@@ -26,7 +26,7 @@ import errno
 import struct
 import ssl
 from enum import Enum
-from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable, TextIO
 
 import re
 import uuid
@@ -82,6 +82,7 @@ DATA_DIR_MODE = 0o700
 CONTAINER_INIT = True
 MIN_PODMAN_VERSION = (2, 0, 2)
 CGROUPS_SPLIT_PODMAN_VERSION = (2, 1, 0)
+PIDS_LIMIT_UNLIMITED_PODMAN_VERSION = (3, 4, 1)
 CUSTOM_PS1 = r'[ceph: \u@\h \W]\$ '
 DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
@@ -375,6 +376,7 @@ class UnauthorizedRegistryError(Error):
 class Ceph(object):
     daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror', 'ceph-exporter')
+    gateways = ('iscsi', 'nfs')
 
 ##################################
 
@@ -589,7 +591,7 @@ class Monitoring(object):
             'cpus': '1',
             'memory': '1GB',
             'args': [
-                '--no-collector.timex',
+                '--no-collector.timex'
             ],
         },
         'grafana': {
@@ -1698,7 +1700,9 @@ class CallVerbosity(Enum):
         return _verbosity_level_to_log_level[self]  # type: ignore
 
 
-if sys.version_info < (3, 8):
+# disable coverage for the next block. this is copy-n-paste
+# from other code for compatibilty on older python versions
+if sys.version_info < (3, 8):  # pragma: no cover
     import itertools
     import threading
     import warnings
@@ -1803,7 +1807,9 @@ if sys.version_info < (3, 8):
 
 try:
     from asyncio import run as async_run   # type: ignore[attr-defined]
-except ImportError:
+except ImportError:  # pragma: no cover
+    # disable coverage for this block. it should be a copy-n-paste from
+    # from newer libs for compatibilty on older python versions
     def async_run(coro):  # type: ignore
         loop = asyncio.new_event_loop()
         try:
@@ -1838,13 +1844,6 @@ def call(ctx: CephadmContext,
         prefix += ': '
     timeout = timeout or ctx.timeout
 
-    async def tee(reader: asyncio.StreamReader) -> str:
-        collected = StringIO()
-        async for line in reader:
-            message = line.decode('utf-8')
-            collected.write(message)
-        return collected.getvalue()
-
     async def run_with_timeout() -> Tuple[str, str, int]:
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -1854,14 +1853,29 @@ def call(ctx: CephadmContext,
         assert process.stdout
         assert process.stderr
         try:
-            stdout, stderr = await asyncio.gather(tee(process.stdout),
-                                                  tee(process.stderr))
-            returncode = await asyncio.wait_for(process.wait(), timeout)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout,
+            )
         except asyncio.TimeoutError:
+            # try to terminate the process assuming it is still running.  It's
+            # possible that even after killing the process it will not
+            # complete, particularly if it is D-state.  If that happens the
+            # process.wait call will block, but we're no worse off than before
+            # when the timeout did not work.  Additionally, there are other
+            # corner-cases we could try and handle here but we decided to start
+            # simple.
+            process.kill()
+            await process.wait()
             logger.info(prefix + f'timeout after {timeout} seconds')
             return '', '', 124
         else:
-            return stdout, stderr, returncode
+            assert process.returncode is not None
+            return (
+                stdout.decode('utf-8'),
+                stderr.decode('utf-8'),
+                process.returncode,
+            )
 
     stdout, stderr, returncode = async_run(run_with_timeout())
     log_level = verbosity.success_log_level()
@@ -2031,9 +2045,23 @@ def get_hostname():
     return socket.gethostname()
 
 
+def get_short_hostname():
+    # type: () -> str
+    return get_hostname().split('.', 1)[0]
+
+
 def get_fqdn():
     # type: () -> str
     return socket.getfqdn() or socket.gethostname()
+
+
+def get_ip_addresses(hostname: str) -> Tuple[List[str], List[str]]:
+    items = socket.getaddrinfo(hostname, None,
+                               flags=socket.AI_CANONNAME,
+                               type=socket.SOCK_STREAM)
+    ipv4_addresses = [i[4][0] for i in items if i[0] == socket.AF_INET]
+    ipv6_addresses = [i[4][0] for i in items if i[0] == socket.AF_INET6]
+    return ipv4_addresses, ipv6_addresses
 
 
 def get_arch():
@@ -2043,8 +2071,8 @@ def get_arch():
 
 def generate_service_id():
     # type: () -> str
-    return get_hostname() + '.' + ''.join(random.choice(string.ascii_lowercase)
-                                          for _ in range(6))
+    return get_short_hostname() + '.' + ''.join(random.choice(string.ascii_lowercase)
+                                                for _ in range(6))
 
 
 def generate_password():
@@ -2460,7 +2488,7 @@ def find_executable(executable: str, path: Optional[str] = None) -> Optional[str
     """
     _, ext = os.path.splitext(executable)
     if (sys.platform == 'win32') and (ext != '.exe'):
-        executable = executable + '.exe'
+        executable = executable + '.exe'  # pragma: no cover
 
     if os.path.isfile(executable):
         return executable
@@ -2705,17 +2733,39 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                 r += [f'--storage.tsdb.retention.size={retention_size}']
                 scheme = 'http'
                 host = get_fqdn()
+                # in case host is not an fqdn then we use the IP to
+                # avoid producing a broken web.external-url link
+                if '.' not in host:
+                    ipv4_addrs, ipv6_addrs = get_ip_addresses(get_hostname())
+                    # use the first ipv4 (if any) otherwise use the first ipv6
+                    addr = next(iter(ipv4_addrs or ipv6_addrs), None)
+                    host = wrap_ipv6(addr) if addr else host
                 r += [f'--web.external-url={scheme}://{host}:{port}']
         if daemon_type == 'alertmanager':
             config = get_parm(ctx.config_json)
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ['--cluster.peer={}'.format(peer)]
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
             # some alertmanager, by default, look elsewhere for a config
             r += ['--config.file=/etc/alertmanager/alertmanager.yml']
         if daemon_type == 'promtail':
             r += ['--config.expand-env']
+        if daemon_type == 'prometheus':
+            config = get_parm(ctx.config_json)
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
         if daemon_type == 'node-exporter':
+            config = get_parm(ctx.config_json)
+            try:
+                r += [f'--web.config={config["web_config"]}']
+            except KeyError:
+                pass
             r += ['--path.procfs=/host/proc',
                   '--path.sysfs=/host/sys',
                   '--path.rootfs=/rootfs']
@@ -2806,6 +2856,12 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             config_dir = 'etc/loki'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'node-exporter':
+            data_dir_root = get_data_dir(fsid, ctx.data_dir,
+                                         daemon_type, daemon_id)
+            config_dir = 'etc/node-exporter'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
 
         # populate the config directory for the component from the config-json
         if 'files' in config_json:
@@ -3039,6 +3095,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[log_dir] = '/var/log/ceph:z'
             mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
         elif daemon_type == 'node-exporter':
+            mounts[os.path.join(data_dir, 'etc/node-exporter')] = '/etc/node-exporter:Z'
             mounts['/proc'] = '/host/proc:ro'
             mounts['/sys'] = '/host/sys:ro'
             mounts['/'] = '/rootfs:ro'
@@ -3117,7 +3174,10 @@ def set_pids_limit_unlimited(ctx: CephadmContext, container_args: List[str]) -> 
     # Useful for daemons like iscsi where the default pids-limit limits the number of luns
     # per iscsi target or rgw where increasing the rgw_thread_pool_size to a value near
     # the default pids-limit may cause the container to crash.
-    if isinstance(ctx.container_engine, Podman):
+    if (
+        isinstance(ctx.container_engine, Podman)
+        and ctx.container_engine.version >= PIDS_LIMIT_UNLIMITED_PODMAN_VERSION
+    ):
         container_args.append('--pids-limit=-1')
     else:
         container_args.append('--pids-limit=0')
@@ -3138,13 +3198,14 @@ def get_container(ctx: CephadmContext,
         envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
     if container_args is None:
         container_args = []
+    if daemon_type in Ceph.daemons or daemon_type in Ceph.gateways:
+        set_pids_limit_unlimited(ctx, container_args)
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % daemon_id
-        set_pids_limit_unlimited(ctx, container_args)
     elif daemon_type == 'rbd-mirror':
         entrypoint = '/usr/bin/rbd-mirror'
         name = 'client.rbd-mirror.%s' % daemon_id
@@ -3180,14 +3241,11 @@ def get_container(ctx: CephadmContext,
         envs.extend(Keepalived.get_container_envs())
         container_args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
     elif daemon_type == CephIscsi.daemon_type:
-        # Applies only on rbd-target-api as get_tcmu_runner_container()
-        # removes all tcmu-runner arguments
         entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
-        set_pids_limit_unlimited(ctx, container_args)
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, fsid, daemon_id)
         entrypoint = cc.entrypoint
@@ -3457,6 +3515,15 @@ def deploy_daemon_units(
     ports: Optional[List[int]] = None,
 ) -> None:
     # cmd
+
+    def add_stop_actions(f: TextIO) -> None:
+        # following generated script basically checks if the container exists
+        # before stopping it. Exit code will be success either if it doesn't
+        # exist or if it exists and is stopped successfully.
+        container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
+        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
+        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
+
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f, \
             open(data_dir + '/unit.meta.new', 'w') as metaf:
@@ -3543,6 +3610,9 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.poststop.new', 'w') as f:
+        # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
+        # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
+        add_stop_actions(f)
         if daemon_type == 'osd':
             assert osd_fsid
             poststop = get_ceph_volume_container(
@@ -3572,13 +3642,7 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.stop.new', 'w') as f:
-        # following generated script basically checks if the container exists
-        # before stopping it. Exit code will be success either if it doesn't
-        # exist or if it exists and is stopped successfully.
-        container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
-        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
-        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
-
+        add_stop_actions(f)
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.stop.new',
                   data_dir + '/unit.stop')
@@ -3954,7 +4018,7 @@ ExecStopPost=-/bin/bash {data_dir}/{fsid}/%i/unit.poststop
 KillMode=none
 Restart=on-failure
 RestartSec=10s
-TimeoutStartSec=120
+TimeoutStartSec=200
 TimeoutStopSec=120
 StartLimitInterval=30min
 StartLimitBurst=5
@@ -4089,6 +4153,9 @@ class CephContainer:
         if isinstance(self.ctx.container_engine, Podman):
             if os.path.exists('/etc/ceph/podman-auth.json'):
                 cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
+
+        if isinstance(self.ctx.container_engine, Docker):
+            cmd_args.extend(['--ulimit', 'nofile=1048576'])
 
         envs: List[str] = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
@@ -5725,7 +5792,7 @@ def command_bootstrap(ctx):
     hostname = get_hostname()
     if '.' in hostname and not ctx.allow_fqdn_hostname:
         raise Error('hostname is a fully qualified domain name (%s); either fix (e.g., "sudo hostname %s" or similar) or pass --allow-fqdn-hostname' % (hostname, hostname.split('.')[0]))
-    mon_id = ctx.mon_id or hostname
+    mon_id = ctx.mon_id or get_short_hostname()
     mgr_id = ctx.mgr_id or generate_service_id()
 
     lock = FileLock(ctx, fsid)
@@ -8568,6 +8635,14 @@ class HostFacts():
         # type: () -> str
         """Return the hostname"""
         return platform.node()
+
+    @property
+    def shortname(self) -> str:
+        return platform.node().split('.', 1)[0]
+
+    @property
+    def fqdn(self) -> str:
+        return get_fqdn()
 
     @property
     def subscribed(self):

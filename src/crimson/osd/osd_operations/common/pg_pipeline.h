@@ -11,6 +11,8 @@ namespace crimson::osd {
 class CommonPGPipeline {
 protected:
   friend class InternalClientRequest;
+  friend class SnapTrimEvent;
+  friend class SnapTrimObjSubEvent;
 
   struct WaitForActive : OrderedExclusivePhaseT<WaitForActive> {
     static constexpr auto type_name = "CommonPGPipeline:::wait_for_active";

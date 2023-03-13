@@ -1,9 +1,71 @@
-Quotas
-======
+CephFS Quotas
+=============
 
-CephFS allows quotas to be set on any directory in the system.  The
+CephFS allows quotas to be set on any directory in the file system.  The
 quota can restrict the number of *bytes* or the number of *files*
 stored beneath that point in the directory hierarchy.
+
+Like most other things in CephFS, quotas are configured using virtual
+extended attributes:
+
+ * ``ceph.quota.max_files`` -- file limit
+ * ``ceph.quota.max_bytes`` -- byte limit
+
+If the extended attributes appear on a directory that means a quota is
+configured there. If they are not present then no quota is set on that
+directory (although one may still be configured on a parent directory).
+
+To set a quota, set the extended attribute on a CephFS directory with a
+value::
+
+  setfattr -n ceph.quota.max_bytes -v 100000000 /some/dir     # 100 MB
+  setfattr -n ceph.quota.max_files -v 10000 /some/dir         # 10,000 files
+
+``ceph.quota.max_bytes`` can also be set using human-friendly units::
+
+  setfattr -n ceph.quota.max_bytes -v 100K /some/dir          # 100 KiB
+  setfattr -n ceph.quota.max_bytes -v 5Gi /some/dir           # 5 GiB
+
+.. note:: Values will be strictly cast to IEC units even when SI units
+   are input, e.g. 1K to 1024 bytes.
+
+To view quota limit::
+
+  $ getfattr -n ceph.quota.max_bytes /some/dir
+  # file: dir1/
+  ceph.quota.max_bytes="100000000"
+  $
+  $ getfattr -n ceph.quota.max_files /some/dir
+  # file: dir1/
+  ceph.quota.max_files="10000"
+
+.. note:: Running ``getfattr /some/dir -d -m -`` for a CephFS directory will
+   print none of the CephFS extended attributes. This is because the CephFS
+   kernel and FUSE clients hide this information from the ``listxattr(2)``
+   system call. Instead, a specific CephFS extended attribute can be viewed by
+   running ``getfattr /some/dir -n ceph.<some-xattr>``.
+
+To remove a quota, set the value of extended attribute to ``0``::
+
+  $ setfattr -n ceph.quota.max_bytes -v 0 /some/dir
+  $ getfattr /some/dir -n ceph.quota.max_bytes
+  dir1/: ceph.quota.max_bytes: No such attribute
+  $
+  $ setfattr -n ceph.quota.max_files -v 0 /some/dir
+  $ getfattr dir1/ -n ceph.quota.max_files
+  dir1/: ceph.quota.max_files: No such attribute
+
+Space Usage Reporting and CephFS Quotas
+---------------------------------------
+When the root directory of the CephFS mount has quota set on it, the available
+space on the CephFS reported by space usage report tools (like ``df``) is
+based on quota limit. That is, ``available space = quota limit - used space``
+instead of ``available space = total space - used space``.
+
+This behaviour can be disabled by setting following option in client section
+of ``ceph.conf``::
+
+    client quota df = false
 
 Limitations
 -----------
@@ -55,34 +117,3 @@ Limitations
 
 #. *Snapshot file data which has since been deleted or changed does not count
    towards the quota.* See also: http://tracker.ceph.com/issues/24284
-
-Configuration
--------------
-
-Like most other things in CephFS, quotas are configured using virtual
-extended attributes:
-
- * ``ceph.quota.max_files`` -- file limit
- * ``ceph.quota.max_bytes`` -- byte limit
-
-If the attributes appear on a directory inode that means a quota is
-configured there.  If they are not present then no quota is set on
-that directory (although one may still be configured on a parent directory).
-
-To set a quota::
-
-  setfattr -n ceph.quota.max_bytes -v 100000000 /some/dir     # 100 MB
-  setfattr -n ceph.quota.max_files -v 10000 /some/dir         # 10,000 files
-
-To view quota settings::
-
-  getfattr -n ceph.quota.max_bytes /some/dir
-  getfattr -n ceph.quota.max_files /some/dir
-
-Note that if the value of the extended attribute is ``0`` that means
-the quota is not set.
-
-To remove a quota::
-
-  setfattr -n ceph.quota.max_bytes -v 0 /some/dir
-  setfattr -n ceph.quota.max_files -v 0 /some/dir

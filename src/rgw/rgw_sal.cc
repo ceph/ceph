@@ -100,6 +100,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool quota_threads,
 						     bool run_sync_thread,
 						     bool run_reshard_thread,
+                                                     bool run_notification_thread,
 						     bool use_cache,
 						     bool use_gc)
 {
@@ -117,6 +118,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
+                .set_run_notification_thread(run_notification_thread)
                 .init_begin(cct, dpp) < 0) {
       delete driver;
       return nullptr;
@@ -143,6 +145,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
                 .set_run_quota_threads(quota_threads)
                 .set_run_sync_thread(run_sync_thread)
                 .set_run_reshard_thread(run_reshard_thread)
+                .set_run_notification_thread(run_notification_thread)
                 .init_begin(cct, dpp) < 0) {
       delete driver;
       return nullptr;
@@ -190,34 +193,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
     ((rgw::sal::MotrStore *)driver)->init_metadata_cache(dpp, cct);
 
-    /* XXX: temporary - create testid user */
-    rgw_user testid_user("tenant", "tester", "ns");
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(testid_user);
-    user->get_info().user_id = testid_user;
-    user->get_info().display_name = "Motr Explorer";
-    user->get_info().user_email = "tester@seagate.com";
-    RGWAccessKey k1("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
-    user->get_info().access_keys["0555b35654ad1656d804"] = k1;
-
-    ldpp_dout(dpp, 20) << "Store testid and user for Motr. User = " << user->get_info().user_id.id << dendl;
-    int rc = user->store_user(dpp, null_yield, true);
-    if (rc < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to store testid user ar Motr: rc=" << rc << dendl;
-    }
-
-    // Read user info and compare.
-    rgw_user ruser("", "tester", "");
-    std::unique_ptr<rgw::sal::User> suser = driver->get_user(ruser);
-    suser->get_info().user_id = ruser;
-    rc = suser->load_user(dpp, null_yield);
-    if (rc != 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to load testid user from Motr: rc=" << rc << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "Read and compare user info: " << dendl;
-      ldpp_dout(dpp, 20) << "User id = " << suser->get_info().user_id.id << dendl;
-      ldpp_dout(dpp, 20) << "User display name = " << suser->get_info().display_name << dendl;
-      ldpp_dout(dpp, 20) << "User email = " << suser->get_info().user_email << dendl;
-    }
+    return store;
   }
 #endif
 

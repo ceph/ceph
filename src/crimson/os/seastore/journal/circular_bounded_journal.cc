@@ -502,19 +502,21 @@ CircularBoundedJournal::write_ertr::future<>
 CircularBoundedJournal::write_header()
 {
   LOG_PREFIX(CircularBoundedJournal::write_header);
-  ceph::bufferlist bl;
-  try {
-    bl = encode_header();
-  } catch (ceph::buffer::error &e) {
-    DEBUG("unable to encode header block from underlying deivce");
-    return crimson::ct_error::input_output_error::make();
-  }
+  ceph::bufferlist bl = encode_header();
   ceph_assert(bl.length() <= get_block_size());
   DEBUG(
     "sync header of CircularBoundedJournal, length {}",
     bl.length());
   assert(device);
-  return device_write_bl(device->get_journal_start(), bl);
+  auto iter = bl.begin();
+  assert(bl.length() < get_block_size());
+  bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(get_block_size()));
+  iter.copy(bl.length(), bp.c_str());
+  return device->write(device->get_journal_start(), std::move(bp)
+  ).handle_error(
+    write_ertr::pass_further{},
+    crimson::ct_error::assert_all{ "Invalid error device->write" }
+  );
 }
 seastar::future<> CircularBoundedJournal::finish_commit(transaction_type_t type) {
   if (is_trim_transaction(type)) {

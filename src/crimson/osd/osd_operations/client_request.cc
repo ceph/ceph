@@ -35,7 +35,7 @@ void ClientRequest::Orderer::clear_and_cancel()
 {
   for (auto i = list.begin(); i != list.end(); ) {
     logger().debug(
-      "{}: ClientRequest::Orderer::clear_and_cancel {}",
+      "ClientRequest::Orderer::clear_and_cancel: {}",
       *i);
     i->complete_request();
     remove_request(*(i++));
@@ -87,7 +87,7 @@ ConnectionPipeline &ClientRequest::cp()
 
 ClientRequest::PGPipeline &ClientRequest::pp(PG &pg)
 {
-  return pg.client_request_pg_pipeline;
+  return pg.request_pg_pipeline;
 }
 
 bool ClientRequest::same_session_and_pg(const ClientRequest& other_op) const
@@ -211,7 +211,13 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
     *this
   ).then_interruptible(
     [this, pg]() mutable {
-    return do_recover_missing(pg, m->get_hobj());
+    if (pg->is_primary()) {
+      return do_recover_missing(pg, m->get_hobj());
+    } else {
+      logger().debug("process_op: Skipping do_recover_missing"
+                     "on non primary pg");
+      return interruptor::now();
+    }
   }).then_interruptible([this, pg, &ihref]() mutable {
     return pg->already_complete(m->get_reqid()).then_interruptible(
       [this, pg, &ihref](auto completed) mutable
@@ -226,7 +232,7 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
         return ihref.enter_stage<interruptor>(pp(*pg).get_obc, *this
 	).then_interruptible(
           [this, pg, &ihref]() mutable -> PG::load_obc_iertr::future<> {
-          logger().debug("{}: got obc lock", *this);
+          logger().debug("{}: in get_obc stage", *this);
           op_info.set_from_op(&*m, *pg->get_osdmap());
           return pg->with_locked_obc(
             m->get_hobj(), op_info,
@@ -252,16 +258,6 @@ ClientRequest::do_process(
   instance_handle_t &ihref,
   Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
 {
-  if (!pg->is_primary()) {
-    // primary can handle both normal ops and balanced reads
-    if (is_misdirected(*pg)) {
-      logger().trace("do_process: dropping misdirected op");
-      return seastar::now();
-    } else if (const hobject_t& hoid = m->get_hobj();
-               !pg->get_peering_state().can_serve_replica_read(hoid)) {
-      return reply_op_error(pg, -EAGAIN);
-    }
-  }
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
     return reply_op_error(pg, -EINVAL);
   }
@@ -293,6 +289,22 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENOENT);
   }
 
+  if (!pg->is_primary()) {
+    // primary can handle both normal ops and balanced reads
+    if (is_misdirected(*pg)) {
+      logger().trace("do_process: dropping misdirected op");
+      return seastar::now();
+    } else if (const hobject_t& hoid = m->get_hobj();
+               !pg->get_peering_state().can_serve_replica_read(hoid)) {
+      logger().debug("{}: unstable write on replica, "
+	             "bouncing to primary",
+                     __func__);
+      return reply_op_error(pg, -EAGAIN);
+    } else {
+      logger().debug("{}: serving replica read on oid {}",
+                     __func__, m->get_hobj());
+    }
+  }
   return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
     [this, pg, &ihref](auto submitted, auto all_completed) mutable {
       return submitted.then_interruptible([this, pg, &ihref] {
@@ -331,7 +343,7 @@ bool ClientRequest::is_misdirected(const PG& pg) const
       return true;
     }
     // balanced reads; any replica will do
-    return pg.is_nonprimary();
+    return false;
   }
   // neither balanced nor localize reads
   return true;

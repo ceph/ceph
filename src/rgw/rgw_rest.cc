@@ -820,9 +820,6 @@ int RGWGetObj_ObjStore::get_params(optional_yield y)
     get_data &= (!rgwx_stat);
   }
 
-  if (s->info.args.exists(GET_TORRENT)) {
-    return torrent.get_params();
-  }
   return 0;
 }
 
@@ -1033,19 +1030,6 @@ int RGWPutObj_ObjStore::verify_params()
 
 int RGWPutObj_ObjStore::get_params(optional_yield y)
 {
-  /* start gettorrent */
-  if (s->cct->_conf->rgw_torrent_flag)
-  {
-    int ret = 0;
-    ret = torrent.get_params();
-    ldpp_dout(s, 5) << "NOTICE:  open produce torrent file " << dendl;
-    if (ret < 0)
-    {
-      return ret;
-    }
-    torrent.set_info_name(s->object->get_name());
-  }
-  /* end gettorrent */
   supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return 0;
@@ -2324,6 +2308,9 @@ RGWHandler_REST* RGWREST::get_handler(
     *init_error = -ERR_METHOD_NOT_ALLOWED;
     return NULL;
   }
+
+  ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name() << dendl;
+  
   *init_error = handler->init(driver, s, rio);
   if (*init_error < 0) {
     m->put_handler(handler);

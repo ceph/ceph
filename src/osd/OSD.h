@@ -148,8 +148,6 @@ public:
   }
 
   int get_nodeid() const final { return whoami; }
-
-  std::atomic<epoch_t> max_oldest_map;
 private:
   OSDMapRef osdmap;
 
@@ -197,40 +195,11 @@ public:
   std::map<epoch_t, unsigned> map_reservations;
 
   /// gets ref to next_osdmap and registers the epoch as reserved
-  OSDMapRef get_nextmap_reserved() {
-    std::lock_guard l(pre_publish_lock);
-    epoch_t e = next_osdmap->get_epoch();
-    std::map<epoch_t, unsigned>::iterator i =
-      map_reservations.insert(std::make_pair(e, 0)).first;
-    i->second++;
-    return next_osdmap;
-  }
+  OSDMapRef get_nextmap_reserved();
   /// releases reservation on map
-  void release_map(OSDMapRef osdmap) {
-    std::lock_guard l(pre_publish_lock);
-    std::map<epoch_t, unsigned>::iterator i =
-      map_reservations.find(osdmap->get_epoch());
-    ceph_assert(i != map_reservations.end());
-    ceph_assert(i->second > 0);
-    if (--(i->second) == 0) {
-      map_reservations.erase(i);
-    }
-    if (pre_publish_waiter) {
-      pre_publish_cond.notify_all();
-    }
-  }
+  void release_map(OSDMapRef osdmap);
   /// blocks until there are no reserved maps prior to next_osdmap
-  void await_reserved_maps() {
-    std::unique_lock l{pre_publish_lock};
-    ceph_assert(next_osdmap);
-    pre_publish_waiter++;
-    pre_publish_cond.wait(l, [this] {
-      auto i = map_reservations.cbegin();
-      return (i == map_reservations.cend() ||
-	      i->first >= next_osdmap->get_epoch());
-    });
-    pre_publish_waiter--;
-  }
+  void await_reserved_maps() ;
   OSDMapRef get_next_osdmap() {
     std::lock_guard l(pre_publish_lock);
     return next_osdmap;
@@ -2024,6 +1993,7 @@ private:
   void maybe_override_sleep_options_for_qos();
   bool maybe_override_options_for_qos(
     const std::set<std::string> *changed = nullptr);
+  void maybe_override_cost_for_qos();
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,

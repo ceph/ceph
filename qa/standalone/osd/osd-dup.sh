@@ -23,59 +23,6 @@ function run() {
     done
 }
 
-function TEST_filestore_to_bluestore() {
-    local dir=$1
-
-    local flimit=$(ulimit -n)
-    if [ $flimit -lt 1536 ]; then
-        echo "Low open file limit ($flimit), test may fail. Increase to 1536 or higher and retry if that happens."
-    fi
-
-    run_mon $dir a || return 1
-    run_mgr $dir x || return 1
-    run_osd_filestore $dir 0 || return 1
-    osd_pid=$(cat $dir/osd.0.pid)
-    run_osd_filestore $dir 1 || return 1
-    run_osd_filestore $dir 2 || return 1
-
-    sleep 5
-
-    create_pool foo 16
-
-    # write some objects
-    timeout 20 rados bench -p foo 10 write -b 4096 --no-cleanup || return 1
-
-    # kill
-    while kill $osd_pid; do sleep 1 ; done
-    ceph osd down 0
-
-    mv $dir/0 $dir/0.old || return 1
-    mkdir $dir/0 || return 1
-    ofsid=$(cat $dir/0.old/fsid)
-    echo "osd fsid $ofsid"
-    O=$CEPH_ARGS
-    CEPH_ARGS+="--log-file $dir/cot.log --log-max-recent 0 "
-    ceph-objectstore-tool --type bluestore --data-path $dir/0 --fsid $ofsid \
-			  --op mkfs --no-mon-config || return 1
-    ceph-objectstore-tool --data-path $dir/0.old --target-data-path $dir/0 \
-			  --op dup || return 1
-    CEPH_ARGS=$O
-
-    activate_osd $dir 0 || return 1
-
-    while ! ceph osd stat | grep '3 up' ; do sleep 1 ; done
-    ceph osd metadata 0 | grep bluestore || return 1
-
-    ceph osd scrub 0
-
-    # give it some time
-    sleep 15
-    # and make sure mon is sync'ed
-    flush_pg_stats
-
-    wait_for_clean || return 1
-}
-
 main osd-dup "$@"
 
 # Local Variables:

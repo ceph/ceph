@@ -73,22 +73,15 @@ void BlockRBManager::complete_allocation(
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
   assert(device);
-  return device->read_rbm_header(RBM_START_ADDRESS
-  ).safe_then([this](auto s)
-    -> open_ertr::future<> {
-    auto ool_start = get_start_rbm_addr();
-    allocator->init(
-      ool_start,
-      device->get_available_size() -
-      ool_start,
-      device->get_block_size());
-    return open_ertr::now();
-  }).handle_error(
-    open_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error read_rbm_header in BlockRBManager::open"
-    }
-  );
+  assert(device->get_available_size() > 0);
+  assert(device->get_block_size() > 0);
+  auto ool_start = get_start_rbm_addr();
+  allocator->init(
+    ool_start,
+    device->get_available_size() -
+    ool_start,
+    device->get_block_size());
+  return open_ertr::now();
 }
 
 BlockRBManager::write_ertr::future<> BlockRBManager::write(
@@ -105,9 +98,11 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
       start, end, addr, bptr.length());
     return crimson::ct_error::erange::make();
   }
+  bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(bptr.length()));
+  bp.copy_in(0, bptr.length(), bptr.c_str());
   return device->write(
     addr,
-    bptr);
+    std::move(bp));
 }
 
 BlockRBManager::read_ertr::future<> BlockRBManager::read(
@@ -153,7 +148,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   }
   return device->write(
     addr,
-    bptr);
+    std::move(bptr));
 }
 
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)

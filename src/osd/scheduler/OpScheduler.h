@@ -18,6 +18,7 @@
 #include <variant>
 
 #include "common/ceph_context.h"
+#include "mon/MonClient.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
 namespace ceph::osd::scheduler {
@@ -61,8 +62,8 @@ std::ostream &operator<<(std::ostream &lhs, const OpScheduler &);
 using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 
 OpSchedulerRef make_scheduler(
-  CephContext *cct, uint32_t num_shards, bool is_rotational,
-  std::string_view osd_objectstore);
+  CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
+  bool is_rotational, std::string_view osd_objectstore, MonClient *monc);
 
 /**
  * Implements OpScheduler in terms of OpQueue

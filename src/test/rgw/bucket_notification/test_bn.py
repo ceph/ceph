@@ -463,7 +463,7 @@ def create_kafka_receiver_thread(topic, security_type='PLAINTEXT'):
     return task, receiver
 
 def stop_kafka_receiver(receiver, task):
-    """stop the receiver thread and wait for it to finis"""
+    """stop the receiver thread and wait for it to finish"""
     receiver.stop = True
     task.join(1)
     try:
@@ -3871,7 +3871,7 @@ def test_ps_s3_multiple_topics_notification():
     http_server.close()
 
 
-def kafka_security(security_type):
+def kafka_security(security_type, mechanism='PLAIN'):
     """ test pushing kafka s3 notification securly to master """
     conn = connection()
     zonegroup = 'default'
@@ -3881,15 +3881,23 @@ def kafka_security(security_type):
     # name is constant for manual testing
     topic_name = bucket_name+'_topic'
     # create s3 topic
-    if security_type == 'SSL_SASL':
+    if security_type == 'SASL_SSL':
         endpoint_address = 'kafka://alice:alice-secret@' + kafka_server + ':9094'
     elif security_type == 'SSL':
         endpoint_address = 'kafka://' + kafka_server + ':9093'
+    elif security_type == 'SASL_PLAINTEXT':
+        endpoint_address = 'kafka://alice:alice-secret@' + kafka_server + ':9095'
     else:
         assert False, 'unknown security method '+security_type
 
-    KAFKA_DIR = os.environ['KAFKA_DIR']
-    endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+"/y-ca.crt"
+    if security_type == 'SASL_PLAINTEXT':
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=false&mechanism='+mechanism
+    elif security_type == 'SASL_SSL':
+        KAFKA_DIR = os.environ['KAFKA_DIR']
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt&mechanism='+mechanism
+    else:
+        KAFKA_DIR = os.environ['KAFKA_DIR']
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker&use-ssl=true&ca-location='+KAFKA_DIR+'/y-ca.crt'
 
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
     
@@ -3949,12 +3957,27 @@ def kafka_security(security_type):
         stop_kafka_receiver(receiver, task)
 
 
-@attr('kafka_ssl_test')
+@attr('kafka_security_test')
 def test_ps_s3_notification_push_kafka_security_ssl():
     kafka_security('SSL')
 
 
-@attr('kafka_ssl_test')
+@attr('kafka_security_test')
 def test_ps_s3_notification_push_kafka_security_ssl_sasl():
-    kafka_security('SSL_SASL')
+    kafka_security('SASL_SSL')
+
+
+@attr('kafka_security_test')
+def test_ps_s3_notification_push_kafka_security_sasl():
+    kafka_security('SASL_PLAINTEXT')
+
+
+@attr('kafka_security_test')
+def test_ps_s3_notification_push_kafka_security_ssl_sasl_scram():
+    kafka_security('SASL_SSL', mechanism='SCRAM-SHA-256')
+
+
+@attr('kafka_security_test')
+def test_ps_s3_notification_push_kafka_security_sasl_scram():
+    kafka_security('SASL_PLAINTEXT', mechanism='SCRAM-SHA-256')
 

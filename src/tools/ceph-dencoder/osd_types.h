@@ -75,7 +75,7 @@ TYPE(HitSet::Params)
 #include "os/ObjectStore.h"
 TYPE(ObjectStore::Transaction)
 
-#include "os/filestore/SequencerPosition.h"
+#include "os/SequencerPosition.h"
 TYPE(SequencerPosition)
 
 #ifdef WITH_BLUESTORE
@@ -141,12 +141,9 @@ TYPE_FEATUREFUL(ServiceMap::Daemon)
 TYPE(ConnectionReport);
 TYPE(ConnectionTracker);
 
-#include "os/filestore/DBObjectMap.h"
+#include "os/DBObjectMap.h"
 TYPE(DBObjectMap::_Header)
 TYPE(DBObjectMap::State)
-
-#include "os/filestore/FileStore.h"
-TYPE(FSSuperblock)
 
 #include "os/kstore/kstore_types.h"
 TYPE(kstore_cnode_t)

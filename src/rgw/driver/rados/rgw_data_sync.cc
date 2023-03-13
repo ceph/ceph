@@ -3621,8 +3621,8 @@ public:
 	  }
 	  if (!no_zero) {
 	    yield {
-	      const int num_shards0 =
-		source_info.layout.logs.front().layout.in_index.layout.num_shards;
+	      const int num_shards0 = rgw::num_shards(
+		source_info.layout.logs.front().layout.in_index.layout);
 	      call(new CheckAllBucketShardStatusIsIncremental(sc, sync_pair,
 							      num_shards0,
 							      &all_incremental));
@@ -5624,7 +5624,7 @@ class RGWSyncBucketCR : public RGWCoroutine {
   rgw_raw_obj error_repo;
   rgw_bucket_shard source_bs;
   rgw_pool pool;
-  uint64_t current_gen;
+  uint64_t current_gen = 0;
 
   RGWSyncTraceNodeRef tn;
 
@@ -6400,14 +6400,14 @@ string RGWBucketPipeSyncStatusManager::inc_status_oid(const rgw_zone_id& source_
 
 string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
                                                       const rgw_zone_id& source_zone,
-                                                      const rgw::sal::Object* obj)
+                                                      const rgw_obj& obj)
 {
-  string prefix = object_status_oid_prefix + "." + source_zone.id + ":" + obj->get_bucket()->get_key().get_key();
+  string prefix = object_status_oid_prefix + "." + source_zone.id + ":" + obj.bucket.get_key();
   if (sync_pipe.source_bucket_info.bucket !=
       sync_pipe.dest_bucket_info.bucket) {
     prefix += string("/") + sync_pipe.dest_bucket_info.bucket.get_key();
   }
-  return prefix + ":" + obj->get_name() + ":" + obj->get_instance();
+  return prefix + ":" + obj.key.name + ":" + obj.key.instance;
 }
 
 int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,

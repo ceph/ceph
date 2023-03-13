@@ -32,7 +32,8 @@ SegmentedOolWriter::alloc_write_ertr::future<>
 SegmentedOolWriter::write_record(
   Transaction& t,
   record_t&& record,
-  std::list<LogicalCachedExtentRef>&& extents)
+  std::list<LogicalCachedExtentRef>&& extents,
+  bool with_atomic_roll_segment)
 {
   LOG_PREFIX(SegmentedOolWriter::write_record);
   assert(extents.size());
@@ -46,7 +47,9 @@ SegmentedOolWriter::write_record(
   stats.md_bytes += record.size.get_raw_mdlength();
   stats.num_records += 1;
 
-  return record_submitter.submit(std::move(record)
+  return record_submitter.submit(
+    std::move(record),
+    with_atomic_roll_segment
   ).safe_then([this, FNAME, &t, extents=std::move(extents)
               ](record_locator_t ret) mutable {
     DEBUGT("{} finish with {} and {} extents",
@@ -101,7 +104,8 @@ SegmentedOolWriter::do_write(
         assert(record_submitter.check_action(record.size) !=
                action_t::ROLL);
         fut_write = write_record(
-            t, std::move(record), std::move(pending_extents));
+            t, std::move(record), std::move(pending_extents),
+            true/* with_atomic_roll_segment */);
       }
       return trans_intr::make_interruptible(
         record_submitter.roll_segment(
@@ -226,12 +230,6 @@ void ExtentPlacementManager::set_primary_device(Device *device)
 {
   ceph_assert(primary_device == nullptr);
   primary_device = device;
-  if (device->get_backend_type() == backend_type_t::SEGMENTED) {
-    prefer_ool = false;
-  } else {
-    ceph_assert(device->get_backend_type() == backend_type_t::RANDOM_BLOCK);
-    prefer_ool = true;
-  }
   ceph_assert(devices_by_id[device->get_device_id()] == device);
 }
 
@@ -595,6 +593,7 @@ RandomBlockOolWriter::do_write(
     stats.extents.bytes += ex->get_length();
     stats.num_records += 1;
 
+    ex->prepare_write();
     return rbm->write(paddr,
       ex->get_bptr()
     ).handle_error(

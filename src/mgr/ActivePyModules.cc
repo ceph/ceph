@@ -235,7 +235,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     cluster_state.with_osdmap([&](const OSDMap &osd_map){
       no_gil.acquire_gil();
       if (what == "osd_map") {
-        osd_map.dump(&f);
+        osd_map.dump(&f, g_ceph_context);
       } else if (what == "osd_map_tree") {
         osd_map.print_tree(&f, nullptr);
       } else if (what == "osd_map_crush") {
@@ -259,10 +259,16 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     f.close_section();
   } else if (what.substr(0, 6) == "config") {
+    // We make a copy of the global config to avoid printing
+    // to py formater (which may drop-take GIL) while holding
+    // the global config lock, which might deadlock with other
+    // thread that is holding the GIL and acquiring the global
+    // config lock.
+    ConfigProxy config{g_conf()};
     if (what == "config_options") {
-      g_conf().config_options(&f);
+      config.config_options(&f);
     } else if (what == "config") {
-      g_conf().show_config(&f);
+      config.show_config(&f);
     }
   } else if (what == "mon_map") {
     without_gil_t no_gil;
@@ -512,8 +518,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
   }
-  without_gil_t no_gil;
-  no_gil.acquire_gil();
   if(ttl_seconds) {
     return jf.get();
   } else {
@@ -1496,8 +1500,6 @@ void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
 
 void ActivePyModules::register_client(std::string_view name, std::string addrs)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 
@@ -1507,8 +1509,6 @@ void ActivePyModules::register_client(std::string_view name, std::string addrs)
 
 void ActivePyModules::unregister_client(std::string_view name, std::string addrs)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 

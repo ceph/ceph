@@ -36,7 +36,6 @@ struct ConnectionPipeline {
 enum class OperationTypeCode {
   client_request = 0,
   peering_event,
-  compound_peering_request,
   pg_advance_map,
   pg_creation,
   replicated_request,
@@ -46,13 +45,14 @@ enum class OperationTypeCode {
   historic_client_request,
   logmissing_request,
   logmissing_request_reply,
+  snaptrim_event,
+  snaptrimobj_subevent,
   last_op
 };
 
 static constexpr const char* const OP_NAMES[] = {
   "client_request",
   "peering_event",
-  "compound_peering_request",
   "pg_advance_map",
   "pg_creation",
   "replicated_request",
@@ -62,6 +62,8 @@ static constexpr const char* const OP_NAMES[] = {
   "historic_client_request",
   "logmissing_request",
   "logmissing_request_reply",
+  "snaptrim_event",
+  "snaptrimobj_subevent",
 };
 
 // prevent the addition of OperationTypeCode-s with no matching OP_NAMES entry:
@@ -146,6 +148,9 @@ protected:
       return typename InterruptorT::template futurize_t<ret_t>{std::move(ret)};
     }
   }
+
+public:
+  static constexpr bool is_trackable = true;
 };
 
 template <class T>

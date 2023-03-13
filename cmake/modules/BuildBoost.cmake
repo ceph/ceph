@@ -136,6 +136,9 @@ function(do_build_boost root_dir version)
   if(WITH_BOOST_VALGRIND)
     list(APPEND b2 valgrind=on)
   endif()
+  if(WITH_ASAN)
+    list(APPEND b2 context-impl=ucontext)
+  endif()
   set(build_command
     ${b2} headers stage
     #"--buildid=ceph" # changes lib names--can omit for static
@@ -231,6 +234,10 @@ macro(build_boost version)
     if((c MATCHES "coroutine|context") AND (WITH_BOOST_VALGRIND))
       set_target_properties(Boost::${c} PROPERTIES
         INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_VALGRIND")
+    endif()
+    if((c MATCHES "context") AND (WITH_ASAN))
+      set_target_properties(Boost::${c} PROPERTIES
+        INTERFACE_COMPILE_DEFINITIONS "BOOST_USE_ASAN;BOOST_USE_UCONTEXT")
     endif()
     list(APPEND Boost_LIBRARIES ${Boost_${upper_c}_LIBRARY})
   endforeach()

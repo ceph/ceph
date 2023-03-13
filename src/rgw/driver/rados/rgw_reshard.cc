@@ -194,9 +194,9 @@ public:
                        const rgw::bucket_index_layout_generation& target)
     : store(_store)
   {
-    const int num_shards = target.layout.normal.num_shards;
+    const uint32_t num_shards = rgw::num_shards(target.layout.normal);
     target_shards.reserve(num_shards);
-    for (int i = 0; i < num_shards; ++i) {
+    for (uint32_t i = 0; i < num_shards; ++i) {
       target_shards.emplace_back(dpp, store, bucket_info, target, i, completions);
     }
   }
@@ -504,6 +504,11 @@ static int init_reshard(rgw::sal::RadosStore* store,
                         uint32_t new_num_shards,
                         const DoutPrefixProvider *dpp)
 {
+  if (new_num_shards == 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ << " got invalid new_num_shards=0" << dendl;
+    return -EINVAL;
+  }
+
   int ret = init_target_layout(store, bucket_info, bucket_attrs, fault, new_num_shards, dpp);
   if (ret < 0) {
     return ret;
@@ -647,7 +652,7 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     // sync on the old shards will force them to detect the end-of-log for that
     // generation, and eventually transition to the next
     // TODO: use a log layout to support types other than BucketLogType::InIndex
-    for (uint32_t shard_id = 0; shard_id < prev.current_index.layout.normal.num_shards; ++shard_id) {
+    for (uint32_t shard_id = 0; shard_id < rgw::num_shards(prev.current_index.layout.normal); ++shard_id) {
       // This null_yield can stay, for now, since we're in our own thread
       ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id,
 						   null_yield);
@@ -823,16 +828,21 @@ int RGWBucketReshard::do_reshard(const rgw::bucket_index_layout_generation& curr
     (*out) << "total entries:";
   }
 
-  const int num_source_shards = current.layout.normal.num_shards;
+  const uint32_t num_source_shards = rgw::num_shards(current.layout.normal);
   string marker;
-  for (int i = 0; i < num_source_shards; ++i) {
+  for (uint32_t i = 0; i < num_source_shards; ++i) {
     bool is_truncated = true;
     marker.clear();
     const std::string null_object_filter; // empty string since we're not filtering by object
     while (is_truncated) {
       entries.clear();
       int ret = store->getRados()->bi_list(dpp, bucket_info, i, null_object_filter, marker, max_entries, &entries, &is_truncated);
-      if (ret < 0 && ret != -ENOENT) {
+      if (ret == -ENOENT) {
+        ldpp_dout(dpp, 1) << "WARNING: " << __func__ << " failed to find shard "
+            << i << ", skipping" << dendl;
+        // break out of the is_truncated loop and move on to the next shard
+        break;
+      } else if (ret < 0) {
         derr << "ERROR: bi_list(): " << cpp_strerror(-ret) << dendl;
         return ret;
       }

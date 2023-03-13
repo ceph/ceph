@@ -43,6 +43,7 @@ set(mgr_modules
   prometheus
   rbd_support
   restful
+  rgw
   # rook (optional)
   selftest
   snap_schedule

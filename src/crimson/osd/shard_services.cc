@@ -43,7 +43,6 @@ PerShardState::PerShardState(
     store(store),
     perf(perf), recoverystate_perf(recoverystate_perf),
     throttler(crimson::common::local_conf()),
-    obc_registry(crimson::common::local_conf()),
     next_tid(
       static_cast<ceph_tid_t>(seastar::this_shard_id()) <<
       (std::numeric_limits<ceph_tid_t>::digits - 8)),
@@ -136,7 +135,11 @@ OSDSingletonState::OSDSingletonState(
       &cct,
       &finisher,
       crimson::common::local_conf()->osd_max_backfills,
-      crimson::common::local_conf()->osd_min_recovery_priority)
+      crimson::common::local_conf()->osd_min_recovery_priority),
+    snap_reserver(
+      &cct,
+      &finisher,
+      crimson::common::local_conf()->osd_max_trimming_pgs)
 {
   crimson::common::local_conf().add_observer(this);
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -318,6 +321,7 @@ const char** OSDSingletonState::get_tracked_conf_keys() const
   static const char* KEYS[] = {
     "osd_max_backfills",
     "osd_min_recovery_priority",
+    "osd_max_trimming_pgs",
     nullptr
   };
   return KEYS;
@@ -334,6 +338,9 @@ void OSDSingletonState::handle_conf_change(
   if (changed.count("osd_min_recovery_priority")) {
     local_reserver.set_min_priority(conf->osd_min_recovery_priority);
     remote_reserver.set_min_priority(conf->osd_min_recovery_priority);
+  }
+  if (changed.count("osd_max_trimming_pgs")) {
+    snap_reserver.set_max(conf->osd_max_trimming_pgs);
   }
 }
 
@@ -505,6 +512,15 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    if (!pool) {
 	      logger().debug(
 		"{} ignoring pgid {}, pool dne",
+		__func__,
+		pgid);
+	      local_state.pg_map.pg_creation_canceled(pgid);
+	      return seastar::make_ready_future<
+		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
+		>(std::make_tuple(Ref<PG>(), startmap));
+	    } else if (!pool->is_crimson()) {
+	      logger().debug(
+		"{} ignoring pgid {}, pool lacks crimson flag",
 		__func__,
 		pgid);
 	      local_state.pg_map.pg_creation_canceled(pgid);
@@ -689,7 +705,7 @@ seastar::future<> OSDSingletonState::send_incremental_map(
       auto m = crimson::make_message<MOSDMap>(
 	monc.get_fsid(),
 	osdmap->get_encoding_features());
-      m->oldest_map = first;
+      m->cluster_osdmap_trim_lower_bound = first;
       m->newest_map = superblock.newest_map;
       m->maps = std::move(bls);
       return conn.send(std::move(m));
@@ -700,7 +716,13 @@ seastar::future<> OSDSingletonState::send_incremental_map(
       auto m = crimson::make_message<MOSDMap>(
 	monc.get_fsid(),
 	osdmap->get_encoding_features());
-      m->oldest_map = superblock.oldest_map;
+      /* TODO: once we support the tracking of superblock's
+       *       cluster_osdmap_trim_lower_bound, the MOSDMap should
+       *       be populated with this value instead of the oldest_map.
+       *       See: OSD::handle_osd_map for how classic updates the
+       *       cluster's trim lower bound.
+       */
+      m->cluster_osdmap_trim_lower_bound = superblock.oldest_map;
       m->newest_map = superblock.newest_map;
       m->maps.emplace(osdmap->get_epoch(), std::move(bl));
       return conn.send(std::move(m));

@@ -6,9 +6,22 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <thread>
+#include <mutex>
 #include <queue>
+#include <memory>
+#include "common/async/yield_context.h"
+#include <memory>
+#include "common/ceph_mutex.h"
+#include <vector>
+#include <functional>
+#include <span>
+#include "boost/circular_buffer.hpp"
+#include "boost/asio/thread_pool.hpp"
 extern "C" {
 #include "cpa.h"
+#include "cpa_cy_sym_dp.h"
+#include "cpa_cy_im.h"
 #include "lac/cpa_cy_sym.h"
 #include "lac/cpa_cy_im.h"
 #include "qae_mem.h"
@@ -18,27 +31,37 @@ extern "C" {
 }
 
 class QccCrypto {
+    friend class QatCrypto;
+    size_t chunk_size{0};
+    size_t max_requests{0};
+
+    boost::asio::thread_pool my_pool{1};
+
+    boost::circular_buffer<std::function<void(int)>> instance_completions;
+
+    template <typename CompletionToken>
+    auto async_get_instance(CompletionToken&& token);
 
   public:
     CpaCySymCipherDirection qcc_op_type;
 
-    QccCrypto() {};
-    ~QccCrypto() {};
+    QccCrypto()  {};
+    ~QccCrypto() { destroy(); };
 
-    bool init();
+    bool init(const size_t chunk_size, const size_t max_requests);
     bool destroy();
-    bool perform_op(unsigned char* out, const unsigned char* in, size_t size,
-        uint8_t *iv,
-        uint8_t *key,
-        CpaCySymCipherDirection op_type);
+    bool perform_op_batch(unsigned char* out, const unsigned char* in, size_t size,
+                          Cpa8U *iv,
+                          Cpa8U *key,
+                          CpaCySymCipherDirection op_type,
+                          optional_yield y);
 
   private:
-
     // Currently only supporting AES_256_CBC.
     // To-Do: Needs to be expanded
     static const size_t AES_256_IV_LEN = 16;
     static const size_t AES_256_KEY_SIZE = 32;
-    static const size_t QCC_MAX_RETRIES = 5000;
+    static const size_t MAX_NUM_SYM_REQ_BATCH = 32;
 
     /*
      * Struct to hold an instance of QAT to handle the crypto operations. These
@@ -62,7 +85,6 @@ class QccCrypto {
      * single crypto or multi-buffer crypto.
      */
     struct QCCSESS {
-      CpaCySymSessionSetupData sess_stp_data;
       Cpa32U sess_ctx_sz;
       CpaCySymSessionCtx sess_ctx;
     } *qcc_sess;
@@ -76,39 +98,18 @@ class QccCrypto {
       // Op common  items
       bool is_mem_alloc;
       bool op_complete;
-      CpaStatus op_result;
-      CpaCySymOpData *sym_op_data;
-      Cpa32U buff_meta_size;
-      Cpa32U num_buffers;
-      Cpa32U buff_size;
-
-      //Src data items
-      Cpa8U *src_buff_meta;
-      CpaBufferList *src_buff_list;
-      CpaFlatBuffer *src_buff_flat;
-      Cpa8U *src_buff;
-      Cpa8U *iv_buff;
+      CpaCySymDpOpData *sym_op_data[MAX_NUM_SYM_REQ_BATCH];
+      Cpa8U *src_buff[MAX_NUM_SYM_REQ_BATCH];
+      Cpa8U *iv_buff[MAX_NUM_SYM_REQ_BATCH];
     } *qcc_op_mem;
-
-    //QAT HW polling thread input structure
-    struct qcc_thread_args {
-      QccCrypto* qccinstance;
-      int entry;
-    };
-
-
-    /*
-     * Function to handle the crypt operation. Will run while the main thread
-     * runs the polling function on the instance doing the op
-     */
-    void do_crypt(qcc_thread_args *thread_args);
 
     /*
      * Handle queue with free instances to handle op
      */
-    std::queue<int> open_instances;
-    int QccGetFreeInstance();
+    boost::circular_buffer<int> open_instances;
     void QccFreeInstance(int entry);
+    std::thread qat_poll_thread;
+    bool thread_stop{false};
 
     /*
      * Contiguous Memory Allocator and de-allocator. We are using the usdm
@@ -153,7 +154,6 @@ class QccCrypto {
     }
 
     std::atomic<bool> is_init = { false };
-    CpaStatus init_stat, stat;
 
     /*
      * Function to cleanup memory if constructor fails
@@ -166,11 +166,49 @@ class QccCrypto {
      * associated callbacks. For synchronous operation (like this one), QAT
      * library creates an internal callback for the operation.
      */
-    static void* crypt_thread(void* entry);
-    CpaStatus QccCyStartPoll(int entry);
-    void poll_instance(int entry);
+    void poll_instances(void);
+    std::atomic<size_t> poll_retry_num{0};
 
-    pthread_t *cypollthreads;
-    static const size_t qcc_sleep_duration = 2;
+    bool symPerformOp(int avail_inst,
+                      CpaCySymSessionCtx sessionCtx,
+                      const Cpa8U *pSrc,
+                      Cpa8U *pDst,
+                      Cpa32U size,
+                      Cpa8U *pIv,
+                      Cpa32U ivLen,
+                      optional_yield y);
+
+    CpaStatus initSession(CpaInstanceHandle cyInstHandle,
+                          CpaCySymSessionCtx *sessionCtx,
+                          Cpa8U *pCipherKey,
+                          CpaCySymCipherDirection cipherDirection);
+
+    CpaStatus updateSession(CpaCySymSessionCtx sessionCtx,
+                            Cpa8U *pCipherKey,
+                            CpaCySymCipherDirection cipherDirection);
+
+
+};
+
+class QatCrypto {
+ private:
+  std::function<void(CpaStatus stat)> completion_handler;
+  std::atomic<std::size_t> count;
+ public:
+  void complete() {
+    if (--count == 0) {
+      completion_handler(CPA_STATUS_SUCCESS);
+    }
+    return ;
+  }
+
+  QatCrypto () : count(0) {}
+  QatCrypto (const QatCrypto &qat) = delete;
+  QatCrypto (QatCrypto &&qat) = delete;
+  void operator=(const QatCrypto &qat) = delete;
+  void operator=(QatCrypto &&qat) = delete;
+
+  template <typename CompletionToken>
+  auto async_perform_op(int avail_inst, std::span<CpaCySymDpOpData*> pOpDataVec, CompletionToken&& token);
 };
 #endif //QCCCRYPTO_H

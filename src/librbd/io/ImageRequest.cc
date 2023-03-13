@@ -461,6 +461,18 @@ void AbstractImageWriteRequest<I>::send_request() {
     return;
   }
 
+  // reflect changes in object_extents back to m_image_extents
+  if (ret == 1) {
+    this->m_image_extents.clear();
+    for (auto& object_extent : object_extents) {
+      auto [image_extents, _] = io::util::object_to_area_extents(
+          &image_ctx, object_extent.object_no,
+          {{object_extent.offset, object_extent.length}});
+      this->m_image_extents.insert(this->m_image_extents.end(),
+                                   image_extents.begin(), image_extents.end());
+    }
+  }
+
   aio_comp->set_request_count(object_extents.size());
   if (!object_extents.empty()) {
     uint64_t journal_tid = 0;
@@ -607,11 +619,12 @@ int ImageDiscardRequest<I>::prune_object_extents(
   // discard_granularity_bytes >= object_size && tail truncation
   // is a special case for filestore
   bool prune_required = false;
+  bool length_modified = false;
   auto object_size = this->m_image_ctx.layout.object_size;
   auto discard_granularity_bytes = std::min(m_discard_granularity_bytes,
                                             object_size);
   auto xform_lambda =
-    [discard_granularity_bytes, object_size, &prune_required]
+    [discard_granularity_bytes, object_size, &prune_required, &length_modified]
     (LightweightObjectExtent& object_extent) {
       auto& offset = object_extent.offset;
       auto& length = object_extent.length;
@@ -625,7 +638,11 @@ int ImageDiscardRequest<I>::prune_object_extents(
           prune_required = true;
           length = 0;
         } else {
-          length = next_offset - offset;
+          auto new_length = next_offset - offset;
+          if (length != new_length) {
+            length_modified = true;
+            length = new_length;
+          }
         }
       }
     };
@@ -643,6 +660,12 @@ int ImageDiscardRequest<I>::prune_object_extents(
                      remove_lambda),
       object_extents->end());
   }
+
+  // object extents were modified, image extents needs updating
+  if (length_modified || prune_required) {
+    return 1;
+  }
+
   return 0;
 }
 

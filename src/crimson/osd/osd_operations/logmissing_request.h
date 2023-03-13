@@ -6,7 +6,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
-#include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
@@ -24,15 +24,6 @@ class PG;
 
 class LogMissingRequest final : public PhasedOperationT<LogMissingRequest> {
 public:
-  class PGPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name = "LogMissingRequest::PGPipeline::await_map";
-    } await_map;
-    struct Process : OrderedExclusivePhaseT<Process> {
-      static constexpr auto type_name = "LogMissingRequest::PGPipeline::process";
-    } process;
-    friend LogMissingRequest;
-  };
   static constexpr OperationTypeCode type = OperationTypeCode::logmissing_request;
   LogMissingRequest(crimson::net::ConnectionRef&&, Ref<MOSDPGUpdateLogMissing>&&);
 
@@ -51,6 +42,7 @@ public:
     ShardServices &shard_services, Ref<PG> pg);
 
   std::tuple<
+    StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,
@@ -59,7 +51,7 @@ public:
   > tracking_events;
 
 private:
-  RepRequest::PGPipeline &pp(PG &pg);
+  ClientRequest::PGPipeline &pp(PG &pg);
 
   crimson::net::ConnectionFRef conn;
   // must be after `conn` to ensure the ConnectionPipeline's is alive

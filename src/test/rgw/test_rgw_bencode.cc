@@ -8,12 +8,11 @@ using namespace std;
 
 TEST(Bencode, String)
 {
-  TorrentBencode decode;
   bufferlist bl;
 
-  decode.bencode("foo", bl);
-  decode.bencode("bar", bl);
-  decode.bencode("baz", bl);
+  bencode("foo", bl);
+  bencode("bar", bl);
+  bencode("baz", bl);
 
   string s(bl.c_str(), bl.length());
 
@@ -22,12 +21,11 @@ TEST(Bencode, String)
 
 TEST(Bencode, Integers)
 {
-  TorrentBencode decode;
   bufferlist bl;
 
-  decode.bencode(0, bl);
-  decode.bencode(-3, bl);
-  decode.bencode(7, bl);
+  bencode(0, bl);
+  bencode(-3, bl);
+  bencode(7, bl);
 
   string s(bl.c_str(), bl.length());
 
@@ -36,13 +34,12 @@ TEST(Bencode, Integers)
 
 TEST(Bencode, Dict)
 {
-  TorrentBencode decode;  
   bufferlist bl;
 
-  decode.bencode_dict(bl);
-  decode.bencode("foo", 5, bl);
-  decode.bencode("bar", "baz", bl);
-  decode.bencode_end(bl);
+  bencode_dict(bl);
+  bencode("foo", 5, bl);
+  bencode("bar", "baz", bl);
+  bencode_end(bl);
 
   string s(bl.c_str(), bl.length());
 
@@ -51,13 +48,12 @@ TEST(Bencode, Dict)
 
 TEST(Bencode, List)
 {
-  TorrentBencode decode;
   bufferlist bl;
 
-  decode.bencode_list(bl);
-  decode.bencode("foo", 5, bl);
-  decode.bencode("bar", "baz", bl);
-  decode.bencode_end(bl);
+  bencode_list(bl);
+  bencode("foo", 5, bl);
+  bencode("bar", "baz", bl);
+  bencode_end(bl);
 
   string s(bl.c_str(), bl.length());
 

@@ -45,25 +45,25 @@ namespace {
   std::string non_base64{"stuff here"};
   std::string non_base64_sploded{"90KLscc0Dz4U49HX-7Tx"};
 
-  Formatter* formatter{nullptr};
+  Formatter* token_formatter{nullptr};
   bool verbose {false};
 }
 
 using namespace std;
 
 TEST(TOKEN, INIT) {
-  formatter = new JSONFormatter(true /* pretty */);
-  ASSERT_NE(formatter, nullptr);
+  token_formatter = new JSONFormatter(true /* pretty */);
+  ASSERT_NE(token_formatter, nullptr);
 }
 
 TEST(TOKEN, ENCODE) {
   // encode the two supported types
   RGWToken token_ad(RGWToken::TOKEN_AD, access_key, secret_key);
-  ASSERT_EQ(token_ad.encode_json_base64(formatter), enc_ad);
+  ASSERT_EQ(token_ad.encode_json_base64(token_formatter), enc_ad);
   tokens.push_back(token_ad); // provies copiable
 
   RGWToken token_ldap(RGWToken::TOKEN_LDAP, access_key, secret_key);
-  ASSERT_EQ(token_ldap.encode_json_base64(formatter), enc_ldap);
+  ASSERT_EQ(token_ldap.encode_json_base64(token_formatter), enc_ldap);
   tokens.push_back(token_ldap);
 }
 
@@ -101,7 +101,7 @@ TEST(TOKEN, BADINPUT3) {
 }
 
 TEST(TOKEN, SHUTDOWN) {
-  delete formatter;
+  delete token_formatter;
 }
 
 int main(int argc, char *argv[])

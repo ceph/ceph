@@ -232,6 +232,7 @@ struct seastore_test_t :
 	bl.length(),
 	bl);
     }
+
     void write(
       SeaStore &seastore,
       uint64_t offset,
@@ -904,6 +905,43 @@ TEST_P(seastore_test_t, attr)
     EXPECT_EQ(attrs.find(SS_ATTR), attrs.end());
     EXPECT_EQ(attrs.find("test_key"), attrs.end());
   }
+  {
+    // create OI_ATTR with len > onode_layout_t::MAX_OI_LENGTH, then
+    // overwrite it with another OI_ATTR len of which < onode_layout_t::MAX_OI_LENGTH
+    // create SS_ATTR with len > onode_layout_t::MAX_SS_LENGTH, then
+    // overwrite it with another SS_ATTR len of which < onode_layout_t::MAX_SS_LENGTH
+    char oi_array[onode_layout_t::MAX_OI_LENGTH + 1] = {'a'};
+    std::string oi(&oi_array[0], sizeof(oi_array));
+    bufferlist bl;
+    encode(oi, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    oi = "asdfasdfasdf";
+    bl.clear();
+    encode(oi, bl);
+    test_obj.set_attr(*seastore, OI_ATTR, bl);
+
+    char ss_array[onode_layout_t::MAX_SS_LENGTH + 1] = {'b'};
+    std::string ss(&ss_array[0], sizeof(ss_array));
+    bl.clear();
+    encode(ss, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    ss = "f";
+    bl.clear();
+    encode(ss, bl);
+    test_obj.set_attr(*seastore, SS_ATTR, bl);
+
+    auto attrs = test_obj.get_attrs(*seastore);
+    std::string oi2, ss2;
+    bufferlist bl2 = attrs[OI_ATTR];
+    decode(oi2, bl2);
+    bl2.clear();
+    bl2 = attrs[SS_ATTR];
+    decode(ss2, bl2);
+    EXPECT_EQ(oi, oi2);
+    EXPECT_EQ(ss, ss2);
+  }
   });
 }
 
@@ -924,6 +962,35 @@ TEST_P(seastore_test_t, omap_test_iterator)
 	make_bufferlist(128));
     }
     test_obj.check_omap(*seastore);
+  });
+}
+
+TEST_P(seastore_test_t, object_data_omap_remove)
+{
+  run_async([this] {
+    auto make_key = [](unsigned i) {
+      std::stringstream ss;
+      ss << "key" << i;
+      return ss.str();
+    };
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*seastore);
+    for (unsigned i = 0; i < 1024; ++i) {
+      test_obj.set_omap(
+	*seastore,
+	make_key(i),
+	make_bufferlist(128));
+    }
+    test_obj.check_omap(*seastore);
+
+    for (uint64_t i = 0; i < 16; i++) {
+      test_obj.write(
+	*seastore,
+	4096 * i,
+	4096,
+	'a');
+    }
+    test_obj.remove(*seastore);
   });
 }
 

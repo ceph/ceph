@@ -87,3 +87,18 @@ options:
   level: advanced
   desc: split extent if ratio of total extent size to write size exceeds this value
   default: 1.25
+- name: seastore_max_concurrent_transactions
+  type: uint
+  level: advanced
+  desc: maximum concurrent transactions that seastore allows
+  default: 8
+- name: seastore_main_device_type
+  type: str
+  level: dev
+  desc: The main device type seastore uses (SSD or RANDOM_BLOCK_SSD)
+  default: SSD
+- name: seastore_cbjournal_size
+  type: size
+  level: dev
+  desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_main_device_type is RANDOM_BLOCK
+  default: 5_G

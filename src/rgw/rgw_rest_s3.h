@@ -668,19 +668,14 @@ public:
 
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
-  const bool isSTSEnabled;
-  const bool isIAMEnabled;
-  const bool isPSEnabled;
   bool is_usage_op() const {
     return s->info.args.exists("usage");
   }
   RGWOp *op_get() override;
   RGWOp *op_head() override;
-  RGWOp *op_post() override;
 public:
-   RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
-                              bool _isSTSEnabled, bool _isIAMEnabled, bool _isPSEnabled) :
-      RGWHandler_REST_S3(auth_registry), isSTSEnabled(_isSTSEnabled), isIAMEnabled(_isIAMEnabled), isPSEnabled(_isPSEnabled) {}
+   RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry) :
+      RGWHandler_REST_S3(auth_registry) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 

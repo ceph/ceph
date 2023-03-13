@@ -132,7 +132,7 @@ public:
    */
   virtual write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &bptr,
+    bufferptr &&bptr,
     uint16_t stream = 0) = 0;
 
   virtual discard_ertr::future<> discard(
@@ -150,7 +150,9 @@ public:
 
   bool is_data_protection_enabled() const { return false; }
 
-  mkfs_ret mkfs(device_config_t) final;
+  mkfs_ret do_mkfs(device_config_t);
+
+  mount_ret do_mount();
 
   write_ertr::future<> write_rbm_header();
 
@@ -160,6 +162,8 @@ public:
     read_ertr::future<seastar::stat_data>;
   virtual stat_device_ret stat_device() = 0;
 
+  virtual std::string get_device_path() const = 0;
+
   uint64_t get_journal_size() const {
     return super.journal_size;
   }
@@ -167,16 +171,10 @@ public:
   static rbm_abs_addr get_journal_start() {
     return RBM_SUPERBLOCK_SIZE;
   }
-
-  // interfaces for test
-  void set_device_id(device_id_t id) {
-    super.config.spec.id = id;
-  }
-  void set_journal_size(uint64_t size) {
-    super.journal_size = size;
-  }
 };
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
+
+constexpr uint64_t DEFAULT_TEST_CBJOURNAL_SIZE = 1 << 26;
 
 class EphemeralRBMDevice : public RBMDevice {
 public:
@@ -198,15 +196,12 @@ public:
   extent_len_t get_block_size() const final { return block_size; }
 
   mount_ret mount() final {
-    return open("", seastar::open_flags::rw
-    ).safe_then([]() {
-      return mount_ertr::now();
-    }).handle_error(
-      mount_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error mount"
-      }
-    );
+    return do_mount();
+  }
+
+  mkfs_ret mkfs(device_config_t config) final {
+    super.journal_size = DEFAULT_TEST_CBJOURNAL_SIZE;
+    return do_mkfs(config);
   }
 
   open_ertr::future<> open(
@@ -215,7 +210,7 @@ public:
 
   write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &bptr,
+    bufferptr &&bptr,
     uint16_t stream = 0) override;
 
   using RBMDevice::read;
@@ -239,9 +234,16 @@ public:
       stat
     );
   }
+
+  std::string get_device_path() const final {
+    return "";
+  }
+
   char *buf;
 };
 using EphemeralRBMDeviceRef = std::unique_ptr<EphemeralRBMDevice>;
-EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size);
+EphemeralRBMDeviceRef create_test_ephemeral(
+  uint64_t journal_size = DEFAULT_TEST_CBJOURNAL_SIZE,
+  uint64_t data_size = DEFAULT_TEST_CBJOURNAL_SIZE);
 
 }

@@ -51,7 +51,6 @@ using RBMDevice = random_block_device::RBMDevice;
  *
  */
 
-constexpr uint64_t DEFAULT_TEST_CBJOURNAL_SIZE = 1 << 26;
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
 class CircularBoundedJournal : public Journal {

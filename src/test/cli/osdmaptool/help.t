@@ -36,4 +36,7 @@
      --test-crush [--range-first <first> --range-last <last>] map pgs to acting osds
      --adjust-crush-weight <osdid:weight>[,<osdid:weight>,<...>] change <osdid> CRUSH <weight> (but do not persist)
      --save                  write modified osdmap with upmap or crush-adjust changes
+     --read <file>           calculate pg upmap entries to balance pg primaries
+     --read-pool <poolname>  specify which pool the read balancer should adjust
+     --vstart                prefix upmap and read output with './bin/'
   [1]

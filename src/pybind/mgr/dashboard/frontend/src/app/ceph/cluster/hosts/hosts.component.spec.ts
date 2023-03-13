@@ -121,30 +121,18 @@ describe('HostsComponent', () => {
     const hostname = 'ceph.dev';
     const payload = [
       {
-        services: [
+        service_instances: [
           {
             type: 'mgr',
-            id: 'x'
-          },
-          {
-            type: 'mgr',
-            id: 'y'
+            count: 2
           },
           {
             type: 'osd',
-            id: '0'
-          },
-          {
-            type: 'osd',
-            id: '1'
-          },
-          {
-            type: 'osd',
-            id: '2'
+            count: 3
           },
           {
             type: 'rgw',
-            id: 'rgw'
+            count: 1
           }
         ],
         hostname: hostname,

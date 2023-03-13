@@ -31,11 +31,17 @@ using namespace std::placeholders;
 namespace ceph::osd::scheduler {
 
 mClockScheduler::mClockScheduler(CephContext *cct,
+  int whoami,
   uint32_t num_shards,
-  bool is_rotational)
+  int shard_id,
+  bool is_rotational,
+  MonClient *monc)
   : cct(cct),
+    whoami(whoami),
     num_shards(num_shards),
+    shard_id(shard_id),
     is_rotational(is_rotational),
+    monc(monc),
     scheduler(
       std::bind(&mClockScheduler::ClientRegistry::get_info,
                 &client_registry,
@@ -339,6 +345,11 @@ void mClockScheduler::enable_mclock_profile_settings()
 
 void mClockScheduler::set_profile_config()
 {
+  // Let only a single osd shard (id:0) set the profile configs
+  if (shard_id > 0) {
+    return;
+  }
+
   ClientAllocs client = client_allocs[
     static_cast<size_t>(op_scheduler_class::client)];
   ClientAllocs rec = client_allocs[
@@ -378,6 +389,9 @@ void mClockScheduler::set_profile_config()
   dout(10) << __func__ << " Best effort QoS params: " << "["
     << best_effort.res << "," << best_effort.wgt << "," << best_effort.lim
     << "]" << dendl;
+
+  // Apply the configuration changes
+  update_configuration();
 }
 
 int mClockScheduler::calc_scaled_cost(int item_cost)
@@ -400,7 +414,7 @@ void mClockScheduler::dump(ceph::Formatter &f) const
 {
   // Display queue sizes
   f.open_object_section("queue_sizes");
-  f.dump_int("immediate", immediate.size());
+  f.dump_int("high_priority_queue", high_priority.size());
   f.dump_int("scheduler", scheduler.request_count());
   f.close_section();
 
@@ -416,15 +430,27 @@ void mClockScheduler::dump(ceph::Formatter &f) const
   f.open_object_section("mClockQueues");
   f.dump_string("queues", display_queues());
   f.close_section();
+
+  f.open_object_section("HighPriorityQueue");
+  for (auto it = high_priority.begin();
+       it != high_priority.end(); it++) {
+    f.dump_int("priority", it->first);
+    f.dump_int("queue_size", it->second.size());
+  }
+  f.close_section();
 }
 
 void mClockScheduler::enqueue(OpSchedulerItem&& item)
 {
   auto id = get_scheduler_id(item);
-
+  unsigned priority = item.get_priority();
+  unsigned cutoff = get_io_prio_cut(cct);
+  
   // TODO: move this check into OpSchedulerItem, handle backwards compat
   if (op_scheduler_class::immediate == id.class_id) {
-    immediate.push_front(std::move(item));
+    enqueue_high(immediate_class_priority, std::move(item));
+  } else if (priority >= cutoff) {
+    enqueue_high(priority, std::move(item));
   } else {
     int cost = calc_scaled_cost(item.get_cost());
     item.set_qos_cost(cost);
@@ -441,7 +467,8 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
   }
 
  dout(20) << __func__ << " client_count: " << scheduler.client_count()
-          << " queue_sizes: [ imm: " << immediate.size()
+          << " queue_sizes: [ "
+	  << " high_priority_queue: " << high_priority.size()
           << " sched: " << scheduler.request_count() << " ]"
           << dendl;
  dout(30) << __func__ << " mClockClients: "
@@ -454,17 +481,46 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
 
 void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
 {
-  immediate.push_back(std::move(item));
-  // TODO: item may not be immediate, update mclock machinery to permit
-  // putting the item back in the queue
+  unsigned priority = item.get_priority();
+  unsigned cutoff = get_io_prio_cut(cct);
+  auto id = get_scheduler_id(item);
+
+  if (op_scheduler_class::immediate == id.class_id) {
+    enqueue_high(immediate_class_priority, std::move(item), true);
+  } else if (priority >= cutoff) {
+    enqueue_high(priority, std::move(item), true);
+  } else {
+    // mClock does not support enqueue at front, so we use
+    // the high queue with priority 0
+    enqueue_high(0, std::move(item), true);
+  }
+}
+
+void mClockScheduler::enqueue_high(unsigned priority,
+                                   OpSchedulerItem&& item,
+				   bool front)
+{
+  if (front) {
+    high_priority[priority].push_back(std::move(item));
+  } else {
+    high_priority[priority].push_front(std::move(item));
+  }
 }
 
 WorkItem mClockScheduler::dequeue()
 {
-  if (!immediate.empty()) {
-    WorkItem work_item{std::move(immediate.back())};
-    immediate.pop_back();
-    return work_item;
+  if (!high_priority.empty()) {
+    auto iter = high_priority.begin();
+    // invariant: high_priority entries are never empty
+    assert(!iter->second.empty());
+    WorkItem ret{std::move(iter->second.back())};
+    iter->second.pop_back();
+    if (iter->second.empty()) {
+      // maintain invariant, high priority entries are never empty
+      high_priority.erase(iter);
+    }
+    ceph_assert(std::get_if<OpSchedulerItem>(&ret));
+    return ret;
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
     if (result.is_future()) {
@@ -544,17 +600,56 @@ void mClockScheduler::handle_conf_change(
       client_registry.update_from_config(conf);
     }
   }
-  if (changed.count("osd_mclock_scheduler_client_res") ||
-      changed.count("osd_mclock_scheduler_client_wgt") ||
-      changed.count("osd_mclock_scheduler_client_lim") ||
-      changed.count("osd_mclock_scheduler_background_recovery_res") ||
-      changed.count("osd_mclock_scheduler_background_recovery_wgt") ||
-      changed.count("osd_mclock_scheduler_background_recovery_lim") ||
-      changed.count("osd_mclock_scheduler_background_best_effort_res") ||
-      changed.count("osd_mclock_scheduler_background_best_effort_wgt") ||
-      changed.count("osd_mclock_scheduler_background_best_effort_lim")) {
+
+  auto get_changed_key = [&changed]() -> std::optional<std::string> {
+    static const std::vector<std::string> qos_params = {
+      "osd_mclock_scheduler_client_res",
+      "osd_mclock_scheduler_client_wgt",
+      "osd_mclock_scheduler_client_lim",
+      "osd_mclock_scheduler_background_recovery_res",
+      "osd_mclock_scheduler_background_recovery_wgt",
+      "osd_mclock_scheduler_background_recovery_lim",
+      "osd_mclock_scheduler_background_best_effort_res",
+      "osd_mclock_scheduler_background_best_effort_wgt",
+      "osd_mclock_scheduler_background_best_effort_lim"
+    };
+
+    for (auto &qp : qos_params) {
+      if (changed.count(qp)) {
+        return qp;
+      }
+    }
+    return std::nullopt;
+  };
+
+  if (auto key = get_changed_key(); key.has_value()) {
     if (mclock_profile == "custom") {
       client_registry.update_from_config(conf);
+    } else {
+      // Attempt to change QoS parameter for a built-in profile. Restore the
+      // profile defaults by making one of the OSD shards remove the key from
+      // config monitor store. Note: monc is included in the check since the
+      // mock unit test currently doesn't initialize it.
+      if (shard_id == 0 && monc) {
+        static const std::vector<std::string> osds = {
+          "osd",
+          "osd." + std::to_string(whoami)
+        };
+
+        for (auto osd : osds) {
+          std::string cmd =
+            "{"
+              "\"prefix\": \"config rm\", "
+              "\"who\": \"" + osd + "\", "
+              "\"name\": \"" + *key + "\""
+            "}";
+          std::vector<std::string> vcmd{cmd};
+
+          dout(10) << __func__ << " Removing Key: " << *key
+                   << " for " << osd << " from Mon db" << dendl;
+          monc->start_mon_command(vcmd, {}, nullptr, nullptr, nullptr);
+        }
+      }
     }
   }
 }

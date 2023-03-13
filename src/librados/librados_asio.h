@@ -32,6 +32,15 @@ namespace librados {
 
 namespace detail {
 
+#ifndef _WIN32
+constexpr auto err_category = boost::system::system_category;
+#else
+// librados uses "errno.h" error codes. On Windows,
+// boost::system::system_category refers to errors from winerror.h.
+// That being considered, we'll use boost::system::generic_category.
+constexpr auto err_category = boost::system::generic_category;
+#endif
+
 /// unique_ptr with custom deleter for AioCompletion
 struct AioCompletionDeleter {
   void operator()(AioCompletion *c) { c->release(); }
@@ -76,7 +85,7 @@ struct AsyncOp : Invoker<Result> {
     const int ret = op.aio_completion->get_return_value();
     boost::system::error_code ec;
     if (ret < 0) {
-      ec.assign(-ret, boost::system::system_category());
+      ec.assign(-ret, librados::detail::err_category());
     }
     op.dispatch(std::move(p), ec);
   }
@@ -107,7 +116,7 @@ auto async_read(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 
   int ret = io.aio_read(oid, op.aio_completion.get(), &op.result, len, off);
   if (ret < 0) {
-    auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+    auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
     ceph::async::post(std::move(p), ec, bufferlist{});
   } else {
     p.release(); // release ownership until completion
@@ -130,7 +139,7 @@ auto async_write(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 
   int ret = io.aio_write(oid, op.aio_completion.get(), bl, len, off);
   if (ret < 0) {
-    auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+    auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
     ceph::async::post(std::move(p), ec);
   } else {
     p.release(); // release ownership until completion
@@ -154,7 +163,7 @@ auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
   int ret = io.aio_operate(oid, op.aio_completion.get(), read_op,
                            flags, &op.result);
   if (ret < 0) {
-    auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+    auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
     ceph::async::post(std::move(p), ec, bufferlist{});
   } else {
     p.release(); // release ownership until completion
@@ -177,7 +186,7 @@ auto async_operate(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
 
   int ret = io.aio_operate(oid, op.aio_completion.get(), write_op, flags);
   if (ret < 0) {
-    auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+    auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
     ceph::async::post(std::move(p), ec);
   } else {
     p.release(); // release ownership until completion
@@ -200,7 +209,7 @@ auto async_notify(ExecutionContext& ctx, IoCtx& io, const std::string& oid,
   int ret = io.aio_notify(oid, op.aio_completion.get(),
                           bl, timeout_ms, &op.result);
   if (ret < 0) {
-    auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+    auto ec = boost::system::error_code{-ret, librados::detail::err_category()};
     ceph::async::post(std::move(p), ec, bufferlist{});
   } else {
     p.release(); // release ownership until completion

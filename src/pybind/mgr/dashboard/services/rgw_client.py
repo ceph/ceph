@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=C0302
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-lines
 
 import ipaddress
 import json
@@ -579,18 +582,245 @@ class RgwClient(RestClient):
         realms_info = self._get_realms_info()
         if 'realms' in realms_info and realms_info['realms']:
             return realms_info['realms']
-
         return []
 
-    def get_default_realm(self) -> str:
+    def get_default_realm(self):
         realms_info = self._get_realms_info()
         if 'default_info' in realms_info and realms_info['default_info']:
             realm_info = self._get_realm_info(realms_info['default_info'])
             if 'name' in realm_info and realm_info['name']:
                 return realm_info['name']
-        raise DashboardException(msg='Default realm not found.',
-                                 http_status_code=404,
-                                 component='rgw')
+        return None
+
+    def create_realm(self, realm_name: str, default: bool):
+        rgw_realm_create_cmd = ['realm', 'create']
+        cmd_create_realm_options = ['--rgw-realm', realm_name]
+        if default != 'false':
+            cmd_create_realm_options.append('--default')
+        rgw_realm_create_cmd += cmd_create_realm_options
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_create_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to create realm',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def list_realms(self):
+        rgw_realm_list = {}
+        rgw_realm_list_cmd = ['realm', 'list']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_realm_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch realm list',
+                                         http_status_code=500, component='rgw')
+            rgw_realm_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_realm_list
+
+    def get_realm(self, realm_name: str):
+        realm_info = {}
+        rgw_realm_info_cmd = ['realm', 'get', '--rgw-realm', realm_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_realm_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get realm info',
+                                         http_status_code=500, component='rgw')
+            realm_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return realm_info
+
+    def get_all_realms_info(self):
+        all_realms_info = {}
+        realms_info = []
+        rgw_realm_list = self.list_realms()
+        if 'realms' in rgw_realm_list:
+            if rgw_realm_list['realms'] != []:
+                for rgw_realm in rgw_realm_list['realms']:
+                    realm_info = self.get_realm(rgw_realm)
+                    realms_info.append(realm_info)
+                    all_realms_info['realms'] = realms_info  # type: ignore
+            else:
+                all_realms_info['realms'] = []  # type: ignore
+        if 'default_info' in rgw_realm_list and rgw_realm_list['default_info'] != '':
+            all_realms_info['default_realm'] = rgw_realm_list['default_info']  # type: ignore
+        else:
+            all_realms_info['default_realm'] = ''  # type: ignore
+        return all_realms_info
+
+    def update_period(self):
+        rgw_update_period_cmd = ['period', 'update', '--commit']
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_update_period_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to update period',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def create_zonegroup(self, realm_name: str, zonegroup_name: str,
+                         default: bool, master: bool, endpoints: List[str]):
+        rgw_zonegroup_create_cmd = ['zonegroup', 'create']
+        cmd_create_zonegroup_options = ['--rgw-zonegroup', zonegroup_name]
+        if realm_name != 'null':
+            cmd_create_zonegroup_options.append('--rgw-realm')
+            cmd_create_zonegroup_options.append(realm_name)
+        if default != 'false':
+            cmd_create_zonegroup_options.append('--default')
+        if master != 'false':
+            cmd_create_zonegroup_options.append('--master')
+        if endpoints != 'null':  # type: ignore
+            if isinstance(endpoints, list) and len(endpoints) > 1:
+                endpoint = ','.join(endpoints)
+            else:
+                endpoint = endpoints  # type: ignore
+            cmd_create_zonegroup_options.append('--endpoints')
+            cmd_create_zonegroup_options.append(endpoint)
+        rgw_zonegroup_create_cmd += cmd_create_zonegroup_options
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_create_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get realm info',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+        return out
+
+    def list_zonegroups(self):
+        rgw_zonegroup_list = {}
+        rgw_zonegroup_list_cmd = ['zonegroup', 'list']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch zonegroup list',
+                                         http_status_code=500, component='rgw')
+            rgw_zonegroup_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_zonegroup_list
+
+    def get_zonegroup(self, zonegroup_name: str):
+        zonegroup_info = {}
+        rgw_zonegroup_info_cmd = ['zonegroup', 'get', '--rgw-zonegroup', zonegroup_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get zonegroup info',
+                                         http_status_code=500, component='rgw')
+            zonegroup_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return zonegroup_info
+
+    def get_all_zonegroups_info(self):
+        all_zonegroups_info = {}
+        zonegroups_info = []
+        rgw_zonegroup_list = self.list_zonegroups()
+        if 'zonegroups' in rgw_zonegroup_list:
+            if rgw_zonegroup_list['zonegroups'] != []:
+                for rgw_zonegroup in rgw_zonegroup_list['zonegroups']:
+                    zonegroup_info = self.get_zonegroup(rgw_zonegroup)
+                    zonegroups_info.append(zonegroup_info)
+                    all_zonegroups_info['zonegroups'] = zonegroups_info  # type: ignore
+            else:
+                all_zonegroups_info['zonegroups'] = []  # type: ignore
+        if 'default_info' in rgw_zonegroup_list and rgw_zonegroup_list['default_info'] != '':
+            all_zonegroups_info['default_zonegroup'] = rgw_zonegroup_list['default_info']
+        else:
+            all_zonegroups_info['default_zonegroup'] = ''  # type: ignore
+        return all_zonegroups_info
+
+    def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, user):
+        if user != 'null':
+            access_key, secret_key = _get_user_keys(user)
+        else:
+            access_key = None  # type: ignore
+            secret_key = None  # type: ignore
+        rgw_zone_create_cmd = ['zone', 'create']
+        cmd_create_zone_options = ['--rgw-zone', zone_name]
+        if zonegroup_name != 'null':
+            cmd_create_zone_options.append('--rgw-zonegroup')
+            cmd_create_zone_options.append(zonegroup_name)
+        if default != 'false':
+            cmd_create_zone_options.append('--default')
+        if master != 'false':
+            cmd_create_zone_options.append('--master')
+        if endpoints != 'null':
+            cmd_create_zone_options.append('--endpoints')
+            cmd_create_zone_options.append(endpoints)
+        if access_key is not None:
+            cmd_create_zone_options.append('--access-key')
+            cmd_create_zone_options.append(access_key)
+        if secret_key is not None:
+            cmd_create_zone_options.append('--secret')
+            cmd_create_zone_options.append(secret_key)
+        rgw_zone_create_cmd += cmd_create_zone_options
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_create_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to create zone',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+        return out
+
+    def list_zones(self):
+        rgw_zone_list = {}
+        rgw_zone_list_cmd = ['zone', 'list']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch zone list',
+                                         http_status_code=500, component='rgw')
+            rgw_zone_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_zone_list
+
+    def get_zone(self, zone_name: str):
+        zone_info = {}
+        rgw_zone_info_cmd = ['zone', 'get', '--rgw-zone', zone_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get zone info',
+                                         http_status_code=500, component='rgw')
+            zone_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return zone_info
+
+    def get_all_zones_info(self):
+        all_zones_info = {}
+        zones_info = []
+        rgw_zone_list = self.list_zones()
+        if 'zones' in rgw_zone_list:
+            if rgw_zone_list['zones'] != []:
+                for rgw_zone in rgw_zone_list['zones']:
+                    zone_info = self.get_zone(rgw_zone)
+                    zones_info.append(zone_info)
+                    all_zones_info['zones'] = zones_info  # type: ignore
+            else:
+                all_zones_info['zones'] = []
+        if 'default_info' in rgw_zone_list and rgw_zone_list['default_info'] != '':
+            all_zones_info['default_zone'] = rgw_zone_list['default_info']  # type: ignore
+        else:
+            all_zones_info['default_zone'] = ''  # type: ignore
+        return all_zones_info
+
+    def get_multisite_status(self):
+        is_multisite_configured = True
+        rgw_realm_list = self.list_realms()
+        rgw_zonegroup_list = self.list_zonegroups()
+        rgw_zone_list = self.list_zones()
+        if len(rgw_realm_list['realms']) < 1 and len(rgw_zonegroup_list['zonegroups']) < 1 \
+                and len(rgw_zone_list['zones']) < 1:
+            is_multisite_configured = False
+        return is_multisite_configured
 
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):
@@ -786,6 +1016,15 @@ class RgwClient(RestClient):
             _ = request(data=data)  # type: ignore
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
+
+    def list_roles(self) -> List[Dict[str, Any]]:
+        rgw_list_roles_command = ['role', 'list']
+        code, roles, err = mgr.send_rgwadmin_command(rgw_list_roles_command)
+        if code < 0:
+            logger.warning('Error listing roles with code %d: %s', code, err)
+            return []
+
+        return roles
 
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:

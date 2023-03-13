@@ -16,6 +16,7 @@
 #include "include/uuid.h"
 
 #include "os/Transaction.h"
+#include "crimson/common/throttle.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
@@ -232,9 +233,11 @@ private:
 	transaction_manager->create_transaction(src, tname)),
       std::forward<F>(f),
       [this, op_type](auto &ctx, auto &f) {
-	return ctx.transaction->get_handle().take_collection_lock(
-	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-	).then([&, this] {
+	return throttler.get(1).then([&ctx] {
+	  return ctx.transaction->get_handle().take_collection_lock(
+	    static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
+	  );
+	}).then([&, this] {
 	  return repeat_eagain([&, this] {
 	    ctx.reset_preserve_handle(*transaction_manager);
 	    return std::invoke(f, ctx);
@@ -247,6 +250,8 @@ private:
 	}).then([this, op_type, &ctx] {
 	  add_latency_sample(op_type,
 	      std::chrono::steady_clock::now() - ctx.begin_timestamp);
+	}).finally([this] {
+	  throttler.put();
 	});
       }
     );
@@ -335,6 +340,8 @@ private:
   TransactionManagerRef transaction_manager;
   CollectionManagerRef collection_manager;
   OnodeManagerRef onode_manager;
+
+  common::Throttle throttler;
 
   using tm_iertr = TransactionManager::base_iertr;
   using tm_ret = tm_iertr::future<>;
