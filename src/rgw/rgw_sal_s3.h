@@ -46,14 +46,8 @@ class S3InternalFilterWriter;
 
 class RGWGetBucketCB : public RGWHTTPStreamRWRequest::ReceiveCB {
 public:
-  //S3FilterBucket *bucket;
   Attrs attrs;
-  //vector<string> *remote_bucket_list;
-  //vector<rgw_bucket_dir_entry> *remote_bucket;
 
-  //RGWGetBucketCB(S3FilterBucket *_bucket, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): bucket(_bucket), remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
-
-  //RGWGetBucketCB(Attrs attrs, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
   RGWGetBucketCB(Attrs _attrs): attrs(_attrs) {}
   int handle_data(bufferlist& bl, bool *pause) override;
 };
@@ -68,7 +62,6 @@ public:
 
   RGWListBucketCB(S3FilterBucket *_bucket, vector<string> *_remote_bucket_obj_list, vector<rgw_bucket_dir_entry> *_remote_bucket_obj_details, bool _is_truncated): bucket(_bucket), remote_bucket_obj_list(_remote_bucket_obj_list), remote_bucket_obj_details(_remote_bucket_obj_details), is_truncated(_is_truncated) {}
 
-  //RGWGetBucketCB(Attrs attrs, vector<string> *_remote_bucket_list, vector<rgw_bucket_dir_entry> *_remote_bucket): remote_bucket_list(_remote_bucket_list), remote_bucket(_remote_bucket) {}
   int handle_data(bufferlist& bl, bool *pause) override;
 };
 
@@ -78,8 +71,7 @@ public:
   S3FilterObject *object;
   Attrs attrs;
   bufferlist *rc_bl;
-  const DoutPrefixProvider* dpp; 
-  RGWGetObjectCB(const DoutPrefixProvider* _dpp, S3FilterObject *_object, Attrs _attrs, bufferlist* _bl): dpp(_dpp), object(_object), attrs(_attrs), rc_bl(_bl) {}
+  RGWGetObjectCB(S3FilterObject *_object, Attrs _attrs, bufferlist* _bl): object(_object), attrs(_attrs), rc_bl(_bl) {}
 
   int handle_data(bufferlist& bl, bool *pause) override;
 };
@@ -265,7 +257,7 @@ class S3FilterObject : public FilterObject {
 								    filter(_filter) {}
     virtual ~S3FilterObject() = default;
 
-	virtual Attrs& get_attrs(void) override;
+	virtual const Attrs& get_attrs(void) const override;
     virtual const std::string &get_name() const override { return next->get_name(); }
     //virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     //                        Attrs* delattrs, optional_yield y) override;

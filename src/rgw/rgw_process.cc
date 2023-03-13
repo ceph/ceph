@@ -339,14 +339,12 @@ int process_request(rgw::sal::Store* const store,
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-	  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       rc = rgw::lua::request::execute(store, rest, olog, s, op, script);
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
       }
     }
   }
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::tie(ret,c) = schedule_request(scheduler, s, op);
   if (ret < 0) {
     if (ret == -EAGAIN) {
@@ -356,12 +354,10 @@ int process_request(rgw::sal::Store* const store,
     abort_early(s, op, ret, handler, yield);
     goto done;
   }
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   req->op = op;
   ldpp_dout(op, 10) << "op=" << typeid(*op).name() << dendl;
   s->op_type = op->get_type();
 
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   try {
     ldpp_dout(op, 2) << "verifying requester" << dendl;
     ret = op->verify_requester(auth_registry, yield);
@@ -397,9 +393,7 @@ int process_request(rgw::sal::Store* const store,
     s->trace->SetAttribute(tracing::rgw::OP, op->name());
     s->trace->SetAttribute(tracing::rgw::TYPE, tracing::rgw::REQUEST);
 
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     ret = rgw_process_authenticated(handler, op, req, s, yield, store);
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (ret < 0) {
       abort_early(s, op, ret, handler, yield);
       goto done;
@@ -409,10 +403,8 @@ int process_request(rgw::sal::Store* const store,
     abort_early(s, op, -ERR_INVALID_SECRET_KEY, handler, yield);
   }
 
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 done:
   if (op) {
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (s->trace) {
       s->trace->SetAttribute(tracing::rgw::RETURN, op->get_ret());
       if (!rgw::sal::User::empty(s->user)) {
@@ -425,18 +417,14 @@ done:
         s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
       }
     }
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     std::string script;
     auto rc = rgw::lua::read_script(s, s->lua_manager, s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       rc = rgw::lua::request::execute(store, rest, olog, s, op, script);
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (rc < 0) {
         ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
       }
@@ -444,33 +432,24 @@ done:
   }
 
   try {
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     client_io->complete_request();
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   } catch (rgw::io::Exception& e) {
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     dout(0) << "ERROR: client_io->complete_request() returned "
             << e.what() << dendl;
   }
   if (should_log) {
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     rgw_log_op(rest, s, op, olog);
   }
 
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (http_ret != nullptr) {
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     *http_ret = s->err.http_ret;
   }
   int op_ret = 0;
 
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (user && !rgw::sal::User::empty(s->user.get())) {
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     *user = s->user->get_id().to_str();
   }
 
-  ldpp_dout(op, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (op) {
     op_ret = op->get_ret();
     ldpp_dout(op, 2) << "op status=" << op_ret << dendl;
@@ -479,12 +458,10 @@ done:
     ldpp_dout(s, 2) << "http status=" << s->err.http_ret << dendl;
   }
 
-  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (handler)
     handler->put_op(op);
   rest->put_handler(handler);
 
-  dout(20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   const auto lat = s->time_elapsed();
   if (latency) {
     *latency = lat;

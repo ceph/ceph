@@ -266,7 +266,6 @@ void handle_connection(boost::asio::io_context& context,
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
       ceph::coarse_real_clock::duration latency{};
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       process_request(env.store, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y,
                       scheduler, &user, &latency,
@@ -274,7 +273,6 @@ void handle_connection(boost::asio::io_context& context,
                       env.lua_background,
                       lua_manager,
                       &http_ret);
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       if (cct->_conf->subsys.should_gather(ceph_subsys_rgw_access, 1)) {
         // access log line elements begin per Apache Combined Log Format with additions following
@@ -289,12 +287,10 @@ void handle_connection(boost::asio::io_context& context,
             << latency << dendl;
       }
     }
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
     if (!parser.keep_alive()) {
       return;
     }
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
     // if we failed before reading the entire message, discard any remaining
     // bytes before reading the next
@@ -319,9 +315,7 @@ void handle_connection(boost::asio::io_context& context,
             << ec.message() << dendl;
         return;
       }
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     }
-  ldout(cct, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   }
 }
 

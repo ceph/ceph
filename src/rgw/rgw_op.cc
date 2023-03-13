@@ -256,18 +256,14 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   bufferlist bl;
   int ret = 0;
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   ret = rop->get_attr(dpp, RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     ret = decode_policy(dpp, cct, bl, policy);
     if (ret < 0)
       return ret;
   } else if (ret == -ENODATA) {
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* object exists, but policy is broken */
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
     std::unique_ptr<rgw::sal::User> user = store->get_user(bucket_info.owner);
@@ -275,23 +271,18 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
     if (ret < 0)
       return ret;
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     policy->create_default(bucket_info.owner, user->get_display_name());
   }
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (storage_class) {
     bufferlist scbl;
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     int r = rop->get_attr(dpp, RGW_ATTR_STORAGE_CLASS, scbl, y);
     if (r >= 0) {
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       *storage_class = scbl.to_str();
     } else {
       storage_class->clear();
     }
   }
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   return ret;
 }
@@ -405,7 +396,6 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   }
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   int ret = get_obj_policy_from_attr(dpp, s->cct, store, bucket_info,
 				     bucket_attrs, acl, storage_class, object,
 				     s->yield);
@@ -659,7 +649,6 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
 {
   int ret = 0;
 
-  ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!rgw::sal::Object::empty(s->object.get())) {
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
@@ -670,7 +659,6 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Store* st
     if (prefetch_data) {
       s->object->set_prefetch_data();
     }
-	ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     ret = read_obj_policy(dpp, store, s, s->bucket->get_info(), s->bucket_attrs,
 			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket.get(),
                           s->object.get(), y);
@@ -1592,7 +1580,6 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
   part->set_atomic();
   part->set_prefetch_data();
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op = part->get_read_op();
 
   if (!swift_slo) {
@@ -2168,9 +2155,7 @@ void RGWGetObj::execute(optional_yield y)
 
   perfcounter->inc(l_rgw_get);
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -2194,20 +2179,16 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   version_id = s->object->get_instance();
   s->obj_size = s->object->get_obj_size();
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " size is: " << s->obj_size << dendl;
   attrs = s->object->get_attrs();
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {
     return;
   }
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
     op_ret = 0;
     goto done_err;
   }
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* start gettorrent */
   if (torrent.get_flag())
   {
@@ -2237,7 +2218,6 @@ void RGWGetObj::execute(optional_yield y)
   }
   /* end gettorrent */
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   // run lua script on decompressed and decrypted data - first filter runs last
   op_ret = get_lua_filter(&run_lua, filter);
   if (run_lua != nullptr) {
@@ -2247,7 +2227,6 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = rgw_compression_info_from_attrset(attrs, need_decompress, cs_info);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
@@ -2260,7 +2239,6 @@ void RGWGetObj::execute(optional_yield y)
       filter = &*decompress;
   }
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter != attrs.end() && get_type() == RGW_OP_GET_OBJ && get_data) {
     RGWObjManifest m;
@@ -2274,7 +2252,6 @@ void RGWGetObj::execute(optional_yield y)
     }
   }
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
     op_ret = handle_user_manifest(attr_iter->second.c_str(), y);
@@ -2286,7 +2263,6 @@ void RGWGetObj::execute(optional_yield y)
     return;
   }
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_SLO_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
     is_slo = true;
@@ -2299,7 +2275,6 @@ void RGWGetObj::execute(optional_yield y)
     return;
   }
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   // for range requests with obj size 0
   if (range_str && !(s->obj_size)) {
     total_len = 0;
@@ -2307,7 +2282,6 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = s->object->range_to_ofs(s->obj_size, ofs, end);
   if (op_ret < 0)
     goto done_err;
@@ -2317,7 +2291,6 @@ void RGWGetObj::execute(optional_yield y)
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* Check whether the object has expired. Swift API documentation
    * stands that we should return 404 Not Found in such case. */
   if (need_object_expiration() && s->object->is_expired()) {
@@ -2330,7 +2303,6 @@ void RGWGetObj::execute(optional_yield y)
 
   start = ofs;
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   op_ret = this->get_decrypt_filter(&decrypt, filter,
                                     attr_iter != attrs.end() ? &(attr_iter->second) : nullptr);
@@ -2343,8 +2315,6 @@ void RGWGetObj::execute(optional_yield y)
   }
 
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " get_data is: "<< get_data << dendl;
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " ofs is: "<< ofs << " end is: " << end << dendl;
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
     return;
@@ -2352,25 +2322,20 @@ void RGWGetObj::execute(optional_yield y)
 
   perfcounter->inc(l_rgw_get_b, end - ofs);
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret >= 0)
     op_ret = filter->flush();
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   perfcounter->tinc(l_rgw_get_lat, s->time_elapsed());
   if (op_ret < 0) {
     goto done_err;
   }
 
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = send_response_data(bl, 0, 0);
   if (op_ret < 0) {
     goto done_err;
   }
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   return;
 
 done_err:
@@ -2460,7 +2425,6 @@ void RGWListBuckets::execute(optional_yield y)
       read_count = max_buckets;
     }
 
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << " marker is: " << marker << " end_marker: " << end_marker << dendl;
     op_ret = s->user->list_buckets(this, marker, end_marker, read_count, should_get_stats(), buckets, y);
 
     if (op_ret < 0) {
@@ -2965,13 +2929,11 @@ void RGWListBucket::pre_exec()
 
 void RGWListBucket::execute(optional_yield y)
 {
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
 
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (allow_unordered && !delimiter.empty()) {
     ldpp_dout(this, 0) <<
       "ERROR: unordered bucket listing requested with a delimiter" << dendl;
@@ -2979,12 +2941,10 @@ void RGWListBucket::execute(optional_yield y)
     return;
   }
 
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (need_container_stats()) {
     op_ret = s->bucket->update_container_stats(s);
   }
 
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << " marker is: " << marker << " end_marker: " << end_marker << dendl;
   rgw::sal::Bucket::ListParams params;
   params.prefix = prefix;
   params.delim = delimiter;
@@ -2994,12 +2954,9 @@ void RGWListBucket::execute(optional_yield y)
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
 
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   rgw::sal::Bucket::ListResults results;
 
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   op_ret = s->bucket->list(this, params, max, results, y);
-    ldpp_dout(this, 20) << "AMIN : " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;
@@ -3250,15 +3207,12 @@ void RGWCreateBucket::execute(optional_yield y)
 {
   buffer::list aclbl;
   buffer::list corsbl;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   string bucket_name = rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name);
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   op_ret = get_params(y);
   if (op_ret < 0)
     return;
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!relaxed_region_enforcement &&
       !location_constraint.empty() &&
       !store->get_zone()->has_zonegroup_api(location_constraint)) {
@@ -3269,7 +3223,6 @@ void RGWCreateBucket::execute(optional_yield y)
       return;
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!relaxed_region_enforcement && !store->get_zone()->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
       store->get_zone()->get_zonegroup().get_api_name() != location_constraint) {
     ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
@@ -3279,11 +3232,9 @@ void RGWCreateBucket::execute(optional_yield y)
     s->err.message = "The specified location-constraint is not valid";
     return;
   }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   std::set<std::string> names;
   store->get_zone()->get_zonegroup().get_placement_target_names(names);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!placement_rule.name.empty() &&
       !names.count(placement_rule.name)) {
     ldpp_dout(this, 0) << "placement target (" << placement_rule.name << ")"
@@ -3294,39 +3245,30 @@ void RGWCreateBucket::execute(optional_yield y)
     return;
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
   {
     std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
     op_ret = store->get_bucket(this, s->user.get(), s->bucket_tenant,
 			       s->bucket_name, &tmp_bucket, y);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << " op_ret is: " << op_ret << dendl;
     if (op_ret < 0 && op_ret != -ENOENT)
       return;
     s->bucket_exists = (op_ret != -ENOENT);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
     if (s->bucket_exists) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (!s->system_request &&
 	  store->get_zone()->get_zonegroup().get_id() !=
 	  tmp_bucket->get_info().zonegroup) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 	op_ret = -EEXIST;
 	return;
       }
       /* Initialize info from req_state */
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       info = tmp_bucket->get_info();
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     }
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   s->bucket_owner.set_id(s->user->get_id()); /* XXX dang use s->bucket->owner */
   s->bucket_owner.set_name(s->user->get_display_name());
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   string zonegroup_id;
 
@@ -3339,20 +3281,17 @@ void RGWCreateBucket::execute(optional_yield y)
     zonegroup_id = store->get_zone()->get_zonegroup().get_id();
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* Encode special metadata first as we're using std::map::emplace under
    * the hood. This method will add the new items only if the map doesn't
    * contain such keys yet. */
   policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (has_cors) {
     cors_config.encode(corsbl);
     emplace_attr(RGW_ATTR_CORS, std::move(corsbl));
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   RGWQuotaInfo quota_info;
   const RGWQuotaInfo * pquota_info = nullptr;
   if (need_metadata_upload()) {
@@ -3362,11 +3301,9 @@ void RGWCreateBucket::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
     populate_with_generic_attrs(s, attrs);
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = filter_out_quota_info(attrs, rmattr_names, quota_info);
     if (op_ret < 0) {
       return;
@@ -3374,13 +3311,11 @@ void RGWCreateBucket::execute(optional_yield y)
       pquota_info = &quota_info;
     }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* Web site of Swift API. */
     filter_out_website(attrs, rmattr_names, info.website_conf);
     info.has_website = !info.website_conf.is_empty();
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   rgw_bucket tmp_bucket;
   tmp_bucket.tenant = s->bucket_tenant; /* ignored if bucket exists */
   tmp_bucket.name = s->bucket_name;
@@ -3391,7 +3326,6 @@ void RGWCreateBucket::execute(optional_yield y)
     info.swift_versioning = (! swift_ver_location->empty());
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* We're replacing bucket with the newly created one */
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << tmp_bucket << dendl;
   op_ret = s->user->create_bucket(this, tmp_bucket, zonegroup_id,
@@ -3401,27 +3335,22 @@ void RGWCreateBucket::execute(optional_yield y)
 				true, obj_lock_enabled, &s->bucket_exists, s->info,
 				&s->bucket, y);
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "rgw_create_bucket returned ret=" << op_ret << " bucket=" << s->bucket.get() << dendl;
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret)
     return;
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   const bool existed = s->bucket_exists;
   if (need_metadata_upload() && existed) {
     /* OK, it looks we lost race with another request. As it's required to
      * handle metadata fusion and upload, the whole operation becomes very
      * similar in nature to PutMetadataBucket. However, as the attrs may
      * changed in the meantime, we have to refresh. */
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     short tries = 0;
     do {
       map<string, bufferlist> battrs;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       op_ret = s->bucket->load_bucket(this, y);
       if (op_ret < 0) {
@@ -3434,7 +3363,6 @@ void RGWCreateBucket::execute(optional_yield y)
         s->bucket_attrs = s->bucket->get_attrs();
       }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       attrs.clear();
 
       op_ret = rgw_get_request_metadata(this, s->cct, s->info, attrs, false);
@@ -3447,7 +3375,6 @@ void RGWCreateBucket::execute(optional_yield y)
       if (op_ret < 0) {
         return;
       }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       /* Handle updates of the metadata for Swift's object versioning. */
       if (swift_ver_location) {
@@ -3455,24 +3382,19 @@ void RGWCreateBucket::execute(optional_yield y)
         s->bucket->get_info().swift_versioning = (! swift_ver_location->empty());
       }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       /* Web site of Swift API. */
       filter_out_website(attrs, rmattr_names, s->bucket->get_info().website_conf);
       s->bucket->get_info().has_website = !s->bucket->get_info().website_conf.is_empty();
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       /* This will also set the quota on the bucket. */
       op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* Restore the proper return code. */
     if (op_ret >= 0) {
       op_ret = -ERR_BUCKET_EXISTS;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     }
   }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 }
 
 int RGWDeleteBucket::verify_permission(optional_yield y)
@@ -3680,7 +3602,6 @@ int RGWPutObj::verify_permission(optional_yield y)
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (ret = read_obj_policy(this, store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
 			policy, cs_bucket.get(), cs_object.get(), y, true); ret < 0) {
       return ret;
@@ -3876,7 +3797,6 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
 
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
-  ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
 
   ret = read_op->prepare(s->yield, this);
@@ -3990,7 +3910,6 @@ void RGWPutObj::execute(optional_yield y)
   if (rgw::sal::Object::empty(s->object.get())) {
     return;
   }
-  ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " object size is: " << s->content_length << dendl;
 
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -4103,20 +4022,11 @@ void RGWPutObj::execute(optional_yield y)
         version_id = s->object->get_instance();
       }
     }
-    ldpp_dout(this, 20) << "AMIN" << __func__ << " : object name is: " << s->object->get_name() << dendl;
-    ldpp_dout(this, 20) << "AMIN" << __func__ << " : bucket_owner is: " << s->bucket_owner.get_id() << dendl;
-    ldpp_dout(this, 20) << "AMIN" << __func__ << " : req id is: " << s->req_id << dendl;
-    ldpp_dout(this, 20) << "AMIN" << __func__ << " : placement name is: " << pdest_placement->name << dendl;
     processor = store->get_atomic_writer(this, s->yield, s->object->clone(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, olh_epoch, s->req_id);
   }
-  /* AMIN
-  if (s->content_length > 0)
-    op_ret = processor->prepare(s->yield, s->content_length);
-  else
-  */
-    op_ret = processor->prepare(s->yield);
+  op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor->prepare() returned ret=" << op_ret
 		      << dendl;
@@ -4155,10 +4065,8 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
     lst = astate->accounted_size - 1;
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " astate size is: " << astate->accounted_size << dendl;
   } else {
     lst = copy_source_range_lst;
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " lst size is: " << lst << dendl;
   }
   fst = copy_source_range_fst;
 
@@ -4208,7 +4116,6 @@ void RGWPutObj::execute(optional_yield y)
       break;
     if (copy_source.empty()) {
       len = get_data(data);
-	  ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " <<  __LINE__ << " len is: " << len << dendl;
     } else {
       off_t cur_lst = min<off_t>(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
       op_ret = get_data(fst, cur_lst, data);
@@ -4217,7 +4124,6 @@ void RGWPutObj::execute(optional_yield y)
       len = data.length();
       s->content_length += len;
       fst += len;
-	  ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << " len is: " << len << dendl;
     }
     if (len < 0) {
       op_ret = len;
@@ -4234,9 +4140,7 @@ void RGWPutObj::execute(optional_yield y)
     /* update torrrent */
     torrent.update(data);
 
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << " ofs is: " << ofs << dendl;
     op_ret = filter->process(std::move(data), ofs);
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "processor->process() returned ret="
           << op_ret << dendl;
@@ -4244,19 +4148,14 @@ void RGWPutObj::execute(optional_yield y)
     }
 
     ofs += len;
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   } while (len > 0);
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   // flush any data in filters
   op_ret = filter->process({}, ofs);
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (op_ret < 0) {
     return;
   }
-	ldpp_dout(this , 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
   if (!chunked_upload && ofs != s->content_length) {
     op_ret = -ERR_REQUEST_TIMEOUT;
@@ -5084,145 +4983,107 @@ void RGWDeleteObj::pre_exec()
 
 void RGWDeleteObj::execute(optional_yield y)
 {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
     return;
   }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   if (!rgw::sal::Object::empty(s->object.get())) {
     uint64_t obj_size = 0;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     std::string etag;
     {
       RGWObjState* astate = nullptr;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         if (need_object_expiration() || multipart_delete) {
           return;
         }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
         if (check_obj_lock) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           /* check if obj exists, read orig attrs */
           if (op_ret == -ENOENT) {
             /* object maybe delete_marker, skip check_obj_lock*/
             check_obj_lock = false;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           } else {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
             return;
           }
         }
       } else {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         obj_size = astate->size;
         etag = astate->attrset[RGW_ATTR_ETAG].to_str();
       }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
 
       if (check_obj_lock) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         ceph_assert(astate);
         int object_lock_response = verify_object_lock(this, astate->attrset, bypass_perm, bypass_governance_mode);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         if (object_lock_response != 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = object_lock_response;
           if (op_ret == -EACCES) {
             s->err.message = "forbidden by object lock";
           }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           return;
         }
       }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (multipart_delete) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         if (!astate) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = -ERR_NOT_SLO_MANIFEST;
           return;
         }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         const auto slo_attr = astate->attrset.find(RGW_ATTR_SLO_MANIFEST);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
         if (slo_attr != astate->attrset.end()) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = handle_slo_manifest(slo_attr->second, y);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           if (op_ret < 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
             ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret << dendl;
           }
         } else {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
           op_ret = -ERR_NOT_SLO_MANIFEST;
         }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         return;
       }
     }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     // make reservation for notification if needed
     const auto versioned_object = s->bucket->versioning_enabled();
     const auto event_type = versioned_object &&
       s->object->get_instance().empty() ?
       rgw::notify::ObjectRemovedDeleteMarkerCreated :
       rgw::notify::ObjectRemovedDelete;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     std::unique_ptr<rgw::sal::Notification> res
       = store->get_notification(s->object.get(), s->src_object.get(), s,
 				event_type);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = res->publish_reserve(this);
     if (op_ret < 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       return;
     }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     s->object->set_atomic();
     
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     bool ver_restored = false;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = s->object->swift_versioning_restore(ver_restored, this);
     if (op_ret < 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       return;
     }
 
     if (!ver_restored) {
       uint64_t epoch = 0;
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       /* Swift's versioning mechanism hasn't found any previous version of
        * the object that could be restored. This means we should proceed
        * with the regular delete path. */
       op_ret = get_system_versioning_params(s, &epoch, &version_id);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (op_ret < 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 	return;
       }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
       del_op->params.obj_owner = s->owner;
       del_op->params.bucket_owner = s->bucket_owner;
@@ -5232,50 +5093,36 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = del_op->delete_obj(this, y);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       if (op_ret >= 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 	delete_marker = del_op->result.delete_marker;
 	version_id = del_op->result.version_id;
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 
       /* Check whether the object has expired. Swift API documentation
        * stands that we should return 404 Not Found in such case. */
       if (need_object_expiration() && s->object->is_expired()) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
         op_ret = -ENOENT;
         return;
       }
     }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (op_ret == -ECANCELED) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = 0;
     }
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       op_ret = 0;
     }
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     // send request to notification manager
     int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     if (ret < 0) {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
       ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
       // too late to rollback operation, hence op_ret is not set here
     }
   } else {
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     op_ret = -EINVAL;
   }
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
 }
 
 bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
@@ -5356,7 +5203,6 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
     rgw_placement_rule src_placement;
 
-	ldpp_dout(this, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
     /* check source object permissions */
     op_ret = read_obj_policy(this, store, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket.get(), s->src_object.get(), y);

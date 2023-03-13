@@ -293,7 +293,6 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
 
   bucket_out->swap(bucket);
 
-  ldpp_dout(dpp, 20) << "AMIN: rados_filter create bucket " << __func__ << dendl;
   return ret;
 }
 
@@ -1603,10 +1602,7 @@ std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-  ldpp_dout(dpp, 20) << "AMIN" << __func__ << " : store name is : " << this->get_name() << dendl;
-  ldpp_dout(dpp, 20) << "AMIN" << __func__ << " : window size is : " << ctx()->_conf->rgw_put_obj_min_window_size << dendl;
   auto aio = rgw::make_throttle(ctx()->_conf->rgw_put_obj_min_window_size, y);
-  ldpp_dout(dpp, 20) << "AMIN" << __func__ << " : " << __LINE__ << dendl;
   return std::make_unique<RadosAtomicWriter>(dpp, y,
 				 std::move(_head_obj),
 				 this, std::move(aio), owner,
