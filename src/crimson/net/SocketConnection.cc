@@ -28,7 +28,7 @@ namespace crimson::net {
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    ChainedDispatchers& dispatchers)
-  : core(messenger.shard_id()),
+  : core(messenger.get_shard_id()),
     messenger(messenger)
 {
   auto ret = create_handlers(dispatchers, *this);
