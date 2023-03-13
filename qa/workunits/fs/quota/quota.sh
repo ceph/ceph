@@ -106,8 +106,8 @@ expect_false setfattr -n ceph.quota.max_bytes -v -9223372036854775809 .
 
 setfattr -n ceph.quota.max_bytes -v 0 .
 setfattr -n ceph.quota.max_bytes -v 1Ti .
-setfattr -n ceph.quota.max_bytes -v 8388608Ti .
-expect_false setfattr -n ceph.quota.max_bytes -v 8388609Ti .
+setfattr -n ceph.quota.max_bytes -v 8388607Ti .
+expect_false setfattr -n ceph.quota.max_bytes -v 8388608Ti .
 expect_false setfattr -n ceph.quota.max_bytes -v -1Ti .
 expect_false setfattr -n ceph.quota.max_bytes -v -8388609Ti .
 expect_false setfattr -n ceph.quota.max_bytes -v -8388610Ti .
