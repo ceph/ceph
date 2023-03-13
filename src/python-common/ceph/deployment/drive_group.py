@@ -30,7 +30,7 @@ class DeviceSelection(object):
     ]
 
     def __init__(self,
-                 paths=None,  # type: Optional[List[str]]
+                 paths=None,  # type: Optional[List[Dict[str, str]]]
                  model=None,  # type: Optional[str]
                  size=None,  # type: Optional[str]
                  rotational=None,  # type: Optional[bool]
@@ -42,7 +42,16 @@ class DeviceSelection(object):
         ephemeral drive group device specification
         """
         #: List of Device objects for devices paths.
-        self.paths = [] if paths is None else [Device(path) for path in paths]  # type: List[Device]
+
+        self.paths = []
+
+        if paths is not None:
+            for device in paths:
+                if isinstance(device, dict):
+                    path: str = device.get("path", '')
+                    self.paths.append(Device(path, crush_device_class=device.get("crush_device_class", None)))  # noqa E501
+                else:
+                    self.paths.append(Device(str(device)))
 
         #: A wildcard string. e.g: "SDD*" or "SanDisk SD8SN8U5"
         self.model = model
@@ -178,9 +187,9 @@ class DriveGroupSpec(ServiceSpec):
                  extra_entrypoint_args: Optional[List[str]] = None,
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
-                 crush_device_class=None,  # type: Optional[str]
                  config=None,  # type: Optional[Dict[str, str]]
                  custom_configs=None,  # type: Optional[List[CustomConfig]]
+                 crush_device_class=None,  # type: Optional[str]
                  ):
         assert service_type is None or service_type == 'osd'
         super(DriveGroupSpec, self).__init__('osd', service_id=service_id,
@@ -354,6 +363,11 @@ class DriveGroupSpec(ServiceSpec):
             raise DriveGroupValidationError(
                 self.service_id,
                 'method raw only supports bluestore')
+
+        if self.data_devices.paths is not None:
+            for device in list(self.data_devices.paths):
+                if not device.path:
+                    raise DriveGroupValidationError(self.service_id, 'Device path cannot be empty')  # noqa E501
 
 
 yaml.add_representer(DriveGroupSpec, DriveGroupSpec.yaml_representer)
