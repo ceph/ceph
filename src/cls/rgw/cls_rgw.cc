@@ -137,9 +137,9 @@ static void bi_log_index_key(cls_method_context_t hctx, string& key, string& id,
   key.append(id);
 }
 
-static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_key, RGWModifyOp op,
-                               string& tag, real_time& timestamp,
-                               rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
+static int log_index_operation(cls_method_context_t hctx, const cls_rgw_obj_key& obj_key,
+                               RGWModifyOp op, const string& tag, real_time timestamp,
+                               const rgw_bucket_entry_ver& ver, RGWPendingState state, uint64_t index_ver,
                                string& max_marker, uint16_t bilog_flags, string *owner, string *owner_display_name, rgw_zone_set *zones_trace)
 {
   bufferlist bl;
@@ -843,7 +843,7 @@ int rgw_bucket_set_tag_timeout(cls_method_context_t hctx, bufferlist *in, buffer
   return write_bucket_header(hctx, &header);
 }
 
-static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
+static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
 			  string *idx, rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name = false);
 
@@ -959,7 +959,7 @@ static int read_index_entry(cls_method_context_t hctx, string& name, T* entry)
   return 0;
 }
 
-static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
+static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
 			  string *idx, rgw_bucket_dir_entry *entry,
                           bool special_delete_marker_name)
 {
@@ -991,6 +991,43 @@ static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
   }
 
   return 0;
+}
+
+// called by rgw_bucket_complete_op() for each item in op.remove_objs
+static int complete_remove_obj(cls_method_context_t hctx,
+                               rgw_bucket_dir_header& header,
+                               const cls_rgw_obj_key& key, bool log_op)
+{
+  rgw_bucket_dir_entry entry;
+  string idx;
+  int ret = read_key_entry(hctx, key, &idx, &entry);
+  if (ret < 0) {
+    CLS_LOG(1, "%s: read_key_entry name=%s instance=%s failed with %d",
+          __func__, key.name.c_str(), key.instance.c_str(), ret);
+    return ret;
+  }
+  CLS_LOG(10, "%s: read entry name=%s instance=%s category=%d", __func__,
+          entry.key.name.c_str(), entry.key.instance.c_str(),
+          int(entry.meta.category));
+  unaccount_entry(header, entry);
+
+  if (log_op) {
+    ++header.ver; // increment index version, or we'll overwrite keys previously written
+    const std::string tag;
+    ret = log_index_operation(hctx, key, CLS_RGW_OP_DEL, tag, entry.meta.mtime,
+                              entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
+                              header.max_marker, 0, nullptr, nullptr, nullptr);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  ret = cls_cxx_map_remove_key(hctx, idx);
+  if (ret < 0) {
+    CLS_LOG(1, "%s: cls_cxx_map_remove_key failed with %d", __func__, ret);
+    return ret;
+  }
+  return ret;
 }
 
 int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -1048,73 +1085,95 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     entry.pending_map.erase(pinter);
   }
 
-  bool cancel = false;
-  bufferlist update_bl;
-
   if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
     CLS_LOG(1, "rgw_bucket_complete_op(): cancel requested\n");
-    cancel = true;
   } else if (op.ver.pool == entry.ver.pool &&
              op.ver.epoch && op.ver.epoch <= entry.ver.epoch) {
     CLS_LOG(1, "rgw_bucket_complete_op(): skipping request, old epoch\n");
-    cancel = true;
+    op.op = CLS_RGW_OP_CANCEL;
   }
 
-  bufferlist op_bl;
-  if (cancel) {
-    if (op.tag.size()) {
-      bufferlist new_key_bl;
-      encode(entry, new_key_bl);
-      return cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-    }
-    return 0;
-  }
-
-  unaccount_entry(header, entry);
+  // controls whether remove_objs deletions are logged
+  const bool default_log_op = op.log_op && !header.syncstopped;
+  // controls whether this operation is logged (depends on op.op and ondisk)
+  bool log_op = default_log_op;
 
   entry.ver = op.ver;
-  switch ((int)op.op) {
-  case CLS_RGW_OP_DEL:
-    entry.meta = op.meta;
-    if (ondisk) {
-      if (!entry.pending_map.size()) {
-	int ret = cls_cxx_map_remove_key(hctx, idx);
-	if (ret < 0)
-	  return ret;
+  if (op.op == CLS_RGW_OP_CANCEL) {
+    log_op = false; // don't log cancelation
+    if (op.tag.size()) {
+      if (!entry.exists && entry.pending_map.empty()) {
+        // a racing delete succeeded, and we canceled the last pending op
+        CLS_LOG(20, "INFO: %s: removing map entry with key=%s",
+                __func__, escape_str(idx).c_str());
+        rc = cls_cxx_map_remove_key(hctx, idx);
+        if (rc < 0) {
+          CLS_LOG(1, "ERROR: %s: unable to remove map key, key=%s, rc=%d",
+                  __func__, escape_str(idx).c_str(), rc);
+          return rc;
+        }
       } else {
-        entry.exists = false;
+        // we removed this tag from pending_map so need to write the changes
+        CLS_LOG(20, "INFO: %s: setting map entry at key=%s",
+                __func__, escape_str(idx).c_str());
         bufferlist new_key_bl;
         encode(entry, new_key_bl);
-	int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-	if (ret < 0)
-	  return ret;
+        rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+        if (rc < 0) {
+          CLS_LOG(1, "ERROR: %s: unable to set map val, key=%s, rc=%d",
+                  __func__, escape_str(idx).c_str(), rc);
+          return rc;
+        }
+      }
+    }
+  } // CLS_RGW_OP_CANCEL
+  else if (op.op == CLS_RGW_OP_DEL) {
+    // unaccount deleted entry
+    unaccount_entry(header, entry);
+
+    entry.meta = op.meta;
+    if (!ondisk) {
+      // no entry to erase
+      log_op = false;
+    } else if (!entry.pending_map.size()) {
+      rc = cls_cxx_map_remove_key(hctx, idx);
+      if (rc < 0) {
+        return rc;
       }
     } else {
-      return -ENOENT;
-    }
-    break;
-  case CLS_RGW_OP_ADD:
-    {
-      rgw_bucket_dir_entry_meta& meta = op.meta;
-      rgw_bucket_category_stats& stats = header.stats[meta.category];
-      entry.meta = meta;
-      entry.key = op.key;
-      entry.exists = true;
-      entry.tag = op.tag;
-      stats.num_entries++;
-      stats.total_size += meta.accounted_size;
-      stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
-      stats.actual_size += meta.size;
+      entry.exists = false;
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
-      int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-      if (ret < 0)
-	return ret;
+      rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+      if (rc < 0) {
+        return rc;
+      }
     }
-    break;
-  }
+  } // CLS_RGW_OP_DEL
+  else if (op.op == CLS_RGW_OP_ADD) {
+    // unaccount overwritten entry
+    unaccount_entry(header, entry);
 
-  if (op.log_op && !header.syncstopped) {
+    rgw_bucket_dir_entry_meta& meta = op.meta;
+    rgw_bucket_category_stats& stats = header.stats[meta.category];
+    entry.meta = meta;
+    entry.key = op.key;
+    entry.exists = true;
+    entry.tag = op.tag;
+    // account for new entry
+    stats.num_entries++;
+    stats.total_size += meta.accounted_size;
+    stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
+    stats.actual_size += meta.size;
+    bufferlist new_key_bl;
+    encode(entry, new_key_bl);
+    rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+    if (rc < 0) {
+      return rc;
+    }
+  } // CLS_RGW_OP_ADD
+
+  if (log_op) {
     rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
 			     entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
 			     header.max_marker, op.bilog_flags, NULL, NULL,
@@ -1125,47 +1184,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d",
-	  int(op.remove_objs.size()));
-
-  for (auto remove_iter = op.remove_objs.begin();
-       remove_iter != op.remove_objs.end();
-       ++remove_iter) {
-    cls_rgw_obj_key& remove_key = *remove_iter;
-    CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s",
-            remove_key.name.c_str(), remove_key.instance.c_str());
-    rgw_bucket_dir_entry remove_entry;
-    std::string k;
-    int ret = read_key_entry(hctx, remove_key, &k, &remove_entry);
-    if (ret < 0) {
-      CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s ret=%d",
-            remove_key.name.c_str(), remove_key.instance.c_str(), ret);
-      continue;
-    }
-    CLS_LOG(0,
-	    "rgw_bucket_complete_op(): entry.name=%s entry.instance=%s entry.meta.category=%d",
-            remove_entry.key.name.c_str(),
-	    remove_entry.key.instance.c_str(),
-	    int(remove_entry.meta.category));
-
-    unaccount_entry(header, remove_entry);
-
-    if (op.log_op && !header.syncstopped) {
-      ++header.ver; // increment index version, or we'll overwrite keys previously written
-      rc = log_index_operation(hctx, remove_key, CLS_RGW_OP_DEL, op.tag,
-			       remove_entry.meta.mtime, remove_entry.ver,
-			       CLS_RGW_STATE_COMPLETE, header.ver,
-			       header.max_marker, op.bilog_flags, NULL,
-			       NULL, &op.zones_trace);
-      if (rc < 0) {
-        continue;
-      }
-    }
-
-    ret = cls_cxx_map_remove_key(hctx, k);
-    if (ret < 0) {
-      CLS_LOG(1, "rgw_bucket_complete_op(): cls_cxx_map_remove_key, failed to remove entry, name=%s instance=%s read_index_entry ret=%d",
-	      remove_key.name.c_str(), remove_key.instance.c_str(), rc);
-      continue;
+          (int)op.remove_objs.size());
+  for (const auto& remove_key : op.remove_objs) {
+    rc = complete_remove_obj(hctx, header, remove_key, default_log_op);
+    if (rc < 0) {
+      continue; // part cleanup errors are not fatal
     }
   }
 
