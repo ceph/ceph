@@ -169,7 +169,8 @@ class CapTester(CephFSTestCase):
                         f'hostfs_mntpt = {mount_x.hostfs_mntpt}')
             mount_x.write_file(filepath, filedata)
             self.test_set.append((mount_x, filepath, filedata))
-            log.info('test file created at {path} with data "{data}.')
+            log.info(f'Test file created at "{filepath}" with the following '
+                     f'data -\n"{filedata}"')
 
     def run_cap_tests(self, perm, mntpt=None):
         # TODO
@@ -247,7 +248,7 @@ class CapTester(CephFSTestCase):
         # Example -
         #   orignal path: /mnt/cephfs_x/dir1/dir2/testdir
         #   cephfs dir serving as root for current mnt: /dir1/dir2
-        #   therefore, final path: /mnt/cephfs_x//testdir
+        #   therefore, final path: /mnt/cephfs_x/testdir
         if mntpt:
             self.test_set = [(x, y.replace(mntpt, ''), z) for x, y, z in \
                              self.test_set]
