@@ -47,6 +47,15 @@ static inline User* nextUser(User* t)
   return dynamic_cast<FilterUser*>(t)->get_next();
 }
 
+void getAccessSecretKeys(RGWAccessKey* accesskey, User* user)
+{
+  map<std::string, RGWAccessKey> accessKeys =  user->get_info().access_keys;
+
+  accesskey->id = accessKeys.begin()->second.id;
+  accesskey->key = accessKeys.begin()->second.key;
+}
+
+
 int RGWGetBucketCB::handle_data(bufferlist& bl, bool *pause){
       string in_data = bl.c_str();
       vector<string> name = get_xml_data(in_data, "Name");
@@ -279,20 +288,25 @@ int S3FilterUser::create_bucket(const DoutPrefixProvider* dpp,
   int ret;
 
   ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket." << dendl;
-
+  /*
   ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user ID is: " << this->get_id() << dendl;
   map<std::string, RGWAccessKey> accessKeys =  this->get_info().access_keys;
-  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user Access Key is: " << accessKeys[this->get_id().to_str()].id << dendl;
-  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user Secret Key is: " << accessKeys[this->get_id().to_str()].key << dendl;
-  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user first element id is: " << accessKeys.begin()->first << dendl;
+  //ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user Access Key is: " << accessKeys[this->get_id().to_str()].id << dendl;
+  //ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user Secret Key is: " << accessKeys[this->get_id().to_str()].key << dendl;
+  //ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user first element id is: " << accessKeys.begin()->first << dendl;
+  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user second id is: " << accessKeys.begin()->second.id << dendl;
+  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: user second key is: " << accessKeys.begin()->second.key << dendl;
   RGWAccessKey accesskey;
-  //RGWAccessKey& k = accessKeys[this->get_id().to_str()];
-  //accesskey.id=k.id; FIXME
-  //accesskey.key = k.key;
+
   //accesskey.id="test5";
   //accesskey.key="test5";
   accesskey.id="c8e89519adae4a9b96575343a6f3566d";
   accesskey.key="d1939a2d17cb4de4b25b25fa473454b8";
+  */
+  RGWAccessKey accesskey;
+  getAccessSecretKeys(&accesskey, this);
+  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: access key is: " << accesskey.id << dendl;
+  ldpp_dout(dpp, 20) << "AMIN S3 Filter: Creating Bucket: secret key is: " << accesskey.key << dendl;
   
   //strcpy(b.tenant, this->get_id().tenant.c_str());
   /* If it exists, look it up; otherwise create it */
@@ -386,6 +400,7 @@ int S3FilterStore::send_get_bucket(const DoutPrefixProvider* dpp, User* u, const
   int ret = 0; 
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
  
+  /*
   map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
   RGWAccessKey accesskey;
   //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
@@ -393,6 +408,11 @@ int S3FilterStore::send_get_bucket(const DoutPrefixProvider* dpp, User* u, const
   //accesskey.key="test5";
   accesskey.id="c8e89519adae4a9b96575343a6f3566d"; //FIXME
   accesskey.key="d1939a2d17cb4de4b25b25fa473454b8";
+  */
+
+  RGWAccessKey accesskey;
+  getAccessSecretKeys(&accesskey, u);
+
   string url ="https://" + this->_cct->_conf->backend_url;
 
   HostStyle host_style = PathStyle;
@@ -528,12 +548,17 @@ int S3FilterWriter::prepare(optional_yield y)
 	 
   this->obj_wr = new RGWRESTStreamS3PutObj(this->filter->_cct, "PUT", url, NULL, NULL, "", host_style);
 
+  /*
   //map<std::string, RGWAccessKey> accessKeys =  this->user->get_info().access_keys;
   RGWAccessKey accesskey;
   //accesskey.id="test5";
   //accesskey.key="test5";
   accesskey.id="c8e89519adae4a9b96575343a6f3566d"; //FIXME
   accesskey.key="d1939a2d17cb4de4b25b25fa473454b8";
+  */
+  RGWAccessKey accesskey;
+  getAccessSecretKeys(&accesskey, this->head_obj->get_bucket()->get_owner());
+
   map<string, bufferlist> obj_attrs;
  
 
@@ -624,7 +649,8 @@ int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixPr
 {
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   User* u = source->get_bucket()->get_owner();
- 
+
+ /* 
   map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
   RGWAccessKey accesskey;
   //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
@@ -632,6 +658,11 @@ int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixPr
   //accesskey.key="test5";
   accesskey.id="c8e89519adae4a9b96575343a6f3566d"; //FIXME
   accesskey.key="d1939a2d17cb4de4b25b25fa473454b8";
+  */
+
+  RGWAccessKey accesskey;
+  getAccessSecretKeys(&accesskey, u);
+
   string url ="https://" + source->filter->_cct->_conf->backend_url;
 
   HostStyle host_style = PathStyle;
@@ -726,7 +757,7 @@ int S3FilterObject::S3FilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 {
   ldpp_dout(dpp, 20) << " AMIN: " << __func__ << " : " << __LINE__ << dendl;
   User* u = source->get_bucket()->get_owner();
- 
+ /*
   map<std::string, RGWAccessKey> accessKeys =  u->get_info().access_keys;
   RGWAccessKey accesskey;
   //RGWAccessKey& k = accessKeys[u->get_id().to_str()];
@@ -734,6 +765,10 @@ int S3FilterObject::S3FilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
   //accesskey.key="test5";
   accesskey.id="c8e89519adae4a9b96575343a6f3566d"; //FIXME
   accesskey.key="d1939a2d17cb4de4b25b25fa473454b8";
+  */
+  RGWAccessKey accesskey;
+  getAccessSecretKeys(&accesskey, u);
+
   string url ="https://" + source->filter->_cct->_conf->backend_url; //FIXME: AMIN : We need to have the flexbility of choosing backend
 
   HostStyle host_style = PathStyle;
