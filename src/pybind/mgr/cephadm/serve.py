@@ -1245,22 +1245,31 @@ class CephadmServe:
                     'Reconfiguring' if reconfig else 'Deploying',
                     daemon_spec.name(), daemon_spec.host))
 
+                cmd = [
+                    '--name', daemon_spec.name(),
+                    '--meta-json', json.dumps({
+                        'service_name': daemon_spec.service_name,
+                        'ports': daemon_spec.ports,
+                        'ip': daemon_spec.ip,
+                        'deployed_by': self.mgr.get_active_mgr_digests(),
+                        'rank': daemon_spec.rank,
+                        'rank_generation': daemon_spec.rank_generation,
+                        'extra_container_args': extra_container_args,
+                        'extra_entrypoint_args': extra_entrypoint_args
+                    }),
+                    '--config-json', '-',
+                ]
+
+                if daemon_spec.daemon_type == 'osd':
+                    if hasattr(self.mgr.spec_store.active_specs.get(daemon_spec.service_name), "objectstore"):
+                        osd_objectstore = self.mgr.spec_store.active_specs.get(daemon_spec.service_name).objectstore
+                    else:
+                        osd_objectstore = 'bluestore'
+                    cmd += '--objectstore', osd_objectstore,
+
                 out, err, code = await self._run_cephadm(
                     daemon_spec.host, daemon_spec.name(), 'deploy',
-                    [
-                        '--name', daemon_spec.name(),
-                        '--meta-json', json.dumps({
-                            'service_name': daemon_spec.service_name,
-                            'ports': daemon_spec.ports,
-                            'ip': daemon_spec.ip,
-                            'deployed_by': self.mgr.get_active_mgr_digests(),
-                            'rank': daemon_spec.rank,
-                            'rank_generation': daemon_spec.rank_generation,
-                            'extra_container_args': extra_container_args,
-                            'extra_entrypoint_args': extra_entrypoint_args
-                        }),
-                        '--config-json', '-',
-                    ] + daemon_spec.extra_args,
+                    cmd + daemon_spec.extra_args,
                     stdin=json.dumps(daemon_spec.final_config),
                     image=image,
                 )

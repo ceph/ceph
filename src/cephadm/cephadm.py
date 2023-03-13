@@ -3513,11 +3513,9 @@ def deploy_daemon_units(
                     ]
                 else:
                     osd_type = 'bluestore'
-                    config_file = '/etc/ceph/ceph.conf'
-                    if os.path.exists(config_file):
-                        config = read_config(config_file)
-                        if config.has_section('osd') and config.has_option('osd', 'osd_objectstore'):
-                            osd_type = config.get('osd', 'osd_objectstore')
+                    if 'objectstore' in ctx and ctx.objectstore:
+                        osd_type = ctx.objectstore
+
                     cmd = [
                         'activate',
                         '--'+ osd_type,
@@ -9745,6 +9743,10 @@ def _get_parser():
     parser_deploy.add_argument(
         '--meta-json',
         help='JSON dict of additional metadata'
+    )
+    parser_deploy.add_argument(
+        '--objectstore',
+        help='Set object store'
     )
     parser_deploy.add_argument(
         '--extra-container-args',
