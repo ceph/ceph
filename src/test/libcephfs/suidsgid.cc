@@ -94,6 +94,46 @@ int do_mon_command(string s, string *key)
   return r;
 }
 
+void run_write_test_case(int mode, int result, bool with_admin=false)
+{
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, ceph_chmod(admin, filename, mode));
+
+  struct ceph_mount_info *_cmount = cmount;
+  if (with_admin) {
+    _cmount = admin;
+  }
+  int fd = ceph_open(_cmount, filename, O_RDWR, 0);
+  ASSERT_LE(0, fd);
+  ASSERT_EQ(ceph_write(_cmount, fd, "foo", 3, 0), 3);
+  ASSERT_EQ(ceph_statx(_cmount, filename, &stx, CEPH_STATX_MODE, 0), 0);
+  std::cout << "After ceph_write, mode: 0" << oct << mode << " -> 0"
+            << (stx.stx_mode & 07777) << dec << std::endl;
+  ASSERT_EQ(stx.stx_mode & (S_ISUID|S_ISGID), result);
+  ceph_close(_cmount, fd);
+}
+
+void run_truncate_test_case(int mode, int result, size_t size, bool with_admin=false)
+{
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, ceph_chmod(admin, filename, mode));
+
+  struct ceph_mount_info *_cmount = cmount;
+  if (with_admin) {
+    _cmount = admin;
+  }
+  int fd = ceph_open(_cmount, filename, O_RDWR, 0);
+  ASSERT_LE(0, fd);
+  ASSERT_GE(ceph_ftruncate(_cmount, fd, size), 0);
+  ASSERT_EQ(ceph_statx(_cmount, filename, &stx, CEPH_STATX_MODE, 0), 0);
+  std::cout << "After ceph_truncate size " << size << " mode: 0" << oct
+            << mode << " -> 0" << (stx.stx_mode & 07777) << dec << std::endl;
+  ASSERT_EQ(stx.stx_mode & (S_ISUID|S_ISGID), result);
+  ceph_close(_cmount, fd);
+}
+
 TEST(SuidsgidTest, WriteClearSetuid) {
   ASSERT_EQ(0, ceph_create(&admin, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(admin, NULL));
@@ -153,6 +193,18 @@ TEST(SuidsgidTest, WriteClearSetuid) {
 
   // 10, Commit to a all-exec file by an unprivileged user clears sgid.
   run_fallocate_test_case(02777, 0); // a+rwx,g+rwxs
+
+  // 11, Write by privileged user leaves the suid and sgid
+  run_write_test_case(06766, S_ISUID | S_ISGID, true);
+
+  // 12, Write by unprivileged user clears the suid and sgid
+  run_write_test_case(06766, 0);
+
+  // 13, Truncate by privileged user leaves the suid and sgid
+  run_truncate_test_case(06766, S_ISUID | S_ISGID, 10000, true);
+
+  // 14, Truncate by unprivileged user clears the suid and sgid
+  run_truncate_test_case(06766, 0, 100);
 
   // clean up
   ceph_shutdown(cmount);
