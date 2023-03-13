@@ -1,0 +1,55 @@
+tasks:
+- vip:
+
+# make sure cephadm notices the new IP
+- cephadm.shell:
+    host.a:
+      - ceph orch device ls --refresh
+
+# stop kernel nfs server, if running
+- vip.exec:
+    all-hosts:
+      - systemctl stop nfs-server
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create foofs
+
+# deploy nfs + keepalive-only ingress service
+- cephadm.apply:
+    specs:
+      - service_type: nfs
+        service_id: foo
+        placement:
+          count: 1
+        spec:
+          port: 2049
+          virtual_ip: "{{VIP0}}"
+      - service_type: ingress
+        service_id: nfs.foo
+        placement:
+          count: 1
+        spec:
+          backend_service: nfs.foo
+          monitor_port: 9002
+          virtual_ip: "{{VIP0}}/{{VIPPREFIXLEN}}"
+          keepalive_only: true
+- cephadm.wait_for_service:
+    service: nfs.foo
+- cephadm.wait_for_service:
+    service: ingress.nfs.foo
+
+# export and mount
+- cephadm.shell:
+    host.a:
+      - ceph nfs export create cephfs --fsname foofs --cluster-id foo --pseudo-path /fake
+
+# make sure mount can be reached over VIP, ensuring both that
+# keepalived is maintaining the VIP and that the nfs has bound to it
+- vip.exec:
+    host.a:
+      - mkdir /mnt/foo
+      - sleep 5
+      - mount -t nfs {{VIP0}}:/fake /mnt/foo
+      - echo test > /mnt/foo/testfile
+      - sync
