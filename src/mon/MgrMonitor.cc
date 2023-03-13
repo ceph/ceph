@@ -436,13 +436,13 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
       } catch (const bad_cmd_get& e) {
 	bufferlist bl;
 	mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
-	return true;
+	return false; /* nothing to propose! */
       }
 
     default:
       mon.no_reply(op);
       derr << "Unhandled message type " << m->get_type() << dendl;
-      return true;
+      return false; /* nothing to propose! */
   }
 }
 
