@@ -7776,11 +7776,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (in->caps_issued_mask(CEPH_CAP_AUTH_EXCL)) {
-    kill_sguid = mask & (CEPH_SETATTR_SIZE|CEPH_SETATTR_KILL_SGUID);
-  } else if (mask & CEPH_SETATTR_SIZE) {
-    /* If we don't have Ax, then we must ask the server to clear them on truncate */
-    mask |= CEPH_SETATTR_KILL_SGUID;
-    inode_drop |= CEPH_CAP_AUTH_SHARED;
+    kill_sguid = !!(mask & CEPH_SETATTR_KILL_SGUID);
   }
 
   if (mask & CEPH_SETATTR_UID) {
@@ -8008,6 +8004,10 @@ void Client::stat_to_statx(struct stat *st, struct ceph_statx *stx)
 int Client::__setattrx(Inode *in, struct ceph_statx *stx, int mask,
 		       const UserPerm& perms, InodeRef *inp)
 {
+  if (mask & CEPH_SETATTR_SIZE) {
+    mask |= clear_suid_sgid(in, perms, true);
+  }
+
   int ret = _do_setattr(in, stx, mask, perms, inp);
   if (ret < 0)
    return ret;
@@ -14792,9 +14792,10 @@ int Client::ll_sync_inode(Inode *in, bool syncdataonly)
   return _fsync(in, syncdataonly);
 }
 
-int Client::clear_suid_sgid(Inode *in, const UserPerm& perms)
+int Client::clear_suid_sgid(Inode *in, const UserPerm& perms, bool defer)
 {
-  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
+  ldout(cct, 20) << __func__ << " " << *in << "; " << perms << " defer "
+                 << defer << dendl;
 
   if (!in->is_file()) {
     return 0;
@@ -14808,7 +14809,7 @@ int Client::clear_suid_sgid(Inode *in, const UserPerm& perms)
     return 0;
   }
 
-  int mask;
+  int mask = 0;
 
   // always drop the suid
   if (unlikely(in->mode & S_ISUID)) {
@@ -14823,6 +14824,10 @@ int Client::clear_suid_sgid(Inode *in, const UserPerm& perms)
   }
 
   ldout(cct, 20) << __func__ << " mask " << mask << dendl;
+  if (defer) {
+    return mask;
+  }
+
   struct ceph_statx stx = { 0 };
   return __setattrx(in, &stx, mask, perms);
 }
