@@ -482,6 +482,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Default timeout applied to cephadm commands run directly on '
             'the host (in seconds)'
         ),
+        Option(
+            'upgrade_osd_flags',
+            type='str',
+            default='noout,nodeep-scrub,noscrub',
+            desc='Comma separated list of osd flags to set when --set-osd-flags '
+            'is passed to the upgrade command'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -565,6 +572,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.cgroups_split = True
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
+            self.upgrade_osd_flags: str = ''
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -2522,6 +2530,57 @@ Then run the following:
 
         return osd[0]
 
+    def set_global_osd_flag(self, flag: str) -> None:
+        # attempt to set an osd flag. If we get a nonzero return code,
+        # raise an OrchestratorError
+        rc, out, err = self.mon_command({
+            'prefix': 'osd set',
+            'key': f'{flag}',
+        })
+        if rc:
+            self.log.warning(
+                f"Setting osd flag {flag} failed with return code {rc}: {err}")
+            raise OrchestratorError(
+                f"Setting osd flag {flag} failed with return code {rc}: {err}")
+        else:
+            self.log.info(
+                f"Set global osd flag {flag}")
+
+    def unset_global_osd_flag(self, flag: str) -> None:
+        # attempt to unset an osd flag. If we get a nonzero return code,
+        # raise an OrchestratorError
+        rc, out, err = self.mon_command({
+            'prefix': 'osd unset',
+            'key': f'{flag}',
+        })
+        if rc:
+            self.log.warning(
+                f"Unsetting osd flag {flag} failed with return code {rc}: {err}")
+            raise OrchestratorError(
+                f"Unsetting osd flag {flag} failed with return code {rc}: {err}")
+        else:
+            self.log.info(
+                f"Unset global osd flag {flag}")
+
+    def get_set_global_osd_flags(self) -> List[str]:
+        # try to find all the currently set global osd flags. If we get a
+        # nonzero return code, raise an OrchestratorError
+        rc, out, err = self.mon_command({
+            'prefix': 'osd dump',
+            'format': 'json',
+        })
+        if rc:
+            self.log.warning(
+                f"Failed trying to find set osd flags with `ceph osd dump` (rc: {rc}): {err}")
+            raise OrchestratorError(
+                f"Failed trying to find set osd flags with `ceph osd dump` (rc: {rc}): {err}")
+
+        try:
+            flags: List[str] = json.loads(out)['flags_set']
+            return flags
+        except Exception as e:
+            raise OrchestratorError(f'Failed to get set osd flags: {e}')
+
     def _trigger_preview_refresh(self,
                                  specs: Optional[List[DriveGroupSpec]] = None,
                                  service_name: Optional[str] = None,
@@ -3185,7 +3244,7 @@ Then run the following:
 
     @handle_orch_error
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None, host_placement: Optional[str] = None,
-                      services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+                      services: Optional[List[str]] = None, limit: Optional[int] = None, no_osd_flags: bool = False) -> str:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("Upgrade aborted - you have host(s) in maintenance state")
         if self.offline_hosts:
@@ -3216,7 +3275,7 @@ Then run the following:
                 raise OrchestratorError(
                     f'Upgrade aborted - --limit arg must be a positive integer, not {limit}')
 
-        return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit)
+        return self.upgrade.upgrade_start(image, version, daemon_types, hosts, services, limit, no_osd_flags)
 
     @handle_orch_error
     def upgrade_pause(self) -> str:

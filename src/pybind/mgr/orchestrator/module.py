@@ -1734,12 +1734,13 @@ Usage:
                        hosts: Optional[str] = None,
                        services: Optional[str] = None,
                        limit: Optional[int] = None,
-                       ceph_version: Optional[str] = None) -> HandleCommandResult:
+                       ceph_version: Optional[str] = None,
+                       no_osd_flags: bool = False) -> HandleCommandResult:
         """Initiate upgrade"""
         self._upgrade_check_image_name(image, ceph_version)
         dtypes = daemon_types.split(',') if daemon_types is not None else None
         service_names = services.split(',') if services is not None else None
-        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit)
+        completion = self.upgrade_start(image, ceph_version, dtypes, hosts, service_names, limit, no_osd_flags)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 

@@ -197,6 +197,43 @@ you need. For example, the following command upgrades to a development build:
 
 For more information about available container images, see :ref:`containers`.
 
+Setting OSD flags during upgrade
+================================
+
+Cephadm can set specified OSD flags as it upgrades and then unset these flags upon
+upgrade completion. To see the OSD flags cephadm is currently configured to set, check
+
+.. prompt:: bash #
+
+  ceph config get mgr mgr/cephadm/upgrade_osd_flags
+
+The config option is a comma separated list of the flags to be set, and can be modified
+by running
+
+.. prompt:: bash #
+
+  ceph config set mgr mgr/cephadm/upgrade_osd_flags <flag1>,<flag2>, . . . ,<flagN>
+
+Note that setting the config option totally overwrites the set of flags cephadm will
+set. So if it is currently configured to set flag1 and flag2 and you do a config set
+to have it set flag3 and flag4 it will ONLY be configured to set flag3 and flag4, NOT
+flag1, flag2, flag3, and flag4.
+
+Cephadm is configured to set these OSD flags by default on upgrade in versions that
+support it. To have cephadm skip setting these flags, you can pass ``--no-osd-flags``
+to the upgrade command
+
+.. prompt:: bash #
+
+  ceph orch upgrade start --image <image> --no-osd-flags
+
+.. note::
+
+   To check if the current version of cephadm supports setting the osd flags, check
+   ``ceph orch upgrade start --help`` and look to see if ``--no-osd-flags`` is available
+   as a command argument. If so, it is supported and cephadm will set these flags by
+   default during the upgrade.
+
 Staggered Upgrade
 =================
 

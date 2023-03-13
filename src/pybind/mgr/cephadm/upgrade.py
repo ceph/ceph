@@ -68,6 +68,7 @@ class UpgradeState:
                  services: Optional[List[str]] = None,
                  total_count: Optional[int] = None,
                  remaining_count: Optional[int] = None,
+                 osd_flags: Optional[List[str]] = None,
                  ):
         self._target_name: str = target_name  # Use CephadmUpgrade.target_image instead.
         self.progress_id: str = progress_id
@@ -85,6 +86,7 @@ class UpgradeState:
         self.services = services
         self.total_count = total_count
         self.remaining_count = remaining_count
+        self.osd_flags = osd_flags
 
     def to_json(self) -> dict:
         return {
@@ -103,6 +105,7 @@ class UpgradeState:
             'services': self.services,
             'total_count': self.total_count,
             'remaining_count': self.remaining_count,
+            'osd_flags': self.osd_flags,
         }
 
     @classmethod
@@ -124,7 +127,8 @@ class CephadmUpgrade:
         'UPGRADE_REDEPLOY_DAEMON',
         'UPGRADE_BAD_TARGET_VERSION',
         'UPGRADE_EXCEPTION',
-        'UPGRADE_OFFLINE_HOST'
+        'UPGRADE_OFFLINE_HOST',
+        'UPGRADE_FAILED_SETTING_OSD_FLAGS'
     ]
 
     def __init__(self, mgr: "CephadmOrchestrator"):
@@ -305,7 +309,8 @@ class CephadmUpgrade:
         return r
 
     def upgrade_start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
-                      hosts: Optional[List[str]] = None, services: Optional[List[str]] = None, limit: Optional[int] = None) -> str:
+                      hosts: Optional[List[str]] = None, services: Optional[List[str]] = None,
+                      limit: Optional[int] = None, no_osd_flags: bool = False) -> str:
         fail_fs_value = cast(bool, self.mgr.get_module_option_ex(
             'orchestrator', 'fail_fs', False))
         if self.mgr.mode != 'root':
@@ -341,6 +346,8 @@ class CephadmUpgrade:
         if running_mgr_count < 2:
             raise OrchestratorError('Need at least 2 running mgr daemons for upgrade')
 
+        osd_flags = None if no_osd_flags else [f.strip() for f in self.mgr.upgrade_osd_flags.split(',')]
+
         self.mgr.log.info('Upgrade: Started with target %s' % target_name)
         self.upgrade_state = UpgradeState(
             target_name=target_name,
@@ -351,6 +358,7 @@ class CephadmUpgrade:
             services=services,
             total_count=limit,
             remaining_count=limit,
+            osd_flags=osd_flags
         )
         self._update_upgrade_progress(0.0)
         self._save_upgrade_state()
@@ -1133,6 +1141,21 @@ class CephadmUpgrade:
 
         image_settings = self.get_distinct_container_image_settings()
 
+        # set osd flags for upgrade
+        if self.upgrade_state.osd_flags:
+            try:
+                currently_set_flags = self.mgr.get_set_global_osd_flags()
+                for flag in self.upgrade_state.osd_flags:
+                    if flag not in currently_set_flags:
+                        self.mgr.set_global_osd_flag(flag)
+            except OrchestratorError as e:
+                self._fail_upgrade('UPGRADE_FAILED_SETTING_OSD_FLAGS', {
+                    'severity': 'error',
+                    'summary': 'Upgrade: Failed to set osd flags for upgrade',
+                    'count': 1,
+                    'detail': [f'Upgrade: Failed to set osd flags for upgrade: {str(e)}'],
+                })
+
         # Older monitors (pre-v16.2.5) asserted that FSMap::compat ==
         # MDSMap::compat for all fs. This is no longer the case beginning in
         # v16.2.5. We must disable the sanity checks during upgrade.
@@ -1280,6 +1303,19 @@ class CephadmUpgrade:
                 'name': 'container_image',
                 'who': name_to_config_section(daemon_type),
             })
+
+        # Upgrade is complete. Unset osd flags
+        if self.upgrade_state.osd_flags:
+            try:
+                currently_set_flags = self.mgr.get_set_global_osd_flags()
+                for flag in self.upgrade_state.osd_flags:
+                    if flag in currently_set_flags:
+                        self.mgr.unset_global_osd_flag(flag)
+            except OrchestratorError as e:
+                # the upgrade is already basically complete here
+                # so it doesn't make sense to mark it failed if we can't
+                # unset the OSD flags. Just log an error?
+                self.mgr.log.error(f'Failed to unset OSD flags at end of upgrade: {str(e)}')
 
         self.mgr.check_mon_command({
             'prefix': 'config rm',

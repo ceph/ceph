@@ -109,11 +109,25 @@ tasks:
       # verify now 8 daemons have been upgraded
       - ceph orch upgrade check quay.ceph.io/ceph-ci/ceph:$sha1 | jq -e '.up_to_date | length == 8'
       # upgrade the rest of the osds
+      # use this opportunity to check we can set osd flags properly
       - ceph orch upgrade status
       - ceph health detail
+      # make sure noout is listed as a flag to be set as that is what we'll test with
+      - ceph config get mgr mgr/cephadm/upgrade_osd_flags | grep noout
+      # upgrade osds and crash daemons.
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1 --daemon-types crash,osd
+      # wait for upgrade to be started and in progress to check for osd flags
+      # To test noout being set during upgrade, want to loop here until either the upgrade completes,
+      # fails with an error, or noout is set, but in the noout case, we need to do something to mark
+      # that that was the condition that we stopped looping on. Doing that here by having
+      # it create a file whose existence we can check for once the loop is over
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do if ceph osd dump -f json | jq '.flags_set' | grep noout; then touch saw_noout.txt; break; else echo "no noout yet"; fi; sleep 1; done
+      - ls | grep saw_noout
+      # wait for upgrade to complete
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
       - ceph orch ps
+      # verify noout was unset once upgrade completed
+      - if ceph osd dump -f json | jq '.flags_set' | grep noout; then (exit 1); else (exit 0); fi
       # verify all osds are now on same version and version hash matches what we are upgrading to
       - ceph versions | jq -e '.osd | length == 1'
       - ceph versions | jq -e '.osd | keys' | grep $sha1
