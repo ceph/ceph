@@ -7,6 +7,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
+#include "ceph_ver.h"
 #include "common/Formatter.h"
 #include "common/HTMLFormatter.h"
 #include "common/utf8.h"
@@ -615,7 +616,13 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   if (content_type) {
     dump_header(s, "Content-Type", content_type);
   }
-  dump_header_if_nonempty(s, "Server", g_conf()->rgw_service_provider_name);
+
+  std::string srv = g_conf().get_val<std::string>("rgw_service_provider_name");
+  if (!srv.empty()) {
+    dump_header(s, "Server", srv);
+  } else {
+    dump_header(s, "Server", "Ceph Object Gateway (" CEPH_RELEASE_NAME ")");
+  }
 
   try {
     RESTFUL_IO(s)->complete_header();
