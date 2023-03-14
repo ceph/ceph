@@ -8876,10 +8876,6 @@ std::vector<Option> get_mds_options() {
      .set_default(0)
      .set_description("number of seconds after which clients which have not responded to cap revoke messages by the MDS are evicted."),
 
-    Option("mds_max_retries_on_remount_failure", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-     .set_default(5)
-     .set_description("number of consecutive failed remount attempts for invalidating kernel dcache after which client would abort."),
-
     Option("mds_dump_cache_threshold_formatter", Option::TYPE_SIZE, Option::LEVEL_DEV)
      .set_default(1_G)
      .set_description("threshold for cache usage to disallow \"dump cache\" operation to formatter")
@@ -9093,6 +9089,10 @@ std::vector<Option> get_mds_client_options() {
     Option("client_force_lazyio", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
+
+    Option("client_max_retries_on_remount_failure", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(5)
+     .set_description("number of consecutive failed remount attempts for invalidating kernel dcache after which client would abort."),
 
     // note: the max amount of "in flight" dirty data is roughly (max - target)
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
