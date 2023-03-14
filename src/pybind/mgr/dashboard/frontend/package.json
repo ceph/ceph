@@ -89,7 +89,7 @@
     "@angular/cli": "13.3.9",
     "@angular/compiler-cli": "13.3.11",
     "@angular/language-service": "13.3.11",
-    "@applitools/eyes-cypress": "3.22.5",
+    "@applitools/eyes-cypress": "3.29.1",
     "@apteco/ngth": "1.5.0",
     "@compodoc/compodoc": "1.1.18",
     "@cypress/browserify-preprocessor": "3.0.2",
