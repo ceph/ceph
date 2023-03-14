@@ -32,7 +32,7 @@ using bid_value = uint16_t;
 using bid_vector = std::vector<bid_value>; // bid per replication log shard
 
 using notifier_id = uint64_t;
-using bidder_map = std::unordered_map<notifier_id, bid_vector>;
+using bidder_map = boost::container::flat_map<notifier_id, bid_vector>;
 
 struct BidRequest {
   bid_vector bids;
