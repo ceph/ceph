@@ -525,12 +525,13 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_stats(self):
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
                 'mds', 'allow rw',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
@@ -613,12 +614,13 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_cancel_sync(self):
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
                 'mds', 'allow rw',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
@@ -655,12 +657,13 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_restart_sync_on_blocklist(self):
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
                 'mds', 'allow rw',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
@@ -905,12 +908,13 @@ class TestMirroring(CephFSTestCase):
 
     def test_cephfs_mirror_symlink_sync(self):
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
                 'mds', 'allow rw',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
@@ -1066,12 +1070,13 @@ class TestMirroring(CephFSTestCase):
     def test_cephfs_mirror_incremental_sync(self):
         """ Test incremental snapshot synchronization (based on mtime differences)."""
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
             'mds', 'allow rw',
             'mon', 'allow r',
             'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                self.backup_fs.get_data_pool_name(),
+                self.backup_fs.get_data_pool_name()))
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
         self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
@@ -1157,12 +1162,13 @@ class TestMirroring(CephFSTestCase):
         file_z |   sym          dir         reg         sym
         """
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
                 'mds', 'allow rw',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
         self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
@@ -1235,12 +1241,13 @@ class TestMirroring(CephFSTestCase):
         """
 
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
             'mds', 'allow rw',
             'mon', 'allow r',
             'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                self.backup_fs.get_data_pool_name(),
+                self.backup_fs.get_data_pool_name()))
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
         self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
@@ -1324,12 +1331,13 @@ class TestMirroring(CephFSTestCase):
         that all replayer threads (3 by default) in the mirror daemon are busy.
         """
         log.debug('reconfigure client auth caps')
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', "client.{0}".format(self.mount_b.client_id),
                 'mds', 'allow rw',
                 'mon', 'allow r',
                 'osd', 'allow rw pool={0}, allow rw pool={1}'.format(
-                    self.backup_fs.get_data_pool_name(), self.backup_fs.get_data_pool_name()))
+                    self.backup_fs.get_data_pool_name(),
+                    self.backup_fs.get_data_pool_name()))
 
         log.debug(f'mounting filesystem {self.secondary_fs_name}')
         self.mount_b.umount_wait()
@@ -1428,7 +1436,7 @@ class TestMirroring(CephFSTestCase):
         log.debug('reconfigure client auth caps')
         cid = self.mount_b.client_id
         data_pool = self.backup_fs.get_data_pool_name()
-        self.mds_cluster.mon_manager.raw_cluster_cmd_result(
+        self.get_ceph_cmd_result(
             'auth', 'caps', f"client.{cid}",
             'mds', 'allow rw',
             'mon', 'allow r',
