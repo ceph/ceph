@@ -4795,14 +4795,19 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
   for (const auto& iter : slo_info.entries) {
     const string& path_str = iter.path;
 
-    const size_t sep_pos = path_str.find('/', 1 /* skip first slash */);
+    const size_t pos_init = path_str.find_first_not_of('/');
+    if (std::string_view::npos == pos_init) {
+      return -EINVAL;
+    }
+
+    const size_t sep_pos = path_str.find('/', pos_init);
     if (std::string_view::npos == sep_pos) {
       return -EINVAL;
     }
 
     RGWBulkDelete::acct_path_t path;
 
-    path.bucket_name = url_decode(path_str.substr(1, sep_pos - 1));
+    path.bucket_name = url_decode(path_str.substr(pos_init, sep_pos - pos_init));
     path.obj_key = url_decode(path_str.substr(sep_pos + 1));
 
     items.push_back(path);
