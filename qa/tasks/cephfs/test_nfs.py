@@ -142,7 +142,7 @@ class TestNFS(MgrTestCase):
         :param cmd_args: nfs command arguments to be run
         '''
         cmd_func()
-        ret = self.mgr_cluster.mon_manager.raw_cluster_cmd_result(*cmd_args)
+        ret = self.get_ceph_cmd_result(*cmd_args)
         if ret != 0:
             self.fail("Idempotency test failed")
 

@@ -55,6 +55,16 @@ class MountDetails():
         mntobj.hostfs_mntpt = self.hostfs_mntpt
 
 
+class RunCephCmd:
+
+    def get_ceph_cmd_result(self, *args, **kwargs):
+        if kwargs.get('args') is None and args:
+            if len(args) == 1:
+                args = args[0]
+            kwargs['args'] = args
+        return self.mon_manager.run_cluster_cmd(**kwargs).exitstatus
+
+
 class CephFSTestCase(CephTestCase, RunCephCmd):
     """
     Test case for Ceph FS, requires caller to populate Filesystem and Mounts,
@@ -184,11 +194,11 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
                        'osd', f'allow rw tag cephfs data={self.fs.name}',
                        'mds', 'allow']
 
-                if self.run_cluster_cmd_result(cmd) == 0:
+                if self.get_ceph_cmd_result(*cmd) == 0:
                     break
 
                 cmd[1] = 'add'
-                if self.run_cluster_cmd_result(cmd) != 0:
+                if self.get_ceph_cmd_result(*cmd) != 0:
                     raise RuntimeError(f'Failed to create new client {cmd[2]}')
 
             # wait for ranks to become active
@@ -428,11 +438,6 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         if isinstance(cmd, str):
             cmd = shlex_split(cmd)
         return self.fs.mon_manager.raw_cluster_cmd(*cmd)
-
-    def run_cluster_cmd_result(self, cmd):
-        if isinstance(cmd, str):
-            cmd = shlex_split(cmd)
-        return self.fs.mon_manager.raw_cluster_cmd_result(*cmd)
 
     def create_client(self, client_id, moncap=None, osdcap=None, mdscap=None):
         if not (moncap or osdcap or mdscap):
