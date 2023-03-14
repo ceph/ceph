@@ -89,16 +89,13 @@ class FormField(NamedTuple):
     field_type: Any = str
     default_value: Optional[Any] = None
     optional: bool = False
-    html_class: str = ''
-    label_html_class: str = 'col-form-label'
-    field_html_class: str = 'col-form-input'
 
     def get_type(self):
         _type = ''
         if self.field_type == str:
             _type = 'string'
         elif self.field_type == int:
-            _type = 'integer'
+            _type = 'int'
         elif self.field_type == bool:
             _type = 'boolean'
         else:
@@ -108,15 +105,12 @@ class FormField(NamedTuple):
 
 class Container:
     def __init__(self, name: str, key: str, fields: List[Union[FormField, "Container"]],
-                 optional: bool = False, html_class: str = '', label_html_class: str = '',
-                 field_html_class: str = ''):
+                 optional: bool = False, min_items=1):
         self.name = name
         self.key = key
         self.fields = fields
         self.optional = optional
-        self.html_class = html_class
-        self.label_html_class = label_html_class
-        self.field_html_class = field_html_class
+        self.min_items = min_items
 
     def layout_type(self):
         raise NotImplementedError
@@ -135,39 +129,36 @@ class Container:
         properties = None  # control schema properties alias
         required = None
         if self._property_type() == 'array':
+            control_schema['required'] = []
+            control_schema['minItems'] = self.min_items
             control_schema['items'] = {
                 'type': 'object',
                 'properties': {},
                 'required': []
             }
             properties = control_schema['items']['properties']
-            required = control_schema['items']['required']
+            required = control_schema['required']
+            control_schema['items']['required'] = required
+
             ui_schemas.append({
-                'type': 'array',
                 'key': key,
-                'htmlClass': self.html_class,
-                'fieldHtmlClass': self.field_html_class,
-                'labelHtmlClass': self.label_html_class,
-                'items': [{
-                        'type': 'div',
-                        'flex-direction': self.layout_type(),
-                        'displayFlex': True,
-                        'items': []
-                }]
+                'templateOptions': {
+                    'objectTemplateOptions': {
+                        'layoutType': self.layout_type()
+                    }
+                },
+                'items': []
             })
-            items = ui_schemas[-1]['items'][0]['items']
+            items = ui_schemas[-1]['items']
         else:
             control_schema['properties'] = {}
             control_schema['required'] = []
             required = control_schema['required']
             properties = control_schema['properties']
             ui_schemas.append({
-                'type': 'section',
-                'flex-direction': self.layout_type(),
-                'displayFlex': True,
-                'htmlClass': self.html_class,
-                'fieldHtmlClass': self.field_html_class,
-                'labelHtmlClass': self.label_html_class,
+                'templateOptions': {
+                    'layoutType': self.layout_type()
+                },
                 'key': key,
                 'items': []
             })
@@ -196,13 +187,10 @@ class Container:
                 properties[field.key]['type'] = _type
                 properties[field.key]['title'] = field.name
                 field_ui_schema['key'] = field_key
-                field_ui_schema['htmlClass'] = field.html_class
-                field_ui_schema['fieldHtmlClass'] = field.field_html_class
-                field_ui_schema['labelHtmlClass'] = field.label_html_class
                 items.append(field_ui_schema)
             elif isinstance(field, Container):
                 container_schema = field.to_dict(key+'.'+field.key if key else field.key)
-                control_schema['properties'][field.key] = container_schema['control_schema']
+                properties[field.key] = container_schema['control_schema']
                 ui_schemas.extend(container_schema['ui_schema'])
             if not field.optional:
                 required.append(field.key)
@@ -245,44 +233,12 @@ class ArrayHorizontalContainer(Container):
 
 
 class Form:
-    def __init__(self, path, root_container, action: str = '',
-                 footer_html_class: str = 'card-footer position-absolute pb-0 mt-3',
-                 submit_style: str = 'btn btn-primary', cancel_style: str = ''):
+    def __init__(self, path, root_container):
         self.path = path
-        self.action = action
         self.root_container = root_container
-        self.footer_html_class = footer_html_class
-        self.submit_style = submit_style
-        self.cancel_style = cancel_style
 
     def to_dict(self):
-        container_schema = self.root_container.to_dict()
-
-        # root container style
-        container_schema['ui_schema'].append({
-            'type': 'flex',
-            'flex-flow': f'{self.root_container.layout_type()} wrap',
-            'displayFlex': True,
-        })
-
-        footer = {
-            "type": "flex",
-            "htmlClass": self.footer_html_class,
-            "items": [
-                {
-                    'type': 'flex',
-                    'flex-direction': 'row',
-                    'displayFlex': True,
-                    'htmlClass': 'd-flex justify-content-end mb-0',
-                    'items': [
-                        {"type": "cancel", "style": self.cancel_style, 'htmlClass': 'me-2'},
-                        {"type": "submit", "style": self.submit_style, "title": self.action},
-                    ]
-                }
-            ]
-        }
-        container_schema['ui_schema'].append(footer)
-        return container_schema
+        return self.root_container.to_dict()
 
 
 class CRUDMeta(SerializableClass):
