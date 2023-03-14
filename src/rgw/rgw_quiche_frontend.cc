@@ -417,6 +417,35 @@ Frontend::~Frontend()
   }
 }
 
+template <typename T>
+static void parse_option(const char* name, std::string_view str, T& option)
+{
+  if (auto value = ceph::parse<T>(str); value) {
+    option = *value;
+  } else {
+    throw std::invalid_argument(name);
+  }
+}
+
+template <typename Rep, typename Period>
+static void parse_option(const char* name, std::string_view str,
+                         std::chrono::duration<Rep, Period>& option)
+{
+  Rep value = 0;
+  parse_option(name, str, value);
+  option = std::chrono::duration<Rep, Period>{value};
+}
+
+template <typename T>
+static void parse_option(const RGWFrontendConfig* conf,
+                         const char* name, T& option)
+{
+  if (auto o = conf->get_val(name); o) {
+    parse_option(name, *o, option);
+  }
+}
+
+
 int Frontend::init()
 {
   // load library and entrypoints
@@ -447,41 +476,44 @@ int Frontend::init()
   if (auto o = conf->get_val("cc_alg"); o) {
     opts.cc_algorithm = *o;
   }
-  if (auto o = conf->get_val("ack_delay_exponent"); o) {
-    auto exp = ceph::parse<uint64_t>(*o);
-    if (!exp) {
-      ldpp_dout(this, -1) << "frontend config failed to parse "
-          "'ack_delay_exponent' as uint64_t" << dendl;
-      return -EINVAL;
-    }
-    opts.ack_delay_exponent = *exp;
-  }
-  if (auto o = conf->get_val("max_ack_delay_ms"); o) {
-    auto ms = ceph::parse<uint64_t>(*o);
-    if (!ms) {
-      ldpp_dout(this, -1) << "frontend config failed to parse "
-          "'max_ack_delay_ms' as uint64_t" << dendl;
-      return -EINVAL;
-    }
-    opts.max_ack_delay = std::chrono::milliseconds(*ms);
+
+  // transport parameters
+  try {
+    parse_option(conf, "conn_idle_timeout_ms", opts.conn_idle_timeout);
+    parse_option(conf, "conn_max_streams_bidi", opts.conn_max_streams_bidi);
+    parse_option(conf, "conn_max_streams_uni", opts.conn_max_streams_uni);
+    parse_option(conf, "conn_max_data", opts.conn_max_data);
+    parse_option(conf, "stream_max_data_bidi_local",
+                 opts.stream_max_data_bidi_local);
+    parse_option(conf, "stream_max_data_bidi_remote",
+                 opts.stream_max_data_bidi_remote);
+    parse_option(conf, "stream_max_data_uni", opts.stream_max_data_uni);
+    parse_option(conf, "ack_delay_exponent", opts.ack_delay_exponent);
+    parse_option(conf, "max_ack_delay_ms", opts.max_ack_delay);
+  } catch (const std::exception& e) {
+    ldpp_dout(this, -1) << "frontend config failed to parse '"
+        << e.what() << "'" << dendl;
+    return -EINVAL;
   }
 
   // ssl configuration
-  auto cert = conf->get_val("cert");
+  auto cert = conf->get_val("ssl_certificate");
   if (!cert) {
-    ldpp_dout(this, -1) << "frontend config requires a 'cert'" << dendl;
+    ldpp_dout(this, -1) << "frontend config requires a 'ssl_certificate'" << dendl;
     return -EINVAL;
   }
-  auto key = conf->get_val("key");
+  auto key = conf->get_val("ssl_private_key");
   if (!key) {
-    ldpp_dout(this, -1) << "frontend config requires a 'key'" << dendl;
+    ldpp_dout(this, -1) << "frontend config requires a 'ssl_private_key'" << dendl;
     return -EINVAL;
   }
-  // TODO: quiche has no interfaces for loading certs/keys from memory, so
-  // can't support the mon config keys. use asio::ssl wrappers like the
-  // beast frontend, and pass its ssl context into quiche_conn_new_with_tls()
+  // TODO: try to fetch mon config-keys
   opts.ssl_certificate = cert->c_str();
   opts.ssl_private_key = key->c_str();
+
+  if (auto c = conf->get_val("ssl_ciphers"); c) {
+    opts.ssl_ciphers = c->c_str();
+  }
 
   // enable ssl key logging if SSLKEYLOGFILE is in the environment
   opts.ssl_keylog_path = ::getenv("SSLKEYLOGFILE");
