@@ -23,8 +23,6 @@
 #include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
 
-#include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
-
 #include "rgw_common.h"
 
 #include "include/function2.hpp"
@@ -34,7 +32,7 @@ struct D3nGetObjData;
 namespace rgw {
 
 struct AioResult {
-  RGWSI_RADOS::Obj obj;
+  rgw_raw_obj obj;
   uint64_t id = 0; // id allows caller to associate a result with its request
   bufferlist data; // result buffer for reads
   int result = 0;
@@ -79,7 +77,7 @@ class Aio {
 
   virtual ~Aio() {}
 
-  virtual AioResultList get(const RGWSI_RADOS::Obj& obj,
+  virtual AioResultList get(rgw_raw_obj obj,
 			    OpFunc&& f,
 			    uint64_t cost, uint64_t id) = 0;
   virtual void put(AioResult& r) = 0;
@@ -93,9 +91,11 @@ class Aio {
   // wait for all outstanding completions and return their results
   virtual AioResultList drain() = 0;
 
-  static OpFunc librados_op(librados::ObjectReadOperation&& op,
+  static OpFunc librados_op(librados::IoCtx ctx,
+                            librados::ObjectReadOperation&& op,
                             optional_yield y);
-  static OpFunc librados_op(librados::ObjectWriteOperation&& op,
+  static OpFunc librados_op(librados::IoCtx ctx,
+                            librados::ObjectWriteOperation&& op,
                             optional_yield y);
   static OpFunc d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
                              off_t read_ofs, off_t read_len, std::string& location);
