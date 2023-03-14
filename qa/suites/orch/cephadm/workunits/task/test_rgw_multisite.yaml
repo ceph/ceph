@@ -21,10 +21,6 @@ tasks:
       - rgw_realm: myrealm1
         rgw_zonegroup: myzonegroup1
         rgw_zone: myzone1
-        placement:
-          hosts:
-           - ceph-node-0
-           - ceph-node-1
         spec:
           rgw_frontend_port: 5500
 - cephadm.shell:
