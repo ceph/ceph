@@ -22,7 +22,7 @@ class TestMantle(CephFSTestCase):
             self.fs.mds_asok(['config', 'set', 'debug_mds_balancer', '5'], mds_id=m)
 
     def push_balancer(self, obj, lua_code, expect):
-        self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', obj)
+        self.get_ceph_cmd_result('fs', 'set', self.fs.name, 'balancer', obj)
         self.fs.radosm(["put", obj, "-"], stdin=StringIO(lua_code))
         with self.assert_cluster_log(failure + obj + " " + expect):
             log.info("run a " + obj + " balancer that expects=" + expect)
@@ -31,16 +31,16 @@ class TestMantle(CephFSTestCase):
         self.start_mantle()
         expect = " : (2) No such file or directory"
 
-        ret = self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer')
+        ret = self.get_ceph_cmd_result('fs', 'set', self.fs.name, 'balancer')
         assert(ret == 22) # EINVAL
 
-        self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', " ")
+        self.get_ceph_cmd_result('fs', 'set', self.fs.name, 'balancer', " ")
         with self.assert_cluster_log(failure + " " + expect): pass
 
     def test_version_not_in_rados(self):
         self.start_mantle()
         expect = failure + "ghost.lua : (2) No such file or directory"
-        self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', "ghost.lua")
+        self.get_ceph_cmd_result('fs', 'set', self.fs.name, 'balancer', "ghost.lua")
         with self.assert_cluster_log(expect): pass
 
     def test_balancer_invalid(self):
@@ -59,7 +59,7 @@ class TestMantle(CephFSTestCase):
     def test_balancer_valid(self):
         self.start_mantle()
         lua_code = "BAL_LOG(0, \"test\")\nreturn {3, 4}"
-        self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', "valid.lua")
+        self.get_ceph_cmd_result('fs', 'set', self.fs.name, 'balancer', "valid.lua")
         self.fs.radosm(["put", "valid.lua", "-"], stdin=StringIO(lua_code))
         with self.assert_cluster_log(success + "valid.lua"):
             log.info("run a valid.lua balancer")
@@ -96,11 +96,11 @@ class TestMantle(CephFSTestCase):
         # kill the OSDs so that the balancer pull from RADOS times out
         osd_map = json.loads(self.fs.mon_manager.raw_cluster_cmd('osd', 'dump', '--format=json-pretty'))
         for i in range(0, len(osd_map['osds'])):
-          self.fs.mon_manager.raw_cluster_cmd_result('osd', 'down', str(i))
-          self.fs.mon_manager.raw_cluster_cmd_result('osd', 'out', str(i))
+          self.get_ceph_cmd_result('osd', 'down', str(i))
+          self.get_ceph_cmd_result('osd', 'out', str(i))
 
         # trigger a pull from RADOS
-        self.fs.mon_manager.raw_cluster_cmd_result('fs', 'set', self.fs.name, 'balancer', "valid.lua")
+        self.get_ceph_cmd_result('fs', 'set', self.fs.name, 'balancer', "valid.lua")
 
         # make the timeout a little longer since dead OSDs spam ceph -w
         with self.assert_cluster_log(failure + "valid.lua" + expect, timeout=30):
@@ -108,4 +108,4 @@ class TestMantle(CephFSTestCase):
 
         # cleanup
         for i in range(0, len(osd_map['osds'])):
-          self.fs.mon_manager.raw_cluster_cmd_result('osd', 'in', str(i))
+          self.get_ceph_cmd_result('osd', 'in', str(i))
