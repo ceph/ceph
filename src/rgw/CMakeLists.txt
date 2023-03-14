@@ -256,7 +256,6 @@ target_link_libraries(rgw_common
     cls_version_client
     librados
     rt
-    fmt::fmt
     ICU::uc
     OATH::OATH
     dmclock::dmclock
