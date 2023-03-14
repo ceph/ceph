@@ -1,10 +1,14 @@
 import { Component, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { DataGatewayService } from '~/app/shared/services/data-gateway.service';
-import { BackButtonComponent } from '~/app/shared/components/back-button/back-button.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Location } from '@angular/common';
+import { FormGroup } from '@angular/forms';
+import { FormlyFormOptions } from '@ngx-formly/core';
+import { mergeMap } from 'rxjs/operators';
+import { JsonFormUISchema } from './crud-form.model';
+import { Observable } from 'rxjs';
 
 @Component({
   selector: 'cd-crud-form',
@@ -12,22 +16,12 @@ import { Location } from '@angular/common';
   styleUrls: ['./crud-form.component.scss']
 })
 export class CrudFormComponent implements OnInit {
-  uiSchema: any;
-  controlSchema: any;
-  data: any;
-  widgets: any = {
-    cancel: BackButtonComponent
-  };
+  model: any = {};
+  options: FormlyFormOptions = {};
   resource: string;
-  title: string;
+  form = new FormGroup({});
+  formUISchema$: Observable<JsonFormUISchema>;
 
-  formOptions = {
-    defautWidgetOptions: {
-      validationMessages: {
-        required: 'This field is required'
-      }
-    }
-  };
   constructor(
     private dataGatewayService: DataGatewayService,
     private activatedRoute: ActivatedRoute,
@@ -36,14 +30,12 @@ export class CrudFormComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.activatedRoute.data.subscribe((data: any) => {
-      this.resource = data.resource;
-      this.dataGatewayService.list(`ui-${this.resource}`).subscribe((response: any) => {
-        this.title = response.forms[0].control_schema.title;
-        this.uiSchema = response.forms[0].ui_schema;
-        this.controlSchema = response.forms[0].control_schema;
-      });
-    });
+    this.formUISchema$ = this.activatedRoute.data.pipe(
+      mergeMap((data: any) => {
+        this.resource = data.resource;
+        return this.dataGatewayService.form(`ui-${this.resource}`);
+      })
+    );
   }
 
   submit(data: any) {
