@@ -13,9 +13,13 @@ from tasks.cephfs.kernel_mount import KernelMount
 log = getLogger(__name__)
 
 
-# TODO: add code to run non-ACL tests too.
 # TODO: make xfstests-dev tests running without running `make install`.
 class XFSTestsDev(CephFSTestCase):
+
+    #
+    # Following are the methods that download xfstests-dev repo and get it
+    # ready to run tests from it.
+    #
 
     RESULTS_DIR = "results"
 
@@ -34,6 +38,7 @@ class XFSTestsDev(CephFSTestCase):
         # deletion.
         #self.xfstests_repo_path = '/path/to/xfstests-dev'
 
+        self.total_tests_failed = 0
         self.get_repos()
         self.get_test_and_scratch_dirs_ready()
         self.install_deps()
@@ -307,3 +312,100 @@ class XFSTestsDev(CephFSTestCase):
 
         self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'ceph.exclude'),
                                               xfstests_exclude_contents, sudo=True)
+
+
+    #
+    # Following are helper methods that launch individual and groups of tests
+    # from xfstests-dev repo that is ready.
+    #
+
+    # generic helper methods
+
+    def run_test(self, cmdargs, exit_on_err=False):
+        """
+        1. exit_on_err is same as check_status in terms of functionality, a
+           different name is used to prevent confusion.
+        2. exit_on_err is set to False to make sure all tests run whether or
+           not all tests pass.
+        """
+        cmd = 'sudo env DIFF_LENGTH=0 ./check ' + cmdargs
+        # XXX: some tests can take pretty long (more than 180 or 300 seconds),
+        # let's be explicit about timeout to save troubles later.
+        timeout = None
+        p = self.mount_a.run_shell(args=cmd, cwd=self.xfstests_repo_path,
+            stdout=StringIO(), stderr=StringIO(), check_status=False,
+            omit_sudo=False, timeout=timeout)
+
+        if p.returncode != 0:
+            log.info('Command failed')
+        log.info(f'Command return value: {p.returncode}')
+
+        stdout, stderr = p.stdout.getvalue(), p.stderr.getvalue()
+
+        try:
+            self.assertEqual(p.returncode, 0)
+            # failure line that is printed some times.
+            line = 'Passed all 0 tests'
+            self.assertNotIn(line, stdout)
+            # "line" isn't printed here normally, but let's have an extra check.
+            self.assertNotIn(line, stderr)
+        except AssertionError:
+            if exit_on_err:
+                raise
+            else:
+                self.total_tests_failed += 1
+
+        return p.returncode
+
+    def run_testfile(self, testdir, testfile, exit_on_err=False):
+        return self.run_test(f'{testdir}/{testfile}', exit_on_err)
+
+    def run_testdir(self, testdir, exit_on_err=False):
+        testfiles = self.mount_a.run_shell(
+            args=f'ls tests/{testdir}', cwd=self.xfstests_repo_path).stdout.\
+            getvalue().split()
+
+        testfiles = [f for f in testfiles if f.isdigit()]
+
+        for testfile in testfiles:
+            self.run_testfile(testdir, testfile)
+
+        log.info('========================================================='
+                 f'Total number of tests failed = {self.total_tests_failed}'
+                 '=========================================================')
+
+        self.assertEqual(self.total_tests_failed, 0)
+
+    def run_testgroup(self, testgroup):
+        return self.run_test(f'-g {testgroup}')
+
+    # Running tests by directory.
+
+    def run_generic_tests(self):
+        return self.run_testdir('generic')
+
+    def run_ceph_tests(self):
+        return self.run_testdir('ceph')
+
+    def run_overlay_tests(self):
+        return self.run_testdir('overlay')
+
+    def run_shared_tests(self):
+        return self.run_testdir('shared')
+
+    # Run tests by group.
+
+    def run_auto_tests(self):
+        return self.run_testgroup('auto')
+
+    def run_quick_tests(self):
+        return self.run_testgroup('quick')
+
+    def run_rw_tests(self):
+        return self.run_testgroup('rw')
+
+    def run_acl_tests(self):
+        return self.run_testgroup('acl')
+
+    def run_stress_tests(self):
+        return self.run_testgroup('stress')
