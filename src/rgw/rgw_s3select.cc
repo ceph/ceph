@@ -818,8 +818,15 @@ int RGWSelectObj_ObjStore_S3::json_processing(bufferlist& bl, off_t ofs, off_t l
                             <<  " obj-size " << m_object_size_for_processing << dendl;
         continue;
       }
+
+      if((ofs + len) > it.length()){
+	ldpp_dout(this, 10) << "offset and lenghth may cause invalid read: ofs = " << ofs << " len = " << len << " it.length() = " << it.length() << dendl;
+	ofs = 0;
+	len = it.length();
+      }
+
       m_aws_response_handler.update_processed_size(len);
-      status = run_s3select_on_json(m_sql_query.c_str(), &(it)[0], len);
+      status = run_s3select_on_json(m_sql_query.c_str(), &(it)[0] + ofs, len);
       if (status<0) {
 	status = -EINVAL;
         break;
@@ -828,8 +835,8 @@ int RGWSelectObj_ObjStore_S3::json_processing(bufferlist& bl, off_t ofs, off_t l
 	break;
       }
       i++;
-    }
-  }
+    }//for
+  }//else
 
   if (status>=0 && (m_aws_response_handler.get_processed_size() == uint64_t(m_object_size_for_processing) || m_s3_json_object.is_sql_limit_reached())) {
     //flush the internal JSON buffer(upon last chunk)
