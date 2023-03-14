@@ -18,7 +18,7 @@ The only additional build dependency is the `cargo` command required to build Qu
 
 ### Start a test cluster with both frontends
 
-	~/ceph/build $ OSD=1 MON=1 RGW=1 MGR=0 MDS=0 ../src/vstart.sh -n -d --rgw_frontend 'beast ssl_port=8000 ssl_certificate=rgw.crt ssl_private_key=rgw.key, quiche port=8000 cert=rgw.crt key=rgw.key'
+	~/ceph/build $ OSD=1 MON=1 RGW=1 MGR=0 MDS=0 ../src/vstart.sh -n -d --rgw_frontend 'beast ssl_port=8000 ssl_certificate=rgw.crt ssl_private_key=rgw.key, quiche port=8000 ssl_certificate=rgw.crt ssl_private_key=rgw.key'
 
 ### Using CURL for HTTP/3
 
