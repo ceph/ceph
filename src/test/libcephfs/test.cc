@@ -2116,7 +2116,7 @@ TEST(LibCephFS, ClearSetuid) {
   stx.stx_gid = g;
   mode_t m = S_ISGID|S_ISUID|S_IRUSR|S_IWUSR;
   stx.stx_mode = m;
-  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_STATX_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID, rootcred), 0);
+  ASSERT_EQ(ceph_ll_setattr(cmount, in, &stx, CEPH_SETATTR_MODE|CEPH_SETATTR_UID|CEPH_SETATTR_GID, rootcred), 0);
   ASSERT_EQ(ceph_ll_getattr(cmount, in, &stx, CEPH_STATX_MODE, 0, altcred), 0);
   ASSERT_EQ(stx.stx_mode&(mode_t)ALLPERMS, m);
   /* not dropped without exe bit */
