@@ -58,6 +58,91 @@ static inline void object_statx_save(struct statx& stx, RGWObjState& state)
   state.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
 }
 
+static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
+		       Attrs& attrs, const std::string& display)
+{
+  char namebuf[64 * 1024]; // Max list size supported on linux
+  ssize_t buflen;
+  int ret;
+
+  buflen = flistxattr(fd, namebuf, sizeof(namebuf));
+  if (buflen < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not list attributes for " << display << ": "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  char *keyptr = namebuf;
+  while (buflen > 0) {
+    std::string value;
+    ssize_t vallen, keylen;
+    char* vp;
+
+    keylen = strlen(keyptr) + 1;
+    std::string key(keyptr);
+    std::string::size_type prefixloc = key.find(ATTR_PREFIX);
+
+    if (prefixloc == std::string::npos) {
+      /* Not one of our attributes */
+      buflen -= keylen;
+      keyptr += keylen;
+      continue;
+    }
+
+    /* Make a key that has just the attribute name */
+    key.erase(prefixloc, ATTR_PREFIX.length());
+
+    vallen = fgetxattr(fd, keyptr, nullptr, 0);
+    if (vallen < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
+      return -ret;
+    } else if (vallen == 0) {
+      /* No attribute value for this name */
+      buflen -= keylen;
+      keyptr += keylen;
+      continue;
+    }
+
+    value.reserve(vallen + 1);
+    vp = &value[0];
+
+    vallen = fgetxattr(fd, keyptr, vp, vallen);
+    if (vallen < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for " << display << ": " << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+
+    bufferlist bl;
+    bl.append(vp, vallen);
+    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+
+    buflen -= keylen;
+    keyptr += keylen;
+  }
+
+  return 0;
+}
+
+int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd, const std::string& key, bufferlist& value, const std::string& display)
+{
+  int ret;
+  std::string attrname;
+
+  attrname = ATTR_PREFIX + key;
+
+  ret = fsetxattr(fd, attrname.c_str(), value.c_str(), value.length(), 0);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname << " for " << display << ": " << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  return 0;
+}
+
 int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   FilterDriver::initialize(cct, dpp);
@@ -549,7 +634,8 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   if (owner) {
     info.owner = owner->get_id();
   }
-  /* TODO Load attrs */
+
+  get_x_attrs(y, dpp, dir_fd, attrs, get_name());
 
   return 0;
 }
@@ -631,7 +717,17 @@ int POSIXBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::r
     return -ret;
   }
 
-  /* TODO Write out attributes */
+  ret = open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (auto& it : attrs) {
+	  int ret = write_x_attr(dpp, null_yield, dir_fd, it.first, it.second, get_name());
+	  if (ret < 0) {
+	    return ret;
+	  }
+  }
   return 0;
 }
 
@@ -925,74 +1021,12 @@ int POSIXObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 int POSIXObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
                                 rgw_obj* target_obj)
 {
-  char namebuf[64 * 1024]; // Max list size supported on linux
-  ssize_t buflen;
-  int ret;
-
-  ret = open(dpp);
+  int ret = open(dpp);
   if (ret < 0) {
     return ret;
   }
 
-  buflen = flistxattr(obj_fd, namebuf, sizeof(namebuf));
-  if (buflen < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not list attributes for object " << get_name() << ": "
-      << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-
-  char *keyptr = namebuf;
-  while (buflen > 0) {
-    std::string value;
-    ssize_t vallen, keylen;
-    char* vp;
-
-    keylen = strlen(keyptr) + 1;
-    std::string key(keyptr);
-    std::string::size_type prefixloc = key.find(ATTR_PREFIX);
-
-    if (prefixloc == std::string::npos) {
-      /* Not one of our attributes */
-      buflen -= keylen;
-      keyptr += keylen;
-      continue;
-    }
-
-    /* Make a key that has just the attribute name */
-    key.erase(prefixloc, ATTR_PREFIX.length());
-
-    vallen = fgetxattr(obj_fd, keyptr, nullptr, 0);
-    if (vallen < 0) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for object " << get_name() << ": " << cpp_strerror(ret) << dendl;
-      return -ret;
-    } else if (vallen == 0) {
-      /* No attribute value for this name */
-      buflen -= keylen;
-      keyptr += keylen;
-      continue;
-    }
-
-    value.reserve(vallen + 1);
-    vp = &value[0];
-
-    vallen = fgetxattr(obj_fd, keyptr, vp, vallen);
-    if (vallen < 0) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << keyptr << " for object " << get_name() << ": " << cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-
-    bufferlist bl;
-    bl.append(vp, vallen);
-    state.attrset.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
-
-    buflen -= keylen;
-    keyptr += keylen;
-  }
-
-  return 0;
+  return get_x_attrs(y, dpp, obj_fd, state.attrset, get_name());
 }
 
 int POSIXObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -1327,16 +1361,7 @@ int POSIXObject::write_attr(const DoutPrefixProvider* dpp, optional_yield y, con
     return ret;
   }
 
-  attrname = ATTR_PREFIX + key;
-
-  ret = fsetxattr(obj_fd, attrname.c_str(), value.c_str(), value.length(), 0);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname << " for object " << get_name() << ": " << cpp_strerror(ret) << dendl;
-    return -ret;
-  }
-
-  return 0;
+  return write_x_attr(dpp, y, obj_fd, key, value, get_name());
 }
 
 int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
