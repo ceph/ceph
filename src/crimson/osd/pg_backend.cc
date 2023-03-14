@@ -784,7 +784,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
                   __func__, os.oi.soid ,snapid);
   hobject_t target_coid = os.oi.soid;
   target_coid.snap = snapid;
-  return obc_loader.with_clone_obc_only<RWState::RWREAD>(
+  return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
     [this, &os, &txn, &delta_stats, &osd_op_params]
     (auto clone_obc) {
