@@ -118,6 +118,7 @@ In the `ceph/ceph-build.git` repo:
 - [x] add the version -> X mapping (`release_from_version()` in `scripts/build_utils.sh`)
 - [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/build_osc`)
 - [x] add the option for X (`case $RELEASE_BRANCH` in `ceph-dev-build/build/setup_osc`)
+- [x] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119)
 
 
 First release candidate
