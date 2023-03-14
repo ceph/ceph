@@ -6,7 +6,7 @@ HTTP Frontends
 
 .. contents::
 
-The Ceph Object Gateway supports two embedded HTTP frontend libraries
+The Ceph Object Gateway supports embedded HTTP frontend libraries
 that can be configured with ``rgw_frontends``. See `Config Reference`_
 for details about the syntax.
 
@@ -23,8 +23,8 @@ Options
 
 ``port`` and ``ssl_port``
 
-:Description: Sets the ipv4 & ipv6 listening port number. Can be specified multiple
-              times as in ``port=80 port=8000``.
+:Description: Sets the TCP IPv4 & IPv6 listening port number. Can be specified
+              multiple times as in ``port=80 port=8000``.
 :Type: Integer
 :Default: ``80``
 
@@ -134,6 +134,99 @@ Options
 :Type: Integer
 :Default: ``16384``
 :Maximum: ``65536``
+
+
+Quiche
+======
+
+The ``quiche`` frontend uses Cloudflare's Quiche library for QUIC and HTTP/3
+protocol support, and the Boost.Asio library for asynchronous network i/o.
+
+.. warning:: This feature is experimental.
+
+Options
+-------
+
+``port``
+
+:Description: Sets the UDP IPv4 & IPv6 listening port number. Can be specified
+              multiple times as in ``port=80 port=8000``.
+
+:Type: Integer
+:Default: ``80``
+
+``ssl_certificate``
+
+:Description: Path to the SSL certificate file in PEM format.
+
+:Type: String
+:Default: None
+
+``ssl_private_key``
+
+:Description: Path to the private key file in PEM format.
+
+:Type: String
+:Default: None
+
+``ssl_ciphers``
+
+:Description: Optional list of one or more cipher strings separated by colons.
+              The format of the string is described in openssl's ciphers(1)
+              manual.
+
+:Type: String
+:Default: None
+
+``cc_alg``
+
+:Description: The QUIC congestion control protocol: ``reno``, ``cubic``, ``bbr``, or ``bbr2``.
+
+:Type: String
+:Default: ``cubic``
+
+``debug``
+
+:Description: Enables very verbose diagnostic logging from the Quiche library.
+
+QUIC Transport Parameters
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``conn_idle_timeout_ms``
+:Type: Integer (in milliseconds)
+:Default: ``5000``
+
+``conn_max_streams_bidi``
+:Type: Integer
+:Default: ``100``
+
+``conn_max_streams_uni``
+:Type: Integer
+:Default: ``10``
+
+``conn_max_data``
+:Type: Integer (in bytes)
+:Default: ``10000000``
+
+``stream_max_data_bidi_local``
+:Type: Integer (in bytes)
+:Default: ``1000000``
+
+``stream_max_data_bidi_remote``
+:Type: Integer (in bytes)
+:Default: ``1000000``
+
+``stream_max_data_uni``
+:Type: Integer (in bytes)
+:Default: ``1000000``
+
+``ack_delay_exponent``
+:Type: Integer
+:Default: ``3``
+
+``max_ack_delay_ms``
+:Type: Integer (in milliseconds)
+:Default: ``25``
 
 
 Generic Options
