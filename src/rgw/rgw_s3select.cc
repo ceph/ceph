@@ -368,11 +368,6 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   if (m_escape_char.size()) {
     csv.escape_char = *m_escape_char.c_str();
   }
-  if (m_enable_progress.compare("true")==0) {
-    enable_progress = true;
-  } else {
-    enable_progress = false;
-  }
   if (output_row_delimiter.size()) {
     csv.output_row_delimiter = *output_row_delimiter.c_str();
   }
@@ -637,6 +632,11 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
     } else {
       m_end_scan_sz = std::numeric_limits<std::int64_t>::max();
     } 
+  }
+  if (m_enable_progress.compare("true")==0) {
+    enable_progress = true;
+  } else {
+    enable_progress = false;
   }
   return 0;
 }
