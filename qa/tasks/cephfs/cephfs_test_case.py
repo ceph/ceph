@@ -127,6 +127,7 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
     def setUp(self):
         super(CephFSTestCase, self).setUp()
         self._init_mon_manager()
+        self.admin_remote = self.ceph_cluster.admin_remote
 
         self.config_set('mon', 'mon_allow_pool_delete', True)
 
