@@ -242,6 +242,10 @@ private:
 
   bool is_misdirected(const PG& pg) const;
 
+  const SnapContext get_snapc(
+    Ref<PG>& pg,
+    crimson::osd::ObjectContextRef obc) const;
+
 public:
 
   friend class LttngBackend;
