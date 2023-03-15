@@ -2607,9 +2607,23 @@ void DaemonServer::send_report()
     });
 
   map<daemon_metric, unique_ptr<DaemonHealthMetricCollector>> accumulated;
+  std::set<int32_t> up_osds;
+
+  cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+    osdmap.get_up_osds(up_osds);
+  });
+
   for (auto service : {"osd", "mon"} ) {
     auto daemons = daemon_state.get_by_service(service);
     for (const auto& [key,state] : daemons) {
+      if (key.type == "osd") {
+        std::string err;
+        uint64_t osd_id = strict_strtoll(key.name, 10, &err);
+        if (err.empty() && 
+            up_osds.find(osd_id) == up_osds.end()) {
+          continue;
+        }
+      }
       std::lock_guard l{state->lock};
       for (const auto& metric : state->daemon_health_metrics) {
         auto acc = accumulated.find(metric.get_type());
