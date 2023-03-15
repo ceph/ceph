@@ -11,7 +11,7 @@ git clone https://github.com/qemu/qemu.git
 cd qemu
 
 
-if grep -iqE '(bionic|focal)' /etc/os-release; then
+if grep -iqE '(bionic|focal|jammy)' /etc/os-release; then
     # Bionic requires a matching test harness
     git checkout v2.11.0
 elif grep -iqE '(xenial|platform:el8)' /etc/os-release; then
