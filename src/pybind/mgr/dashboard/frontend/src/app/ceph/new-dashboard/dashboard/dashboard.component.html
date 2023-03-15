@@ -27,7 +27,7 @@
               i18n>Cluster</span>
       </div>
       <section class="border-top mt-5"
-               *ngIf="isAlertmanagerConfigured && (crticialActiveAlerts || warningActiveAlerts)">
+               *ngIf="isAlertmanagerConfigured && (prometheusAlertService.activeCriticalAlerts || prometheusAlertService.activeWarningAlerts)">
         <div class="d-flex flex-wrap ms-4 me-4">
           <span class="pt-2"
                 i18n>Alerts</span>
@@ -38,9 +38,9 @@
                   (click)="toggleAlertsWindow('danger')"
                   id="dangerAlerts"
                   i18n-title
-                  *ngIf="crticialActiveAlerts">
+                  *ngIf="prometheusAlertService?.activeCriticalAlerts > 0">
             <i [ngClass]="[icons.danger]"></i>
-            <span>{{ crticialActiveAlerts }}</span>
+            <span>{{ prometheusAlertService.activeCriticalAlerts }}</span>
           </button>
 
           <button class="btn btn-outline-warning rounded-pill ms-2"
@@ -49,9 +49,9 @@
                   (click)="toggleAlertsWindow('warning')"
                   id="warningAlerts"
                   i18n-title
-                  *ngIf="warningActiveAlerts">
+                  *ngIf="prometheusAlertService?.activeWarningAlerts > 0">
             <i [ngClass]="[icons.infoCircle]"></i>
-            <span>{{ warningActiveAlerts }}</span>
+            <span>{{ prometheusAlertService.activeWarningAlerts }}</span>
           </button>
 
           <div class="pt-0 position-right">
