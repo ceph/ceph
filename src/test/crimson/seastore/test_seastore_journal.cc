@@ -146,7 +146,7 @@ struct journal_test_t : seastar_test_suite_t, SegmentProvider, JournalTrimmer {
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, 1));
+        segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
       block_size = segment_manager->get_block_size();
       sms.reset(new SegmentManagerGroup());

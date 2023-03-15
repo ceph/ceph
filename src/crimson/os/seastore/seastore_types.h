@@ -876,7 +876,8 @@ enum class device_type_t : uint8_t {
   HDD,
   SSD,
   ZNS,
-  SEGMENTED_EPHEMERAL,
+  EPHEMERAL_COLD,
+  EPHEMERAL_MAIN,
   RANDOM_BLOCK_SSD,
   RANDOM_BLOCK_EPHEMERAL,
   NUM_TYPES
@@ -899,7 +900,7 @@ constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
   assert(dtype != device_type_t::NONE &&
 	 dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
-      dtype <= device_type_t::SEGMENTED_EPHEMERAL) {
+      dtype <= device_type_t::EPHEMERAL_MAIN) {
     return backend_type_t::SEGMENTED;
   } else {
     return backend_type_t::RANDOM_BLOCK;
@@ -1149,14 +1150,9 @@ constexpr rewrite_gen_t OOL_GENERATION = 2;
 
 // All the rewritten extents start with MIN_REWRITE_GENERATION
 constexpr rewrite_gen_t MIN_REWRITE_GENERATION = 3;
-constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 4;
-
-/**
- * TODO:
- * For tiering, might introduce 5 and 6 for the cold tier, and 1 ~ 4 for the
- * hot tier.
- */
-
+// without cold tier, the largest generation is less than MIN_COLD_GENERATION
+constexpr rewrite_gen_t MIN_COLD_GENERATION = 5;
+constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 7;
 constexpr rewrite_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
 constexpr rewrite_gen_t NULL_GENERATION =
   std::numeric_limits<rewrite_gen_t>::max();
@@ -1195,7 +1191,7 @@ std::ostream &operator<<(std::ostream &out, data_category_t c);
 
 constexpr data_category_t get_extent_category(extent_types_t type) {
   if (type == extent_types_t::OBJECT_DATA_BLOCK ||
-      type == extent_types_t::COLL_BLOCK) {
+      type == extent_types_t::TEST_BLOCK) {
     return data_category_t::DATA;
   } else {
     return data_category_t::METADATA;
@@ -1751,7 +1747,8 @@ enum class transaction_type_t : uint8_t {
   READ, // including weak and non-weak read transactions
   TRIM_DIRTY,
   TRIM_ALLOC,
-  CLEANER,
+  CLEANER_MAIN,
+  CLEANER_COLD,
   MAX
 };
 
