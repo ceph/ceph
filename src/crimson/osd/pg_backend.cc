@@ -787,31 +787,31 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
     [this, &os, &txn, &delta_stats, &osd_op_params]
-    (auto clone_obc) {
-    if (clone_obc->obs.oi.soid.is_head()) {
+    (auto resolved_obc) {
+    if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object.
       logger().debug("PGBackend::rollback: loaded head_obc: {}"
                      " do nothing",
-                     clone_obc->obs.oi.soid);
+                     resolved_obc->obs.oi.soid);
       return rollback_iertr::now();
     }
     logger().debug("PGBackend::rollback: loaded clone_obc: {}",
-                   clone_obc->obs.oi.soid);
+                   resolved_obc->obs.oi.soid);
     // 1) Delete current head
     if (os.exists) {
       txn.remove(coll->get_cid(), ghobject_t{os.oi.soid,
                                   ghobject_t::NO_GEN, shard});
     }
     // 2) Clone correct snapshot into head
-    txn.clone(coll->get_cid(), ghobject_t{clone_obc->obs.oi.soid},
+    txn.clone(coll->get_cid(), ghobject_t{resolved_obc->obs.oi.soid},
                                ghobject_t{os.oi.soid});
     //    Copy clone obc.os.oi to os.oi
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
-    os.oi.copy_user_bits(clone_obc->obs.oi);
+    os.oi.copy_user_bits(resolved_obc->obs.oi);
     delta_stats.num_bytes -= os.oi.size;
-    delta_stats.num_bytes += clone_obc->obs.oi.size;
+    delta_stats.num_bytes += resolved_obc->obs.oi.size;
     osd_op_params.clean_regions.mark_data_region_dirty(0,
-      std::max(os.oi.size, clone_obc->obs.oi.size));
+      std::max(os.oi.size, resolved_obc->obs.oi.size));
     osd_op_params.clean_regions.mark_omap_dirty();
     // TODO: 3) Calculate clone_overlaps by following overlaps
     //          forward from rollback snapshot
