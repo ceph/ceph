@@ -293,7 +293,9 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENOENT);
   }
 
-  return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
+  SnapContext snapc = get_snapc(pg,obc);
+
+  return pg->do_osd_ops(m, obc, op_info, snapc).safe_then_unpack_interruptible(
     [this, pg, &ihref](auto submitted, auto all_completed) mutable {
       return submitted.then_interruptible([this, pg, &ihref] {
 	return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);
@@ -341,6 +343,30 @@ void ClientRequest::put_historic() const
 {
   ceph_assert_always(put_historic_shard_services);
   put_historic_shard_services->get_registry().put_historic(*this);
+}
+
+const SnapContext ClientRequest::get_snapc(
+  Ref<PG>& pg,
+  crimson::osd::ObjectContextRef obc) const
+{
+  SnapContext snapc;
+  if (op_info.may_write() || op_info.may_cache()) {
+    // snap
+    if (pg->get_pgpool().info.is_pool_snaps_mode()) {
+      // use pool's snapc
+      snapc = pg->get_pgpool().snapc;
+      logger().debug("{} using pool's snapc snaps={}",
+                     __func__, snapc.snaps);
+
+    } else {
+      // client specified snapc
+      snapc.seq = m->get_snap_seq();
+      snapc.snaps = m->get_snaps();
+      logger().debug("{} client specified snapc seq={} snaps={}",
+                     __func__, snapc.seq, snapc.snaps);
+    }
+  }
+  return snapc;
 }
 
 }

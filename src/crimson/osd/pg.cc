@@ -952,27 +952,11 @@ PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<MURef<MOSDOpReply>>>
 PG::do_osd_ops(
   Ref<MOSDOp> m,
   ObjectContextRef obc,
-  const OpInfo &op_info)
+  const OpInfo &op_info,
+  const SnapContext& snapc)
 {
   if (__builtin_expect(stopping, false)) {
     throw crimson::common::system_shutdown_exception();
-  }
-  SnapContext snapc;
-  if (op_info.may_write() || op_info.may_cache()) {
-    // snap
-    if (get_pgpool().info.is_pool_snaps_mode()) {
-      // use pool's snapc
-      snapc = get_pgpool().snapc;
-      logger().debug("{} using pool's snapc snaps={}",
-                     __func__, snapc.snaps);
-
-    } else {
-      // client specified snapc
-      snapc.seq = m->get_snap_seq();
-      snapc.snaps = m->get_snaps();
-      logger().debug("{} client specified snapc seq={} snaps={}",
-                     __func__, snapc.seq, snapc.snaps);
-    }
   }
   return do_osd_ops_execute<MURef<MOSDOpReply>>(
     seastar::make_lw_shared<OpsExecuter>(
