@@ -830,13 +830,15 @@ SegmentCleaner::SegmentCleaner(
   config_t config,
   SegmentManagerGroupRef&& sm_group,
   BackrefManager &backref_manager,
-  bool detailed)
+  SegmentSeqAllocator &segment_seq_allocator,
+  bool detailed,
+  bool is_cold)
   : detailed(detailed),
+    is_cold(is_cold),
     config(config),
     sm_group(std::move(sm_group)),
     backref_manager(backref_manager),
-    ool_segment_seq_allocator(
-      new SegmentSeqAllocator(segment_type_t::OOL))
+    ool_segment_seq_allocator(segment_seq_allocator)
 {
   config.validate();
 }
@@ -854,7 +856,13 @@ void SegmentCleaner::register_metrics()
   i = get_bucket_index(UTIL_STATE_EMPTY);
   stats.segment_util.buckets[i].count = segments.get_num_segments();
 
-  metrics.add_group("segment_cleaner", {
+  std::string prefix;
+  if (is_cold) {
+    prefix.append("cold_");
+  }
+  prefix.append("segment_cleaner");
+
+  metrics.add_group(prefix, {
     sm::make_counter("segments_number",
 		     [this] { return segments.get_num_segments(); },
 		     sm::description("the number of segments")),
@@ -1053,8 +1061,12 @@ SegmentCleaner::do_reclaim_space(
                         &pin_list, &reclaimed, &runs] {
     reclaimed = 0;
     runs++;
+    auto src = Transaction::src_t::CLEANER_MAIN;
+    if (is_cold) {
+      src = Transaction::src_t::CLEANER_COLD;
+    }
     return extent_callback->with_transaction_intr(
-      Transaction::src_t::CLEANER,
+      src,
       "clean_reclaim_space",
       [this, &backref_extents, &pin_list, &reclaimed](auto &t)
     {
@@ -1137,6 +1149,7 @@ SegmentCleaner::clean_space_ret SegmentCleaner::clean_space()
 {
   LOG_PREFIX(SegmentCleaner::clean_space);
   assert(background_callback->is_ready());
+  ceph_assert(can_clean_space());
   if (!reclaim_state) {
     segment_id_t seg_id = get_next_reclaim_segment();
     auto &segment_info = segments[seg_id];
