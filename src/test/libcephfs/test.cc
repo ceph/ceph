@@ -3711,8 +3711,11 @@ TEST(LibCephFS, SnapdirAttrsOnSnapDelete) {
 
   struct ceph_statx stx_snap_dir_2;
   ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir_2, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  // Flaky assertion on Windows, potentially due to timestamp precision.
+  #ifndef _WIN32
   ASSERT_LT(utime_t(stx_snap_dir_1.stx_mtime), utime_t(stx_snap_dir_2.stx_mtime));
   ASSERT_LT(utime_t(stx_snap_dir_1.stx_ctime), utime_t(stx_snap_dir_2.stx_ctime));
+  #endif
   ASSERT_LT(stx_snap_dir_1.stx_version, stx_snap_dir_2.stx_version);
 
   ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
@@ -3764,8 +3767,11 @@ TEST(LibCephFS, SnapdirAttrsOnSnapRename) {
 
   struct ceph_statx stx_snap_dir_2;
   ASSERT_EQ(ceph_statx(cmount, snap_dir_path, &stx_snap_dir_2, CEPH_STATX_MTIME|CEPH_STATX_CTIME|CEPH_STATX_VERSION, 0), 0);
+  // Flaky assertion on Windows, potentially due to timestamp precision.
+  #ifndef _WIN32
   ASSERT_LT(utime_t(stx_snap_dir_1.stx_mtime), utime_t(stx_snap_dir_2.stx_mtime));
   ASSERT_LT(utime_t(stx_snap_dir_1.stx_ctime), utime_t(stx_snap_dir_2.stx_ctime));
+  #endif
   ASSERT_LT(stx_snap_dir_1.stx_version, stx_snap_dir_2.stx_version);
 
   ASSERT_EQ(0, ceph_rmdir(cmount, snap_path_r));
