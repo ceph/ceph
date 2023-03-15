@@ -788,6 +788,13 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     head, target_coid,
     [this, &os, &txn, &delta_stats, &osd_op_params]
     (auto clone_obc) {
+    if (clone_obc->obs.oi.soid.is_head()) {
+      // no-op: The resolved oid returned the head object.
+      logger().debug("PGBackend::rollback: loaded head_obc: {}"
+                     " do nothing",
+                     clone_obc->obs.oi.soid);
+      return rollback_iertr::now();
+    }
     logger().debug("PGBackend::rollback: loaded clone_obc: {}",
                    clone_obc->obs.oi.soid);
     // 1) Delete current head
