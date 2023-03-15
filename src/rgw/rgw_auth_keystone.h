@@ -146,7 +146,13 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                     const std::string_view& access_key_id,
                     const std::string& string_to_sign,
                     const std::string_view& signature) const;
-  std::pair<boost::optional<token_envelope_t>, int>
+
+  struct access_token_result {
+    boost::optional<token_envelope_t> token;
+    boost::optional<std::string> secret_key;
+    int failure_reason = 0;
+  };
+  access_token_result
   get_access_token(const DoutPrefixProvider* dpp,
                    const std::string_view& access_key_id,
                    const std::string& string_to_sign,
