@@ -291,6 +291,15 @@ ClientRequest::do_process(
 
   SnapContext snapc = get_snapc(pg,obc);
 
+  if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
+       snapc.seq < obc->ssc->snapset.seq) {
+        logger().debug("{} ORDERSNAP flag set and snapc seq {}",
+                       " < snapset seq {} on {}",
+                       __func__, snapc.seq, obc->ssc->snapset.seq,
+                       obc->obs.oi.soid);
+     return reply_op_error(pg, -EOLDSNAPC);
+  }
+
   if (!pg->is_primary()) {
     // primary can handle both normal ops and balanced reads
     if (is_misdirected(*pg)) {
