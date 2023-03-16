@@ -96,16 +96,16 @@ class TestMisc(CephFSTestCase):
 
         self.fs.fail()
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
-                                            '--yes-i-really-mean-it')
+        self.get_ceph_cmd_stdout('fs', 'rm', self.fs.name,
+                                 '--yes-i-really-mean-it')
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                            self.fs.metadata_pool_name,
-                                            self.fs.metadata_pool_name,
-                                            '--yes-i-really-really-mean-it')
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            self.fs.metadata_pool_name,
-                                            '--pg_num_min', str(self.fs.pg_num_min))
+        self.get_ceph_cmd_stdout('osd', 'pool', 'delete',
+                                 self.fs.metadata_pool_name,
+                                 self.fs.metadata_pool_name,
+                                 '--yes-i-really-really-mean-it')
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create',
+                                 self.fs.metadata_pool_name,
+                                 '--pg_num_min', str(self.fs.pg_num_min))
 
         # insert a garbage object
         self.fs.radosm(["put", "foo", "-"], stdin=StringIO("bar"))
@@ -119,34 +119,34 @@ class TestMisc(CephFSTestCase):
         self.wait_until_true(lambda: get_pool_df(self.fs, self.fs.metadata_pool_name), timeout=30)
 
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
-                                                self.fs.metadata_pool_name,
-                                                data_pool_name)
+            self.get_ceph_cmd_stdout('fs', 'new', self.fs.name,
+                                     self.fs.metadata_pool_name,
+                                     data_pool_name)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
             raise AssertionError("Expected EINVAL")
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
-                                            self.fs.metadata_pool_name,
-                                            data_pool_name, "--force")
+        self.get_ceph_cmd_stdout('fs', 'new', self.fs.name,
+                                 self.fs.metadata_pool_name,
+                                 data_pool_name, "--force")
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'fail', self.fs.name)
+        self.get_ceph_cmd_stdout('fs', 'fail', self.fs.name)
 
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'rm', self.fs.name,
-                                            '--yes-i-really-mean-it')
+        self.get_ceph_cmd_stdout('fs', 'rm', self.fs.name,
+                                 '--yes-i-really-mean-it'])
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
-                                            self.fs.metadata_pool_name,
-                                            self.fs.metadata_pool_name,
-                                            '--yes-i-really-really-mean-it')
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            self.fs.metadata_pool_name,
-                                            '--pg_num_min', str(self.fs.pg_num_min))
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
-                                            self.fs.metadata_pool_name,
-                                            data_pool_name,
-                                            '--allow_dangerous_metadata_overlay')
+        self.get_ceph_cmd_stdout('osd', 'pool', 'delete',
+                                 self.fs.metadata_pool_name,
+                                 self.fs.metadata_pool_name,
+                                 '--yes-i-really-really-mean-it')
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create',
+                                 self.fs.metadata_pool_name,
+                                 '--pg_num_min', str(self.fs.pg_num_min))
+        self.get_ceph_cmd_stdout('fs', 'new', self.fs.name,
+                                 self.fs.metadata_pool_name,
+                                 data_pool_name,
+                                 '--allow_dangerous_metadata_overlay')
 
     def test_cap_revoke_nonresponder(self):
         """
@@ -199,9 +199,8 @@ class TestMisc(CephFSTestCase):
         pool_name = self.fs.get_data_pool_name()
         raw_df = self.fs.get_pool_df(pool_name)
         raw_avail = float(raw_df["max_avail"])
-        out = self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'get',
-                                                  pool_name, 'size',
-                                                  '-f', 'json-pretty')
+        out = self.get_ceph_cmd_stdout('osd', 'pool', 'get', pool_name,
+                                       'size', '-f', 'json-pretty')
         _ = json.loads(out)
 
         proc = self.mount_a.run_shell(['df', '.'])
@@ -232,9 +231,8 @@ class TestMisc(CephFSTestCase):
         self.fs.set_allow_new_snaps(False)
         self.fs.set_allow_standby_replay(True)
 
-        lsflags = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'lsflags',
-                                                                 self.fs.name,
-                                                                 "--format=json-pretty"))
+        lsflags = json.loads(self.get_ceph_cmd_stdout(
+            'fs', 'lsflags', self.fs.name, "--format=json-pretty"))
         self.assertEqual(lsflags["joinable"], False)
         self.assertEqual(lsflags["allow_snaps"], False)
         self.assertEqual(lsflags["allow_multimds_snaps"], True)
@@ -404,7 +402,7 @@ class TestMisc(CephFSTestCase):
         self.fs.mds_asok(['config', 'set', 'debug_mds', '1/10'])
         self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
         try:
-            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+            mons = json.loads(self.get_ceph_cmd_stdout('mon', 'dump', '-f', 'json'))['mons']
         except:
             self.assertTrue(False, "Error fetching monitors")
 
@@ -447,7 +445,7 @@ class TestMisc(CephFSTestCase):
         self.fs.mds_asok(['config', 'set', 'mds_heartbeat_grace', '1'])
         self.fs.mds_asok(['config', 'set', 'mds_extraordinary_events_dump_interval', '1'])
         try:
-            mons = json.loads(self.fs.mon_manager.raw_cluster_cmd('mon', 'dump', '-f', 'json'))['mons']
+            mons = json.loads(self.get_ceph_cmd_stdout('mon', 'dump', '-f', 'json'))['mons']
         except:
             self.assertTrue(False, "Error fetching monitors")
 
