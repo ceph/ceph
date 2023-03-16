@@ -472,6 +472,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=False,
             desc='Enable TLS security for all the monitoring stack daemons'
         ),
+        Option(
+            'default_cephadm_command_timeout',
+            type='secs',
+            default=15 * 60,
+            desc='Default timeout applied to cephadm commands run directly on '
+            'the host (in seconds)'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -554,6 +561,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.device_enhanced_scan = False
             self.cgroups_split = True
             self.log_refresh_metadata = False
+            self.default_cephadm_command_timeout = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
