@@ -404,7 +404,7 @@ class TestMDSMetrics(CephFSTestCase):
         invalid_mds_rank = "1,"
         # try, 'fs perf stat' command with invalid mds_rank
         try:
-            self.get_ceph_cmd_stdout("fs", "perf", "stats", "--mds_rank", invalid_mds_rank)
+            self.run_ceph_cmd("fs", "perf", "stats", "--mds_rank", invalid_mds_rank)
         except CommandFailedError as ce:
             if ce.exitstatus != errno.EINVAL:
                 raise
@@ -415,7 +415,7 @@ class TestMDSMetrics(CephFSTestCase):
         invalid_client_id = "abcd"
         # try, 'fs perf stat' command with invalid client_id
         try:
-            self.get_ceph_cmd_stdout("fs", "perf", "stats", "--client_id", invalid_client_id)
+            self.run_ceph_cmd("fs", "perf", "stats", "--client_id", invalid_client_id)
         except CommandFailedError as ce:
             if ce.exitstatus != errno.EINVAL:
                 raise
@@ -426,7 +426,7 @@ class TestMDSMetrics(CephFSTestCase):
         invalid_client_ip = "1.2.3"
         # try, 'fs perf stat' command with invalid client_ip
         try:
-            self.get_ceph_cmd_stdout("fs", "perf", "stats", "--client_ip", invalid_client_ip)
+            self.run_ceph_cmd("fs", "perf", "stats", "--client_ip", invalid_client_ip)
         except CommandFailedError as ce:
             if ce.exitstatus != errno.EINVAL:
                 raise
@@ -501,8 +501,8 @@ class TestMDSMetrics(CephFSTestCase):
         self.mount_b.umount_wait()
         self.fs.delete_all_filesystems()
 
-        self.get_ceph_cmd_stdout("fs", "flag", "set", "enable_multiple",
-                                 "true", "--yes-i-really-mean-it")
+        self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
+            "true", "--yes-i-really-mean-it")
 
         # creating filesystem
         fs_a = self._setup_fs(fs_name="fs1")
@@ -569,8 +569,8 @@ class TestMDSMetrics(CephFSTestCase):
         self.mount_a.umount_wait()
         self.mount_b.umount_wait()
 
-        self.get_ceph_cmd_stdout("fs", "flag", "set", "enable_multiple",
-                                 "true", "--yes-i-really-mean-it")
+        self.run_ceph_cmd("fs", "flag", "set", "enable_multiple",
+            "true", "--yes-i-really-mean-it")
 
         # creating filesystem
         fs_b = self._setup_fs(fs_name="fs2")

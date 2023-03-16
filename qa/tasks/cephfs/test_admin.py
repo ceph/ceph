@@ -130,7 +130,7 @@ class TestAdminCommands(CephFSTestCase):
         n = "test_new_default_ec"
         self._setup_ec_pools(n)
         try:
-            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -148,7 +148,7 @@ class TestAdminCommands(CephFSTestCase):
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
         self.setup_ec_pools(n)
-        self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
 
     def test_new_default_ec_no_overwrite(self):
         """
@@ -160,7 +160,7 @@ class TestAdminCommands(CephFSTestCase):
         n = "test_new_default_ec_no_overwrite"
         self._setup_ec_pools(n, overwrites=False)
         try:
-            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -170,7 +170,7 @@ class TestAdminCommands(CephFSTestCase):
             raise RuntimeError("expected failure")
         # and even with --force !
         try:
-            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -601,17 +601,17 @@ class TestMirroringCommands(CephFSTestCase):
     MDSS_REQUIRED = 1
 
     def _enable_mirroring(self, fs_name):
-        self.get_ceph_cmd_stdout("fs", "mirror", "enable", fs_name)
+        self.run_ceph_cmd("fs", "mirror", "enable", fs_name)
 
     def _disable_mirroring(self, fs_name):
-        self.get_ceph_cmd_stdout("fs", "mirror", "disable", fs_name)
+        self.run_ceph_cmd("fs", "mirror", "disable", fs_name)
 
     def _add_peer(self, fs_name, peer_spec, remote_fs_name):
         peer_uuid = str(uuid.uuid4())
-        self.get_ceph_cmd_stdout("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
+        self.run_ceph_cmd("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
 
     def _remove_peer(self, fs_name, peer_uuid):
-        self.get_ceph_cmd_stdout("fs", "mirror", "peer_remove", fs_name, peer_uuid)
+        self.run_ceph_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
 
     def _verify_mirroring(self, fs_name, flag_str):
         status = self.fs.status()
