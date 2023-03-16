@@ -1628,6 +1628,7 @@ void RBMCleaner::mark_space_used(
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
 	INFO("allocate addr: {} len: {}", addr, len);
+	stats.used_bytes += len;
 	rbm->mark_space_used(addr, len);
       }
       return;
@@ -1646,6 +1647,8 @@ void RBMCleaner::mark_space_free(
     if (addr.get_device_id() == rbm->get_device_id()) {
       if (rbm->get_start() <= addr) {
 	INFO("free addr: {} len: {}", addr, len);
+	ceph_assert(stats.used_bytes >= len);
+	stats.used_bytes -= len;
 	rbm->mark_space_free(addr, len);
       }
       return;
@@ -1690,6 +1693,7 @@ RBMCleaner::clean_space_ret RBMCleaner::clean_space()
 RBMCleaner::mount_ret RBMCleaner::mount()
 {
   stats = {};
+  register_metrics();
   return seastar::do_with(
     rb_group->get_rb_managers(),
     [](auto &rbs) {
@@ -1781,6 +1785,22 @@ bool RBMCleaner::equals(const RBMSpaceTracker &_other) const
     }
   }
   return all_match;
+}
+
+void RBMCleaner::register_metrics()
+{
+  namespace sm = seastar::metrics;
+
+  metrics.add_group("rbm_cleaner", {
+    sm::make_counter("total_bytes",
+		     [this] { return get_total_bytes(); },
+		     sm::description("the size of the space")),
+    sm::make_counter("available_bytes",
+		     [this] { return get_total_bytes() - get_journal_bytes() - stats.used_bytes; },
+		     sm::description("the size of the space is available")),
+    sm::make_counter("used_bytes", stats.used_bytes,
+		     sm::description("the size of the space occupied by live extents")),
+  });
 }
 
 }
