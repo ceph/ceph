@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include "include/scope_guard.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -247,17 +248,36 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
 {
   DIR* dir;
   struct dirent* entry;
+  int dfd;
   int ret;
 
   buckets.clear();
 
-  dir = fdopendir(driver->get_root_fd());
+  /* it's not sufficient to dup(root_fd), as as the new fd would share
+   * the file position of root_fd */
+  dfd = openat(-1, driver->get_base_path().c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (dfd == -1) {
+    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
+      << cpp_strerror(ret) << dendl;
+    return -errno;
+  }
+
+  dir = fdopendir(dfd);
   if (dir == NULL) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
       << cpp_strerror(ret) << dendl;
+    close(dfd);
     return -ret;
   }
+
+  auto cleanup_guard = make_scope_guard(
+    [&dir]
+      {
+	closedir(dir);
+	// dfd is also closed
+      }
+    );
 
   errno = 0;
   while ((entry = readdir(dir)) != NULL) {
