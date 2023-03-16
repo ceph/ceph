@@ -123,6 +123,10 @@ public:
     return allocator->get_extent_state(addr, size);
   }
 
+  size_t get_journal_size() const final {
+    return device->get_journal_size();
+  }
+
 private:
   /*
    * this contains the number of bitmap blocks, free blocks and
