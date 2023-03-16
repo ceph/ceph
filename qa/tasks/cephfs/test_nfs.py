@@ -22,10 +22,8 @@ class TestNFS(MgrTestCase):
         return self._cmd("nfs", *args)
 
     def _nfs_complete_cmd(self, cmd):
-        return self.mgr_cluster.mon_manager.run_cluster_cmd(args=f"nfs {cmd}",
-                                                            stdout=StringIO(),
-                                                            stderr=StringIO(),
-                                                            check_status=False)
+        return self.run_ceph_cmd(args=f"nfs {cmd}", stdout=StringIO(),
+                                 stderr=StringIO(), check_status=False)
 
     def _orch_cmd(self, *args):
         return self._cmd("orch", *args)

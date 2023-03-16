@@ -26,15 +26,15 @@ class TestMultiFS(CapsHelper):
 
         # we might have it - the client - if the same cluster was used for a
         # different vstart_runner.py run.
-        self.run_cluster_cmd(f'auth rm {self.client_name}')
+        self.run_ceph_cmd(f'auth rm {self.client_name}')
 
         self.fs1 = self.fs
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
         # we'll reassign caps to client.1 so that it can operate with cephfs2
-        self.run_cluster_cmd(f'auth caps client.{self.mount_b.client_id} mon '
-                             f'"allow r" osd "allow rw '
-                             f'pool={self.fs2.get_data_pool_name()}" mds allow')
+        self.run_ceph_cmd(f'auth caps client.{self.mount_b.client_id} mon '
+                          f'"allow r" osd "allow rw '
+                          f'pool={self.fs2.get_data_pool_name()}" mds allow')
         self.mount_b.remount(cephfs_name=self.fs2.name)
 
 
