@@ -244,7 +244,7 @@ class TestDamage(CephFSTestCase):
             # Reset MDS state
             self.mount_a.umount_wait(force=True)
             self.fs.fail()
-            self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
+            self.get_ceph_cmd_stdout('mds', 'repaired', '0')
 
             # Reset RADOS pool state
             self.fs.radosm(['import', '-'], stdin=BytesIO(serialized))
@@ -355,8 +355,9 @@ class TestDamage(CephFSTestCase):
                 # EIOs mean something handled by DamageTable: assert that it has
                 # been populated
                 damage = json.loads(
-                    self.fs.mon_manager.raw_cluster_cmd(
-                        'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]), "damage", "ls", '--format=json-pretty'))
+                    self.get_ceph_cmd_stdout(
+                        'tell', f'mds.{self.fs.get_active_names()[0]}',
+                        "damage", "ls", '--format=json-pretty'))
                 if len(damage) == 0:
                     results[mutation] = EIO_NO_DAMAGE
 
@@ -416,8 +417,8 @@ class TestDamage(CephFSTestCase):
 
         # The fact that there is damaged should have bee recorded
         damage = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd(
-                'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
+            self.get_ceph_cmd_stdout(
+                'tell', f'mds.{self.fs.get_active_names()[0]}',
                 "damage", "ls", '--format=json-pretty'))
         self.assertEqual(len(damage), 1)
         damage_id = damage[0]['id']
@@ -466,9 +467,9 @@ class TestDamage(CephFSTestCase):
         self.fs.radosm(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
 
         # Clean up the damagetable entry
-        self.fs.mon_manager.raw_cluster_cmd(
-            'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
-            "damage", "rm", "{did}".format(did=damage_id))
+        self.get_ceph_cmd_stdout(
+            'tell', f'mds.{self.fs.get_active_names()[0]}',
+            "damage", "rm", f"{damage_id}")
 
         # Now I should be able to create a file with the same name as the
         # damaged guy if I want.
@@ -520,14 +521,14 @@ class TestDamage(CephFSTestCase):
 
         # Check that an entry is created in the damage table
         damage = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd(
+            self.get_ceph_cmd_stdout(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "ls", '--format=json-pretty'))
         self.assertEqual(len(damage), 1)
         self.assertEqual(damage[0]['damage_type'], "backtrace")
         self.assertEqual(damage[0]['ino'], file1_ino)
 
-        self.fs.mon_manager.raw_cluster_cmd(
+        self.get_ceph_cmd_stdout(
             'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
             "damage", "rm", str(damage[0]['id']))
 
@@ -545,7 +546,7 @@ class TestDamage(CephFSTestCase):
 
         # Check that an entry is created in the damage table
         damage = json.loads(
-            self.fs.mon_manager.raw_cluster_cmd(
+            self.get_ceph_cmd_stdout(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "ls", '--format=json-pretty'))
         self.assertEqual(len(damage), 2)
@@ -560,7 +561,7 @@ class TestDamage(CephFSTestCase):
             self.assertEqual(damage[1]['ino'], file2_ino)
 
         for entry in damage:
-            self.fs.mon_manager.raw_cluster_cmd(
+            self.get_ceph_cmd_stdout(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "rm", str(entry['id']))
 

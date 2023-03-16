@@ -77,18 +77,18 @@ class TestAdminCommands(CephFSTestCase):
     MDSS_REQUIRED = 1
 
     def check_pool_application_metadata_key_value(self, pool, app, key, value):
-        output = self.fs.mon_manager.raw_cluster_cmd(
+        output = self.get_ceph_cmd_stdout(
             'osd', 'pool', 'application', 'get', pool, app, key)
         self.assertEqual(str(output.strip()), value)
 
     def setup_ec_pools(self, n, metadata=True, overwrites=True):
         if metadata:
-            self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', n+"-meta", "8")
+            self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+"-meta", "8")
         cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
-        self.fs.mon_manager.raw_cluster_cmd(*cmd)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
+        self.get_ceph_cmd_stdout(cmd)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
         if overwrites:
-            self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
+            self.get_ceph_cmd_stdout('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
 @classhook('_add_valid_tell')
 class TestValidTell(TestAdminCommands):
@@ -129,13 +129,13 @@ class TestFsStatus(TestAdminCommands):
         That `ceph fs status` command functions.
         """
 
-        s = self.fs.mon_manager.raw_cluster_cmd("fs", "status")
+        s = self.get_ceph_cmd_stdout("fs", "status")
         self.assertTrue("active" in s)
 
-        mdsmap = json.loads(self.fs.mon_manager.raw_cluster_cmd("fs", "status", "--format=json-pretty"))["mdsmap"]
+        mdsmap = json.loads(self.get_ceph_cmd_stdout("fs", "status", "--format=json-pretty"))["mdsmap"]
         self.assertEqual(mdsmap[0]["state"], "active")
 
-        mdsmap = json.loads(self.fs.mon_manager.raw_cluster_cmd("fs", "status", "--format=json"))["mdsmap"]
+        mdsmap = json.loads(self.get_ceph_cmd_stdout("fs", "status", "--format=json"))["mdsmap"]
         self.assertEqual(mdsmap[0]["state"], "active")
 
 
@@ -157,7 +157,7 @@ class TestAddDataPool(TestAdminCommands):
         That the application metadata set on a newly added data pool is as expected.
         """
         pool_name = "foo"
-        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        mon_cmd = self.get_ceph_cmd_stdout
         mon_cmd('osd', 'pool', 'create', pool_name, '--pg_num_min',
                 str(self.fs.pg_num_min))
         # Check whether https://tracker.ceph.com/issues/43061 is fixed
@@ -201,22 +201,22 @@ class TestAddDataPool(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         # create second data pool, metadata pool and add with filesystem
         second_fs = "second_fs"
         second_metadata_pool = "second_metadata_pool"
         second_data_pool = "second_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
 
         # try to add 'first_data_pool' with 'second_fs'
         # Expecting EINVAL exit status because 'first_data_pool' is already in use with 'first_fs'
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', second_fs, first_data_pool)
+            self.get_ceph_cmd_stdout('fs', 'add_data_pool', second_fs, first_data_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -231,23 +231,23 @@ class TestAddDataPool(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         # create second data pool, metadata pool and add with filesystem
         second_fs = "second_fs"
         second_metadata_pool = "second_metadata_pool"
         second_data_pool = "second_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
 
         # try to add 'second_metadata_pool' with 'first_fs' as a data pool
         # Expecting EINVAL exit status because 'second_metadata_pool'
         # is already in use with 'second_fs' as a metadata pool
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', first_fs, second_metadata_pool)
+            self.get_ceph_cmd_stdout('fs', 'add_data_pool', first_fs, second_metadata_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -264,10 +264,8 @@ class TestFsNew(TestAdminCommands):
         metapoolname, datapoolname = n+'-testmetapool', n+'-testdatapool'
         badname = n+'badname@#'
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            n+metapoolname)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            n+datapoolname)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+metapoolname)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+datapoolname)
 
         # test that fsname not with "goodchars" fails
         args = ['fs', 'new', badname, metapoolname, datapoolname]
@@ -275,12 +273,12 @@ class TestFsNew(TestAdminCommands):
                                  check_status=False)
         self.assertIn('invalid chars', proc.stderr.getvalue().lower())
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', metapoolname,
-                                            metapoolname,
-                                            '--yes-i-really-really-mean-it-not-faking')
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', datapoolname,
-                                            datapoolname,
-                                            '--yes-i-really-really-mean-it-not-faking')
+        self.get_ceph_cmd_stdout('osd', 'pool', 'rm', metapoolname,
+                                 metapoolname,
+                                 '--yes-i-really-really-mean-it-not-faking')
+        self.get_ceph_cmd_stdout('osd', 'pool', 'rm', datapoolname,
+                                 datapoolname,
+                                 '--yes-i-really-really-mean-it-not-faking')
 
     def test_new_default_ec(self):
         """
@@ -292,7 +290,7 @@ class TestFsNew(TestAdminCommands):
         n = "test_new_default_ec"
         self.setup_ec_pools(n)
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data")
+            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -310,7 +308,7 @@ class TestFsNew(TestAdminCommands):
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
         self.setup_ec_pools(n)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
 
     def test_new_default_ec_no_overwrite(self):
         """
@@ -322,7 +320,7 @@ class TestFsNew(TestAdminCommands):
         n = "test_new_default_ec_no_overwrite"
         self.setup_ec_pools(n, overwrites=False)
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data")
+            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -332,7 +330,7 @@ class TestFsNew(TestAdminCommands):
             raise RuntimeError("expected failure")
         # and even with --force !
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -350,7 +348,7 @@ class TestFsNew(TestAdminCommands):
         fs_name = "test_fs_new_pool_application"
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
-        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        mon_cmd = self.get_ceph_cmd_stdout
         for p in pool_names:
             mon_cmd('osd', 'pool', 'create', p, '--pg_num_min', str(self.fs.pg_num_min))
             mon_cmd('osd', 'pool', 'application', 'enable', p, 'cephfs')
@@ -434,13 +432,13 @@ class TestFsNew(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         second_fs = "second_fs"
         second_data_pool = "second_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_data_pool)
 
         # try to create new fs 'second_fs' with following configuration
         # metadata pool -> 'first_metadata_pool'
@@ -448,7 +446,7 @@ class TestFsNew(TestAdminCommands):
         # Expecting EINVAL exit status because 'first_metadata_pool'
         # is already in use with 'first_fs'
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_metadata_pool, second_data_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', second_fs, first_metadata_pool, second_data_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -463,13 +461,13 @@ class TestFsNew(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         second_fs = "second_fs"
         second_metadata_pool = "second_metadata_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_metadata_pool)
 
         # try to create new fs 'second_fs' with following configuration
         # metadata pool -> 'second_metadata_pool'
@@ -477,7 +475,7 @@ class TestFsNew(TestAdminCommands):
         # Expecting EINVAL exit status because 'first_data_pool'
         # is already in use with 'first_fs'
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, first_data_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', second_fs, second_metadata_pool, first_data_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -492,9 +490,9 @@ class TestFsNew(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         second_fs = "second_fs"
 
@@ -504,7 +502,7 @@ class TestFsNew(TestAdminCommands):
         # Expecting EINVAL exit status because 'first_metadata_pool' and 'first_data_pool'
         # is already in use with 'first_fs'
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_metadata_pool, first_data_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', second_fs, first_metadata_pool, first_data_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -519,17 +517,17 @@ class TestFsNew(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         # create second data pool, metadata pool and add with filesystem
         second_fs = "second_fs"
         second_metadata_pool = "second_metadata_pool"
         second_data_pool = "second_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
 
         third_fs = "third_fs"
 
@@ -539,7 +537,7 @@ class TestFsNew(TestAdminCommands):
         # Expecting EINVAL exit status because 'first_metadata_pool' and 'second_data_pool'
         # is already in use with 'first_fs' and 'second_fs'
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', third_fs, first_metadata_pool, second_data_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', third_fs, first_metadata_pool, second_data_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -554,9 +552,9 @@ class TestFsNew(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         second_fs = "second_fs"
 
@@ -566,7 +564,7 @@ class TestFsNew(TestAdminCommands):
         # Expecting EINVAL exit status because 'first_data_pool' and 'first_metadata_pool'
         # is already in use with 'first_fs'
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, first_data_pool, first_metadata_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', second_fs, first_data_pool, first_metadata_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -581,17 +579,17 @@ class TestFsNew(TestAdminCommands):
         first_fs = "first_fs"
         first_metadata_pool = "first_metadata_pool"
         first_data_pool = "first_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', first_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', first_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', first_fs, first_metadata_pool, first_data_pool)
 
         # create second data pool, metadata pool and add with filesystem
         second_fs = "second_fs"
         second_metadata_pool = "second_metadata_pool"
         second_data_pool = "second_data_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_metadata_pool)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', second_data_pool)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', second_data_pool)
+        self.get_ceph_cmd_stdout('fs', 'new', second_fs, second_metadata_pool, second_data_pool)
 
         third_fs = "third_fs"
 
@@ -601,7 +599,7 @@ class TestFsNew(TestAdminCommands):
         # Expecting EINVAL exit status because 'first_data_pool' and 'second_metadata_pool'
         # is already in use with 'first_fs' and 'second_fs'
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', third_fs, first_data_pool, second_metadata_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', third_fs, first_data_pool, second_metadata_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -614,20 +612,20 @@ class TestFsNew(TestAdminCommands):
 
         # create pool and initialise with rbd
         new_pool = "new_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', new_pool)
         self.ctx.cluster.run(args=['rbd', 'pool', 'init', new_pool])
 
         new_fs = "new_fs"
         new_data_pool = "new_data_pool"
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_data_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', new_data_pool)
 
         # try to create new fs 'new_fs' with following configuration
         # metadata pool -> 'new_pool' (already used by rbd app)
         # data pool -> 'new_data_pool'
         # Expecting EINVAL exit status because 'new_pool' is already in use with 'rbd' app
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', new_fs, new_pool, new_data_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', new_fs, new_pool, new_data_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -640,20 +638,20 @@ class TestFsNew(TestAdminCommands):
 
         # create pool and initialise with rbd
         new_pool = "new_pool"
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', new_pool)
         self.ctx.cluster.run(args=['rbd', 'pool', 'init', new_pool])
 
         new_fs = "new_fs"
         new_metadata_pool = "new_metadata_pool"
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', new_metadata_pool)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', new_metadata_pool)
 
         # try to create new fs 'new_fs' with following configuration
         # metadata pool -> 'new_metadata_pool'
         # data pool -> 'new_pool' (already used by rbd app)
         # Expecting EINVAL exit status because 'new_pool' is already in use with 'rbd' app
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', new_fs, new_metadata_pool, new_pool)
+            self.get_ceph_cmd_stdout('fs', 'new', new_fs, new_metadata_pool, new_pool)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
@@ -904,13 +902,13 @@ class TestRequiredClientFeatures(CephFSTestCase):
         """
 
         def is_required(index):
-            out = self.fs.mon_manager.raw_cluster_cmd('fs', 'get', self.fs.name, '--format=json-pretty')
+            out = self.get_ceph_cmd_stdout('fs', 'get', self.fs.name, '--format=json-pretty')
             features = json.loads(out)['mdsmap']['required_client_features']
             if "feature_{0}".format(index) in features:
                 return True;
             return False;
 
-        features = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'feature', 'ls', '--format=json-pretty'))
+        features = json.loads(self.get_ceph_cmd_stdout('fs', 'feature', 'ls', '--format=json-pretty'))
         self.assertGreater(len(features), 0);
 
         for f in features:
@@ -1116,7 +1114,7 @@ class TestConfigCommands(CephFSTestCase):
 
         names = self.fs.get_rank_names()
         for n in names:
-            s = self.fs.mon_manager.raw_cluster_cmd("config", "show", "mds."+n)
+            s = self.get_ceph_cmd_stdout("config", "show", "mds."+n)
             self.assertTrue("NAME" in s)
             self.assertTrue("mon_host" in s)
 
@@ -1166,17 +1164,17 @@ class TestMirroringCommands(CephFSTestCase):
     MDSS_REQUIRED = 1
 
     def _enable_mirroring(self, fs_name):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", fs_name)
+        self.get_ceph_cmd_stdout("fs", "mirror", "enable", fs_name)
 
     def _disable_mirroring(self, fs_name):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", fs_name)
+        self.get_ceph_cmd_stdout("fs", "mirror", "disable", fs_name)
 
     def _add_peer(self, fs_name, peer_spec, remote_fs_name):
         peer_uuid = str(uuid.uuid4())
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
+        self.get_ceph_cmd_stdout("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
 
     def _remove_peer(self, fs_name, peer_uuid):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
+        self.get_ceph_cmd_stdout("fs", "mirror", "peer_remove", fs_name, peer_uuid)
 
     def _verify_mirroring(self, fs_name, flag_str):
         status = self.fs.status()
