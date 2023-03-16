@@ -1265,10 +1265,7 @@ class CephadmServe:
                 ]
 
                 if daemon_spec.daemon_type == 'osd':
-                    if hasattr(self.mgr.spec_store.active_specs.get(daemon_spec.service_name), "objectstore"):
-                        osd_objectstore = self.mgr.spec_store.active_specs.get(daemon_spec.service_name).objectstore
-                    else:
-                        osd_objectstore = 'bluestore'
+                    osd_objectstore = getattr(self.mgr.spec_store.active_specs.get(daemon_spec.service_name), 'objectstore', 'bluestore')
                     cmd += '--objectstore', osd_objectstore,
 
                 out, err, code = await self._run_cephadm(
@@ -1548,13 +1545,12 @@ class CephadmServe:
             await self._registry_login(host, json.loads(str(self.mgr.get_store('registry_credentials'))))
 
         j = None
-        if not self.mgr.use_repo_digest:
-            try:
-                j = await self._run_cephadm_json(host, '', 'inspect-image', [],
-                                                 image=image_name, no_fsid=True,
-                                                 error_ok=True)
-            except OrchestratorError:
-                pass
+        try:
+            j = await self._run_cephadm_json(host, '', 'inspect-image', [],
+                                             image=image_name, no_fsid=True,
+                                             error_ok=True)
+        except OrchestratorError:
+            pass
 
         if not j:
             pullargs: List[str] = []
