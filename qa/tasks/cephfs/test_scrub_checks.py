@@ -281,7 +281,7 @@ class TestScrubChecks(CephFSTestCase):
             all_damage = self.fs.rank_tell(["damage", "ls"], mds_rank)
             damage = [d for d in all_damage if d['ino'] == ino and d['damage_type'] == dtype]
             for d in damage:
-                self.get_ceph_cmd_stdout(
+                self.run_ceph_cmd(
                     'tell', f'mds.{self.fs.get_active_names()[mds_rank]}',
                     "damage", "rm", str(d['id']))
             return len(damage) > 0

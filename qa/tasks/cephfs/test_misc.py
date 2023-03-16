@@ -96,16 +96,15 @@ class TestMisc(CephFSTestCase):
 
         self.fs.fail()
 
-        self.get_ceph_cmd_stdout('fs', 'rm', self.fs.name,
-                                 '--yes-i-really-mean-it')
+        self.run_ceph_cmd('fs', 'rm', self.fs.name, '--yes-i-really-mean-it')
 
-        self.get_ceph_cmd_stdout('osd', 'pool', 'delete',
-                                 self.fs.metadata_pool_name,
-                                 self.fs.metadata_pool_name,
-                                 '--yes-i-really-really-mean-it')
-        self.get_ceph_cmd_stdout('osd', 'pool', 'create',
-                                 self.fs.metadata_pool_name,
-                                 '--pg_num_min', str(self.fs.pg_num_min))
+        self.run_ceph_cmd('osd', 'pool', 'delete',
+                          self.fs.metadata_pool_name,
+                          self.fs.metadata_pool_name,
+                           '--yes-i-really-really-mean-it')
+        self.run_ceph_cmd('osd', 'pool', 'create',
+                          self.fs.metadata_pool_name,
+                          '--pg_num_min', str(self.fs.pg_num_min))
 
         # insert a garbage object
         self.fs.radosm(["put", "foo", "-"], stdin=StringIO("bar"))
@@ -119,34 +118,34 @@ class TestMisc(CephFSTestCase):
         self.wait_until_true(lambda: get_pool_df(self.fs, self.fs.metadata_pool_name), timeout=30)
 
         try:
-            self.get_ceph_cmd_stdout('fs', 'new', self.fs.name,
-                                     self.fs.metadata_pool_name,
-                                     data_pool_name)
+            self.run_ceph_cmd('fs', 'new', self.fs.name,
+                              self.fs.metadata_pool_name,
+                              data_pool_name)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
         else:
             raise AssertionError("Expected EINVAL")
 
-        self.get_ceph_cmd_stdout('fs', 'new', self.fs.name,
-                                 self.fs.metadata_pool_name,
-                                 data_pool_name, "--force")
+        self.run_ceph_cmd('fs', 'new', self.fs.name,
+                          self.fs.metadata_pool_name,
+                          data_pool_name, "--force")
 
-        self.get_ceph_cmd_stdout('fs', 'fail', self.fs.name)
+        self.run_ceph_cmd('fs', 'fail', self.fs.name)
 
-        self.get_ceph_cmd_stdout('fs', 'rm', self.fs.name,
-                                 '--yes-i-really-mean-it'])
+        self.run_ceph_cmd('fs', 'rm', self.fs.name,
+                          '--yes-i-really-mean-it')
 
-        self.get_ceph_cmd_stdout('osd', 'pool', 'delete',
-                                 self.fs.metadata_pool_name,
-                                 self.fs.metadata_pool_name,
-                                 '--yes-i-really-really-mean-it')
-        self.get_ceph_cmd_stdout('osd', 'pool', 'create',
-                                 self.fs.metadata_pool_name,
-                                 '--pg_num_min', str(self.fs.pg_num_min))
-        self.get_ceph_cmd_stdout('fs', 'new', self.fs.name,
-                                 self.fs.metadata_pool_name,
-                                 data_pool_name,
-                                 '--allow_dangerous_metadata_overlay')
+        self.run_ceph_cmd('osd', 'pool', 'delete',
+                          self.fs.metadata_pool_name,
+                          self.fs.metadata_pool_name,
+                          '--yes-i-really-really-mean-it')
+        self.run_ceph_cmd('osd', 'pool', 'create',
+                          self.fs.metadata_pool_name,
+                          '--pg_num_min', str(self.fs.pg_num_min))
+        self.run_ceph_cmd('fs', 'new', self.fs.name,
+                          self.fs.metadata_pool_name,
+                          data_pool_name,
+                          '--allow_dangerous_metadata_overlay')
 
     def test_cap_revoke_nonresponder(self):
         """

@@ -2741,11 +2741,11 @@ class TestSubvolumes(TestVolumesHelper):
         group = self._generate_random_group_name()
 
         # Create auth_id
-        self.get_ceph_cmd_stdout(
+        self.run_ceph_cmd(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
-            "mon", "allow *"]
+            "mon", "allow *"
         )
 
         auth_id = "guest1"
@@ -2770,7 +2770,7 @@ class TestSubvolumes(TestVolumesHelper):
             self.fail("expected the 'fs subvolume authorize' command to fail")
 
         # clean up
-        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2785,7 +2785,7 @@ class TestSubvolumes(TestVolumesHelper):
         group = self._generate_random_group_name()
 
         # Create auth_id
-        self.get_ceph_cmd_stdout(
+        self.run_ceph_cmd(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
@@ -2813,7 +2813,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, auth_id,
                      "--group_name", group)
-        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2920,7 +2920,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2976,7 +2976,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, "guest1", "--group_name", group)
         guest_mount.umount_wait()
-        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -3051,7 +3051,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, auth_id, "--group_name", group)
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -3123,7 +3123,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -7019,8 +7019,8 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         new_pool = "new_pool"
         self.fs.add_data_pool(new_pool)
 
-        self.get_ceph_cmd_stdout("osd", "pool", "set-quota", new_pool,
-                                 "max_bytes", f"{pool_capacity // 4}")
+        self.run_ceph_cmd("osd", "pool", "set-quota", new_pool,
+                          "max_bytes", f"{pool_capacity // 4}")
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1, "--pool_layout", new_pool)

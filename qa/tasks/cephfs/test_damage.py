@@ -244,7 +244,7 @@ class TestDamage(CephFSTestCase):
             # Reset MDS state
             self.mount_a.umount_wait(force=True)
             self.fs.fail()
-            self.get_ceph_cmd_stdout('mds', 'repaired', '0')
+            self.run_ceph_cmd('mds', 'repaired', '0')
 
             # Reset RADOS pool state
             self.fs.radosm(['import', '-'], stdin=BytesIO(serialized))
@@ -467,7 +467,7 @@ class TestDamage(CephFSTestCase):
         self.fs.radosm(["setomapval", dirfrag_obj, "file_to_be_damaged_head", junk])
 
         # Clean up the damagetable entry
-        self.get_ceph_cmd_stdout(
+        self.run_ceph_cmd(
             'tell', f'mds.{self.fs.get_active_names()[0]}',
             "damage", "rm", f"{damage_id}")
 
@@ -528,7 +528,7 @@ class TestDamage(CephFSTestCase):
         self.assertEqual(damage[0]['damage_type'], "backtrace")
         self.assertEqual(damage[0]['ino'], file1_ino)
 
-        self.get_ceph_cmd_stdout(
+        self.run_ceph_cmd(
             'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
             "damage", "rm", str(damage[0]['id']))
 
@@ -561,7 +561,7 @@ class TestDamage(CephFSTestCase):
             self.assertEqual(damage[1]['ino'], file2_ino)
 
         for entry in damage:
-            self.get_ceph_cmd_stdout(
+            self.run_ceph_cmd(
                 'tell', 'mds.{0}'.format(self.fs.get_active_names()[0]),
                 "damage", "rm", str(entry['id']))
 
