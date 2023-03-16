@@ -472,4 +472,19 @@ DEV=
 rbd feature disable ${POOL}/${IMAGE} journaling
 rbd config image rm ${POOL}/${IMAGE} rbd_discard_granularity_bytes
 
+# test that rbd_op_threads setting takes effect
+EXPECTED=`ceph-conf --show-config-value librados_thread_count`
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+ACTUAL=`ps -p ${PID} -T | grep -c io_context_pool`
+[ ${ACTUAL} -eq ${EXPECTED} ]
+unmap_device ${DEV} ${PID}
+EXPECTED=$((EXPECTED * 3 + 1))
+DEV=`_sudo rbd device --device-type nbd --rbd-op-threads ${EXPECTED} map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+ACTUAL=`ps -p ${PID} -T | grep -c io_context_pool`
+[ ${ACTUAL} -eq ${EXPECTED} ]
+unmap_device ${DEV} ${PID}
+DEV=
+
 echo OK

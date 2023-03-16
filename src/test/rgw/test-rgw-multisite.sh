@@ -56,6 +56,7 @@ i=2
 while [ $i -le $num_clusters ]; do
   x $(start_ceph_cluster c$i) -n $(get_mstart_parameters $i)
   j=1
+  endpoints=""
   while [ $j -le $rgws ]; do
     port=$((8000+i*100+j))
     endpoints="$endpoints""$url:$port,"

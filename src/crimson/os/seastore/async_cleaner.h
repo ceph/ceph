@@ -544,14 +544,6 @@ public:
     journal_alloc_tail = JOURNAL_SEQ_NULL;
   }
 
-  bool should_trim_dirty() const {
-    return get_dirty_tail_target() > journal_dirty_tail;
-  }
-
-  bool should_trim_alloc() const {
-    return get_alloc_tail_target() > journal_alloc_tail;
-  }
-
   bool should_trim() const {
     return should_trim_alloc() || should_trim_dirty();
   }
@@ -596,6 +588,14 @@ public:
   friend std::ostream &operator<<(std::ostream &, const stat_printer_t &);
 
 private:
+  bool should_trim_dirty() const {
+    return get_dirty_tail_target() > journal_dirty_tail;
+  }
+
+  bool should_trim_alloc() const {
+    return get_alloc_tail_target() > journal_alloc_tail;
+  }
+
   using trim_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
   trim_ertr::future<> trim_dirty();
@@ -1144,11 +1144,17 @@ public:
 
   virtual bool should_block_io_on_clean() const = 0;
 
+  virtual bool can_clean_space() const = 0;
+
   virtual bool should_clean_space() const = 0;
 
   using clean_space_ertr = base_ertr;
   using clean_space_ret = clean_space_ertr::future<>;
   virtual clean_space_ret clean_space() = 0;
+
+  virtual const std::set<device_id_t>& get_device_ids() const = 0;
+
+  virtual std::size_t get_reclaim_size_per_cycle() const = 0;
 
   // test only
   virtual bool check_usage() = 0;
@@ -1210,11 +1216,9 @@ public:
     config_t config,
     SegmentManagerGroupRef&& sm_group,
     BackrefManager &backref_manager,
-    bool detailed);
-
-  SegmentSeqAllocator& get_ool_segment_seq_allocator() {
-    return *ool_segment_seq_allocator;
-  }
+    SegmentSeqAllocator &segment_seq_allocator,
+    bool detailed,
+    bool is_cold);
 
   void set_journal_trimmer(JournalTrimmer &_trimmer) {
     trimmer = &_trimmer;
@@ -1224,9 +1228,12 @@ public:
       config_t config,
       SegmentManagerGroupRef&& sm_group,
       BackrefManager &backref_manager,
-      bool detailed) {
+      SegmentSeqAllocator &ool_seq_allocator,
+      bool detailed,
+      bool is_cold = false) {
     return std::make_unique<SegmentCleaner>(
-        config, std::move(sm_group), backref_manager, detailed);
+        config, std::move(sm_group), backref_manager,
+        ool_seq_allocator, detailed, is_cold);
   }
 
   /*
@@ -1312,6 +1319,11 @@ public:
     return aratio < config.available_ratio_hard_limit;
   }
 
+  bool can_clean_space() const final {
+    assert(background_callback->is_ready());
+    return get_segments_reclaimable() > 0;
+  }
+
   bool should_clean_space() const final {
     assert(background_callback->is_ready());
     if (get_segments_reclaimable() == 0) {
@@ -1327,6 +1339,14 @@ public:
   }
 
   clean_space_ret clean_space() final;
+
+  const std::set<device_id_t>& get_device_ids() const final {
+    return sm_group->get_device_ids();
+  }
+
+  std::size_t get_reclaim_size_per_cycle() const final {
+    return config.reclaim_bytes_per_cycle;
+  }
 
   // Testing interfaces
 
@@ -1521,11 +1541,12 @@ private:
     auto new_usage = calc_utilization(segment);
     adjust_segment_util(old_usage, new_usage);
     if (s_type == segment_type_t::OOL) {
-      ool_segment_seq_allocator->set_next_segment_seq(seq);
+      ool_segment_seq_allocator.set_next_segment_seq(seq);
     }
   }
 
   const bool detailed;
+  const bool is_cold;
   const config_t config;
 
   SegmentManagerGroupRef sm_group;
@@ -1574,7 +1595,7 @@ private:
   BackgroundListener *background_callback = nullptr;
 
   // TODO: drop once paddr->journal_seq_t is introduced
-  SegmentSeqAllocatorRef ool_segment_seq_allocator;
+  SegmentSeqAllocator &ool_segment_seq_allocator;
 };
 
 class RBMCleaner;
@@ -1635,11 +1656,23 @@ public:
     return false;
   }
 
+  bool can_clean_space() const final {
+    return false;
+  }
+
   bool should_clean_space() const final {
     return false;
   }
 
   clean_space_ret clean_space() final;
+
+  const std::set<device_id_t>& get_device_ids() const final {
+    return rb_group->get_device_ids();
+  }
+
+  std::size_t get_reclaim_size_per_cycle() const final {
+    return 0;
+  }
 
   RandomBlockManager* get_rbm(paddr_t paddr) {
     auto rbs = rb_group->get_rb_managers();

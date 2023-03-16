@@ -1,22 +1,19 @@
 Troubleshooting
 ===============
 
-You might need to investigate why a cephadm command failed
+You may wish to investigate why a cephadm command failed
 or why a certain service no longer runs properly.
 
-Cephadm deploys daemons as containers. This means that
-troubleshooting those containerized daemons might work
-differently than you expect (and that is certainly true if
-you expect this troubleshooting to work the way that
-troubleshooting does when the daemons involved aren't
-containerized). 
+Cephadm deploys daemons within containers. This means that
+troubleshooting those containerized daemons will require
+a different process than traditional package-install daemons.
 
 Here are some tools and commands to help you troubleshoot
 your Ceph environment.
 
 .. _cephadm-pause:
 
-Pausing or disabling cephadm
+Pausing or Disabling cephadm
 ----------------------------
 
 If something goes wrong and cephadm is behaving badly, you can
@@ -45,16 +42,15 @@ See :ref:`cephadm-spec-unmanaged` for information on disabling
 individual services.
 
 
-Per-service and per-daemon events
+Per-service and Per-daemon Events
 ---------------------------------
 
-In order to help with the process of debugging failed daemon
-deployments, cephadm stores events per service and per daemon.
+In order to facilitate debugging failed daemons,
+cephadm stores events per service and per daemon.
 These events often contain information relevant to
-troubleshooting
-your Ceph cluster. 
+troubleshooting your Ceph cluster. 
 
-Listing service events
+Listing Service Events
 ~~~~~~~~~~~~~~~~~~~~~~
 
 To see the events associated with a certain service, run a
@@ -82,7 +78,7 @@ This will return something in the following form:
   - '2021-02-01T12:09:25.264584 service:alertmanager [ERROR] "Failed to apply: Cannot
     place <AlertManagerSpec for service_name=alertmanager> on unknown_host: Unknown hosts"'
 
-Listing daemon events
+Listing Daemon Events
 ~~~~~~~~~~~~~~~~~~~~~
 
 To see the events associated with a certain daemon, run a
@@ -106,16 +102,16 @@ This will return something in the following form:
     mds.cephfs.hostname.ppdhsz on host 'hostname'"
 
 
-Checking cephadm logs
+Checking Cephadm Logs
 ---------------------
 
-To learn how to monitor the cephadm logs as they are generated, read :ref:`watching_cephadm_logs`.
+To learn how to monitor cephadm logs as they are generated, read :ref:`watching_cephadm_logs`.
 
-If your Ceph cluster has been configured to log events to files, there will exist a
-cephadm log file called ``ceph.cephadm.log`` on all monitor hosts (see
-:ref:`cephadm-logs` for a more complete explanation of this).
+If your Ceph cluster has been configured to log events to files, there will be a
+``ceph.cephadm.log`` file on all monitor hosts (see
+:ref:`cephadm-logs` for a more complete explanation).
 
-Gathering log files
+Gathering Log Files
 -------------------
 
 Use journalctl to gather the log files of all daemons:
@@ -140,7 +136,7 @@ To fetch all log files of all daemons on a given host, run::
       cephadm logs --fsid <fsid> --name "$name" > $name;
     done
 
-Collecting systemd status
+Collecting Systemd Status
 -------------------------
 
 To print the state of a systemd unit, run::
@@ -156,7 +152,7 @@ To fetch all state of all daemons of a given host, run::
     done
 
 
-List all downloaded container images
+List all Downloaded Container Images
 ------------------------------------
 
 To list all container images that are downloaded on a host:
@@ -170,16 +166,16 @@ To list all container images that are downloaded on a host:
     "registry.opensuse.org/opensuse/leap:15.2"
 
 
-Manually running containers
+Manually Running Containers
 ---------------------------
 
-Cephadm writes small wrappers that run a containers. Refer to
+Cephadm uses small wrappers when running containers. Refer to
 ``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the
 container execution command.
 
 .. _cephadm-ssh-errors:
 
-SSH errors
+SSH Errors
 ----------
 
 Error message::
@@ -191,7 +187,7 @@ Error message::
   Please make sure that the host is reachable and accepts connections using the cephadm SSH key
   ...
 
-Things users can do:
+Things Ceph administrators can do:
 
 1. Ensure cephadm has an SSH identity key::
 
@@ -224,7 +220,7 @@ To verify that the public key is in the authorized_keys file, run the following 
      [root@mon1 ~]# cephadm shell -- ceph cephadm get-pub-key > ~/ceph.pub
      [root@mon1 ~]# grep "`cat ~/ceph.pub`"  /root/.ssh/authorized_keys
 
-Failed to infer CIDR network error
+Failed to Infer CIDR network error
 ----------------------------------
 
 If you see this error::
@@ -241,7 +237,7 @@ This means that you must run a command of this form::
 
 For more detail on operations of this kind, see :ref:`deploy_additional_monitors`
 
-Accessing the admin socket
+Accessing the Admin Socket
 --------------------------
 
 Each Ceph daemon provides an admin socket that bypasses the
@@ -252,12 +248,12 @@ To access the admin socket, first enter the daemon container on the host::
     [root@mon1 ~]# cephadm enter --name <daemon-name>
     [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
 
-Calling miscellaneous ceph tools
+Running Various Ceph Tools
 --------------------------------
 
-To call miscellaneous like ``ceph-objectstore-tool`` or 
-``ceph-monstore-tool``, you can run them by calling 
-``cephadm shell --name <daemon-name>`` like so::
+To run Ceph tools like ``ceph-objectstore-tool`` or 
+``ceph-monstore-tool``, invoke the cephadm CLI with
+``cephadm shell --name <daemon-name>``.  For example::
 
     root@myhostname # cephadm unit --name mon.myhostname stop
     root@myhostname # cephadm shell --name mon.myhostname
@@ -272,21 +268,21 @@ To call miscellaneous like ``ceph-objectstore-tool`` or
     election_strategy: 1
     0: [v2:127.0.0.1:3300/0,v1:127.0.0.1:6789/0] mon.myhostname
 
-This command sets up the environment in a way that is suitable
-for extended daemon maintenance and running the daemon interactively. 
+The cephadm shell sets up the environment in a way that is suitable
+for extended daemon maintenance and running daemons interactively. 
 
 .. _cephadm-restore-quorum:
 
-Restoring the MON quorum
-------------------------
+Restoring the Monitor Quorum
+----------------------------
 
-In case the Ceph MONs cannot form a quorum, cephadm is not able
-to manage the cluster, until the quorum is restored.
+If the Ceph monitor daemons (mons) cannot form a quorum, cephadm will not be
+able to manage the cluster until quorum is restored.
 
-In order to restore the MON quorum, remove unhealthy MONs
+In order to restore the quorum, remove unhealthy monitors
 form the monmap by following these steps:
 
-1. Stop all MONs. For each MON host::
+1. Stop all mons. For each mon host::
 
     ssh {mon-host}
     cephadm unit --name mon.`hostname` stop
@@ -301,18 +297,19 @@ form the monmap by following these steps:
 
 .. _cephadm-manually-deploy-mgr:
 
-Manually deploying a MGR daemon
--------------------------------
-cephadm requires a MGR daemon in order to manage the cluster. In case the cluster
-the last MGR of a cluster was removed, follow these steps in order to deploy 
-a MGR ``mgr.hostname.smfvfd`` on a random host of your cluster manually. 
+Manually Deploying a Manager Daemon
+-----------------------------------
+At least one manager (mgr) daemon is required by cephadm in order to manage the
+cluster. If the last mgr in a cluster has been removed, follow these steps in
+order to deploy a manager called (for example)
+``mgr.hostname.smfvfd`` on a random host of your cluster manually. 
 
 Disable the cephadm scheduler, in order to prevent cephadm from removing the new 
-MGR. See :ref:`cephadm-enable-cli`::
+manager. See :ref:`cephadm-enable-cli`::
 
   ceph config-key set mgr/cephadm/pause true
 
-Then get or create the auth entry for the new MGR::
+Then get or create the auth entry for the new manager::
 
   ceph auth get-or-create mgr.hostname.smfvfd mon "profile mgr" osd "allow *" mds "allow *"
 
@@ -338,26 +335,26 @@ Deploy the daemon::
 
   cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 
-Analyzing core dumps
+Analyzing Core Dumps
 ---------------------
 
-In case a Ceph daemon crashes, cephadm supports analyzing core dumps. To enable core dumps, run
+When a Ceph daemon crashes, cephadm supports analyzing core dumps. To enable core dumps, run
 
 .. prompt:: bash #
 
   ulimit -c unlimited
 
-core dumps will now be written to ``/var/lib/systemd/coredump``.
+Core dumps will now be written to ``/var/lib/systemd/coredump``.
 
 .. note::
 
-  core dumps are not namespaced by the kernel, which means
+  Core dumps are not namespaced by the kernel, which means
   they will be written to ``/var/lib/systemd/coredump`` on
   the container host. 
 
-Now, wait for the crash to happen again. (To simulate the crash of a daemon, run e.g. ``killall -3 ceph-mon``)
+Now, wait for the crash to happen again. To simulate the crash of a daemon, run e.g. ``killall -3 ceph-mon``.
 
-Install debug packages by entering the cephadm shell and install ``ceph-debuginfo``::
+Install debug packages including ``ceph-debuginfo`` by entering the cephadm shelll::
 
   # cephadm shell --mount /var/lib/systemd/coredump
   [ceph: root@host1 /]# dnf install ceph-debuginfo gdb zstd

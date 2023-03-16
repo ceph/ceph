@@ -46,6 +46,7 @@ Cache::Cache(
   LOG_PREFIX(Cache::Cache);
   INFO("created, lru_size={}", lru.get_capacity());
   register_metrics();
+  segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
 
 Cache::~Cache()
@@ -135,7 +136,8 @@ void Cache::register_metrics()
     {src_t::READ, sm::label_instance("src", "READ")},
     {src_t::TRIM_DIRTY, sm::label_instance("src", "TRIM_DIRTY")},
     {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
-    {src_t::CLEANER, sm::label_instance("src", "CLEANER")},
+    {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
+    {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -624,8 +626,10 @@ void Cache::register_metrics()
            src2 == Transaction::src_t::READ) ||
           (src1 == Transaction::src_t::TRIM_DIRTY &&
            src2 == Transaction::src_t::TRIM_DIRTY) ||
-          (src1 == Transaction::src_t::CLEANER &&
-           src2 == Transaction::src_t::CLEANER) ||
+          (src1 == Transaction::src_t::CLEANER_MAIN &&
+           src2 == Transaction::src_t::CLEANER_MAIN) ||
+          (src1 == Transaction::src_t::CLEANER_COLD &&
+           src2 == Transaction::src_t::CLEANER_COLD) ||
           (src1 == Transaction::src_t::TRIM_ALLOC &&
            src2 == Transaction::src_t::TRIM_ALLOC)) {
         continue;
@@ -1113,12 +1117,13 @@ record_t Cache::prepare_record(
       auto stype = segment_type_t::NULL_SEG;
 
       // FIXME: This is specific to the segmented implementation
-      if (segment_provider != nullptr &&
-          i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
+      if (i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
-        auto &sinfo = segment_provider->get_seg_info(sid);
-        sseq = sinfo.seq;
-        stype = sinfo.type;
+        auto sinfo = get_segment_info(sid);
+        if (sinfo) {
+          sseq = sinfo->seq;
+          stype = sinfo->type;
+        }
       }
 
       record.push_back(
@@ -1389,7 +1394,8 @@ record_t Cache::prepare_record(
   auto &rewrite_version_stats = t.get_rewrite_version_stats();
   if (trans_src == Transaction::src_t::TRIM_DIRTY) {
     stats.committed_dirty_version.increment_stat(rewrite_version_stats);
-  } else if (trans_src == Transaction::src_t::CLEANER) {
+  } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
+             trans_src == Transaction::src_t::CLEANER_COLD) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
   } else {
     assert(rewrite_version_stats.is_clear());
@@ -1656,21 +1662,22 @@ Cache::replay_delta(
    * safetly skip these deltas because the extent must already
    * have been rewritten.
    */
-  if (segment_provider != nullptr &&
-      delta.paddr != P_ADDR_NULL &&
+  if (delta.paddr != P_ADDR_NULL &&
       delta.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
     auto& seg_addr = delta.paddr.as_seg_paddr();
-    auto& seg_info = segment_provider->get_seg_info(seg_addr.get_segment_id());
-    auto delta_paddr_segment_seq = seg_info.seq;
-    auto delta_paddr_segment_type = seg_info.type;
-    if (delta_paddr_segment_seq != delta.ext_seq ||
-        delta_paddr_segment_type != delta.seg_type) {
-      DEBUG("delta is obsolete, delta_paddr_segment_seq={},"
-            " delta_paddr_segment_type={} -- {}",
-            segment_seq_printer_t{delta_paddr_segment_seq},
-            delta_paddr_segment_type,
-            delta);
-      return replay_delta_ertr::make_ready_future<bool>(false);
+    auto seg_info = get_segment_info(seg_addr.get_segment_id());
+    if (seg_info) {
+      auto delta_paddr_segment_seq = seg_info->seq;
+      auto delta_paddr_segment_type = seg_info->type;
+      if (delta_paddr_segment_seq != delta.ext_seq ||
+          delta_paddr_segment_type != delta.seg_type) {
+        DEBUG("delta is obsolete, delta_paddr_segment_seq={},"
+              " delta_paddr_segment_type={} -- {}",
+              segment_seq_printer_t{delta_paddr_segment_seq},
+              delta_paddr_segment_type,
+              delta);
+        return replay_delta_ertr::make_ready_future<bool>(false);
+      }
     }
   }
 
@@ -1891,7 +1898,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
     DEBUGT("root not on t -- {}", t, *root);
     t.root = root;
     t.add_to_read_set(root);
-    return root->wait_io().then([this] {
+    return root->wait_io().then([root=root] {
       return get_root_iertr::make_ready_future<RootBlockRef>(
 	root);
     });

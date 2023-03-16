@@ -34,6 +34,10 @@ if(Sanitizers_address_COMPILE_OPTIONS OR Sanitizers_leak_COMPILE_OPTIONS)
   # ASAN_LIBRARY will be read by ceph.in to preload the asan library
   find_library(ASAN_LIBRARY
     NAMES
+      libasan.so.10
+      libasan.so.9
+      libasan.so.8
+      libasan.so.7
       libasan.so.6
       libasan.so.5
       libasan.so.4

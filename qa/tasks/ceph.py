@@ -377,6 +377,24 @@ def crush_setup(ctx, config):
 
 
 @contextlib.contextmanager
+def check_enable_crimson(ctx, config):
+    # enable crimson-osds if crimson
+    log.info("check_enable_crimson: {}".format(is_crimson(config)))
+    if is_crimson(config):
+        cluster_name = config['cluster']
+        first_mon = teuthology.get_first_mon(ctx, config, cluster_name)
+        (mon_remote,) = ctx.cluster.only(first_mon).remotes.keys()
+        log.info('check_enable_crimson: setting set-allow-crimson')
+        mon_remote.run(
+            args=[
+                'sudo', 'ceph', '--cluster', cluster_name,
+                'osd', 'set-allow-crimson', '--yes-i-really-mean-it'
+            ]
+        )
+    yield
+
+
+@contextlib.contextmanager
 def setup_manager(ctx, config):
     first_mon = teuthology.get_first_mon(ctx, config, config['cluster'])
     (mon,) = ctx.cluster.only(first_mon).remotes.keys()
@@ -597,9 +615,12 @@ def create_simple_monmap(ctx, remote, conf, mons,
     return fsid
 
 
+def is_crimson(config):
+    return config.get('flavor', 'default') == 'crimson'
+
+
 def maybe_redirect_stderr(config, type_, args, log_path):
-    if type_ == 'osd' and \
-       config.get('flavor', 'default') == 'crimson':
+    if type_ == 'osd' and is_crimson(config):
         # teuthworker uses ubuntu:ubuntu to access the test nodes
         create_log_cmd = \
             f'sudo install -b -o ubuntu -g ubuntu /dev/null {log_path}'
@@ -870,6 +891,7 @@ def cluster(ctx, config):
     teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_dev, remote_to_roles_to_devs)
 
     log.info("ctx.disk_config.remote_to_roles_to_dev: {r}".format(r=str(ctx.disk_config.remote_to_roles_to_dev)))
+
     for remote, roles_for_host in osds.remotes.items():
         roles_to_devs = remote_to_roles_to_devs[remote]
 
@@ -1585,6 +1607,20 @@ def restart(ctx, config):
     if config.get('wait-for-osds-up', False):
         for cluster in clusters:
             ctx.managers[cluster].wait_for_all_osds_up()
+    if config.get('expected-failure') is not None:
+        log.info('Checking for expected-failure in osds logs after restart...')
+        expected_fail = config.get('expected-failure')
+        is_osd = teuthology.is_type('osd')
+        for role in daemons:
+            if not is_osd(role):
+                continue
+            (remote,) = ctx.cluster.only(role).remotes.keys()
+            cluster, type_, id_ = teuthology.split_role(role)
+            remote.run(
+               args = ['sudo',
+                       'egrep', expected_fail,
+                       '/var/log/ceph/{cluster}-{type_}.{id_}.log'.format(cluster=cluster, type_=type_, id_=id_),
+                ])
     yield
 
 
@@ -1882,6 +1918,7 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
+        lambda: check_enable_crimson(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
         lambda: setup_manager(ctx=ctx, config=config),
         lambda: create_rbd_pool(ctx=ctx, config=config),
@@ -1899,7 +1936,8 @@ def task(ctx, config):
         finally:
             # set pg_num_targets back to actual pg_num, so we don't have to
             # wait for pending merges (which can take a while!)
-            ctx.managers[config['cluster']].stop_pg_num_changes()
+            if not config.get('skip_stop_pg_num_changes', True):
+                ctx.managers[config['cluster']].stop_pg_num_changes()
 
             if config.get('wait-for-scrub', True):
                 # wait for pgs to become active+clean in case any

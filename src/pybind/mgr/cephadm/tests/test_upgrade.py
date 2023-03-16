@@ -136,6 +136,7 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
                             style='cephadm',
                             fsid='fsid',
                             container_id='container_id',
+                            container_image_name='to_image',
                             container_image_id='image_id',
                             container_image_digests=['to_image@repo_digest'],
                             deployed_by=['to_image@repo_digest'],

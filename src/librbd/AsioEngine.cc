@@ -3,7 +3,6 @@
 
 #include "librbd/AsioEngine.h"
 #include "include/Context.h"
-#include "include/stringify.h"
 #include "include/neorados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
@@ -31,7 +30,9 @@ AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
   if (rbd_threads > rados_threads) {
     // inherit the librados thread count -- but increase it if librbd wants to
     // utilize more threads
-    m_cct->_conf.set_val("librados_thread_count", stringify(rbd_threads));
+    m_cct->_conf.set_val_or_die("librados_thread_count",
+                                std::to_string(rbd_threads));
+    m_cct->_conf.apply_changes(nullptr);
   }
 }
 

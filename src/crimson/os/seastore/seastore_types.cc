@@ -399,8 +399,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "TRIM_DIRTY";
   case transaction_type_t::TRIM_ALLOC:
     return os << "TRIM_ALLOC";
-  case transaction_type_t::CLEANER:
-    return os << "CLEANER";
+  case transaction_type_t::CLEANER_MAIN:
+    return os << "CLEANER_MAIN";
+  case transaction_type_t::CLEANER_COLD:
+    return os << "CLEANER_COLD";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:
@@ -795,8 +797,10 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "SSD";
   case device_type_t::ZNS:
     return out << "ZNS";
-  case device_type_t::SEGMENTED_EPHEMERAL:
-    return out << "SEGMENTED_EPHEMERAL";
+  case device_type_t::EPHEMERAL_COLD:
+    return out << "EPHEMERAL_COLD";
+  case device_type_t::EPHEMERAL_MAIN:
+    return out << "EPHEMERAL_MAIN";
   case device_type_t::RANDOM_BLOCK_SSD:
     return out << "RANDOM_BLOCK_SSD";
   case device_type_t::RANDOM_BLOCK_EPHEMERAL:

@@ -397,6 +397,45 @@
 	...
 }
 {
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*rocksdb*Configurable*ParseOption*
+	...
+}
+{
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*RocksDBStore*ParseOptionsFromString*
+	...
+}
+{
+	rocksdb config parsing
+	Memcheck:Leak
+	...
+	fun:*RocksDBStore*do_open*
+	...
+}
+{
+	rocksdb column family init
+	Memcheck:Leak
+	...
+	fun:*rocksdb*ColumnFamilyOptions*
+	...
+	fun:*RocksDBStore*init*
+	...
+}
+{
+	rocksdb cache get-or-create
+	Memcheck:Leak
+	...
+	fun:*rocksdb*RegisterCacheDeleterRole*
+	...
+	fun:*rocksdb*GetCacheItemHelperForRole*
+	...
+}
+{
 	rocksdb BGThreadWrapper
 	Memcheck:Leak
 	...
@@ -409,6 +448,13 @@
 	...
 	fun:*VersionStorageInfo
 	...
+}
+{
+        rocksdb version builder
+        Memcheck:Leak
+        ...
+        fun:*rocksdb*VersionBuilder*Rep*LoadTableHandlers*
+        ...
 }
 {
 	libstdc++ leak on xenial

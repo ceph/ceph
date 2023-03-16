@@ -15,6 +15,7 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
 import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -161,6 +162,13 @@ describe('Dashbord Component', () => {
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
       { provide: SummaryService, useClass: SummaryServiceMock },
+      {
+        provide: PrometheusAlertService,
+        useValue: {
+          activeCriticalAlerts: 2,
+          activeWarningAlerts: 1
+        }
+      },
       CssHelper,
       PgCategoryService
     ]
@@ -244,12 +252,12 @@ describe('Dashbord Component', () => {
   it('should show the actual alert count on each alerts pill', () => {
     fixture.detectChanges();
 
-    const successNotification = fixture.debugElement.query(By.css('button[id=warningAlerts] span'));
+    const warningAlerts = fixture.debugElement.query(By.css('button[id=warningAlerts] span'));
 
-    const dangerNotification = fixture.debugElement.query(By.css('button[id=dangerAlerts] span'));
+    const dangerAlerts = fixture.debugElement.query(By.css('button[id=dangerAlerts] span'));
 
-    expect(successNotification.nativeElement.textContent).toBe('1');
-    expect(dangerNotification.nativeElement.textContent).toBe('2');
+    expect(warningAlerts.nativeElement.textContent).toBe('1');
+    expect(dangerAlerts.nativeElement.textContent).toBe('2');
   });
 
   it('should show the critical alerts window and its content', () => {
@@ -275,15 +283,16 @@ describe('Dashbord Component', () => {
   });
 
   it('should only show the pills when the alerts are not empty', () => {
-    getAlertsSpy.and.returnValue(of({}));
+    spyOn(TestBed.inject(PrometheusAlertService), 'activeCriticalAlerts').and.returnValue(0);
+    spyOn(TestBed.inject(PrometheusAlertService), 'activeWarningAlerts').and.returnValue(0);
     fixture.detectChanges();
 
-    const successNotification = fixture.debugElement.query(By.css('button[id=warningAlerts]'));
+    const warningAlerts = fixture.debugElement.query(By.css('button[id=warningAlerts]'));
 
-    const dangerNotification = fixture.debugElement.query(By.css('button[id=dangerAlerts]'));
+    const dangerAlerts = fixture.debugElement.query(By.css('button[id=dangerAlerts]'));
 
-    expect(successNotification).toBe(null);
-    expect(dangerNotification).toBe(null);
+    expect(warningAlerts).toBe(null);
+    expect(dangerAlerts).toBe(null);
   });
 
   describe('features disabled', () => {

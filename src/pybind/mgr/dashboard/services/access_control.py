@@ -14,6 +14,7 @@ from typing import List, Optional, Sequence
 
 import bcrypt
 from mgr_module import CLICheckNonemptyFileInput, CLIReadCommand, CLIWriteCommand
+from mgr_util import password_hash
 
 from .. import mgr
 from ..exceptions import PasswordPolicyException, PermissionNotValid, \
@@ -25,17 +26,6 @@ from ..settings import Settings
 
 logger = logging.getLogger('access_control')
 DEFAULT_FILE_DESC = 'password/secret'
-
-
-# password hashing algorithm
-def password_hash(password, salt_password=None):
-    if not password:
-        return None
-    if not salt_password:
-        salt_password = bcrypt.gensalt()
-    else:
-        salt_password = salt_password.encode('utf8')
-    return bcrypt.hashpw(password.encode('utf8'), salt_password).decode('utf8')
 
 
 _P = Permission  # short alias

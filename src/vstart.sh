@@ -150,6 +150,7 @@ nodaemon=0
 redirect=0
 smallmds=0
 short=0
+crimson=0
 ec=0
 cephadm=0
 parallel=true
@@ -186,6 +187,7 @@ filestore_path=
 kstore_path=
 declare -a block_devs
 declare -a secondary_block_devs
+secondary_block_devs_type="SSD"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -254,7 +256,8 @@ options:
 	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
-	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
+	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
 \n
 EOF
@@ -334,11 +337,13 @@ case $1 in
         short=1
         ;;
     --crimson)
+        crimson=1
         ceph_osd=crimson-osd
         nodaemon=1
         msgr=2
         ;;
     --crimson-foreground)
+        crimson=1
         ceph_osd=crimson-osd
         nodaemon=0
         msgr=2
@@ -511,6 +516,10 @@ case $1 in
         ;;
     --seastore-secondary-devs)
         parse_secondary_devs --seastore-devs "$2"
+        shift
+        ;;
+    --seastore-secondary-devs-type)
+        secondary_block_devs_type="$2"
         shift
         ;;
     --crimson-smp)
@@ -854,6 +863,12 @@ $CMONDEBUG
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         auth allow insecure global id reclaim = false
 EOF
+
+    if [ "$crimson" -eq 1 ]; then
+        wconf <<EOF
+        osd pool default crimson = true
+EOF
+    fi
 }
 
 write_logrotate_conf() {
@@ -966,6 +981,10 @@ EOF
     do
         run 'mon' $f $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
     done
+
+    if [ "$crimson" -eq 1 ]; then
+        $CEPH_BIN/ceph osd set-allow-crimson --yes-i-really-mean-it
+    fi
 }
 
 start_osd() {
@@ -1024,7 +1043,8 @@ EOF
                 fi
                 if [ -n "${secondary_block_devs[$osd]}" ]; then
                     dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.segmented.1
+                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
+                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
                 fi
             fi
             if [ "$objectstore" == "bluestore" ]; then

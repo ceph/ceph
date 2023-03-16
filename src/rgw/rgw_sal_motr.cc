@@ -1296,19 +1296,6 @@ void MotrObject::gen_rand_obj_instance_name()
   state.obj.key.set_instance(buf);
 }
 
-int MotrObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-    std::map<std::string, bufferlist> *m,
-    bool* pmore, optional_yield y)
-{
-  return 0;
-}
-
-int MotrObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-    optional_yield y)
-{
-  return 0;
-}
-
 int MotrObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
     const std::set<std::string>& keys,
     Attrs* vals)
@@ -1553,14 +1540,6 @@ int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, b
   return del_op.delete_obj(dpp, y);
 }
 
-int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-    Completions* aio, bool keep_index_consistent,
-    optional_yield y)
-{
-  /* XXX: Make it async */
-  return 0;
-}
-
 int MotrObject::copy_object(User* user,
     req_info* info,
     const rgw_zone_id& source_zone,
@@ -1606,7 +1585,7 @@ int MotrObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
 
 MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
           optional_yield y,
-          std::unique_ptr<rgw::sal::Object> _head_obj,
+          rgw::sal::Object* obj,
           MotrStore* _store,
           const rgw_user& _owner,
           const rgw_placement_rule *_ptail_placement_rule,
@@ -1618,8 +1597,8 @@ MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
               ptail_placement_rule(_ptail_placement_rule),
               olh_epoch(_olh_epoch),
               unique_tag(_unique_tag),
-              obj(_store, _head_obj->get_key(), _head_obj->get_bucket()),
-              old_obj(_store, _head_obj->get_key(), _head_obj->get_bucket()) {}
+              obj(_store, obj->get_key(), obj->get_bucket()),
+              old_obj(_store, obj->get_key(), obj->get_bucket()) {}
 
 static const unsigned MAX_BUFVEC_NR = 256;
 
@@ -2984,14 +2963,14 @@ int MotrMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 std::unique_ptr<Writer> MotrMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
 {
   return std::make_unique<MotrMultipartWriter>(dpp, y, this,
-				 std::move(_head_obj), store, owner,
+				 obj, store, owner,
 				 ptail_placement_rule, part_num, part_num_str);
 }
 
@@ -3128,7 +3107,7 @@ std::unique_ptr<MultipartUpload> MotrBucket::get_multipart_upload(const std::str
 
 std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
-        std::unique_ptr<rgw::sal::Object> _head_obj,
+        rgw::sal::Object* obj,
         const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         const std::string& unique_tag,
@@ -3139,13 +3118,13 @@ std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *d
 
 std::unique_ptr<Writer> MotrStore::get_atomic_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
-        std::unique_ptr<rgw::sal::Object> _head_obj,
+        rgw::sal::Object* obj,
         const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         uint64_t olh_epoch,
         const std::string& unique_tag) {
   return std::make_unique<MotrAtomicWriter>(dpp, y,
-                  std::move(_head_obj), this, owner,
+                  obj, this, owner,
                   ptail_placement_rule, olh_epoch, unique_tag);
 }
 
@@ -3371,11 +3350,6 @@ int MotrStore::cluster_stat(RGWClusterStat& stats)
 }
 
 std::unique_ptr<Lifecycle> MotrStore::get_lifecycle(void)
-{
-  return 0;
-}
-
-std::unique_ptr<Completions> MotrStore::get_completions(void)
 {
   return 0;
 }

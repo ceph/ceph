@@ -355,10 +355,10 @@ existing data should be deleted in order to free up space.
 OSD_BACKFILLFULL
 ________________
 
-One or more OSDs has exceeded the `backfillfull` threshold, which will
-prevent data from being allowed to rebalance to this device.  This is
-an early warning that rebalancing may not be able to complete and that
-the cluster is approaching full.
+One or more OSDs has exceeded the `backfillfull` threshold or *would* exceed
+when the currently mapped backfills finish, which will prevent data from being
+allowed to rebalance to this device.  This is an early warning that rebalancing
+may not be able to complete and that the cluster is approaching full.
 
 Utilization by pool can be checked with:
 
@@ -473,11 +473,11 @@ Hit sets can be configured on the cache pool with:
 OSD_NO_SORTBITWISE
 __________________
 
-No pre-luminous v12.y.z OSDs are running but the ``sortbitwise`` flag has not
+No pre-Luminous v12.y.z OSDs are running but the ``sortbitwise`` flag has not
 been set.
 
-The ``sortbitwise`` flag must be set before luminous v12.y.z or newer
-OSDs can start.  You can safely set the flag with:
+The ``sortbitwise`` flag must be set before OSDs running Luminous v12.y.z or newer
+can start.  You can safely set the flag with:
 
 .. prompt:: bash $
 
@@ -486,11 +486,11 @@ OSDs can start.  You can safely set the flag with:
 OSD_FILESTORE
 __________________
 
-Filestore has been deprecated, considering that Bluestore has been the default
-objectstore for quite some time. Warn if OSDs are running Filestore.
+The Filestore OSD back end has been deprecated; the BlueStore back end has been
+the default objectstore for quite some time. Warn if OSDs are running Filestore.
 
-The 'mclock_scheduler' is not supported for filestore OSDs. Therefore, the
-default 'osd_op_queue' is set to 'wpq' for filestore OSDs and is enforced
+The 'mclock_scheduler' is not supported for Filestore OSDs. Therefore, the
+default 'osd_op_queue' is set to 'wpq' for Filestore OSDs and is enforced
 even if the user attempts to change it.
 
 Filestore OSDs can be listed with:
@@ -499,12 +499,17 @@ Filestore OSDs can be listed with:
 
    ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
 
-If it is not feasible to migrate Filestore OSDs to Bluestore immediately, you
-can silence this warning temporarily with:
+In order to upgrade to Reef or later releases, any Filestore OSDs must first be
+migrated to BlueStore.
+When upgrading a release prior to Reef to Reef or later: if it is not feasible to migrate Filestore OSDs to
+BlueStore immediately, you can silence this warning temporarily with:
 
 .. prompt:: bash $
 
    ceph health mute OSD_FILESTORE
+
+Since this migration can take considerable time to complete, we recommend that you
+begin the process well in advance of an update to Reef or later releases.
 
 POOL_FULL
 _________

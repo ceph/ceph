@@ -528,26 +528,24 @@ static int remove_expired_obj(
     obj_key.instance = "null";
   }
 
+  std::unique_ptr<rgw::sal::User> user;
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::Object> obj;
 
-  ret = driver->get_bucket(nullptr, bucket_info, &bucket);
+  user = driver->get_user(bucket_info.owner);
+  ret = driver->get_bucket(user.get(), bucket_info, &bucket);
   if (ret < 0) {
     return ret;
   }
 
-  // XXXX currently, rgw::sal::Bucket.owner is always null here
-  std::unique_ptr<rgw::sal::User> user;
-  if (! bucket->get_owner()) {
-    auto& bucket_info = bucket->get_info();
-    user = driver->get_user(bucket_info.owner);
-    // forgive me, lord
-    if (user) {
-      bucket->set_owner(user.get());
-    }
+  obj = bucket->get_object(obj_key);
+
+  RGWObjState* obj_state{nullptr};
+  ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
+  if (ret < 0) {
+    return ret;
   }
 
-  obj = bucket->get_object(obj_key);
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op
     = obj->get_delete_op();
   del_op->params.versioning_status
@@ -578,9 +576,9 @@ static int remove_expired_obj(
       "ERROR: publishing notification failed, with error: " << ret << dendl;
   } else {
     // send request to notification manager
-    (void) notify->publish_commit(dpp, obj->get_obj_size(),
+    (void) notify->publish_commit(dpp, obj_state->size,
 				  ceph::real_clock::now(),
-				  obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
+				  obj_state->attrset[RGW_ATTR_ETAG].to_str(),
 				  version_id);
   }
 

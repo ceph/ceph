@@ -353,7 +353,8 @@ by users who have access to the namespace.
 
 .. note:: Namespaces are primarily useful for applications written on top of
    ``librados`` where the logical grouping can alleviate the need to create
-   different pools. Ceph Object Gateway (from ``luminous``) uses namespaces for various
+   different pools. Ceph Object Gateway (in releases beginning with
+   Luminous) uses namespaces for various
    metadata objects.
 
 The rationale for namespaces is that pools can be a computationally expensive

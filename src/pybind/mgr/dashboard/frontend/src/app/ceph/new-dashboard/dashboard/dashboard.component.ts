@@ -23,13 +23,15 @@ import {
 } from '~/app/shared/services/feature-toggles.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
+import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 
 @Component({
   selector: 'cd-dashboard',
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.scss']
 })
-export class DashboardComponent implements OnInit, OnDestroy {
+export class DashboardComponent extends PrometheusListHelper implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
   osdSettingsService: any;
   osdSettings: any;
@@ -42,7 +44,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   healthData$: Observable<Object>;
   prometheusAlerts$: Observable<AlertmanagerAlert[]>;
 
-  isAlertmanagerConfigured = false;
   icons = Icons;
   showAlerts = false;
   flexHeight = true;
@@ -53,8 +54,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
   borderClass: string;
   alertType: string;
   alerts: AlertmanagerAlert[];
-  crticialActiveAlerts: number;
-  warningActiveAlerts: number;
   healthData: any;
   categoryPgAmount: Record<string, number> = {};
   totalPgs = 0;
@@ -86,16 +85,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
     public prometheusService: PrometheusService,
-    private refreshIntervalService: RefreshIntervalService
+    private refreshIntervalService: RefreshIntervalService,
+    public prometheusAlertService: PrometheusAlertService
   ) {
+    super(prometheusService);
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
+    super.ngOnInit();
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
-      this.triggerPrometheusAlerts();
       this.getCapacityCardData();
     });
     this.getPrometheusData(this.lastHourDateObject);
@@ -113,6 +114,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   toggleAlertsWindow(type: string, isToggleButton: boolean = false) {
+    this.triggerPrometheusAlerts();
     if (isToggleButton) {
       this.showAlerts = !this.showAlerts;
       this.flexHeight = !this.flexHeight;
@@ -159,56 +161,48 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   triggerPrometheusAlerts() {
     this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.isAlertmanagerConfigured = true;
-
       this.prometheusService.getAlerts().subscribe((alerts) => {
         this.alerts = alerts;
-        this.crticialActiveAlerts = alerts.filter(
-          (alert: AlertmanagerAlert) =>
-            alert.status.state === 'active' && alert.labels.severity === 'critical'
-        ).length;
-        this.warningActiveAlerts = alerts.filter(
-          (alert: AlertmanagerAlert) =>
-            alert.status.state === 'active' && alert.labels.severity === 'warning'
-        ).length;
       });
     });
   }
 
   getPrometheusData(selectedTime: any) {
-    if (this.timerGetPrometheusDataSub) {
-      this.timerGetPrometheusDataSub.unsubscribe();
-    }
-    this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-      selectedTime = this.updateTimeStamp(selectedTime);
-
-      for (const queryName in queries) {
-        if (queries.hasOwnProperty(queryName)) {
-          const query = queries[queryName];
-          let interval = selectedTime.step;
-
-          if (query.includes('rate') && selectedTime.step < 20) {
-            interval = 20;
-          } else if (query.includes('rate')) {
-            interval = selectedTime.step * 2;
-          }
-
-          const intervalAdjustedQuery = query.replace(/\[(.*?)\]/g, `[${interval}s]`);
-
-          this.prometheusService
-            .getPrometheusData({
-              params: intervalAdjustedQuery,
-              start: selectedTime['start'],
-              end: selectedTime['end'],
-              step: selectedTime['step']
-            })
-            .subscribe((data: any) => {
-              if (data.result.length) {
-                this.queriesResults[queryName] = data.result[0].values;
-              }
-            });
-        }
+    this.prometheusService.ifPrometheusConfigured(() => {
+      if (this.timerGetPrometheusDataSub) {
+        this.timerGetPrometheusDataSub.unsubscribe();
       }
+      this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
+        selectedTime = this.updateTimeStamp(selectedTime);
+
+        for (const queryName in queries) {
+          if (queries.hasOwnProperty(queryName)) {
+            const query = queries[queryName];
+            let interval = selectedTime.step;
+
+            if (query.includes('rate') && selectedTime.step < 20) {
+              interval = 20;
+            } else if (query.includes('rate')) {
+              interval = selectedTime.step * 2;
+            }
+
+            const intervalAdjustedQuery = query.replace(/\[(.*?)\]/g, `[${interval}s]`);
+
+            this.prometheusService
+              .getPrometheusData({
+                params: intervalAdjustedQuery,
+                start: selectedTime['start'],
+                end: selectedTime['end'],
+                step: selectedTime['step']
+              })
+              .subscribe((data: any) => {
+                if (data.result.length) {
+                  this.queriesResults[queryName] = data.result[0].values;
+                }
+              });
+          }
+        }
+      });
     });
   }
 

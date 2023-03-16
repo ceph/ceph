@@ -30,11 +30,21 @@ EphemeralSegmentManagerRef create_test_ephemeral() {
 }
 
 device_config_t get_ephemeral_device_config(
-    std::size_t index, std::size_t num_devices)
+    std::size_t index,
+    std::size_t num_main_devices,
+    std::size_t num_cold_devices)
 {
+  auto num_devices = num_main_devices + num_cold_devices;
   assert(num_devices > index);
+  auto get_sec_dtype = [num_main_devices](std::size_t idx) {
+    if (idx < num_main_devices) {
+      return device_type_t::EPHEMERAL_MAIN;
+    } else {
+      return device_type_t::EPHEMERAL_COLD;
+    }
+  };
+
   magic_t magic = 0xabcd;
-  auto type = device_type_t::SEGMENTED_EPHEMERAL;
   bool is_major_device;
   secondary_device_set_t secondary_devices;
   if (index == 0) {
@@ -44,7 +54,12 @@ device_config_t get_ephemeral_device_config(
          ++secondary_index) {
       device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
       secondary_devices.insert({
-        secondary_index, device_spec_t{magic, type, secondary_id}
+        secondary_index,
+	device_spec_t{
+	  magic,
+	  get_sec_dtype(secondary_index),
+	  secondary_id
+	}
       });
     }
   } else { // index > 0
@@ -54,7 +69,11 @@ device_config_t get_ephemeral_device_config(
   device_id_t id = static_cast<device_id_t>(index);
   seastore_meta_t meta = {};
   return {is_major_device,
-          device_spec_t{magic, type, id},
+          device_spec_t{
+            magic,
+	    get_sec_dtype(index),
+            id
+          },
           meta,
           secondary_devices};
 }

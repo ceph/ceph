@@ -44,7 +44,7 @@ std::ostream& operator<<(std::ostream &out, Segment::segment_state_t s)
 
 seastar::future<crimson::os::seastore::SegmentManagerRef>
 SegmentManager::get_segment_manager(
-  const std::string &device)
+  const std::string &device, device_type_t dtype)
 {
 #ifdef HAVE_ZNS
 LOG_PREFIX(SegmentManager::get_segment_manager);
@@ -71,7 +71,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
 	} else {
 	  return std::make_unique<
 	    segment_manager::block::BlockSegmentManager
-	    >(device + "/block");
+	    >(device + "/block", dtype);
 	}
       });
     });
@@ -79,7 +79,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
   return seastar::make_ready_future<crimson::os::seastore::SegmentManagerRef>(
     std::make_unique<
       segment_manager::block::BlockSegmentManager
-    >(device + "/block"));
+    >(device + "/block", dtype));
 #endif
 }
 

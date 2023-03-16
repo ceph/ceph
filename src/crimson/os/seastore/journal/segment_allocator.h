@@ -348,7 +348,7 @@ public:
   // when available, submit the record if possible
   using submit_ertr = base_ertr;
   using submit_ret = submit_ertr::future<record_locator_t>;
-  submit_ret submit(record_t&&);
+  submit_ret submit(record_t&&, bool with_atomic_roll_segment=false);
 
   void update_committed_to(const journal_seq_t& new_committed_to) {
     assert(new_committed_to != JOURNAL_SEQ_NULL);

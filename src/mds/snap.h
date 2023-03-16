@@ -38,6 +38,7 @@ struct SnapInfo {
   inodeno_t ino;
   utime_t stamp;
   std::string name;
+  std::string alternate_name;
 
   mutable std::string long_name; ///< cached _$ino_$name
   std::map<std::string,std::string> metadata;
@@ -93,6 +94,10 @@ struct sr_t {
   std::map<snapid_t, SnapInfo> snaps;
   std::map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
   std::set<snapid_t> past_parent_snaps;
+  utime_t last_modified;                // timestamp when this realm
+                                        // was last changed.
+  uint64_t change_attr = 0;             // tracks changes to snap
+                                        // realm attrs.
 
   __u32 flags = 0;
   enum {

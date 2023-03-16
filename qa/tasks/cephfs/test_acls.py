@@ -13,13 +13,8 @@ class TestACLs(XFSTestsDev):
         from tasks.cephfs.fuse_mount import FuseMount
         from tasks.cephfs.kernel_mount import KernelMount
 
-        # TODO: make xfstests-dev compatible with ceph-fuse. xfstests-dev
-        # remounts CephFS before running tests using kernel, so ceph-fuse
-        # mounts are never actually testsed.
         if isinstance(self.mount_a, FuseMount):
             log.info('client is fuse mounted')
-            self.skipTest('Requires kernel client; xfstests-dev not '\
-                          'compatible with ceph-fuse ATM.')
         elif isinstance(self.mount_a, KernelMount):
             log.info('client is kernel mounted')
 
@@ -27,8 +22,8 @@ class TestACLs(XFSTestsDev):
         # failure on our own (since this command doesn't set right error code
         # and error message in some cases) and print custom log messages
         # accordingly.
-        proc = self.mount_a.client_remote.run(args=['sudo', './check',
-            'generic/099'], cwd=self.xfstests_repo_path, stdout=StringIO(),
+        proc = self.mount_a.client_remote.run(args=['sudo', 'env', 'DIFF_LENGTH=0',
+            './check', 'generic/099'], cwd=self.xfstests_repo_path, stdout=StringIO(),
             stderr=StringIO(), timeout=30, check_status=False,omit_sudo=False,
             label='running tests for ACLs from xfstests-dev')
 

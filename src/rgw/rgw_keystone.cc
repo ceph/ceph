@@ -375,6 +375,29 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
   return 0;
 }
 
+/*
+ * Maybe one day we'll have the parser find this in Keystone replies.
+ * But for now, we use the confguration to augment the list of roles.
+ */
+void TokenEnvelope::update_roles(const std::vector<std::string> & admin,
+                                 const std::vector<std::string> & reader)
+{
+  for (auto& iter: roles) {
+    for (const auto& r : admin) {
+      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
+        iter.is_admin = true;
+        break;
+      }
+    }
+    for (const auto& r : reader) {
+      if (fnmatch(r.c_str(), iter.name.c_str(), 0) == 0) {
+        iter.is_reader = true;
+        break;
+      }
+    }
+  }
+}
+
 bool TokenCache::find(const std::string& token_id,
                       rgw::keystone::TokenEnvelope& token)
 {

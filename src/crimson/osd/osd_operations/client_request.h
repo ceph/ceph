@@ -41,6 +41,7 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
 
 public:
   class PGPipeline : public CommonPGPipeline {
+    public:
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
     } await_map;

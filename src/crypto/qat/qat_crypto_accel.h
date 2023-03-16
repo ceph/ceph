@@ -18,18 +18,29 @@
 
 #include "crypto/crypto_accel.h"
 #include "crypto/qat/qcccrypto.h"
+#include "common/async/yield_context.h"
 
 class QccCryptoAccel : public CryptoAccel {
   public:
     QccCrypto qcccrypto;
-    QccCryptoAccel() { qcccrypto.init(); };
+    QccCryptoAccel(const size_t chunk_size, const size_t max_requests):qcccrypto() { qcccrypto.init(chunk_size, max_requests); };
     ~QccCryptoAccel() { qcccrypto.destroy(); };
 
     bool cbc_encrypt(unsigned char* out, const unsigned char* in, size_t size,
         const unsigned char (&iv)[AES_256_IVSIZE],
-        const unsigned char (&key)[AES_256_KEYSIZE]) override;
+        const unsigned char (&key)[AES_256_KEYSIZE],
+        optional_yield y) override { return false; }
     bool cbc_decrypt(unsigned char* out, const unsigned char* in, size_t size,
         const unsigned char (&iv)[AES_256_IVSIZE],
-        const unsigned char (&key)[AES_256_KEYSIZE]) override;
+        const unsigned char (&key)[AES_256_KEYSIZE],
+        optional_yield y) override { return false; }
+    bool cbc_encrypt_batch(unsigned char* out, const unsigned char* in, size_t size,
+        const unsigned char iv[][AES_256_IVSIZE],
+        const unsigned char (&key)[AES_256_KEYSIZE],
+        optional_yield y) override;
+    bool cbc_decrypt_batch(unsigned char* out, const unsigned char* in, size_t size,
+        const unsigned char iv[][AES_256_IVSIZE],
+        const unsigned char (&key)[AES_256_KEYSIZE],
+        optional_yield y) override;
 };
 #endif

@@ -412,16 +412,18 @@ bool RecordSubmitter::is_available() const
              !has_io_error;
 #ifndef NDEBUG
   if (ret) {
-    // invariants when available
+    // unconditional invariants
     ceph_assert(segment_allocator.can_write());
     ceph_assert(p_current_batch != nullptr);
     ceph_assert(!p_current_batch->is_submitting());
+    // the current batch accepts a further write
     ceph_assert(!p_current_batch->needs_flush());
     if (!p_current_batch->is_empty()) {
       auto submit_length =
         p_current_batch->get_submit_size().get_encoded_length();
       ceph_assert(!segment_allocator.needs_roll(submit_length));
     }
+    // I'm not rolling
   }
 #endif
   return ret;
@@ -466,10 +468,11 @@ RecordSubmitter::roll_segment_ertr::future<>
 RecordSubmitter::roll_segment()
 {
   LOG_PREFIX(RecordSubmitter::roll_segment);
-  assert(is_available());
+  ceph_assert(p_current_batch->needs_flush() ||
+              is_available());
   // #1 block concurrent submissions due to rolling
   wait_available_promise = seastar::shared_promise<>();
-  assert(!wait_unfull_flush_promise.has_value());
+  ceph_assert(!wait_unfull_flush_promise.has_value());
   return [FNAME, this] {
     if (p_current_batch->is_pending()) {
       if (state == state_t::FULL) {
@@ -521,10 +524,12 @@ RecordSubmitter::roll_segment()
 }
 
 RecordSubmitter::submit_ret
-RecordSubmitter::submit(record_t&& record)
+RecordSubmitter::submit(
+    record_t&& record,
+    bool with_atomic_roll_segment)
 {
   LOG_PREFIX(RecordSubmitter::submit);
-  assert(is_available());
+  ceph_assert(is_available());
   assert(check_action(record.size) != action_t::ROLL);
   segment_allocator.get_provider().update_modify_time(
       segment_allocator.get_segment_id(),
@@ -574,16 +579,22 @@ RecordSubmitter::submit(record_t&& record)
             get_name(),
             p_current_batch->get_num_records(),
             num_outstanding_io);
-      wait_available_promise = seastar::shared_promise<>();
-      assert(!wait_unfull_flush_promise.has_value());
-      wait_unfull_flush_promise = seastar::promise<>();
-      // flush and mark available in background
-      std::ignore = wait_unfull_flush_promise->get_future(
-      ).finally([FNAME, this] {
-        DEBUG("{} flush done, available", get_name());
-        wait_available_promise->set_value();
-        wait_available_promise.reset();
-      });
+      if (with_atomic_roll_segment) {
+        // wait_available_promise and wait_unfull_flush_promise
+        // need to be delegated to the follow-up atomic roll_segment();
+        assert(p_current_batch->is_pending());
+      } else {
+        wait_available_promise = seastar::shared_promise<>();
+        ceph_assert(!wait_unfull_flush_promise.has_value());
+        wait_unfull_flush_promise = seastar::promise<>();
+        // flush and mark available in background
+        std::ignore = wait_unfull_flush_promise->get_future(
+        ).finally([FNAME, this] {
+          DEBUG("{} flush done, available", get_name());
+          wait_available_promise->set_value();
+          wait_available_promise.reset();
+        });
+      }
     } else {
       DEBUG("{} added pending, flush", get_name());
       flush_current_batch();
@@ -664,14 +675,14 @@ RecordSubmitter::open(bool is_mkfs)
 RecordSubmitter::close_ertr::future<>
 RecordSubmitter::close()
 {
-  assert(state == state_t::IDLE);
-  assert(num_outstanding_io == 0);
+  ceph_assert(state == state_t::IDLE);
+  ceph_assert(num_outstanding_io == 0);
   committed_to = JOURNAL_SEQ_NULL;
-  assert(p_current_batch != nullptr);
-  assert(p_current_batch->is_empty());
-  assert(!wait_available_promise.has_value());
+  ceph_assert(p_current_batch != nullptr);
+  ceph_assert(p_current_batch->is_empty());
+  ceph_assert(!wait_available_promise.has_value());
   has_io_error = false;
-  assert(!wait_unfull_flush_promise.has_value());
+  ceph_assert(!wait_unfull_flush_promise.has_value());
   metrics.clear();
   return segment_allocator.close();
 }
@@ -708,7 +719,7 @@ void RecordSubmitter::decrement_io_with_flush()
       return;
     }
   } else {
-    assert(!wait_unfull_flush_promise.has_value());
+    ceph_assert(!wait_unfull_flush_promise.has_value());
   }
 
   auto needs_flush = (
