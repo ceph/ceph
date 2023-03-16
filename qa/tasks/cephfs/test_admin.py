@@ -35,8 +35,8 @@ class TestAdminCommands(CephFSTestCase):
 
         # test that fsname not with "goodchars" fails
         args = ['fs', 'new', badname, metapoolname, datapoolname]
-        proc = self.fs.mon_manager.run_cluster_cmd(args=args,stderr=StringIO(),
-                                                   check_status=False)
+        proc = self.run_ceph_cmd(args=args, stderr=StringIO(),
+                                 check_status=False)
         self.assertIn('invalid chars', proc.stderr.getvalue().lower())
 
         self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', metapoolname,
@@ -208,8 +208,8 @@ class TestAdminCommands(CephFSTestCase):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
-        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+            self.run_ceph_cmd(f'osd pool create {p}')
+        self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
         self.fs.status().get_fsmap(fscid)
         for i in range(2):
             self._check_pool_application_metadata_key_value(pool_names[i], 'cephfs', keys[i], fs_name)
@@ -223,9 +223,9 @@ class TestAdminCommands(CephFSTestCase):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
-        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
-        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+            self.run_ceph_cmd(f'osd pool create {p}')
+        self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+        self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
         self.fs.status().get_fsmap(fscid)
 
     def test_fs_new_with_specific_id_fails_without_force_flag(self):
@@ -237,9 +237,9 @@ class TestAdminCommands(CephFSTestCase):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
+            self.run_ceph_cmd(f'osd pool create {p}')
         try:
-            self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid}')
+            self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid}')
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
                 "invalid error code on creating a file system with specifc ID without --force flag")
@@ -256,9 +256,9 @@ class TestAdminCommands(CephFSTestCase):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
+            self.run_ceph_cmd(f'osd pool create {p}')
         try:
-            self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+            self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
                 "invalid error code on creating a file system with specifc ID that is already in use")
@@ -765,10 +765,10 @@ class TestSubCmdFsAuthorize(CapsHelper):
         fs_name = "cephfs-_."
         self.fs = self.mds_cluster.newfs(name=fs_name)
         self.fs.wait_for_daemons()
-        self.run_cluster_cmd(f'auth caps client.{self.mount_a.client_id} '
-                             f'mon "allow r" '
-                             f'osd "allow rw pool={self.fs.get_data_pool_name()}" '
-                             f'mds allow')
+        self.run_ceph_cmd(f'auth caps client.{self.mount_a.client_id} '
+                          f'mon "allow r" '
+                          f'osd "allow rw pool={self.fs.get_data_pool_name()}" '
+                          f'mds allow')
         self.mount_a.remount(cephfs_name=self.fs.name)
         perm = 'rw'
         filepaths, filedata, mounts, keyring = self.setup_test_env(perm)
@@ -810,7 +810,7 @@ class TestSubCmdFsAuthorize(CapsHelper):
 
     def tearDown(self):
         self.mount_a.umount_wait()
-        self.run_cluster_cmd(f'auth rm {self.client_name}')
+        self.run_ceph_cmd(f'auth rm {self.client_name}')
 
         super(type(self), self).tearDown()
 
