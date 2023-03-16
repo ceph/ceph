@@ -90,6 +90,7 @@ public:
 
   /* Internal APIs */
   int get_root_fd() { return root_fd; }
+  const std::string& get_base_path() const { return base_path; }
 };
 
 class POSIXUser : public FilterUser {
