@@ -28,10 +28,8 @@ class TestAdminCommands(CephFSTestCase):
         metapoolname, datapoolname = n+'-testmetapool', n+'-testdatapool'
         badname = n+'badname@#'
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            n+metapoolname)
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                            n+datapoolname)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+metapoolname)
+        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+datapoolname)
 
         # test that fsname not with "goodchars" fails
         args = ['fs', 'new', badname, metapoolname, datapoolname]
@@ -39,12 +37,12 @@ class TestAdminCommands(CephFSTestCase):
                                  check_status=False)
         self.assertIn('invalid chars', proc.stderr.getvalue().lower())
 
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', metapoolname,
-                                            metapoolname,
-                                            '--yes-i-really-really-mean-it-not-faking')
-        self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', datapoolname,
-                                            datapoolname,
-                                            '--yes-i-really-really-mean-it-not-faking')
+        self.get_ceph_cmd_stdout('osd', 'pool', 'rm', metapoolname,
+                                 metapoolname,
+                                 '--yes-i-really-really-mean-it-not-faking')
+        self.get_ceph_cmd_stdout('osd', 'pool', 'rm', datapoolname,
+                                 datapoolname,
+                                 '--yes-i-really-really-mean-it-not-faking')
 
     def test_fs_status(self):
         """
@@ -132,7 +130,7 @@ class TestAdminCommands(CephFSTestCase):
         n = "test_new_default_ec"
         self._setup_ec_pools(n)
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data")
+            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -149,8 +147,8 @@ class TestAdminCommands(CephFSTestCase):
         self.mount_a.umount_wait(require_clean=True)
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
-        self._setup_ec_pools(n)
-        self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        self.setup_ec_pools(n)
+        self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
 
     def test_new_default_ec_no_overwrite(self):
         """
@@ -162,7 +160,7 @@ class TestAdminCommands(CephFSTestCase):
         n = "test_new_default_ec_no_overwrite"
         self._setup_ec_pools(n, overwrites=False)
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data")
+            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -172,7 +170,7 @@ class TestAdminCommands(CephFSTestCase):
             raise RuntimeError("expected failure")
         # and even with --force !
         try:
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
+            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -190,7 +188,7 @@ class TestAdminCommands(CephFSTestCase):
         fs_name = "test_fs_new_pool_application"
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
-        mon_cmd = self.fs.mon_manager.raw_cluster_cmd
+        mon_cmd = self.get_ceph_cmd_stdout
         for p in pool_names:
             mon_cmd('osd', 'pool', 'create', p, '--pg_num_min', str(self.fs.pg_num_min))
             mon_cmd('osd', 'pool', 'application', 'enable', p, 'cephfs')
@@ -346,13 +344,13 @@ class TestRequiredClientFeatures(CephFSTestCase):
         """
 
         def is_required(index):
-            out = self.fs.mon_manager.raw_cluster_cmd('fs', 'get', self.fs.name, '--format=json-pretty')
+            out = self.get_ceph_cmd_stdout('fs', 'get', self.fs.name, '--format=json-pretty')
             features = json.loads(out)['mdsmap']['required_client_features']
             if "feature_{0}".format(index) in features:
                 return True;
             return False;
 
-        features = json.loads(self.fs.mon_manager.raw_cluster_cmd('fs', 'feature', 'ls', '--format=json-pretty'))
+        features = json.loads(self.get_ceph_cmd_stdout('fs', 'feature', 'ls', '--format=json-pretty'))
         self.assertGreater(len(features), 0);
 
         for f in features:
@@ -558,7 +556,7 @@ class TestConfigCommands(CephFSTestCase):
 
         names = self.fs.get_rank_names()
         for n in names:
-            s = self.fs.mon_manager.raw_cluster_cmd("config", "show", "mds."+n)
+            s = self.get_ceph_cmd_stdout("config", "show", "mds."+n)
             self.assertTrue("NAME" in s)
             self.assertTrue("mon_host" in s)
 
@@ -603,17 +601,17 @@ class TestMirroringCommands(CephFSTestCase):
     MDSS_REQUIRED = 1
 
     def _enable_mirroring(self, fs_name):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "enable", fs_name)
+        self.get_ceph_cmd_stdout("fs", "mirror", "enable", fs_name)
 
     def _disable_mirroring(self, fs_name):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "disable", fs_name)
+        self.get_ceph_cmd_stdout("fs", "mirror", "disable", fs_name)
 
     def _add_peer(self, fs_name, peer_spec, remote_fs_name):
         peer_uuid = str(uuid.uuid4())
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
+        self.get_ceph_cmd_stdout("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
 
     def _remove_peer(self, fs_name, peer_uuid):
-        self.fs.mon_manager.raw_cluster_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
+        self.get_ceph_cmd_stdout("fs", "mirror", "peer_remove", fs_name, peer_uuid)
 
     def _verify_mirroring(self, fs_name, flag_str):
         status = self.fs.status()

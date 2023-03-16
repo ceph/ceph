@@ -61,10 +61,10 @@ class FullnessTestCase(CephFSTestCase):
         self.assertGreaterEqual(mount_a_initial_epoch, self.initial_osd_epoch)
 
         # Set and unset a flag to cause OSD epoch to increment
-        self.fs.mon_manager.raw_cluster_cmd("osd", "set", "pause")
-        self.fs.mon_manager.raw_cluster_cmd("osd", "unset", "pause")
+        self.get_ceph_cmd_stdout("osd", "set", "pause")
+        self.get_ceph_cmd_stdout("osd", "unset", "pause")
 
-        out = self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json").strip()
+        out = self.get_ceph_cmd_stdout("osd", "dump", "--format=json").strip()
         new_epoch = json.loads(out)['epoch']
         self.assertNotEqual(self.initial_osd_epoch, new_epoch)
 
@@ -138,7 +138,7 @@ class FullnessTestCase(CephFSTestCase):
         # Wait for the MDS to see the latest OSD map so that it will reliably
         # be applying the policy of rejecting non-deletion metadata operations
         # while in the full state.
-        osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
+        osd_epoch = json.loads(self.get_ceph_cmd_stdout("osd", "dump", "--format=json-pretty"))['epoch']
         self.wait_until_true(
             lambda: self.fs.rank_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
@@ -167,7 +167,7 @@ class FullnessTestCase(CephFSTestCase):
 
         # Wait for the MDS to see the latest OSD map so that it will reliably
         # be applying the free space policy
-        osd_epoch = json.loads(self.fs.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['epoch']
+        osd_epoch = json.loads(self.get_ceph_cmd_stdout("osd", "dump", "--format=json-pretty"))['epoch']
         self.wait_until_true(
             lambda: self.fs.rank_asok(['status'])['osdmap_epoch'] >= osd_epoch,
             timeout=10)
@@ -376,8 +376,8 @@ class TestQuotaFull(FullnessTestCase):
         super(TestQuotaFull, self).setUp()
 
         pool_name = self.fs.get_data_pool_name()
-        self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", pool_name,
-                                            "max_bytes", "{0}".format(self.pool_capacity))
+        self.get_ceph_cmd_stdout("osd", "pool", "set-quota", pool_name,
+                                 "max_bytes", f"{self.pool_capacity}")
 
 
 class TestClusterFull(FullnessTestCase):
