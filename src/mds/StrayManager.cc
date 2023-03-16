@@ -650,7 +650,7 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
 	dout(20) << __func__ << ": not reintegrating (can't authpin remote parent)" << dendl;
       }
 
-    } else if (!remote_dn->is_auth() && stray_dn->is_auth()) {
+    } else if (stray_dn->is_auth()) {
       migrate_stray(stray_dn, remote_dn->authority().first);
     } else {
       dout(20) << __func__ << ": not reintegrating" << dendl;
