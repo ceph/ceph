@@ -31,12 +31,12 @@ class TestAdminCommands(CephFSTestCase):
 
     def setup_ec_pools(self, n, metadata=True, overwrites=True):
         if metadata:
-            self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+"-meta", "8")
+            self.run_ceph_cmd('osd', 'pool', 'create', n+"-meta", "8")
         cmd = ['osd', 'erasure-code-profile', 'set', n+"-profile", "m=2", "k=2", "crush-failure-domain=osd"]
-        self.get_ceph_cmd_stdout(cmd)
-        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
+        self.run_ceph_cmd(cmd)
+        self.run_ceph_cmd('osd', 'pool', 'create', n+"-data", "8", "erasure", n+"-profile")
         if overwrites:
-            self.get_ceph_cmd_stdout('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
+            self.run_ceph_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
 @classhook('_add_valid_tell')
 class TestValidTell(TestAdminCommands):
@@ -151,8 +151,8 @@ class TestFsNew(TestAdminCommands):
         metapoolname, datapoolname = n+'-testmetapool', n+'-testdatapool'
         badname = n+'badname@#'
 
-        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+metapoolname)
-        self.get_ceph_cmd_stdout('osd', 'pool', 'create', n+datapoolname)
+        self.run_ceph_cmd('osd', 'pool', 'create', n+metapoolname)
+        self.run_ceph_cmd('osd', 'pool', 'create', n+datapoolname)
 
         # test that fsname not with "goodchars" fails
         args = ['fs', 'new', badname, metapoolname, datapoolname]
@@ -160,12 +160,12 @@ class TestFsNew(TestAdminCommands):
                                  check_status=False)
         self.assertIn('invalid chars', proc.stderr.getvalue().lower())
 
-        self.get_ceph_cmd_stdout('osd', 'pool', 'rm', metapoolname,
-                                 metapoolname,
-                                 '--yes-i-really-really-mean-it-not-faking')
-        self.get_ceph_cmd_stdout('osd', 'pool', 'rm', datapoolname,
-                                 datapoolname,
-                                 '--yes-i-really-really-mean-it-not-faking')
+        self.run_ceph_cmd('osd', 'pool', 'rm', metapoolname,
+                          metapoolname,
+                          '--yes-i-really-really-mean-it-not-faking')
+        self.run_ceph_cmd('osd', 'pool', 'rm', datapoolname,
+                          datapoolname,
+                          '--yes-i-really-really-mean-it-not-faking')
 
     def test_new_default_ec(self):
         """
@@ -177,7 +177,7 @@ class TestFsNew(TestAdminCommands):
         n = "test_new_default_ec"
         self.setup_ec_pools(n)
         try:
-            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -195,7 +195,7 @@ class TestFsNew(TestAdminCommands):
         self.mds_cluster.delete_all_filesystems()
         n = "test_new_default_ec_force"
         self.setup_ec_pools(n)
-        self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
+        self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
 
     def test_new_default_ec_no_overwrite(self):
         """
@@ -207,7 +207,7 @@ class TestFsNew(TestAdminCommands):
         n = "test_new_default_ec_no_overwrite"
         self.setup_ec_pools(n, overwrites=False)
         try:
-            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data")
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -217,7 +217,7 @@ class TestFsNew(TestAdminCommands):
             raise RuntimeError("expected failure")
         # and even with --force !
         try:
-            self.get_ceph_cmd_stdout('fs', 'new', n, n+"-meta", n+"-data", "--force")
+            self.run_ceph_cmd('fs', 'new', n, n+"-meta", n+"-data", "--force")
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 pass
@@ -818,17 +818,17 @@ class TestMirroringCommands(CephFSTestCase):
     MDSS_REQUIRED = 1
 
     def _enable_mirroring(self, fs_name):
-        self.get_ceph_cmd_stdout("fs", "mirror", "enable", fs_name)
+        self.run_ceph_cmd("fs", "mirror", "enable", fs_name)
 
     def _disable_mirroring(self, fs_name):
-        self.get_ceph_cmd_stdout("fs", "mirror", "disable", fs_name)
+        self.run_ceph_cmd("fs", "mirror", "disable", fs_name)
 
     def _add_peer(self, fs_name, peer_spec, remote_fs_name):
         peer_uuid = str(uuid.uuid4())
-        self.get_ceph_cmd_stdout("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
+        self.run_ceph_cmd("fs", "mirror", "peer_add", fs_name, peer_uuid, peer_spec, remote_fs_name)
 
     def _remove_peer(self, fs_name, peer_uuid):
-        self.get_ceph_cmd_stdout("fs", "mirror", "peer_remove", fs_name, peer_uuid)
+        self.run_ceph_cmd("fs", "mirror", "peer_remove", fs_name, peer_uuid)
 
     def _verify_mirroring(self, fs_name, flag_str):
         status = self.fs.status()

@@ -61,8 +61,8 @@ class FullnessTestCase(CephFSTestCase):
         self.assertGreaterEqual(mount_a_initial_epoch, self.initial_osd_epoch)
 
         # Set and unset a flag to cause OSD epoch to increment
-        self.get_ceph_cmd_stdout("osd", "set", "pause")
-        self.get_ceph_cmd_stdout("osd", "unset", "pause")
+        self.run_ceph_cmd("osd", "set", "pause")
+        self.run_ceph_cmd("osd", "unset", "pause")
 
         out = self.get_ceph_cmd_stdout("osd", "dump", "--format=json").strip()
         new_epoch = json.loads(out)['epoch']
@@ -376,8 +376,8 @@ class TestQuotaFull(FullnessTestCase):
         super(TestQuotaFull, self).setUp()
 
         pool_name = self.fs.get_data_pool_name()
-        self.get_ceph_cmd_stdout("osd", "pool", "set-quota", pool_name,
-                                 "max_bytes", f"{self.pool_capacity}")
+        self.run_ceph_cmd("osd", "pool", "set-quota", pool_name,
+                          "max_bytes", f"{self.pool_capacity}")
 
 
 class TestClusterFull(FullnessTestCase):
