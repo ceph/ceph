@@ -36,7 +36,7 @@ class TestSnapSchedulesHelper(CephFSTestCase):
         self.assertTrue((delta <= timo + 5) and (delta >= timo - 5))
 
     def _fs_cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
+        return self.get_ceph_cmd_stdout("fs", *args)
 
     def fs_snap_schedule_cmd(self, *args, **kwargs):
         if 'fs' in kwargs:
@@ -61,10 +61,10 @@ class TestSnapSchedulesHelper(CephFSTestCase):
             self.volname = result[0]['name']
 
     def _enable_snap_schedule(self):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable", "snap_schedule")
+        return self.get_ceph_cmd_stdout("mgr", "module", "enable", "snap_schedule")
 
     def _disable_snap_schedule(self):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "disable", "snap_schedule")
+        return self.get_ceph_cmd_stdout("mgr", "module", "disable", "snap_schedule")
 
     def _allow_minute_granularity_snapshots(self):
         self.config_set('mgr', 'mgr/snap_schedule/allow_m_granularity', True)

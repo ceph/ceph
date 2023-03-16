@@ -35,10 +35,10 @@ class TestVolumesHelper(CephFSTestCase):
     DEFAULT_NUMBER_OF_FILES = 1024
 
     def _fs_cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
+        return self.get_ceph_cmd_stdout("fs", *args)
 
     def _raw_cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
+        return self.get_ceph_cmd_stdout(args)
 
     def __check_clone_state(self, state, clone, clone_group=None, timo=120):
         check = 0
@@ -1054,7 +1054,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
 
         # Create auth_id
         authid = "client.guest1"
-        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+        user = json.loads(self.get_ceph_cmd_stdout(
             "auth", "get-or-create", authid,
             "mds", "allow rw path=/volumes",
             "mgr", "allow rw",
@@ -1140,7 +1140,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
 
         # Create auth_id
         authid = "client.guest1"
-        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+        user = json.loads(self.get_ceph_cmd_stdout(
             "auth", "get-or-create", authid,
             "mds", f"allow rw path={mount_path}",
             "mgr", "allow rw",
@@ -2795,11 +2795,11 @@ class TestSubvolumes(TestVolumesHelper):
         group = self._generate_random_group_name()
 
         # Create auth_id
-        self.fs.mon_manager.raw_cluster_cmd(
+        self.get_ceph_cmd_stdout(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
-            "mon", "allow *"
+            "mon", "allow *"]
         )
 
         auth_id = "guest1"
@@ -2824,7 +2824,7 @@ class TestSubvolumes(TestVolumesHelper):
             self.fail("expected the 'fs subvolume authorize' command to fail")
 
         # clean up
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2839,7 +2839,7 @@ class TestSubvolumes(TestVolumesHelper):
         group = self._generate_random_group_name()
 
         # Create auth_id
-        self.fs.mon_manager.raw_cluster_cmd(
+        self.get_ceph_cmd_stdout(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
@@ -2867,7 +2867,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, auth_id,
                      "--group_name", group)
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2901,7 +2901,7 @@ class TestSubvolumes(TestVolumesHelper):
                                   "--group_name", group).rstrip()
 
         # Update caps for guestclient_1 out of band
-        out = self.fs.mon_manager.raw_cluster_cmd(
+        out = self.get_ceph_cmd_stdout(
             "auth", "caps", "client.guest1",
             "mds", "allow rw path=/volumes/{0}, allow rw path={1}".format(group, subvol_path),
             "osd", "allow rw pool=cephfs_data",
@@ -2914,7 +2914,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # Validate the caps of guestclient_1 after deauthorize. It should not have deleted
         # guestclient_1. The mgr and mds caps should be present which was updated out of band.
-        out = json.loads(self.fs.mon_manager.raw_cluster_cmd("auth", "get", "client.guest1", "--format=json-pretty"))
+        out = json.loads(self.get_ceph_cmd_stdout("auth", "get", "client.guest1", "--format=json-pretty"))
 
         self.assertEqual("client.guest1", out[0]["entity"])
         self.assertEqual("allow rw path=/volumes/{0}".format(group), out[0]["caps"]["mds"])
@@ -2922,7 +2922,7 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertNotIn("osd", out[0]["caps"])
 
         # clean up
-        out = self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        out = self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2974,7 +2974,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -3030,7 +3030,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, "guest1", "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -3105,7 +3105,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, auth_id, "--group_name", group)
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -3177,7 +3177,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -7073,8 +7073,8 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         new_pool = "new_pool"
         self.fs.add_data_pool(new_pool)
 
-        self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", new_pool,
-                                            "max_bytes", "{0}".format(pool_capacity // 4))
+        self.get_ceph_cmd_stdout("osd", "pool", "set-quota", new_pool,
+                                 "max_bytes", f"{pool_capacity // 4}")
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1, "--pool_layout", new_pool)
@@ -7848,7 +7848,7 @@ class TestMisc(TestVolumesHelper):
         self._fs_cmd("subvolume", "authorize", self.volname, subvol1, authid1)
 
         # Validate that the mds path added is of subvol1 and not of subvol2
-        out = json.loads(self.fs.mon_manager.raw_cluster_cmd("auth", "get", "client.alice", "--format=json-pretty"))
+        out = json.loads(self.get_ceph_cmd_stdout("auth", "get", "client.alice", "--format=json-pretty"))
         self.assertEqual("client.alice", out[0]["entity"])
         self.assertEqual("allow rw path={0}".format(createpath1[1:]), out[0]["caps"]["mds"])
 

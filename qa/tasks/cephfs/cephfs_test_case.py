@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+from io import StringIO
 
 from tasks.ceph_test_case import CephTestCase
 
@@ -69,6 +70,14 @@ class RunCephCmd:
             kwargs['args'] = args
         return self.run_ceph_cmd(**kwargs).exitstatus
 
+    def get_ceph_cmd_stdout(self, *args, **kwargs):
+        if kwargs.get('args') is None and args:
+            if len(args) == 1:
+                args = args[0]
+            kwargs['args'] = args
+        kwargs['stdout'] = kwargs.pop('stdout', StringIO())
+        return self.run_ceph_cmd(**kwargs).stdout.getvalue()
+
 
 class CephFSTestCase(CephTestCase, RunCephCmd):
     """
@@ -115,15 +124,15 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         except CommandFailedError:
             # Fallback for older Ceph cluster
             try:
-                blocklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
-                                      "dump", "--format=json-pretty"))['blocklist']
+                blocklist = json.loads(self.get_ceph_cmd_stdout("osd",
+                    "dump", "--format=json-pretty"))['blocklist']
                 log.info(f"Removing {len(blocklist)} blocklist entries")
                 for addr, blocklisted_at in blocklist.items():
                     self.run_ceph_cmd("osd", "blocklist", "rm", addr)
             except KeyError:
                 # Fallback for more older Ceph clusters, who will use 'blacklist' instead.
-                blacklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
-                                      "dump", "--format=json-pretty"))['blacklist']
+                blacklist = json.loads(self.get_ceph_cmd_stdout("osd",
+                    "dump", "--format=json-pretty"))['blacklist']
                 log.info(f"Removing {len(blacklist)} blacklist entries")
                 for addr, blocklisted_at in blacklist.items():
                     self.run_ceph_cmd("osd", "blacklist", "rm", addr)
@@ -253,9 +262,8 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         """
         Convenience wrapper on "ceph auth ls"
         """
-        return json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd(
-            "auth", "ls", "--format=json-pretty"
-        ))['auth_dump']
+        return json.loads(self.get_ceph_cmd_stdout("auth", "ls",
+            "--format=json-pretty"))['auth_dump']
 
     def assert_session_count(self, expected, ls_data=None, mds_id=None):
         if ls_data is None:
