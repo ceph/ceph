@@ -27,7 +27,7 @@ class TestFSRecovery(CephFSTestCase):
         # recovered/intact
         self.fs.rm()
         # Recreate file system with pool and previous fscid
-        self.fs.mon_manager.raw_cluster_cmd(
+        self.get_ceph_cmd_stdout(
             'fs', 'new', self.fs.name, metadata_pool, data_pool,
             '--recover', '--force', '--fscid', f'{self.fs.id}')
         self.fs.set_joinable()
