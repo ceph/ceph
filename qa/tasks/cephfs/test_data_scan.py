@@ -428,7 +428,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.data_scan(["scan_links"])
 
         # Mark the MDS repaired
-        self.get_ceph_cmd_stdout('mds', 'repaired', '0')
+        self.run_ceph_cmd('mds', 'repaired', '0')
 
         # Start the MDS
         self.fs.mds_restart()

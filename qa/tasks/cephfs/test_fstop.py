@@ -93,8 +93,8 @@ class TestFSTop(CephFSTestCase):
         # umount mount_b, mount another filesystem on it and use --dumpfs filter
         self.mount_b.umount_wait()
 
-        self.get_ceph_cmd_stdout("fs", "flag", "set", "enable_multiple",
-                                 "true", "--yes-i-really-mean-it")
+        self.run_ceph_cmd("fs", "flag", "set", "enable_multiple", "true",
+                          "--yes-i-really-mean-it")
 
         # create a new filesystem
         fs_b = self.mds_cluster.newfs(name=newfs_name)
