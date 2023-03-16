@@ -651,9 +651,8 @@ class TestStrays(CephFSTestCase):
         self.assertFalse(self._is_stopped(1))
 
         # Permit the daemon to start purging again
-        self.fs.mon_manager.raw_cluster_cmd('tell', 'mds.{0}'.format(rank_1_id),
-                                            'injectargs',
-                                            "--mds_max_purge_files 100")
+        self.get_ceph_cmd_stdout('tell', 'mds.{0}'.format(rank_1_id),
+                                 'injectargs', "--mds_max_purge_files 100")
 
         # It should now proceed through shutdown
         self.fs.wait_for_daemons(timeout=120)
@@ -816,7 +815,7 @@ touch pin/placeholder
 
         :param pool_name: Which pool (must exist)
         """
-        out = self.fs.mon_manager.raw_cluster_cmd("df", "--format=json-pretty")
+        out = self.get_ceph_cmd_stdout("df", "--format=json-pretty")
         for p in json.loads(out)['pools']:
             if p['name'] == pool_name:
                 return p['stats']
