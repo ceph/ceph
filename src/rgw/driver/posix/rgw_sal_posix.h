@@ -234,12 +234,12 @@ public:
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool* existed);
   void set_stat(struct statx _stx) { stx = _stx; stat_done = true; }
   int get_dir_fd(const DoutPrefixProvider *dpp) { open(dpp); return dir_fd; }
+  /* TODO dang Escape the bucket name for file use */
+  const std::string& get_fname() { return get_name(); }
 private:
   int open(const DoutPrefixProvider *dpp);
   int close(const DoutPrefixProvider* dpp);
   int stat(const DoutPrefixProvider *dpp);
-  /* TODO dang Escape the bucket name for file use */
-  const std::string& get_fname() { return get_name(); }
 };
 
 class POSIXObject : public StoreObject {
@@ -249,6 +249,7 @@ private:
   int obj_fd{-1};
   struct statx stx;
   bool stat_done{false};
+  std::string temp_fname;
 
 public:
   struct POSIXReadOp : ReadOp {
@@ -358,16 +359,19 @@ public:
     return std::unique_ptr<Object>(new POSIXObject(*this));
   }
 
-  int open(const DoutPrefixProvider *dpp);
+  int open(const DoutPrefixProvider *dpp, bool temp_file = false);
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value);
+  int write_temp_file(const DoutPrefixProvider* dpp);
+  void gen_temp_fname();
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
 private:
   /* TODO dang Escape the object name for file use */
   const std::string get_fname();
+  const std::string get_temp_fname();
   int stat(const DoutPrefixProvider *dpp);
 };
 

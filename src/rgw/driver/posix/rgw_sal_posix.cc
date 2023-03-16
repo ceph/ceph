@@ -1132,7 +1132,7 @@ std::unique_ptr<Object::DeleteOp> POSIXObject::get_delete_op()
   return std::make_unique<POSIXDeleteOp>(this);
 }
 
-int POSIXObject::open(const DoutPrefixProvider* dpp)
+int POSIXObject::open(const DoutPrefixProvider* dpp, bool temp_file)
 {
   if (obj_fd >= 0) {
     return 0;
@@ -1144,7 +1144,12 @@ int POSIXObject::open(const DoutPrefixProvider* dpp)
       return -EINVAL;
   }
 
-  int ret = openat(b->get_dir_fd(dpp), get_fname().c_str(), O_CREAT | O_RDWR | O_NOFOLLOW);
+  int ret;
+  if(temp_file) {
+    ret = openat(driver->get_root_fd(), b->get_fname().c_str(), O_TMPFILE | O_RDWR);
+  } else {
+    ret = openat(b->get_dir_fd(dpp), get_fname().c_str(), O_CREAT | O_RDWR | O_NOFOLLOW);
+  }
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name() << ": "
@@ -1156,6 +1161,40 @@ int POSIXObject::open(const DoutPrefixProvider* dpp)
 
   return 0;
 }
+
+int POSIXObject::write_temp_file(const DoutPrefixProvider *dpp)
+{
+  if (obj_fd < 0) {
+    return 0;
+  }
+
+  char temp_file_path[PATH_MAX];
+  // Only works on Linux - Non-portable
+  snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", obj_fd);
+
+  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+
+  if (!b) {
+      ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
+      return -EINVAL;
+  }
+
+  int ret = linkat(AT_FDCWD, temp_file_path, b->get_dir_fd(dpp), get_temp_fname().c_str(), AT_SYMLINK_FOLLOW);
+  if(ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: linkat for temp file could not finish" << dendl;
+    return -1;
+  }
+
+  ret = renameat(b->get_dir_fd(dpp), get_temp_fname().c_str(), b->get_dir_fd(dpp), get_fname().c_str());
+  if(ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: renameat for object could not finish" << dendl;
+    return -1;
+  }
+
+
+  return 0;
+}
+
 
 int POSIXObject::close()
 {
@@ -1346,6 +1385,21 @@ const std::string POSIXObject::get_fname()
   return fname;
 }
 
+void POSIXObject::gen_temp_fname()
+{
+  enum { RAND_SUFFIX_SIZE = 8 };
+  char buf[RAND_SUFFIX_SIZE + 1];
+
+  gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, RAND_SUFFIX_SIZE);
+  temp_fname = get_fname() + ".";
+  temp_fname.append(buf);
+}
+
+const std::string POSIXObject::get_temp_fname()
+{
+  return temp_fname;
+}
+
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
@@ -1493,7 +1547,8 @@ int POSIXWriter::complete(size_t accounted_size, const std::string& etag,
 
 int POSIXAtomicWriter::prepare(optional_yield y)
 {
-  return obj.open(dpp);
+  obj.gen_temp_fname();
+  return obj.open(dpp, true);
 }
 
 int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
@@ -1514,14 +1569,20 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   for (auto attr : attrs) {
     ret = obj.write_attr(dpp, y, attr.first, attr.second);
     if (ret < 0) {
-      ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter::complete() failed writing attr " << attr.first << dendl;
+      ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing attr " << attr.first << dendl;
       return ret;
     }
   }
 
+  ret = obj.write_temp_file(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;
+    return ret;
+  }
+
   ret = obj.close();
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter::complete() close() failed" << dendl;
+    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
   }
 
