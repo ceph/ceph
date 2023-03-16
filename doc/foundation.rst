@@ -36,7 +36,6 @@ Premier
 * `Samsung Electronics <https://samsung.com/>`_
 * `SoftIron <https://www.softiron.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
-* `XSKY <https://www.xsky.com/en/>`_
 * `ZTE <https://www.zte.com.cn/global/>`_
 
 General
@@ -100,7 +99,6 @@ Members
 * Alex Marangone (DigitalOcean)
 * Carlos Maltzahn (UCSC) - Associate member representative
 * Dan van der Ster (CERN) - Ceph Council representative
-* Haomai Wang (XSKY)
 * James Page (Canonical)
 * Joachim Kraftmayer (Clyso)
 * Josh Durgin (IBM) - Ceph Council representative
@@ -114,7 +112,6 @@ Members
 * Pawel Sadowski (OVH)
 * Vincent Hsu (IBM)
 * Xie Xingguo (ZTE)
-* Zhang Shaowen (China Mobile)
 
 Joining
 =======
