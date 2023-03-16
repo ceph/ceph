@@ -158,8 +158,8 @@ class TestFsNew(TestAdminCommands):
 
         # test that fsname not with "goodchars" fails
         args = ['fs', 'new', badname, metapoolname, datapoolname]
-        proc = self.fs.mon_manager.run_cluster_cmd(args=args,stderr=StringIO(),
-                                                   check_status=False)
+        proc = self.run_ceph_cmd(args=args, stderr=StringIO(),
+                                 check_status=False)
         self.assertIn('invalid chars', proc.stderr.getvalue().lower())
 
         self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'rm', metapoolname,
@@ -255,8 +255,8 @@ class TestFsNew(TestAdminCommands):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
-        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+            self.run_ceph_cmd(f'osd pool create {p}')
+        self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
         self.fs.status().get_fsmap(fscid)
         for i in range(2):
             self.check_pool_application_metadata_key_value(pool_names[i], 'cephfs', keys[i], fs_name)
@@ -270,9 +270,9 @@ class TestFsNew(TestAdminCommands):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
-        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
-        self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+            self.run_ceph_cmd(f'osd pool create {p}')
+        self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+        self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
         self.fs.status().get_fsmap(fscid)
 
     def test_fs_new_with_specific_id_fails_without_force_flag(self):
@@ -284,9 +284,9 @@ class TestFsNew(TestAdminCommands):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
+            self.run_ceph_cmd(f'osd pool create {p}')
         try:
-            self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid}')
+            self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid}')
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
                 "invalid error code on creating a file system with specifc ID without --force flag")
@@ -303,9 +303,9 @@ class TestFsNew(TestAdminCommands):
         keys = ['metadata', 'data']
         pool_names = [fs_name+'-'+key for key in keys]
         for p in pool_names:
-            self.run_cluster_cmd(f'osd pool create {p}')
+            self.run_ceph_cmd(f'osd pool create {p}')
         try:
-            self.run_cluster_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
+            self.run_ceph_cmd(f'fs new {fs_name} {pool_names[0]} {pool_names[1]} --fscid  {fscid} --force')
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
                 "invalid error code on creating a file system with specifc ID that is already in use")
@@ -335,7 +335,7 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
         client_id = 'test_new_cephfs'
 
-        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
 
         # authorize a cephx ID access to the renamed file system.
         # use the ID to write to the file system.
@@ -356,7 +356,7 @@ class TestRenameCommand(TestAdminCommands):
 
         # cleanup
         self.mount_a.umount_wait()
-        self.run_cluster_cmd(f'auth rm client.{client_id}')
+        self.run_ceph_cmd(f'auth rm client.{client_id}')
 
     def test_fs_rename_idempotency(self):
         """
@@ -368,8 +368,8 @@ class TestRenameCommand(TestAdminCommands):
         orig_fs_name = self.fs.name
         new_fs_name = 'new_cephfs'
 
-        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
-        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
 
         # original file system name does not appear in `fs ls` command
         self.assertFalse(self.fs.exists())
@@ -388,10 +388,10 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
         data_pool = self.fs.get_data_pool_name()
         metadata_pool = self.fs.get_metadata_pool_name()
-        self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
 
         try:
-            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool}")
+            self.run_ceph_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool}")
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
                 "invalid error code on creating a new file system with old "
@@ -401,7 +401,7 @@ class TestRenameCommand(TestAdminCommands):
                       "existing pools to fail.")
 
         try:
-            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} --force")
+            self.run_ceph_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} --force")
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EEXIST,
                 "invalid error code on creating a new file system with old "
@@ -411,7 +411,7 @@ class TestRenameCommand(TestAdminCommands):
                       "existing pools, and --force flag to fail.")
 
         try:
-            self.run_cluster_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} "
+            self.run_ceph_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool} "
                                  "--allow-dangerous-metadata-overlay")
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
@@ -426,7 +426,7 @@ class TestRenameCommand(TestAdminCommands):
         That renaming a file system without '--yes-i-really-mean-it' flag fails.
         """
         try:
-            self.run_cluster_cmd(f"fs rename {self.fs.name} new_fs")
+            self.run_ceph_cmd(f"fs rename {self.fs.name} new_fs")
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EPERM,
                 "invalid error code on renaming a file system without the  "
@@ -440,7 +440,7 @@ class TestRenameCommand(TestAdminCommands):
         That renaming a non-existent file system fails.
         """
         try:
-            self.run_cluster_cmd("fs rename non_existent_fs new_fs --yes-i-really-mean-it")
+            self.run_ceph_cmd("fs rename non_existent_fs new_fs --yes-i-really-mean-it")
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on renaming a non-existent fs")
         else:
@@ -453,7 +453,7 @@ class TestRenameCommand(TestAdminCommands):
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
         try:
-            self.run_cluster_cmd(f"fs rename {self.fs.name} {self.fs2.name} --yes-i-really-mean-it")
+            self.run_ceph_cmd(f"fs rename {self.fs.name} {self.fs2.name} --yes-i-really-mean-it")
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EINVAL,
                              "invalid error code on renaming to a fs name that is already in use")
@@ -467,14 +467,14 @@ class TestRenameCommand(TestAdminCommands):
         orig_fs_name = self.fs.name
         new_fs_name = 'new_cephfs'
 
-        self.run_cluster_cmd(f'fs mirror enable {orig_fs_name}')
+        self.run_ceph_cmd(f'fs mirror enable {orig_fs_name}')
         try:
-            self.run_cluster_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+            self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.EPERM, "invalid error code on renaming a mirrored file system")
         else:
             self.fail("expected renaming of a mirrored file system to fail")
-        self.run_cluster_cmd(f'fs mirror disable {orig_fs_name}')
+        self.run_ceph_cmd(f'fs mirror disable {orig_fs_name}')
 
 
 class TestDump(CephFSTestCase):
@@ -981,10 +981,10 @@ class TestFsAuthorize(CapsHelper):
         fs_name = "cephfs-_."
         self.fs = self.mds_cluster.newfs(name=fs_name)
         self.fs.wait_for_daemons()
-        self.run_cluster_cmd(f'auth caps client.{self.mount_a.client_id} '
-                             f'mon "allow r" '
-                             f'osd "allow rw pool={self.fs.get_data_pool_name()}" '
-                             f'mds allow')
+        self.run_ceph_cmd(f'auth caps client.{self.mount_a.client_id} '
+                          f'mon "allow r" '
+                          f'osd "allow rw pool={self.fs.get_data_pool_name()}" '
+                          f'mds allow')
         self.mount_a.remount(cephfs_name=self.fs.name)
         perm = 'rw'
         filepaths, filedata, mounts, keyring = self.setup_test_env(perm)
@@ -1024,7 +1024,7 @@ class TestFsAuthorize(CapsHelper):
 
     def tearDown(self):
         self.mount_a.umount_wait()
-        self.run_cluster_cmd(f'auth rm {self.client_name}')
+        self.run_ceph_cmd(f'auth rm {self.client_name}')
 
         super(type(self), self).tearDown()
 

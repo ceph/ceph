@@ -645,7 +645,7 @@ class TestDamage(CephFSTestCase):
         # so now we want to trigger commit but this will crash, so:
         with self.assert_cluster_log("MDS abort because newly corrupt dentry"):
             c = ['--connect-timeout=60', 'tell', f"mds.{fscid}:0", "flush", "journal"]
-            p = self.ceph_cluster.mon_manager.run_cluster_cmd(args=c, wait=False, timeoutcmd=30)
+            p = self.run_ceph_cmd(args=c, wait=False, timeoutcmd=30)
             self.wait_until_true(lambda: "laggy_since" in self.fs.get_rank(), timeout=self.fs.beacon_timeout)
         self.config_rm("mds", "mds_inject_journal_corrupt_dentry_first")
         self.fs.rank_freeze(False, rank=0)

@@ -5559,9 +5559,9 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
 
         # try to get metadata after removing snapshot.
         # Expecting error ENOENT with error message of snapshot does not exist
-        cmd_ret = self.mgr_cluster.mon_manager.run_cluster_cmd(
-                args=["fs", "subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group],
-                check_status=False, stdout=StringIO(), stderr=StringIO())
+        cmd_ret = self.run_ceph_cmd(
+            args=["fs", "subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group], check_status=False, stdout=StringIO(),
+            stderr=StringIO())
         self.assertEqual(cmd_ret.returncode, errno.ENOENT, "Expecting ENOENT error")
         self.assertIn(f"snapshot '{snapshot}' does not exist", cmd_ret.stderr.getvalue(),
                 f"Expecting message: snapshot '{snapshot}' does not exist ")
