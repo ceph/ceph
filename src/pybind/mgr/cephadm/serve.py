@@ -1381,6 +1381,7 @@ class CephadmServe:
                            image: Optional[str] = "",
                            env_vars: Optional[List[str]] = None,
                            log_output: Optional[bool] = True,
+                           timeout: Optional[int] = None,  # timeout in seconds
                            ) -> Tuple[List[str], List[str], int]:
         """
         Run cephadm on the remote host with the given command + args
@@ -1418,6 +1419,11 @@ class CephadmServe:
 
         if not self.mgr.cgroups_split:
             final_args += ['--no-cgroups-split']
+
+        if not timeout:
+            # 15 minute global timeout if no timeout was passed
+            timeout = self.mgr.default_cephadm_command_timeout
+        final_args += ['--timeout', str(timeout)]
 
         # subcommand
         final_args.append(command)
