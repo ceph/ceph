@@ -3,8 +3,6 @@ import logging
 import os
 import re
 
-from shlex import split as shlex_split
-
 from tasks.ceph_test_case import CephTestCase
 
 from teuthology import contextutil
@@ -57,12 +55,19 @@ class MountDetails():
 
 class RunCephCmd:
 
+    def run_ceph_cmd(self, *args, **kwargs):
+        if kwargs.get('args') is None and args:
+            if len(args) == 1:
+                args = args[0]
+            kwargs['args'] = args
+        return self.mon_manager.run_cluster_cmd(**kwargs)
+
     def get_ceph_cmd_result(self, *args, **kwargs):
         if kwargs.get('args') is None and args:
             if len(args) == 1:
                 args = args[0]
             kwargs['args'] = args
-        return self.mon_manager.run_cluster_cmd(**kwargs).exitstatus
+        return self.run_ceph_cmd(**kwargs).exitstatus
 
 
 class CephFSTestCase(CephTestCase, RunCephCmd):
@@ -106,7 +111,7 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         # In case anything is in the OSD blocklist list, clear it out.  This is to avoid
         # the OSD map changing in the background (due to blocklist expiry) while tests run.
         try:
-            self.mds_cluster.mon_manager.run_cluster_cmd(args="osd blocklist clear")
+            self.run_ceph_cmd("osd blocklist clear")
         except CommandFailedError:
             # Fallback for older Ceph cluster
             try:
@@ -114,14 +119,14 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
                                       "dump", "--format=json-pretty"))['blocklist']
                 log.info(f"Removing {len(blocklist)} blocklist entries")
                 for addr, blocklisted_at in blocklist.items():
-                    self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blocklist", "rm", addr)
+                    self.run_ceph_cmd("osd", "blocklist", "rm", addr)
             except KeyError:
                 # Fallback for more older Ceph clusters, who will use 'blacklist' instead.
                 blacklist = json.loads(self.mds_cluster.mon_manager.raw_cluster_cmd("osd",
                                       "dump", "--format=json-pretty"))['blacklist']
                 log.info(f"Removing {len(blacklist)} blacklist entries")
                 for addr, blocklisted_at in blacklist.items():
-                    self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
+                    self.run_ceph_cmd("osd", "blacklist", "rm", addr)
 
     def _init_mon_manager(self):
         # if vstart_runner.py has invoked this code
@@ -183,7 +188,7 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         for entry in self.auth_list():
             ent_type, ent_id = entry['entity'].split(".")
             if ent_type == "client" and ent_id not in client_mount_ids and not (ent_id == "admin" or ent_id[:6] == 'mirror'):
-                self.mds_cluster.mon_manager.raw_cluster_cmd("auth", "del", entry['entity'])
+                self.run_ceph_cmd("auth", "del", entry['entity'])
 
         if self.REQUIRE_FILESYSTEM:
             self.fs = self.mds_cluster.newfs(create=True)
@@ -211,9 +216,8 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         if self.REQUIRE_BACKUP_FILESYSTEM:
             if not self.REQUIRE_FILESYSTEM:
                 self.skipTest("backup filesystem requires a primary filesystem as well")
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'flag', 'set',
-                                                'enable_multiple', 'true',
-                                                '--yes-i-really-mean-it')
+            self.run_ceph_cmd('fs', 'flag', 'set', 'enable_multiple', 'true',
+                              '--yes-i-really-mean-it')
             self.backup_fs = self.mds_cluster.newfs(name="backup_fs")
             self.backup_fs.wait_for_daemons()
 
@@ -434,11 +438,6 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         except contextutil.MaxWhileTries as e:
             raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank)) from e
 
-    def run_cluster_cmd(self, cmd):
-        if isinstance(cmd, str):
-            cmd = shlex_split(cmd)
-        return self.fs.mon_manager.raw_cluster_cmd(*cmd)
-
     def create_client(self, client_id, moncap=None, osdcap=None, mdscap=None):
         if not (moncap or osdcap or mdscap):
             if self.fs:
@@ -456,5 +455,5 @@ class CephFSTestCase(CephTestCase, RunCephCmd):
         if mdscap:
             cmd += ['mds', mdscap]
 
-        self.run_cluster_cmd(cmd)
-        return self.run_cluster_cmd(f'auth get {self.client_name}')
+        self.run_ceph_cmd(*cmd)
+        return self.run_ceph_cmd(f'auth get {self.client_name}')
