@@ -651,8 +651,8 @@ class TestStrays(CephFSTestCase):
         self.assertFalse(self._is_stopped(1))
 
         # Permit the daemon to start purging again
-        self.get_ceph_cmd_stdout('tell', 'mds.{0}'.format(rank_1_id),
-                                 'injectargs', "--mds_max_purge_files 100")
+        self.run_ceph_cmd('tell', 'mds.{0}'.format(rank_1_id),
+                          'injectargs', "--mds_max_purge_files 100")
 
         # It should now proceed through shutdown
         self.fs.wait_for_daemons(timeout=120)

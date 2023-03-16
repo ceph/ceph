@@ -116,7 +116,7 @@ class TestScrub2(CephFSTestCase):
 
         def expect_exdev(cmd, mds):
             try:
-                self.get_ceph_cmd_stdout('tell', 'mds.{0}'.format(mds), *cmd)
+                self.run_ceph_cmd('tell', 'mds.{0}'.format(mds), *cmd)
             except CommandFailedError as e:
                 if e.exitstatus == errno.EXDEV:
                     pass
