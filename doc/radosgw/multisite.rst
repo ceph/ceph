@@ -61,8 +61,24 @@ Diagram - Replication of Object Data Between Zones
 The replication of object data between zones within a zonegroup looks
 something like this:
 
-.. image:: ../images/zone-sync2.png
+.. image:: ../images/zone-sync.svg
    :align: center
+
+At the top of this diagram, we see two applications (also known as "clients").
+The application on the right is both writing and reading data from the Ceph
+Cluster, by means of the RADOS Gateway (RGW). The application on the left is
+only *reading* data from the Ceph Cluster, by means of an instance of RADOS
+Gateway (RGW). In both cases (read-and-write and read-only), the transmssion of
+data is handled RESTfully.
+
+In the middle of this diagram, we see two zones, each of which contains an
+instance of RADOS Gateway (RGW). These instances of RGW are handling the
+movement of data from the applications to the zonegroup. The arrow from the
+master zone (US-EAST) to the secondary zone (US-WEST) represents an act of data
+synchronization.
+
+At the bottom of this diagram, we see the data distributed into the Ceph
+Storage Cluster.
 
 For additional details on setting up a cluster, see `Ceph Object Gateway for
 Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`__.
@@ -71,15 +87,17 @@ Functional Changes from Infernalis
 ==================================
 
 Beginning with Kraken, each Ceph Object Gateway can be configured to work in an
-active-active zone configuration, allowing for writes to non-master zones.
+active-active zone mode. This makes it possible to write to non-master zones.
 
 The multi-site configuration is stored within a container called a "realm". The
-realm stores zonegroups, zones, and a time "period" with multiple epochs for
-tracking changes to the configuration. Beginning with Kraken, the
-``ceph-radosgw`` daemons handle the synchronization, which eliminates the need
-for a separate synchronization agent. Additionally, the new approach to
-synchronization allows the Ceph Object Gateway to operate with an
-"active-active" configuration instead of "active-passive".
+realm stores zonegroups, zones, and a time "period" with multiple epochs (which
+(the epochs) are used for tracking changes to the configuration). 
+
+Beginning with Kraken, the ``ceph-radosgw`` daemons handle the synchronization
+of data across zones, which eliminates the need for a separate synchronization
+agent. This new approach to synchronization allows the Ceph Object Gateway to
+operate with an "active-active" configuration instead of with an
+"active-passive" configuration.
 
 Requirements and Assumptions
 ============================
@@ -141,7 +159,11 @@ realm enforces a globally unique namespace within itself.
 
       radosgw-admin realm create --rgw-realm=movies --default
 
-   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zonegroups and zones.
+   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  
+
+      If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. 
+      
+      If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zonegroups and zones.
 
 #. After the realm has been created, ``radosgw-admin`` echoes back the realm
    configuration. For example:
@@ -160,8 +182,8 @@ realm enforces a globally unique namespace within itself.
 Create a Master Zonegroup
 --------------------------
 
-A realm must have at least one zonegroup which serves as the master zone
-group for the realm.
+A realm must have at least one zonegroup which serves as the master zonegroup
+for the realm.
 
 #. To create a new master zonegroup for the multi-site configuration, open a
    command-line interface on a host in the master zonegroup and zone. Then
@@ -177,10 +199,14 @@ group for the realm.
 
       radosgw-admin zonegroup create --rgw-zonegroup=us --endpoints=http://rgw1:80 --rgw-realm=movies --master --default
 
-   .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
+   .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. 
 
-#. After creating the master zonegroup, ``radosgw-admin`` echoes back the zone
-   group configuration. For example:
+      If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. 
+      
+      If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
+
+#. After creating the master zonegroup, ``radosgw-admin`` echoes back the
+   zonegroup configuration. For example:
 
    ::
    
@@ -239,8 +265,8 @@ For example:
 Delete Default Zonegroup and Zone
 ----------------------------------
 
-#. Delete the ``default`` zone if it exists. Remove it from the default zone
-   group first.
+#. Delete the ``default`` zone if it exists. Remove it from the default
+   zonegroup first.
 
    .. prompt:: bash #
 
@@ -344,8 +370,11 @@ Zones that are within a zonegroup replicate all data in order to ensure that
 every zone has the same data. When creating a secondary zone, run the following
 operations on a host identified to serve the secondary zone.
 
-.. note:: To add a tertiary zone, follow the same procedures used for adding a
-   secondary zone. Be sure to specify a different zone name.
+.. note:: To add a second secondary zone (that is, a second non-master zone
+   within a zonegroup that already contains a secondary zone), follow :ref:`the
+   same procedures that are used for adding a secondary
+   zone<radosgw-multisite-secondary-zone-creating>`. Be sure to specify a
+   different zone name than the name of the first secondary zone.
 
 .. important:: Metadata operations (for example, user creation) must be
    run on a host within the master zone. Bucket operations can be received
@@ -375,6 +404,8 @@ default realm:
 .. prompt:: bash #
 
    radosgw-admin realm default --rgw-realm={realm-name}
+
+.. _radosgw-multisite-secondary-zone-creating:
 
 Creating a Secondary Zone
 -------------------------
@@ -1163,10 +1194,10 @@ specifying the required settings. Here is a list of the required settings:
 3. ``is_master``: Determines whether the zonegroup is the master zonegroup.
    Required. **note:** You can only have one master zonegroup.
 
-4. ``endpoints``: A list of all the endpoints in the zonegroup. For
-   example, you may use multiple domain names to refer to the same zone
-   group. Remember to escape the forward slashes (``\/``). You may also
-   specify a port (``fqdn:port``) for each endpoint. Optional.
+4. ``endpoints``: A list of all the endpoints in the zonegroup. For example,
+   you may use multiple domain names to refer to the same zonegroup. Remember
+   to escape the forward slashes (``\/``). You may also specify a port
+   (``fqdn:port``) for each endpoint. Optional.
 
 5. ``hostnames``: A list of all the hostnames in the zonegroup. For example,
    you may use multiple domain names to refer to the same zonegroup. Optional.
@@ -1307,6 +1338,8 @@ The following JSON object is an example of a default zonegroup map:
    
       radosgw-admin period update --commit
 
+.. _radosgw-zones:
+
 Zones
 -----
 
@@ -1315,7 +1348,9 @@ instances. Ceph Object Gateway supports zones.
 
 The procedure for configuring zones differs from typical configuration
 procedures, because not all of the settings end up in a Ceph configuration
-file. Zones can be listed. You can "get" a zone configuration and "set" a zone
+file. 
+
+Zones can be listed. You can "get" a zone configuration and "set" a zone
 configuration.
 
 Creating a Zone

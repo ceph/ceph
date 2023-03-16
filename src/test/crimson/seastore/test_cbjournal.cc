@@ -26,9 +26,6 @@ namespace {
   }
 }
 
-constexpr uint64_t CBTEST_DEFAULT_TEST_SIZE = 1 << 20;
-
-
 std::optional<record_t> decode_record(
   bufferlist& bl)
 {
@@ -132,7 +129,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 
   cbjournal_test_t() {
     device = random_block_device::create_test_ephemeral(
-     CBTEST_DEFAULT_TEST_SIZE, 0);
+     random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
     cbj.reset(new CircularBoundedJournal(*this, device.get(), std::string()));
     block_size = device->get_block_size();
     cbj->set_write_pipeline(&pipeline);
@@ -249,11 +246,10 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   auto mkfs() {
-    return device->mount(
+    device_config_t config = get_rbm_ephemeral_device_config(0, 1);
+    return device->mkfs(config
     ).safe_then([this]() {
-      device_config_t config = get_rbm_ephemeral_device_config(0, 1);
-      device->set_journal_size(CBTEST_DEFAULT_TEST_SIZE);
-      return device->mkfs(config
+      return device->mount(
       ).safe_then([this]() {
 	return cbj->open_for_mkfs(
 	).safe_then([](auto q) {

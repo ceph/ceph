@@ -4,6 +4,8 @@
 #include "device.h"
 
 #include "segment_manager.h"
+#include "random_block_manager.h"
+#include "random_block_manager/rbm_device.h"
 
 namespace crimson::os::seastore {
 
@@ -33,9 +35,14 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
 seastar::future<DeviceRef>
 Device::make_device(const std::string& device, device_type_t dtype)
 {
-  // TODO: support other backend types
-  assert(get_default_backend_of_device(dtype) == backend_type_t::SEGMENTED);
-  return SegmentManager::get_segment_manager(device
+  if (get_default_backend_of_device(dtype) == backend_type_t::SEGMENTED) {
+    return SegmentManager::get_segment_manager(device, dtype
+    ).then([](DeviceRef ret) {
+      return ret;
+    });
+  } 
+  assert(get_default_backend_of_device(dtype) == backend_type_t::RANDOM_BLOCK);
+  return get_rb_device(device
   ).then([](DeviceRef ret) {
     return ret;
   });

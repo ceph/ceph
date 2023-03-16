@@ -1,19 +1,7 @@
 set(libos_srcs
   ObjectStore.cc
   Transaction.cc
-  filestore/chain_xattr.cc
-  filestore/BtrfsFileStoreBackend.cc
-  filestore/DBObjectMap.cc
-  filestore/FileJournal.cc
-  filestore/FileStore.cc
-  filestore/JournalThrottle.cc
-  filestore/GenericFileStoreBackend.cc
-  filestore/JournalingObjectStore.cc
-  filestore/HashIndex.cc
-  filestore/IndexManager.cc
-  filestore/LFNIndex.cc
-  filestore/WBThrottle.cc
-  filestore/os_xattr.c
+  DBObjectMap.cc
   memstore/MemStore.cc
   kstore/KStore.cc
   kstore/kstore_types.cc
@@ -52,7 +40,6 @@ endif(WITH_FUSE)
 
 if(HAVE_LIBXFS)
   list(APPEND libos_srcs
-    filestore/XfsFileStoreBackend.cc
     fs/XFS.cc)
 endif()
 

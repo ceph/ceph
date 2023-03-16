@@ -135,15 +135,15 @@ int main(int argc, char *argv[])
   main.init_perfcounters();
   main.init_http_clients();
 
-  main.init_storage();
-  if (! main.get_driver()) {
+  r = main.init_storage();
+  if (r < 0) {
     mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
     mutex.unlock();
 
     derr << "Couldn't init storage provider (RADOS)" << dendl;
-    return EIO;
+    return -r;
   }
 
   main.cond_init_apis();

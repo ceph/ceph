@@ -15,6 +15,9 @@ class OSDMethod(str, enum.Enum):
     raw = 'raw'
     lvm = 'lvm'
 
+    def to_json(self) -> str:
+        return self.value
+
 
 class DeviceSelection(object):
     """

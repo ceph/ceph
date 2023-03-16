@@ -736,8 +736,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
   rgw::sal::Attrs attrs;
 
-  rgw::sal::RadosBucket bucket(store, src_bucket);
-  rgw::sal::RadosObject src_obj(store, key, &bucket);
+  rgw_obj src_obj(src_bucket, key);
+
   rgw::sal::RadosBucket dest_bucket(store, dest_bucket_info);
   rgw::sal::RadosObject dest_obj(store, dest_key.value_or(key), &dest_bucket);
     
@@ -748,9 +748,9 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        user_id.value_or(rgw_user()),
                        NULL, /* req_info */
                        source_zone,
-                       &dest_obj,
-                       &src_obj,
-                       &dest_bucket, /* dest */
+                       dest_obj.get_obj(),
+                       src_obj,
+                       dest_bucket_info, /* dest */
                        nullptr, /* source */
                        dest_placement_rule,
                        nullptr, /* real_time* src_mtime, */
@@ -839,15 +839,15 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
-  rgw::sal::RadosBucket bucket(store, src_bucket);
-  rgw::sal::RadosObject src_obj(store, key, &bucket);
+
+  rgw_obj src_obj(src_bucket, key);
 
   int r = store->getRados()->stat_remote_obj(dpp,
                        obj_ctx,
                        rgw_user(user_id),
                        nullptr, /* req_info */
                        source_zone,
-                       &src_obj,
+                       src_obj,
                        nullptr, /* source */
                        pmtime, /* real_time* src_mtime, */
                        psize, /* uint64_t * */

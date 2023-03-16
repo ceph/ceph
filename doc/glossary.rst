@@ -4,6 +4,11 @@
 
 .. glossary::
 
+        Application
+                More properly called a :term:`client`, an application is any program
+                external to Ceph that uses a Ceph Cluster to store and
+                replicate data.
+
 	:ref:`BlueStore<rados_config_storage_devices_bluestore>`
                 OSD BlueStore is a storage back end used by OSD daemons, and
                 was designed specifically for use with Ceph. BlueStore was
@@ -14,6 +19,22 @@
                 system interface. Since Luminous (12.2), BlueStore has been
                 Ceph's default and recommended storage back end.
 
+        Bucket
+                In the context of :term:`RGW`, a bucket is a group of objects.
+                In a filesystem-based analogy in which objects are the
+                counterpart of files, buckets are the counterpart of
+                directories. :ref:`Multisite sync
+                policies<radosgw-multisite-sync-policy>` can be set on buckets,
+                to provide fine-grained control of data movement from one zone
+                to another zone. 
+                
+                The concept of the bucket has been taken from AWS S3. See also
+                `the AWS S3 page on creating buckets <https://docs.aws.amazon.com/AmazonS3/latest/userguide/creating-buckets-s3.html>`_
+                and `the AWS S3 'Buckets Overview' page <https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingBucket.html>`_.
+
+                OpenStack Swift uses the term "containers" for what RGW and AWS call "buckets". 
+                See `the OpenStack Storage API overview page <https://docs.openstack.org/swift/latest/api/object_api_v1_overview.html>`_.
+                
 	Ceph
                 Ceph is a distributed network storage and file system with
                 distributed metadata management and POSIX semantics.
@@ -170,6 +191,10 @@
                 The Ceph authentication protocol. CephX operates like Kerberos,
                 but it has no single point of failure. See the :ref:`CephX
                 Configuration Reference<rados-cephx-config-ref>`.
+
+	Client
+                A client is any program external to Ceph that uses a Ceph
+                Cluster to store and replicate data. 
 
 	Cloud Platforms
 	Cloud Stacks
@@ -364,6 +389,12 @@
 
 	Teuthology
 		The collection of software that performs scripted tests on Ceph.
+
+        Zone
+                In the context of :term:`RGW`, a zone is a logical group that
+                consists of one or more :term:`RGW` instances.  A zone's
+                configuration state is stored in the :term:`period`. See
+                :ref:`Zones<radosgw-zones>`.
 
 .. _https://github.com/ceph: https://github.com/ceph
 .. _Cluster Map: ../architecture#cluster-map   

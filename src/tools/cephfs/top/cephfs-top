@@ -385,7 +385,7 @@ class FSTop(FSTopBase):
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         title = ['No filesystem available',
-                 'Press "q" to go back to home (all filesystem info) screen']
+                 'Press "q" to go back to home (All Filesystem Info) screen']
         pos_x1 = w // 2 - len(title[0]) // 2
         pos_x2 = w // 2 - len(title[1]) // 2
         stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
@@ -413,10 +413,10 @@ class FSTop(FSTopBase):
                 endmenu = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if self.active_screen == FS_TOP_ALL_FS_APP:
-                    self.run_all_display()
-                else:
+                if fs_list and self.active_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endmenu = True
 
             try:
@@ -445,13 +445,14 @@ class FSTop(FSTopBase):
         key = 0
         endwhile = False
         while not endwhile:
-            global current_states
+            global current_states, fs_list
+            fs_list = self.get_fs_names()
 
             if key == curses.KEY_UP and curr_row1 > 0:
                 curr_row1 -= 1
             elif key == curses.KEY_DOWN and curr_row1 < len(field_menu) - 1:
                 curr_row1 += 1
-            elif key == curses.KEY_ENTER or key in [10, 13]:
+            elif (key in [curses.KEY_ENTER, 10, 13]) and fs_list:
                 self.stdscr.erase()
                 if curr_row1 != len(field_menu) - 1:
                     current_states["last_field"] = (field_menu[curr_row1].split('='))[0]
@@ -465,10 +466,10 @@ class FSTop(FSTopBase):
                 endwhile = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if self.active_screen == FS_TOP_ALL_FS_APP:
-                    self.run_all_display()
-                else:
+                if fs_list and self.active_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endwhile = True
 
             try:
@@ -824,6 +825,7 @@ class FSTop(FSTopBase):
                     xp += len(f'{self.speed_items(item)}{self.speed_mtype(typ)}') + ITEMS_PAD_LEN
                 else:
                     # display 0th element from metric tuple
+                    metrics_dict[fs_name][client_id][self.items(item)] = m[0]
                     self.fsstats.addstr(y_coord, xp, f'{m[0]}', curses.A_DIM)
                     xp += len(f'{self.items(item)}{self.mtype(typ)}') + ITEMS_PAD_LEN
             else:

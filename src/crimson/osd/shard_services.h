@@ -132,7 +132,7 @@ class PerShardState {
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
     crimson::get_logger(ceph_subsys_osd).info(
       "PerShardState::{}, {}", __func__, *op);
-    auto fut = op->start().then([op /* by copy */] {
+    auto fut = op->start().finally([op /* by copy */] {
       // ensure the op's lifetime is appropriate. It is not enough to
       // guarantee it's alive at the scheduling stages (i.e. `then()`
       // calling) but also during the actual execution (i.e. when passed
@@ -269,6 +269,7 @@ private:
   } finisher;
   AsyncReserver<spg_t, DirectFinisher> local_reserver;
   AsyncReserver<spg_t, DirectFinisher> remote_reserver;
+  AsyncReserver<spg_t, DirectFinisher> snap_reserver;
 
   epoch_t up_thru_wanted = 0;
   seastar::future<> send_alive(epoch_t want);
@@ -478,6 +479,12 @@ public:
   FORWARD_TO_OSD_SINGLETON_TARGET(
     remote_dump_reservations,
     remote_reserver.dump)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_cancel_reservation,
+    snap_reserver.cancel_reservation)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_dump_reservations,
+    snap_reserver.dump)
 
   Context *invoke_context_on_core(core_id_t core, Context *c) {
     if (!c) return nullptr;
@@ -522,6 +529,20 @@ public:
       },
       invoke_context_on_core(seastar::this_shard_id(), on_reserved),
       invoke_context_on_core(seastar::this_shard_id(), on_preempt));
+  }
+  seastar::future<> snap_request_reservation(
+    spg_t item,
+    Context *on_reserved,
+    unsigned prio) {
+    return with_singleton(
+      [item, prio](OSDSingletonState &singleton,
+		   Context *wrapped_on_reserved) {
+	return singleton.snap_reserver.request_reservation(
+	  item,
+	  wrapped_on_reserved,
+	  prio);
+      },
+      invoke_context_on_core(seastar::this_shard_id(), on_reserved));
   }
 
 #undef FORWARD_CONST

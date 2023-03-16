@@ -246,13 +246,13 @@ public:
   void hinc(int idx, int64_t x, int64_t y);
 
   void reset();
-  void dump_formatted(ceph::Formatter *f, bool schema,
+  void dump_formatted(ceph::Formatter *f, bool schema, bool dump_labeled,
                       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, false, counter);
+    dump_formatted_generic(f, schema, false, dump_labeled, counter);
   }
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
                                  const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, true, counter);
+    dump_formatted_generic(f, schema, true, false, counter);
   }
   std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
@@ -278,6 +278,7 @@ private:
   PerfCounters(const PerfCounters &rhs);
   PerfCounters& operator=(const PerfCounters &rhs);
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+                              bool dump_labeled,
                               const std::string &counter = "") const;
 
   typedef std::vector<perf_counter_data_any_d> perf_counter_data_vec_t;
@@ -323,16 +324,16 @@ public:
   void clear();
   bool reset(const std::string &name);
 
-  void dump_formatted(ceph::Formatter *f, bool schema,
+  void dump_formatted(ceph::Formatter *f, bool schema, bool dump_labeled,
                       const std::string &logger = "",
                       const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, false, logger, counter);
+    dump_formatted_generic(f, schema, false, dump_labeled, logger, counter);
   }
 
   void dump_formatted_histograms(ceph::Formatter *f, bool schema,
                                  const std::string &logger = "",
                                  const std::string &counter = "") const {
-    dump_formatted_generic(f, schema, true, logger, counter);
+    dump_formatted_generic(f, schema, true, false, logger, counter);
   }
 
   // A reference to a perf_counter_data_any_d, with an accompanying
@@ -351,6 +352,7 @@ public:
 
 private:
   void dump_formatted_generic(ceph::Formatter *f, bool schema, bool histograms,
+                              bool dump_labeled,
                               const std::string &logger = "",
                               const std::string &counter = "") const;
 

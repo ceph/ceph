@@ -18,6 +18,7 @@ CommonClientRequest::do_recover_missing(
   Ref<PG>& pg, const hobject_t& soid)
 {
   eversion_t ver;
+  assert(pg->is_primary());
   logger().debug("{} check for recovery, {}", __func__, soid);
   if (!pg->is_unreadable_object(soid, &ver) &&
       !pg->is_degraded_or_backfilling_object(soid)) {

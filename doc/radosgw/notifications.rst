@@ -156,6 +156,7 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
    [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
    [&Attributes.entry.10.key=cloudevents&Attributes.entry.10.value=true|false]
+   [&Attributes.entry.11.key=mechanism&Attributes.entry.11.value=<mechanism>]
 
 Request parameters:
 
@@ -211,10 +212,16 @@ Request parameters:
  - ``ca-location``: If this is provided and a secure connection is used, the
    specified CA will be used instead of the default CA to authenticate the
    broker. 
- - user/password: This must be provided only over HTTPS. Topic creation
-   requests will otherwise be rejected.
- - user/password: This must be provided along with ``use-ssl``. Connections to
-   the broker will otherwise fail.
+ - user/password: This should be provided over HTTPS. If not, the config parameter `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topics.
+ - user/password: This should be provided together with ``use-ssl``. If not, the broker credentials will be sent over insecure transport.
+ - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
+
+  - PLAIN
+  - SCRAM-SHA-256
+  - SCRAM-SHA-512
+  - GSSAPI
+  - OAUTHBEARER
+
  - port: This defaults to 9092.
  - kafka-ack-level: No end2end acking is required. Messages may persist in the
    broker before being delivered to their final destinations. Two ack methods

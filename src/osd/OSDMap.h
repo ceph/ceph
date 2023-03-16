@@ -371,6 +371,13 @@ public:
     bool stretch_mode_enabled{false};
     bool change_stretch_mode{false};
 
+    enum class mutate_allow_crimson_t : uint8_t {
+      NONE = 0,
+      SET = 1,
+      // Monitor won't allow CLEAR to be set currently, but we may allow it later
+      CLEAR = 2
+    } mutate_allow_crimson = mutate_allow_crimson_t::NONE;
+
     // full (rare)
     ceph::buffer::list fullmap;  // in lieu of below.
     ceph::buffer::list crush;
@@ -517,6 +524,8 @@ public:
       }
       return p->second.contains(snap);
     }
+
+    void set_allow_crimson() { mutate_allow_crimson = mutate_allow_crimson_t::SET; }
   };
   
 private:
@@ -652,6 +661,7 @@ private:
   uint32_t degraded_stretch_mode; // 0 if not degraded; else count of up sites
   uint32_t recovering_stretch_mode; // 0 if not recovering; else 1
   int32_t stretch_mode_bucket; // the bucket type we're stretched across
+  bool allow_crimson{false};
 private:
   uint32_t crush_version = 1;
 
@@ -853,6 +863,10 @@ public:
   }
   const mempool::osdmap::map<std::string,std::map<std::string,std::string>> &get_erasure_code_profiles() const {
     return erasure_code_profiles;
+  }
+
+  bool get_allow_crimson() const {
+    return allow_crimson;
   }
 
   bool exists(int osd) const {
@@ -1455,6 +1469,18 @@ public:
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
+  int balance_primaries(
+    CephContext *cct,
+    int64_t pid,
+    Incremental *pending_inc,
+    OSDMap& tmp_osd_map) const;
+
+  int calc_desired_primary_distribution(
+    CephContext *cct,
+    int64_t pid, // pool id
+    const std::vector<uint64_t> &osds,
+    std::map<uint64_t, float>& desired_primary_distribution) const; // vector of osd ids
+
   int calc_pg_upmaps(
     CephContext *cct,
     uint32_t max_deviation, ///< max deviation from target (value >= 1)
@@ -1464,8 +1490,6 @@ public:
     std::random_device::result_type *p_seed = nullptr  ///< [optional] for regression tests
     );
 
-private: // Bunch of internal functions used only by calc_pg_upmaps (result of code refactoring)
-
   std::map<uint64_t,std::set<pg_t>> get_pgs_by_osd(
     CephContext *cct,
     int64_t pid,
@@ -1473,7 +1497,8 @@ private: // Bunch of internal functions used only by calc_pg_upmaps (result of c
     std::map<uint64_t, std::set<pg_t>> *p_acting_primaries_by_osd = nullptr
   ) const; // used in calc_desired_primary_distribution()
 
-private:
+private: // Bunch of internal functions used only by calc_pg_upmaps (result of code refactoring)
+
   float get_osds_weight(
     CephContext *cct,
     const OSDMap& tmp_osd_map,

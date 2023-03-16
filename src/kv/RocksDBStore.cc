@@ -667,11 +667,10 @@ rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& pref
  * CF handle. In all other cases, we return a nullptr to indicate that the specified bounds cannot necessarily be mapped
  * to a single CF.
  */
-rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& prefix, const IteratorBounds& bounds) {
+rocksdb::ColumnFamilyHandle *RocksDBStore::check_cf_handle_bounds(const cf_handles_iterator& iter, const IteratorBounds& bounds) {
   if (!bounds.lower_bound || !bounds.upper_bound) {
     return nullptr;
   }
-  auto iter = cf_handles.find(prefix);
   ceph_assert(iter != cf_handles.end());
   ceph_assert(iter->second.handles.size() != 1);
   if (iter->second.hash_l != 0) {
@@ -1448,7 +1447,7 @@ void RocksDBStore::get_statistics(Formatter *f)
       f->close_section();
     }
     f->open_object_section("rocksdbstore_perf_counters");
-    logger->dump_formatted(f,0);
+    logger->dump_formatted(f, false, false);
     f->close_section();
   }
   if (cct->_conf->rocksdb_collect_memory_stats) {
@@ -1708,7 +1707,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
 {
   auto p_iter = db->cf_handles.find(prefix);
   if (p_iter == db->cf_handles.end()) {
-    uint64_t cnt = db->delete_range_threshold;
+    uint64_t cnt = db->get_delete_range_threshold();
     bat.SetSavePoint();
     auto it = db->get_iterator(prefix);
     for (it->seek_to_first(); it->valid() && (--cnt) != 0; it->next()) {
@@ -1727,7 +1726,7 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   } else {
     ceph_assert(p_iter->second.handles.size() >= 1);
     for (auto cf : p_iter->second.handles) {
-      uint64_t cnt = db->delete_range_threshold;
+      uint64_t cnt = db->get_delete_range_threshold();
       bat.SetSavePoint();
       auto it = db->new_shard_iterator(cf);
       for (it->SeekToFirst(); it->Valid() && (--cnt) != 0; it->Next()) {
@@ -1748,11 +1747,14 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
                                                          const string &start,
                                                          const string &end)
 {
-  ldout(db->cct, 10) << __func__ << " enter start=" << start
+  ldout(db->cct, 10) << __func__ 
+                     << " enter prefix=" << prefix
+                     << " start=" << start
 		     << " end=" << end << dendl;
   auto p_iter = db->cf_handles.find(prefix);
+  uint64_t cnt = db->get_delete_range_threshold();
   if (p_iter == db->cf_handles.end()) {
-    uint64_t cnt = db->delete_range_threshold;
+    uint64_t cnt0 = cnt;
     bat.SetSavePoint();
     auto it = db->get_iterator(prefix);
     for (it->lower_bound(start);
@@ -1760,6 +1762,9 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
 	 it->next()) {
       bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
     }
+    ldout(db->cct, 15) << __func__ << " count = "
+                       << cnt0 - cnt
+                       << dendl;
     if (cnt == 0) {
       ldout(db->cct, 10) << __func__ << " p_iter == end(), resorting to DeleteRange"
 			 << dendl;
@@ -1770,10 +1775,18 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
     } else {
       bat.PopSavePoint();
     }
+  } else if (cnt == 0) {
+    ceph_assert(p_iter->second.handles.size() >= 1);
+    for (auto cf : p_iter->second.handles) {
+      ldout(db->cct, 10) << __func__ << " p_iter != end(), resorting to DeleteRange"
+			   << dendl;
+	bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+    }
   } else {
     ceph_assert(p_iter->second.handles.size() >= 1);
     for (auto cf : p_iter->second.handles) {
-      uint64_t cnt = db->delete_range_threshold;
+      cnt = db->get_delete_range_threshold();
+      uint64_t cnt0 = cnt;
       bat.SetSavePoint();
       rocksdb::Iterator* it = db->new_shard_iterator(cf);
       ceph_assert(it != nullptr);
@@ -1782,6 +1795,9 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
 	   it->Next()) {
 	bat.Delete(cf, it->key());
       }
+      ldout(db->cct, 10) << __func__ << " count = "
+                         << cnt0 - cnt
+                         << dendl;
       if (cnt == 0) {
         ldout(db->cct, 10) << __func__ << " p_iter != end(), resorting to DeleteRange"
 			   << dendl;
@@ -2996,7 +3012,7 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
     if (cf_it->second.handles.size() == 1) {
       cf = cf_it->second.handles[0];
     } else if (cct->_conf->osd_rocksdb_iterator_bounds_enabled) {
-      cf = get_cf_handle(prefix, bounds);
+      cf = check_cf_handle_bounds(cf_it, bounds);
     }
     if (cf) {
       return std::make_shared<CFIteratorImpl>(
@@ -3012,7 +3028,13 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
         std::move(bounds));
     }
   } else {
-    return KeyValueDB::get_iterator(prefix, opts);
+    // use wholespace engine if no cfs are configured
+    // or use default cf otherwise as there is no
+    // matching cf for the specified prefix.
+    auto w_it = cf_handles.size() == 0 || prefix.empty() ?
+      get_wholespace_iterator(opts) :
+      get_default_cf_iterator();
+    return KeyValueDB::make_iterator(prefix, w_it);
   }
 }
 

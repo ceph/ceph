@@ -115,16 +115,15 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
 }
 
 TokenEngine::auth_info_t
-TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
-                            const std::vector<std::string>& admin_roles
+TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
                            ) const noexcept
 {
   using acct_privilege_t = rgw::auth::RemoteApplier::AuthInfo::acct_privilege_t;
 
   /* Check whether the user has an admin status. */
   acct_privilege_t level = acct_privilege_t::IS_PLAIN_ACCT;
-  for (const auto& admin_role : admin_roles) {
-    if (token.has_role(admin_role)) {
+  for (const auto& role : token.roles) {
+    if (role.is_admin && !role.is_reader) {
       level = acct_privilege_t::IS_ADMIN_ACCT;
       break;
     }
@@ -175,7 +174,7 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
   };
 
   /* Lambda will obtain a copy of (not a reference to!) allowed_items. */
-  return [allowed_items](const rgw::auth::Identity::aclspec_t& aclspec) {
+  return [allowed_items, token_roles=token.roles](const rgw::auth::Identity::aclspec_t& aclspec) {
     uint32_t perm = 0;
 
     for (const auto& allowed_item : allowed_items) {
@@ -183,6 +182,18 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
 
       if (std::end(aclspec) != iter) {
         perm |= iter->second;
+      }
+    }
+
+    for (const auto& r : token_roles) {
+      if (r.is_reader) {
+        if (r.is_admin) {    /* system scope reader persona */
+          /*
+           * Because system reader defeats permissions,
+           * we don't even look at the aclspec.
+           */
+          perm |= RGW_OP_TYPE_READ;
+        }
       }
     }
 
@@ -205,6 +216,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, reader);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
@@ -212,6 +224,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
+    std::vector<std::string> reader;
   } roles(cct);
 
   static const struct ServiceTokenRolesCacher {
@@ -239,7 +252,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t, roles.admin));
+                                              get_creds_info(*t));
     return result_t::grant(std::move(apl));
   }
 
@@ -314,6 +327,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (! t) {
     return result_t::deny(-EACCES);
   }
+  t->update_roles(roles.admin, roles.reader);
 
   /* Verify expiration. */
   if (t->expired()) {
@@ -350,7 +364,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                     << " expires: " << t->get_expires() << dendl;
       token_cache.add(token_id, *t);
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                            get_creds_info(*t, roles.admin));
+                                                get_creds_info(*t));
       return result_t::grant(std::move(apl));
     }
   }

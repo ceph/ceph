@@ -29,9 +29,13 @@ function run() {
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
+        echo "-------------- Prepare Test $func -------------------"
         setup $dir || return 1
+        echo "-------------- Run Test $func -----------------------"
         $func $dir || return 1
+        echo "-------------- Teardown Test $func ------------------"
         teardown $dir || return 1
+        echo "-------------- Complete Test $func ------------------"
     done
 }
 
@@ -71,7 +75,10 @@ function TEST_scrub_test() {
       local anotherosd="2"
     fi
 
-    objectstore_tool $dir $anotherosd obj1 set-bytes /etc/fstab
+    CORRUPT_DATA="corrupt-data.$$"
+    dd if=/dev/urandom of=$CORRUPT_DATA bs=512 count=1
+    objectstore_tool $dir $anotherosd obj1 set-bytes $CORRUPT_DATA
+    rm -f $CORRUPT_DATA
 
     local pgid="${poolid}.0"
     pg_deep_scrub "$pgid" || return 1
