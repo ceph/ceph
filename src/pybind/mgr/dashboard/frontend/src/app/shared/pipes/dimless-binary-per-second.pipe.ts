@@ -11,14 +11,14 @@ export class DimlessBinaryPerSecondPipe implements PipeTransform {
   transform(value: any): any {
     return this.formatter.format_number(value, 1024, [
       'B/s',
-      'kB/s',
-      'MB/s',
-      'GB/s',
-      'TB/s',
-      'PB/s',
-      'EB/s',
-      'ZB/s',
-      'YB/s'
+      'KiB/s',
+      'MiB/s',
+      'GiB/s',
+      'TiB/s',
+      'PiB/s',
+      'EiB/s',
+      'ZiB/s',
+      'YiB/s'
     ]);
   }
 }
