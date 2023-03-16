@@ -119,7 +119,7 @@ class TestRecoveryPool(CephFSTestCase):
         recovery_fs.create(recover=True, metadata_overlay=True)
 
         recovery_pool = recovery_fs.get_metadata_pool_name()
-        recovery_fs.mon_manager.raw_cluster_cmd('-s')
+        self.get_ceph_cmd_stdout('-s')
 
         # Reset the MDS map in case multiple ranks were in play: recovery procedure
         # only understands how to rebuild metadata under rank 0
