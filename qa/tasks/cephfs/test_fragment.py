@@ -160,13 +160,13 @@ class TestFragmentation(CephFSTestCase):
             target_files = branch_factor**depth * int(split_size * 1.5)
             create_files = target_files - files_written
 
-            self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
+            self.get_ceph_cmd_stdout("log",
                 "{0} Writing {1} files (depth={2})".format(
                     self.__class__.__name__, create_files, depth
                 ))
             self.mount_a.create_n_files("splitdir/file_{0}".format(depth),
                                         create_files)
-            self.ceph_cluster.mon_manager.raw_cluster_cmd("log",
+            self.get_ceph_cmd_stdout("log",
                 "{0} Done".format(self.__class__.__name__))
 
             files_written += create_files

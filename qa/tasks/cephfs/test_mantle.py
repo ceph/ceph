@@ -94,7 +94,7 @@ class TestMantle(CephFSTestCase):
         expect = " : (110) Connection timed out"
 
         # kill the OSDs so that the balancer pull from RADOS times out
-        osd_map = json.loads(self.fs.mon_manager.raw_cluster_cmd('osd', 'dump', '--format=json-pretty'))
+        osd_map = json.loads(self.get_ceph_cmd_stdout('osd', 'dump', '--format=json-pretty'))
         for i in range(0, len(osd_map['osds'])):
           self.get_ceph_cmd_result('osd', 'down', str(i))
           self.get_ceph_cmd_result('osd', 'out', str(i))
