@@ -3571,7 +3571,7 @@ def deploy_daemon_units(
 
                     cmd = [
                         'activate',
-                        '--'+ osd_type,
+                        '--' + osd_type,
                         '--osd-id', str(daemon_id),
                         '--osd-uuid', osd_fsid,
                         '--no-systemd',
