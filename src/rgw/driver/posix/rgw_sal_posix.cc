@@ -260,6 +260,7 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
    * the file position of root_fd */
   dfd = openat(-1, driver->get_base_path().c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (dfd == -1) {
+    ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
       << cpp_strerror(ret) << dendl;
     return -errno;
@@ -356,6 +357,7 @@ int POSIXUser::create_bucket(const DoutPrefixProvider* dpp,
 			      std::unique_ptr<Bucket>* bucket_out,
 			      optional_yield y)
 {
+  info.bucket = b;
   POSIXBucket* fb = new POSIXBucket(driver, info, this);
 
   int ret = fb->create(dpp, y, existed);
