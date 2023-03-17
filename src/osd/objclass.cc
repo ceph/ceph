@@ -102,6 +102,18 @@ int cls_setxattr(cls_method_context_t hctx, const char *name,
   return r;
 }
 
+int cls_rmxattr(cls_method_context_t hctx, const char *name)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  vector<OSDOp> nops(1);
+  OSDOp& op = nops[0];
+
+  op.op.op = CEPH_OSD_OP_RMXATTR;
+  op.op.xattr.name_len = strlen(name);
+  op.indata.append(name, op.op.xattr.name_len);
+  return (*pctx)->pg->do_osd_ops(*pctx, nops);
+}
+
 int cls_read(cls_method_context_t hctx, int ofs, int len,
 	     char **outdata, int *outdatalen)
 {
