@@ -70,15 +70,15 @@ struct fltree_onode_manager_test_t
     return tm_teardown();
   }
 
-
-  virtual void _init() final {
-    TMTestState::_init();
-    manager.reset(new FLTreeOnodeManager(*tm));
+  virtual seastar::future<> _init() final {
+    return TMTestState::_init().then([this] {
+      manager.reset(new FLTreeOnodeManager(*tm));
+    });
   }
 
-  virtual void _destroy() final {
+  virtual seastar::future<> _destroy() final {
     manager.reset();
-    TMTestState::_destroy();
+    return TMTestState::_destroy();
   }
 
   virtual FuturizedStore::mkfs_ertr::future<> _mkfs() final {
