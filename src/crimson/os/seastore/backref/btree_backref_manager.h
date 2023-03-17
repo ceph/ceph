@@ -75,8 +75,6 @@ public:
     Transaction &t,
     paddr_t offset) final;
 
-  check_child_trackers_ret check_child_trackers(Transaction &t) final;
-
   scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) final;

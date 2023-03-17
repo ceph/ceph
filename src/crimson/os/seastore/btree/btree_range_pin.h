@@ -127,10 +127,14 @@ class BtreeNodeMapping : public PhysicalNodeMapping<key_t, val_t> {
    */
   CachedExtentRef parent;
 
-  val_t value;
+  pladdr_t value;
   extent_len_t len;
   fixed_kv_node_meta_t<key_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
+
+  pladdr_t _get_val() const final {
+    return value;
+  }
 
 public:
   using val_type = val_t;
@@ -140,7 +144,7 @@ public:
     op_context_t<key_t> ctx,
     CachedExtentRef parent,
     uint16_t pos,
-    val_t &value,
+    pladdr_t value,
     extent_len_t len,
     fixed_kv_node_meta_t<key_t> &&meta)
     : ctx(ctx),
