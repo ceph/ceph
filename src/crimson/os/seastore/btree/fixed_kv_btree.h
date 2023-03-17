@@ -197,7 +197,10 @@ public:
       if constexpr (
         std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
                        node_val_t>) {
-        ret.paddr = ret.paddr.maybe_relative_to(leaf.node->get_paddr());
+        if (ret.pladdr.is_paddr()) {
+          ret.pladdr = ret.pladdr.get_paddr().maybe_relative_to(
+            leaf.node->get_paddr());
+        }
       }
       return ret;
     }
@@ -487,11 +490,13 @@ public:
     return upper_bound(c, min_max_t<node_key_t>::max);
   }
 
-  template <typename child_node_t, typename node_t>
+  template <typename child_node_t, typename node_t, bool lhc = leaf_has_children,
+           typename std::enable_if<lhc, int>::type = 0>
   void check_node(
     op_context_t<node_key_t> c,
     TCachedExtentRef<node_t> node)
   {
+    assert(leaf_has_children);
     for (auto i : *node) {
       CachedExtentRef child_node;
       Transaction::get_extent_ret ret;
@@ -501,11 +506,10 @@ public:
           i->get_val().maybe_relative_to(node->get_paddr()),
           &child_node);
       } else {
-        if constexpr (leaf_has_children) {
-          ret = c.trans.get_extent(
-            i->get_val().paddr.maybe_relative_to(node->get_paddr()),
-            &child_node);
-        }
+        assert(i->get_val().pladdr.is_paddr());
+        ret = c.trans.get_extent(
+          i->get_val().pladdr.get_paddr().maybe_relative_to(node->get_paddr()),
+          &child_node);
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
         if (child_node->is_stable()) {
@@ -577,7 +581,10 @@ public:
             assert(!c.cache.query_cache(i->get_val(), nullptr));
           } else {
             if constexpr (leaf_has_children) {
-              assert(!c.cache.query_cache(i->get_val().paddr, nullptr));
+              assert(i->get_val().pladdr.is_paddr()
+                ? (bool)!c.cache.query_cache(
+                    i->get_val().pladdr.get_paddr(), nullptr)
+                : true);
             }
           }
         }
@@ -588,6 +595,8 @@ public:
   }
 
   using check_child_trackers_ret = base_iertr::future<>;
+  template <bool lhc = leaf_has_children,
+            typename std::enable_if<lhc, int>::type = 0>
   check_child_trackers_ret check_child_trackers(
     op_context_t<node_key_t> c) {
     mapped_space_visitor_t checker = [c, this](

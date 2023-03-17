@@ -272,7 +272,7 @@ BtreeLBAManager::alloc_extent(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    lba_map_val_t{len, addr, 1, 0},
+	    lba_map_val_t{len, pladdr_t(addr), 1, 0}
 	    nextent
 	  ).si_then([&state, FNAME, c, addr, len, hint, nextent](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
@@ -311,7 +311,8 @@ _init_cached_extent(
       LOG_PREFIX(BtreeLBAManager::init_cached_extent);
       if (!iter.is_end() &&
 	  iter.get_key() == logn->get_laddr() &&
-	  iter.get_val().paddr == logn->get_paddr()) {
+	  iter.get_val().pladdr.is_paddr() &&
+	  iter.get_val().pladdr.get_paddr() == logn->get_paddr()) {
 	assert(!iter.get_leaf_node()->is_pending());
 	iter.get_leaf_node()->link_child(logn.get(), iter.get_leaf_pos());
 	logn->set_laddr(iter.get_pin(c)->get_key());
@@ -387,7 +388,7 @@ BtreeLBAManager::scan_mappings(
 	      seastar::stop_iteration::yes);
 	  }
 	  ceph_assert((pos.get_key() + pos.get_val().len) > begin);
-	  f(pos.get_key(), pos.get_val().paddr, pos.get_val().len);
+	  f(pos.get_key(), pos.get_val().pladdr, pos.get_val().len);
 	  return typename LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
@@ -439,8 +440,9 @@ BtreeLBAManager::update_mapping(
       const lba_map_val_t &in) {
       assert(!addr.is_null());
       lba_map_val_t ret = in;
-      ceph_assert(in.paddr == prev_addr);
-      ret.paddr = addr;
+      ceph_assert(in.pladdr.is_paddr());
+      ceph_assert(in.pladdr.get_paddr() == prev_addr);
+      ret.pladdr = addr;
       return ret;
     },
     nextent
@@ -528,7 +530,7 @@ BtreeLBAManager::update_refcount(
     DEBUGT("laddr={}, delta={} done -- {}", t, addr, delta, result);
     return ref_update_result_t{
       result.refcount,
-      result.paddr,
+      result.pladdr,
       result.len
      };
   });

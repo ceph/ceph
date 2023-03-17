@@ -39,7 +39,7 @@ public:
 	c,
 	parent,
 	pos,
-	val.paddr,
+	val.pladdr,
 	val.len,
 	std::forward<lba_node_meta_t>(meta))
   {}
