@@ -45,14 +45,6 @@ struct rgw_get_bucket_info_result {
 
 using RGWGetBucketInfoCR = RGWSimpleAsyncCR<rgw_get_bucket_info_params, rgw_get_bucket_info_result>;
 
-struct rgw_bucket_create_local_params {
-  std::shared_ptr<RGWUserInfo> user_info;
-  std::string bucket_name;
-  rgw_placement_rule placement_rule;
-};
-
-using RGWBucketCreateLocalCR = RGWSimpleWriteOnlyAsyncCR<rgw_bucket_create_local_params>;
-
 struct rgw_object_simple_put_params {
   RGWDataAccess::BucketRef bucket;
   rgw_obj_key key;
