@@ -181,11 +181,11 @@ protected:
 
   virtual seastar::future<> _init() = 0;
 
-  virtual void _destroy() = 0;
+  virtual seastar::future<> _destroy() = 0;
   virtual seastar::future<> _teardown() = 0;
   seastar::future<> teardown() {
     return _teardown().then([this] {
-      _destroy();
+      return _destroy();
     });
   }
 
@@ -226,7 +226,7 @@ protected:
     }
     SUBINFO(test, "begin with {} devices ...", devices->get_num_devices());
     return devices->setup(
-    ).then([this]() {
+    ).then([this] {
       return _init();
     }).then([this, FNAME] {
         return _mkfs(
@@ -273,18 +273,16 @@ protected:
     return seastar::now();
   }
 
-  virtual void _destroy() override {
+  virtual seastar::future<> _destroy() override {
     epm = nullptr;
     lba_manager = nullptr;
     cache = nullptr;
     tm.reset();
+    return seastar::now();
   }
 
   virtual seastar::future<> _teardown() {
-    return tm->close().safe_then([this] {
-      _destroy();
-      return seastar::now();
-    }).handle_error(
+    return tm->close().handle_error(
       crimson::ct_error::assert_all{"Error in teardown"}
     );
   }
@@ -407,18 +405,24 @@ class SeaStoreTestState : public EphemeralTestState {
 
 protected:
   std::unique_ptr<SeaStore> seastore;
+  FuturizedStore::Shard *sharded_seastore;
 
   SeaStoreTestState() : EphemeralTestState(1, 0) {}
 
   virtual seastar::future<> _init() final {
     seastore = make_test_seastore(
       std::make_unique<TestMDStoreState::Store>(mdstore_state.get_mdstore()));
-    return seastore->test_start(devices->get_primary_device_ref());
+    return seastore->test_start(devices->get_primary_device_ref()
+    ).then([this] {
+      sharded_seastore = &(seastore->get_sharded_store());
+    });
   }
 
-  virtual void _destroy() final {
+  virtual seastar::future<> _destroy() final {
     devices->set_primary_device_ref(seastore->get_primary_device_ref());
-    seastore.reset();
+    return seastore->stop().then([this] {
+      seastore.reset();
+    });
   }
 
   virtual seastar::future<> _teardown() final {
