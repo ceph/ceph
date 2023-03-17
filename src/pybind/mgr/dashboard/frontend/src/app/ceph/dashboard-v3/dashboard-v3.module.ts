@@ -13,7 +13,7 @@ import { CardComponent } from './card/card.component';
 import { DashboardAreaChartComponent } from './dashboard-area-chart/dashboard-area-chart.component';
 import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardTimeSelectorComponent } from './dashboard-time-selector/dashboard-time-selector.component';
-import { DashboardComponent } from './dashboard/dashboard.component';
+import { DashboardV3Component } from './dashboard/dashboard-v3.component';
 import { CardRowComponent } from './card-row/card-row.component';
 import { PgSummaryPipe } from './pg-summary.pipe';
 
@@ -33,13 +33,15 @@ import { PgSummaryPipe } from './pg-summary.pipe';
   ],
 
   declarations: [
-    DashboardComponent,
+    DashboardV3Component,
     CardComponent,
     DashboardPieComponent,
     CardRowComponent,
     PgSummaryPipe,
     DashboardAreaChartComponent,
     DashboardTimeSelectorComponent
-  ]
+  ],
+
+  exports: [DashboardV3Component]
 })
-export class NewDashboardModule {}
+export class DashboardV3Module {}

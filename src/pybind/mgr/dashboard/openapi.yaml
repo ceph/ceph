@@ -2858,6 +2858,9 @@ paths:
                   cephfs:
                     description: ''
                     type: boolean
+                  dashboard:
+                    description: ''
+                    type: boolean
                   iscsi:
                     description: ''
                     type: boolean
@@ -2880,6 +2883,7 @@ paths:
                 - cephfs
                 - rgw
                 - nfs
+                - dashboard
                 type: object
           description: OK
         '400':
