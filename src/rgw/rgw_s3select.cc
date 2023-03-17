@@ -395,6 +395,9 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   } else if(m_header_info.compare("USE")==0) {
     csv.use_header_info=true;
   }
+  if(output_json_format.compare("JSON") == 0) {
+    csv.output_json_format = true;
+  }
   //m_s3_csv_object.set_external_debug_system(fp_debug_mesg);
   m_s3_csv_object.set_result_formatters(fp_s3select_result_format,fp_result_header_format);
   m_s3_csv_object.set_csv_query(&s3select_syntax, csv);
@@ -484,6 +487,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
 int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char* input, size_t input_length)
 {
   int status = 0;
+  json_object::csv_definitions csv;
   
   const char* s3select_processTime_error = "s3select-ProcessingTime-Error";
   const char* s3select_syntax_error = "s3select-Syntax-Error";
@@ -512,9 +516,17 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
     ldpp_dout(this, 10) << "s3-select query: failed to prase query; {" << s3select_syntax.get_error_description() << "}" << dendl;
     return -EINVAL;
   }
+
+  if (output_row_delimiter.size()) {
+    csv.output_row_delimiter = *output_row_delimiter.c_str();
+  }
+
+  if(output_json_format.compare("JSON") == 0) {
+    csv.output_json_format = true;
+  }
     
   //initializing json processor
-  m_s3_json_object.set_json_query(&s3select_syntax);
+  m_s3_json_object.set_json_query(&s3select_syntax, csv);
 
   if (input == nullptr) {
     input = "";
@@ -523,7 +535,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_json(const char* query, const char
   uint32_t length_before_processing = m_aws_response_handler.get_sql_result().size();
   //query is correct(syntax), processing is starting.
   try {
-    status = m_s3_json_object.run_s3select_on_stream(m_aws_response_handler.get_sql_result(), input, input_length, m_object_size_for_processing);
+    status = m_s3_json_object.run_s3select_on_stream(m_aws_response_handler.get_sql_result(), input, input_length, m_object_size_for_processing, csv.output_json_format);
   } catch(base_s3select_exception& e) {
     ldpp_dout(this, 10) << "S3select: failed to process JSON object: " << e.what() << dendl;
     m_aws_response_handler.get_sql_result().append(e.what());
@@ -610,6 +622,7 @@ int RGWSelectObj_ObjStore_S3::handle_aws_cli_parameters(std::string& sql_query)
   size_t _qo = m_s3select_query.find("<" + output_tag + ">", 0);
   size_t _qs = m_s3select_query.find("</" + output_tag + ">", _qi);
   m_s3select_output = m_s3select_query.substr(_qo + output_tag.size() + 2, _qs - (_qo + output_tag.size() + 2));
+  extract_format_by_tag(m_s3select_output, "JSON", output_json_format);
   extract_by_tag(m_s3select_output, "FieldDelimiter", output_column_delimiter);
   extract_by_tag(m_s3select_output, "QuoteCharacter", output_quot);
   extract_by_tag(m_s3select_output, "QuoteEscapeCharacter", output_escape_char);
@@ -654,6 +667,17 @@ int RGWSelectObj_ObjStore_S3::extract_by_tag(std::string input, std::string tag_
     return -1;
   }
   result = input.substr(qs_input, _qe - qs_input);
+  return 0;
+}
+
+int RGWSelectObj_ObjStore_S3::extract_format_by_tag(std::string input, std::string tag_name, std::string& result)
+{
+  result = "";
+  size_t _qs = input.find(tag_name, 0);
+  if (_qs == std::string::npos) {
+    return -1;
+  }
+  result = tag_name;
   return 0;
 }
 

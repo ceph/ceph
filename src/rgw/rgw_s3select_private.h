@@ -186,6 +186,7 @@ private:
   std::string output_row_delimiter;
   std::string m_start_scan;
   std::string m_end_scan;
+  std::string output_json_format;
   bool m_scan_range_ind;
   int64_t m_start_scan_sz;
   int64_t m_end_scan_sz;
@@ -238,6 +239,8 @@ private:
   int run_s3select_on_json(const char* query, const char* input, size_t input_length);
 
   int extract_by_tag(std::string input, std::string tag_name, std::string& result);
+
+  int extract_format_by_tag(std::string input, std::string tag_name, std::string& result);
 
   void convert_escape_seq(std::string& esc);
 
