@@ -332,17 +332,6 @@ BtreeBackrefManager::merge_cached_backrefs(
   });
 }
 
-BtreeBackrefManager::check_child_trackers_ret
-BtreeBackrefManager::check_child_trackers(
-  Transaction &t) {
-  auto c = get_context(t);
-  return with_btree<BackrefBtree>(
-    cache, c,
-    [c](auto &btree) {
-    return btree.check_child_trackers(c);
-  });
-}
-
 BtreeBackrefManager::scan_mapped_space_ret
 BtreeBackrefManager::scan_mapped_space(
   Transaction &t,

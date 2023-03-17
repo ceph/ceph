@@ -249,7 +249,7 @@ struct lba_btree_test : btree_test_base {
   }
 
   static auto get_map_val(extent_len_t len) {
-    return lba_map_val_t{0, P_ADDR_NULL, len, 0};
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0};
   }
 
   device_off_t next_off = 0;

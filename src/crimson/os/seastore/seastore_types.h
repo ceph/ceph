@@ -488,6 +488,7 @@ constexpr device_off_t decode_device_off(internal_paddr_t addr) {
 struct seg_paddr_t;
 struct blk_paddr_t;
 struct res_paddr_t;
+struct pladdr_t;
 struct paddr_t {
 public:
   // P_ADDR_MAX == P_ADDR_NULL == paddr_t{}
@@ -668,6 +669,8 @@ private:
                      static_cast<u_device_off_t>(offset)) {}
 
   friend struct paddr_le_t;
+  friend struct pladdr_le_t;
+
 };
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
@@ -1029,6 +1032,86 @@ struct __attribute((packed)) laddr_le_t {
     val = addr;
     laddr = val;
     return *this;
+  }
+};
+
+constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
+
+struct pladdr_t {
+  std::variant<laddr_t, paddr_t> pladdr;
+
+  pladdr_t() = default;
+  pladdr_t(const pladdr_t &) = default;
+  explicit pladdr_t(laddr_t laddr)
+    : pladdr(laddr) {}
+  explicit pladdr_t(paddr_t paddr)
+    : pladdr(paddr) {}
+
+  bool is_laddr() const {
+    return pladdr.index() == 0;
+  }
+
+  bool is_paddr() const {
+    return pladdr.index() == 1;
+  }
+
+  pladdr_t& operator=(paddr_t paddr) {
+    pladdr = paddr;
+    return *this;
+  }
+
+  pladdr_t& operator=(laddr_t laddr) {
+    pladdr = laddr;
+    return *this;
+  }
+
+  bool operator==(const pladdr_t &) const = default;
+
+  paddr_t get_paddr() const {
+    assert(pladdr.index() == 1);
+    return paddr_t(std::get<1>(pladdr));
+  }
+
+  laddr_t get_laddr() const {
+    assert(pladdr.index() == 0);
+    return laddr_t(std::get<0>(pladdr));
+  }
+
+};
+
+std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr);
+
+enum class addr_type_t : uint8_t {
+  PADDR=0,
+  LADDR=1,
+  MAX=2	// or NONE
+};
+
+struct __attribute((packed)) pladdr_le_t {
+  ceph_le64 pladdr = ceph_le64(PL_ADDR_NULL);
+  addr_type_t addr_type = addr_type_t::MAX;
+
+  pladdr_le_t() = default;
+  pladdr_le_t(const pladdr_le_t &) = default;
+  explicit pladdr_le_t(const pladdr_t &addr)
+    : pladdr(
+	ceph_le64(
+	  addr.is_laddr() ?
+	    std::get<0>(addr.pladdr) :
+	    std::get<1>(addr.pladdr).internal_paddr)),
+      addr_type(
+	addr.is_laddr() ?
+	  addr_type_t::LADDR :
+	  addr_type_t::PADDR)
+  {}
+
+  operator pladdr_t() const {
+    if (addr_type == addr_type_t::LADDR) {
+      return pladdr_t(laddr_t(pladdr));
+    } else {
+      assert(addr_type == addr_type_t::PADDR);
+      return pladdr_t(paddr_t(pladdr));
+    }
   }
 };
 
@@ -2132,6 +2215,7 @@ template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::os
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
