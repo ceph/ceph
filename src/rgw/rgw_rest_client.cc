@@ -363,7 +363,7 @@ static void scope_from_api_name(const DoutPrefixProvider *dpp,
   }
 }
 
-int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
+int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y, std::string service)
 {
 
   string date_str;
@@ -413,7 +413,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   }
 
   if (s == "iam") {
-    info.args.remove("PayloadHash");
+    new_info.args.remove("PayloadHash");
   }
 
   for (const auto& kv: new_env.get_map()) {
@@ -426,7 +426,7 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   }
 
   string params_str;
-  get_params_str(info.args.get_params(), params_str);
+  get_params_str(new_info.args.get_params(), params_str);
 
   string new_url = url;
   string& resource = new_info.request_uri;
