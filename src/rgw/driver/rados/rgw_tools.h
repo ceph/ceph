@@ -66,7 +66,7 @@ int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                        bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker,
                        real_time set_mtime, optional_yield y,
-                       std::map<std::string, bufferlist> *pattrs = nullptr);
+                       const std::map<std::string, bufferlist> *pattrs = nullptr);
 int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool,
                        const std::string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime,
