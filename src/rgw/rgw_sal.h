@@ -298,14 +298,6 @@ class Driver {
                             std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
-    /** For multisite, forward an OP to the zone's master */
-    virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
-					  bufferlist& in_data, JSONParser* jp, req_info& info,
-					  optional_yield y) = 0;
-    virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y) = 0;
     /** Get zone info for this driver */
     virtual Zone* get_zone() = 0;
     /** Get a unique ID specific to this zone. */

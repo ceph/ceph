@@ -2252,22 +2252,6 @@ int DaosStore::load_bucket(const DoutPrefixProvider* dpp, User* u,
 
 bool DaosStore::is_meta_master() { return true; }
 
-int DaosStore::forward_request_to_master(const DoutPrefixProvider* dpp,
-                                         User* user, obj_version* objv,
-                                         bufferlist& in_data, JSONParser* jp,
-                                         req_info& info, optional_yield y) {
-  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
-}
-
-int DaosStore::forward_iam_request_to_master(const DoutPrefixProvider* dpp,
-                                             const RGWAccessKey& key,
-                                             obj_version* objv,
-                                             bufferlist& in_data,
-                                             RGWXMLDecoder::XMLParser* parser,
-                                             req_info& info, optional_yield y) {
-  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
-}
-
 std::string DaosStore::zone_unique_id(uint64_t unique_num) { return ""; }
 
 std::string DaosStore::zone_unique_trans_id(const uint64_t unique_num) {
