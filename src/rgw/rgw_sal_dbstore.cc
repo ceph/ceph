@@ -84,7 +84,7 @@ namespace rgw::sal {
     obj_version objv, *pobjv = NULL;
 
     /* If it exists, look it up; otherwise create it */
-    ret = store->get_bucket(dpp, this, b, &bucket, y);
+    ret = store->load_bucket(dpp, this, b, &bucket, y);
     if (ret < 0 && ret != -ENOENT)
       return ret;
 
@@ -1633,41 +1633,29 @@ namespace rgw::sal {
   }
 
 
-  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  std::unique_ptr<Bucket> DBStore::get_bucket(User* u, const RGWBucketInfo& i)
   {
-    int ret;
-    Bucket* bp;
-
-    bp = new DBBucket(this, b, u);
-    ret = bp->load_bucket(dpp, y);
-    if (ret < 0) {
-      delete bp;
-      return ret;
-    }
-
-    bucket->reset(bp);
-    return 0;
-  }
-
-  int DBStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
-  {
-    Bucket* bp;
-
-    bp = new DBBucket(this, i, u);
     /* Don't need to fetch the bucket info, use the provided one */
-
-    bucket->reset(bp);
-    return 0;
+    return std::make_unique<DBBucket>(this, i, u);
   }
 
-  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  int DBStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y)
+  {
+    *bucket = std::make_unique<DBBucket>(this, b, u);
+    return (*bucket)->load_bucket(dpp, y);
+  }
+
+  int DBStore::load_bucket(const DoutPrefixProvider *dpp, User* u,
+                           const std::string& tenant, const std::string& name,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y)
   {
     rgw_bucket b;
 
     b.tenant = tenant;
     b.name = name;
 
-    return get_bucket(dpp, u, b, bucket, y);
+    return load_bucket(dpp, u, b, bucket, y);
   }
 
   bool DBStore::is_meta_master()

@@ -101,7 +101,7 @@ int DaosUser::create_bucket(
   std::unique_ptr<Bucket> bucket;
 
   // Look up the bucket. Create it if it doesn't exist.
-  ret = this->store->get_bucket(dpp, this, b, &bucket, y);
+  ret = this->store->load_bucket(dpp, this, b, &bucket, y);
   if (ret != 0 && ret != -ENOENT) {
     return ret;
   }
@@ -2249,45 +2249,30 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_user* u) {
   return out << s;
 }
 
-int DaosStore::get_bucket(const DoutPrefixProvider* dpp, User* u,
-                          const rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
-                          optional_yield y) {
-  ldpp_dout(dpp, 20) << "DEBUG: get_bucket1: User: " << u << dendl;
-  int ret;
-  Bucket* bp;
-
-  bp = new DaosBucket(this, b, u);
-  ret = bp->load_bucket(dpp, y);
-  if (ret != 0) {
-    delete bp;
-    return ret;
-  }
-
-  bucket->reset(bp);
-  return 0;
-}
-
-int DaosStore::get_bucket(User* u, const RGWBucketInfo& i,
-                          std::unique_ptr<Bucket>* bucket) {
-  DaosBucket* bp;
-
-  bp = new DaosBucket(this, i, u);
+std::unique_ptr<Bucket> DaosStore::get_bucket(User* u, const RGWBucketInfo& i) {
   /* Don't need to fetch the bucket info, use the provided one */
-
-  bucket->reset(bp);
-  return 0;
+  return std::make_unique<DaosBucket>(this, i, u);
 }
 
-int DaosStore::get_bucket(const DoutPrefixProvider* dpp, User* u,
-                          const std::string& tenant, const std::string& name,
-                          std::unique_ptr<Bucket>* bucket, optional_yield y) {
+int DaosStore::load_bucket(const DoutPrefixProvider* dpp, User* u,
+                           const rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
+                           optional_yield y) {
+  ldpp_dout(dpp, 20) << "DEBUG: get_bucket1: User: " << u << dendl;
+
+  *bucket = std::make_unique<DaosBucket>(this, b, u);
+  return (*bucket)->load_bucket(dpp, y);
+}
+
+int DaosStore::load_bucket(const DoutPrefixProvider* dpp, User* u,
+                           const std::string& tenant, const std::string& name,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y) {
   ldpp_dout(dpp, 20) << "get_bucket" << dendl;
   rgw_bucket b;
 
   b.tenant = tenant;
   b.name = name;
 
-  return get_bucket(dpp, u, b, bucket, y);
+  return load_bucket(dpp, u, b, bucket, y);
 }
 
 bool DaosStore::is_meta_master() { return true; }

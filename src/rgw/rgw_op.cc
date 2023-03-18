@@ -490,10 +490,10 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   /* check if copy source is within the current domain */
   if (!s->src_bucket_name.empty()) {
     std::unique_ptr<rgw::sal::Bucket> src_bucket;
-    ret = driver->get_bucket(dpp, nullptr,
-                             rgw_bucket_key(s->src_tenant_name,
-                                            s->src_bucket_name),
-                             &src_bucket, y);
+    ret = driver->load_bucket(dpp, nullptr,
+                              rgw_bucket_key(s->src_tenant_name,
+                                             s->src_bucket_name),
+                              &src_bucket, y);
     if (ret == 0) {
       string& zonegroup = src_bucket->get_info().zonegroup;
       s->local_source = driver->get_zone()->get_zonegroup().equals(zonegroup);
@@ -513,7 +513,10 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 
     /* This is the only place that s->bucket is created.  It should never be
      * overwritten. */
-    ret = driver->get_bucket(dpp, s->user.get(), rgw_bucket(s->bucket_tenant, s->bucket_name, s->bucket_instance_id), &s->bucket, y);
+    ret = driver->load_bucket(dpp, s->user.get(),
+                              rgw_bucket(s->bucket_tenant, s->bucket_name,
+                                         s->bucket_instance_id),
+                              &s->bucket, y);
     if (ret < 0) {
       if (ret != -ENOENT) {
 	string bucket_log;
@@ -1936,7 +1939,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
     map<string, bufferlist> bucket_attrs;
-    r = driver->get_bucket(this, s->user.get(), s->user->get_tenant(), bucket_name, &ubucket, y);
+    r = driver->load_bucket(this, s->user.get(), s->user->get_tenant(),
+                            bucket_name, &ubucket, y);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 		       << bucket_name << dendl;
@@ -2066,7 +2070,8 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
 
 	std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
-	int r = driver->get_bucket(this, s->user.get(), s->user->get_tenant(), bucket_name, &tmp_bucket, y);
+	int r = driver->load_bucket(this, s->user.get(), s->user->get_tenant(),
+                                    bucket_name, &tmp_bucket, y);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
@@ -2974,7 +2979,7 @@ void RGWStatBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->get_bucket(this, s->user.get(), s->bucket->get_key(), &bucket, y);
+  op_ret = driver->load_bucket(this, s->user.get(), s->bucket->get_key(), &bucket, y);
   if (op_ret) {
     return;
   }
@@ -3368,8 +3373,8 @@ void RGWCreateBucket::execute(optional_yield y)
    * specific request */
   {
     std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
-    op_ret = driver->get_bucket(this, s->user.get(), s->bucket_tenant,
-			       s->bucket_name, &tmp_bucket, y);
+    op_ret = driver->load_bucket(this, s->user.get(), s->bucket_tenant,
+                                 s->bucket_name, &tmp_bucket, y);
     if (op_ret < 0 && op_ret != -ENOENT)
       return;
     s->bucket_exists = (op_ret != -ENOENT);
@@ -3668,8 +3673,8 @@ int RGWPutObj::init_processing(optional_yield y) {
       }
     }
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = driver->get_bucket(this, s->user.get(), copy_source_tenant_name, copy_source_bucket_name,
-			      &bucket, y);
+    ret = driver->load_bucket(this, s->user.get(), copy_source_tenant_name,
+                              copy_source_bucket_name, &bucket, y);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket() returned ret=" << ret << dendl;
       if (ret == -ENOENT) {
@@ -3730,20 +3735,16 @@ int RGWPutObj::verify_permission(optional_yield y)
     RGWAccessControlPolicy cs_acl(s->cct);
     boost::optional<Policy> policy;
     map<string, bufferlist> cs_attrs;
-    std::unique_ptr<rgw::sal::Bucket> cs_bucket;
-    int ret = driver->get_bucket(NULL, copy_source_bucket_info, &cs_bucket);
-    if (ret < 0)
-      return ret;
-
-    std::unique_ptr<rgw::sal::Object> cs_object =
-      cs_bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
-
+    auto cs_bucket = driver->get_bucket(nullptr, copy_source_bucket_info);
+    auto cs_object = cs_bucket->get_object(rgw_obj_key(copy_source_object_name,
+                                                       copy_source_version_id));
     cs_object->set_atomic();
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
-    if (ret = read_obj_policy(this, driver, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
-			policy, cs_bucket.get(), cs_object.get(), y, true); ret < 0) {
+    int ret = read_obj_policy(this, driver, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
+                              policy, cs_bucket.get(), cs_object.get(), y, true);
+    if (ret < 0) {
       return ret;
     }
 
@@ -3797,10 +3798,10 @@ int RGWPutObj::verify_permission(optional_yield y)
       return -EACCES;
   }
 
-  auto op_ret = get_params(y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 20) << "get_params() returned ret=" << op_ret << dendl;
-    return op_ret;
+  int ret = get_params(y);
+  if (ret < 0) {
+    ldpp_dout(this, 20) << "get_params() returned ret=" << ret << dendl;
+    return ret;
   }
 
   if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
@@ -3920,13 +3921,10 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   new_ofs = fst;
   new_end = lst;
 
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = driver->get_bucket(nullptr, copy_source_bucket_info, &bucket);
-  if (ret < 0)
-    return ret;
-
-  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
-  std::unique_ptr<rgw::sal::Object::ReadOp> read_op(obj->get_read_op());
+  auto bucket = driver->get_bucket(nullptr, copy_source_bucket_info);
+  auto obj = bucket->get_object(rgw_obj_key(copy_source_object_name,
+                                            copy_source_version_id));
+  auto read_op = obj->get_read_op();
 
   ret = read_op->prepare(s->yield, this);
   if (ret < 0)
@@ -4184,14 +4182,9 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
   if ((! copy_source.empty()) && !copy_source_range) {
-    std::unique_ptr<rgw::sal::Bucket> bucket;
-    op_ret = driver->get_bucket(nullptr, copy_source_bucket_info, &bucket);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "ERROR: failed to get bucket with error" << op_ret << dendl;
-      return;
-    }
-    std::unique_ptr<rgw::sal::Object> obj =
-      bucket->get_object(rgw_obj_key(copy_source_object_name, copy_source_version_id));
+    auto bucket = driver->get_bucket(nullptr, copy_source_bucket_info);
+    auto obj = bucket->get_object(rgw_obj_key(copy_source_object_name,
+                                              copy_source_version_id));
 
     RGWObjState *astate;
     op_ret = obj->get_obj_state(this, &astate, s->yield);
@@ -5363,10 +5356,10 @@ int RGWCopyObj::init_processing(optional_yield y)
     return op_ret;
   }
 
-  op_ret = driver->get_bucket(this, s->user.get(),
-                              rgw_bucket_key(s->src_tenant_name,
-                                             s->src_bucket_name),
-                              &src_bucket, y);
+  op_ret = driver->load_bucket(this, s->user.get(),
+                               rgw_bucket_key(s->src_tenant_name,
+                                              s->src_bucket_name),
+                               &src_bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_BUCKET;
@@ -7322,12 +7315,8 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
   ACLOwner bowner;
   RGWObjVersionTracker ot;
 
-  int ret = driver->get_bucket(dpp, s->user.get(), s->user->get_tenant(), path.bucket_name, &bucket, y);
-  if (ret < 0) {
-    goto binfo_fail;
-  }
-
-  ret = bucket->load_bucket(dpp, s->yield);
+  int ret = driver->load_bucket(dpp, s->user.get(), s->user->get_tenant(),
+                                path.bucket_name, &bucket, y);
   if (ret < 0) {
     goto binfo_fail;
   }
@@ -7700,7 +7689,8 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   ACLOwner bowner;
 
-  op_ret = driver->get_bucket(this, s->user.get(), rgw_bucket(rgw_bucket_key(s->user->get_tenant(), bucket_name)), &bucket, y);
+  op_ret = driver->load_bucket(this, s->user.get(), s->user->get_tenant(),
+                               bucket_name, &bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       ldpp_dout(this, 20) << "non existent directory=" << bucket_name << dendl;
