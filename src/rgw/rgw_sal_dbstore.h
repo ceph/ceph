@@ -88,22 +88,6 @@ protected:
       }
       int list_buckets(const DoutPrefixProvider *dpp, const std::string& marker, const std::string& end_marker,
           uint64_t max, bool need_stats, BucketList& buckets, optional_yield y) override;
-      virtual int create_bucket(const DoutPrefixProvider* dpp,
-          const rgw_bucket& b,
-          const std::string& zonegroup_id,
-          const rgw_placement_rule& placement_rule,
-          const std::string& swift_ver_location,
-          const RGWQuotaInfo* pquota_info,
-          const RGWAccessControlPolicy& policy,
-          Attrs& attrs,
-          RGWBucketInfo& info,
-          obj_version& ep_objv,
-          bool exclusive,
-          bool obj_lock_enabled,
-          bool* existed,
-          req_info& req_info,
-          std::unique_ptr<Bucket>* bucket,
-          optional_yield y) override;
       virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
       virtual int read_stats(const DoutPrefixProvider *dpp,
           optional_yield y, RGWStorageStats* stats,
@@ -178,6 +162,9 @@ protected:
 					DoutPrefixProvider *dpp) override;
       virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
       virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
+      int create(const DoutPrefixProvider* dpp,
+                 const CreateParams& params,
+                 optional_yield y) override;
       virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int read_stats(const DoutPrefixProvider *dpp,
 			     const bucket_index_layout_generation& idx_layout,

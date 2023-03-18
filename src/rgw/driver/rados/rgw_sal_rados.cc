@@ -120,119 +120,51 @@ int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
   return 0;
 }
 
-int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
-				 const rgw_bucket& b,
-				 const std::string& zonegroup_id,
-				 const rgw_placement_rule& placement_rule,
-				 const std::string& swift_ver_location,
-				 const RGWQuotaInfo * pquota_info,
-				 const RGWAccessControlPolicy& policy,
-				 Attrs& attrs,
-				 RGWBucketInfo& info,
-				 obj_version& ep_objv,
-				 bool exclusive,
-				 bool obj_lock_enabled,
-				 bool* existed,
-				 req_info& req_info,
-				 std::unique_ptr<Bucket>* bucket_out,
-				 optional_yield y)
+int RadosBucket::create(const DoutPrefixProvider* dpp,
+                        const CreateParams& params,
+                        optional_yield y)
 {
-  int ret;
-  bufferlist in_data;
-  RGWBucketInfo master_info;
-  rgw_bucket* pmaster_bucket = nullptr;
-  real_time creation_time;
-  std::unique_ptr<Bucket> bucket;
-  obj_version objv,* pobjv = NULL;
+  ceph_assert(owner);
+  const rgw_user& owner_id = owner->get_id();
 
-  /* If it exists, look it up; otherwise create it */
-  ret = store->load_bucket(dpp, this, b, &bucket, y);
-  if (ret < 0 && ret != -ENOENT)
+  rgw_bucket key = get_key();
+  key.marker = params.marker;
+  key.bucket_id = params.bucket_id;
+
+  int ret = store->getRados()->create_bucket(
+      dpp, y, key, owner_id, params.zonegroup_id,
+      params.placement_rule, params.zone_placement, params.attrs,
+      params.obj_lock_enabled, params.swift_ver_location,
+      params.quota, params.creation_time, &bucket_version, info);
+
+  bool existed = false;
+  if (ret == -EEXIST) {
+    existed = true;
+    /* bucket already existed, might have raced with another bucket creation,
+     * or might be partial bucket creation that never completed. Read existing
+     * bucket info, verify that the reported bucket owner is the current user.
+     * If all is ok then update the user's list of buckets.  Otherwise inform
+     * client about a name conflict.
+     */
+    if (info.owner != owner_id) {
+      return -ERR_BUCKET_EXISTS;
+    }
+    ret = 0;
+  } else if (ret != 0) {
     return ret;
-
-  if (ret != -ENOENT) {
-    *existed = true;
-  } else {
-    bucket = std::unique_ptr<Bucket>(new RadosBucket(store, b, this));
-    *existed = false;
-    bucket->set_attrs(attrs);
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    JSONParser jp;
-    ret = store->forward_request_to_master(dpp, this, NULL, in_data, &jp, req_info, y);
-    if (ret < 0) {
-      return ret;
-    }
-
-    JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
-    JSONDecoder::decode_json("object_ver", objv, &jp);
-    JSONDecoder::decode_json("bucket_info", master_info, &jp);
-    ldpp_dout(dpp, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
-    std::time_t ctime = ceph::real_clock::to_time_t(master_info.creation_time);
-    ldpp_dout(dpp, 20) << "got creation time: << " << std::put_time(std::localtime(&ctime), "%F %T") << dendl;
-    pmaster_bucket= &master_info.bucket;
-    creation_time = master_info.creation_time;
-    pobjv = &objv;
-    obj_lock_enabled = master_info.obj_lock_enabled();
-  }
-
-  std::string zid = zonegroup_id;
-  if (zid.empty()) {
-    zid = store->svc()->zone->get_zonegroup().get_id();
-  }
-
-  if (*existed) {
-    rgw_placement_rule selected_placement_rule;
-    ret = store->svc()->zone->select_bucket_placement(dpp, this->get_info(),
-					       zid, placement_rule,
-					       &selected_placement_rule, nullptr, y);
-    if (selected_placement_rule != info.placement_rule) {
-      ret = -EEXIST;
-      bucket_out->swap(bucket);
-      return ret;
-    }
-  } else {
-
-    ret = store->getRados()->create_bucket(this->get_info(), bucket->get_key(),
-				    zid, placement_rule, swift_ver_location,
-				    obj_lock_enabled, pquota_info,
-				    attrs, info, pobjv, &ep_objv, creation_time,
-				    pmaster_bucket, y, dpp, exclusive);
-    if (ret == -EEXIST) {
-      *existed = true;
-      /* bucket already existed, might have raced with another bucket creation,
-       * or might be partial bucket creation that never completed. Read existing
-       * bucket info, verify that the reported bucket owner is the current user.
-       * If all is ok then update the user's list of buckets.  Otherwise inform
-       * client about a name conflict.
-       */
-      if (info.owner.compare(this->get_id()) != 0) {
-	return -EEXIST;
-      }
-      ret = 0;
-    } else if (ret != 0) {
-      return ret;
-    }
-  }
-
-  bucket->set_version(ep_objv);
-  bucket->get_info() = info;
-
-  RadosBucket* rbucket = static_cast<RadosBucket*>(bucket.get());
-  ret = rbucket->link(dpp, this, y, false);
-  if (ret && !*existed && ret != -EEXIST) {
+  ret = link(dpp, owner, y, false);
+  if (ret && !existed && ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    ret = rbucket->unlink(dpp, this, y);
+    ret = unlink(dpp, owner, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << ret
 		       << dendl;
     }
-  } else if (ret == -EEXIST || (ret == 0 && *existed)) {
+  } else if (ret == -EEXIST || (ret == 0 && existed)) {
     ret = -ERR_BUCKET_EXISTS;
   }
-
-  bucket_out->swap(bucket);
 
   return ret;
 }

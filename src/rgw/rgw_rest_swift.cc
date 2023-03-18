@@ -682,14 +682,14 @@ static void get_rmattrs_from_headers(const req_state * const s,
 
 static int get_swift_versioning_settings(
   req_state * const s,
-  boost::optional<std::string>& swift_ver_location)
+  std::optional<std::string>& swift_ver_location)
 {
   /* Removing the Swift's versions location has lower priority than setting
    * a new one. That's the reason why we're handling it first. */
   const std::string vlocdel =
     s->info.env->get("HTTP_X_REMOVE_VERSIONS_LOCATION", "");
   if (vlocdel.size()) {
-    swift_ver_location = boost::in_place(std::string());
+    swift_ver_location.emplace();
   }
 
   if (s->info.env->exists("HTTP_X_VERSIONS_LOCATION")) {
@@ -724,9 +724,10 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
   location_constraint = driver->get_zone()->get_zonegroup().get_api_name();
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
-  placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""), s->info.storage_class);
+  createparams.placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""),
+                                   s->info.storage_class);
 
-  return get_swift_versioning_settings(s, swift_ver_location);
+  return get_swift_versioning_settings(s, createparams.swift_ver_location);
 }
 
 static inline int handle_metadata_errors(req_state* const s, const int op_ret)
