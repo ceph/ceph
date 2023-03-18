@@ -110,6 +110,47 @@ static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
 static constexpr auto S3_RESOURCE_TAG = "s3:ResourceTag";
 static constexpr auto S3_RUNTIME_RESOURCE_VAL = "${s3:ResourceTag";
 
+int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
+                                  const rgw::SiteConfig& site,
+                                  const rgw_user& uid,
+                                  bufferlist* indata, JSONParser* jp,
+                                  req_info& req, optional_yield y)
+{
+  const auto& period = site.get_period();
+  if (!period) {
+    return 0; // not multisite
+  }
+  if (site.is_meta_master()) {
+    return 0; // don't need to forward metadata requests
+  }
+  const auto& pmap = period->period_map;
+  auto zg = pmap.zonegroups.find(pmap.master_zonegroup);
+  if (zg == pmap.zonegroups.end()) {
+    return -EINVAL;
+  }
+  auto z = zg->second.zones.find(zg->second.master_zone);
+  if (z == zg->second.zones.end()) {
+    return -EINVAL;
+  }
+  const RGWAccessKey& creds = site.get_zone_params().system_key;
+
+  // use the master zone's endpoints
+  auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
+                          creds, zg->second.id, zg->second.api_name};
+  bufferlist outdata;
+  constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
+  int ret = conn.forward(dpp, uid, req, nullptr, max_response_size,
+                         indata, &outdata, y);
+  if (ret < 0) {
+    return ret;
+  }
+  if (jp && !jp->parse(outdata.c_str(), outdata.length())) {
+    ldpp_dout(dpp, 0) << "failed parsing response from master zonegroup" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int RGWGetObj::parse_range(void)
 {
   int r = -ERANGE;
@@ -1215,9 +1256,11 @@ void RGWPutBucketTags::execute(optional_yield y)
   if (op_ret < 0) 
     return;
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
   }
 
   op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
@@ -1244,8 +1287,8 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
 
 void RGWDeleteBucketTags::execute(optional_yield y)
 {
-  bufferlist in_data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1300,7 +1343,8 @@ void RGWPutBucketReplication::execute(optional_yield y) {
   if (op_ret < 0) 
     return;
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -1341,8 +1385,8 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
 
 void RGWDeleteBucketReplication::execute(optional_yield y)
 {
-  bufferlist in_data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2781,7 +2825,8 @@ void RGWSetBucketVersioning::execute(optional_yield y)
     }
   }
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2870,7 +2915,8 @@ void RGWSetBucketWebsite::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << " forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -2911,9 +2957,8 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
     return;
   }
 
-  bufferlist in_data;
-
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket->get_name()
       << "returned err=" << op_ret << dendl;
@@ -3524,8 +3569,8 @@ void RGWCreateBucket::execute(optional_yield y)
     // apply bucket creation on the master zone first
     bufferlist in_data;
     JSONParser jp;
-    op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr,
-                                               in_data, &jp, s->info, y);
+    op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                           &in_data, &jp, s->info, y);
     if (op_ret < 0) {
       return;
     }
@@ -3669,8 +3714,8 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  bufferlist in_data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), &ot.read_version, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       /* adjust error, we want to return with NoSuchBucket and not
@@ -6038,7 +6083,8 @@ void RGWPutACLs::execute(optional_yield y)
     if (s->canned_acl.empty()) {
       in_data.append(data);
     }
-    op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+    op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                           &in_data, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -6167,7 +6213,8 @@ void RGWPutLC::execute(optional_yield y)
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6182,8 +6229,8 @@ void RGWPutLC::execute(optional_yield y)
 
 void RGWDeleteLC::execute(optional_yield y)
 {
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6235,7 +6282,8 @@ void RGWPutCORS::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6260,8 +6308,8 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
 
 void RGWDeleteCORS::execute(optional_yield y)
 {
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -6383,7 +6431,8 @@ void RGWSetRequestPayment::execute(optional_yield y)
   if (op_ret < 0)
     return;
   
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &in_data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -7423,9 +7472,8 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
       req_info req = s->info;
       forward_req_info(dpp, s->cct, req, path.bucket_name);
 
-      bufferlist data;
-      ret = driver->forward_request_to_master(dpp, s->user.get(), nullptr,
-                                              data, nullptr, req, y);
+      ret = rgw_forward_request_to_master(dpp, *s->penv.site, s->user->get_id(),
+                                          nullptr, nullptr, req, y);
       if (ret < 0) {
         goto delop_fail;
       }
@@ -7679,8 +7727,8 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
     req_info req = s->info;
     forward_req_info(this, s->cct, req, bucket_name);
 
-    ret = driver->forward_request_to_master(this, s->user.get(), nullptr,
-                                            in_data, &jp, req, y);
+    ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                        &in_data, &jp, req, y);
     if (ret < 0) {
       return ret;
     }
@@ -8390,7 +8438,8 @@ void RGWPutBucketPolicy::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8491,8 +8540,8 @@ int RGWDeleteBucketPolicy::verify_permission(optional_yield y)
 
 void RGWDeleteBucketPolicy::execute(optional_yield y)
 {
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8558,7 +8607,8 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << __func__ << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8920,7 +8970,8 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -8995,8 +9046,8 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission(optional_yield y)
 
 void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
 {
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -9051,7 +9102,8 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         &data, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -9105,8 +9157,8 @@ int RGWDeleteBucketEncryption::verify_permission(optional_yield y)
 
 void RGWDeleteBucketEncryption::execute(optional_yield y)
 {
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
