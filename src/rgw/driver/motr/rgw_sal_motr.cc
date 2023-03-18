@@ -3246,22 +3246,6 @@ bool MotrStore::is_meta_master()
   return true;
 }
 
-int MotrStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version *objv,
-    bufferlist& in_data,
-    JSONParser *jp, req_info& info,
-    optional_yield y)
-{
-  return 0;
-}
-
-int MotrStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y)
-{
-    return 0;
-}
-
 std::string MotrStore::zone_unique_id(uint64_t unique_num)
 {
   return "";
