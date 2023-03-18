@@ -1595,20 +1595,16 @@ class DB {
         RGWBucketInfo& info, rgw::sal::Attrs* pattrs, ceph::real_time* pmtime,
         obj_version* pbucket_version);
     int create_bucket(const DoutPrefixProvider *dpp,
-        const RGWUserInfo& owner, rgw_bucket& bucket,
+        const rgw_user& owner, const rgw_bucket& bucket,
         const std::string& zonegroup_id,
         const rgw_placement_rule& placement_rule,
-        const std::string& swift_ver_location,
-        const RGWQuotaInfo * pquota_info,
-        std::map<std::string, bufferlist>& attrs,
-        RGWBucketInfo& info,
-        obj_version *pobjv,
+        const std::map<std::string, bufferlist>& attrs,
+        const std::optional<std::string>& swift_ver_location,
+        const std::optional<RGWQuotaInfo>& quota,
+        std::optional<ceph::real_time> creation_time,
         obj_version *pep_objv,
-        real_time creation_time,
-        rgw_bucket *pmaster_bucket,
-        uint32_t *pmaster_num_shards,
-        optional_yield y,
-        bool exclusive);
+        RGWBucketInfo& info,
+        optional_yield y);
 
     int next_bucket_id() { return ++max_bucket_id; };
 

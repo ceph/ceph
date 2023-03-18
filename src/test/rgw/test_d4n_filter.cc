@@ -114,43 +114,17 @@ class D4NFilterFixture : public ::testing::Test {
     }
 
     int createBucket() {
-      rgw_bucket b;
-      string zonegroup_id = "test_id";
-      rgw_placement_rule placement_rule;
-      string swift_ver_location = "test_location";
-      const RGWAccessControlPolicy policy;
-      rgw::sal::Attrs attrs;
       RGWBucketInfo info;
-      obj_version ep_objv;
-      bool bucket_exists;
-      int ret;
-      
-      CephContext* cct = get_pointer(env->cct);
-      RGWProcessEnv penv;
-      RGWEnv rgw_env;
-      req_state s(cct->get(), penv, &rgw_env, 0);
-      req_info _req_info = s.info;
+      info.bucket.name = "test_bucket";
 
-      b.name = "test_bucket";
-      placement_rule.storage_class = "test_sc";
+      testBucket = driver->get_bucket(testUser.get(), info);
 
-      ret = testUser->create_bucket(dpp, b,
-	    zonegroup_id,
-	    placement_rule,
-	    swift_ver_location,
-	    nullptr,
-	    policy,
-	    attrs,
-	    info,
-	    ep_objv,
-	    false,
-	    false,
-	    &bucket_exists,
-	    _req_info,
-	    &testBucket,
-	    null_yield);
-	
-      return ret;
+      rgw::sal::Bucket::CreateParams params;
+      params.zonegroup_id = "test_id";
+      params.placement_rule.storage_class = "test_sc";
+      params.swift_ver_location = "test_location";
+
+      return testBucket->create(dpp, params, null_yield);
     }
 
     int putObject(string name) {
