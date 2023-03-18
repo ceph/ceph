@@ -104,31 +104,6 @@ int RGWGetBucketInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 }
 
 template<>
-int RGWObjectSimplePutCR::Request::_send_request(const DoutPrefixProvider *dpp)
-{
-  RGWDataAccess::ObjectRef obj;
-
-  CephContext *cct = store->ctx();
-
-  int ret = params.bucket->get_object(params.key, &obj);
-  if (ret < 0) {
-    lderr(cct) << "ERROR: failed to get object: " << cpp_strerror(-ret) << dendl;
-    return -ret;
-  }
-
-  if (params.user_data) {
-    obj->set_user_data(*params.user_data);
-  }
-
-  ret = obj->put(params.data, params.attrs, dpp, null_yield);
-  if (ret < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: put object returned error: " << cpp_strerror(-ret) << dendl;
-  }
-
-  return 0;
-}
-
-template<>
 int RGWBucketLifecycleConfigCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
   CephContext *cct = store->ctx();
