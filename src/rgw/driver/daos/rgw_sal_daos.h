@@ -898,15 +898,6 @@ class DaosStore : public StoreDriver {
                   const rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
                   optional_yield y) override;
   virtual bool is_meta_master() override;
-  virtual int forward_request_to_master(const DoutPrefixProvider* dpp,
-                                        User* user, obj_version* objv,
-                                        bufferlist& in_data, JSONParser* jp,
-                                        req_info& info,
-                                        optional_yield y) override;
-  virtual int forward_iam_request_to_master(
-      const DoutPrefixProvider* dpp, const RGWAccessKey& key, obj_version* objv,
-      bufferlist& in_data, RGWXMLDecoder::XMLParser* parser, req_info& info,
-      optional_yield y) override;
   virtual Zone* get_zone() { return &zone; }
   virtual std::string zone_unique_id(uint64_t unique_num) override;
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;

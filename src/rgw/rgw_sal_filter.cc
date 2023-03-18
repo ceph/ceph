@@ -179,26 +179,6 @@ bool FilterDriver::is_meta_master()
   return next->is_meta_master();
 }
 
-int FilterDriver::forward_request_to_master(const DoutPrefixProvider *dpp,
-					   User* user, obj_version* objv,
-					   bufferlist& in_data,
-					   JSONParser* jp, req_info& info,
-					   optional_yield y)
-{
-  return next->forward_request_to_master(dpp, user, objv, in_data, jp, info, y);
-}
-
-int FilterDriver::forward_iam_request_to_master(const DoutPrefixProvider *dpp,
-					       const RGWAccessKey& key,
-					       obj_version* objv,
-					       bufferlist& in_data,
-					       RGWXMLDecoder::XMLParser* parser,
-					       req_info& info,
-					       optional_yield y)
-{
-  return next->forward_iam_request_to_master(dpp, key, objv, in_data, parser, info, y);
-}
-
 std::string FilterDriver::zone_unique_id(uint64_t unique_num)
 {
   return next->zone_unique_id(unique_num);
