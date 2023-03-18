@@ -628,21 +628,20 @@ public:
   bool get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool);
   bool obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
-  int create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
-		    const std::string& zonegroup_id,
-		    const rgw_placement_rule& placement_rule,
-		    const std::string& swift_ver_location,
-		    bool obj_lock_enabled,
-		    const RGWQuotaInfo * pquota_info,
-		    std::map<std::string,bufferlist>& attrs,
-		    RGWBucketInfo& bucket_info,
-		    obj_version *pobjv,
-		    obj_version *pep_objv,
-		    ceph::real_time creation_time,
-		    const rgw_bucket *master_bucket,
-		    optional_yield y,
-                    const DoutPrefixProvider *dpp,
-		    bool exclusive = true);
+  int create_bucket(const DoutPrefixProvider* dpp,
+                    optional_yield y,
+                    const rgw_bucket& bucket,
+                    const rgw_user& owner,
+                    const std::string& zonegroup_id,
+                    const rgw_placement_rule& placement_rule,
+                    const RGWZonePlacementInfo* zone_placement,
+                    const std::map<std::string, bufferlist>& attrs,
+                    bool obj_lock_enabled,
+                    const std::optional<std::string>& swift_ver_location,
+                    const std::optional<RGWQuotaInfo>& quota,
+                    std::optional<ceph::real_time> creation_time,
+                    obj_version* pep_objv,
+                    RGWBucketInfo& info);
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
 

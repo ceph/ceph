@@ -943,6 +943,12 @@ int delete_zone(const DoutPrefixProvider* dpp, optional_yield y,
                 sal::ConfigStore* cfgstore, const RGWZoneParams& info,
                 sal::ZoneWriter& writer);
 
+/// Return the zone placement corresponding to the given rule, or nullptr.
+auto find_zone_placement(const DoutPrefixProvider* dpp,
+                         const RGWZoneParams& info,
+                         const rgw_placement_rule& rule)
+    -> const RGWZonePlacementInfo*;
+
 
 /// Global state about the site configuration. Initialized once during
 /// startup and may be reinitialized by RGWRealmReloader, but is otherwise

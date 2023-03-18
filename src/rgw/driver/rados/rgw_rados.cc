@@ -2272,79 +2272,70 @@ void RGWRados::create_bucket_id(string *bucket_id)
   *bucket_id = buf;
 }
 
-int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
-                            const string& zonegroup_id,
+int RGWRados::create_bucket(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            const rgw_bucket& bucket,
+                            const rgw_user& owner,
+                            const std::string& zonegroup_id,
                             const rgw_placement_rule& placement_rule,
-                            const string& swift_ver_location,
+                            const RGWZonePlacementInfo* zone_placement,
+                            const std::map<std::string, bufferlist>& attrs,
                             bool obj_lock_enabled,
-                            const RGWQuotaInfo * pquota_info,
-			    map<std::string, bufferlist>& attrs,
-                            RGWBucketInfo& info,
-                            obj_version *pobjv,
-                            obj_version *pep_objv,
-                            real_time creation_time,
-                            const rgw_bucket* pmaster_bucket,
-			    optional_yield y,
-                            const DoutPrefixProvider *dpp,
-			    bool exclusive)
+                            const std::optional<std::string>& swift_ver_location,
+                            const std::optional<RGWQuotaInfo>& quota,
+                            std::optional<ceph::real_time> creation_time,
+                            obj_version* pep_objv,
+                            RGWBucketInfo& info)
 {
+  int ret = 0;
+
 #define MAX_CREATE_RETRIES 20 /* need to bound retries */
-  rgw_placement_rule selected_placement_rule;
-  RGWZonePlacementInfo rule_info;
-
   for (int i = 0; i < MAX_CREATE_RETRIES; i++) {
-    int ret = 0;
-    ret = svc.zone->select_bucket_placement(dpp, owner, zonegroup_id, placement_rule,
-                                            &selected_placement_rule, &rule_info, y);
-    if (ret < 0)
-      return ret;
-
-    if (!pmaster_bucket) {
-      create_bucket_id(&bucket.marker);
-      bucket.bucket_id = bucket.marker;
-    } else {
-      bucket.marker = pmaster_bucket->marker;
-      bucket.bucket_id = pmaster_bucket->bucket_id;
-    }
-
     RGWObjVersionTracker& objv_tracker = info.objv_tracker;
-
     objv_tracker.read_version.clear();
+    objv_tracker.generate_new_write_ver(cct);
 
-    if (pobjv) {
-      objv_tracker.write_version = *pobjv;
+    if (bucket.marker.empty()) {
+      create_bucket_id(&info.bucket.marker);
+      info.bucket.bucket_id = info.bucket.marker;
     } else {
-      objv_tracker.generate_new_write_ver(cct);
+      info.bucket = bucket;
     }
 
-    info.bucket = bucket;
-    info.owner = owner.user_id;
+    info.owner = owner;
     info.zonegroup = zonegroup_id;
-    info.placement_rule = selected_placement_rule;
-    info.swift_ver_location = swift_ver_location;
-    info.swift_versioning = (!swift_ver_location.empty());
+    info.placement_rule = placement_rule;
+    info.swift_versioning = swift_ver_location.has_value();
+    if (swift_ver_location) {
+      info.swift_ver_location = *swift_ver_location;
+    }
     if (obj_lock_enabled) {
       info.flags |= BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
     }
 
-    init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
-			       rule_info.index_type);
+    if (zone_placement) {
+      init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
+                                 zone_placement->index_type);
+    }
 
     info.requester_pays = false;
-    if (real_clock::is_zero(creation_time)) {
-      info.creation_time = ceph::real_clock::now();
+    if (creation_time) {
+      info.creation_time = *creation_time;
     } else {
-      info.creation_time = creation_time;
+      info.creation_time = ceph::real_clock::now();
     }
-    if (pquota_info) {
-      info.quota = *pquota_info;
-    }
-
-    int r = svc.bi->init_index(dpp, info, info.layout.current_index);
-    if (r < 0) {
-      return r;
+    if (quota) {
+      info.quota = *quota;
     }
 
+    if (zone_placement) {
+      ret = svc.bi->init_index(dpp, info, info.layout.current_index);
+      if (ret < 0) {
+        return ret;
+      }
+    }
+
+    constexpr bool exclusive = true;
     ret = put_linked_bucket_info(info, exclusive, ceph::real_time(), pep_objv, &attrs, true, dpp, y);
     if (ret == -ECANCELED) {
       ret = -EEXIST;
@@ -2352,7 +2343,7 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
     if (ret == -EEXIST) {
        /* we need to reread the info and return it, caller will have a use for it */
       RGWBucketInfo orig_info;
-      r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, NULL);
+      int r = get_bucket_info(&svc, bucket.tenant, bucket.name, orig_info, NULL, y, NULL);
       if (r < 0) {
         if (r == -ENOENT) {
           continue;
@@ -2363,10 +2354,12 @@ int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
 
       /* only remove it if it's a different bucket instance */
       if (orig_info.bucket.bucket_id != bucket.bucket_id) {
-	int r = svc.bi->clean_index(dpp, info, info.layout.current_index);
-	if (r < 0) {
-	  ldpp_dout(dpp, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
-	}
+        if (zone_placement) {
+          r = svc.bi->clean_index(dpp, info, info.layout.current_index);
+          if (r < 0) {
+            ldpp_dout(dpp, 0) << "WARNING: could not remove bucket index (r=" << r << ")" << dendl;
+          }
+        }
         r = ctl.bucket->remove_bucket_instance_info(info.bucket, info, y, dpp);
         if (r < 0) {
           ldpp_dout(dpp, 0) << "WARNING: " << __func__ << "(): failed to remove bucket instance info: bucket instance=" << info.bucket.get_key() << ": r=" << r << dendl;

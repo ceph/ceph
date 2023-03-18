@@ -58,90 +58,22 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBUser::create_bucket(const DoutPrefixProvider *dpp,
-      const rgw_bucket& b,
-      const string& zonegroup_id,
-      const rgw_placement_rule& placement_rule,
-      const string& swift_ver_location,
-      const RGWQuotaInfo * pquota_info,
-      const RGWAccessControlPolicy& policy,
-      Attrs& attrs,
-      RGWBucketInfo& info,
-      obj_version& ep_objv,
-      bool exclusive,
-      bool obj_lock_enabled,
-      bool *existed,
-      req_info& req_info,
-      std::unique_ptr<Bucket>* bucket_out,
-      optional_yield y)
+  int DBBucket::create(const DoutPrefixProvider *dpp,
+                       const CreateParams& params,
+                       optional_yield y)
   {
-    int ret;
-    bufferlist in_data;
-    RGWBucketInfo master_info;
-    rgw_bucket *pmaster_bucket = nullptr;
-    real_time creation_time;
-    std::unique_ptr<Bucket> bucket;
-    obj_version objv, *pobjv = NULL;
+    ceph_assert(owner);
+    const rgw_user& owner_id = owner->get_id();
 
-    /* If it exists, look it up; otherwise create it */
-    ret = store->load_bucket(dpp, this, b, &bucket, y);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;
+    rgw_bucket key = get_key();
+    key.marker = params.marker;
+    key.bucket_id = params.bucket_id;
 
-    if (ret != -ENOENT) {
-      *existed = true;
-    } else {
-      bucket = std::make_unique<DBBucket>(store, b, this);
-      *existed = false;
-      bucket->set_attrs(attrs);
-    }
-
-    /*
-     * XXX: If not master zone, fwd the request to master zone.
-     * For now DBStore has single zone.
-     */
-    std::string zid = zonegroup_id;
-    /* if (zid.empty()) {
-       zid = svc()->zone->get_zonegroup().get_id();
-       } */
-
-    // XXX: For now single default zone and STANDARD storage class
-    // supported.
-    rgw_placement_rule selected_placement_rule;
-    selected_placement_rule.name = "default";
-    selected_placement_rule.storage_class = "STANDARD";
-
-    if (*existed) {
-      /* XXX: Handle this when zone is implemented
-         ret = svc()->zone->select_bucket_placement(this.get_info(),
-         zid, placement_rule,
-         &selected_placement_rule, nullptr, y);
-         if (selected_placement_rule != info.placement_rule) {
-         ret = -EEXIST;
-         bucket_out->swap(bucket);
-         return ret;
-         } */
-    } else {
-
-      /* XXX: We may not need to send all these params. Cleanup the unused ones */
-      ret = store->getDB()->create_bucket(dpp, this->get_info(), bucket->get_key(),
-          zid, selected_placement_rule, swift_ver_location, pquota_info,
-          attrs, info, pobjv, &ep_objv, creation_time,
-          pmaster_bucket, nullptr, y, exclusive);
-      if (ret == -EEXIST) {
-        *existed = true;
-        ret = 0;
-      } else if (ret != 0) {
-        return ret;
-      }
-    }
-
-    bucket->set_version(ep_objv);
-    bucket->get_info() = info;
-
-    bucket_out->swap(bucket);
-
-    return ret;
+    /* XXX: We may not need to send all these params. Cleanup the unused ones */
+    return store->getDB()->create_bucket(dpp, owner_id, key,
+        params.zonegroup_id, params.placement_rule, params.attrs,
+        params.swift_ver_location, params.quota, params.creation_time,
+        &bucket_version, info, y);
   }
 
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)

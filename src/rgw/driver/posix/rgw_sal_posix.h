@@ -121,22 +121,6 @@ public:
 			   const std::string& marker, const std::string& end_marker,
 			   uint64_t max, bool need_stats, BucketList& buckets,
 			   optional_yield y) override;
-  virtual int create_bucket(const DoutPrefixProvider* dpp,
-                            const rgw_bucket& b,
-                            const std::string& zonegroup_id,
-                            const rgw_placement_rule& placement_rule,
-                            const std::string& swift_ver_location,
-                            const RGWQuotaInfo* pquota_info,
-                            const RGWAccessControlPolicy& policy,
-                            Attrs& attrs,
-                            RGWBucketInfo& info,
-                            obj_version& ep_objv,
-                            bool exclusive,
-                            bool obj_lock_enabled,
-                            bool* existed,
-                            req_info& req_info,
-                            std::unique_ptr<Bucket>* bucket,
-                            optional_yield y) override;
   virtual Attrs& get_attrs() override { return next->get_attrs(); }
   virtual void set_attrs(Attrs& _attrs) override { next->set_attrs(_attrs); }
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
@@ -197,6 +181,9 @@ public:
 				      bool keep_index_consistent,
 				      optional_yield y,
 				      const DoutPrefixProvider *dpp) override;
+  virtual int create(const DoutPrefixProvider* dpp,
+		     const CreateParams& params,
+		     optional_yield y) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
