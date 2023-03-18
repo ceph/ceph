@@ -228,7 +228,7 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
   std::unique_ptr<Bucket> bucket;
 
   // Look up the bucket. Create it if it doesn't exist.
-  ret = this->store->get_bucket(dpp, this, b, &bucket, y);
+  ret = this->store->load_bucket(dpp, this, b, &bucket, y);
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
@@ -3242,41 +3242,27 @@ std::unique_ptr<Object> MotrStore::get_object(const rgw_obj_key& k)
 }
 
 
-int MotrStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+std::unique_ptr<Bucket> MotrStore::get_bucket(User* u, const RGWBucketInfo& i)
 {
-  int ret;
-  Bucket* bp;
-
-  bp = new MotrBucket(this, b, u);
-  ret = bp->load_bucket(dpp, y);
-  if (ret < 0) {
-    delete bp;
-    return ret;
-  }
-
-  bucket->reset(bp);
-  return 0;
-}
-
-int MotrStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
-{
-  Bucket* bp;
-
-  bp = new MotrBucket(this, i, u);
   /* Don't need to fetch the bucket info, use the provided one */
-
-  bucket->reset(bp);
-  return 0;
+  return std::make_unique<MotrBucket>(this, i, u);
 }
 
-int MotrStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int MotrStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y)
+{
+  *bucket = std::make_unique<MotrBucket>(this, b, u);
+  return (*bucket)->load_bucket(dpp, y);
+}
+
+int MotrStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   rgw_bucket b;
 
   b.tenant = tenant;
   b.name = name;
 
-  return get_bucket(dpp, u, b, bucket, y);
+  return load_bucket(dpp, u, b, bucket, y);
 }
 
 bool MotrStore::is_meta_master()

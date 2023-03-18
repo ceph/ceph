@@ -393,41 +393,26 @@ std::unique_ptr<Object> POSIXDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<POSIXObject>(this, k);
 }
 
-int POSIXDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  int ret;
-  Bucket* bp;
-
-  bp = new POSIXBucket(this, root_fd, b, u);
-  ret = bp->load_bucket(dpp, y);
-  if (ret < 0) {
-    delete bp;
-    return ret;
-  }
-
-  bucket->reset(bp);
-  return 0;
+  *bucket = std::make_unique<POSIXBucket>(this, root_fd, b, u);
+  return (*bucket)->load_bucket(dpp, y);
 }
 
-int POSIXDriver::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
+std::unique_ptr<Bucket> POSIXDriver::get_bucket(User* u, const RGWBucketInfo& i)
 {
-  Bucket* bp;
-
-  bp = new POSIXBucket(this, root_fd, i, u);
   /* Don't need to fetch the bucket info, use the provided one */
-
-  bucket->reset(bp);
-  return 0;
+  return std::make_unique<POSIXBucket>(this, root_fd, i, u);
 }
 
-int POSIXDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   rgw_bucket b;
 
   b.tenant = tenant;
   b.name = name;
 
-  return get_bucket(dpp, u, b, bucket, y);
+  return load_bucket(dpp, u, b, bucket, y);
 }
 
 std::string POSIXDriver::zone_unique_trans_id(const uint64_t unique_num)
@@ -612,7 +597,7 @@ int POSIXUser::create_bucket(const DoutPrefixProvider* dpp,
   {
     std::unique_ptr<rgw::sal::Bucket> bucket;
 
-    int ret = driver->get_bucket(dpp, this, b, &bucket, y);
+    int ret = driver->load_bucket(dpp, this, b, &bucket, y);
     if (ret >= 0) {
       *existed = true;
       // Bucket exists.  Check owner comparison
@@ -730,7 +715,7 @@ int POSIXDriver::mint_listing_entry(const std::string &bname,
     POSIXObject *pobj;
     int ret;
 
-    ret = get_bucket(nullptr, nullptr, std::string(), bname, &b, null_yield);
+    ret = load_bucket(nullptr, nullptr, std::string(), bname, &b, null_yield);
     if (ret < 0)
       return ret;
 

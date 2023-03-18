@@ -161,49 +161,27 @@ std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<FilterObject>(std::move(o));
 }
 
-int FilterDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+std::unique_ptr<Bucket> FilterDriver::get_bucket(User* u, const RGWBucketInfo& i)
 {
-  std::unique_ptr<Bucket> nb;
-  int ret;
-  User* nu = nextUser(u);
-
-  ret = next->get_bucket(dpp, nu, b, &nb, y);
-  if (ret != 0)
-    return ret;
-
-  Bucket* fb = new FilterBucket(std::move(nb), u);
-  bucket->reset(fb);
-  return 0;
+  return std::make_unique<FilterBucket>(next->get_bucket(nextUser(u), i), u);
 }
 
-int FilterDriver::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
+int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   std::unique_ptr<Bucket> nb;
-  int ret;
-  User* nu = nextUser(u);
-
-  ret = next->get_bucket(nu, i, &nb);
-  if (ret != 0)
-    return ret;
-
-  Bucket* fb = new FilterBucket(std::move(nb), u);
-  bucket->reset(fb);
-  return 0;
+  const int ret = next->load_bucket(dpp, nextUser(u), b, &nb, y);
+  *bucket = std::make_unique<FilterBucket>(std::move(nb), u);
+  return ret;
 }
 
-int FilterDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, User* u,
+                              const std::string& tenant, const std::string& name,
+                              std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   std::unique_ptr<Bucket> nb;
-  int ret;
-  User* nu = nextUser(u);
-
-  ret = next->get_bucket(dpp, nu, tenant, name, &nb, y);
-  if (ret != 0)
-    return ret;
-
-  Bucket* fb = new FilterBucket(std::move(nb), u);
-  bucket->reset(fb);
-  return 0;
+  const int ret = next->load_bucket(dpp, nextUser(u), tenant, name, &nb, y);
+  *bucket = std::make_unique<FilterBucket>(std::move(nb), u);
+  return ret;
 }
 
 bool FilterDriver::is_meta_master()

@@ -146,7 +146,7 @@ int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
   obj_version objv,* pobjv = NULL;
 
   /* If it exists, look it up; otherwise create it */
-  ret = store->get_bucket(dpp, this, b, &bucket, y);
+  ret = store->load_bucket(dpp, this, b, &bucket, y);
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
@@ -1055,41 +1055,29 @@ std::unique_ptr<Object> RadosStore::get_object(const rgw_obj_key& k)
   return std::make_unique<RadosObject>(this, k);
 }
 
-int RadosStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+std::unique_ptr<Bucket> RadosStore::get_bucket(User* u, const RGWBucketInfo& i)
 {
-  int ret;
-  Bucket* bp;
-
-  bp = new RadosBucket(this, b, u);
-  ret = bp->load_bucket(dpp, y);
-  if (ret < 0) {
-    delete bp;
-    return ret;
-  }
-
-  bucket->reset(bp);
-  return 0;
-}
-
-int RadosStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
-{
-  Bucket* bp;
-
-  bp = new RadosBucket(this, i, u);
   /* Don't need to fetch the bucket info, use the provided one */
-
-  bucket->reset(bp);
-  return 0;
+  return std::make_unique<RadosBucket>(this, i, u);
 }
 
-int RadosStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int RadosStore::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
+                            std::unique_ptr<Bucket>* bucket, optional_yield y)
+{
+  *bucket = std::make_unique<RadosBucket>(this, b, u);
+  return (*bucket)->load_bucket(dpp, y);
+}
+
+int RadosStore::load_bucket(const DoutPrefixProvider* dpp, User* u,
+                            const std::string& tenant, const std::string& name,
+                            std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   rgw_bucket b;
 
   b.tenant = tenant;
   b.name = name;
 
-  return get_bucket(dpp, u, b, bucket, y);
+  return load_bucket(dpp, u, b, bucket, y);
 }
 
 bool RadosStore::is_meta_master()
