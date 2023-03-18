@@ -965,6 +965,10 @@ class SiteConfig {
   const RGWZoneGroup& get_zonegroup() const { return *zonegroup; }
   /// Return the public zone configuration.
   const RGWZone& get_zone() const { return *zone; }
+  /// Return true if the local zone can write metadata.
+  bool is_meta_master() const {
+    return zonegroup->is_master && zonegroup->master_zone == zone->id;
+  }
 
   /// Load or reload the multisite configuration from storage. This is not
   /// thread-safe, so requires careful coordination with the RGWRealmReloader.

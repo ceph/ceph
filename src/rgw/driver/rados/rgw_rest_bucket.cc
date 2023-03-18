@@ -3,6 +3,7 @@
 
 #include "rgw_op.h"
 #include "driver/rados/rgw_bucket.h"
+#include "rgw_process_env.h"
 #include "rgw_rest_bucket.h"
 #include "rgw_sal.h"
 
@@ -150,8 +151,8 @@ void RGWOp_Bucket_Link::execute(optional_yield y)
   op_state.set_bucket_id(bucket_id);
   op_state.set_new_bucket_name(new_bucket_name);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -188,8 +189,8 @@ void RGWOp_Bucket_Unlink::execute(optional_yield y)
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -220,8 +221,8 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
   RESTArgs::get_bool(s, "purge-objects", false, &delete_children);
 
-  bufferlist data;
-  op_ret = driver->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
     if (op_ret == -ENOENT) {
