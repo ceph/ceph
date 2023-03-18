@@ -102,7 +102,7 @@ map<string, bufferlist>* no_change_attrs() {
 
 int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                        const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, const map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs) {

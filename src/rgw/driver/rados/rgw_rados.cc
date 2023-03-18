@@ -8587,7 +8587,7 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 }
 
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
-                              real_time mtime, map<string, bufferlist> *pattrs,
+                              real_time mtime, const map<string, bufferlist> *pattrs,
                               const DoutPrefixProvider *dpp, optional_yield y)
 {
   return ctl.bucket->store_bucket_instance_info(info.bucket, info, y, dpp,
@@ -8598,7 +8598,7 @@ int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
 }
 
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,
-                                     map<string, bufferlist> *pattrs, bool create_entry_point,
+                                     const map<string, bufferlist> *pattrs, bool create_entry_point,
                                      const DoutPrefixProvider *dpp, optional_yield y)
 {
   bool create_head = !info.has_instance_obj || create_entry_point;

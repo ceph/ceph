@@ -108,13 +108,13 @@ public:
         return *this;
       }
 
-      WOp& set_attrs(std::map<std::string, bufferlist>& _attrs) {
+      WOp& set_attrs(const std::map<std::string, bufferlist>& _attrs) {
         attrs = _attrs;
         return *this;
       }
 
       WOp& set_attrs(std::map<std::string, bufferlist>&& _attrs) {
-        attrs = _attrs;
+        attrs = std::move(_attrs);
         return *this;
       }
 
