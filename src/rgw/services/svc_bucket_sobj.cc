@@ -241,7 +241,7 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                     RGWBucketEntryPoint& info,
                                                     bool exclusive,
                                                     real_time mtime,
-                                                    map<string, bufferlist> *pattrs,
+                                                    const map<string, bufferlist> *pattrs,
                                                     RGWObjVersionTracker *objv_tracker,
                                                     optional_yield y,
                                                     const DoutPrefixProvider *dpp)
@@ -492,7 +492,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                   std::optional<RGWBucketInfo *> orig_info,
                                                   bool exclusive,
                                                   real_time mtime,
-                                                  map<string, bufferlist> *pattrs,
+                                                  const map<string, bufferlist> *pattrs,
                                                   optional_yield y,
                                                   const DoutPrefixProvider *dpp)
 {

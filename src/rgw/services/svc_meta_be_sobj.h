@@ -70,15 +70,15 @@ struct RGWSI_MBSObj_GetParams : public RGWSI_MetaBackend::GetParams {
 
 struct RGWSI_MBSObj_PutParams : public RGWSI_MetaBackend::PutParams {
   bufferlist bl;
-  std::map<std::string, bufferlist> *pattrs{nullptr};
+  const std::map<std::string, bufferlist> *pattrs{nullptr};
   bool exclusive{false};
 
   RGWSI_MBSObj_PutParams() {}
-  RGWSI_MBSObj_PutParams(std::map<std::string, bufferlist> *_pattrs,
+  RGWSI_MBSObj_PutParams(const std::map<std::string, bufferlist> *_pattrs,
                          const ceph::real_time& _mtime) : RGWSI_MetaBackend::PutParams(_mtime),
                                                           pattrs(_pattrs) {}
   RGWSI_MBSObj_PutParams(bufferlist& _bl,
-                         std::map<std::string, bufferlist> *_pattrs,
+                         const std::map<std::string, bufferlist> *_pattrs,
                          const ceph::real_time& _mtime,
                          bool _exclusive) : RGWSI_MetaBackend::PutParams(_mtime),
                                             bl(_bl),
