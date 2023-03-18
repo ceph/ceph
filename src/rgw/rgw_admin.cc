@@ -1192,7 +1192,7 @@ public:
 static int init_bucket(rgw::sal::User* user, const rgw_bucket& b,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  return driver->get_bucket(dpp(), user, b, bucket, null_yield);
+  return driver->load_bucket(dpp(), user, b, bucket, null_yield);
 }
 
 static int init_bucket(rgw::sal::User* user,
@@ -1407,7 +1407,7 @@ int set_bucket_quota(rgw::sal::Driver* driver, OPT opt_cmd,
                      bool have_max_size, bool have_max_objects)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  int r = driver->load_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1431,7 +1431,7 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
                      bool have_max_read_bytes, bool have_max_write_bytes)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  int r = driver->load_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1534,7 +1534,7 @@ int show_bucket_ratelimit(rgw::sal::Driver* driver, const string& tenant_name,
                           const string& bucket_name, Formatter *formatter)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->get_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
+  int r = driver->load_bucket(dpp(), nullptr, tenant_name, bucket_name, &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;

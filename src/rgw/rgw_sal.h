@@ -290,11 +290,15 @@ class Driver {
      * there is a Bucket, otherwise use the get_object() in the Bucket class. */
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) = 0;
     /** Get a Bucket by info.  Does not query the driver, just uses the give bucket info. */
-    virtual int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket) = 0;
-    /** Lookup a Bucket by key.  Queries driver for bucket info. */
-    virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
-    /** Lookup a Bucket by name.  Queries driver for bucket info. */
-    virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
+    virtual std::unique_ptr<Bucket> get_bucket(User* u, const RGWBucketInfo& i) = 0;
+    /** Load a Bucket by key.  Queries driver for bucket info.  On -ENOENT, the
+     * bucket must still be allocated to support bucket->create(). */
+    virtual int load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
+                            std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
+    /** Load a Bucket by name.  Queries driver for bucket info. */
+    virtual int load_bucket(const DoutPrefixProvider* dpp, User* u,
+                            const std::string& tenant, const std::string& name,
+                            std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
     /** For multisite, forward an OP to the zone's master */
