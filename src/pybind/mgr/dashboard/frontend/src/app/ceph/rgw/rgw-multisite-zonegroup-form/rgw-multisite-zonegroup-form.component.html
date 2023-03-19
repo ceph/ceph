@@ -61,6 +61,12 @@
           <label class="form-check-label"
                  for="master_zonegroup"
                  i18n>Master</label>
+          <span *ngIf="!isMaster">
+          <cd-helper i18n>RGW multi-site configuration must have a master zonegroup. Setting
+            the first zonegroup created as master, to avoid any errors on udating the period.
+            Can be modified later by editing a zonegroup.
+          </cd-helper>
+          </span>
         </div>
         </div>
       </div>

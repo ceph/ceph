@@ -30,6 +30,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   realmList: RgwRealm[] = [];
   zonegroupList: RgwZonegroup[] = [];
   zonegroupNames: string[];
+  isMaster = false;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -91,6 +92,15 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       this.multisiteInfo[1] !== undefined && this.multisiteInfo[1].hasOwnProperty('zonegroups')
         ? this.multisiteInfo[1]['zonegroups']
         : [];
+    this.zonegroupList.forEach((zgp: any) => {
+      if (zgp.is_master === true && !_.isEmpty(zgp.realm_id)) {
+        this.isMaster = true;
+      }
+    });
+    if (!this.isMaster) {
+      this.multisiteZonegroupForm.get('master_zonegroup').setValue(true);
+      this.multisiteZonegroupForm.get('master_zonegroup').disable();
+    }
     this.zonegroupNames = this.zonegroupList.map((zonegroup) => {
       return zonegroup['name'];
     });
