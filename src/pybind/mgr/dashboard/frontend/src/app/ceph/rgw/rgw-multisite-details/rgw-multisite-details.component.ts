@@ -7,6 +7,7 @@ import {
   TREE_ACTIONS
 } from '@circlon/angular-tree-component';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import _ from 'lodash';
 import { forkJoin, Subscription } from 'rxjs';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
@@ -35,7 +36,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   @ViewChild('tree') tree: TreeComponent;
 
   messages = {
-    noDefaultRealm: $localize`Please create a default realm first to enable this feature`
+    noDefaultRealm: $localize`Please create a default realm first to enable this feature`,
+    noMasterZone: $localize`Please create a master zone for each zonegroups to enable this feature`
   };
 
   icons = Icons;
@@ -285,7 +287,17 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     if (this.defaultRealmId === '') {
       return this.messages.noDefaultRealm;
     } else {
-      return false;
+      let isMasterZone = true;
+      this.zonegroups.forEach((zgp: any) => {
+        if (_.isEmpty(zgp.master_zone)) {
+          isMasterZone = false;
+        }
+      });
+      if (!isMasterZone) {
+        return this.messages.noMasterZone;
+      } else {
+        return false;
+      }
     }
   }
 }

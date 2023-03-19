@@ -16,7 +16,8 @@
           <select class="form-select"
                   id="selectedZonegroup"
                   formControlName="selectedZonegroup"
-                  name="selectedZonegroup">
+                  name="selectedZonegroup"
+                  (change)="onZoneGroupChange($event.target.value)">
             <option *ngFor="let zonegroupName of zonegroupList"
                     [value]="zonegroupName.name"
                     [selected]="zonegroupName.name === multisiteZoneForm.getValue('selectedZonegroup')">
