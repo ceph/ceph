@@ -4,6 +4,7 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
+import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -38,6 +39,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
     public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public rgwZoneService: RgwZoneService,
+    public rgwZoneGroupService: RgwZonegroupService,
     public notificationService: NotificationService,
     public rgwUserService: RgwUserService
   ) {
@@ -88,6 +90,17 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
     });
   }
 
+  onZoneGroupChange(zonegroupName: string) {
+    let zg = new RgwZonegroup();
+    zg.name = zonegroupName;
+    this.rgwZoneGroupService.get(zg).subscribe((zonegroup: RgwZonegroup) => {
+      if (_.isEmpty(zonegroup.master_zone)) {
+        this.multisiteZoneForm.get('master_zone').setValue(true);
+        this.multisiteZoneForm.get('master_zone').disable();
+      }
+    });
+  }
+
   ngOnInit(): void {
     this.zonegroupList =
       this.multisiteInfo[1] !== undefined && this.multisiteInfo[1].hasOwnProperty('zonegroups')
@@ -104,6 +117,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.multisiteZoneForm
         .get('selectedZonegroup')
         .setValue(this.defaultsInfo['defaultZonegroupName']);
+      this.onZoneGroupChange(this.defaultsInfo['defaultZonegroupName']);
     }
     this.rgwUserService.list().subscribe((users: any) => {
       this.users = users.filter((user: any) => user.keys.length !== 0);

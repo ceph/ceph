@@ -657,7 +657,7 @@ class RgwClient(RestClient):
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_update_period_cmd)
             if exit_code > 0:
                 raise DashboardException(e=err, msg='Unable to update period',
-                                         http_status_code=500, component='rgw')
+                                         http_status_code=400, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
@@ -684,18 +684,18 @@ class RgwClient(RestClient):
             cmd_edit_realm_options = ['--rgw-realm', realm_name, '--realm-new-name', new_realm_name]
             rgw_realm_edit_cmd += cmd_edit_realm_options
             try:
-                exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_edit_cmd)
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
                 if exit_code > 0:
                     raise DashboardException(e=err, msg='Unable to edit realm',
                                              http_status_code=500, component='rgw')
-            except ValueError:
-                pass
-
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
             if str_to_bool(default):
                 rgw_realm_edit_cmd = ['realm', 'default']
                 cmd_edit_realm_options = ['--rgw-realm', new_realm_name]
+                rgw_realm_edit_cmd += cmd_edit_realm_options
                 try:
-                    exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_edit_cmd)
+                    exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
                     if exit_code > 0:
                         raise DashboardException(msg='Unable to set {} as default realm'.format(new_realm_name),  # noqa E501  #pylint: disable=line-too-long
                                                  http_status_code=500, component='rgw')
@@ -722,9 +722,9 @@ class RgwClient(RestClient):
             cmd_create_zonegroup_options.append(endpoint)
         rgw_zonegroup_create_cmd += cmd_create_zonegroup_options
         try:
-            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_create_cmd)
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_zonegroup_create_cmd)
             if exit_code > 0:
-                raise DashboardException('Unable to get realm info',
+                raise DashboardException(e=err, msg='Unable to get realm info',
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
@@ -800,12 +800,13 @@ class RgwClient(RestClient):
             cmd_create_zone_options.append(secret_key)
         rgw_zone_create_cmd += cmd_create_zone_options
         try:
-            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_create_cmd)
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_zone_create_cmd)
             if exit_code > 0:
-                raise DashboardException(msg='Unable to create zone',
+                raise DashboardException(e=err, msg='Unable to create zone',
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+
         self.update_period()
         return out
 
