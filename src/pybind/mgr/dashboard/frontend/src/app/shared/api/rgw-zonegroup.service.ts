@@ -54,6 +54,8 @@ export class RgwZonegroupService {
     nodes['parent'] = realm ? realm.name : '';
     nodes['is_default'] = zonegroup.id === defaultZonegroupId ? true : false;
     nodes['type'] = 'zonegroup';
+    nodes['endpoints'] = zonegroup.endpoints;
+    nodes['master_zone'] = zonegroup.master_zone;
     return nodes;
   }
 }
