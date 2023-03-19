@@ -789,12 +789,21 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     [this, &os, &txn, &delta_stats, &osd_op_params]
     (auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
-      // no-op: The resolved oid returned the head object.
+      // no-op: The resolved oid returned the head object
       logger().debug("PGBackend::rollback: loaded head_obc: {}"
                      " do nothing",
                      resolved_obc->obs.oi.soid);
       return rollback_iertr::now();
     }
+    /* TODO: https://tracker.ceph.com/issues/59114 This implementation will not
+     * behave correctly for a rados operation consisting of a mutation followed
+     * by a rollback to a snapshot since the last mutation of the object.
+     * The correct behavior would be for the rollback to undo the mutation
+     * earlier in the operation by resolving to the clone created at the start
+     * of the operation (see resolve_oid).
+     * Instead, it will select HEAD leaving that mutation intact since the SnapSet won't
+     * yet contain that clone. This behavior exists in classic as well.
+     */
     logger().debug("PGBackend::rollback: loaded clone_obc: {}",
                    resolved_obc->obs.oi.soid);
     // 1) Delete current head
