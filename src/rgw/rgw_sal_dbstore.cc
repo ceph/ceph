@@ -311,11 +311,6 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::update_container_stats(const DoutPrefixProvider *dpp, optional_yield y)
-  {
-    return 0;
-  }
-
   int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp, optional_yield y)
   {
     return 0;

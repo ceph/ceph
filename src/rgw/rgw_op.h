@@ -910,23 +910,21 @@ protected:
   std::string max_keys;
   std::string delimiter;
   std::string encoding_type;
-  bool list_versions;
-  int max;
+  bool list_versions{false};
+  int max{0};
   std::vector<rgw_bucket_dir_entry> objs;
   std::map<std::string, bool> common_prefixes;
+  std::optional<RGWStorageStats> stats; // initialized if need_container_stats()
 
-  int default_max;
-  bool is_truncated;
-  bool allow_unordered;
+  int default_max{0};
+  bool is_truncated{false};
+  bool allow_unordered{false};
 
-  int shard_id;
+  int shard_id{-1};
 
   int parse_max_keys();
 
 public:
-  RGWListBucket() : list_versions(false), max(0),
-                    default_max(0), is_truncated(false),
-		    allow_unordered(false), shard_id(-1) {}
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1063,6 +1061,7 @@ public:
 class RGWStatBucket : public RGWOp {
 protected:
   std::unique_ptr<rgw::sal::Bucket> bucket;
+  RGWStorageStats stats;
 
 public:
   int verify_permission(optional_yield y) override;

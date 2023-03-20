@@ -8602,48 +8602,6 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
   return 0;
 }
 
-int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m, const DoutPrefixProvider *dpp, optional_yield y)
-{
-  map<string, RGWBucketEnt>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWBucketEnt& ent = iter->second;
-    rgw_bucket& bucket = ent.bucket;
-    ent.count = 0;
-    ent.size = 0;
-    ent.size_rounded = 0;
-
-    vector<rgw_bucket_dir_header> headers;
-
-    RGWBucketInfo bucket_info;
-    int ret = get_bucket_instance_info(bucket, bucket_info, NULL, NULL, y, dpp);
-    if (ret < 0) {
-      return ret;
-    }
-
-    int r = cls_bucket_head(dpp, bucket_info, bucket_info.layout.current_index, RGW_NO_SHARD, headers);
-    if (r < 0)
-      return r;
-
-    auto hiter = headers.begin();
-    for (; hiter != headers.end(); ++hiter) {
-      RGWObjCategory category = main_category;
-      auto iter = (hiter->stats).find(category);
-      if (iter != hiter->stats.end()) {
-        struct rgw_bucket_category_stats& stats = iter->second;
-        ent.count += stats.num_entries;
-        ent.size += stats.total_size;
-        ent.size_rounded += stats.total_size_rounded;
-      }
-    }
-
-    // fill in placement_rule from the bucket instance for use in swift's
-    // per-storage policy statistics
-    ent.placement_rule = std::move(bucket_info.placement_rule);
-  }
-
-  return m.size();
-}
-
 int RGWRados::append_async(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, size_t size, bufferlist& bl)
 {
   rgw_rados_ref ref;
