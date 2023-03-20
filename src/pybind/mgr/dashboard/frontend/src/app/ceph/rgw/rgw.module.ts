@@ -34,6 +34,8 @@ import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-m
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
 import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.component';
+import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
+import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 
 @NgModule({
   imports: [
@@ -77,7 +79,9 @@ import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.compon
     RgwMultisiteDetailsComponent,
     RgwMultisiteRealmFormComponent,
     RgwMultisiteZonegroupFormComponent,
-    RgwMultisiteZoneFormComponent
+    RgwMultisiteZoneFormComponent,
+    RgwMultisiteZoneDeletionFormComponent,
+    RgwMultisiteZonegroupDeletionFormComponent
   ]
 })
 export class RgwModule {}
