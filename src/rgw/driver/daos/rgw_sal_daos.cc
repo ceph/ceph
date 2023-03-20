@@ -509,10 +509,6 @@ int DaosBucket::sync_user_stats(const DoutPrefixProvider* dpp,
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::update_container_stats(const DoutPrefixProvider* dpp) {
-  return DAOS_NOT_IMPLEMENTED_LOG(dpp);
-}
-
 int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }

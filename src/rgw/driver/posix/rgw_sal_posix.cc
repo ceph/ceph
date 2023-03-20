@@ -1049,7 +1049,33 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return 0;
+  auto& main = stats[RGWObjCategory::Main];
+
+  // TODO: bucket stats shouldn't have to list all objects
+  return for_each(dpp, [this, dpp, &main] (const char* name) {
+    if (name[0] == '.') {
+      /* Skip dotfiles */
+      return 0;
+    }
+
+    struct statx lstx;
+    int ret = statx(dir_fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &lstx);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+
+    if (S_ISREG(lstx.stx_mode) || S_ISDIR(lstx.stx_mode)) {
+      main.num_objects++;
+      main.size += lstx.stx_size;
+      main.size_rounded += lstx.stx_size;
+      main.size_utilized += lstx.stx_size;
+    }
+
+    return 0;
+  });
 }
 
 int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
@@ -1061,49 +1087,6 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
 
 int POSIXBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
 {
-  return 0;
-}
-
-int POSIXBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
-{
-  /* Force re-stat */
-  stat_done = false;
-  int ret = stat(dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  bucket_statx_save(stx, ent, mtime);
-  info.creation_time = ent.creation_time;
-  ent.count = 0;
-  ent.size = 0;
-
-  // TODO dang: store size/count in attributes
-  ret = for_each(dpp, [this, &dpp](const char* name) {
-    int ret;
-    struct statx lstx;
-
-    if (name[0] == '.') {
-      /* Skip dotfiles */
-      return 0;
-    }
-
-    ret = statx(dir_fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &lstx);
-    if (ret < 0) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
-	<< cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-
-    if (S_ISREG(lstx.stx_mode) || S_ISDIR(lstx.stx_mode)) {
-      ent.count++;
-      ent.size += lstx.stx_size;
-    }
-
-    return 0;
-  });
-
   return 0;
 }
 
@@ -1199,14 +1182,9 @@ int POSIXBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uin
 
 int POSIXBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
 {
-  int ret = update_container_stats(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-
   *pmtime = mtime;
 
-  ret = open(dpp);
+  int ret = open(dpp);
   if (ret < 0) {
     return ret;
   }

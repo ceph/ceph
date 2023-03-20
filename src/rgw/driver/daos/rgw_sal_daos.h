@@ -314,7 +314,6 @@ class DaosBucket : public StoreBucket {
                                RGWGetBucketStats_CB* ctx) override;
   virtual int sync_user_stats(const DoutPrefixProvider* dpp,
                               optional_yield y) override;
-  virtual int update_container_stats(const DoutPrefixProvider* dpp) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
   virtual int chown(const DoutPrefixProvider* dpp, User& new_user,
                     optional_yield y) override;

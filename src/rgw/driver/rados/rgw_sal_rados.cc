@@ -690,34 +690,6 @@ int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y
   return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
 }
 
-int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
-{
-  int ret;
-  map<std::string, RGWBucketEnt> m;
-
-  m[info.bucket.name] = ent;
-  ret = store->getRados()->update_containers_stats(m, dpp, y);
-  if (!ret)
-    return -EEXIST;
-  if (ret < 0)
-    return ret;
-
-  map<std::string, RGWBucketEnt>::iterator iter = m.find(info.bucket.name);
-  if (iter == m.end())
-    return -EINVAL;
-
-  ent.count = iter->second.count;
-  ent.size = iter->second.size;
-  ent.size_rounded = iter->second.size_rounded;
-  ent.creation_time = iter->second.creation_time;
-  ent.placement_rule = std::move(iter->second.placement_rule);
-
-  info.creation_time = ent.creation_time;
-  info.placement_rule = ent.placement_rule;
-
-  return 0;
-}
-
 int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
 {
       return store->getRados()->check_bucket_shards(info, info.bucket, get_count(), dpp, y);

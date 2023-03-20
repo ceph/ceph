@@ -711,11 +711,6 @@ int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield 
   return next->sync_user_stats(dpp, y);
 }
 
-int FilterBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
-{
-  return next->update_container_stats(dpp, y);
-}
-
 int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return next->check_bucket_shards(dpp, y);

@@ -353,6 +353,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params(optional_yield y)
 
 static void dump_container_metadata(req_state *,
                                     const rgw::sal::Bucket*,
+                                    const std::optional<RGWStorageStats>& stats,
                                     const RGWQuotaInfo&,
                                     const RGWBucketWebsiteConf&);
 
@@ -362,7 +363,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, s->bucket.get(), quota.bucket_quota,
+  dump_container_metadata(s, s->bucket.get(), stats, quota.bucket_quota,
                           s->bucket->get_info().website_conf);
 
   s->formatter->open_array_section_with_attrs("container",
@@ -463,15 +464,18 @@ next:
 
 static void dump_container_metadata(req_state *s,
                                     const rgw::sal::Bucket* bucket,
+                                    const std::optional<RGWStorageStats>& stats,
                                     const RGWQuotaInfo& quota,
                                     const RGWBucketWebsiteConf& ws_conf)
 {
   /* Adding X-Timestamp to keep align with Swift API */
   dump_header(s, "X-Timestamp", utime_t(s->bucket->get_info().creation_time));
 
-  dump_header(s, "X-Container-Object-Count", bucket->get_count());
-  dump_header(s, "X-Container-Bytes-Used", bucket->get_size());
-  dump_header(s, "X-Container-Bytes-Used-Actual", bucket->get_size_rounded());
+  if (stats) {
+    dump_header(s, "X-Container-Object-Count", stats->num_objects);
+    dump_header(s, "X-Container-Bytes-Used", stats->size);
+    dump_header(s, "X-Container-Bytes-Used-Actual", stats->size_rounded);
+  }
 
   if (rgw::sal::Object::empty(s->object.get())) {
     auto swift_policy = \
@@ -586,7 +590,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket.get(), quota.bucket_quota,
+    dump_container_metadata(s, bucket.get(), stats, quota.bucket_quota,
                             s->bucket->get_info().website_conf);
   }
 
@@ -2509,7 +2513,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
       dump_errno(s);
-      dump_container_metadata(s, s->bucket.get(), quota.bucket_quota,
+      dump_container_metadata(s, s->bucket.get(), stats, quota.bucket_quota,
                               s->bucket->get_info().website_conf);
       end_header(s, this, "text/html");
       if (op_ret < 0) {

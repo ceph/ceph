@@ -23,6 +23,7 @@
 #include "rgw_datalog_notify.h"
 #include "include/random.h"
 
+struct RGWBucketEnt;
 class RGWRESTMgr;
 class RGWAccessListFilter;
 class RGWLC;
@@ -676,8 +677,6 @@ class Bucket {
 				 int shard_id, RGWGetBucketStats_CB* ctx) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-    /** Refresh the metadata stats (size, count, and so on) from the backing store */
-    virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not

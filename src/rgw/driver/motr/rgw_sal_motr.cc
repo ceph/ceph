@@ -830,11 +830,6 @@ int MotrBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-int MotrBucket::update_container_stats(const DoutPrefixProvider *dpp)
-{
-  return 0;
-}
-
 int MotrBucket::check_bucket_shards(const DoutPrefixProvider *dpp)
 {
   return 0;
