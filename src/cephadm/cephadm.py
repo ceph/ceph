@@ -6556,6 +6556,29 @@ def command_list_networks(ctx):
 ##################################
 
 
+def command_sleep_90_seconds(ctx):
+    # type: (CephadmContext) -> None
+    time.sleep(90)
+
+##################################
+
+
+def command_sleep_90_seconds_error(ctx):
+    # type: (CephadmContext) -> None
+    time.sleep(90)
+    raise Exception('Slept 90 seconds, now raising an exception')
+
+#################################
+
+
+def command_sleep_90_seconds_forever(ctx):
+    # type: (CephadmContext) -> None
+    while True:
+        time.sleep(90)
+
+#################################
+
+
 def command_ls(ctx):
     # type: (CephadmContext) -> None
     ls = list_daemons(ctx, detail=not ctx.no_detail,
@@ -9347,6 +9370,18 @@ def _get_parser():
         '--legacy-dir',
         default='/',
         help='base directory for legacy daemon data')
+
+    parser_sleep_90 = subparsers.add_parser(
+        'sleep-90-seconds', help='sleep for 90 seconds then return')
+    parser_sleep_90.set_defaults(func=command_sleep_90_seconds)
+
+    parser_sleep_90_error = subparsers.add_parser(
+        'sleep-90-seconds-error', help='sleep for 90 seconds then raise Exception')
+    parser_sleep_90_error.set_defaults(func=command_sleep_90_seconds_error)
+
+    parser_sleep_forever = subparsers.add_parser(
+        'sleep-90-seconds-forever', help='sleep for 90 seconds on loop forever')
+    parser_sleep_forever.set_defaults(func=command_sleep_90_seconds_forever)
 
     parser_list_networks = subparsers.add_parser(
         'list-networks', help='list IP networks')

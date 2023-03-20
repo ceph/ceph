@@ -272,6 +272,24 @@ class CephadmServe:
                     if r:
                         failures.append(r)
 
+                self.log.debug(f'sleep 90 seconds return on {host}')
+                r = self._sleep_90_seconds_return(host)
+                self.log.error(f'sleep 90 seconds return returned: {r}')
+                if r:
+                    failures.append(r)
+
+                self.log.debug(f'sleep 90 seconds error on {host}')
+                r = self._sleep_90_seconds_error(host)
+                self.log.error(f'sleep 90 seconds error returned: {r}')
+                if r:
+                    failures.append(r)
+
+                self.log.debug(f'sleep 90 seconds forever on {host}')
+                r = self._sleep_90_seconds_forever(host)
+                self.log.error(f'sleep 90 seconds forever returned: {r}')
+                if r:
+                    failures.append(r)
+
                 self.mgr.cache.metadata_up_to_date[host] = True
             elif not self.mgr.cache.get_daemons_by_type('agent', host=host):
                 if self.mgr.cache.host_needs_daemon_refresh(host):
@@ -363,6 +381,42 @@ class CephadmServe:
 
         self.mgr.cache.update_host_facts(host, val)
 
+        return None
+
+    def _sleep_90_seconds_return(self, host: str) -> Optional[str]:
+        # the command this calls will sleep for 90 seconds. Passing an explicit
+        # 60 second timeout here to force a timeout to occur
+        try:
+            _ = self.run_cephadm_with_timeout(use_json=False, cmd_name='sleep-90-seconds', hostname=host, timeout=60,
+                                              args=(host, 'mon', 'sleep-90-seconds', []), kwargs={'no_fsid': True})
+        except OrchestratorError as e:
+            self.log.error(f'sleep 90 seconds return received OrchestratorError: {str(e)}')
+            return str(e)
+        self.log.error('sleep 90 seconds return returning with no error???')
+        return None
+
+    def _sleep_90_seconds_error(self, host: str) -> Optional[str]:
+        # the command this calls will sleep for 90 seconds then raise an Exception.
+        # Passing an explicit 60 second timeout here to force a timeout to occur before the exception
+        try:
+            _ = self.run_cephadm_with_timeout(use_json=False, cmd_name='sleep-90-seconds-error', hostname=host, timeout=60,
+                                              args=(host, 'mon', 'sleep-90-seconds', []), kwargs={'no_fsid': True})
+        except OrchestratorError as e:
+            self.log.error(f'sleep 90 seconds error received OrchestratorError: {str(e)}')
+            return str(e)
+        self.log.error('sleep 90 seconds error returning with no error???')
+        return None
+
+    def _sleep_90_seconds_forever(self, host: str) -> Optional[str]:
+        # the command this calls will sleep for 90 seconds. Passing an explicit
+        # 60 second timeout here just so I don't have to wait 15 minutes to see it timeout
+        try:
+            _ = self.run_cephadm_with_timeout(use_json=False, cmd_name='sleep-90-seconds-forever', hostname=host, timeout=60,
+                                              args=(host, 'mon', 'sleep-90-seconds', []), kwargs={'no_fsid': True})
+        except OrchestratorError as e:
+            self.log.error(f'sleep 90 seconds forever received OrchestratorError: {str(e)}')
+            return str(e)
+        self.log.error('sleep 90 seconds forever returning with no error???')
         return None
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
@@ -1417,6 +1471,8 @@ class CephadmServe:
             timeout = self.mgr.default_cephadm_command_timeout
         result: List[Any] = []
         excs: List[Exception] = []
+        if 'sleep-90-seconds' in cmd_name:
+            self.log.error(f'Starting {cmd_name} on host {hostname} at {datetime_now()} (timeout set to {timeout})')
         if use_json:
             t = threading.Thread(target=self._run_cephadm_thread_json, args=(result, excs, args, kwargs))
         else:
@@ -1424,6 +1480,8 @@ class CephadmServe:
         t.daemon = True
         t.start()
         t.join(timeout)
+        if 'sleep-90-seconds' in cmd_name:
+            self.log.error(f'Passed thread join for {cmd_name} on host {hostname} at {datetime_now()}')
         if t.is_alive():
             # if we got here, the command timed out. Raise an error
             self.log.error(f'Command `cephadm {cmd_name}` on host {hostname} timed out. ({timeout} seconds timeout)')
