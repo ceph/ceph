@@ -355,122 +355,150 @@ Op::~Op() {
   reinterpret_cast<OpImpl*>(&impl)->~OpImpl();
 }
 
-void Op::set_excl() {
+Op&& Op::set_excl() {
   reinterpret_cast<OpImpl*>(&impl)->op.set_last_op_flags(CEPH_OSD_OP_FLAG_EXCL);
+  return std::move(*this);
 }
-void Op::set_failok() {
+Op&& Op::set_failok() {
   reinterpret_cast<OpImpl*>(&impl)->op.set_last_op_flags(
     CEPH_OSD_OP_FLAG_FAILOK);
+  return std::move(*this);
 }
-void Op::set_fadvise_random() {
+Op&& Op::set_fadvise_random() {
   reinterpret_cast<OpImpl*>(&impl)->op.set_last_op_flags(
     CEPH_OSD_OP_FLAG_FADVISE_RANDOM);
+  return std::move(*this);
 }
-void Op::set_fadvise_sequential() {
+Op&& Op::set_fadvise_sequential() {
   reinterpret_cast<OpImpl*>(&impl)->op.set_last_op_flags(
     CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL);
+  return std::move(*this);
 }
-void Op::set_fadvise_willneed() {
+Op&& Op::set_fadvise_willneed() {
   reinterpret_cast<OpImpl*>(&impl)->op.set_last_op_flags(
     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+  return std::move(*this);
 }
-void Op::set_fadvise_dontneed() {
+Op&& Op::set_fadvise_dontneed() {
   reinterpret_cast<OpImpl*>(&impl)->op.set_last_op_flags(
     CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  return std::move(*this);
 }
-void Op::set_fadvise_nocache() {
+Op&& Op::set_fadvise_nocache() {
   reinterpret_cast<OpImpl*>(&impl)->op.set_last_op_flags(
     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+  return std::move(*this);
 }
 
-void Op::cmpext(uint64_t off, bufferlist&& cmp_bl, std::size_t* s) {
+Op&& Op::cmpext(uint64_t off, bufferlist&& cmp_bl, std::size_t* s) {
   reinterpret_cast<OpImpl*>(&impl)->op.cmpext(off, std::move(cmp_bl), nullptr,
 					      s);
+  return std::move(*this);
 }
-void Op::cmpxattr(std::string_view name, cmpxattr_op op, const bufferlist& val) {
+Op&& Op::cmpxattr(std::string_view name, cmpxattr_op op, const bufferlist& val) {
   reinterpret_cast<OpImpl*>(&impl)->
     op.cmpxattr(name, std::uint8_t(op), CEPH_OSD_CMPXATTR_MODE_STRING, val);
+  return std::move(*this);
 }
-void Op::cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) {
+Op&& Op::cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) {
   bufferlist bl;
   encode(val, bl);
   reinterpret_cast<OpImpl*>(&impl)->
     op.cmpxattr(name, std::uint8_t(op), CEPH_OSD_CMPXATTR_MODE_U64, bl);
+  return std::move(*this);
 }
 
-void Op::assert_version(uint64_t ver) {
+Op&& Op::assert_version(uint64_t ver) {
   reinterpret_cast<OpImpl*>(&impl)->op.assert_version(ver);
+  return std::move(*this);
 }
-void Op::assert_exists() {
+Op&& Op::assert_exists() {
   reinterpret_cast<OpImpl*>(&impl)->op.stat(
     nullptr,
     static_cast<ceph::real_time*>(nullptr),
     static_cast<bs::error_code*>(nullptr));
+  return std::move(*this);
 }
-void Op::cmp_omap(const bc::flat_map<
+Op&& Op::cmp_omap(const bc::flat_map<
 		  std::string, std::pair<cb::list,
 		  int>>& assertions) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_cmp(assertions, nullptr);
+  return std::move(*this);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+Op&& Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
 	      cb::list* out,
 	      bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec, out);
+  return std::move(*this);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+Op&& Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
 	      fu2::unique_function<void(bs::error_code,
 					const cb::list&) &&> f) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
+  return std::move(*this);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+Op&& Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl,
 	      fu2::unique_function<void(bs::error_code, int,
 					const cb::list&) &&> f) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, std::move(f));
+  return std::move(*this);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+Op&& Op::exec(std::string_view cls, std::string_view method,
 	      const bufferlist& inbl, bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.call(cls, method, inbl, ec);
+  return std::move(*this);
 }
 
-void Op::balance_reads() {
+Op&& Op::balance_reads() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_BALANCE_READS;
+  return std::move(*this);
 }
-void Op::localize_reads() {
+Op&& Op::localize_reads() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_LOCALIZE_READS;
+  return std::move(*this);
 }
-void Op::order_reads_writes() {
+Op&& Op::order_reads_writes() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_RWORDERED;
+  return std::move(*this);
 }
-void Op::ignore_cache() {
+Op&& Op::ignore_cache() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_IGNORE_CACHE;
+  return std::move(*this);
 }
-void Op::skiprwlocks() {
+Op&& Op::skiprwlocks() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_SKIPRWLOCKS;
+  return std::move(*this);
 }
-void Op::ignore_overlay() {
+Op&& Op::ignore_overlay() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  return std::move(*this);
 }
-void Op::full_try() {
+Op&& Op::full_try() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_FULL_TRY;
+  return std::move(*this);
 }
-void Op::full_force() {
+Op&& Op::full_force() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_FULL_FORCE;
+  return std::move(*this);
 }
-void Op::ignore_redirect() {
+Op&& Op::ignore_redirect() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_IGNORE_REDIRECT;
+  return std::move(*this);
 }
-void Op::ordersnap() {
+Op&& Op::ordersnap() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_ORDERSNAP;
+  return std::move(*this);
 }
-void Op::returnvec() {
+Op&& Op::returnvec() {
   reinterpret_cast<OpImpl*>(&impl)->op.flags |= CEPH_OSD_FLAG_RETURNVEC;
+  return std::move(*this);
 }
 
 std::size_t Op::size() const {
@@ -486,149 +514,174 @@ std::ostream& operator <<(std::ostream& m, const Op& o) {
 
 // ReadOp / WriteOp
 
-void ReadOp::read(size_t off, uint64_t len, cb::list* out,
-		  bs::error_code* ec) {
+ReadOp&& ReadOp::read(size_t off, uint64_t len, cb::list* out,
+		      bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.read(off, len, ec, out);
+  return std::move(*this);
 }
 
-void ReadOp::get_xattr(std::string_view name, cb::list* out,
-		       bs::error_code* ec) {
-  reinterpret_cast<OpImpl*>(&impl)->op.getxattr(name, ec, out);
-}
-
-void ReadOp::get_omap_header(cb::list* out,
-			     bs::error_code* ec) {
-  reinterpret_cast<OpImpl*>(&impl)->op.omap_get_header(ec, out);
-}
-
-void ReadOp::sparse_read(uint64_t off, uint64_t len, cb::list* out,
-			 std::vector<std::pair<std::uint64_t,
-			 std::uint64_t>>* extents,
-			 bs::error_code* ec) {
-  reinterpret_cast<OpImpl*>(&impl)->op.sparse_read(off, len, ec, extents, out);
-}
-
-void ReadOp::stat(std::uint64_t* size, ceph::real_time* mtime,
-		  bs::error_code* ec) {
-  reinterpret_cast<OpImpl*>(&impl)->op.stat(size, mtime, ec);
-}
-
-void ReadOp::get_omap_keys(std::optional<std::string_view> start_after,
-			   std::uint64_t max_return,
-			   bc::flat_set<std::string>* keys,
-			   bool* done,
+ReadOp&& ReadOp::get_xattr(std::string_view name, cb::list* out,
 			   bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.getxattr(name, ec, out);
+  return std::move(*this);
+}
+
+ReadOp&& ReadOp::get_omap_header(cb::list* out,
+				 bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_get_header(ec, out);
+  return std::move(*this);
+}
+
+ReadOp&& ReadOp::sparse_read(uint64_t off, uint64_t len, cb::list* out,
+			     std::vector<std::pair<std::uint64_t,
+			     std::uint64_t>>* extents,
+			     bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.sparse_read(off, len, ec, extents, out);
+  return std::move(*this);
+}
+
+ReadOp&& ReadOp::stat(std::uint64_t* size, ceph::real_time* mtime,
+		      bs::error_code* ec) {
+  reinterpret_cast<OpImpl*>(&impl)->op.stat(size, mtime, ec);
+  return std::move(*this);
+}
+
+ReadOp&& ReadOp::get_omap_keys(std::optional<std::string_view> start_after,
+			      std::uint64_t max_return,
+			      bc::flat_set<std::string>* keys,
+			      bool* done,
+			      bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_keys(start_after, max_return,
 						     ec, keys, done);
+  return std::move(*this);
 }
 
-void ReadOp::get_xattrs(bc::flat_map<std::string,
-			cb::list>* kv,
-			bs::error_code* ec) {
+ReadOp&& ReadOp::get_xattrs(bc::flat_map<std::string,
+			    cb::list>* kv,
+			    bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.getxattrs(ec, kv);
+  return std::move(*this);
 }
 
-void ReadOp::get_omap_vals(std::optional<std::string_view> start_after,
-			   std::optional<std::string_view> filter_prefix,
-			   uint64_t max_return,
-			   bc::flat_map<std::string,
-			   cb::list>* kv,
-			   bool* done,
-			   bs::error_code* ec) {
+ReadOp&& ReadOp::get_omap_vals(std::optional<std::string_view> start_after,
+			       std::optional<std::string_view> filter_prefix,
+			       uint64_t max_return,
+			       bc::flat_map<std::string, cb::list>* kv,
+			       bool* done,
+			       bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_vals(start_after, filter_prefix,
 						     max_return, ec, kv, done);
+  return std::move(*this);
 }
 
-void ReadOp::get_omap_vals_by_keys(
+ReadOp&& ReadOp::get_omap_vals_by_keys(
   const bc::flat_set<std::string>& keys,
   bc::flat_map<std::string, cb::list>* kv,
   bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_get_vals_by_keys(keys, ec, kv);
+  return std::move(*this);
 }
 
-void ReadOp::list_watchers(std::vector<ObjWatcher>* watchers,
+ReadOp&& ReadOp::list_watchers(std::vector<ObjWatcher>* watchers,
 			   bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)-> op.list_watchers(watchers, ec);
+  return std::move(*this);
 }
 
-void ReadOp::list_snaps(SnapSet* snaps,
-			bs::error_code* ec) {
+ReadOp&& ReadOp::list_snaps(SnapSet* snaps,
+			    bs::error_code* ec) {
   reinterpret_cast<OpImpl*>(&impl)->op.list_snaps(snaps, nullptr, ec);
+  return std::move(*this);
 }
 
 // WriteOp
 
-void WriteOp::set_mtime(ceph::real_time t) {
+WriteOp&& WriteOp::set_mtime(ceph::real_time t) {
   auto o = reinterpret_cast<OpImpl*>(&impl);
   o->mtime = t;
+  return std::move(*this);
 }
 
-void WriteOp::create(bool exclusive) {
+WriteOp&& WriteOp::create(bool exclusive) {
   reinterpret_cast<OpImpl*>(&impl)->op.create(exclusive);
+  return std::move(*this);
 }
 
-void WriteOp::write(uint64_t off, bufferlist&& bl) {
+WriteOp&& WriteOp::write(uint64_t off, bufferlist&& bl) {
   reinterpret_cast<OpImpl*>(&impl)->op.write(off, bl);
+  return std::move(*this);
 }
 
-void WriteOp::write_full(bufferlist&& bl) {
+WriteOp&& WriteOp::write_full(bufferlist&& bl) {
   reinterpret_cast<OpImpl*>(&impl)->op.write_full(bl);
+  return std::move(*this);
 }
 
-void WriteOp::writesame(uint64_t off, uint64_t write_len, bufferlist&& bl) {
+WriteOp&& WriteOp::writesame(uint64_t off, uint64_t write_len, bufferlist&& bl) {
   reinterpret_cast<OpImpl*>(&impl)->op.writesame(off, write_len, bl);
+  return std::move(*this);
 }
 
-void WriteOp::append(bufferlist&& bl) {
+WriteOp&& WriteOp::append(bufferlist&& bl) {
   reinterpret_cast<OpImpl*>(&impl)->op.append(bl);
+  return std::move(*this);
 }
 
-void WriteOp::remove() {
+WriteOp&& WriteOp::remove() {
   reinterpret_cast<OpImpl*>(&impl)->op.remove();
+  return std::move(*this);
 }
 
-void WriteOp::truncate(uint64_t off) {
+WriteOp&& WriteOp::truncate(uint64_t off) {
   reinterpret_cast<OpImpl*>(&impl)->op.truncate(off);
+  return std::move(*this);
 }
 
-void WriteOp::zero(uint64_t off, uint64_t len) {
+WriteOp&& WriteOp::zero(uint64_t off, uint64_t len) {
   reinterpret_cast<OpImpl*>(&impl)->op.zero(off, len);
+  return std::move(*this);
 }
 
-void WriteOp::rmxattr(std::string_view name) {
+WriteOp&& WriteOp::rmxattr(std::string_view name) {
   reinterpret_cast<OpImpl*>(&impl)->op.rmxattr(name);
+  return std::move(*this);
 }
 
-void WriteOp::setxattr(std::string_view name,
+WriteOp&& WriteOp::setxattr(std::string_view name,
                        bufferlist&& bl) {
   reinterpret_cast<OpImpl*>(&impl)->op.setxattr(name, bl);
+  return std::move(*this);
 }
 
-void WriteOp::rollback(uint64_t snapid) {
+WriteOp&& WriteOp::rollback(uint64_t snapid) {
   reinterpret_cast<OpImpl*>(&impl)->op.rollback(snapid);
+  return std::move(*this);
 }
 
-void WriteOp::set_omap(
+WriteOp&& WriteOp::set_omap(
   const bc::flat_map<std::string, cb::list>& map) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_set(map);
+  return std::move(*this);
 }
 
-void WriteOp::set_omap_header(bufferlist&& bl) {
+WriteOp&& WriteOp::set_omap_header(bufferlist&& bl) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_set_header(bl);
+  return std::move(*this);
 }
 
-void WriteOp::clear_omap() {
+WriteOp&& WriteOp::clear_omap() {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_clear();
+  return std::move(*this);
 }
 
-void WriteOp::rm_omap_keys(
-  const bc::flat_set<std::string>& to_rm) {
+WriteOp&& WriteOp::rm_omap_keys(const bc::flat_set<std::string>& to_rm) {
   reinterpret_cast<OpImpl*>(&impl)->op.omap_rm_keys(to_rm);
+  return std::move(*this);
 }
 
-void WriteOp::set_alloc_hint(uint64_t expected_object_size,
-			     uint64_t expected_write_size,
-			     alloc_hint::alloc_hint_t flags) {
+WriteOp&& WriteOp::set_alloc_hint(uint64_t expected_object_size,
+				  uint64_t expected_write_size,
+				  alloc_hint::alloc_hint_t flags) {
   using namespace alloc_hint;
   static_assert(sequential_write ==
 		static_cast<int>(CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE));
@@ -654,6 +707,7 @@ void WriteOp::set_alloc_hint(uint64_t expected_object_size,
   reinterpret_cast<OpImpl*>(&impl)->op.set_alloc_hint(expected_object_size,
 						      expected_write_size,
 						      flags);
+  return std::move(*this);
 }
 
 // RADOS

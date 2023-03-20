@@ -213,53 +213,53 @@ public:
   Op& operator =(Op&&);
   ~Op();
 
-  void set_excl();
-  void set_failok();
-  void set_fadvise_random();
-  void set_fadvise_sequential();
-  void set_fadvise_willneed();
-  void set_fadvise_dontneed();
-  void set_fadvise_nocache();
+  Op&& set_excl();
+  Op&& set_failok();
+  Op&& set_fadvise_random();
+  Op&& set_fadvise_sequential();
+  Op&& set_fadvise_willneed();
+  Op&& set_fadvise_dontneed();
+  Op&& set_fadvise_nocache();
 
-  void cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s);
-  void cmpxattr(std::string_view name, cmpxattr_op op,
+  Op&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s);
+  Op&& cmpxattr(std::string_view name, cmpxattr_op op,
 		const ceph::buffer::list& val);
-  void cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val);
-  void assert_version(uint64_t ver);
-  void assert_exists();
-  void cmp_omap(const boost::container::flat_map<
-		  std::string,
-		  std::pair<ceph::buffer::list, int>>& assertions);
+  Op&& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val);
+  Op&& assert_version(uint64_t ver);
+  Op&& assert_exists();
+  Op&& cmp_omap(const boost::container::flat_map<std::string,
+		                                 std::pair<ceph::buffer::list,
+		                                           int>>& assertions);
 
-  void exec(std::string_view cls, std::string_view method,
+  Op&& exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
 	    ceph::buffer::list* out,
 	    boost::system::error_code* ec = nullptr);
-  void exec(std::string_view cls, std::string_view method,
+  Op&& exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
 	    fu2::unique_function<void(boost::system::error_code,
 				      const ceph::buffer::list&) &&> f);
-  void exec(std::string_view cls, std::string_view method,
+  Op&& exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
 	    fu2::unique_function<void(boost::system::error_code, int,
 				      const ceph::buffer::list&) &&> f);
-  void exec(std::string_view cls, std::string_view method,
+  Op&& exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
 	    boost::system::error_code* ec = nullptr);
 
 
   // Flags that apply to all ops in the operation vector
-  void balance_reads();
-  void localize_reads();
-  void order_reads_writes();
-  void ignore_cache();
-  void skiprwlocks();
-  void ignore_overlay();
-  void full_try();
-  void full_force();
-  void ignore_redirect();
-  void ordersnap();
-  void returnvec();
+  Op&& balance_reads();
+  Op&& localize_reads();
+  Op&& order_reads_writes();
+  Op&& ignore_cache();
+  Op&& skiprwlocks();
+  Op&& ignore_overlay();
+  Op&& full_try();
+  Op&& full_force();
+  Op&& ignore_redirect();
+  Op&& ordersnap();
+  Op&& returnvec();
 
   std::size_t size() const;
   using Signature = void(boost::system::error_code);
@@ -287,33 +287,33 @@ public:
   ReadOp& operator =(const ReadOp&) = delete;
   ReadOp& operator =(ReadOp&&) = default;
 
-  void read(size_t off, uint64_t len, ceph::buffer::list* out,
+  ReadOp&& read(size_t off, uint64_t len, ceph::buffer::list* out,
 	    boost::system::error_code* ec = nullptr);
-  void get_xattr(std::string_view name, ceph::buffer::list* out,
+  ReadOp&& get_xattr(std::string_view name, ceph::buffer::list* out,
 		 boost::system::error_code* ec = nullptr);
-  void get_omap_header(ceph::buffer::list*,
+  ReadOp&& get_omap_header(ceph::buffer::list*,
 		       boost::system::error_code* ec = nullptr);
 
-  void sparse_read(uint64_t off, uint64_t len,
+  ReadOp&& sparse_read(uint64_t off, uint64_t len,
 		   ceph::buffer::list* out,
 		   std::vector<std::pair<std::uint64_t, std::uint64_t>>* extents,
 		   boost::system::error_code* ec = nullptr);
 
-  void stat(std::uint64_t* size, ceph::real_time* mtime,
+  ReadOp&& stat(std::uint64_t* size, ceph::real_time* mtime,
 	    boost::system::error_code* ec = nullptr);
 
-  void get_omap_keys(std::optional<std::string_view> start_after,
+  ReadOp&& get_omap_keys(std::optional<std::string_view> start_after,
 		     std::uint64_t max_return,
 		     boost::container::flat_set<std::string>* keys,
 		     bool* truncated,
 		     boost::system::error_code* ec = nullptr);
 
 
-  void get_xattrs(boost::container::flat_map<std::string,
+  ReadOp&& get_xattrs(boost::container::flat_map<std::string,
 		                             ceph::buffer::list>* kv,
 		     boost::system::error_code* ec = nullptr);
 
-  void get_omap_vals(std::optional<std::string_view> start_after,
+  ReadOp&& get_omap_vals(std::optional<std::string_view> start_after,
 		     std::optional<std::string_view> filter_prefix,
 		     uint64_t max_return,
 		     boost::container::flat_map<std::string,
@@ -322,15 +322,15 @@ public:
 		     boost::system::error_code* ec = nullptr);
 
 
-  void get_omap_vals_by_keys(const boost::container::flat_set<std::string>& keys,
+  ReadOp&& get_omap_vals_by_keys(const boost::container::flat_set<std::string>& keys,
 			     boost::container::flat_map<std::string,
 			                                ceph::buffer::list>* kv,
 			     boost::system::error_code* ec = nullptr);
 
-  void list_watchers(std::vector<struct ObjWatcher>* watchers,
+  ReadOp&& list_watchers(std::vector<struct ObjWatcher>* watchers,
 		     boost::system::error_code* ec = nullptr);
 
-  void list_snaps(struct SnapSet* snaps,
+  ReadOp&& list_snaps(struct SnapSet* snaps,
 		  boost::system::error_code* ec = nullptr);
 };
 
@@ -345,28 +345,28 @@ public:
   WriteOp& operator =(const WriteOp&) = delete;
   WriteOp& operator =(WriteOp&&) = default;
 
-  void set_mtime(ceph::real_time t);
-  void create(bool exclusive);
-  void write(uint64_t off, ceph::buffer::list&& bl);
-  void write_full(ceph::buffer::list&& bl);
-  void writesame(std::uint64_t off, std::uint64_t write_len,
-		 ceph::buffer::list&& bl);
-  void append(ceph::buffer::list&& bl);
-  void remove();
-  void truncate(uint64_t off);
-  void zero(uint64_t off, uint64_t len);
-  void rmxattr(std::string_view name);
-  void setxattr(std::string_view name,
-		ceph::buffer::list&& bl);
-  void rollback(uint64_t snapid);
-  void set_omap(const boost::container::flat_map<std::string,
+  WriteOp&& set_mtime(ceph::real_time t);
+  WriteOp&& create(bool exclusive);
+  WriteOp&& write(uint64_t off, ceph::buffer::list&& bl);
+  WriteOp&& write_full(ceph::buffer::list&& bl);
+  WriteOp&& writesame(std::uint64_t off, std::uint64_t write_len,
+		      ceph::buffer::list&& bl);
+  WriteOp&& append(ceph::buffer::list&& bl);
+  WriteOp&& remove();
+  WriteOp&& truncate(uint64_t off);
+  WriteOp&& zero(uint64_t off, uint64_t len);
+  WriteOp&& rmxattr(std::string_view name);
+  WriteOp&& setxattr(std::string_view name,
+		     ceph::buffer::list&& bl);
+  WriteOp&& rollback(uint64_t snapid);
+  WriteOp&& set_omap(const boost::container::flat_map<std::string,
 		                                 ceph::buffer::list>& map);
-  void set_omap_header(ceph::buffer::list&& bl);
-  void clear_omap();
-  void rm_omap_keys(const boost::container::flat_set<std::string>& to_rm);
-  void set_alloc_hint(uint64_t expected_object_size,
-		      uint64_t expected_write_size,
-		      alloc_hint::alloc_hint_t flags);
+  WriteOp&& set_omap_header(ceph::buffer::list&& bl);
+  WriteOp&& clear_omap();
+  WriteOp&& rm_omap_keys(const boost::container::flat_set<std::string>& to_rm);
+  WriteOp&& set_alloc_hint(uint64_t expected_object_size,
+			   uint64_t expected_write_size,
+			   alloc_hint::alloc_hint_t flags);
 };
 
 

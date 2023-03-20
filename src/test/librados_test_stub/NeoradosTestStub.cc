@@ -282,19 +282,21 @@ Op::~Op() {
   }
 }
 
-void Op::assert_exists() {
+Op&& Op::assert_exists() {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::assert_exists, _1, _2, _4));
+  return std::move(*this);
 }
 
-void Op::assert_version(uint64_t ver) {
+Op&& Op::assert_version(uint64_t ver) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
           &librados::TestIoCtxImpl::assert_version, _1, _2, ver));
+  return std::move(*this);
 }
 
-void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
+Op&& Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op = std::bind(
     &librados::TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl, _4);
@@ -303,6 +305,7 @@ void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
       save_operation_size, std::bind(op, _1, _2, _3, _4, _5, _6), s);
   }
   o->ops.push_back(op);
+  return std::move(*this);
 }
 
 std::size_t Op::size() const {
@@ -310,35 +313,42 @@ std::size_t Op::size() const {
   return o->ops.size();
 }
 
-void Op::set_fadvise_random() {
+Op&& Op::set_fadvise_random() {
   // no-op
+  return std::move(*this);
 }
 
-void Op::set_fadvise_sequential() {
+Op&& Op::set_fadvise_sequential() {
   // no-op
+  return std::move(*this);
 }
 
-void Op::set_fadvise_willneed() {
+Op&& Op::set_fadvise_willneed() {
   // no-op
+  return std::move(*this);
 }
 
-void Op::set_fadvise_dontneed() {
+Op&& Op::set_fadvise_dontneed() {
   // no-op
+  return std::move(*this);
 }
 
-void Op::set_fadvise_nocache() {
+Op&& Op::set_fadvise_nocache() {
   // no-op
+  return std::move(*this);
 }
 
-void Op::balance_reads() {
+Op&& Op::balance_reads() {
   // no-op
+  return std::move(*this);
 }
 
-void Op::localize_reads() {
+Op&& Op::localize_reads() {
   // no-op
+  return std::move(*this);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+Op&& Op::exec(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
               ceph::buffer::list* out,
               boost::system::error_code* ec) {
@@ -359,9 +369,10 @@ void Op::exec(std::string_view cls, std::string_view method,
       save_operation_ec, std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return std::move(*this);
 }
 
-void Op::exec(std::string_view cls, std::string_view method,
+Op&& Op::exec(std::string_view cls, std::string_view method,
               const ceph::buffer::list& inbl,
               boost::system::error_code* ec) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
@@ -380,9 +391,10 @@ void Op::exec(std::string_view cls, std::string_view method,
       save_operation_ec, std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return std::move(*this);
 }
 
-void ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
+ReadOp&& ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
 	          boost::system::error_code* ec) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op;
@@ -399,9 +411,10 @@ void ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
       save_operation_ec, std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return std::move(*this);
 }
 
-void ReadOp::sparse_read(uint64_t off, uint64_t len,
+ReadOp&& ReadOp::sparse_read(uint64_t off, uint64_t len,
 		         ceph::buffer::list* out,
 		         std::vector<std::pair<std::uint64_t,
                                                std::uint64_t>>* extents,
@@ -425,9 +438,10 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
                      std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return std::move(*this);
 }
 
-void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
+ReadOp&& ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op =
     [snaps]
@@ -455,55 +469,64 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
                    std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return std::move(*this);
 }
 
-void WriteOp::create(bool exclusive) {
+WriteOp&& WriteOp::create(bool exclusive) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::create, _1, _2, exclusive, _5));
+  return std::move(*this);
 }
 
-void WriteOp::write(uint64_t off, ceph::buffer::list&& bl) {
+WriteOp&& WriteOp::write(uint64_t off, ceph::buffer::list&& bl) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::write, _1, _2, bl, bl.length(), off, _5));
+  return std::move(*this);
 }
 
-void WriteOp::write_full(ceph::buffer::list&& bl) {
+WriteOp&& WriteOp::write_full(ceph::buffer::list&& bl) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::write_full, _1, _2, bl, _5));
+  return std::move(*this);
 }
 
-void WriteOp::remove() {
+WriteOp&& WriteOp::remove() {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::remove, _1, _2, _5));
+  return std::move(*this);
 }
 
-void WriteOp::truncate(uint64_t off) {
+WriteOp&& WriteOp::truncate(uint64_t off) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::truncate, _1, _2, off, _5));
+  return std::move(*this);
 }
 
-void WriteOp::zero(uint64_t off, uint64_t len) {
+WriteOp&& WriteOp::zero(uint64_t off, uint64_t len) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::zero, _1, _2, off, len, _5));
+  return std::move(*this);
 }
 
-void WriteOp::writesame(std::uint64_t off, std::uint64_t write_len,
+WriteOp&& WriteOp::writesame(std::uint64_t off, std::uint64_t write_len,
                         ceph::buffer::list&& bl) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::writesame, _1, _2, bl, write_len, off, _5));
+  return std::move(*this);
 }
 
-void WriteOp::set_alloc_hint(uint64_t expected_object_size,
+WriteOp&& WriteOp::set_alloc_hint(uint64_t expected_object_size,
 		             uint64_t expected_write_size,
 		             alloc_hint::alloc_hint_t flags) {
   // no-op
+  return std::move(*this);
 }
 
 RADOS::RADOS() = default;
