@@ -102,10 +102,16 @@
 # distros that ship cmd2 and/or colorama
 %bcond_without cephfs_shell
 %else
-%bcond_without embedded_pip_pkgs
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
+
+%if 0%{?centos} || 0%{?centos} == 8
+%bcond_with embedded_pip_pkgs
+%else
+%bcond_without embedded_pip_pkgs
+%endif
+
 %if 0%{?fedora} || 0%{?rhel} >= 9
 %bcond_without system_arrow
 %else
@@ -1879,7 +1885,9 @@ fi
 
 %files mgr-modules-core
 %dir %{_datadir}/ceph/mgr
+%if 0%{?with embedded_pip_pkgs}
 %{_datadir}/ceph/mgr/__pypackages__
+%endif
 %{_datadir}/ceph/mgr/alerts
 %{_datadir}/ceph/mgr/balancer
 %{_datadir}/ceph/mgr/crash
