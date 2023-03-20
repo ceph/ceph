@@ -12,15 +12,20 @@ import { forkJoin, Subscription } from 'rxjs';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, TimerServiceInterval } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
 import { TimerService } from '~/app/shared/services/timer.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
+import { RgwMultisiteZoneDeletionFormComponent } from '../models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
+import { RgwMultisiteZonegroupDeletionFormComponent } from '../models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 import { RgwMultisiteRealmFormComponent } from '../rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZoneFormComponent } from '../rgw-multisite-zone-form/rgw-multisite-zone-form.component';
 import { RgwMultisiteZonegroupFormComponent } from '../rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
@@ -56,6 +61,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       }
     }
   };
+  modalRef: NgbModalRef;
 
   realms: RgwRealm[] = [];
   zonegroups: RgwZonegroup[] = [];
@@ -79,7 +85,8 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     public timerServiceVariable: TimerServiceInterval,
     public rgwRealmService: RgwRealmService,
     public rgwZonegroupService: RgwZonegroupService,
-    public rgwZoneService: RgwZoneService
+    public rgwZoneService: RgwZoneService,
+    private notificationService: NotificationService
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
     const createRealmAction: CdTableAction = {
@@ -298,6 +305,37 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       } else {
         return false;
       }
+    }
+  }
+
+  delete(node: TreeNode) {
+    if (node.data.type === 'realm') {
+      this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+        itemDescription: $localize`${node.data.type} ${node.data.name}`,
+        itemNames: [`${node.data.name}`],
+        submitAction: () => {
+          this.rgwRealmService.delete(node.data.name).subscribe(
+            () => {
+              this.modalRef.close();
+              this.notificationService.show(
+                NotificationType.success,
+                $localize`Realm: '${node.data.name}' deleted successfully`
+              );
+            },
+            () => {
+              this.modalRef.componentInstance.stopLoadingSpinner();
+            }
+          );
+        }
+      });
+    } else if (node.data.type === 'zonegroup') {
+      this.modalRef = this.modalService.show(RgwMultisiteZonegroupDeletionFormComponent, {
+        zonegroup: node.data
+      });
+    } else if (node.data.type === 'zone') {
+      this.modalRef = this.modalService.show(RgwMultisiteZoneDeletionFormComponent, {
+        zone: node.data
+      });
     }
   }
 }

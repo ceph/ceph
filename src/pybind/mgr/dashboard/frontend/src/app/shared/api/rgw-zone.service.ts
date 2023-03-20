@@ -52,6 +52,17 @@ export class RgwZoneService {
     });
   }
 
+  delete(zonegroupName: string, zoneName: string, deletePools: boolean): Observable<any> {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        zonegroup_name: zonegroupName,
+        zone_name: zoneName,
+        delete_pools: deletePools
+      });
+      return this.http.delete(`${this.url}/${zoneName}`, { params: params });
+    });
+  }
+
   getZoneTree(zone: RgwZone, defaultZoneId: string, zonegroup?: RgwZonegroup, realm?: RgwRealm) {
     let nodes = {};
     let zoneIds = [];

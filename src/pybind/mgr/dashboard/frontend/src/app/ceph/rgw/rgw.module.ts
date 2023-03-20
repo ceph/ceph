@@ -34,6 +34,8 @@ import { ModuleStatusGuardService } from '~/app/shared/services/module-status-gu
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
+import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
+import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 
 @NgModule({
   imports: [
@@ -77,7 +79,9 @@ import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-mul
     RgwMultisiteDetailsComponent,
     RgwMultisiteRealmFormComponent,
     RgwMultisiteZonegroupFormComponent,
-    RgwMultisiteZoneFormComponent
+    RgwMultisiteZoneFormComponent,
+    RgwMultisiteZoneDeletionFormComponent,
+    RgwMultisiteZonegroupDeletionFormComponent
   ]
 })
 export class RgwModule {}

@@ -52,6 +52,15 @@ export class RgwRealmService {
     });
   }
 
+  delete(realmName: string): Observable<any> {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        realm_name: realmName
+      });
+      return this.http.delete(`${this.url}/${realmName}`, { params: params });
+    });
+  }
+
   getRealmTree(realm: RgwRealm, defaultRealmId: string) {
     let nodes = {};
     let realmIds = [];
