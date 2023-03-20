@@ -4,6 +4,7 @@ import json
 import logging
 import uuid
 import os
+import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set, \
     DefaultDict
@@ -270,6 +271,7 @@ class CephadmServe:
                     r = self._refresh_host_devices(host)
                     if r:
                         failures.append(r)
+
                 self.mgr.cache.metadata_up_to_date[host] = True
             elif not self.mgr.cache.get_daemons_by_type('agent', host=host):
                 if self.mgr.cache.host_needs_daemon_refresh(host):
@@ -345,8 +347,8 @@ class CephadmServe:
 
     def _refresh_host_daemons(self, host: str) -> Optional[str]:
         try:
-            ls = self.mgr.wait_async(self._run_cephadm_json(host, 'mon', 'ls', [],
-                                                            no_fsid=True, log_output=self.mgr.log_refresh_metadata))
+            ls = self.run_cephadm_with_timeout(use_json=True, cmd_name='ls', hostname=host, args=(host, 'mon', 'ls', []),
+                                               kwargs={'no_fsid': True, 'log_output': self.mgr.log_refresh_metadata})
         except OrchestratorError as e:
             return str(e)
         self.mgr._process_ls_output(host, ls)
@@ -354,8 +356,8 @@ class CephadmServe:
 
     def _refresh_facts(self, host: str) -> Optional[str]:
         try:
-            val = self.mgr.wait_async(self._run_cephadm_json(
-                host, cephadmNoImage, 'gather-facts', [], no_fsid=True, log_output=self.mgr.log_refresh_metadata))
+            val = self.run_cephadm_with_timeout(use_json=True, cmd_name='gather-facts', hostname=host, args=(host, cephadmNoImage, 'gather-facts', []),
+                                                kwargs={'no_fsid': True, 'log_output': self.mgr.log_refresh_metadata})
         except OrchestratorError as e:
             return str(e)
 
@@ -1408,6 +1410,44 @@ class CephadmServe:
             msg = f'host {host} `cephadm {command}` failed: Cannot decode JSON'
             self.log.exception(f'{msg}: {"".join(out)}')
             raise OrchestratorError(msg)
+
+    def run_cephadm_with_timeout(self, args: Tuple[Any, ...], kwargs: Dict[Any, Any], cmd_name: str, hostname: str,
+                                 use_json: bool = False, timeout: Optional[int] = None, ) -> Any:
+        if not timeout:
+            timeout = self.mgr.default_cephadm_command_timeout
+        result: List[Any] = []
+        excs: List[Exception] = []
+        if use_json:
+            t = threading.Thread(target=self._run_cephadm_thread_json, args=(result, excs, args, kwargs))
+        else:
+            t = threading.Thread(target=self._run_cephadm_thread, args=(result, excs, args, kwargs))
+        t.daemon = True
+        t.start()
+        t.join(timeout)
+        if t.is_alive():
+            # if we got here, the command timed out. Raise an error
+            self.log.error(f'Command `cephadm {cmd_name}` on host {hostname} timed out. ({timeout} seconds timeout)')
+            raise OrchestratorError(f'Command `cephadm {cmd_name}` on host {hostname} timed out. ({timeout} seconds timeout)')
+        elif excs:
+            raise excs[0]
+        else:
+            return result[0]
+
+    def _run_cephadm_thread(self, result: List[Any], excs: List[Exception], args: Tuple[Any, ...], kwargs: Dict[Any, Any]) -> None:
+        try:
+            out, err, code = self.mgr.wait_async(self._run_cephadm(*args, **kwargs))
+        except Exception as e:
+            excs.append(e)
+            return
+        result.append((out, err, code))
+
+    def _run_cephadm_thread_json(self, result: List[Any], excs: List[Exception], args: Tuple[Any, ...], kwargs: Dict[Any, Any]) -> None:
+        try:
+            out = self.mgr.wait_async(self._run_cephadm_json(*args, **kwargs))
+        except Exception as e:
+            excs.append(e)
+            return
+        result.append(out)
 
     async def _run_cephadm(self,
                            host: str,
