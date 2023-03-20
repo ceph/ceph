@@ -48,6 +48,13 @@
                           ngbDropdownToggle>
                     <i [ngClass]="[icons.edit]"></i>
                   </button>
+                  <button type="button"
+                          title="Delete"
+                          class="btn btn-light ms-1"
+                          i18n-title
+                          (click)="delete(node)">
+                    <i [ngClass]="[icons.destroy]"></i>
+                  </button>
                 </div>
               </ng-template>
             </tree-root>
