@@ -3379,8 +3379,6 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
   if (le) 
     le->metablob.add_import_dir(dir);
 
-  int num_imported = 0;
-
   // take all waiters on this dir
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
   // a replica's presense in my cache implies/forces it's presense in authority's.
