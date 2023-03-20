@@ -141,6 +141,7 @@ TEST(ClsLock, TestMultiLocking) {
   ASSERT_EQ(0, l.unlock(&ioctx, oid));
   locks.clear();
   ASSERT_EQ(0, list_locks(&ioctx, oid, &locks));
+  ASSERT_TRUE(locks.empty());
 
   /* test shared lock */
   ASSERT_EQ(0, l2.lock_shared(&ioctx2, oid));

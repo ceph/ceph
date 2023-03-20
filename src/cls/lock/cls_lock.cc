@@ -106,6 +106,10 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
   string key = LOCK_PREFIX;
   key.append(name);
 
+  if (lock.lockers.empty()) {
+    return cls_rmxattr(hctx, key.c_str());
+  }
+
   bufferlist lock_bl;
   encode(lock, lock_bl, cls_get_client_features(hctx));
 
