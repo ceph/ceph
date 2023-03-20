@@ -437,8 +437,8 @@ void Op::exec(std::string_view cls, std::string_view method,
   o->ops.push_back(op);
 }
 
-void ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
-	          boost::system::error_code* ec) {
+ReadOp& ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
+		     boost::system::error_code* ec) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op;
   if (out != nullptr) {
@@ -454,13 +454,14 @@ void ReadOp::read(size_t off, uint64_t len, ceph::buffer::list* out,
       save_operation_ec, std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return *this;
 }
 
-void ReadOp::sparse_read(uint64_t off, uint64_t len,
-		         ceph::buffer::list* out,
-		         std::vector<std::pair<std::uint64_t,
-                                               std::uint64_t>>* extents,
-		         boost::system::error_code* ec) {
+ReadOp& ReadOp::sparse_read(uint64_t off, uint64_t len,
+			    ceph::buffer::list* out,
+			    std::vector<std::pair<std::uint64_t,
+                                                  std::uint64_t>>* extents,
+			    boost::system::error_code* ec) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op =
     [off, len, out, extents]
@@ -480,9 +481,10 @@ void ReadOp::sparse_read(uint64_t off, uint64_t len,
                      std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return *this;
 }
 
-void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
+ReadOp& ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op =
     [snaps]
@@ -510,55 +512,64 @@ void ReadOp::list_snaps(SnapSet* snaps, bs::error_code* ec) {
                    std::bind(op, _1, _2, _3, _4, _5, _6), ec);
   }
   o->ops.push_back(op);
+  return *this;
 }
 
-void WriteOp::create(bool exclusive) {
+WriteOp& WriteOp::create(bool exclusive) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::create, _1, _2, exclusive, _5));
+  return *this;
 }
 
-void WriteOp::write(uint64_t off, ceph::buffer::list&& bl) {
+WriteOp& WriteOp::write(uint64_t off, ceph::buffer::list&& bl) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::write, _1, _2, bl, bl.length(), off, _5));
+  return *this;
 }
 
-void WriteOp::write_full(ceph::buffer::list&& bl) {
+WriteOp& WriteOp::write_full(ceph::buffer::list&& bl) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::write_full, _1, _2, bl, _5));
+  return *this;
 }
 
-void WriteOp::remove() {
+WriteOp& WriteOp::remove() & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::remove, _1, _2, _5));
+  return *this;
 }
 
-void WriteOp::truncate(uint64_t off) {
+WriteOp& WriteOp::truncate(uint64_t off) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::truncate, _1, _2, off, _5));
+  return *this;
 }
 
-void WriteOp::zero(uint64_t off, uint64_t len) {
+WriteOp& WriteOp::zero(uint64_t off, uint64_t len) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::zero, _1, _2, off, len, _5));
+  return *this;
 }
 
-void WriteOp::writesame(std::uint64_t off, std::uint64_t write_len,
-                        ceph::buffer::list&& bl) {
+WriteOp& WriteOp::writesame(std::uint64_t off, std::uint64_t write_len,
+			    ceph::buffer::list&& bl) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::writesame, _1, _2, bl, write_len, off, _5));
+  return *this;
 }
 
-void WriteOp::set_alloc_hint(uint64_t expected_object_size,
-		             uint64_t expected_write_size,
-		             alloc_hint::alloc_hint_t flags) {
+WriteOp& WriteOp::set_alloc_hint(uint64_t expected_object_size,
+				 uint64_t expected_write_size,
+				 alloc_hint::alloc_hint_t flags) & {
   // no-op
+  return *this;
 }
 
 RADOS::RADOS() = default;

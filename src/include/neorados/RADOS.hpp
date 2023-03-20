@@ -16,6 +16,7 @@
 #ifndef NEORADOS_RADOS_HPP
 #define NEORADOS_RADOS_HPP
 
+#include <concepts>
 #include <cstddef>
 #include <memory>
 #include <tuple>
@@ -216,6 +217,71 @@ enum alloc_hint_t {
 };
 }
 
+class Op;
+class ReadOp;
+class WriteOp;
+
+template<std::invocable<Op&> F>
+class ClsOp {
+  F f;
+public:
+  ClsOp(F&& f) : f(std::move(f)) {}
+
+  ReadOp& operator()(ReadOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  ReadOp&& operator()(ReadOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+
+  WriteOp& operator()(WriteOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  WriteOp&& operator()(WriteOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+};
+
+template<std::invocable<ReadOp&> F>
+class ClsReadOp {
+  F f;
+public:
+  ClsReadOp(F&& f) : f(std::move(f)) {}
+
+  ReadOp& operator()(ReadOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  ReadOp&& operator()(ReadOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+};
+
+template<std::invocable<WriteOp&> F>
+class ClsWriteOp {
+  F f;
+public:
+  ClsWriteOp(F&& f) : f(std::move(f)) {}
+
+  WriteOp& operator()(WriteOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  WriteOp&& operator()(WriteOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+};
+
 class Op {
   friend RADOS;
 
@@ -241,9 +307,9 @@ public:
   void cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val);
   void assert_version(uint64_t ver);
   void assert_exists();
-  void cmp_omap(const boost::container::flat_map<
-		  std::string,
-		  std::pair<ceph::buffer::list, int>>& assertions);
+  void cmp_omap(const boost::container::flat_map<std::string,
+		                                 std::pair<ceph::buffer::list,
+		                                           int>>& assertions);
 
   void exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
@@ -301,51 +367,398 @@ public:
   ReadOp& operator =(const ReadOp&) = delete;
   ReadOp& operator =(ReadOp&&) = default;
 
-  void read(size_t off, uint64_t len, ceph::buffer::list* out,
-	    boost::system::error_code* ec = nullptr);
-  void get_xattr(std::string_view name, ceph::buffer::list* out,
-		 boost::system::error_code* ec = nullptr);
-  void get_omap_header(ceph::buffer::list*,
-		       boost::system::error_code* ec = nullptr);
+  ReadOp& read(size_t off, uint64_t len, ceph::buffer::list* out,
+	       boost::system::error_code* ec = nullptr) &;
+  ReadOp&& read(size_t off, uint64_t len, ceph::buffer::list* out,
+		boost::system::error_code* ec = nullptr) && {
+    return std::move(read(off, len, out, ec));
+  }
+  ReadOp& get_xattr(std::string_view name, ceph::buffer::list* out,
+		    boost::system::error_code* ec = nullptr) &;
+  ReadOp&& get_xattr(std::string_view name, ceph::buffer::list* out,
+		     boost::system::error_code* ec = nullptr) && {
+    return std::move(get_xattr(name, out, ec));
+  }
+  ReadOp& get_omap_header(ceph::buffer::list* bl,
+			  boost::system::error_code* ec = nullptr) &;
+  ReadOp&& get_omap_header(ceph::buffer::list* bl,
+			   boost::system::error_code* ec = nullptr) && {
+    return std::move(get_omap_header(bl, ec));
+  }
+  ReadOp& sparse_read(uint64_t off, uint64_t len,
+		      ceph::buffer::list* out,
+		      std::vector<std::pair<std::uint64_t,
+		                            std::uint64_t>>* extents,
+		      boost::system::error_code* ec = nullptr) &;
+  ReadOp&& sparse_read(uint64_t off, uint64_t len,
+		       ceph::buffer::list* out,
+		       std::vector<std::pair<std::uint64_t,
+		                             std::uint64_t>>* extents,
+		       boost::system::error_code* ec = nullptr) && {
+    return std::move(sparse_read(off, len, out, extents, ec));
+  }
 
-  void sparse_read(uint64_t off, uint64_t len,
-		   ceph::buffer::list* out,
-		   std::vector<std::pair<std::uint64_t, std::uint64_t>>* extents,
-		   boost::system::error_code* ec = nullptr);
+  ReadOp& stat(std::uint64_t* size, ceph::real_time* mtime,
+	       boost::system::error_code* ec = nullptr) &;
+  ReadOp&& stat(std::uint64_t* size, ceph::real_time* mtime,
+		boost::system::error_code* ec = nullptr) && {
+    return std::move(stat(size, mtime, ec));
+  }
 
-  void stat(std::uint64_t* size, ceph::real_time* mtime,
-	    boost::system::error_code* ec = nullptr);
+  ReadOp& get_omap_keys(std::optional<std::string_view> start_after,
+			std::uint64_t max_return,
+			boost::container::flat_set<std::string>* keys,
+			bool* truncated,
+			boost::system::error_code* ec = nullptr) &;
+  ReadOp&& get_omap_keys(std::optional<std::string_view> start_after,
+			 std::uint64_t max_return,
+			 boost::container::flat_set<std::string>* keys,
+			 bool* truncated,
+			 boost::system::error_code* ec = nullptr) && {
+    return std::move(get_omap_keys(start_after, max_return, keys, truncated, ec));
+  }
 
-  void get_omap_keys(std::optional<std::string_view> start_after,
-		     std::uint64_t max_return,
-		     boost::container::flat_set<std::string>* keys,
-		     bool* truncated,
-		     boost::system::error_code* ec = nullptr);
 
-
-  void get_xattrs(boost::container::flat_map<std::string,
-		                             ceph::buffer::list>* kv,
-		     boost::system::error_code* ec = nullptr);
-
-  void get_omap_vals(std::optional<std::string_view> start_after,
-		     std::optional<std::string_view> filter_prefix,
-		     uint64_t max_return,
-		     boost::container::flat_map<std::string,
+  ReadOp& get_xattrs(boost::container::flat_map<std::string,
+		                               ceph::buffer::list>* kv,
+		     boost::system::error_code* ec = nullptr) &;
+  ReadOp&& get_xattrs(boost::container::flat_map<std::string,
 		                                ceph::buffer::list>* kv,
-		     bool* truncated,
-		     boost::system::error_code* ec = nullptr);
+		      boost::system::error_code* ec = nullptr) && {
+    return std::move(get_xattrs(kv, ec));
+  }
 
+  ReadOp& get_omap_vals(std::optional<std::string_view> start_after,
+			std::optional<std::string_view> filter_prefix,
+			uint64_t max_return,
+			boost::container::flat_map<std::string,
+		                                   ceph::buffer::list>* kv,
+			bool* truncated,
+			boost::system::error_code* ec = nullptr) &;
+  ReadOp&& get_omap_vals(std::optional<std::string_view> start_after,
+			 std::optional<std::string_view> filter_prefix,
+			 uint64_t max_return,
+			 boost::container::flat_map<std::string,
+		                                    ceph::buffer::list>* kv,
+			 bool* truncated,
+			 boost::system::error_code* ec = nullptr) && {
+    return std::move(get_omap_vals(start_after, filter_prefix, max_return, kv,
+				   truncated, ec));
+  }
 
-  void get_omap_vals_by_keys(const boost::container::flat_set<std::string>& keys,
-			     boost::container::flat_map<std::string,
-			                                ceph::buffer::list>* kv,
-			     boost::system::error_code* ec = nullptr);
+  ReadOp& get_omap_vals_by_keys(
+    const boost::container::flat_set<std::string>& keys,
+    boost::container::flat_map<std::string, ceph::buffer::list>* kv,
+    boost::system::error_code* ec = nullptr) &;
+  ReadOp&& get_omap_vals_by_keys(
+    const boost::container::flat_set<std::string>& keys,
+    boost::container::flat_map<std::string, ceph::buffer::list>* kv,
+    boost::system::error_code* ec = nullptr) && {
+    return std::move(get_omap_vals_by_keys(keys, kv, ec));
+  }
 
-  void list_watchers(std::vector<struct ObjWatcher>* watchers,
-		     boost::system::error_code* ec = nullptr);
+  ReadOp& list_watchers(std::vector<struct ObjWatcher>* watchers,
+			boost::system::error_code* ec = nullptr) &;
+  ReadOp&& list_watchers(std::vector<struct ObjWatcher>* watchers,
+			 boost::system::error_code* ec = nullptr) && {
+    return std::move(list_watchers(watchers, ec));
+  }
 
-  void list_snaps(struct SnapSet* snaps,
-		  boost::system::error_code* ec = nullptr);
+  ReadOp& list_snaps(struct SnapSet* snaps,
+		     boost::system::error_code* ec = nullptr) &;
+  ReadOp&& list_snaps(struct SnapSet* snaps,
+		      boost::system::error_code* ec = nullptr) && {
+    return std::move(list_snaps(snaps, ec));
+  }
+
+  // Chaining versions of functions from Op
+  ReadOp& set_excl() & {
+    Op::set_excl();
+    return *this;
+  }
+  ReadOp&& set_excl() && {
+    Op::set_excl();
+    return std::move(*this);
+  }
+
+  ReadOp& set_failok() & {
+    Op::set_failok();
+    return *this;
+  }
+  ReadOp&& set_failok() && {
+    Op::set_failok();
+    return std::move(*this);
+  }
+
+  ReadOp& set_fadvise_random() & {
+    Op::set_fadvise_random();
+    return *this;
+  }
+  ReadOp&& set_fadvise_random() && {
+    Op::set_fadvise_random();
+    return std::move(*this);
+  }
+
+  ReadOp& set_fadvise_sequential() & {
+    Op::set_fadvise_sequential();
+    return *this;
+  }
+  ReadOp&& set_fadvise_sequential() && {
+    Op::set_fadvise_sequential();
+    return std::move(*this);
+  }
+
+  ReadOp& set_fadvise_willneed() & {
+    Op::set_fadvise_willneed();
+    return *this;
+  }
+  ReadOp&& set_fadvise_willneed() && {
+    Op::set_fadvise_willneed();
+    return std::move(*this);
+  }
+
+  ReadOp& set_fadvise_dontneed() & {
+    Op::set_fadvise_dontneed();
+    return *this;
+  }
+  ReadOp&& set_fadvise_dontneed() && {
+    Op::set_fadvise_dontneed();
+    return std::move(*this);
+  }
+
+  ReadOp& set_fadvise_nocache() & {
+    Op::set_fadvise_nocache();
+    return *this;
+  }
+  ReadOp&& set_fadvise_nocache() && {
+    Op::set_fadvise_nocache();
+    return std::move(*this);
+  }
+
+  ReadOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) & {
+    Op::cmpext(off, std::move(cmp_bl), s);
+    return *this;
+  }
+  ReadOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) && {
+    Op::cmpext(off, std::move(cmp_bl), s);
+    return std::move(*this);
+  }
+
+  ReadOp& cmpxattr(std::string_view name, cmpxattr_op op,
+		   const ceph::buffer::list& val) & {
+    Op::cmpxattr(name, op, val);
+    return *this;
+  }
+  ReadOp&& cmpxattr(std::string_view name, cmpxattr_op op,
+		    const ceph::buffer::list& val) && {
+    Op::cmpxattr(name, op, val);
+    return std::move(*this);
+  }
+
+  ReadOp& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) & {
+    Op::cmpxattr(name, op, val);
+    return *this;
+  }
+  ReadOp&& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) && {
+    Op::cmpxattr(name, op, val);
+    return std::move(*this);
+  }
+
+  ReadOp& assert_version(uint64_t ver) & {
+    Op::assert_version(ver);
+    return *this;
+  }
+  ReadOp&& assert_version(uint64_t ver) && {
+    Op::assert_version(ver);
+    return std::move(*this);
+  }
+
+  ReadOp& assert_exists() & {
+    Op::assert_exists();
+    return *this;
+  }
+  ReadOp&& assert_exists() && {
+    Op::assert_exists();
+    return std::move(*this);
+  }
+
+  ReadOp& cmp_omap(
+    const boost::container::flat_map<
+      std::string, std::pair<ceph::buffer::list, int>>& assertions) & {
+    Op::cmp_omap(assertions);
+    return *this;
+  }
+  ReadOp&& cmp_omap(
+    const boost::container::flat_map<
+      std::string, std::pair<ceph::buffer::list, int>>& assertions) && {
+    Op::cmp_omap(assertions);
+    return std::move(*this);
+  }
+
+  ReadOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       ceph::buffer::list* out,
+	       boost::system::error_code* ec = nullptr) & {
+    Op::exec(cls, method, inbl, out, ec);
+    return *this;
+  }
+  ReadOp&& exec(std::string_view cls, std::string_view method,
+		const ceph::buffer::list& inbl,
+		ceph::buffer::list* out,
+		boost::system::error_code* ec = nullptr) && {
+    Op::exec(cls, method, inbl, out, ec);
+    return std::move(*this);
+  }
+
+  ReadOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       fu2::unique_function<void(boost::system::error_code,
+	                            const ceph::buffer::list&) &&> f) & {
+    Op::exec(cls, method, inbl, std::move(f));
+    return *this;
+  }
+  ReadOp&& exec(std::string_view cls, std::string_view method,
+		const ceph::buffer::list& inbl,
+	        fu2::unique_function<void(boost::system::error_code,
+	                             const ceph::buffer::list&) &&> f) && {
+    Op::exec(cls, method, inbl, std::move(f));
+    return std::move(*this);
+  }
+
+  ReadOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       fu2::unique_function<void(boost::system::error_code, int,
+	                                 const ceph::buffer::list&) &&> f) & {
+    Op::exec(cls, method, inbl, std::move(f));
+    return *this;
+  }
+  ReadOp&& exec(std::string_view cls, std::string_view method,
+	        const ceph::buffer::list& inbl,
+	        fu2::unique_function<void(boost::system::error_code, int,
+	                                  const ceph::buffer::list&) &&> f) && {
+    Op::exec(cls, method, inbl, std::move(f));
+    return std::move(*this);
+  }
+
+  ReadOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       boost::system::error_code* ec = nullptr) & {
+    Op::exec(cls, method, inbl, ec);
+    return *this;
+  }
+  ReadOp&& exec(std::string_view cls, std::string_view method,
+		const ceph::buffer::list& inbl,
+		boost::system::error_code* ec = nullptr) && {
+    Op::exec(cls, method, inbl, ec);
+    return std::move(*this);
+  }
+
+  template<typename F>
+  ReadOp& exec(ClsOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  ReadOp&& exec(ClsOp<F>&& clsop) && {
+    return std::move(clsop(*this));
+  }
+  template<typename F>
+  ReadOp& exec(ClsReadOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  ReadOp&& exec(ClsReadOp<F>&& clsop) && {
+    return std::move(clsop(*this));
+  }
+
+  // Flags that apply to all ops in the operation vector
+  ReadOp& balance_reads() & {
+    Op::balance_reads();
+    return *this;
+  }
+  ReadOp&& balance_reads() && {
+    Op::balance_reads();
+    return std::move(*this);
+  }
+  ReadOp& localize_reads() & {
+    Op::localize_reads();
+    return *this;
+  }
+  ReadOp&& localize_reads() && {
+    Op::localize_reads();
+    return std::move(*this);
+  }
+  ReadOp& order_reads_writes() & {
+    Op::order_reads_writes();
+    return *this;
+  }
+  ReadOp&& order_reads_writes() && {
+    Op::order_reads_writes();
+    return std::move(*this);
+  }
+  ReadOp& ignore_cache() & {
+    Op::ignore_cache();
+    return *this;
+  }
+  ReadOp&& ignore_cache() && {
+    Op::ignore_cache();
+    return std::move(*this);
+  }
+  ReadOp& skiprwlocks() & {
+    Op::skiprwlocks();
+    return *this;
+  }
+  ReadOp&& skiprwlocks() && {
+    Op::skiprwlocks();
+    return std::move(*this);
+  }
+  ReadOp& ignore_overlay() & {
+    Op::ignore_overlay();
+    return *this;
+  }
+  ReadOp&& ignore_overlay() && {
+    Op::ignore_overlay();
+    return std::move(*this);
+  }
+  ReadOp& full_try() & {
+    Op::full_try();
+    return *this;
+  }
+  ReadOp&& full_try() && {
+    Op::full_try();
+    return std::move(*this);
+  }
+  ReadOp& full_force() & {
+    Op::full_force();
+    return *this;
+  }
+  ReadOp&& full_force() && {
+    Op::full_force();
+    return std::move(*this);
+  }
+  ReadOp& ignore_redirect() & {
+    Op::ignore_redirect();
+    return *this;
+  }
+  ReadOp&& ignore_redirect() && {
+    Op::ignore_redirect();
+    return std::move(*this);
+  }
+  ReadOp& ordersnap() & {
+    Op::ordersnap();
+    return *this;
+  }
+  ReadOp&& ordersnap() && {
+    Op::ordersnap();
+    return std::move(*this);
+  }
+  ReadOp& returnvec() & {
+    Op::returnvec();
+    return *this;
+  }
+  ReadOp&& returnvec() && {
+    Op::returnvec();
+    return std::move(*this);
+  }
 };
 
 class WriteOp final : public Op {
@@ -359,28 +772,376 @@ public:
   WriteOp& operator =(const WriteOp&) = delete;
   WriteOp& operator =(WriteOp&&) = default;
 
-  void set_mtime(ceph::real_time t);
-  void create(bool exclusive);
-  void write(uint64_t off, ceph::buffer::list&& bl);
-  void write_full(ceph::buffer::list&& bl);
-  void writesame(std::uint64_t off, std::uint64_t write_len,
-		 ceph::buffer::list&& bl);
-  void append(ceph::buffer::list&& bl);
-  void remove();
-  void truncate(uint64_t off);
-  void zero(uint64_t off, uint64_t len);
-  void rmxattr(std::string_view name);
-  void setxattr(std::string_view name,
-		ceph::buffer::list&& bl);
-  void rollback(uint64_t snapid);
-  void set_omap(const boost::container::flat_map<std::string,
-		                                 ceph::buffer::list>& map);
-  void set_omap_header(ceph::buffer::list&& bl);
-  void clear_omap();
-  void rm_omap_keys(const boost::container::flat_set<std::string>& to_rm);
-  void set_alloc_hint(uint64_t expected_object_size,
-		      uint64_t expected_write_size,
-		      alloc_hint::alloc_hint_t flags);
+  WriteOp& set_mtime(ceph::real_time t) &;
+  WriteOp&& set_mtime(ceph::real_time t) && {
+    return std::move(set_mtime(t));
+  }
+  WriteOp& create(bool exclusive) &;
+  WriteOp&& create(bool exclusive) && {
+    return std::move(create(exclusive));
+  }
+  WriteOp& write(uint64_t off, ceph::buffer::list&& bl) &;
+  WriteOp&& write(uint64_t off, ceph::buffer::list&& bl) && {
+    return std::move(write(off, std::move(bl)));
+  }
+  WriteOp& write_full(ceph::buffer::list&& bl) &;
+  WriteOp&& write_full(ceph::buffer::list&& bl) && {
+    return std::move(write_full(std::move(bl)));
+  }
+  WriteOp& writesame(std::uint64_t off, std::uint64_t write_len,
+		     ceph::buffer::list&& bl) &;
+  WriteOp&& writesame(std::uint64_t off, std::uint64_t write_len,
+		      ceph::buffer::list&& bl) && {
+    return std::move(writesame(off, write_len, std::move(bl)));
+  }
+  WriteOp& append(ceph::buffer::list&& bl) &;
+  WriteOp&& append(ceph::buffer::list&& bl) && {
+    return std::move(append(std::move(bl)));
+  }
+  WriteOp& remove() &;
+  WriteOp&& remove() && {
+    return std::move(remove());
+  }
+  WriteOp& truncate(uint64_t off) &;
+  WriteOp&& truncate(uint64_t off) && {
+    return std::move(truncate(off));
+  }
+  WriteOp& zero(uint64_t off, uint64_t len) &;
+  WriteOp&& zero(uint64_t off, uint64_t len) && {
+    return std::move(zero(off, len));
+  }
+  WriteOp& rmxattr(std::string_view name) &;
+  WriteOp&& rmxattr(std::string_view name) && {
+    return std::move(rmxattr(name));
+  }
+  WriteOp& setxattr(std::string_view name,
+		    ceph::buffer::list&& bl) &;
+  WriteOp&& setxattr(std::string_view name,
+		     ceph::buffer::list&& bl) && {
+    return std::move(setxattr(name, std::move(bl)));
+  }
+  WriteOp& rollback(uint64_t snapid) &;
+  WriteOp&& rollback(uint64_t snapid) && {
+    return std::move(rollback(snapid));
+  }
+  WriteOp& set_omap(
+    const boost::container::flat_map<std::string, ceph::buffer::list>& map) &;
+  WriteOp&& set_omap(
+    const boost::container::flat_map<std::string, ceph::buffer::list>& map) && {
+    return std::move(set_omap(map));
+  }
+  WriteOp& set_omap_header(ceph::buffer::list&& bl) &;
+  WriteOp&& set_omap_header(ceph::buffer::list&& bl) && {
+    return std::move(set_omap_header(std::move(bl)));
+  }
+  WriteOp& clear_omap() &;
+  WriteOp&& clear_omap() && {
+    return std::move(clear_omap());
+  }
+  WriteOp& rm_omap_keys(const boost::container::flat_set<std::string>& to_rm) &;
+  WriteOp&& rm_omap_keys(const boost::container::flat_set<std::string>& to_rm) && {
+    return std::move(rm_omap_keys(to_rm));
+  }
+  WriteOp& set_alloc_hint(uint64_t expected_object_size,
+			  uint64_t expected_write_size,
+			  alloc_hint::alloc_hint_t flags) &;
+  WriteOp&& set_alloc_hint(uint64_t expected_object_size,
+			   uint64_t expected_write_size,
+			   alloc_hint::alloc_hint_t flags) && {
+    return std::move(set_alloc_hint(expected_object_size,
+				    expected_write_size,
+				    flags));
+  }
+
+  // Chaining versions of functions from Op
+  WriteOp& set_excl() & {
+    Op::set_excl();
+    return *this;
+  }
+  WriteOp&& set_excl() && {
+    Op::set_excl();
+    return std::move(*this);
+  }
+
+  WriteOp& set_failok() & {
+    Op::set_failok();
+    return *this;
+  }
+  WriteOp&& set_failok() && {
+    Op::set_failok();
+    return std::move(*this);
+  }
+
+  WriteOp& set_fadvise_random() & {
+    Op::set_fadvise_random();
+    return *this;
+  }
+  WriteOp&& set_fadvise_random() && {
+    Op::set_fadvise_random();
+    return std::move(*this);
+  }
+
+  WriteOp& set_fadvise_sequential() & {
+    Op::set_fadvise_sequential();
+    return *this;
+  }
+  WriteOp&& set_fadvise_sequential() && {
+    Op::set_fadvise_sequential();
+    return std::move(*this);
+  }
+
+  WriteOp& set_fadvise_willneed() & {
+    Op::set_fadvise_willneed();
+    return *this;
+  }
+  WriteOp&& set_fadvise_willneed() && {
+    Op::set_fadvise_willneed();
+    return std::move(*this);
+  }
+
+  WriteOp& set_fadvise_dontneed() & {
+    Op::set_fadvise_dontneed();
+    return *this;
+  }
+  WriteOp&& set_fadvise_dontneed() && {
+    Op::set_fadvise_dontneed();
+    return std::move(*this);
+  }
+
+  WriteOp& set_fadvise_nocache() & {
+    Op::set_fadvise_nocache();
+    return *this;
+  }
+  WriteOp&& set_fadvise_nocache() && {
+    Op::set_fadvise_nocache();
+    return std::move(*this);
+  }
+
+  WriteOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) & {
+    Op::cmpext(off, std::move(cmp_bl), s);
+    return *this;
+  }
+  WriteOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) && {
+    Op::cmpext(off, std::move(cmp_bl), s);
+    return std::move(*this);
+  }
+
+  WriteOp& cmpxattr(std::string_view name, cmpxattr_op op,
+		   const ceph::buffer::list& val) & {
+    Op::cmpxattr(name, op, val);
+    return *this;
+  }
+  WriteOp&& cmpxattr(std::string_view name, cmpxattr_op op,
+		    const ceph::buffer::list& val) && {
+    Op::cmpxattr(name, op, val);
+    return std::move(*this);
+  }
+
+  WriteOp& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) & {
+    Op::cmpxattr(name, op, val);
+    return *this;
+  }
+  WriteOp&& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) && {
+    Op::cmpxattr(name, op, val);
+    return std::move(*this);
+  }
+
+  WriteOp& assert_version(uint64_t ver) & {
+    Op::assert_version(ver);
+    return *this;
+  }
+  WriteOp&& assert_version(uint64_t ver) && {
+    Op::assert_version(ver);
+    return std::move(*this);
+  }
+
+  WriteOp& assert_exists() & {
+    Op::assert_exists();
+    return *this;
+  }
+  WriteOp&& assert_exists() && {
+    Op::assert_exists();
+    return std::move(*this);
+  }
+
+  WriteOp& cmp_omap(
+    const boost::container::flat_map<
+      std::string, std::pair<ceph::buffer::list, int>>& assertions) & {
+    Op::cmp_omap(assertions);
+    return *this;
+  }
+  WriteOp&& cmp_omap(
+    const boost::container::flat_map<
+      std::string, std::pair<ceph::buffer::list, int>>& assertions) && {
+    Op::cmp_omap(assertions);
+    return std::move(*this);
+  }
+
+  WriteOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       ceph::buffer::list* out,
+	       boost::system::error_code* ec = nullptr) & {
+    Op::exec(cls, method, inbl, out, ec);
+    return *this;
+  }
+  WriteOp&& exec(std::string_view cls, std::string_view method,
+		const ceph::buffer::list& inbl,
+		ceph::buffer::list* out,
+		boost::system::error_code* ec = nullptr) && {
+    Op::exec(cls, method, inbl, out, ec);
+    return std::move(*this);
+  }
+
+  WriteOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       fu2::unique_function<void(boost::system::error_code,
+	                            const ceph::buffer::list&) &&> f) & {
+    Op::exec(cls, method, inbl, std::move(f));
+    return *this;
+  }
+  WriteOp&& exec(std::string_view cls, std::string_view method,
+		const ceph::buffer::list& inbl,
+	        fu2::unique_function<void(boost::system::error_code,
+	                             const ceph::buffer::list&) &&> f) && {
+    Op::exec(cls, method, inbl, std::move(f));
+    return std::move(*this);
+  }
+
+  WriteOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       fu2::unique_function<void(boost::system::error_code, int,
+	                                 const ceph::buffer::list&) &&> f) & {
+    Op::exec(cls, method, inbl, std::move(f));
+    return *this;
+  }
+  WriteOp&& exec(std::string_view cls, std::string_view method,
+	        const ceph::buffer::list& inbl,
+	        fu2::unique_function<void(boost::system::error_code, int,
+	                                  const ceph::buffer::list&) &&> f) && {
+    Op::exec(cls, method, inbl, std::move(f));
+    return std::move(*this);
+  }
+
+  WriteOp& exec(std::string_view cls, std::string_view method,
+	       const ceph::buffer::list& inbl,
+	       boost::system::error_code* ec = nullptr) & {
+    Op::exec(cls, method, inbl, ec);
+    return *this;
+  }
+  WriteOp&& exec(std::string_view cls, std::string_view method,
+		const ceph::buffer::list& inbl,
+		boost::system::error_code* ec = nullptr) && {
+    Op::exec(cls, method, inbl, ec);
+    return std::move(*this);
+  }
+
+  template<typename F>
+  WriteOp& exec(ClsOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  WriteOp&& exec(ClsOp<F>&& clsop) && {
+    return std::move(clsop(*this));
+  }
+  template<typename F>
+  WriteOp& exec(ClsWriteOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  WriteOp&& exec(ClsWriteOp<F>&& clsop) && {
+    return std::move(clsop(*this));
+  }
+
+
+  // Flags that apply to all ops in the operation vector
+  WriteOp& balance_reads() & {
+    Op::balance_reads();
+    return *this;
+  }
+  WriteOp&& balance_reads() && {
+    Op::balance_reads();
+    return std::move(*this);
+  }
+  WriteOp& localize_reads() & {
+    Op::localize_reads();
+    return *this;
+  }
+  WriteOp&& localize_reads() && {
+    Op::localize_reads();
+    return std::move(*this);
+  }
+  WriteOp& order_reads_writes() & {
+    Op::order_reads_writes();
+    return *this;
+  }
+  WriteOp&& order_reads_writes() && {
+    Op::order_reads_writes();
+    return std::move(*this);
+  }
+  WriteOp& ignore_cache() & {
+    Op::ignore_cache();
+    return *this;
+  }
+  WriteOp&& ignore_cache() && {
+    Op::ignore_cache();
+    return std::move(*this);
+  }
+  WriteOp& skiprwlocks() & {
+    Op::skiprwlocks();
+    return *this;
+  }
+  WriteOp&& skiprwlocks() && {
+    Op::skiprwlocks();
+    return std::move(*this);
+  }
+  WriteOp& ignore_overlay() & {
+    Op::ignore_overlay();
+    return *this;
+  }
+  WriteOp&& ignore_overlay() && {
+    Op::ignore_overlay();
+    return std::move(*this);
+  }
+  WriteOp& full_try() & {
+    Op::full_try();
+    return *this;
+  }
+  WriteOp&& full_try() && {
+    Op::full_try();
+    return std::move(*this);
+  }
+  WriteOp& full_force() & {
+    Op::full_force();
+    return *this;
+  }
+  WriteOp&& full_force() && {
+    Op::full_force();
+    return std::move(*this);
+  }
+  WriteOp& ignore_redirect() & {
+    Op::ignore_redirect();
+    return *this;
+  }
+  WriteOp&& ignore_redirect() && {
+    Op::ignore_redirect();
+    return std::move(*this);
+  }
+  WriteOp& ordersnap() & {
+    Op::ordersnap();
+    return *this;
+  }
+  WriteOp&& ordersnap() && {
+    Op::ordersnap();
+    return std::move(*this);
+  }
+  WriteOp& returnvec() & {
+    Op::returnvec();
+    return *this;
+  }
+  WriteOp&& returnvec() && {
+    Op::returnvec();
+    return std::move(*this);
+  }
 };
 
 
