@@ -14,9 +14,10 @@ system_1 = {
         'Health': 'OK'
     },
 
-    'processor': {
+    'processors': [{
         'description': '',
-        'count': '',
+        'cores': '',
+        'threads': '',
         'type': '',
         'model': '',
         'temperature': '',
@@ -24,7 +25,7 @@ system_1 = {
             'State': 'Enabled',
             'Health': 'OK'
         }
-    },
+    }],
 
     'memory': {
         'description': '',
@@ -56,6 +57,9 @@ system_1 = {
             {
                 'device': 'devc',
                 'description': 'Milk, Cheese, Bread, Fruit, Vegetables',
+                'serial_number': 'xxxxx',
+                'location': '1I:x:y',
+                'interface_type': 'SATA',
                 'model': 'Buy groceries',
                 'type': 'ssd|rotate|nvme',
                 'capacity_bytes': '',
@@ -68,8 +72,8 @@ system_1 = {
         ]
     },
 
-    'power': {
-        'power_supplies': [
+    'power':
+        [{
             'type': 'xx',
             'manufacturer': 'xxx',
             'model': 'xx',
@@ -79,14 +83,16 @@ system_1 = {
                 'State': 'Enabled',
                 'Health': 'OK'
             }
-        ]
-    },
+        }],
 
-    'cooling': {
+    'thermal': {
         'fans': [
             {
                 'id': 1,
-                'status': '',
+                'status': {
+                    'State': 'Enabled',
+                    'Health': 'OK'
+                }
             }
         ]
     },
