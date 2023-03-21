@@ -1091,7 +1091,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 
     rgw::sal::BucketList buckets;
     std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
-    std::string marker;
+    std::string marker = op_state.marker;
     const std::string empty_end_marker;
     constexpr bool no_need_stats = false; // set need_stats to false
 

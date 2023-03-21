@@ -6982,6 +6982,7 @@ int main(int argc, const char **argv)
           return -ENOENT;
         }
       }
+      bucket_op.marker = marker;
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);

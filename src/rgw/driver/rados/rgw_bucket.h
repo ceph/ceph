@@ -222,6 +222,7 @@ struct RGWBucketAdminOpState {
   std::string bucket_id;
   std::string object_name;
   std::string new_bucket_name;
+  std::string marker;
 
   bool list_buckets;
   bool stat_buckets;
