@@ -163,9 +163,12 @@ class RgwRESTController(RESTController):
             if json_response:
                 result = json_str_to_object(result)
             return result
-        except (DashboardException, RequestException) as e:
-            http_status_code = e.status if isinstance(e, DashboardException) else 500
+        except (RequestException) as e:
+            # Bypass NotFound errors
+            http_status_code = e.status_code if e.status_code == 404 else 500
             raise DashboardException(e, http_status_code=http_status_code, component='rgw')
+        except (DashboardException) as e:
+            raise DashboardException(e, http_status_code=e.status, component='rgw')
 
 
 @APIRouter('/rgw/site', Scope.RGW)
