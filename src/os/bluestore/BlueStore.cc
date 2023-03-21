@@ -4673,6 +4673,12 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_max_blob_size_ssd",
     "bluestore_compression_max_blob_size_hdd",
     "bluestore_compression_required_ratio",
+    "bluestore_kv_sync_max_interval",
+    "bluestore_kv_sync_max_interval_ssd",
+    "bluestore_kv_sync_max_interval_hdd",
+    "bluestore_kv_sync_max_items",
+    "bluestore_kv_sync_max_items_ssd",
+    "bluestore_kv_sync_max_items_hdd",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
     "bluestore_prefer_deferred_size_hdd",
@@ -4729,6 +4735,22 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
       changed.count("bluestore_compression_max_blob_size")) {
     if (bdev) {
       _set_compression();
+    }
+  }
+  if (changed.count("bluestore_kv_sync_interval") ||
+      changed.count("bluestore_kv_sync_interval_hdd") ||
+      changed.count("bluestore_kv_sync_interval_ssd")) { 
+    if (bdev) {
+      // only after startup
+      _set_kv_sync_interval();
+    }
+  }
+  if (changed.count("bluestore_kv_sync_items") ||
+      changed.count("bluestore_kv_sync_items_hdd") ||
+      changed.count("bluestore_kv_sync_items_ssd")) {
+    if (bdev) {
+      // only after startup
+      _set_kv_sync_items();
     }
   }
   if (changed.count("bluestore_max_blob_size") ||
@@ -4861,6 +4883,32 @@ void BlueStore::_set_throttle_params()
 
   dout(10) << __func__ << " throttle_cost_per_io " << throttle_cost_per_io
 	   << dendl;
+}
+void BlueStore::_set_kv_sync_interval() {
+  if (cct->_conf->bluestore_kv_sync_interval) {
+    kv_sync_interval = cct->_conf->bluestore_kv_sync_interval;
+  } else {
+    ceph_assert(bdev);
+    if (_use_rotational_settings()) {
+      kv_sync_interval = cct->_conf->bluestore_kv_sync_interval_hdd;
+    } else {
+      kv_sync_interval = cct->_conf->bluestore_kv_sync_interval_ssd;
+    }
+  }
+  dout(10) << __func__ << " kv_sync_interval " << kv_sync_interval << dendl;
+}
+void BlueStore::_set_kv_sync_items() {
+  if (cct->_conf->bluestore_kv_sync_items) {
+    kv_sync_items = cct->_conf->bluestore_kv_sync_items;
+  } else {
+    ceph_assert(bdev);
+    if (_use_rotational_settings()) {
+      kv_sync_items = cct->_conf->bluestore_kv_sync_items_hdd;
+    } else {
+      kv_sync_items = cct->_conf->bluestore_kv_sync_items_ssd;
+    }
+  }
+  dout(10) << __func__ << " kv_sync_items " << kv_sync_items << dendl;
 }
 void BlueStore::_set_blob_size()
 {
@@ -12420,8 +12468,9 @@ int BlueStore::_open_super_meta()
 
   _set_csum();
   _set_compression();
+  _set_kv_sync_interval();
+  _set_kv_sync_items();
   _set_blob_size();
-
   _validate_bdev();
   return 0;
 }
@@ -13255,7 +13304,25 @@ void BlueStore::_kv_sync_thread()
   timespan twait = ceph::make_timespan(0);
   size_t kv_submitted = 0;
 
+  ceph::timespan max_interval = std::chrono::microseconds(kv_sync_interval);
+  auto last = t0;
+  auto cur = t0;
+
   while (true) {
+    cur = mono_clock::now();
+    ceph::timespan sync_interval = cur - last;
+    if (sync_interval < max_interval && kv_queue.size() < kv_sync_items) {
+      continue;
+    }  else {
+      dout(20) << __func__ 
+              << ", kv_sync_interval: " << kv_sync_interval
+              << ", sync_interval: " << sync_interval
+              << ", kv_sync_items: " << kv_sync_items
+              << ", kv_queue.size(): " << kv_queue.size()
+              << dendl;
+      last = cur;
+    }
+
     auto period = cct->_conf->bluestore_kv_sync_util_logging_s;
     auto observation_period =
       ceph::make_timespan(period);

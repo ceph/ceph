@@ -2335,6 +2335,12 @@ private:
 
   std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
 
+  ////< Maximum time in microseconds to wait between kv syncs
+  std::atomic<uint64_t> kv_sync_interval = {0};
+
+  ////< Maximum number of kv items to queue between kv syncs
+  std::atomic<uint64_t> kv_sync_items = {0};
+
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
 
@@ -2620,6 +2626,8 @@ private:
   void _set_alloc_sizes();
   void _set_blob_size();
   void _set_finisher_num();
+  void _set_kv_sync_interval();
+  void _set_kv_sync_items();
   void _set_per_pool_omap();
   void _update_osd_memory_options();
 

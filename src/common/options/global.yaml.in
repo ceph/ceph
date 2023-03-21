@@ -4610,6 +4610,73 @@ options:
   flags:
   - runtime
   with_legacy: true
+- name: bluestore_kv_sync_interval
+  type: size
+  level: dev
+  long_desc: Bluestore syncronizes key/value data and deferred writes to the RocksDB
+    write-ahead-log in a dedicated background thread.  This paramater specifies in
+    microseconds how long the kv sync thread should wait to accumulate IO before
+    flushing data the the write-ahead-log.  The higher this value is set, the longer
+    the kv sync thread will wait.  This can increase minimum latency, but may also
+    reduce the number of syncs necessary to flush data to disk.  The effect on
+    average and tail latency are likely to be device dependent. A value of 0 means
+    not to wait and let the kv_sync thread run as fast as possible.
+  default: 0
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_kv_sync_interval_hdd
+  type: size
+  level: dev
+  default: 8000
+  see_also:
+  - bluestore_kv_sync_interval
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_kv_sync_interval_ssd
+  type: size
+  level: dev
+  default: 0
+  see_also:
+  - bluestore_kv_sync_interval
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_kv_sync_items
+  type: size
+  level: dev
+  long_desc: Bluestore syncronizes key/value data and deferred writes to the RocksDB
+    write-ahead-log in a dedicated background thread.  This paramater specifies the 
+    the number of queued items the kv sync thread should try to accumulate before
+    flushing data the the write-ahead-log.  The higher this value is set, the more
+    items the kv sync thread will try to collect.  This can increase minimum latency,
+    but may also reduce the number of syncs necessary to flush data to disk.  The
+    effect on average and tail latency are likely to be device dependent. A value of
+    0 means not to try to accumulate queued items and let the kv_sync thread run as
+    fast as possible.
+  default: 0
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_kv_sync_items_hdd
+  type: size
+  level: dev
+  default: 32 
+  see_also:
+  - bluestore_kv_sync_items
+  flags:
+  - runtime
+  with_legacy: true
+- name: bluestore_kv_sync_items_ssd
+  type: size
+  level: dev
+  default: 0
+  see_also:
+  - bluestore_kv_sync_items
+  flags:
+  - runtime
+  with_legacy: true
 - name: bluestore_max_blob_size
   type: size
   level: dev
