@@ -73,25 +73,42 @@ class NFSCluster:
             # run NFS on non-standard port
             if not ingress_mode:
                 ingress_mode = IngressType.default
+            ingress_mode = ingress_mode.canonicalize()
             pspec = PlacementSpec.from_string(placement)
             if ingress_mode == IngressType.keepalive_only:
                 # enforce count=1 for nfs over keepalive only
                 pspec.count = 1
+
+            ganesha_port = 10000 + port  # semi-arbitrary, fix me someday
+            frontend_port: Optional[int] = port
+            virtual_ip_for_ganesha: Optional[str] = None
+            keepalive_only: bool = False
+            enable_haproxy_protocol: bool = False
+            if ingress_mode == IngressType.haproxy_protocol:
+                enable_haproxy_protocol = True
+            elif ingress_mode == IngressType.keepalive_only:
+                keepalive_only = True
+                virtual_ip_for_ganesha = virtual_ip.split('/')[0]
+                ganesha_port = port
+                frontend_port = None
+
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
                                   placement=pspec,
                                   # use non-default port so we don't conflict with ingress
-                                  port=10000 + port if ingress_mode != IngressType.keepalive_only else port,  # semi-arbitrary, fix me someday
-                                  virtual_ip=virtual_ip.split('/')[0] if ingress_mode == IngressType.keepalive_only else None)
+                                  port=ganesha_port,
+                                  virtual_ip=virtual_ip_for_ganesha,
+                                  enable_haproxy_protocol=enable_haproxy_protocol)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
                                 service_id='nfs.' + cluster_id,
                                 backend_service='nfs.' + cluster_id,
                                 placement=pspec,
-                                frontend_port=port if ingress_mode != IngressType.keepalive_only else None,
+                                frontend_port=frontend_port,
                                 monitor_port=7000 + port,   # semi-arbitrary, fix me someday
                                 virtual_ip=virtual_ip,
-                                keepalive_only=(ingress_mode == IngressType.keepalive_only))
+                                keepalive_only=keepalive_only,
+                                enable_haproxy_protocol=enable_haproxy_protocol)
             completion = self.mgr.apply_ingress(ispec)
             orchestrator.raise_if_exception(completion)
         else:
