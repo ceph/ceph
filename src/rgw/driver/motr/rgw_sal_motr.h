@@ -359,7 +359,7 @@ class MotrBucket : public StoreBucket {
         DoutPrefixProvider *dpp) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
-    virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats = false) override;
+    virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;
     int link_user(const DoutPrefixProvider* dpp, User* new_user, optional_yield y);
     int unlink_user(const DoutPrefixProvider* dpp, User* new_user, optional_yield y);
     int create_bucket_index();
@@ -373,8 +373,10 @@ class MotrBucket : public StoreBucket {
     virtual int read_stats_async(const DoutPrefixProvider *dpp,
                                  const bucket_index_layout_generation& idx_layout,
                                  int shard_id, RGWGetBucketStats_CB* ctx) override;
-    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-    virtual int check_bucket_shards(const DoutPrefixProvider *dpp) override;
+    int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                        RGWBucketEnt* ent) override;
+    int check_bucket_shards(const DoutPrefixProvider *dpp,
+                            uint64_t num_objs) override;
     virtual int chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime) override;
     virtual bool is_owner(User* user) override;

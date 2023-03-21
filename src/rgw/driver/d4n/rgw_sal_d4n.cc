@@ -365,10 +365,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 	source->set_instance(it->second);
       } else if (!std::strcmp(it->first.data(), "source_zone_short_id")) {
 	astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second));
-      } else if (!std::strcmp(it->first.data(), "bucket_count")) {
-	source->get_bucket()->set_count(std::stoull(it->second));
-      } else if (!std::strcmp(it->first.data(), "bucket_size")) {
-	source->get_bucket()->set_size(std::stoull(it->second));
       } else if (!std::strcmp(it->first.data(), "user_quota.max_size")) {
         quota_info.max_size = std::stoull(it->second);
       } else if (!std::strcmp(it->first.data(), "user_quota.max_objects")) {
@@ -516,14 +512,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   }
-
-  bl.append(std::to_string(obj->get_bucket()->get_count()));
-  baseAttrs.insert({"bucket_count", bl});
-  bl.clear();
-
-  bl.append(std::to_string(obj->get_bucket()->get_size()));
-  baseAttrs.insert({"bucket_size", bl});
-  bl.clear();
 
   RGWUserInfo info = obj->get_bucket()->get_owner()->get_info();
   bl.append(std::to_string(info.quota.user_quota.max_size));

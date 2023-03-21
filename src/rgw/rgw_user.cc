@@ -35,12 +35,12 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* dri
         ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = bucket->sync_user_stats(dpp, y);
+      ret = bucket->sync_user_stats(dpp, y, &ent);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      ret = bucket->check_bucket_shards(dpp, y);
+      ret = bucket->check_bucket_shards(dpp, ent.count, y);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }

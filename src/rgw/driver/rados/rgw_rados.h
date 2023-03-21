@@ -1559,8 +1559,8 @@ public:
                   RGWQuota& quota, uint64_t obj_size,
 		  optional_yield y, bool check_size_only = false);
 
-  int check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
-			  uint64_t num_objs, const DoutPrefixProvider *dpp, optional_yield y);
+  int check_bucket_shards(const RGWBucketInfo& bucket_info, uint64_t num_objs,
+                          const DoutPrefixProvider *dpp, optional_yield y);
 
   int add_bucket_to_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, uint32_t new_num_shards, optional_yield y);
 

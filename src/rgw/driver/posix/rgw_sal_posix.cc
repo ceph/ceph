@@ -966,8 +966,7 @@ int POSIXBucket::remove_bucket_bypass_gc(int concurrent_max,
   return remove_bucket(dpp, true, false, nullptr, y);
 }
 
-int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-			      bool get_stats)
+int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
@@ -980,8 +979,8 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  bucket_statx_save(stx, ent, mtime);
-  info.creation_time = ent.creation_time;
+  mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+  info.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
 
   if (owner) {
     info.owner = owner->get_id();
@@ -1008,8 +1007,6 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   } else {
     // TODO dang: fake info up (UID to owner conversion?)
   }
-
-  info.creation_time = ent.creation_time;
 
   return 0;
 }
@@ -1071,14 +1068,16 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int POSIXBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int POSIXBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
 {
   return 0;
 }
 
-int POSIXBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
+int POSIXBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
+                                     uint64_t num_objs, optional_yield y)
 {
-      return 0;
+  return 0;
 }
 
 int POSIXBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
