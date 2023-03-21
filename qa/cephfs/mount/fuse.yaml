@@ -9,5 +9,8 @@ teuthology:
   - local function is_fuse()
       return true
     end
+  - local function syntax_version()
+      return ''
+    end
 tasks:
   - ceph-fuse:
