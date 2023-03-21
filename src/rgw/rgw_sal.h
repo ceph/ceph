@@ -454,6 +454,18 @@ class Driver {
 };
 
 /**
+ * @brief A list of buckets
+ *
+ * This is the result from a bucket listing operation.
+ */
+struct BucketList {
+  /// The list of results, sorted by bucket name
+  std::vector<RGWBucketEnt> buckets;
+  /// The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
+/**
  * @brief User abstraction
  *
  * This represents a user.  In general, there will be a @a User associated with an OP
@@ -814,51 +826,6 @@ class Bucket {
 
     virtual bool operator==(const Bucket& b) const = 0;
     virtual bool operator!=(const Bucket& b) const = 0;
-
-    friend class BucketList;
-};
-
-/**
- * @brief A list of buckets
- *
- * This is the result from a bucket listing operation.
- */
-class BucketList {
-  std::map<std::string, std::unique_ptr<Bucket>> buckets;
-  bool truncated;
-
-public:
-  BucketList() : buckets(), truncated(false) {}
-  BucketList(BucketList&& _bl) :
-    buckets(std::move(_bl.buckets)),
-    truncated(_bl.truncated)
-    { }
-  BucketList& operator=(const BucketList&) = delete;
-  BucketList& operator=(BucketList&& _bl) {
-    for (auto& ent : _bl.buckets) {
-      buckets.emplace(ent.first, std::move(ent.second));
-    }
-    truncated = _bl.truncated;
-    return *this;
-  };
-
-  /** Get the list of buckets.  The list is a map of <bucket-name, Bucket> pairs. */
-  std::map<std::string, std::unique_ptr<Bucket>>& get_buckets() { return buckets; }
-  /** True if the list is truncated (that is, there are more buckets to list) */
-  bool is_truncated(void) const { return truncated; }
-  /** Set the truncated state of the list */
-  void set_truncated(bool trunc) { truncated = trunc; }
-  /** Add a bucket to the list.  Takes ownership of the bucket */
-  void add(std::unique_ptr<Bucket> bucket) {
-    buckets.emplace(bucket->get_name(), std::move(bucket));
-  }
-  /** The number of buckets in this list */
-  size_t count() const { return buckets.size(); }
-  /** Clear the list */
-  void clear(void) {
-    buckets.clear();
-    truncated = false;
-  }
 };
 
 /**

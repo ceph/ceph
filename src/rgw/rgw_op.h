@@ -16,6 +16,7 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <string>
 #include <set>
 #include <map>
@@ -835,7 +836,7 @@ public:
   void execute(optional_yield y) override;
 
   virtual int get_params(optional_yield y) = 0;
-  virtual void handle_listing_chunk(rgw::sal::BucketList&& buckets) {
+  virtual void handle_listing_chunk(std::span<RGWBucketEnt> buckets) {
     /* The default implementation, used by e.g. S3, just generates a new
      * part of listing and sends it client immediately. Swift can behave
      * differently: when the reverse option is requested, all incoming
@@ -843,7 +844,7 @@ public:
     return send_response_data(buckets);
   }
   virtual void send_response_begin(bool has_buckets) = 0;
-  virtual void send_response_data(rgw::sal::BucketList& buckets) = 0;
+  virtual void send_response_data(std::span<const RGWBucketEnt> buckets) = 0;
   virtual void send_response_end() = 0;
   void send_response() override {}
 
