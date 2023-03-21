@@ -1469,14 +1469,21 @@ class CephadmServe:
                                  use_json: bool = False, timeout: Optional[int] = None, ) -> Any:
         if not timeout:
             timeout = self.mgr.default_cephadm_command_timeout
+        if 'sleep-90-seconds' in cmd_name:
+            self.log.error(f'Starting {cmd_name} on host {hostname} at {datetime_now()} (timeout set to {timeout})')
         try:
             if use_json:
                 result = self.mgr.wait_async(self._run_cephadm_json(*args, **kwargs), timeout)
             else:
                 result = self.mgr.wait_async(self._run_cephadm(*args, **kwargs), timeout)
         except asyncio.TimeoutError:
+            if 'sleep-90-seconds' in cmd_name:
+                self.log.error(f'Passed thread join for {cmd_name} on host {hostname} at {datetime_now()}')
             self.log.error(f'Command `cephadm {cmd_name}` on host {hostname} timed out. ({timeout} seconds timeout)')
             raise OrchestratorError(f'Command `cephadm {cmd_name}` on host {hostname} timed out. ({timeout} seconds timeout)')
+
+        if 'sleep-90-seconds' in cmd_name:
+            self.log.error(f'Passed thread join for {cmd_name} on host {hostname} at {datetime_now()}')
         return result
 
     async def _run_cephadm(self,
