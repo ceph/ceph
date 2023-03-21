@@ -173,6 +173,13 @@ class DaemonAction(enum.Enum):
 class IngressType(enum.Enum):
     default = 'default'
     keepalive_only = 'keepalive-only'
+    haproxy_standard = 'haproxy-standard'
+    haproxy_protocol = 'haproxy-protocol'
+
+    def canonicalize(self) -> "IngressType":
+        if self == self.default:
+            return self.haproxy_standard
+        return self
 
 
 def to_format(what: Any, format: Format, many: bool, cls: Any) -> Any:
