@@ -481,12 +481,17 @@ void ManagedLock<I>::send_acquire_lock() {
 
   uint64_t watch_handle = m_watcher->get_watch_handle();
   if (watch_handle == 0) {
-    lderr(m_cct) << "watcher not registered - delaying request" << dendl;
-    m_state = STATE_WAITING_FOR_REGISTER;
+    if (m_watcher->is_blocklisted()) {
+      lderr(m_cct) << "watcher not registered - client blocklisted" << dendl;
+      complete_active_action(STATE_UNLOCKED, -EBLOCKLISTED);
+    } else {
+      lderr(m_cct) << "watcher not registered - delaying request" << dendl;
+      m_state = STATE_WAITING_FOR_REGISTER;
 
-    // shut down might race w/ release/re-acquire of the lock
-    if (is_state_shutdown()) {
-      complete_active_action(STATE_UNLOCKED, -ESHUTDOWN);
+      // shut down might race w/ release/re-acquire of the lock
+      if (is_state_shutdown()) {
+        complete_active_action(STATE_UNLOCKED, -ESHUTDOWN);
+      }
     }
     return;
   }
