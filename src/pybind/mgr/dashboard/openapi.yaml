@@ -8549,22 +8549,14 @@ paths:
           application/json:
             schema:
               properties:
-<<<<<<< HEAD
-                default:
-                  default: ''
-=======
                 daemon_name:
                   type: string
                 default:
->>>>>>> e8048004324 (mgr/dashboard: edit rgw-multisite)
                   type: string
                 new_realm_name:
                   type: string
               required:
-<<<<<<< HEAD
-=======
               - default
->>>>>>> e8048004324 (mgr/dashboard: edit rgw-multisite)
               - new_realm_name
               type: object
       responses:

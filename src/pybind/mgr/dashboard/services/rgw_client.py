@@ -661,28 +661,11 @@ class RgwClient(RestClient):
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-    def edit_realm(self, realm_name: str, default: bool, new_realm_name: str):
+    def edit_realm(self, realm_name: str, new_realm_name: str, default: str = None):
         rgw_realm_edit_cmd = []
-        cmd_edit_realm_options = []
-        if new_realm_name == realm_name:
-            if str_to_bool(default):
-                rgw_realm_edit_cmd = ['realm', 'default']
-                cmd_edit_realm_options = ['--rgw-realm', realm_name]
-                rgw_realm_edit_cmd += cmd_edit_realm_options
-                try:
-                    exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_edit_cmd)
-                    if exit_code > 0:
-                        raise DashboardException(e=err, msg='Unable to set {} as default realm'.format(realm_name),  # noqa E501  #pylint: disable=line-too-long
-                                                 http_status_code=500, component='rgw')
-                except SubprocessError as error:
-                    raise DashboardException(error, http_status_code=500, component='rgw')
-            else:
-                raise DashboardException(msg='The realm already exists',
-                                         http_status_code=400, component='rgw')
-        else:
-            rgw_realm_edit_cmd = ['realm', 'rename']
-            cmd_edit_realm_options = ['--rgw-realm', realm_name, '--realm-new-name', new_realm_name]
-            rgw_realm_edit_cmd += cmd_edit_realm_options
+        if new_realm_name != realm_name:
+            rgw_realm_edit_cmd = ['realm', 'rename', '--rgw-realm',
+                                  realm_name, '--realm-new-name', new_realm_name]
             try:
                 exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
                 if exit_code > 0:
@@ -690,17 +673,15 @@ class RgwClient(RestClient):
                                              http_status_code=500, component='rgw')
             except SubprocessError as error:
                 raise DashboardException(error, http_status_code=500, component='rgw')
-            if str_to_bool(default):
-                rgw_realm_edit_cmd = ['realm', 'default']
-                cmd_edit_realm_options = ['--rgw-realm', new_realm_name]
-                rgw_realm_edit_cmd += cmd_edit_realm_options
-                try:
-                    exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
-                    if exit_code > 0:
-                        raise DashboardException(msg='Unable to set {} as default realm'.format(new_realm_name),  # noqa E501  #pylint: disable=line-too-long
-                                                 http_status_code=500, component='rgw')
-                except SubprocessError as error:
-                    raise DashboardException(error, http_status_code=500, component='rgw')
+        if default and str_to_bool(default):
+            rgw_realm_edit_cmd = ['realm', 'default', '--rgw-realm', new_realm_name]
+            try:
+                exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(msg='Unable to set {} as default realm'.format(new_realm_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_zonegroup(self, realm_name: str, zonegroup_name: str,
                          default: bool, master: bool, endpoints: List[str]):

@@ -710,7 +710,7 @@ class RgwRealm(RESTController):
     # pylint: disable=W0613
     def create(self, realm_name, default, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.create_realm(realm_name, default)
             return result
         except NoRgwDaemonsException as e:
@@ -720,7 +720,7 @@ class RgwRealm(RESTController):
     # pylint: disable=W0613
     def list(self, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.list_realms()
             return result
         except NoRgwDaemonsException as e:
@@ -730,7 +730,7 @@ class RgwRealm(RESTController):
     # pylint: disable=W0613
     def get(self, realm_name, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.get_realm(realm_name)
             return result
         except NoRgwDaemonsException as e:
@@ -748,10 +748,10 @@ class RgwRealm(RESTController):
 
     @allow_empty_body
     # pylint: disable=W0613
-    def set(self, realm_name, default, new_realm_name, daemon_name=None):
+    def set(self, realm_name: str, new_realm_name: str, default: str = None, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
-            result = instance.edit_realm(realm_name, default, new_realm_name)
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
+            result = instance.edit_realm(realm_name, new_realm_name, default)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
@@ -764,7 +764,7 @@ class RgwZonegroup(RESTController):
     def create(self, realm_name, zonegroup_name, default=None, master=None,
                zonegroup_endpoints=None, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.create_zonegroup(realm_name, zonegroup_name, default,
                                                master, zonegroup_endpoints)
             return result
@@ -775,7 +775,7 @@ class RgwZonegroup(RESTController):
     # pylint: disable=W0613
     def list(self, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.list_zonegroups()
             return result
         except NoRgwDaemonsException as e:
@@ -785,7 +785,7 @@ class RgwZonegroup(RESTController):
     # pylint: disable=W0613
     def get(self, zonegroup_name, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.get_zonegroup(zonegroup_name)
             return result
         except NoRgwDaemonsException as e:
@@ -809,7 +809,7 @@ class RgwZone(RESTController):
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
                zone_endpoints=None, user=None, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.create_zone(zone_name, zonegroup_name, default,
                                           master, zone_endpoints, user)
             return result
@@ -820,7 +820,7 @@ class RgwZone(RESTController):
     # pylint: disable=W0613
     def list(self, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.list_zones()
             return result
         except NoRgwDaemonsException as e:
@@ -830,7 +830,7 @@ class RgwZone(RESTController):
     # pylint: disable=W0613
     def get(self, zone_name, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance()
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.get_zone(zone_name)
             return result
         except NoRgwDaemonsException as e:
