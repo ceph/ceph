@@ -330,6 +330,13 @@ public:
 
   std::set<client_t> client_reclaim_gather;
 
+  std::set<client_t> get_laggy_clients() const {
+    return laggy_clients;
+  }
+  void clear_laggy_clients() {
+    laggy_clients.clear();
+  }
+
   const bufferlist& get_snap_trace(Session *session, SnapRealm *realm) const;
   const bufferlist& get_snap_trace(client_t client, SnapRealm *realm) const;
 
@@ -555,6 +562,9 @@ private:
 
   size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
   size_t fscrypt_last_block_max_size = g_conf().get_val<Option::size_t>("mds_fscrypt_last_block_max_size");
+
+  // record laggy clients due to laggy OSDs
+  std::set<client_t> laggy_clients;
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
