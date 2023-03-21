@@ -93,7 +93,11 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
         ? this.multisiteInfo[1]['zonegroups']
         : [];
     this.zonegroupList.forEach((zgp: any) => {
-      if (zgp.is_master === true && !_.isEmpty(zgp.realm_id)) {
+      if (
+        zgp.is_master === true &&
+        !_.isEmpty(zgp.realm_id) &&
+        zgp.realm_id === this.defaultsInfo['defaultRealmName']
+      ) {
         this.isMaster = true;
       }
     });

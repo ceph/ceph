@@ -67,6 +67,9 @@ export class RgwMultisiteRealmFormComponent implements OnInit {
     if (this.action === 'edit') {
       this.multisiteRealmForm.get('realmName').setValue(this.info.data.name);
       this.multisiteRealmForm.get('default_realm').setValue(this.info.data.is_default);
+      if (this.info.data.is_default) {
+        this.multisiteRealmForm.get('default_realm').disable();
+      }
     }
   }
 
