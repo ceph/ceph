@@ -278,6 +278,7 @@ def ceph_log(ctx, config):
                         '--no-run-if-empty',
                         '--',
                         'gzip',
+                        '-5',
                         '--',
                     ],
                     wait=False,

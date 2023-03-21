@@ -540,6 +540,7 @@ def build_ceph_cluster(ctx, config):
                         '--no-run-if-empty',
                         '--',
                         'gzip',
+                        '-5',
                         '--',
                     ],
                     wait=False,
