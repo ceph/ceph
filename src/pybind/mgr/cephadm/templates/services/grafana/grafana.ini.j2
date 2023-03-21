@@ -1,10 +1,12 @@
 # {{ cephadm_managed }}
 [users]
   default_theme = light
+{% if anonymous_access %}
 [auth.anonymous]
   enabled = true
   org_name = 'Main Org.'
   org_role = 'Viewer'
+{% endif %}
 [server]
   domain = 'bootstrap.storage.lab'
   protocol = {{ protocol }}
