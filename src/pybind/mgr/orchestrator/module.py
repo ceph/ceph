@@ -184,8 +184,8 @@ class IngressType(enum.Enum):
 
     def canonicalize(self) -> "IngressType":
         if self == self.default:
-            return self.haproxy_standard
-        return self
+            return IngressType(self.haproxy_standard)
+        return IngressType(self)
 
 
 def to_format(what: Any, format: Format, many: bool, cls: Any) -> Any:
