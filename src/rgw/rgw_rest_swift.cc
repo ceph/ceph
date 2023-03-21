@@ -203,18 +203,36 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::BucketList&& buckets)
+static bool bucket_prefix_less(const RGWBucketEnt& e, std::string_view p)
 {
-  if (wants_reversed) {
-    /* Just store in the reversal buffer. Its content will be handled later,
-     * in send_response_end(). */
-    reverse_buffer.emplace(std::begin(reverse_buffer), std::move(buckets));
-  } else {
+  return e.bucket.name < p;
+}
+
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(std::span<RGWBucketEnt> buckets)
+{
+  if (!wants_reversed) {
     return send_response_data(buckets);
+  }
+
+  /* Just store in the reversal buffer. Its content will be handled later,
+   * in send_response_end(). */
+  if (prefix.empty()) {
+    reverse_buffer.insert(reverse_buffer.begin(),
+                          std::make_move_iterator(buckets.rbegin()),
+                          std::make_move_iterator(buckets.rend()));
+    return;
+  }
+
+  // only keep the entries that match the prefix
+  auto i = std::lower_bound(buckets.begin(), buckets.end(),
+                            prefix, bucket_prefix_less);
+  for (; i != buckets.end() && boost::algorithm::starts_with(i->bucket.name, prefix);
+       ++i) {
+    reverse_buffer.push_front(std::move(*i));
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::BucketList& buckets)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data(std::span<const RGWBucketEnt> buckets)
 {
   if (! sent_data) {
     return;
@@ -224,22 +242,22 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::BucketList& buc
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  const auto& m = buckets.get_buckets();
-  for (auto iter = m.lower_bound(prefix);
-       iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
-       ++iter) {
-    dump_bucket_entry(*iter->second);
+  auto i = std::lower_bound(buckets.begin(), buckets.end(),
+                            prefix, bucket_prefix_less);
+  for (; i != buckets.end() && boost::algorithm::starts_with(i->bucket.name, prefix);
+       ++i) {
+    dump_bucket_entry(*i);
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::Bucket& bucket)
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& ent)
 {
   s->formatter->open_object_section("container");
-  s->formatter->dump_string("name", bucket.get_name());
+  s->formatter->dump_string("name", ent.bucket.name);
 
   if (need_stats) {
-    s->formatter->dump_int("count", bucket.get_count());
-    s->formatter->dump_int("bytes", bucket.get_size());
+    s->formatter->dump_int("count", ent.count);
+    s->formatter->dump_int("bytes", ent.size);
   }
 
   s->formatter->close_section();
@@ -249,37 +267,11 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::Bucket& bu
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::BucketList& buckets)
-{
-  if (! sent_data) {
-    return;
-  }
-
-  /* Take care of the prefix parameter of Swift API. There is no business
-   * in applying the filter earlier as we really need to go through all
-   * entries regardless of it (the headers like X-Account-Container-Count
-   * aren't affected by specifying prefix). */
-  auto& m = buckets.get_buckets();
-
-  auto iter = m.rbegin();
-  for (/* initialized above */;
-       iter != m.rend() && !boost::algorithm::starts_with(iter->first, prefix);
-       ++iter) {
-    /* NOP */;
-  }
-
-  for (/* iter carried */;
-       iter != m.rend() && boost::algorithm::starts_with(iter->first, prefix);
-       ++iter) {
-    dump_bucket_entry(*iter->second);
-  }
-}
-
 void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 {
   if (wants_reversed) {
-    for (auto& buckets : reverse_buffer) {
-      send_response_data_reversed(buckets);
+    for (const auto& ent : reverse_buffer) {
+      dump_bucket_entry(ent);
     }
   }
 

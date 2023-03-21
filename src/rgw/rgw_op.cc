@@ -2489,29 +2489,46 @@ void RGWListBuckets::execute(optional_yield y)
 
   const uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
+  auto g = make_scope_guard([this, &started] {
+      if (!started) {
+        send_response_begin(false);
+      }
+      send_response_end();
+    });
+
   op_ret = get_params(y);
   if (op_ret < 0) {
-    goto send_end;
+    return;
   }
 
   if (supports_account_metadata()) {
     op_ret = s->user->read_attrs(this, s->yield);
     if (op_ret < 0) {
-      goto send_end;
+      return;
     }
   }
 
-  is_truncated = false;
+  /* We need to have stats for all our policies - even if a given policy
+   * isn't actually used in a given account. In such situation its usage
+   * stats would be simply full of zeros. */
+  std::set<std::string> targets;
+  driver->get_zone()->get_zonegroup().get_placement_target_names(targets);
+  for (const auto& policy : targets) {
+    policies_stats[policy] = {};
+  }
+
+  rgw::sal::BucketList listing;
   do {
-    rgw::sal::BucketList buckets;
     uint64_t read_count;
-    if (limit >= 0) {
+    if (limit == 0) {
+      break;
+    } else if (limit > 0) {
       read_count = min(limit - total_count, max_buckets);
     } else {
       read_count = max_buckets;
     }
 
-    op_ret = s->user->list_buckets(this, marker, end_marker, read_count, should_get_stats(), buckets, y);
+    op_ret = s->user->list_buckets(this, marker, end_marker, read_count, should_get_stats(), listing, y);
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -2521,57 +2538,33 @@ void RGWListBuckets::execute(optional_yield y)
       break;
     }
 
-    is_truncated = buckets.is_truncated();
+    marker = listing.next_marker;
 
-    /* We need to have stats for all our policies - even if a given policy
-     * isn't actually used in a given account. In such situation its usage
-     * stats would be simply full of zeros. */
-    std::set<std::string> targets;
-    driver->get_zone()->get_zonegroup().get_placement_target_names(targets);
-    for (const auto& policy : targets) {
-      policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
-    }
-
-    std::map<std::string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
-    for (const auto& kv : m) {
-      const auto& bucket = kv.second;
-
-      global_stats.bytes_used += bucket->get_size();
-      global_stats.bytes_used_rounded += bucket->get_size_rounded();
-      global_stats.objects_count += bucket->get_count();
+    for (const auto& ent : listing.buckets) {
+      global_stats.bytes_used += ent.size;
+      global_stats.bytes_used_rounded += ent.size_rounded;
+      global_stats.objects_count += ent.count;
 
       /* operator[] still can create a new entry for storage policy seen
        * for first time. */
-      auto& policy_stats = policies_stats[bucket->get_placement_rule().to_str()];
-      policy_stats.bytes_used += bucket->get_size();
-      policy_stats.bytes_used_rounded += bucket->get_size_rounded();
+      auto& policy_stats = policies_stats[ent.placement_rule.to_str()];
+      policy_stats.bytes_used += ent.size;
+      policy_stats.bytes_used_rounded += ent.size_rounded;
       policy_stats.buckets_count++;
-      policy_stats.objects_count += bucket->get_count();
+      policy_stats.objects_count += ent.count;
     }
-    global_stats.buckets_count += m.size();
-    total_count += m.size();
+    global_stats.buckets_count += listing.buckets.size();
+    total_count += listing.buckets.size();
 
-    done = (m.size() < read_count || (limit >= 0 && total_count >= (uint64_t)limit));
+    done = (limit >= 0 && std::cmp_greater_equal(total_count, limit));
 
     if (!started) {
-      send_response_begin(buckets.count() > 0);
+      send_response_begin(!listing.buckets.empty());
       started = true;
     }
 
-    if (read_count > 0 &&
-        !m.empty()) {
-      auto riter = m.rbegin();
-      marker = riter->first;
-
-      handle_listing_chunk(std::move(buckets));
-    }
-  } while (is_truncated && !done);
-
-send_end:
-  if (!started) {
-    send_response_begin(false);
-  }
-  send_response_end();
+    handle_listing_chunk(listing.buckets);
+  } while (!marker.empty() && !done);
 }
 
 void RGWGetUsage::execute(optional_yield y)
@@ -2649,58 +2642,44 @@ int RGWStatAccount::verify_permission(optional_yield y)
 
 void RGWStatAccount::execute(optional_yield y)
 {
-  string marker;
-  rgw::sal::BucketList buckets;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
-  const string *lastmarker;
 
+  /* We need to have stats for all our policies - even if a given policy
+   * isn't actually used in a given account. In such situation its usage
+   * stats would be simply full of zeros. */
+  std::set<std::string> names;
+  driver->get_zone()->get_zonegroup().get_placement_target_names(names);
+  for (const auto& policy : names) {
+    policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
+  }
+
+  rgw::sal::BucketList listing;
   do {
-
-    lastmarker = nullptr;
-    op_ret = s->user->list_buckets(this, marker, string(), max_buckets, true, buckets, y);
+    op_ret = s->user->list_buckets(this, listing.next_marker, string(),
+                                   max_buckets, true, listing, y);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
       ldpp_dout(this, 10) << "WARNING: failed on list_buckets uid="
 			<< s->user->get_id() << " ret=" << op_ret << dendl;
-      break;
-    } else {
-      /* We need to have stats for all our policies - even if a given policy
-       * isn't actually used in a given account. In such situation its usage
-       * stats would be simply full of zeros. */
-      std::set<std::string> names;
-      driver->get_zone()->get_zonegroup().get_placement_target_names(names);
-      for (const auto& policy : names) {
-        policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
-      }
-
-      std::map<std::string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
-      for (const auto& kv : m) {
-        const auto& bucket = kv.second;
-	lastmarker = &kv.first;
-
-        global_stats.bytes_used += bucket->get_size();
-        global_stats.bytes_used_rounded += bucket->get_size_rounded();
-        global_stats.objects_count += bucket->get_count();
-
-        /* operator[] still can create a new entry for storage policy seen
-         * for first time. */
-        auto& policy_stats = policies_stats[bucket->get_placement_rule().to_str()];
-        policy_stats.bytes_used += bucket->get_size();
-        policy_stats.bytes_used_rounded += bucket->get_size_rounded();
-        policy_stats.buckets_count++;
-        policy_stats.objects_count += bucket->get_count();
-      }
-      global_stats.buckets_count += m.size();
-
+      return;
     }
-    if (!lastmarker) {
-	ldpp_dout(this, -1) << "ERROR: rgw_read_user_buckets, stasis at marker="
-	      << marker << " uid=" << s->user->get_id() << dendl;
-	break;
+
+    for (const auto& ent : listing.buckets) {
+      global_stats.bytes_used += ent.size;
+      global_stats.bytes_used_rounded += ent.size_rounded;
+      global_stats.objects_count += ent.count;
+
+      /* operator[] still can create a new entry for storage policy seen
+       * for first time. */
+      auto& policy_stats = policies_stats[ent.placement_rule.to_str()];
+      policy_stats.bytes_used += ent.size;
+      policy_stats.bytes_used_rounded += ent.size_rounded;
+      policy_stats.buckets_count++;
+      policy_stats.objects_count += ent.count;
     }
-    marker = *lastmarker;
-  } while (buckets.is_truncated());
+    global_stats.buckets_count += listing.buckets.size();
+  } while (!listing.next_marker.empty());
 }
 
 int RGWGetBucketVersioning::verify_permission(optional_yield y)
@@ -3090,6 +3069,36 @@ int RGWGetBucketLocation::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLocation);
 }
 
+// list the user's buckets to check whether they're at their maximum
+static int check_user_max_buckets(const DoutPrefixProvider* dpp,
+                                  rgw::sal::User& user, optional_yield y)
+{
+  int32_t remaining = user.get_max_buckets();
+  if (!remaining) { // unlimited
+    return 0;
+  }
+
+  uint64_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+
+  rgw::sal::BucketList listing;
+  do {
+    size_t to_read = std::max<size_t>(max_buckets, remaining);
+
+    int ret = user.list_buckets(dpp, listing.next_marker, string(),
+                                to_read, false, listing, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    remaining -= listing.buckets.size();
+    if (remaining <= 0) {
+      return -ERR_TOO_MANY_BUCKETS;
+    }
+  } while (!listing.next_marker.empty());
+
+  return 0;
+}
+
 int RGWCreateBucket::verify_permission(optional_yield y)
 {
   /* This check is mostly needed for S3 that doesn't support account ACL.
@@ -3122,21 +3131,7 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     return -EPERM;
   }
 
-  if (s->user->get_max_buckets()) {
-    rgw::sal::BucketList buckets;
-    string marker;
-    op_ret = s->user->list_buckets(this, marker, string(), s->user->get_max_buckets(),
-				   false, buckets, y);
-    if (op_ret < 0) {
-      return op_ret;
-    }
-
-    if ((int)buckets.count() >= s->user->get_max_buckets()) {
-      return -ERR_TOO_MANY_BUCKETS;
-    }
-  }
-
-  return 0;
+  return check_user_max_buckets(this, *s->user, y);
 }
 
 void RGWCreateBucket::pre_exec()
@@ -7478,21 +7473,7 @@ RGWBulkUploadOp::handle_upload_path(req_state *s)
 
 int RGWBulkUploadOp::handle_dir_verify_permission(optional_yield y)
 {
-  if (s->user->get_max_buckets() > 0) {
-    rgw::sal::BucketList buckets;
-    std::string marker;
-    op_ret = s->user->list_buckets(this, marker, std::string(), s->user->get_max_buckets(),
-                                   false, buckets, y);
-    if (op_ret < 0) {
-      return op_ret;
-    }
-
-    if (buckets.count() >= static_cast<size_t>(s->user->get_max_buckets())) {
-      return -ERR_TOO_MANY_BUCKETS;
-    }
-  }
-
-  return 0;
+  return check_user_max_buckets(this, *s->user, y);
 }
 
 static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, req_info& info, const std::string& bucket_name)

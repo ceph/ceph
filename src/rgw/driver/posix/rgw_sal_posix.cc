@@ -510,16 +510,17 @@ int POSIXDriver::close()
   return 0;
 }
 
+// TODO: marker and other params
 int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			     const std::string& end_marker, uint64_t max,
-			     bool need_stats, BucketList &buckets, optional_yield y)
+			     bool need_stats, BucketList &result, optional_yield y)
 {
   DIR* dir;
   struct dirent* entry;
   int dfd;
   int ret;
 
-  buckets.clear();
+  result.buckets.clear();
 
   /* it's not sufficient to dup(root_fd), as as the new fd would share
    * the file position of root_fd */
@@ -557,7 +558,6 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
 	<< cpp_strerror(ret) << dendl;
-      buckets.clear();
       return -ret;
     }
 
@@ -572,25 +572,12 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
       continue;
     }
 
-    /* TODO Use stat_to_ent */
-    //RGWBucketEnt ent;
-    //ent.bucket.name = decode_name(entry->d_name);
-    //bucket_statx_save(stx, ent, mtime);
-    RGWBucketInfo info;
-    info.bucket.name = url_decode(entry->d_name);
-    info.owner.id = std::to_string(stx.stx_uid); // TODO convert to owner name
-    info.creation_time = from_statx_timestamp(stx.stx_btime);
+    RGWBucketEnt ent;
+    ent.bucket.name = url_decode(entry->d_name);
+    ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+    // TODO: ent.size and ent.count
 
-    std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = driver->get_bucket(this, info, &bucket);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not get bucket " << info.bucket << ": "
-	<< cpp_strerror(ret) << dendl;
-      buckets.clear();
-      return -ret;
-    }
-
-    buckets.add(std::move(bucket));
+    result.buckets.push_back(std::move(ent));
 
     errno = 0;
   }
@@ -598,7 +585,6 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
   if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not list buckets for " << get_display_name() << ": "
       << cpp_strerror(ret) << dendl;
-    buckets.clear();
     return -ret;
   }
 

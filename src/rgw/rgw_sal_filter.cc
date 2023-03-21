@@ -536,20 +536,8 @@ int FilterUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& m
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &buckets, optional_yield y)
 {
-  BucketList bl;
-  int ret;
-
-  buckets.clear();
-  ret = next->list_buckets(dpp, marker, end_marker, max, need_stats, bl, y);
-  if (ret < 0)
-    return ret;
-
-  buckets.set_truncated(bl.is_truncated());
-  for (auto& ent : bl.get_buckets()) {
-    buckets.add(std::make_unique<FilterBucket>(std::move(ent.second), this));
-  }
-
-  return 0;
+  return next->list_buckets(dpp, marker, end_marker, max,
+                            need_stats, buckets, y);
 }
 
 int FilterUser::create_bucket(const DoutPrefixProvider* dpp,

@@ -140,23 +140,28 @@ static int drain_aio(std::list<librados::AioCompletion*>& handles)
 
 int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			       const std::string& end_marker, uint64_t max, bool need_stats,
-			       BucketList &buckets, optional_yield y)
+			       BucketList &result, optional_yield y)
 {
   RGWUserBuckets ulist;
   bool is_truncated = false;
-  int ret;
 
-  buckets.clear();
-  ret = store->ctl()->user->list_buckets(dpp, info.user_id, marker, end_marker, max,
-					 need_stats, &ulist, &is_truncated, y);
+  int ret = store->ctl()->user->list_buckets(dpp, get_id(), marker, end_marker,
+                                             max, need_stats, &ulist,
+                                             &is_truncated, y);
   if (ret < 0)
     return ret;
 
-  buckets.set_truncated(is_truncated);
-  for (const auto& ent : ulist.get_buckets()) {
-    buckets.add(std::unique_ptr<Bucket>(new RadosBucket(this->store, ent.second, this)));
+  result.buckets.clear();
+
+  for (auto& ent : ulist.get_buckets()) {
+    result.buckets.push_back(std::move(ent.second));
   }
 
+  if (is_truncated && !result.buckets.empty()) {
+    result.next_marker = result.buckets.back().bucket.name;
+  } else {
+    result.next_marker.clear();
+  }
   return 0;
 }
 

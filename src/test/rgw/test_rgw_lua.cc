@@ -74,7 +74,7 @@ public:
     return std::unique_ptr<User>(new TestUser(*this));
   }
 
-  virtual int list_buckets(const DoutPrefixProvider *dpp, const string&, const string&, uint64_t, bool, sal::BucketList&, optional_yield y) override {
+  virtual int list_buckets(const DoutPrefixProvider *dpp, const string&, const string&, uint64_t, bool, sal::BucketList& results, optional_yield y) {
     return 0;
   }
 
