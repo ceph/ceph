@@ -694,8 +694,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         serve = CephadmServe(self)
         serve.serve()
 
-    def wait_async(self, coro: Awaitable[T]) -> T:
-        return self.event_loop.get_result(coro)
+    def wait_async(self, coro: Awaitable[T], timeout: Optional[int] = None) -> T:
+        return self.event_loop.get_result(coro, timeout)
 
     def set_container_image(self, entity: str, image: str) -> None:
         self.check_mon_command({

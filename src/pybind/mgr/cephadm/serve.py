@@ -1,10 +1,10 @@
+import asyncio
 import ipaddress
 import hashlib
 import json
 import logging
 import uuid
 import os
-import threading
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set, \
     DefaultDict
@@ -1469,43 +1469,15 @@ class CephadmServe:
                                  use_json: bool = False, timeout: Optional[int] = None, ) -> Any:
         if not timeout:
             timeout = self.mgr.default_cephadm_command_timeout
-        result: List[Any] = []
-        excs: List[Exception] = []
-        if 'sleep-90-seconds' in cmd_name:
-            self.log.error(f'Starting {cmd_name} on host {hostname} at {datetime_now()} (timeout set to {timeout})')
-        if use_json:
-            t = threading.Thread(target=self._run_cephadm_thread_json, args=(result, excs, args, kwargs))
-        else:
-            t = threading.Thread(target=self._run_cephadm_thread, args=(result, excs, args, kwargs))
-        t.daemon = True
-        t.start()
-        t.join(timeout)
-        if 'sleep-90-seconds' in cmd_name:
-            self.log.error(f'Passed thread join for {cmd_name} on host {hostname} at {datetime_now()}')
-        if t.is_alive():
-            # if we got here, the command timed out. Raise an error
+        try:
+            if use_json:
+                result = self.mgr.wait_async(self._run_cephadm_json(*args, **kwargs), timeout)
+            else:
+                result = self.mgr.wait_async(self._run_cephadm(*args, **kwargs), timeout)
+        except asyncio.TimeoutError:
             self.log.error(f'Command `cephadm {cmd_name}` on host {hostname} timed out. ({timeout} seconds timeout)')
             raise OrchestratorError(f'Command `cephadm {cmd_name}` on host {hostname} timed out. ({timeout} seconds timeout)')
-        elif excs:
-            raise excs[0]
-        else:
-            return result[0]
-
-    def _run_cephadm_thread(self, result: List[Any], excs: List[Exception], args: Tuple[Any, ...], kwargs: Dict[Any, Any]) -> None:
-        try:
-            out, err, code = self.mgr.wait_async(self._run_cephadm(*args, **kwargs))
-        except Exception as e:
-            excs.append(e)
-            return
-        result.append((out, err, code))
-
-    def _run_cephadm_thread_json(self, result: List[Any], excs: List[Exception], args: Tuple[Any, ...], kwargs: Dict[Any, Any]) -> None:
-        try:
-            out = self.mgr.wait_async(self._run_cephadm_json(*args, **kwargs))
-        except Exception as e:
-            excs.append(e)
-            return
-        result.append(out)
+        return result
 
     async def _run_cephadm(self,
                            host: str,

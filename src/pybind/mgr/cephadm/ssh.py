@@ -52,8 +52,14 @@ class EventLoopThread(Thread):
         super().__init__(target=self._loop.run_forever)
         self.start()
 
-    def get_result(self, coro: Awaitable[T]) -> T:
-        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+    def get_result(self, coro: Awaitable[T], timeout: Optional[int] = None) -> T:
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            return future.result(timeout)
+        except asyncio.TimeoutError:
+            # try to cancel the task before raising the exception further up
+            future.cancel()
+            raise
 
 
 class SSHManager:
