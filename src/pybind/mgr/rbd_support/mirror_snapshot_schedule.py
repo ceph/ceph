@@ -4,12 +4,12 @@ import rados
 import rbd
 import traceback
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from threading import Condition, Lock, Thread
 from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
-from .common import get_rbd_pools
-from .schedule import LevelSpec, Schedules
+from .common import get_rbd_pools, get_image_timestamps
+from .schedule import LevelSpec, Schedules, Interval
 
 
 def namespace_validator(ioctx: rados.Ioctx) -> None:
@@ -358,6 +358,7 @@ class MirrorSnapshotScheduleHandler:
         try:
             self.log.info("MirrorSnapshotScheduleHandler: starting")
             while not self.stop_thread:
+                self.module.set_health_checks(self.get_health_checks())
                 refresh_delay = self.refresh_images()
                 with self.lock:
                     (image_spec, wait_time) = self.dequeue()
@@ -376,6 +377,97 @@ class MirrorSnapshotScheduleHandler:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
 
+    def get_queue_timestamp(
+        self,
+        pool_id: str,
+        namespace: str,
+        image_id: str,
+    ) -> Optional[datetime]:
+        for timestamp, images in self.queue.items():
+            for img in images:
+                if img[0] == pool_id and img[1] == namespace and img[2] == image_id:
+                    return datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
+        return None
+    
+    def get_health_checks(self) -> dict[str, any]:
+        unsynced_images = []
+        slow_status_images = []
+        total_image_count = 0
+
+        for pool_id in self.images:
+            with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
+                for namespace in self.images[pool_id]:
+                    ioctx.set_namespace(namespace)
+                    try:
+                        statuses = list(rbd.RBD().mirror_image_status_list(ioctx))
+                    except Exception as e:
+                        self.log.error(
+                            "error getting image statuses from {}/{}: {}".format(
+                                pool_id, namespace, e
+                            )
+                        )
+                        continue
+
+                    for image_id in self.images[pool_id][namespace]:
+                        schedule = self.schedules.find(pool_id, namespace, image_id)
+                        if not schedule:
+                            continue
+                        total_image_count += 1
+                        timestamps = get_image_timestamps(statuses, image_id)
+                        if not timestamps:
+                            continue
+
+                        min_interval_minutes = min(
+                            schedule.items, key=lambda x: x[0].minutes
+                        )[0].minutes
+                        next_snapshot_timestamp = self.get_queue_timestamp(
+                            pool_id, namespace, image_id
+                        )
+                        if not next_snapshot_timestamp:
+                            continue
+                        expected_snapshot_timestamp = (
+                            next_snapshot_timestamp.timestamp()
+                            - (min_interval_minutes * 60)
+                        )
+                        unsynced_images += [
+                            image_id
+                            for local_ts, remote_ts in timestamps
+                            if (remote_ts - local_ts) > min_interval_minutes * 60
+                        ]
+                        slow_status_images += [
+                            image_id
+                            for local_ts, remote_ts in timestamps
+                            if (expected_snapshot_timestamp - remote_ts)
+                            > min_interval_minutes * 60 * 5
+                        ]
+
+        health_checks = {}
+
+        unsynced_count = len(unsynced_images)
+        slow_count = len(slow_status_images)
+        if total_image_count > 0 and (unsynced_count / total_image_count) > 0.1:
+            health_checks["unsynced_images"] = {
+                "severity": "warning",
+                "summary": "More than 10% of images are not synced according to their schedule {}".format(
+                    {unsynced_count} / {total_image_count}
+                ),
+                "detail": [
+                    "List of unsynced images: {}".format(", ".join(unsynced_images))
+                ],
+            }
+
+        if slow_count > 0:
+            return {
+                "rbd_mirror_status_not_updated": {
+                    "severity": "critical",
+                    "summary": "remote RBD mirror is not updating image statuses",
+                    "count": slow_count,
+                    "detail": [
+                        "list of slow images: {}".format(", ".join(slow_status_images))
+                    ],
+                }
+            }
+        return health_checks
     def init_schedule_queue(self) -> None:
         # schedule_time => image_spec
         self.queue: Dict[str, List[ImageSpec]] = {}
