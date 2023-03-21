@@ -213,6 +213,7 @@ private:
 
 public:
   unsigned int chunk_number;
+  size_t m_requested_range;
 
   RGWSelectObj_ObjStore_S3();
   virtual ~RGWSelectObj_ObjStore_S3();
@@ -249,5 +250,6 @@ private:
   std::function<int(int64_t, int64_t, void*, optional_yield*)> fp_range_req;
   std::function<size_t(void)> fp_get_obj_size;
 
+  void continue_to_end_of_csv_row(const char*, off_t ofs, off_t& len);
 };
 
