@@ -1514,6 +1514,10 @@ class TestSNMPGateway:
 
 class TestIngressService:
 
+    @pytest.mark.parametrize(
+        "enable_haproxy_protocol",
+        [False, True],
+    )
     @patch("cephadm.inventory.Inventory.get_addr")
     @patch("cephadm.utils.resolve_ip")
     @patch("cephadm.inventory.HostCache.get_daemons_by_service")
@@ -1523,7 +1527,8 @@ class TestIngressService:
         _run_cephadm,
         _get_daemons_by_service,
         _resolve_ip, _get_addr,
-        cephadm_module: CephadmOrchestrator
+        cephadm_module: CephadmOrchestrator,
+        enable_haproxy_protocol: bool,
     ):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
 
@@ -1546,6 +1551,7 @@ class TestIngressService:
                 count=1,
                 hosts=['host1', 'host2']),
             port=12049,
+            enable_haproxy_protocol=enable_haproxy_protocol,
         )
 
         ispec = IngressSpec(
@@ -1558,6 +1564,7 @@ class TestIngressService:
             monitor_user='admin',
             monitor_password='12345',
             keepalived_password='12345',
+            enable_haproxy_protocol=enable_haproxy_protocol,
         )
 
         cephadm_module.spec_store._specs = {
@@ -1608,8 +1615,10 @@ class TestIngressService:
             '    mode        tcp\n'
             '    balance     source\n'
             '    hash-type   consistent\n'
-            '    server nfs.foo.0 192.168.122.111:12049\n'
         )
+        if enable_haproxy_protocol:
+            haproxy_txt += '    default-server send-proxy-v2\n'
+        haproxy_txt += '    server nfs.foo.0 192.168.122.111:12049\n'
         haproxy_expected_conf = {
             'files': {'haproxy.cfg': haproxy_txt}
         }
