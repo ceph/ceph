@@ -622,7 +622,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
     return ret;
   }
 
-  sync_user_stats(dpp, y);
+  sync_user_stats(dpp, y, nullptr);
   if (ret < 0) {
      ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -641,7 +641,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   return ret;
 }
 
-int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats)
+int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
@@ -667,10 +667,6 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bo
 
   bucket_version = ep_ot.read_version;
 
-  if (get_stats) {
-    ret = store->ctl()->bucket->read_bucket_stats(info.bucket, &ent, y, dpp);
-  }
-
   return ret;
 }
 
@@ -690,14 +686,16 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return store->getRados()->get_bucket_stats_async(dpp, get_info(), idx_layout, shard_id, ctx);
 }
 
-int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
 {
-  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
+  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, ent);
 }
 
-int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
+                                     uint64_t num_objs, optional_yield y)
 {
-      return store->getRados()->check_bucket_shards(info, info.bucket, get_count(), dpp, y);
+  return store->getRados()->check_bucket_shards(info, num_objs, dpp, y);
 }
 
 int RadosBucket::link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)

@@ -284,7 +284,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats)
+  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y)
   {
     int ret = 0;
 
@@ -310,12 +310,14 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                RGWBucketEnt* ent)
   {
     return 0;
   }
 
-  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp,
+                                    uint64_t num_objs, optional_yield y)
   {
     return 0;
   }

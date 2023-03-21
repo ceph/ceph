@@ -79,7 +79,6 @@ class StoreUser : public User {
 
 class StoreBucket : public Bucket {
   protected:
-    RGWBucketEnt ent;
     RGWBucketInfo info;
     User* owner = nullptr;
     Attrs attrs;
@@ -89,31 +88,11 @@ class StoreBucket : public Bucket {
   public:
 
     StoreBucket() = default;
-    StoreBucket(User* _u) :
-      owner(_u) { }
-    StoreBucket(const rgw_bucket& _b) { ent.bucket = _b; info.bucket = _b; }
-    StoreBucket(const RGWBucketEnt& _e) : ent(_e) {
-      info.bucket = ent.bucket;
-      info.placement_rule = ent.placement_rule;
-      info.creation_time = ent.creation_time;
-    }
-    StoreBucket(const RGWBucketInfo& _i) : info(_i) {
-      ent.bucket = info.bucket;
-      ent.placement_rule = info.placement_rule;
-      ent.creation_time = info.creation_time;
-    }
-    StoreBucket(const rgw_bucket& _b, User* _u) :
-      owner(_u) { ent.bucket = _b; info.bucket = _b; }
-    StoreBucket(const RGWBucketEnt& _e, User* _u) : ent(_e), owner(_u) {
-      info.bucket = ent.bucket;
-      info.placement_rule = ent.placement_rule;
-      info.creation_time = ent.creation_time;
-    }
-    StoreBucket(const RGWBucketInfo& _i, User* _u) : info(_i), owner(_u) {
-      ent.bucket = info.bucket;
-      ent.placement_rule = info.placement_rule;
-      ent.creation_time = info.creation_time;
-    }
+    StoreBucket(User* u) : owner(u) { }
+    StoreBucket(const rgw_bucket& b) { info.bucket = b; }
+    StoreBucket(const RGWBucketInfo& i) : info(i) {}
+    StoreBucket(const rgw_bucket& b, User* u) : owner(u) { info.bucket = b; }
+    StoreBucket(const RGWBucketInfo& i, User* u) : info(i), owner(u) {}
     virtual ~StoreBucket() = default;
 
     virtual Attrs& get_attrs(void) override { return attrs; }
@@ -121,12 +100,6 @@ class StoreBucket : public Bucket {
     virtual void set_owner(rgw::sal::User* _owner) override {
       owner = _owner;
       info.owner = owner->get_id();
-    }
-    virtual void set_count(uint64_t _count) override {
-      ent.count = _count;
-    }
-    virtual void set_size(uint64_t _size) override {
-      ent.size = _size;
     }
     virtual User* get_owner(void) override { return owner; };
     /* Make sure to call get_bucket_info() if you need it first */
@@ -137,9 +110,6 @@ class StoreBucket : public Bucket {
     virtual const std::string& get_tenant() const override { return info.bucket.tenant; }
     virtual const std::string& get_marker() const override { return info.bucket.marker; }
     virtual const std::string& get_bucket_id() const override { return info.bucket.bucket_id; }
-    virtual size_t get_size() const override { return ent.size; }
-    virtual size_t get_size_rounded() const override { return ent.size_rounded; }
-    virtual uint64_t get_count() const override { return ent.count; }
     virtual rgw_placement_rule& get_placement_rule() override { return info.placement_rule; }
     virtual ceph::real_time& get_creation_time() override { return info.creation_time; }
     virtual ceph::real_time& get_modification_time() override { return mtime; }
@@ -179,9 +149,6 @@ class StoreBucket : public Bucket {
         optional_yield y, const DoutPrefixProvider *dpp) override {return 0;}
 
     friend class BucketList;
-
-  protected:
-    virtual void set_ent(RGWBucketEnt& _ent) { ent = _ent; info.bucket = ent.bucket; info.placement_rule = ent.placement_rule; }
 };
 
 class StoreObject : public Object {

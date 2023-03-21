@@ -424,8 +424,7 @@ public:
 		      optional_yield y) override;
 
   virtual void set_owner(rgw::sal::User* _owner) override { next->set_owner(_owner); }
-  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-			  bool get_stats = false) override;
+  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read_stats(const DoutPrefixProvider *dpp,
 			 const bucket_index_layout_generation& idx_layout,
 			 int shard_id, std::string* bucket_ver, std::string* master_ver,
@@ -435,8 +434,10 @@ public:
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
 			       const bucket_index_layout_generation& idx_layout,
 			       int shard_id, RGWGetBucketStats_CB* ctx) override;
-  virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-  virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) override;
+  int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                      RGWBucketEnt* ent) override;
+  int check_bucket_shards(const DoutPrefixProvider* dpp,
+                          uint64_t num_objs, optional_yield y) override;
   virtual int chown(const DoutPrefixProvider* dpp, User& new_user,
 		    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -470,16 +471,11 @@ public:
   virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
   virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
   virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual void set_count(uint64_t _count) override { return next->set_count(_count); }
-  virtual void set_size(uint64_t _size) override { return next->set_size(_size); }
   virtual bool empty() const override { return next->empty(); }
   virtual const std::string& get_name() const override { return next->get_name(); }
   virtual const std::string& get_tenant() const override { return next->get_tenant(); }
   virtual const std::string& get_marker() const override { return next->get_marker(); }
   virtual const std::string& get_bucket_id() const override { return next->get_bucket_id(); }
-  virtual size_t get_size() const override { return next->get_size(); }
-  virtual size_t get_size_rounded() const override { return next->get_size_rounded(); }
-  virtual uint64_t get_count() const override { return next->get_count(); }
   virtual rgw_placement_rule& get_placement_rule() override { return next->get_placement_rule(); }
   virtual ceph::real_time& get_creation_time() override { return next->get_creation_time(); }
   virtual ceph::real_time& get_modification_time() override { return next->get_modification_time(); }

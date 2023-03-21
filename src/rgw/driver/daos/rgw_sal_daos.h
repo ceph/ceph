@@ -299,8 +299,7 @@ class DaosBucket : public StoreBucket {
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp,
                       RGWAccessControlPolicy& acl, optional_yield y) override;
-  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-                          bool get_stats = false) override;
+  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read_stats(const DoutPrefixProvider* dpp,
                          const bucket_index_layout_generation& idx_layout,
                          int shard_id, std::string* bucket_ver,

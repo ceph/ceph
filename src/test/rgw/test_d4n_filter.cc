@@ -1763,8 +1763,6 @@ TEST_F(D4NFilterFixture, StoreGetMetadata) {
   EXPECT_EQ(storeObject->state.accounted_size, (uint64_t)200);
   EXPECT_EQ(storeObject->state.epoch, (uint64_t)3);
   EXPECT_EQ(storeObject->state.zone_short_id, (uint32_t)300);
-  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_count(), (uint64_t)10);
-  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_size(), (uint64_t)20);
   EXPECT_EQ(info.quota.user_quota.max_size, (int64_t)0);
   EXPECT_EQ(info.quota.user_quota.max_objects, (int64_t)0);
   EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_owner()->get_max_buckets(), (int32_t)2000);
