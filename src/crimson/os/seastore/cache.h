@@ -1321,11 +1321,15 @@ private:
     ).safe_then(
       [extent=std::move(extent)]() mutable {
         LOG_PREFIX(Cache::read_extent);
-        extent->state = CachedExtent::extent_state_t::CLEAN;
-        /* TODO: crc should be checked against LBA manager */
-        extent->last_committed_crc = extent->get_crc32c();
+	if (likely(extent->state == CachedExtent::extent_state_t::CLEAN_PENDING)) {
+	  extent->state = CachedExtent::extent_state_t::CLEAN;
+	  /* TODO: crc should be checked against LBA manager */
+	  extent->last_committed_crc = extent->get_crc32c();
 
-        extent->on_clean_read();
+	  extent->on_clean_read();
+	} else {
+	  ceph_assert(!extent->is_valid());
+	}
         extent->complete_io();
         SUBDEBUG(seastore_cache, "read extent done -- {}", *extent);
         return get_extent_ertr::make_ready_future<TCachedExtentRef<T>>(
