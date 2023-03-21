@@ -8325,7 +8325,6 @@ paths:
                 new_realm_name:
                   type: string
               required:
-              - default
               - new_realm_name
               type: object
       responses:

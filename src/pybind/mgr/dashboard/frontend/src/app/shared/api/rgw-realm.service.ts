@@ -24,13 +24,13 @@ export class RgwRealmService {
   }
 
   update(realm: RgwRealm, defaultRealm: boolean, newRealmName: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
+    return this.rgwDaemonService.request((requestBody: any) => {
+      requestBody = {
         realm_name: realm.name,
         default: defaultRealm,
         new_realm_name: newRealmName
-      });
-      return this.http.put(`${this.url}/${realm.name}`, null, { params: params });
+      };
+      return this.http.put(`${this.url}/${realm.name}`, requestBody);
     });
   }
 
