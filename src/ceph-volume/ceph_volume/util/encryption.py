@@ -158,16 +158,11 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
 def write_lockbox_keyring(osd_id, osd_fsid, secret):
     """
     Helper to write the lockbox keyring. This is needed because the bluestore OSD will
-    not persist the keyring, and it can't be stored in the data device for filestore because
-    at the time this is needed, the device is encrypted.
+    not persist the keyring.
 
     For bluestore: A tmpfs filesystem is mounted, so the path can get written
     to, but the files are ephemeral, which requires this file to be created
     every time it is activated.
-    For filestore: The path for the OSD would exist at this point even if no
-    OSD data device is mounted, so the keyring is written to fetch the key, and
-    then the data device is mounted on that directory, making the keyring
-    "disappear".
     """
     if os.path.exists('/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)):
         return
