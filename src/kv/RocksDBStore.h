@@ -390,7 +390,9 @@ public:
   Iterator get_iterator(const std::string& prefix, IteratorOpts opts = 0, IteratorBounds = IteratorBounds()) override;
 private:
   /// this iterator spans single cf
-  rocksdb::Iterator* new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
+  WholeSpaceIterator new_shard_iterator(rocksdb::ColumnFamilyHandle* cf);
+  Iterator new_shard_iterator(rocksdb::ColumnFamilyHandle* cf,
+			      const std::string& prefix, IteratorBounds bound);
 public:
   /// Utility
   static std::string combine_strings(const std::string &prefix, const std::string &value) {
