@@ -52,7 +52,7 @@
 	osd recovery max chunk = 1048576
 
 	osd debug shutdown = true
-        osd debug op order = true
+        osd debug op order = false
         osd debug verify stray on activate = true
 
 	osd open classes on start = true
