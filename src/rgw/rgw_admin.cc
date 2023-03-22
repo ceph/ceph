@@ -10108,7 +10108,7 @@ next:
                            have_max_read_ops, have_max_write_ops,
                            have_max_read_bytes, have_max_write_bytes);
     } else if (!rgw::sal::User::empty(user)) {
-      } if (ratelimit_scope == "user") {
+      if (ratelimit_scope == "user") {
         return set_user_ratelimit(opt_cmd, user, max_read_ops, max_write_ops,
                          max_read_bytes, max_write_bytes,
                          have_max_read_ops, have_max_write_ops,
@@ -10117,6 +10117,7 @@ next:
         cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
         return EINVAL;
       }
+    }
   }
 
   if (ratelimit_op_get) {
@@ -10132,12 +10133,13 @@ next:
       }
       return show_bucket_ratelimit(driver, tenant, bucket_name, formatter.get());
     } else if (!rgw::sal::User::empty(user)) {
-      } if (ratelimit_scope == "user") {
+      if (ratelimit_scope == "user") {
         return show_user_ratelimit(user, formatter.get());
       } else {
         cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
         return EINVAL;
       }
+    }
   }
 
   if (opt_cmd == OPT::MFA_CREATE) {
