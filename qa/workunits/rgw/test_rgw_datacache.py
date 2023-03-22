@@ -85,13 +85,10 @@ def get_radosgw_endpoint():
     port = [i for i in x if ':' in i][0].split(':')[1]
     log.info('radosgw port: %s' % port)
     proto = "http"
-    hostname = 'localhost'
+    hostname = '127.0.0.1'
 
     if port == '443':
         proto = "https"
-        out = exec_cmd('hostname')
-        hostname = get_cmd_output(out)
-        hostname = hostname + ".front.sepia.ceph.com"
 
     endpoint = proto + "://" + hostname + ":" + port
     log.info("radosgw endpoint is: %s", endpoint)
@@ -156,16 +153,16 @@ def main():
     create_s3cmd_config(s3cmd_config_path, proto)
 
     # create a bucket
-    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --host=%s mb s3://%s'
+    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --no-check-hostname --host=%s mb s3://%s'
             % (ACCESS_KEY, SECRET_KEY, s3cmd_config_path, endpoint, BUCKET_NAME))
 
     # put an object in the bucket
-    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --host=%s put %s s3://%s'
+    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --no-check-hostname --host=%s put %s s3://%s'
             % (ACCESS_KEY, SECRET_KEY, s3cmd_config_path, endpoint, outfile, BUCKET_NAME))
 
     # get object from bucket
     get_file_path = pwd + '/' + GET_FILE_NAME
-    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --host=%s get s3://%s/%s %s --force'
+    exec_cmd('s3cmd --access_key=%s --secret_key=%s --config=%s --no-check-hostname --host=%s get s3://%s/%s %s --force'
             % (ACCESS_KEY, SECRET_KEY, s3cmd_config_path, endpoint, BUCKET_NAME, FILE_NAME, get_file_path))
 
     # get info of object
