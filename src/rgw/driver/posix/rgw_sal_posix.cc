@@ -1413,7 +1413,7 @@ void POSIXObject::gen_temp_fname()
   char buf[RAND_SUFFIX_SIZE + 1];
 
   gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, RAND_SUFFIX_SIZE);
-  temp_fname = get_fname() + ".";
+  temp_fname = "." + get_fname() + ".";
   temp_fname.append(buf);
 }
 
