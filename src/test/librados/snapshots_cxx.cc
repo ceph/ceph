@@ -409,7 +409,6 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, Bug11677) {
 }
 
 TEST_F(LibRadosSnapshotsSelfManagedPP, OrderSnap) {
-  SKIP_IF_CRIMSON();
   std::vector<uint64_t> my_snaps;
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
