@@ -18,6 +18,7 @@
 #include <sys/stat.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include "include/scope_guard.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -212,13 +213,8 @@ std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider 
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-  std::unique_ptr<Object> no;
 
-  std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, std::move(no),
-							   owner, ptail_placement_rule,
-							   olh_epoch, unique_tag);
-
-  return std::make_unique<POSIXWriter>(std::move(writer), std::move(_head_obj), this);
+  return std::make_unique<POSIXAtomicWriter>(dpp, y, std::move(_head_obj), this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
 void POSIXDriver::finalize(void)
@@ -231,23 +227,61 @@ void POSIXDriver::register_admin_apis(RGWRESTMgr* mgr)
   return next->register_admin_apis(mgr);
 }
 
+std::unique_ptr<Notification> POSIXDriver::get_notification(rgw::sal::Object* obj,
+			      rgw::sal::Object* src_obj, struct req_state* s,
+			      rgw::notify::EventType event_type, optional_yield y,
+			      const std::string* object_name)
+{
+  return next->get_notification(obj, src_obj, s, event_type, y, object_name);
+}
+
+std::unique_ptr<Notification> POSIXDriver::get_notification(const DoutPrefixProvider* dpp,
+                              rgw::sal::Object* obj, rgw::sal::Object* src_obj,
+                              rgw::notify::EventType event_type,
+                              rgw::sal::Bucket* _bucket,
+                              std::string& _user_id, std::string& _user_tenant,
+                              std::string& _req_id, optional_yield y)
+{
+  return next->get_notification(dpp, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
+}
+
 int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &buckets, optional_yield y)
 {
   DIR* dir;
   struct dirent* entry;
+  int dfd;
   int ret;
 
   buckets.clear();
 
-  dir = fdopendir(driver->get_root_fd());
+  /* it's not sufficient to dup(root_fd), as as the new fd would share
+   * the file position of root_fd */
+  dfd = openat(-1, driver->get_base_path().c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (dfd == -1) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
+      << cpp_strerror(ret) << dendl;
+    return -errno;
+  }
+
+  dir = fdopendir(dfd);
   if (dir == NULL) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
       << cpp_strerror(ret) << dendl;
+    close(dfd);
     return -ret;
   }
+
+  auto cleanup_guard = make_scope_guard(
+    [&dir]
+      {
+	closedir(dir);
+	// dfd is also closed
+      }
+    );
 
   errno = 0;
   while ((entry = readdir(dir)) != NULL) {
@@ -323,6 +357,7 @@ int POSIXUser::create_bucket(const DoutPrefixProvider* dpp,
 			      std::unique_ptr<Bucket>* bucket_out,
 			      optional_yield y)
 {
+  info.bucket = b;
   POSIXBucket* fb = new POSIXBucket(driver, info, this);
 
   int ret = fb->create(dpp, y, existed);
@@ -1145,7 +1180,7 @@ std::unique_ptr<Object::DeleteOp> POSIXObject::get_delete_op()
   return std::make_unique<POSIXDeleteOp>(this);
 }
 
-int POSIXObject::open(const DoutPrefixProvider* dpp)
+int POSIXObject::open(const DoutPrefixProvider* dpp, bool temp_file)
 {
   if (obj_fd >= 0) {
     return 0;
@@ -1157,7 +1192,12 @@ int POSIXObject::open(const DoutPrefixProvider* dpp)
       return -EINVAL;
   }
 
-  int ret = openat(b->get_dir_fd(dpp), get_fname().c_str(), O_RDWR | O_NOFOLLOW);
+  int ret;
+  if(temp_file) {
+    ret = openat(driver->get_root_fd(), b->get_fname().c_str(), O_TMPFILE | O_RDWR);
+  } else {
+    ret = openat(b->get_dir_fd(dpp), get_fname().c_str(), O_CREAT | O_RDWR | O_NOFOLLOW);
+  }
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open object " << get_name() << ": "
@@ -1170,13 +1210,55 @@ int POSIXObject::open(const DoutPrefixProvider* dpp)
   return 0;
 }
 
+int POSIXObject::write_temp_file(const DoutPrefixProvider *dpp)
+{
+  if (obj_fd < 0) {
+    return 0;
+  }
+
+  char temp_file_path[PATH_MAX];
+  // Only works on Linux - Non-portable
+  snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", obj_fd);
+
+  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+
+  if (!b) {
+      ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
+      return -EINVAL;
+  }
+
+  int ret = linkat(AT_FDCWD, temp_file_path, b->get_dir_fd(dpp), get_temp_fname().c_str(), AT_SYMLINK_FOLLOW);
+  if(ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: linkat for temp file could not finish" << dendl;
+    return -1;
+  }
+
+  ret = renameat(b->get_dir_fd(dpp), get_temp_fname().c_str(), b->get_dir_fd(dpp), get_fname().c_str());
+  if(ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: renameat for object could not finish" << dendl;
+    return -1;
+  }
+
+
+  return 0;
+}
+
+
 int POSIXObject::close()
 {
   if (obj_fd < 0) {
     return 0;
   }
 
-  ::close(obj_fd);
+  int ret = ::fsync(obj_fd);
+  if(ret < 0) {
+    return ret;
+  }
+
+  ret = ::close(obj_fd);
+  if(ret < 0) {
+    return ret;
+  }
 
   return 0;
 }
@@ -1215,6 +1297,14 @@ int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dp
   char* curp = bl.c_str();
   ssize_t ret;
 
+  ret = fchmod(obj_fd, S_IRUSR|S_IWUSR);
+  if(ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not change permissions on object " << get_name() << ": "
+                  << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+
   ret = lseek(obj_fd, ofs, SEEK_SET);
   if (ret < 0) {
     ret = errno;
@@ -1227,7 +1317,7 @@ int POSIXObject::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dp
     ret = ::write(obj_fd, curp, left);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
+      ldpp_dout(dpp, 0) << "ERROR: could not write object " << get_name() << ": "
 	<< cpp_strerror(ret) << dendl;
       return -ret;
     }
@@ -1341,6 +1431,21 @@ const std::string POSIXObject::get_fname()
   }
 
   return fname;
+}
+
+void POSIXObject::gen_temp_fname()
+{
+  enum { RAND_SUFFIX_SIZE = 8 };
+  char buf[RAND_SUFFIX_SIZE + 1];
+
+  gen_rand_alphanumeric_no_underscore(driver->ctx(), buf, RAND_SUFFIX_SIZE);
+  temp_fname = get_fname() + ".";
+  temp_fname.append(buf);
+}
+
+const std::string POSIXObject::get_temp_fname()
+{
+  return temp_fname;
 }
 
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
@@ -1465,7 +1570,7 @@ std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
   return std::make_unique<POSIXWriter>(std::move(writer), std::move(_head_obj), driver);
 }
 
-int POSIXWriter::prepare(optional_yield y) 
+int POSIXWriter::prepare(optional_yield y)
 {
   return next->prepare(y);
 }
@@ -1487,6 +1592,51 @@ int POSIXWriter::complete(size_t accounted_size, const std::string& etag,
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, y);
+}
+
+
+int POSIXAtomicWriter::prepare(optional_yield y)
+{
+  obj.gen_temp_fname();
+  return obj.open(dpp, true);
+}
+
+int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
+{
+  return obj.write(offset, data, dpp, null_yield);
+}
+
+int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
+                       ceph::real_time *mtime, ceph::real_time set_mtime,
+                       std::map<std::string, bufferlist>& attrs,
+                       ceph::real_time delete_at,
+                       const char *if_match, const char *if_nomatch,
+                       const std::string *user_data,
+                       rgw_zone_set *zones_trace, bool *canceled,
+                       optional_yield y)
+{
+  int ret;
+  for (auto attr : attrs) {
+    ret = obj.write_attr(dpp, y, attr.first, attr.second);
+    if (ret < 0) {
+      ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing attr " << attr.first << dendl;
+      return ret;
+    }
+  }
+
+  ret = obj.write_temp_file(dpp);
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;
+    return ret;
+  }
+
+  ret = obj.close();
+  if (ret < 0) {
+    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
+    return ret;
+  }
+
+  return 0;
 }
 
 } } // namespace rgw::sal
