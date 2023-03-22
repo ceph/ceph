@@ -289,6 +289,17 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENOENT);
   }
 
+  SnapContext snapc = get_snapc(pg,obc);
+
+  if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
+       snapc.seq < obc->ssc->snapset.seq) {
+        logger().debug("{} ORDERSNAP flag set and snapc seq {}",
+                       " < snapset seq {} on {}",
+                       __func__, snapc.seq, obc->ssc->snapset.seq,
+                       obc->obs.oi.soid);
+     return reply_op_error(pg, -EOLDSNAPC);
+  }
+
   if (!pg->is_primary()) {
     // primary can handle both normal ops and balanced reads
     if (is_misdirected(*pg)) {
@@ -305,7 +316,7 @@ ClientRequest::do_process(
                      __func__, m->get_hobj());
     }
   }
-  return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
+  return pg->do_osd_ops(m, obc, op_info, snapc).safe_then_unpack_interruptible(
     [this, pg, &ihref](auto submitted, auto all_completed) mutable {
       return submitted.then_interruptible([this, pg, &ihref] {
 	return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);
@@ -353,6 +364,30 @@ void ClientRequest::put_historic() const
 {
   ceph_assert_always(put_historic_shard_services);
   put_historic_shard_services->get_registry().put_historic(*this);
+}
+
+const SnapContext ClientRequest::get_snapc(
+  Ref<PG>& pg,
+  crimson::osd::ObjectContextRef obc) const
+{
+  SnapContext snapc;
+  if (op_info.may_write() || op_info.may_cache()) {
+    // snap
+    if (pg->get_pgpool().info.is_pool_snaps_mode()) {
+      // use pool's snapc
+      snapc = pg->get_pgpool().snapc;
+      logger().debug("{} using pool's snapc snaps={}",
+                     __func__, snapc.snaps);
+
+    } else {
+      // client specified snapc
+      snapc.seq = m->get_snap_seq();
+      snapc.snaps = m->get_snaps();
+      logger().debug("{} client specified snapc seq={} snaps={}",
+                     __func__, snapc.seq, snapc.snaps);
+    }
+  }
+  return snapc;
 }
 
 }

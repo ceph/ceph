@@ -565,7 +565,8 @@ private:
   do_osd_ops_iertr::future<pg_rep_op_fut_t<MURef<MOSDOpReply>>> do_osd_ops(
     Ref<MOSDOp> m,
     ObjectContextRef obc,
-    const OpInfo &op_info);
+    const OpInfo &op_info,
+    const SnapContext& snapc);
   using do_osd_ops_success_func_t =
     std::function<do_osd_ops_iertr::future<>()>;
   using do_osd_ops_failure_func_t =
