@@ -101,10 +101,9 @@ def ensure_associated_lvs(lvs, lv_tags={}):
     # leaving many journals with osd.1 - usually, only a single LV will be
     # returned
 
-    journal_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'journal'}))
     db_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'db'}))
     wal_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'wal'}))
-    backing_devices = [(journal_lvs, 'journal'), (db_lvs, 'db'),
+    backing_devices = [(db_lvs, 'db'),
                        (wal_lvs, 'wal')]
 
     verified_devices = []
