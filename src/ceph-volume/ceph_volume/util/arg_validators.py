@@ -121,7 +121,7 @@ class ValidBatchDataDevice(ValidBatchDevice, ValidDataDevice):
         # leave the validation to Batch.get_deployment_layout()
         # This way the idempotency isn't broken (especially when using --osds-per-device)
         for lv in self._device.lvs:
-            if lv.tags.get('ceph.type') in ['db', 'wal', 'journal']:
+            if lv.tags.get('ceph.type') in ['db', 'wal']:
                 return self._device
         if self._device.used_by_ceph:
             return self._device

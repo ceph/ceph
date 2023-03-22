@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 def prepare_dmcrypt(key, device, device_type, fsid):
     """
     Helper for devices that are encrypted. The operations needed for
-    block, db, wal, or data/journal devices are all the same
+    block, db, wal, devices are all the same
     """
     if not device:
         return ''
