@@ -55,10 +55,14 @@ To list your cluster's pools, execute:
 Create a Pool
 =============
 
-Before creating pools, refer to the `Pool, PG and CRUSH Config Reference`_.
-Ideally, you should override the default value for the number of placement
-groups in your Ceph configuration file, as the default is NOT ideal.
-For details on placement group numbers refer to `setting the number of placement groups`_
+If you are not using the PG autoscaler you may wish to explicitly set a value
+for :confval:osd_pool_default_pg_num, as the default is small and not ideal for
+many production-scale deployments. Refer to the `Pool, PG and CRUSH Config
+Reference`_. Be careful, though, to not set a very high value as auto-deployed
+pools, notably certain RGW pools, will not hold much data and thus should not
+have a gratuitous number of PGs. When the PG autoscaler is not actively
+managing placement group numbers, best practice is to explicitly provide pg_num
+and pgp_num when creating each pool.
 
 .. note:: Starting with Luminous, all pools need to be associated to the
    application using the pool. See `Associate Pool to Application`_ below for
@@ -66,10 +70,11 @@ For details on placement group numbers refer to `setting the number of placement
 
 For example:
 
-.. prompt:: bash $
+.. code-block:: ini
 
+	[global]
+	osd_pool_default_pg_autoscale_mode = off
 	osd_pool_default_pg_num = 128
-	osd_pool_default_pgp_num = 128
 
 To create a pool, execute:
 
@@ -91,13 +96,16 @@ Where:
 
 .. describe:: {pg-num}
 
-   The total number of placement groups for the pool. See :ref:`placement groups`
-   for details on calculating a suitable number. The
-   default value ``8`` is NOT suitable for most systems.
+   The total number of placement groups for the pool. See :ref:`placement
+   groups` for details on calculating a suitable number. The default value of
+   :confval:`osd_pool_default_pg_num` is likely too small for production pools
+   used for bulk data, including RBD and RGW data and bucket pools
+   respectively.
 
   :Type: Integer
-  :Required: Yes.
-  :Default: 8
+  :Required: No. Set to ``1`` if autoscaling is enabled, otherwise picks up Ceph
+         configuration value :confval:`osd_pool_default_pg_num`
+  :Default: Value of :confval:`osd_pool_default_pg_num`
 
 .. describe:: {pgp-num}
 
@@ -106,8 +114,9 @@ Where:
    for placement group splitting scenarios.
 
   :Type: Integer
-  :Required: Yes. Picks up default or Ceph configuration value if not specified.
-  :Default: 8
+  :Required: No. Picks up Ceph configuration value :confval:`osd_pool_default_pgp_num`
+         if not specified. If that is not set, defaults to value of ``pg-num``.
+  :Default: Value of ``pg-num`` 
 
 .. describe:: {replicated|erasure}
 

@@ -2509,14 +2509,17 @@ options:
   type: uint
   level: advanced
   desc: number of PGs for placement purposes (0 to match pg_num)
-  fmt_desc: The default number of placement groups for placement for a pool.
+  fmt_desc: |
+    The default number of placement groups for placement for a pool.
     The default value is the same as ``pgp_num`` with ``mkpool``.
-    PG and PGP should be equal (for now).
+    PG and PGP should be equal (for now). Note: should not be set unless
+    autoscaling is disabled.
   default: 0
   services:
   - mon
   see_also:
   - osd_pool_default_pg_num
+  - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
 - name: osd_pool_default_type
