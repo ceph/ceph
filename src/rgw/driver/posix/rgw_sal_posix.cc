@@ -126,7 +126,9 @@ static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
   return 0;
 }
 
-int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd, const std::string& key, bufferlist& value, const std::string& display)
+static int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd,
+			const std::string& key, bufferlist& value,
+			const std::string& display)
 {
   int ret;
   std::string attrname;
@@ -138,6 +140,86 @@ int write_x_attr(const DoutPrefixProvider* dpp, optional_yield y, int fd, const 
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not write attribute " << attrname << " for " << display << ": " << cpp_strerror(ret) << dendl;
     return -ret;
+  }
+
+  return 0;
+}
+
+static int delete_directory(int parent_fd, const char* dname, bool delete_children,
+		     const DoutPrefixProvider* dpp)
+{
+  int ret;
+  int dir_fd = -1;
+
+  if (delete_children) {
+    DIR* dir;
+    struct dirent* entry;
+
+    dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+    if (dir_fd < 0) {
+      dir_fd = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not open subdir " << dname << ": "
+	<< cpp_strerror(dir_fd) << dendl;
+      return -dir_fd;
+    }
+
+    dir = fdopendir(dir_fd);
+    if (dir == NULL) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << dname << " for listing: "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+
+    errno = 0;
+    while ((entry = readdir(dir)) != NULL) {
+      struct statx stx;
+
+      if ((entry->d_name[0] == '.' && entry->d_name[1] == '\0')
+	  || (entry->d_name[0] == '.' && entry->d_name[1] == '.'
+	      && entry->d_name[2] == '\0')) {
+	/* Skip . and .. */
+	errno = 0;
+	continue;
+      }
+
+      ret = statx(dir_fd, entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
+      if (ret < 0) {
+	ret = errno;
+	ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
+	  << cpp_strerror(ret) << dendl;
+	return -ret;
+      }
+
+      if (S_ISDIR(stx.stx_mode)) {
+	/* Recurse */
+	ret = delete_directory(dir_fd, entry->d_name, true, dpp);
+	if (ret < 0) {
+	  return ret;
+	}
+
+	continue;
+      }
+
+      /* Otherwise, unlink */
+      ret = unlinkat(dir_fd, entry->d_name, 0);
+      if (ret < 0) {
+	ret = errno;
+	ldpp_dout(dpp, 0) << "ERROR: could not remove file " << entry->d_name << ": "
+	  << cpp_strerror(ret) << dendl;
+	return -ret;
+      }
+    }
+  }
+
+  ret = unlinkat(parent_fd, dname, AT_REMOVEDIR);
+  if (ret < 0) {
+    ret = errno;
+    if (errno != ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove bucket " << dname << ": "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
   }
 
   return 0;
@@ -525,6 +607,8 @@ int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
     return -ret;
   }
 
+  rewinddir(dir);
+
   errno = 0;
   while ((entry = readdir(dir)) != NULL) {
     struct statx stx;
@@ -595,18 +679,8 @@ int POSIXBucket::remove_bucket(const DoutPrefixProvider* dpp,
 				req_info* req_info,
 				optional_yield y)
 {
-  /* TODO dang delete_children */
-  int ret = unlinkat(driver->get_root_fd(), get_fname().c_str(), AT_REMOVEDIR);
-  if (ret < 0) {
-    ret = errno;
-    if (errno != ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: could not remove bucket " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-  }
-
-  return 0;
+  return delete_directory(driver->get_root_fd(), get_fname().c_str(),
+			  delete_children, dpp);
 }
 
 int POSIXBucket::remove_bucket_bypass_gc(int concurrent_max,
