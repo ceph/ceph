@@ -471,11 +471,15 @@ int S3FilterObject::S3FilterReadOp::get_attr(const DoutPrefixProvider* dpp, cons
   return 0;
 }
 
-Attrs& S3FilterObject::get_attrs()
+const Attrs& S3FilterObject::get_attrs() const
 { 
   return this->get_bucket()->get_attrs();
 }
 
+Attrs& S3FilterObject::get_attrs()
+{ 
+  return this->get_bucket()->get_attrs();
+}
 
 int S3FilterObject::S3FilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {

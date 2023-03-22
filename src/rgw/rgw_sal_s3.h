@@ -257,7 +257,8 @@ class S3FilterObject : public FilterObject {
 								    filter(_filter) {}
     virtual ~S3FilterObject() = default;
 
-	virtual const Attrs& get_attrs(void) const override;
+    virtual Attrs& get_attrs(void) override;
+    virtual const Attrs& get_attrs(void) const override;
     virtual const std::string &get_name() const override { return next->get_name(); }
     //virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
     //                        Attrs* delattrs, optional_yield y) override;
