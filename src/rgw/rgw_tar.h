@@ -16,7 +16,7 @@
 namespace rgw {
 namespace tar {
 
-static constexpr size_t BLOCK_SIZE = 512;
+static constexpr size_t TAR_BLOCK_SIZE = 512;
 
 
 static inline std::pair<class StatusIndicator,
@@ -82,8 +82,8 @@ protected:
     char __padding[355];
   } *header;
 
-  static_assert(sizeof(*header) == BLOCK_SIZE,
-                "The TAR header must be exactly BLOCK_SIZE length");
+  static_assert(sizeof(*header) == TAR_BLOCK_SIZE,
+                "The TAR header must be exactly TAR_BLOCK_SIZE length");
 
   /* The label is far more important from what the code really does. */
   static size_t pos2len(const size_t pos) {
@@ -91,7 +91,7 @@ protected:
   }
 
 public:
-  explicit HeaderView(const char (&header)[BLOCK_SIZE])
+  explicit HeaderView(const char (&header)[TAR_BLOCK_SIZE])
     : header(reinterpret_cast<const header_t*>(header)) {
   }
 
@@ -138,11 +138,11 @@ public:
 static inline std::pair<StatusIndicator,
                         boost::optional<HeaderView>>
 interpret_block(const StatusIndicator& status, ceph::bufferlist& bl) {
-  static constexpr std::array<char, BLOCK_SIZE> zero_block = {0, };
-  const char (&block)[BLOCK_SIZE] = \
-    reinterpret_cast<const char (&)[BLOCK_SIZE]>(*bl.c_str());
+  static constexpr std::array<char, TAR_BLOCK_SIZE> zero_block = {0, };
+  const char (&block)[TAR_BLOCK_SIZE] = \
+    reinterpret_cast<const char (&)[TAR_BLOCK_SIZE]>(*bl.c_str());
 
-  if (std::memcmp(zero_block.data(), block, BLOCK_SIZE) == 0) {
+  if (std::memcmp(zero_block.data(), block, TAR_BLOCK_SIZE) == 0) {
     return std::make_pair(StatusIndicator(status, true), boost::none);
   } else {
     return std::make_pair(StatusIndicator(status, false), HeaderView(block));
