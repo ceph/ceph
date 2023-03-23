@@ -199,20 +199,6 @@
 	...
 }
 {
-	libleveldb: ignore all static leveldb leaks
-	Memcheck:Leak
-	...
-	fun:*leveldb*
-	...
-}
-{
-	libleveldb: ignore all dynamic libleveldb leaks
-	Memcheck:Leak
-	...
-	obj:*libleveldb.so*
-	...
-}
-{
 	libcurl: ignore libcurl leaks
 	Memcheck:Leak
 	...
