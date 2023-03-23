@@ -1,5 +1,5 @@
   $ ceph-kvstore-tool --help
-  Usage: ceph-kvstore-tool <leveldb|rocksdb|bluestore-kv> <store path> command [args...]
+  Usage: ceph-kvstore-tool <rocksdb|bluestore-kv> <store path> command [args...]
   
   Commands:
     list [prefix]
@@ -12,7 +12,7 @@
     set <prefix> <key> [ver <N>|in <file>]
     rm <prefix> <key>
     rm-prefix <prefix>
-    store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...] 
+    store-copy <path> [num-keys-per-tx] [rocksdb|...] 
     store-crc <path>
     compact
     compact-prefix <prefix>

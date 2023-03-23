@@ -9,14 +9,14 @@
 Synopsis
 ========
 
-| **ceph-kvstore-tool** <leveldb|rocksdb|bluestore-kv> <store path> *command* [args...]
+| **ceph-kvstore-tool** <rocksdb|bluestore-kv> <store path> *command* [args...]
 
 
 Description
 ===========
 
 :program:`ceph-kvstore-tool` is a kvstore manipulation tool. It allows users to manipulate
-leveldb/rocksdb's data (like OSD's omap) offline.
+RocksDB's data (like OSD's omap) offline.
 
 Commands
 ========
