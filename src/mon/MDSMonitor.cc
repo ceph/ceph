@@ -1460,28 +1460,7 @@ int MDSMonitor::filesystem_command(
   string whostr;
   cmd_getval(cmdmap, "role", whostr);
 
-  if (prefix == "mds set_state") {
-    mds_gid_t gid;
-    if (!cmd_getval(cmdmap, "gid", gid)) {
-      ss << "error parsing 'gid' value '"
-         << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
-      return -EINVAL;
-    }
-    MDSMap::DaemonState state;
-    if (!cmd_getval(cmdmap, "state", state)) {
-      ss << "error parsing 'state' string value '"
-         << cmd_vartype_stringify(cmdmap.at("state")) << "'";
-      return -EINVAL;
-    }
-    if (fsmap.gid_exists(gid, op->get_session()->get_allowed_fs_names())) {
-      fsmap.modify_daemon(gid, [state](auto& info) {
-        info.state = state;
-      });
-      ss << "set mds gid " << gid << " to state " << state << " "
-         << ceph_mds_state_name(state);
-      return 0;
-    }
-  } else if (prefix == "mds fail") {
+  if (prefix == "mds fail") {
     string who;
     cmd_getval(cmdmap, "role_or_gid", who);
 
