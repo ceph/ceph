@@ -129,10 +129,10 @@ WNBDActiveDiskIterator::WNBDActiveDiskIterator()
     // no error
     break;
   case ERROR_OPEN_FAILED:
-    error = ENOENT;
+    error = -ENOENT;
     break;
   default:
-    error = EINVAL;
+    error = -EINVAL;
     break;
   }
 }
@@ -185,14 +185,14 @@ RegistryDiskIterator::RegistryDiskIterator()
                             SERVICE_REG_KEY, false);
   if (!reg_key->hKey) {
     if (!reg_key->missingKey)
-      error = EINVAL;
+      error = -EINVAL;
     return;
   }
 
   if (RegQueryInfoKey(reg_key->hKey, NULL, NULL, NULL, &subkey_count,
                      NULL, NULL, NULL, NULL, NULL, NULL, NULL)) {
     derr << "Could not query registry key: " << SERVICE_REG_KEY << dendl;
-    error = EINVAL;
+    error = -EINVAL;
     return;
   }
 }
@@ -215,12 +215,12 @@ bool RegistryDiskIterator::get(Config *cfg)
     return false;
   } else if (err) {
     derr << "Could not enumerate registry. Error: " << err << dendl;
-    error = EINVAL;
+    error = -EINVAL;
     return false;
   }
 
   if (load_mapping_config_from_registry(subkey_name, cfg)) {
-    error = EINVAL;
+    error = -EINVAL;
     return false;
   };
 
@@ -722,7 +722,7 @@ int disconnect_all_mappings(
   pool.join();
 
   r = iterator.get_error();
-  if (r == ENOENT) {
+  if (r == -ENOENT) {
     dout(0) << __func__ << ": wnbd adapter unavailable, "
             << "assuming that no wnbd mappings exist." << dendl;
     err = 0;
@@ -1471,7 +1471,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
   int error = wnbd_disk_iterator.get_error();
   if (error) {
     derr << "Could not get disk list: " << error << dendl;
-    return -error;
+    return error;
   }
 
   if (f) {
@@ -1565,11 +1565,11 @@ static int do_stats(std::string search_devpath)
   }
   int error = wnbd_disk_iterator.get_error();
   if (!error) {
-    error = ENOENT;
+    error = -ENOENT;
   }
 
   derr << "Could not find the specified disk." << dendl;
-  return -error;
+  return error;
 }
 
 static int parse_args(std::vector<const char*>& args,
