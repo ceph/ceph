@@ -1,4 +1,6 @@
 import { Component } from '@angular/core';
+import { Observable } from 'rxjs';
+import { FeatureTogglesService } from '~/app/shared/services/feature-toggles.service';
 
 @Component({
   selector: 'cd-dashboard',
@@ -6,5 +8,9 @@ import { Component } from '@angular/core';
   styleUrls: ['./dashboard.component.scss']
 })
 export class DashboardComponent {
-  hasGrafana = false; // TODO: Temporary var, remove when grafana is implemented
+  enabledFeature$: Observable<Object>;
+
+  constructor(private featureToggles: FeatureTogglesService) {
+    this.enabledFeature$ = this.featureToggles.get();
+  }
 }
