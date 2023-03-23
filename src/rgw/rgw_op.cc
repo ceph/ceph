@@ -5219,10 +5219,13 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
   return true;
 }
 
-int RGWCopyObj::verify_permission(optional_yield y)
+int RGWCopyObj::init_processing(optional_yield y)
 {
-  RGWAccessControlPolicy src_acl(s->cct);
-  boost::optional<Policy> src_policy;
+  op_ret = RGWOp::init_processing(y);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   op_ret = get_params(y);
   if (op_ret < 0)
     return op_ret;
@@ -5245,6 +5248,14 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   /* This is the only place the bucket is set on src_object */
   s->src_object->set_bucket(src_bucket.get());
+  return 0;
+}
+
+int RGWCopyObj::verify_permission(optional_yield y)
+{
+  RGWAccessControlPolicy src_acl(s->cct);
+  boost::optional<Policy> src_policy;
+
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
     s->src_object->set_atomic();
