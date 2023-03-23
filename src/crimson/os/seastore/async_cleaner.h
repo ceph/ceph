@@ -1634,7 +1634,10 @@ public:
 
   store_statfs_t get_stat() const final {
     store_statfs_t st;
-    // TODO 
+    st.total = get_total_bytes();
+    st.available = get_total_bytes() - get_journal_bytes() - stats.used_bytes;
+    st.allocated = get_journal_bytes() + stats.used_bytes;
+    st.data_stored = get_journal_bytes() + stats.used_bytes;
     return st;
   }
 
@@ -1687,7 +1690,27 @@ public:
   paddr_t alloc_paddr(extent_len_t length) {
     // TODO: implement allocation strategy (dirty metadata and multiple devices)
     auto rbs = rb_group->get_rb_managers();
-    return rbs[0]->alloc_extent(length);
+    auto paddr = rbs[0]->alloc_extent(length);
+    stats.used_bytes += length;
+    return paddr;
+  }
+
+  size_t get_total_bytes() const {
+    auto rbs = rb_group->get_rb_managers();
+    size_t total = 0;
+    for (auto p : rbs) {
+      total += p->get_device()->get_available_size();
+    }
+    return total;
+  }
+
+  size_t get_journal_bytes() const {
+    auto rbs = rb_group->get_rb_managers();
+    size_t total = 0;
+    for (auto p : rbs) {
+      total += p->get_journal_size();
+    }
+    return total;
   }
 
   // Testing interfaces
@@ -1722,6 +1745,8 @@ private:
      */
     uint64_t projected_used_bytes = 0;
   } stats;
+  seastar::metrics::metric_group metrics;
+  void register_metrics();
 
   ExtentCallbackInterface *extent_callback = nullptr;
   BackgroundListener *background_callback = nullptr;
