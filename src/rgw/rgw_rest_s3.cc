@@ -3419,12 +3419,6 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_IF_NONE_MATCH");
 
-  src_tenant_name = s->src_tenant_name;
-  src_bucket_name = s->src_bucket_name;
-  dest_tenant_name = s->bucket->get_tenant();
-  dest_bucket_name = s->bucket->get_name();
-  dest_obj_name = s->object->get_name();
-
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
@@ -3448,9 +3442,9 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   }
 
   if (source_zone.empty() &&
-      (dest_tenant_name.compare(src_tenant_name) == 0) &&
-      (dest_bucket_name.compare(src_bucket_name) == 0) &&
-      (dest_obj_name.compare(s->src_object->get_name()) == 0) &&
+      (s->bucket->get_tenant() == s->src_tenant_name) &&
+      (s->bucket->get_name() == s->src_bucket_name) &&
+      (s->object->get_name() == s->src_object->get_name()) &&
       s->src_object->get_instance().empty() &&
       (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
