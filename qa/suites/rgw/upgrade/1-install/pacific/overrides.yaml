@@ -1,9 +1,3 @@
 overrides:
   ragweed:
     default-branch: ceph-master # ceph-pacific doesn't have tox, but tests are the same
-
-tasks:
-- install:
-    branch: pacific
-    exclude_packages:
-      - ceph-volume
