@@ -63,7 +63,7 @@ To install Ceph with RPMs, execute the following steps:
 
 #. Install pre-requisite packages::  
 
-	sudo yum install snappy leveldb gdisk python-argparse gperftools-libs
+	sudo yum install snappy gdisk python-argparse gperftools-libs
 
 
 Once you have added either release or development packages, or added a

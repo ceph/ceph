@@ -94,8 +94,7 @@ defaulted to ON. To build without the RADOS Gateway:
 Another example below is building with debugging and alternate locations 
 for a couple of external dependencies:
 
-	cmake -DLEVELDB_PREFIX="/opt/hyperleveldb" \
-	-DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-Og -g3 -gdwarf-4" \
+	cmake -DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-Og -g3 -gdwarf-4" \
 	..
 
 Ceph has several bundled dependencies such as Boost, RocksDB and Arrow. By

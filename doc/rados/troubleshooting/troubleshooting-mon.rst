@@ -418,7 +418,7 @@ Monitor Store Failures
 Symptoms of store corruption
 ----------------------------
 
-Ceph monitor stores the :term:`Cluster Map` in a key/value store such as LevelDB. If
+Ceph monitor stores the :term:`Cluster Map` in a key/value store such as RocksDB. If
 a monitor fails due to the key/value store corruption, following error messages
 might be found in the monitor log::
 
