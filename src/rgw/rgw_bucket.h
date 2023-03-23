@@ -47,9 +47,10 @@ extern int rgw_bucket_parse_bucket_key(CephContext *cct, const std::string& key,
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
 
-extern void rgw_parse_url_bucket(const std::string& bucket,
-                                 const std::string& auth_tenant,
-                                 std::string &tenant_name, std::string &bucket_name);
+[[nodiscard]] int rgw_parse_url_bucket(const std::string& bucket,
+                                       const std::string& auth_tenant,
+                                       std::string &tenant_name,
+                                       std::string &bucket_name);
 
 extern int rgw_chown_bucket_and_objects(rgw::sal::Store* store,
 					rgw::sal::Bucket* bucket,
