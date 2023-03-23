@@ -1,6 +1,6 @@
-import { Location } from '@angular/common';
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { FormGroup, NgForm } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -35,10 +35,12 @@ export class FormButtonPanelComponent {
   @Input()
   disabled = false;
 
+  previousRoute: string;
   constructor(
-    private location: Location,
+    private router: Router,
+    private route: ActivatedRoute,
     private actionLabels: ActionLabelsI18n,
-    private modalService: ModalService
+    private modalService: ModalService,
   ) {}
 
   submitAction() {
@@ -50,7 +52,7 @@ export class FormButtonPanelComponent {
       if (this.modalService.hasOpenModals()) {
         this.modalService.dismissAll();
       } else {
-        this.location.back();
+        this.router.navigate(['../'], {relativeTo: this.route});
       }
     } else {
       this.backActionEvent.emit();

@@ -1,4 +1,4 @@
-import { Location } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -11,14 +11,17 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 export class BackButtonComponent {
   @Output() backAction = new EventEmitter();
   @Input() name: string = this.actionLabels.CANCEL;
+  
+   
 
-  constructor(private location: Location, private actionLabels: ActionLabelsI18n) {}
+  constructor(private router: Router, private route: ActivatedRoute, private actionLabels: ActionLabelsI18n) {}
 
   back() {
-    if (this.backAction.observers.length === 0) {
-      this.location.back();
+    if(this.backAction.observers.length === 0){
+      this.router.navigate(['../'], {relativeTo: this.route})
     } else {
       this.backAction.emit();
     }
+     
   }
 }
