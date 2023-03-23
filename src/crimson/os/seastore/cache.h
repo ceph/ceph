@@ -1106,6 +1106,14 @@ public:
   /// Dump live extents
   void dump_contents();
 
+  /**
+   * backref_extent_entry_t
+   *
+   * All the backref extent entries have to be indexed by paddr in memory,
+   * so they can be retrived by range during cleaning.
+   *
+   * See BtreeBackrefManager::retrieve_backref_extents_in_range()
+   */
   struct backref_extent_entry_t {
     backref_extent_entry_t(
       paddr_t paddr,
