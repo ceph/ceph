@@ -127,8 +127,8 @@ Monitor databases might grow in size when there are placement groups that have
 not reached an ``active+clean`` state in a long time.
 
 This alert might also indicate that the monitor's database is not properly
-compacting, an issue that has been observed with some older versions of leveldb
-and rocksdb. Forcing a compaction with ``ceph daemon mon.<id> compact`` might
+compacting, an issue that has been observed with some older versions of
+RocksDB. Forcing a compaction with ``ceph daemon mon.<id> compact`` might
 shrink the database's on-disk size.
 
 This alert might also indicate that the monitor has a bug that prevents it from

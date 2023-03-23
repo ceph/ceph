@@ -38,7 +38,7 @@ the monitor services are written by the Ceph Monitor to a single Paxos
 instance, and Paxos writes the changes to a key/value store for strong
 consistency. Ceph Monitors are able to query the most recent version of the
 cluster map during sync operations, and they use the key/value store's
-snapshots and iterators (using leveldb) to perform store-wide synchronization.
+snapshots and iterators (using RocksDB) to perform store-wide synchronization.
 
 .. ditaa::
  /-------------\               /-------------\
@@ -265,7 +265,7 @@ Data
 
 Ceph provides a default path where Ceph Monitors store data. For optimal
 performance in a production Ceph Storage Cluster, we recommend running Ceph
-Monitors on separate hosts and drives from Ceph OSD Daemons. As leveldb uses
+Monitors on separate hosts and drives from Ceph OSD Daemons. As RocksDB uses
 ``mmap()`` for writing the data, Ceph Monitors flush their data from memory to disk
 very often, which can interfere with Ceph OSD Daemon workloads if the data
 store is co-located with the OSD Daemons.
