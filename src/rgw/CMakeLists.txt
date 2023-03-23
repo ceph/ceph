@@ -141,6 +141,7 @@ set(librgw_common_srcs
   rgw_bucket_encryption.cc
   rgw_tracer.cc
   rgw_lua_background.cc
+  driver/posix/aio.cc
   rgw_data_access.cc
   rgw_realm_watcher.cc
   rgw_bucket_logging.cc
