@@ -7729,7 +7729,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 
   auto status = rgw::tar::StatusIndicator::create();
   do {
-    op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
+    op_ret = stream->get_exactly(rgw::tar::TAR_BLOCK_SIZE, buffer);
     if (op_ret < 0) {
       ldpp_dout(this, 2) << "cannot read header" << dendl;
       return;
@@ -7757,7 +7757,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 	  else
 	    filename = file_prefix + std::string(header->get_filename());
 	  auto body = AlignedStreamGetter(0, header->get_filesize(),
-                                          rgw::tar::BLOCK_SIZE, *stream);
+                                          rgw::tar::TAR_BLOCK_SIZE, *stream);
           op_ret = handle_file(filename,
                                header->get_filesize(),
                                body, y);
