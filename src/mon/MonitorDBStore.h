@@ -664,8 +664,8 @@ class MonitorDBStore
     std::string kv_type;
     int r = read_meta("kv_backend", &kv_type);
     if (r < 0 || kv_type.empty()) {
-      // assume old monitors that did not mark the type were leveldb.
-      kv_type = "leveldb";
+      // assume old monitors that did not mark the type were RocksDB.
+      kv_type = "rocksdb";
       r = write_meta("kv_backend", kv_type);
       if (r < 0)
 	return r;

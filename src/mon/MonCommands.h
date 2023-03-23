@@ -209,7 +209,7 @@ COMMAND("auth rm "
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage",
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's RocksDB storage",
 	     "mon", "rw",
              FLAG(TELL))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r")
