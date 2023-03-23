@@ -287,7 +287,7 @@ options:
   type: float
   level: advanced
   desc: Scrub each PG no more often than this interval
-  fmt_desc: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
+  fmt_desc: The desired interval in seconds for scrubbing the Ceph OSD Daemon
     when the Ceph Storage Cluster load is low.
   default: 1_day
   see_also:
@@ -326,7 +326,7 @@ options:
   type: float
   level: dev
   desc: Backoff ratio for scheduling scrubs
-  long_desc: This is the precentage of ticks that do NOT schedule scrubs, 66% means
+  long_desc: This is the percentage of ticks that do NOT schedule scrubs, 66% means
     that 1 out of 3 ticks will schedule scrubs
   default: 0.66
   with_legacy: true
@@ -507,31 +507,76 @@ options:
     stats (inc. scrub/block duration) every this many seconds.
   default: 120
   with_legacy: false
-# when replicas are slow to respond to scrub resource reservations
-# Note: disable by using a very large value
 - name: osd_scrub_slow_reservation_response
   type: millisecs
   level: advanced
-  desc: Duration before issuing a cluster-log warning
-  long_desc: Waiting too long for a replica to respond (after at least half of the
-    replicas have responded).
+  desc: Maximum wait (milliseconds) for scrub reservations before issuing a cluster-log warning
+  long_desc: Waiting too long for a replica to respond to scrub resource reservation request
+   (after at least half of the replicas have responded). Disable by setting to a very large value.
   default: 2200
   min: 500
   see_also:
   - osd_scrub_reservation_timeout
   with_legacy: false
-# when a replica does not respond to scrub resource request
-# Note: disable by using a very large value
 - name: osd_scrub_reservation_timeout
   type: millisecs
   level: advanced
-  desc: Duration before aborting the scrub session
-  long_desc: Waiting too long for some replicas to respond to
-    scrub reservation requests.
+  desc: Maximum wait (milliseconds) for replicas' response to scrub reservation requests
+  long_desc: Maximum wait (milliseconds) for all replicas to respond to
+    scrub reservation requests, before the scrub session is aborted. Disable by setting
+    to a very large value.
   default: 5000
   min: 2000
   see_also:
   - osd_scrub_slow_reservation_response
+  with_legacy: false
+- name: osd_scrub_retry_busy_replicas
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying scrub after a replica reservation failure
+  long_desc: Minimum delay after a failed attempt to secure the replicas' scrub resources.
+  default: 20
+  min: 1
+  see_also:
+  - osd_scrub_retry_wrong_time
+  with_legacy: false
+- name: osd_scrub_retry_wrong_time
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying periodic scrub after a badly-timed attempt
+  long_desc: Minimum delay after a failed attempt to initiate a periodic
+    scrub at the wrong time.
+  default: 300
+  min: 1
+  see_also:
+  - osd_scrub_begin_hour
+  - osd_scrub_end_hour
+  - osd_scrub_begin_week_day
+  - osd_scrub_end_week_day
+  with_legacy: false
+- name: osd_scrub_retry_pg_state
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying to scrub a previously inactive/not-clean PG
+  long_desc: Minimum delay after a failed attempt to scrub a PG that was not
+    active or not clean.
+  default: 60
+  min: 1
+  see_also:
+  - osd_scrub_retry_wrong_time
+  with_legacy: false
+- name: osd_scrub_retry_delay
+  type: int
+  level: advanced
+  desc: Period (in seconds) before retrying a specific PG after a scrub failure
+  long_desc: Minimum delay after a failed attempt to scrub a PG. See the
+    'see also' for the configuration options for some specific delay reasons
+  default: 3
+  min: 1
+  see_also:
+  - osd_scrub_retry_wrong_time
+  - osd_scrub_retry_busy_replicas
+  - osd_scrub_retry_pg_state
   with_legacy: false
 # where rados plugins are stored
 - name: osd_class_dir

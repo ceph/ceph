@@ -24,7 +24,7 @@ class PrimaryLogPG;
  */
 class PrimaryLogScrub : public PgScrubber {
  public:
-  explicit PrimaryLogScrub(PrimaryLogPG* pg);
+  explicit PrimaryLogScrub(PrimaryLogPG* pg, ScrubQueue& osd_scrubq);
 
   void _scrub_finish() final;
 

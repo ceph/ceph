@@ -74,7 +74,7 @@ struct ScrubMachineListener {
    *
    * Attempts to cancel the callback to whcih the passed token is associated.
    * cancel_callback is best effort, the callback may still fire.
-   * cancel_callback guarrantees that exactly one of the two things will happen:
+   * cancel_callback guarantees that exactly one of the two things will happen:
    * - the callback is destroyed and will not be invoked
    * - the callback will be invoked
    */
@@ -113,6 +113,12 @@ struct ScrubMachineListener {
   virtual void on_replica_init() = 0;
 
   virtual void replica_handling_done() = 0;
+
+  /// the map builder got an error ret code from the backend
+  virtual void on_backend_error() = 0;
+
+  /// the interval just ended, while the FSM state is ActiveScrubbing
+  virtual void interval_when_active() = 0;
 
   /// the version of 'scrub_clear_state()' that does not try to invoke FSM
   /// services (thus can be called from FSM reactions)
@@ -184,6 +190,8 @@ struct ScrubMachineListener {
   virtual void set_scrub_begin_time() = 0;
 
   virtual void set_scrub_duration() = 0;
+
+  virtual void on_repl_reservation_failure() = 0;
 
   /**
    * No new scrub session will start while a scrub was initiate on a PG,

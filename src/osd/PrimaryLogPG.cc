@@ -999,7 +999,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 // ==========================================================
 
 void PrimaryLogPG::do_command(
-  const string_view& orig_prefix,
+  string_view orig_prefix,
   const cmdmap_t& cmdmap,
   const bufferlist& idata,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
@@ -1032,7 +1032,7 @@ void PrimaryLogPG::do_command(
     f->close_section();
 
     if (is_primary() && is_active() && m_scrubber) {
-      m_scrubber->dump_scrubber(f.get(), m_planned_scrub);
+      m_scrubber->dump_scrubber(f.get());
     }
 
     f->open_object_section("agent_state");
@@ -1158,39 +1158,19 @@ void PrimaryLogPG::do_command(
     f->close_section();
   }
 
-  else if (prefix == "scrub" ||
-	   prefix == "deep_scrub") {
-    bool deep = (prefix == "deep_scrub");
+  else if (prefix == "scrub" || prefix == "deep_scrub") {
+
+    scrub_level_t deep =
+	(prefix == "deep_scrub") ? scrub_level_t::deep : scrub_level_t::shallow;
     int64_t time = cmd_getval_or<int64_t>(cmdmap, "time", 0);
+    bool as_must = cmd_getval_or<bool>(cmdmap, "force", false);
 
     if (is_primary()) {
-      const pg_pool_t *p = &pool.info;
-      double pool_scrub_max_interval = 0;
-      double scrub_max_interval;
-      if (deep) {
-        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_deep_scrub_interval;
+      if (as_must) {
+	m_scrubber->on_operator_forced_scrub(f.get(), deep);
       } else {
-        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_scrub_max_interval;
+        m_scrubber->on_operator_periodic_cmd(f.get(), deep, time);
       }
-      // Instead of marking must_scrub force a schedule scrub
-      utime_t stamp = ceph_clock_now();
-      if (time == 0)
-        stamp -= scrub_max_interval;
-      else
-        stamp -=  (float)time;
-      stamp -= 100.0;  // push back last scrub more for good measure
-      if (deep) {
-        set_last_deep_scrub_stamp(stamp);
-      }
-      set_last_scrub_stamp(stamp); // for 'deep' as well, as we use this value to order scrubs
-      f->open_object_section("result");
-      f->dump_bool("deep", deep);
-      f->dump_stream("stamp") << stamp;
-      f->close_section();
     } else {
       ss << "Not primary";
       ret = -EPERM;
@@ -1198,19 +1178,14 @@ void PrimaryLogPG::do_command(
     outbl.append(ss.str());
   }
 
-  else if (prefix == "block" || prefix == "unblock" || prefix == "set" ||
-           prefix == "unset") {
+  else if (orig_prefix == "scrubdebug" ||
+      prefix == "block" || prefix == "unblock" || prefix == "set" ||
+      prefix == "unset") {
     string value;
     cmd_getval(cmdmap, "value", value);
-
-    if (is_primary()) {
-      ret = m_scrubber->asok_debug(prefix, value, f.get(), ss);
-      f->open_object_section("result");
-      f->dump_bool("success", true);
-      f->close_section();
-    } else {
-      ss << "Not primary";
-      ret = -EPERM;
+    ret = do_scrub_debug(f.get(), orig_prefix, prefix, value);
+    if (ret) {
+      ss << "do_scrub_debug returned " << ret;
     }
     outbl.append(ss.str());
   }
@@ -1224,6 +1199,23 @@ void PrimaryLogPG::do_command(
     f->flush(outbl);
   }
   on_finish(ret, ss.str(), outbl);
+}
+
+int PrimaryLogPG::do_scrub_debug(
+    Formatter *f,
+    std::string_view prefix,
+    std::string_view cmd,
+    std::string_view val)
+{
+  dout(10) << fmt::format("do_scrub_debug: {} / {} / {}", prefix, cmd, val)
+	   << dendl;
+  if (!m_scrubber) {
+    dout(10) << "do_scrub_debug: no scrubber object" << dendl;
+    return -EPERM;
+  }
+
+  stringstream ss;
+  return m_scrubber->asok_debug(prefix, cmd, val, f, ss);
 }
 
 
@@ -1768,11 +1760,13 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
     pgbackend->get_is_recoverable_predicate());
   snap_trimmer_machine.initiate();
 
-  m_scrubber = make_unique<PrimaryLogScrub>(this);
+  m_scrubber = make_unique<PrimaryLogScrub>(this, o->get_scrub_services());
 }
 
 PrimaryLogPG::~PrimaryLogPG()
 {
+  // making sure the scrubber is deleted here, in the 'derived' class, and not
+  // in the PG destructor:
   m_scrubber.reset();
 }
 
@@ -12319,8 +12313,6 @@ int PrimaryLogPG::recover_missing(
   int priority,
   PGBackend::RecoveryHandle *h)
 {
-  dout(10) << __func__ << " sar: " << scrub_after_recovery << dendl;
-
   if (recovery_state.get_missing_loc().is_unfound(soid)) {
     dout(7) << __func__ << " " << soid
 	    << " v " << v
@@ -12350,7 +12342,7 @@ int PrimaryLogPG::recover_missing(
 	 if (!object_missing) {
 	   object_stat_sum_t stat_diff;
 	   stat_diff.num_objects_recovered = 1;
-	   if (scrub_after_recovery)
+	   if (m_scrubber->is_after_repair_required())
 	     stat_diff.num_objects_repaired = 1;
 	   on_global_recover(soid, stat_diff, true);
 	 } else {
@@ -13148,7 +13140,7 @@ void PrimaryLogPG::_clear_recovery_state()
 #ifdef DEBUG_RECOVERY_OIDS
   recovering_oids.clear();
 #endif
-  dout(15) << __func__ << " flags: " << m_planned_scrub << dendl;
+  dout(15) << __func__ << dendl;
 
   last_backfill_started = hobject_t();
   set<hobject_t>::iterator i = backfills_in_flight.begin();

@@ -1478,7 +1478,7 @@ public:
   ~PrimaryLogPG() override;
 
   void do_command(
-    const std::string_view& prefix,
+    std::string_view prefix,
     const cmdmap_t& cmdmap,
     const ceph::buffer::list& idata,
     std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) override;
@@ -1524,6 +1524,11 @@ public:
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
+  int do_scrub_debug(
+      Formatter *f,
+      std::string_view prefix,
+      std::string_view cmd,
+      std::string_view par);
   bool check_src_targ(const hobject_t& soid, const hobject_t& toid) const;
 
   uint64_t temp_seq; ///< last id for naming temp objects

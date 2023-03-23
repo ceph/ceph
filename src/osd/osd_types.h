@@ -397,7 +397,7 @@ struct pg_t {
   uint32_t m_seed;
 
   pg_t() : m_pool(0), m_seed(0) {}
-  pg_t(ps_t seed, uint64_t pool) :
+  constexpr pg_t(ps_t seed, uint64_t pool) :
     m_pool(pool), m_seed(seed) {}
   // cppcheck-suppress noExplicitConstructor
   pg_t(const ceph_pg& cpg) :
@@ -515,7 +515,7 @@ struct spg_t {
   pg_t pgid;
   shard_id_t shard;
   spg_t() : shard(shard_id_t::NO_SHARD) {}
-  spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
+  constexpr spg_t(pg_t pgid, shard_id_t shard) : pgid(pgid), shard(shard) {}
   explicit spg_t(pg_t pgid) : pgid(pgid), shard(shard_id_t::NO_SHARD) {}
   auto operator<=>(const spg_t&) const = default;
   unsigned get_split_bits(unsigned pg_num) const {
@@ -2155,12 +2155,13 @@ enum class scrub_type_t : bool { not_repair = false, do_repair = true };
 
 /// is there a scrub in our future?
 enum class pg_scrub_sched_status_t : uint16_t {
-  unknown,         ///< status not reported yet
-  not_queued,	   ///< not in the OSD's scrub queue. Probably not active.
-  active,          ///< scrubbing
-  scheduled,	   ///< scheduled for a scrub at an already determined time
-  queued,	   ///< queued to be scrubbed
-  blocked	   ///< blocked waiting for objects to be unlocked
+  unknown,     ///< status not reported yet
+  not_queued,  ///< not in the OSD's scrub queue
+  active,      ///< scrubbing
+  queued,     ///< ready and queued to be scrubbed
+  scheduled,  ///< queued to be scrubbed once our 'not before' time is reached
+  delayed,    ///< past scheduled time, but previous attempt to scrub failed
+  blocked     ///< blocked waiting for objects to be unlocked
 };
 
 struct pg_scrubbing_status_t {

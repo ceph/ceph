@@ -279,9 +279,6 @@ public:
       bool need_write_epoch,
       ObjectStore::Transaction &t) = 0;
 
-    /// Need to reschedule next scrub. Assuming no change in role
-    /* RRR probably rm */ virtual void reschedule_scrub() = 0;
-
     /// Notify that a scrub has been requested
     virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 

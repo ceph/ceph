@@ -54,6 +54,7 @@
 #include "osd/osd_perf_counters.h"
 #include "common/Finisher.h"
 #include "scrubber/osd_scrub_sched.h"
+#include "scrubber/scrub_queue_if.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -91,6 +92,7 @@ class MOSDPGInfo;
 class MOSDPGRemove;
 class MOSDForceRecovery;
 class MMonGetPurgedSnapsReply;
+class ScrubQueue;
 
 class OSD;
 
@@ -243,26 +245,12 @@ public:
    * The entity that maintains the set of PGs we may scrub (i.e. - those that we
    * are their primary), and schedules their scrubbing.
    */
-  ScrubQueue m_scrub_queue;
+  std::unique_ptr<ScrubQueue> m_scrub_queue;
 
  public:
-  ScrubQueue& get_scrub_services() { return m_scrub_queue; }
+  ScrubQueue& get_scrub_services() { return *m_scrub_queue; }
 
-  /**
-   * A callback used by the ScrubQueue object to initiate a scrub on a specific PG.
-   *
-   * The request might fail for multiple reasons, as ScrubQueue cannot by its own
-   * check some of the PG-specific preconditions and those are checked here. See
-   * attempt_t definition.
-   *
-   * @param pgid to scrub
-   * @param allow_requested_repair_only
-   * @return a Scrub::attempt_t detailing either a success, or the failure reason.
-   */
-  Scrub::schedule_result_t initiate_a_scrub(
-    spg_t pgid,
-    bool allow_requested_repair_only) final;
-
+  std::optional<PGLockWrapper> get_locked_pg(spg_t pgid) final;
 
  private:
   // -- agent shared state --
@@ -512,6 +500,13 @@ public:
                               uint64_t cost,
 			      int priority);
   void queue_for_snap_trim(PG *pg);
+
+  void queue_for_scrub_initiation(
+      spg_t pg,
+      scrub_level_t scrub_level,
+      utime_t loop_id,
+      Scrub::OSDRestrictions env_conditions) override;
+
   void queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority);
 
   void queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority);
@@ -1865,11 +1860,6 @@ protected:
 		   int priority,
 		   ThreadPool::TPHandle &handle);
 
-
-  // -- scrubbing --
-  void sched_scrub();
-  void resched_all_scrubs();
-  bool scrub_random_backoff();
 
   // -- status reporting --
   MPGStats *collect_pg_stats();

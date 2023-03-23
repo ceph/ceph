@@ -226,7 +226,9 @@ void PrimaryLogScrub::_scrub_finish()
     m_pl_pg->object_contexts.clear();
 }
 
-PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg) : PgScrubber{pg}, m_pl_pg{pg}
+PrimaryLogScrub::PrimaryLogScrub(PrimaryLogPG* pg, ScrubQueue& osd_scrubq)
+    : PgScrubber{pg, osd_scrubq}
+    , m_pl_pg{pg}
 {}
 
 void PrimaryLogScrub::_scrub_clear_state()
