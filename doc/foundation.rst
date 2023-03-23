@@ -41,18 +41,17 @@ Premier
 General
 -------
 
+* `42on <https://www.42on.com/>`_
 * `ARM <http://www.arm.com/>`_
 * `Canonical <https://www.canonical.com/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
 * `croit <http://www.croit.io/>`_
-* `EasyStack <https://www.easystack.io/>`_
 * `ISS <http://iss-integration.com/>`_
 * `Koor <http://koor.tech/>`_
 * `Linode <https://linode.com/>`_
 * `OSNexus <https://osnexus.com/>`_
 * `Seagate <https://seagate.com/>`_
 * `SinoRail <http://www.sinorail.com/>`_
-* `Vexxhost <https://vexxhost.com>`_
 
 Associate
 ---------
