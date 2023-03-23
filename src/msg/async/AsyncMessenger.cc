@@ -501,22 +501,28 @@ void AsyncMessenger::_finish_bind(const entity_addrvec_t& bind_addrs,
   if (get_myaddrs().front().get_port() == 0) {
     set_myaddrs(listen_addrs);
   }
-  entity_addrvec_t newaddrs = *my_addrs;
-  for (auto& a : newaddrs.v) {
-    a.set_nonce(nonce);
-    if (saved_public_addrs) {
-      // transplantate network layer addresses while keeping ports
-      // (as they can be figured out by msgr from the allowed range [1])
-      // unless they are explicitly specified (NATing both IP/port?)
-      //
-      // [1]: the low-level `Processor::bind` scans for free ports in
-      // a range controlled by ms_bind_port_min and ms_bind_port_max
-      const auto& public_addr =
-        saved_public_addrs->addr_of_type(a.get_type());
-      const auto public_port = public_addr.get_port();
-      const auto bound_port = a.get_port();
-      a.set_sockaddr(public_addr.get_sockaddr());
-      a.set_port(public_port == 0 ? bound_port : public_port);
+
+  entity_addrvec_t newaddrs;
+  if (saved_public_addrs) {
+    newaddrs = *saved_public_addrs;
+    for (auto& public_addr : newaddrs.v) {
+      public_addr.set_nonce(nonce);
+      if (public_addr.is_ip() && public_addr.get_port() == 0) {
+	// port is not explicitly set. This is fine as it can be figured
+	// out by msgr. For instance, the low-level `Processor::bind`
+	// scans for free ports in a range controlled by ms_bind_port_min
+	// and ms_bind_port_max.
+        for (const auto& a : my_addrs->v) {
+          if (public_addr.get_type() == a.get_type() && a.is_ip()) {
+             public_addr.set_port(a.get_port());
+          }
+        }
+      }
+    }
+  } else {
+    newaddrs = *my_addrs;
+    for (auto& a : newaddrs.v) {
+      a.set_nonce(nonce);
     }
   }
   set_myaddrs(newaddrs);
