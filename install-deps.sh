@@ -351,7 +351,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/libtool \
         devel/google-perftools \
         lang/cython \
-        databases/leveldb \
         net/openldap24-client \
         archivers/snappy \
         archivers/liblz4 \
