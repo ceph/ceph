@@ -186,7 +186,6 @@ add_library(common-common-objs OBJECT
 # retrieved OpenSSL location. This is especially important when cross
 # compiling (e.g. targeting Windows).
 target_include_directories(common-common-objs PRIVATE ${OPENSSL_INCLUDE_DIR})
-
 # for options.cc
 target_compile_definitions(common-common-objs PRIVATE
   "CMAKE_INSTALL_LIBDIR=\"${CMAKE_INSTALL_LIBDIR}\""
