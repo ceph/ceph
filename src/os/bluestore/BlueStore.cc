@@ -16518,7 +16518,14 @@ int BlueStore::_do_remove(
   if (!h || !h->exists) {
     return 0;
   }
+  // Set maybe_unshared_blobs contains those shared blobs that have all nref=1.
+  // Is .head object is using all those segments?
+  // If it is using all, then no one else can use the shared blob,
+  // and we can fallback to regular non-shared blob.
 
+  // Note. We only process loaded shared blobs.
+  // This is very smart optimization - there is no way that we can unshare blob
+  // that is not yet loaded! We must have had inspected it to even check nrefs.
   dout(20) << __func__ << " checking for unshareable blobs on " << h
 	   << " " << h->oid << dendl;
   map<SharedBlob*,bluestore_extent_ref_map_t> expect;
@@ -16531,6 +16538,7 @@ int BlueStore::_do_remove(
       if (b.is_compressed()) {
 	expect[sb].get(0, b.get_ondisk_length());
       } else {
+	// todo: it seems to be an overkill to go through map()
 	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
 	    expect[sb].get(off, len);
 	    return 0;
@@ -16539,11 +16547,13 @@ int BlueStore::_do_remove(
     }
   }
 
+  // expect has now refs set exactly as .head is using it
   vector<SharedBlob*> unshared_blobs;
   unshared_blobs.reserve(maybe_unshared_blobs.size());
   for (auto& p : expect) {
     dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
     if (p.first->persistent->ref_map == p.second) {
+      // yup, .head is only one that is using the shared blob now
       SharedBlob *sb = p.first;
       dout(20) << __func__ << "  unsharing " << *sb << dendl;
       unshared_blobs.push_back(sb);
@@ -16559,6 +16569,7 @@ int BlueStore::_do_remove(
     return 0;
   }
 
+  // And now a run through .head extents to clear up freshly unshared blobs.
   for (auto& e : h->extent_map.extent_map) {
     const bluestore_blob_t& b = e.blob->get_blob();
     SharedBlob *sb = e.blob->shared_blob.get();
@@ -16568,6 +16579,18 @@ int BlueStore::_do_remove(
       dout(20) << __func__ << "  unsharing " << e << dendl;
       bluestore_blob_t& blob = e.blob->dirty_blob();
       blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
+      if (e.blob->shared_blob->nref > 1) {
+	// Each blob on creation gets its own unique (empty) shared_blob.
+	// In function ExtentMap::dup() we sometimes merge 2 blobs,
+	// so they share common shared_blob used for ref counting.
+	// Imagine 2 blobs having same shared_blob, and shared blob gets just unshared.
+	// We cleared shared_blob content so it is now logically empty,
+	// but now those 2 blobs share it.
+	// This is illegal, as empty shared blobs should be unique.
+	// Fixing by re-creation.
+	e.blob->shared_blob = new SharedBlob(c.get());
+	dout(20) << __func__ << " recreated empty shared blob " << e << dendl;
+      }
       h->extent_map.dirty_range(e.logical_offset, 1);
     }
   }
