@@ -27,6 +27,12 @@ Synopsis
 
 | **ceph** **fs** **mirror** [ *disable* \| *enable* \| *peer_add* \| *peer_remove* ]
 
+| **ceph** **fs** **subvolume** [*authorize* \|  *authorized_list* \| *create* \| *deauthorize* \| *evict* \| *exist* \| *getpath* \| *info* \| *ls* \| *pin* \| *resize* \| *rm* ]
+
+| **ceph** **fs** **subvolume** **snapshot** [ *clone* \| *create* \| *info* \| *ls* \| *protect* \| *rm*  \| *unprotect* ]
+
+| **ceph** **fs** **subvolume** **snapshot** **metadata** [ *get* \| *ls* \| *rm* \| *set* ]
+
 | **ceph** **fs** **volume** [ *create* \| *info* \| *ls* \| *rename* \| *rm* ]
 
 | **ceph** **fsid**
@@ -422,6 +428,169 @@ Subcommand ``peer_remove`` removes a mirroring peer for a CephFS.
 Usage::
 
     ceph fs mirror peer_remove <fs-name> <uuid>
+
+Subcommand ``subvolume`` lets manage FS subvolumes.
+
+Subcommand ``authorize`` allow a CephX auth ID access to a subvolume
+
+Usage::
+
+    ceph fs subvolume authorize <vol_name> <sub_name> <auth_id> [<group_name>] [<access_level>] [<tenant_id>] [--allow-existing-id]
+
+Subcommand ``authorized_list`` lists the auth IDs that have access to a subvolume.
+
+Usage::
+
+    ceph fs subvolume authorized_list <vol_name> <sub_name> [<group_name>]
+
+Subcommand ``create`` creates a CephFS subvolume in a volume, and optionally,
+with a specific size (in bytes), a specific data pool layout, a specific mode,
+in a specific subvolume group and in separate RADOS namespace
+
+Usage::
+
+    ceph fs subvolume create <vol-name> <sub-vol-name> [<size:int>] [<group_name>] [<pool_layout>] [<uid:int>] [<gid:int>] [<mode>] [--namespace-isolated]
+
+Subcommand ``deauthorize`` denies a cephx auth ID access to a subvolume.
+
+Usage::
+
+    ceph fs subvolume deauthorize <vol_name> <sub_name> <auth_id> [<group_name>]
+
+Subcommand ``evict`` evicts the clients based on auth IDs and subvolume mounted.
+
+Usage::
+
+    ceph fs subvolume evict <vol_name> <sub_name> <auth_id> [<group_name>]
+
+Subcommand ``exist`` checks a volume for the existence of a subvolume,
+optionally in a specified subvolume group
+
+Usage::
+
+    ceph fs subvolume exist <vol_name> [<group_name>]
+
+Subcommand ``getpath`` gets the mountpath of a CephFS subvolume in a volume,
+and optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume getpath <vol_name> <sub_name> [<group_name>]
+
+Subcommand ``info`` gets the information of a CephFS subvolume in a volume,
+and optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume info <vol_name> <sub_name> [<group_name>]
+
+Subvolume ``ls`` lists the subvolumes for the given CephFS volume.
+
+Usage::
+
+    ceph fs subvolume ls <vol_name> [<group_name>]
+
+Subcommand ``pin`` sets the MDS pinning policy for subvolume.
+
+Usage::
+
+    ceph fs subvolume pin <vol_name> <sub_name> <pin_type:export|distributed|random> <pin_setting> [<group_name>]
+
+Subcommand ``resize`` resizes a CephFS subvolume.
+
+Usage::
+
+    ceph fs subvolume resize <vol_name> <sub_name> <new_size> [<group_name>] [--no-shrink]
+
+Subcommand ``rm`` deletes a CephFS subvolume in a volume, and optionally, in
+a specific subvolume group. Optionally, it can also force delete a cancelled
+or failed clone, and retaining existing subvolume snapshots
+
+Usage::
+
+    ceph fs subvolume rm <vol_name> <sub_name> [<group_name>] [--force] [--retain-snapshots]
+
+Subcommand ``snapshot`` lets manage subvolume snapshots.
+
+Subcommad ``clone`` clones a snapshot to target subvolume.
+
+Usage::
+
+    ceph fs subvolume snapshot clone <vol_name> <sub_name> <snap_name> <target_sub_name> [<pool_layout>] [<group_name>] [<target_group_name>]
+
+Subcommand ``create`` creates a snapshot of a CephFS subvolume in a volume,
+and optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume snapshot create <vol_name> <sub_name> <snap_name> [<group_name>]
+
+Subcommand ``info`` displays the information of a CephFS subvolume snapshot and
+optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume snapshot info <vol_name> <sub_name> <snap_name> [<group_name>]
+
+Subcommand ``ls`` displays the list subvolume snapshots.
+
+Usage::
+
+    ceph fs subvolume snapshot ls <vol_name> <sub_name> [<group_name>]
+
+(deprecated) Subcommand ``protect`` protects snapshot of a CephFS subvolume
+in a volume, and optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume snapshot protect <vol_name> <sub_name> <snap_name> [<group_name>]
+
+Subcommand ``rm`` deletes a snapshot of a CephFS subvolume in a volume, and
+optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume snapshot rm <vol_name> <sub_name> <snap_name> [<group_name>] [--force]
+
+(deprecated) Subcommands ``unprotect`` stop protecting a snapshot of a CephFS
+subvolume in a volume, and optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume snapshot unprotect <vol_name> <sub_name> <snap_name> [<group_name>]
+
+Subcommand ``subvolume snapshot metadata`` lets manage metadata on a snapshot in a subvolume.
+
+Subcommand ``get`` displays the custom metadata associated with the key of a
+CephFS subvolume snapshot in a volume, and optionally, in a specific subvolume
+group.
+
+Usage::
+
+    ceph fs subvolume snapshot metadata get <vol_name> <sub_name> <snap_name> <key_name> [<group_name>]
+
+Subcommand ``ls`` displays the list of custom metadata (key-value pairs) of a
+CephFS subvolume snapshot in a volume, and optionally, in a specific subvolume
+group.
+
+Usage::
+
+    ceph fs subvolume snapshot metadata ls <vol_name> <sub_name> <snap_name> [<group_name>]
+
+Subcommand ``rm`` removes the custom metadata (key-value) associated with the
+key of a CephFS subvolume snapshot in a volume, and optionally, in a specific
+subvolume group.
+
+Usage::
+
+    ceph fs subvolume snapshot metadata rm <vol_name> <sub_name> <snap_name> <key_name> [<group_name>] [--force]
+
+Subcommand ``set`` sets the custom metadata (key-value) for a CephFS subvolume
+snapshot in a volume, and optionally, in a specific subvolume group.
+
+Usage::
+
+    ceph fs subvolume snapshot metadata set <vol_name> <sub_name> <snap_name> <key_name> <value> [<group_name>]
 
 Subcommand ``volume`` helps manage FS volumes. It has got more subcommands.
 
