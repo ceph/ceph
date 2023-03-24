@@ -292,7 +292,7 @@ jump to :ref:`this step <bluestore_data_migration_step>`.
 
       ceph-volume lvm zap $DEVICE
 
-#. Use the now-empty host as the new host, and repeat::
+#. Use the now-empty host as the new host, and repeat:
 
    .. prompt:: bash $
 
