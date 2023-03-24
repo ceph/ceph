@@ -23,8 +23,10 @@ def gen_mon_cap_str(caps):
             perm, fsname = c[0], None
         elif len(c) == 2:
             perm, fsname = c
-        else:
-            raise RuntimeError('caps tuple received isn\'t right')
+        elif len(c) < 1:
+            raise RuntimeError('received no items caps tuple')
+        else: # len(c) > 2
+            raise RuntimeError('received too many items in caps tuple')
         return perm, fsname
 
     def _gen_mon_cap_str(c):
@@ -78,14 +80,16 @@ def gen_mds_cap_str(caps):
     caps = ((perm1, fsname1, cephfs_mntpt1), (perm2, fsname2, cephfs_mntpt2))
     """
     def _unpack_tuple(c):
-        if len(c) == 2:
+        if len(c) == 1:
+            perm, fsname, cephfs_mntpt = c[0], None, '/'
+        elif len(c) == 2:
             perm, fsname, cephfs_mntpt = c[0], c[1], '/'
         elif len(c) == 3:
             perm, fsname, cephfs_mntpt = c
-        elif len(c) < 2:
-            raise RuntimeError('received items are too less in caps')
+        elif len(c) < 1:
+            raise RuntimeError('received no items caps tuple')
         else: # len(c) > 3
-            raise RuntimeError('received items are too many in caps')
+            raise RuntimeError('received too many items in caps tuple')
 
         return perm, fsname, cephfs_mntpt
 
