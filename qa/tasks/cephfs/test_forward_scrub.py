@@ -129,7 +129,7 @@ class TestForwardScrub(CephFSTestCase):
         # Umount before flush to avoid cap releases putting
         # things we don't want in the journal later.
         self.mount_a.umount_wait()
-        self.fs.mds_asok(["flush", "journal"])
+        self.fs.flush()
 
         # Create a new inode that's just in the log, i.e. would
         # look orphaned to backward scan if backward scan wisnae
@@ -163,7 +163,7 @@ class TestForwardScrub(CephFSTestCase):
 
         # Run a tagging forward scrub
         tag = "mytag123"
-        self.fs.mds_asok(["tag", "path", "/parent", tag])
+        self.fs.rank_asok(["tag", "path", "/parent", tag])
 
         # See that the orphan wisnae tagged
         self.assertUntagged(inos['./parent/flushed/bravo'])
@@ -175,14 +175,21 @@ class TestForwardScrub(CephFSTestCase):
         # See that journalled-but-not-flushed file *was* tagged
         self.assertTagged(inos['./parent/unflushed/jfile'], tag, self.fs.get_data_pool_name())
 
-        # Run cephfs-data-scan targeting only orphans
+        # okay, now we are going to run cephfs-data-scan. It's necessary to
+        # have a clean journal otherwise replay will blowup on mismatched
+        # inotable versions (due to scan_links)
+        self.fs.flush()
         self.fs.fail()
+        self.fs.journal_tool(["journal", "reset", "--force"], 0)
+
+        # Run cephfs-data-scan targeting only orphans
         self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
         self.fs.data_scan([
             "scan_inodes",
             "--filter-tag", tag,
             self.fs.get_data_pool_name()
         ])
+        self.fs.data_scan(["scan_links"])
 
         # After in-place injection stats should be kosher again
         self.fs.set_ceph_conf('mds', 'mds verify scatter', True)
