@@ -4,7 +4,8 @@ Test for Ceph clusters with multiple FSs.
 import logging
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from tasks.cephfs.caps_helper import CapTester
+from tasks.cephfs.caps_helper import (CapTester, gen_mon_cap_str,
+                                      gen_osd_cap_str, gen_mds_cap_str)
 
 from teuthology.exceptions import CommandFailedError
 
@@ -41,14 +42,13 @@ class TestMultiFS(CephFSTestCase):
 class TestMONCaps(TestMultiFS):
 
     def test_moncap_with_one_fs_names(self):
-        moncap = f'allow r fsname={self.fs1.name}'
+        moncap = gen_mon_cap_str((('r', self.fs1.name),))
         self.create_client(self.client_id, moncap)
 
         self.captester.run_mon_cap_tests(self.fs1, self.client_id)
 
     def test_moncap_with_multiple_fs_names(self):
-        moncap = (f'allow r fsname={self.fs1.name}, '
-                  f'allow r fsname={self.fs2.name}')
+        moncap = gen_mon_cap_str((('r', self.fs1.name), ('r', self.fs2.name)))
         self.create_client(self.client_id, moncap)
 
         self.captester.run_mon_cap_tests(self.fs1, self.client_id)
@@ -155,31 +155,16 @@ class TestMDSCaps(TestMultiFS):
 
         super(type(self), self).tearDown()
 
-    def generate_caps(self, perm, fsname, cephfs_mntpt):
-        moncap = 'allow r'
-        osdcap = (f'allow {perm} tag cephfs data={self.fs1.name}, '
-                  f'allow {perm} tag cephfs data={self.fs2.name}')
-
-        if fsname:
-            if cephfs_mntpt == '/':
-                mdscap = (f'allow {perm} fsname={self.fs1.name}, '
-                          f'allow {perm} fsname={self.fs2.name}')
-            else:
-                mdscap = (f'allow {perm} fsname={self.fs1.name} '
-                          f'path=/{cephfs_mntpt}, '
-                          f'allow {perm} fsname={self.fs2.name} '
-                          f'path=/{cephfs_mntpt}')
-        else:
-            if cephfs_mntpt == '/':
-                mdscap = f'allow {perm}'
-            else:
-                mdscap = f'allow {perm} path=/{cephfs_mntpt}'
-
-        return moncap, osdcap, mdscap
-
     def _create_client(self, perm, fsname=False, cephfs_mntpt='/'):
-        moncap, osdcap, mdscap = self.generate_caps(perm, fsname,
-                                                    cephfs_mntpt)
+        moncap = 'allow r'
+        osdcap = gen_osd_cap_str(((perm, self.fs1.name),
+                                  (perm, self.fs2.name)))
+        if fsname:
+            mdscap = gen_mds_cap_str(((perm, self.fs1.name, cephfs_mntpt),
+                                      (perm, self.fs2.name, cephfs_mntpt)))
+        else:
+            mdscap = gen_mds_cap_str(((perm, None, cephfs_mntpt),
+                                      (perm, None, cephfs_mntpt)))
 
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
         keyring_paths = []
@@ -277,10 +262,11 @@ class TestClientsWithoutAuth(TestMultiFS):
 
     def test_mount_mon_and_osd_caps_present_mds_caps_absent(self):
         # setup part...
-        moncap = f'allow rw fsname={self.fs1.name}, allow rw fsname={self.fs2.name}'
-        mdscap = f'allow rw fsname={self.fs1.name}'
-        osdcap = (f'allow rw tag cephfs data={self.fs1.name}, allow rw tag '
-                  f'cephfs data={self.fs2.name}')
+        moncap = gen_mon_cap_str((('rw', self.fs1.name),
+                                  ('rw', self.fs2.name)))
+        mdscap = gen_mds_cap_str((('rw', self.fs1.name),))
+        osdcap = gen_osd_cap_str((('rw', self.fs1.name,),
+                                  ('rw', self.fs2.name)))
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
         keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
 
