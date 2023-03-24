@@ -3727,8 +3727,6 @@ options:
   level: advanced
   default: 1_G
   with_legacy: true
-# osd_recovery_op_warn_multiple scales the normal warning threshold,
-# osd_op_complaint_time, so that slow recovery ops won't cause noise
 - name: osd_max_write_op_reply_len
   type: size
   level: advanced
