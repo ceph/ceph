@@ -280,11 +280,15 @@ public:
     return TCachedExtentRef<const T>(static_cast<const T*>(this));
   }
 
-  /// Returns true if extent is part of an open transaction
-  bool is_pending() const {
+  bool is_mutable() const {
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
       state == extent_state_t::MUTATION_PENDING ||
       state == extent_state_t::EXIST_MUTATION_PENDING;
+  }
+
+  /// Returns true if extent is part of an open transaction
+  bool is_pending() const {
+    return is_mutable() || state == extent_state_t::EXIST_CLEAN;
   }
 
   /// Returns true if extent has a pending delta
