@@ -28,6 +28,7 @@ tasks:
       - |
         set -e
         set -x
+        while true; do TOKEN=$(ceph rgw realm tokens | jq -r '.[0].token'); echo $TOKEN; if [ "$TOKEN" != "master zone has no endpoint" ]; then break; fi; sleep 5; done
         TOKENS=$(ceph rgw realm tokens)
         echo $TOKENS | jq --exit-status '.[0].realm == "myrealm1"'
         echo $TOKENS | jq --exit-status '.[0].token'
