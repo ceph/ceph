@@ -1233,12 +1233,14 @@ class CephadmServe:
                         daemon_spec.extra_args.extend(['--objectstore', spec.objectstore])
                         final_conf = daemon_spec.final_config['config']
                         objectstore_str = '\tosd_objectstore = ' + spec.objectstore + '\n'
+                        index = 0
                         if final_conf.find("[osd]") != -1:
                             index = final_conf.index("[osd]") + 5
-                        else:
+                        elif final_conf.find("[global]") != -1:
                             index = final_conf.index("[global]") + 8
-                        final_conf = final_conf[:index] + objectstore_str + final_conf[index:]
-                        daemon_spec.final_config['config'] = final_conf
+                        if index != 0:
+                            final_conf = final_conf[:index] + objectstore_str + final_conf[index:]
+                            daemon_spec.final_config['config'] = final_conf
 
                 if reconfig:
                     daemon_spec.extra_args.append('--reconfig')
