@@ -33,6 +33,10 @@ Synopsis
 
 | **ceph** **fs** **subvolume** **snapshot** **metadata** [ *get* \| *ls* \| *rm* \| *set* ]
 
+| **ceph** **fs** **subvolumegroup** [ *create* \| *exist* \| *getpath* \| *info* \| *ls* \| *pin* \| *resize* \| *rm*]
+
+| **ceph** **fs** **subvolumegroup** **snapshot** [ *create* \| *ls* \| *rm* ]
+
 | **ceph** **fs** **volume** [ *create* \| *info* \| *ls* \| *rename* \| *rm* ]
 
 | **ceph** **fsid**
@@ -591,6 +595,78 @@ snapshot in a volume, and optionally, in a specific subvolume group.
 Usage::
 
     ceph fs subvolume snapshot metadata set <vol_name> <sub_name> <snap_name> <key_name> <value> [<group_name>]
+
+Subcommand ``subvolumegroup``` lets manage subvolumegroup in a CepFS volume.
+
+Subcommand ``create`` creates a CephFS subvolume group in a volume, and
+optionally, with a specific data pool layout, and a specific numeric mode.
+
+Usage::
+
+    ceph fs subvolumegroup create <vol_name> <group_name> [<size:int>] [<pool_layout>] [<uid:int>] [<gid:int>] [<mode>]
+
+Subcommand ``exist`` check a volume for the existence of subvolumegroup.
+
+Usage::
+
+    ceph fs subvolumegroup exist <vol_name>
+
+Subcommand ``getpath`` displays mountpath of a CephFS subvolume group in a volume.
+
+Usage::
+
+    ceph fs subvolumegroup getpath <vol_name> <group_name>
+
+Subcommand ``info`` displays the metadata of a CephFS subvolume group in a volume.
+
+Usage::
+
+    ceph fs subvolumegroup info <vol_name> <group_name>
+
+Subcommand ``ls`` lists the subvolumegroups.
+
+Usage::
+
+    ceph fs subvolumegroup ls <vol_name>
+
+Subcommand ``pin`` sets the MDS pinning policy for subvolumegroup.
+
+Usage::
+
+    ceph fs subvolumegroup pin <vol_name> <group_name> <pin_type:export|distributed|random> <pin_setting>
+
+Subcommand ``resize`` resize a CephFS subvolume group in a volume.
+
+Usage::
+
+    ceph fs subvolumegroup resize <vol_name> <group_name> <new_size> [--no-shrink]
+
+Subcommand ``rm`` deletes a CephFS subvolume group in a volume.
+
+Usage::
+
+    ceph fs subvolumegroup rm <vol_name> <group_name> [--force]
+
+Subcommand ``subvolumegroup snapshot`` lets manage snapshots for subvolume group.
+
+Subcommand ``create`` creates a snapshot for given subvolume group.
+Create a snapshot of a CephFS subvolume group in a volume
+
+Usage::
+
+    ceph fs subvolumegroup snapshot create <vol_name> <group_name> <snap_name>
+
+Subcommand ``ls`` displays the list of subvolumegroup snapshots.
+
+Usage::
+
+    ceph fs subvolumegroup snapshot ls <vol_name> <group_name>
+
+Subcommand ``rm`` deletes a snapshot of a CephFS subvolume group in a volume.
+
+Usage::
+
+    ceph fs subvolumegroup snapshot rm <vol_name> <group_name> <snap_name> [--force]
 
 Subcommand ``volume`` helps manage FS volumes. It has got more subcommands.
 
