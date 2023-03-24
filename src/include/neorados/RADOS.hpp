@@ -16,6 +16,7 @@
 #ifndef NEORADOS_RADOS_HPP
 #define NEORADOS_RADOS_HPP
 
+#include <concepts>
 #include <cstddef>
 #include <memory>
 #include <tuple>
@@ -201,6 +202,71 @@ enum alloc_hint_t {
   incompressible = 512
 };
 }
+
+class Op;
+class ReadOp;
+class WriteOp;
+
+template<std::invocable<Op&> F>
+class ClsOp {
+  F f;
+public:
+  ClsOp(F&& f) : f(std::move(f)) {}
+
+  ReadOp& operator()(ReadOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  ReadOp&& operator()(ReadOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+
+  WriteOp& operator()(WriteOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  WriteOp&& operator()(WriteOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+};
+
+template<std::invocable<ReadOp&> F>
+class ClsReadOp {
+  F f;
+public:
+  ClsReadOp(F&& f) : f(std::move(f)) {}
+
+  ReadOp& operator()(ReadOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  ReadOp&& operator()(ReadOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+};
+
+template<std::invocable<WriteOp&> F>
+class ClsWriteOp {
+  F f;
+public:
+  ClsWriteOp(F&& f) : f(std::move(f)) {}
+
+  WriteOp& operator()(WriteOp& op) {
+    std::move(f)(op);
+    return op;
+  }
+
+  WriteOp&& operator()(WriteOp&& op) {
+    std::move(f)(op);
+    return std::move(op);
+  }
+};
 
 class Op {
   friend RADOS;
@@ -573,6 +639,22 @@ public:
     return std::move(*this);
   }
 
+  template<typename F>
+  ReadOp& exec(ClsOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  ReadOp&& exec(ClsOp<F>&& clsop) && {
+    return std::move(clsop(*this));
+  }
+  template<typename F>
+  ReadOp& exec(ClsReadOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  ReadOp&& exec(ClsReadOp<F>&& clsop) && {
+    return std::move(clsop(*this));
+  }
 
   // Flags that apply to all ops in the operation vector
   ReadOp& balance_reads() & {
@@ -937,6 +1019,23 @@ public:
 		boost::system::error_code* ec = nullptr) && {
     Op::exec(cls, method, inbl, ec);
     return std::move(*this);
+  }
+
+  template<typename F>
+  WriteOp& exec(ClsOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  WriteOp&& exec(ClsOp<F>&& clsop) && {
+    return std::move(clsop(*this));
+  }
+  template<typename F>
+  WriteOp& exec(ClsWriteOp<F>&& clsop) & {
+    return clsop(*this);
+  }
+  template<typename F>
+  WriteOp&& exec(ClsWriteOp<F>&& clsop) && {
+    return std::move(clsop(*this));
   }
 
 
