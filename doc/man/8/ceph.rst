@@ -27,6 +27,8 @@ Synopsis
 
 | **ceph** **fs** **mirror** [ *disable* \| *enable* \| *peer_add* \| *peer_remove* ]
 
+| **ceph** **fs** **volume** [ *create* \| *info* \| *ls* \| *rename* \| *rm* ]
+
 | **ceph** **fsid**
 
 | **ceph** **health** *{detail}*
@@ -420,6 +422,38 @@ Subcommand ``peer_remove`` removes a mirroring peer for a CephFS.
 Usage::
 
     ceph fs mirror peer_remove <fs-name> <uuid>
+
+Subcommand ``volume`` helps manage FS volumes. It has got more subcommands.
+
+Subcommand ``create`` creates new FS volume.
+
+Usage::
+
+    ceph fs volume create <vol-name>
+
+Subcommand ``info`` displays information of a FS volume.
+
+Usage::
+
+    ceph fs volume info <vol-name>
+
+Subcommand ``ls`` list all FS volumes.
+
+Usage::
+
+    ceph fs volume ls
+
+Subcommand ``rename`` rename a CephFS volume.
+
+Usage::
+
+    ceph fs volume rename <vol_name> <new_vol_name> [--yes-i-really-mean-it]
+
+Subcommand ``rm`` delete the FS volume.
+
+Usage::
+
+    ceph fs volume rm <vol_name> [<yes-i-really-mean-it>]
 
 fsid
 ----
