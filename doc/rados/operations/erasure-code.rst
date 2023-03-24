@@ -13,7 +13,7 @@ pools use a method of data protection that is different from replication. In
 erasure coding, data is broken into fragments of two kinds: data blocks and
 parity blocks. If a drive fails or becomes corrupted, the parity blocks are
 used to rebuild the data. At scale, erasure coding saves space relative to
-replication.
+replication. 
 
 In this documentation, data blocks are referred to as "data chunks"
 and parity blocks are referred to as "coding chunks".
