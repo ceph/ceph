@@ -62,6 +62,8 @@ write data, and Ceph users must have execute permissions in order to use Ceph's
 administrative commands. The following concepts will help you understand
 Ceph['s] user management.
 
+.. _rados-ops-user:
+
 User
 ----
 

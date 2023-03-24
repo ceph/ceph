@@ -390,6 +390,12 @@
 	Teuthology
 		The collection of software that performs scripted tests on Ceph.
 
+        User
+                An individual or a system actor (for example, an application)
+                that uses Ceph clients to interact with the :term:`Ceph Storage
+                Cluster`. See :ref:`User<rados-ops-user>` and :ref:`User
+                Management<user-management>`.
+
         Zone
                 In the context of :term:`RGW`, a zone is a logical group that
                 consists of one or more :term:`RGW` instances.  A zone's
