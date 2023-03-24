@@ -3056,12 +3056,13 @@ void BlueStore::ExtentMap::scan_shared_blobs(
     }
     if (ep->blob->last_encoded_id == -1) {
       const bluestore_blob_t& blob = ep->blob->get_blob();
-      if (blob.is_shared() && !blob.is_compressed()) {
+      if (blob.is_shared()) {
 	// excellent time to load the blob
 	c->load_shared_blob(ep->blob->shared_blob);
-
-	// todo consider change to emplace_hint
-	candidates.emplace(ep->blob_start(), ep->blob.get());
+	if (!blob.is_compressed()) {
+	  // todo consider change to emplace_hint
+	  candidates.emplace(ep->blob_start(), ep->blob.get());
+	}
       }
       // mark as processed
       ep->blob->last_encoded_id = 0;
