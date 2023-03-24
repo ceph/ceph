@@ -25,6 +25,8 @@ Synopsis
 
 | **ceph** **fs** [ *ls* \| *new* \| *reset* \| *rm* \| *authorize* ] ...
 
+| **ceph** **fs** **mirror** [ *disable* \| *enable* \| *peer_add* \| *peer_remove* ]
+
 | **ceph** **fsid**
 
 | **ceph** **health** *{detail}*
@@ -392,6 +394,32 @@ given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
 Usage::
 
     ceph fs authorize <fs_name> client.<client_id> <path> <perms> [<path> <perms>...]
+
+Subcommand ``mirror`` lets handle mirroring on CephFS.
+
+Subcommand ``disable`` disables mirroring on a CephFS.
+
+Usage::
+
+    ceph fs mirror disable <fs-name>
+
+Subcommand ``enable`` enables mirroring on a CephFS.
+
+Usage::
+
+    ceph fs mirror enable <fs-name>
+
+Subcommand ``peer_add`` adds a mirroring peer to a CephFS.
+
+Usage::
+
+    ceph fs mirror peer_add <fs-name> <uuid> <remote-cluster-spec> <remote-fs-name>
+
+Subcommand ``peer_remove`` removes a mirroring peer for a CephFS.
+
+Usage::
+
+    ceph fs mirror peer_remove <fs-name> <uuid>
 
 fsid
 ----
