@@ -1241,6 +1241,8 @@ class CephadmServe:
                         if index != 0:
                             final_conf = final_conf[:index] + objectstore_str + final_conf[index:]
                             daemon_spec.final_config['config'] = final_conf
+                    else:
+                        daemon_spec.extra_args.extend(['--objectstore', 'bluestore'])
 
                 if reconfig:
                     daemon_spec.extra_args.append('--reconfig')
