@@ -1228,19 +1228,21 @@ class CephadmServe:
                     if not osd_uuid:
                         raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
                     daemon_spec.extra_args.extend(['--osd-fsid', osd_uuid])
-                    spec = cast(DriveGroupSpec, self.mgr.spec_store.active_specs.get(daemon_spec.service_name, None))
-                    if spec:
-                        daemon_spec.extra_args.extend(['--objectstore', spec.objectstore])
-                        final_conf = daemon_spec.final_config['config']
-                        objectstore_str = '\tosd_objectstore = ' + spec.objectstore + '\n'
-                        index = 0
-                        if final_conf.find("[osd]") != -1:
-                            index = final_conf.index("[osd]") + 5
-                        elif final_conf.find("[global]") != -1:
-                            index = final_conf.index("[global]") + 8
-                        if index != 0:
-                            final_conf = final_conf[:index] + objectstore_str + final_conf[index:]
-                            daemon_spec.final_config['config'] = final_conf
+                    if daemon_spec.service_name in self.mgr.spec_store:
+                        spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+                        objectstore = spec.objectstore
+                        if objectstore:
+                            daemon_spec.extra_args.extend(['--objectstore', spec.objectstore])
+                            final_conf = daemon_spec.final_config['config']
+                            objectstore_str = '\n\tosd_objectstore = ' + spec.objectstore
+                            index = 0
+                            if final_conf.find("[osd]") != -1:
+                                index = final_conf.index("[osd]") + 5
+                            elif final_conf.find("[global]") != -1:
+                                index = final_conf.index("[global]") + 8
+                            if index != 0:
+                                final_conf = final_conf[:index] + objectstore_str + final_conf[index:]
+                                daemon_spec.final_config['config'] = final_conf
                     else:
                         daemon_spec.extra_args.extend(['--objectstore', 'bluestore'])
 
