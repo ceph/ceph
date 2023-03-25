@@ -603,6 +603,8 @@ class ExportMgr:
             })
             if err:
                 raise NFSException(f'Failed to fetch caps for {entity}: {err}')
+        elif err:
+            raise NFSException(f'Failed to get-or-create caps for {entity}: {err}')
 
         json_res = json.loads(out)
         log.info("Export user created is %s", json_res[0]['entity'])
