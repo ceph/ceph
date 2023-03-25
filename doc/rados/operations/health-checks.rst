@@ -1,23 +1,25 @@
 .. _health-checks:
 
-=============
-Health checks
-=============
+===============
+ Health checks 
+===============
 
 Overview
 ========
 
-There is a finite set of possible health messages that a Ceph cluster can
-raise -- these are defined as *health checks* which have unique identifiers.
+There is a finite set of health messages that a Ceph cluster can raise. These
+messages are known as *health checks*. Each health check has a unique
+identifier.
 
-The identifier is a terse pseudo-human-readable (i.e. like a variable name)
-string.  It is intended to enable tools (such as UIs) to make sense of
-health checks, and present them in a way that reflects their meaning.
+The identifier is a terse human-readable string -- that is, the identifier is
+readable in much the same way as a typical variable name. It is intended to
+enable tools (for example, UIs) to make sense of health checks and present them
+in a way that reflects their meaning.
 
 This page lists the health checks that are raised by the monitor and manager
-daemons.  In addition to these, you may also see health checks that originate
+daemons. In addition to these, you might see health checks that originate
 from MDS daemons (see :ref:`cephfs-health-messages`), and health checks
-that are defined by ceph-mgr python modules.
+that are defined by ``ceph-mgr`` python modules.
 
 Definitions
 ===========
@@ -28,162 +30,166 @@ Monitor
 DAEMON_OLD_VERSION
 __________________
 
-Warn if old version(s) of Ceph are running on any daemons.
-It will generate a health error if multiple versions are detected.
-This condition must exist for over mon_warn_older_version_delay (set to 1 week by default) in order for the
-health condition to be triggered.  This allows most upgrades to proceed
-without falsely seeing the warning.  If upgrade is paused for an extended
-time period, health mute can be used like this
-"ceph health mute DAEMON_OLD_VERSION --sticky".  In this case after
-upgrade has finished use "ceph health unmute DAEMON_OLD_VERSION".
+Warn if one or more old versions of Ceph are running on any daemons.  A health
+check is raised if multiple versions are detected.  This condition must exist
+for a period of time greater than ``mon_warn_older_version_delay`` (set to one
+week by default) in order for the health check to be raised. This allows most
+upgrades to proceed without the occurrence of a false warning. If the upgrade
+is paused for an extended time period, ``health mute`` can be used by running
+``ceph health mute DAEMON_OLD_VERSION --sticky``. Be sure, however, to run
+``ceph health unmute DAEMON_OLD_VERSION`` after the upgrade has finished.
 
 MON_DOWN
 ________
 
-One or more monitor daemons is currently down.  The cluster requires a
-majority (more than 1/2) of the monitors in order to function.  When
-one or more monitors are down, clients may have a harder time forming
-their initial connection to the cluster as they may need to try more
-addresses before they reach an operating monitor.
+One or more monitor daemons are currently down. The cluster requires a majority
+(more than one-half) of the monitors to be available. When one or more monitors
+are down, clients might have a harder time forming their initial connection to
+the cluster, as they might need to try more addresses before they reach an
+operating monitor.
 
-The down monitor daemon should generally be restarted as soon as
-possible to reduce the risk of a subsequent monitor failure leading to
-a service outage.
+The down monitor daemon should be restarted as soon as possible to reduce the
+risk of a subsequent monitor failure leading to a service outage.
 
 MON_CLOCK_SKEW
 ______________
 
 The clocks on the hosts running the ceph-mon monitor daemons are not
-sufficiently well synchronized.  This health alert is raised if the
-cluster detects a clock skew greater than ``mon_clock_drift_allowed``.
+well-synchronized. This health check is raised if the cluster detects a clock
+skew greater than ``mon_clock_drift_allowed``.
 
-This is best resolved by synchronizing the clocks using a tool like
+This issue is best resolved by synchronizing the clocks by using a tool like
 ``ntpd`` or ``chrony``.
 
 If it is impractical to keep the clocks closely synchronized, the
-``mon_clock_drift_allowed`` threshold can also be increased, but this
-value must stay significantly below the ``mon_lease`` interval in
-order for monitor cluster to function properly.
+``mon_clock_drift_allowed`` threshold can also be increased. However, this
+value must stay significantly below the ``mon_lease`` interval in order for the
+monitor cluster to function properly.
 
 MON_MSGR2_NOT_ENABLED
 _____________________
 
-The :confval:`ms_bind_msgr2` option is enabled but one or more monitors is
-not configured to bind to a v2 port in the cluster's monmap.  This
-means that features specific to the msgr2 protocol (e.g., encryption)
-are not available on some or all connections.
+The :confval:`ms_bind_msgr2` option is enabled but one or more monitors are
+not configured to bind to a v2 port in the cluster's monmap. This
+means that features specific to the msgr2 protocol (for example, encryption)
+are unavailable on some or all connections.
 
-In most cases this can be corrected by issuing the command:
+In most cases this can be corrected by running the following command:
 
 .. prompt:: bash $
 
    ceph mon enable-msgr2
 
-That command will change any monitor configured for the old default
-port 6789 to continue to listen for v1 connections on 6789 and also
-listen for v2 connections on the new default 3300 port.
+After this command is run, any monitor configured to listen on the old default
+port (6789) will continue to listen for v1 connections on 6789 and begin to
+listen for v2 connections on the new default port 3300.
 
-If a monitor is configured to listen for v1 connections on a non-standard port (not 6789), then the monmap will need to be modified manually.
+If a monitor is configured to listen for v1 connections on a non-standard port
+(that is, a port other than 6789), then the monmap will need to be modified
+manually.
 
 
 MON_DISK_LOW
 ____________
 
-One or more monitors is low on disk space.  This alert triggers if the
-available space on the file system storing the monitor database
-(normally ``/var/lib/ceph/mon``), as a percentage, drops below
+One or more monitors are low on disk space. This health check is raised if the
+percentage of available space on the file system used by the monitor database
+(normally ``/var/lib/ceph/mon``) drops below the percentage value
 ``mon_data_avail_warn`` (default: 30%).
 
-This may indicate that some other process or user on the system is
-filling up the same file system used by the monitor.  It may also
-indicate that the monitors database is large (see ``MON_DISK_BIG``
+This alert might indicate that some other process or user on the system is
+filling up the file system used by the monitor. It might also
+indicate that the monitor database is too large (see ``MON_DISK_BIG``
 below).
 
-If space cannot be freed, the monitor's data directory may need to be
-moved to another storage device or file system (while the monitor
-daemon is not running, of course).
+If space cannot be freed, the monitor's data directory might need to be
+moved to another storage device or file system (this relocation process must be carried out while the monitor
+daemon is not running).
 
 
 MON_DISK_CRIT
 _____________
 
-One or more monitors is critically low on disk space.  This alert
-triggers if the available space on the file system storing the monitor
-database (normally ``/var/lib/ceph/mon``), as a percentage, drops
-below ``mon_data_avail_crit`` (default: 5%).  See ``MON_DISK_LOW``, above.
+One or more monitors are critically low on disk space. This health check is raised if the
+percentage of available space on the file system used by the monitor database
+(normally ``/var/lib/ceph/mon``) drops below the percentage value
+``mon_data_avail_crit`` (default: 5%). See ``MON_DISK_LOW``, above.
 
 MON_DISK_BIG
 ____________
 
-The database size for one or more monitors is very large.  This alert
-triggers if the size of the monitor's database is larger than
+The database size for one or more monitors is very large. This health check is
+raised if the size of the monitor database is larger than
 ``mon_data_size_warn`` (default: 15 GiB).
 
-A large database is unusual, but may not necessarily indicate a
-problem.  Monitor databases may grow in size when there are placement
-groups that have not reached an ``active+clean`` state in a long time.
+A large database is unusual, but does not necessarily indicate a problem.
+Monitor databases might grow in size when there are placement groups that have
+not reached an ``active+clean`` state in a long time.
 
-This may also indicate that the monitor's database is not properly
-compacting, which has been observed with some older versions of
-leveldb and rocksdb.  Forcing a compaction with ``ceph daemon mon.<id>
-compact`` may shrink the on-disk size.
+This alert might also indicate that the monitor's database is not properly
+compacting, an issue that has been observed with some older versions of leveldb
+and rocksdb. Forcing a compaction with ``ceph daemon mon.<id> compact`` might
+shrink the database's on-disk size.
 
-This warning may also indicate that the monitor has a bug that is
-preventing it from pruning the cluster metadata it stores.  If the
-problem persists, please report a bug.
+This alert might also indicate that the monitor has a bug that prevents it from
+pruning the cluster metadata that it stores. If the problem persists, please
+report a bug.
 
-The warning threshold may be adjusted with:
+To adjust the warning threshold, run the following command:
 
 .. prompt:: bash $
 
    ceph config set global mon_data_size_warn <size>
 
+
 AUTH_INSECURE_GLOBAL_ID_RECLAIM
 _______________________________
 
-One or more clients or daemons are connected to the cluster that are
-not securely reclaiming their global_id (a unique number identifying
-each entity in the cluster) when reconnecting to a monitor.  The
-client is being permitted to connect anyway because the
-``auth_allow_insecure_global_id_reclaim`` option is set to true (which may
-be necessary until all ceph clients have been upgraded), and the
-``auth_expose_insecure_global_id_reclaim`` option set to ``true`` (which
-allows monitors to detect clients with insecure reclaim early by forcing them to
-reconnect right after they first authenticate).
+One or more clients or daemons that are connected to the cluster are not
+securely reclaiming their ``global_id`` (a unique number that identifies each
+entity in the cluster) when reconnecting to a monitor. The client is being
+permitted to connect anyway because the
+``auth_allow_insecure_global_id_reclaim`` option is set to ``true`` (which may
+be necessary until all Ceph clients have been upgraded) and because the
+``auth_expose_insecure_global_id_reclaim`` option is set to ``true`` (which
+allows monitors to detect clients with "insecure reclaim" sooner by forcing
+those clients to reconnect immediately after their initial authentication).
 
-You can identify which client(s) are using unpatched ceph client code with:
+To identify which client(s) are using unpatched Ceph client code, run the
+following command:
 
 .. prompt:: bash $
 
    ceph health detail
 
-Clients' global_id reclaim behavior can also seen in the
-``global_id_status`` field in the dump of clients connected to an
-individual monitor (``reclaim_insecure`` means the client is
-unpatched and is contributing to this health alert):
+If you collect a dump of the clients that are connected to an individual
+monitor and examine the ``global_id_status`` field in the output of the dump,
+you can see the ``global_id`` reclaim behavior of those clients. Here
+``reclaim_insecure`` means that a client is unpatched and is contributing to
+this health check.  To effect a client dump, run the following command:
 
 .. prompt:: bash $
 
    ceph tell mon.\* sessions
 
-We strongly recommend that all clients in the system are upgraded to a
-newer version of Ceph that correctly reclaims global_id values.  Once
-all clients have been updated, you can stop allowing insecure reconnections
-with:
+We strongly recommend that all clients in the system be upgraded to a newer
+version of Ceph that correctly reclaims ``global_id`` values. After all clients
+have been updated, run the following command to stop allowing insecure
+reconnections:
 
 .. prompt:: bash $
 
    ceph config set mon auth_allow_insecure_global_id_reclaim false
 
-If it is impractical to upgrade all clients immediately, you can silence
-this warning temporarily with:
+If it is impractical to upgrade all clients immediately, you can temporarily
+silence this alert by running the following command:
 
 .. prompt:: bash $
 
    ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM 1w   # 1 week
 
-Although we do NOT recommend doing so, you can also disable this warning
-indefinitely with:
+Although we do NOT recommend doing so, you can also disable this alert
+indefinitely by running the following command:
 
 .. prompt:: bash $
 
@@ -192,30 +198,32 @@ indefinitely with:
 AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED
 _______________________________________
 
-Ceph is currently configured to allow clients to reconnect to monitors using
-an insecure process to reclaim their previous global_id because the setting
-``auth_allow_insecure_global_id_reclaim`` is set to ``true``.  It may be necessary to
-leave this setting enabled while existing Ceph clients are upgraded to newer
-versions of Ceph that correctly and securely reclaim their global_id.
+Ceph is currently configured to allow clients that reconnect to monitors using
+an insecure process to reclaim their previous ``global_id``. Such reclaiming is
+allowed because, by default, ``auth_allow_insecure_global_id_reclaim`` is set
+to ``true``. It might be necessary to leave this setting enabled while existing
+Ceph clients are upgraded to newer versions of Ceph that correctly and securely
+reclaim their ``global_id``.
 
-If the ``AUTH_INSECURE_GLOBAL_ID_RECLAIM`` health alert has not also been raised and
-the ``auth_expose_insecure_global_id_reclaim`` setting has not been disabled (it is
-on by default), then there are currently no clients connected that need to be
-upgraded, and it is safe to disallow insecure global_id reclaim with:
+If the ``AUTH_INSECURE_GLOBAL_ID_RECLAIM`` health check has not also been
+raised and if the ``auth_expose_insecure_global_id_reclaim`` setting has not
+been disabled (it is enabled by default), then there are currently no clients
+connected that need to be upgraded. In that case, it is safe to disable
+``insecure global_id reclaim`` by running the following command:
 
 .. prompt:: bash $
 
    ceph config set mon auth_allow_insecure_global_id_reclaim false
 
-If there are still clients that need to be upgraded, then this alert can be
-silenced temporarily with:
+On the other hand, if there are still clients that need to be upgraded, then
+this alert can be temporarily silenced by running the following command:
 
 .. prompt:: bash $
 
    ceph health mute AUTH_INSECURE_GLOBAL_ID_RECLAIM_ALLOWED 1w   # 1 week
 
-Although we do NOT recommend doing so, you can also disable this warning indefinitely
-with:
+Although we do NOT recommend doing so, you can also disable this alert indefinitely
+by running the following command:
 
 .. prompt:: bash $
 
@@ -228,50 +236,48 @@ Manager
 MGR_DOWN
 ________
 
-All manager daemons are currently down.  The cluster should normally
-have at least one running manager (``ceph-mgr``) daemon.  If no
-manager daemon is running, the cluster's ability to monitor itself will
-be compromised, and parts of the management API will become
-unavailable (for example, the dashboard will not work, and most CLI
-commands that report metrics or runtime state will block).  However,
-the cluster will still be able to perform all IO operations and
-recover from failures.
+All manager daemons are currently down. The cluster should normally have at
+least one running manager (``ceph-mgr``) daemon. If no manager daemon is
+running, the cluster's ability to monitor itself will be compromised, and parts
+of the management API will become unavailable (for example, the dashboard will
+not work, and most CLI commands that report metrics or runtime state will
+block). However, the cluster will still be able to perform all I/O operations
+and to recover from failures.
 
-The down manager daemon should generally be restarted as soon as
-possible to ensure that the cluster can be monitored (e.g., so that
-the ``ceph -s`` information is up to date, and/or metrics can be
-scraped by Prometheus).
+The "down" manager daemon should be restarted as soon as possible to ensure
+that the cluster can be monitored (for example, so that the ``ceph -s``
+information is up to date, or so that metrics can be scraped by Prometheus).
 
 
 MGR_MODULE_DEPENDENCY
 _____________________
 
-An enabled manager module is failing its dependency check.  This health check
-should come with an explanatory message from the module about the problem.
+An enabled manager module is failing its dependency check. This health check
+typically comes with an explanatory message from the module about the problem.
 
-For example, a module might report that a required package is not installed:
-install the required package and restart your manager daemons.
+For example, a module might report that a required package is not installed: in
+this case, you should install the required package and restart your manager
+daemons.
 
-This health check is only applied to enabled modules.  If a module is
-not enabled, you can see whether it is reporting dependency issues in
-the output of `ceph module ls`.
+This health check is applied only to enabled modules. If a module is not
+enabled, you can see whether it is reporting dependency issues in the output of
+`ceph module ls`.
 
 
 MGR_MODULE_ERROR
 ________________
 
-A manager module has experienced an unexpected error.  Typically,
-this means an unhandled exception was raised from the module's `serve`
-function.  The human readable description of the error may be obscurely
-worded if the exception did not provide a useful description of itself.
+A manager module has experienced an unexpected error. Typically, this means
+that an unhandled exception was raised from the module's `serve` function. The
+human-readable description of the error might be obscurely worded if the
+exception did not provide a useful description of itself.
 
-This health check may indicate a bug: please open a Ceph bug report if you
+This health check might indicate a bug: please open a Ceph bug report if you
 think you have encountered a bug.
 
-If you believe the error is transient, you may restart your manager
-daemon(s), or use `ceph mgr fail` on the active daemon to prompt
-a failover to another daemon.
-
+However, if you believe the error is transient, you may restart your manager
+daemon(s) or use ``ceph mgr fail`` on the active daemon in order to force
+failover to another daemon.
 
 OSDs
 ----
@@ -279,14 +285,13 @@ OSDs
 OSD_DOWN
 ________
 
-One or more OSDs are marked down.  The ceph-osd daemon may have been
-stopped, or peer OSDs may be unable to reach the OSD over the network.
-Common causes include a stopped or crashed daemon, a down host, or a
-network outage.
+One or more OSDs are marked down.  The ceph-osd daemon may have been stopped,
+or peer OSDs may be unable to reach the OSD over the network.  Common causes
+include a stopped or crashed daemon, a down host, or a network outage.
 
-Verify the host is healthy, the daemon is started, and network is
-functioning.  If the daemon has crashed, the daemon log file
-(``/var/log/ceph/ceph-osd.*``) may contain debugging information.
+Verify the host is healthy, the daemon is started, and network is functioning.
+If the daemon has crashed, the daemon log file (``/var/log/ceph/ceph-osd.*``)
+may contain debugging information.
 
 OSD_<crush type>_DOWN
 _____________________
