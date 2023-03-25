@@ -102,11 +102,11 @@ shows the resource control parameters set by the profile:
 +------------------------+-------------+--------+-------+
 |  Service Type          | Reservation | Weight | Limit |
 +========================+=============+========+=======+
-| client                 | 50%         | 2      | MAX   |
+| client                 | 60%         | 5      | MAX   |
 +------------------------+-------------+--------+-------+
-| background recovery    | 25%         | 1      | 100%  |
+| background recovery    | 20%         | 1      | 50%   |
 +------------------------+-------------+--------+-------+
-| background best-effort | 25%         | 2      | MAX   |
+| background best-effort | 20%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
 
 high_recovery_ops
@@ -122,9 +122,9 @@ parameters set by the profile:
 +========================+=============+========+=======+
 | client                 | 30%         | 1      | 80%   |
 +------------------------+-------------+--------+-------+
-| background recovery    | 60%         | 2      | 200%  |
+| background recovery    | 60%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | 1 (MIN)     | 2      | MAX   |
+| background best-effort | MIN         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
 
 balanced
@@ -141,9 +141,9 @@ within the OSD.
 +========================+=============+========+=======+
 | client                 | 40%         | 1      | 100%  |
 +------------------------+-------------+--------+-------+
-| background recovery    | 40%         | 1      | 150%  |
+| background recovery    | 40%         | 1      | 70%   |
 +------------------------+-------------+--------+-------+
-| background best-effort | 20%         | 2      | MAX   |
+| background best-effort | 20%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
 
 .. note:: Across the built-in profiles, internal background best-effort clients
@@ -184,27 +184,27 @@ config parameters cannot be modified when using any of the built-in profiles:
 
 Recovery/Backfill Options
 -------------------------
-The following recovery and backfill related Ceph options are set to new defaults
-for mClock:
+The following recovery and backfill related Ceph options are overridden to
+mClock defaults:
 
 - :confval:`osd_max_backfills`
 - :confval:`osd_recovery_max_active`
 - :confval:`osd_recovery_max_active_hdd`
 - :confval:`osd_recovery_max_active_ssd`
 
-The following table shows the new mClock defaults. This is done to maximize the
+The following table shows the mClock defaults. This is done to maximize the
 impact of the built-in profile:
 
 +----------------------------------------+------------------+----------------+
 |  Config Option                         | Original Default | mClock Default |
 +========================================+==================+================+
-| :confval:`osd_max_backfills`           | 1                | 10             |
+| :confval:`osd_max_backfills`           | 1                | 3              |
 +----------------------------------------+------------------+----------------+
 | :confval:`osd_recovery_max_active`     | 0                | 0              |
 +----------------------------------------+------------------+----------------+
-| :confval:`osd_recovery_max_active_hdd` | 3                | 10             |
+| :confval:`osd_recovery_max_active_hdd` | 3                | 3              |
 +----------------------------------------+------------------+----------------+
-| :confval:`osd_recovery_max_active_ssd` | 10               | 20             |
+| :confval:`osd_recovery_max_active_ssd` | 10               | 10             |
 +----------------------------------------+------------------+----------------+
 
 The above mClock defaults, can be modified if necessary by enabling
@@ -293,15 +293,17 @@ command can be used:
 
 After switching to the *custom* profile, the desired mClock configuration
 option may be modified. For example, to change the client reservation IOPS
-allocation for a specific OSD (say osd.0), the following command can be used:
+ratio for a specific OSD (say osd.0) to 0.5 (or 50%), the following command
+can be used:
 
   .. prompt:: bash #
 
-    ceph config set osd.0 osd_mclock_scheduler_client_res 3000
+    ceph config set osd.0 osd_mclock_scheduler_client_res 0.5
 
-.. important:: Care must be taken to change the reservations of other services like
-   recovery and background best effort accordingly to ensure that the sum of the
-   reservations do not exceed the maximum IOPS capacity of the OSD.
+.. important:: Care must be taken to change the reservations of other services
+   like recovery and background best effort accordingly to ensure that the sum
+   of the reservations do not exceed the maximum proportion (1.0) of the IOPS
+   capacity of the OSD.
 
 .. tip::  The reservation and limit parameter allocations are per-shard based on
    the type of backing device (HDD/SSD) under the OSD. See
@@ -669,12 +671,8 @@ mClock Config Options
 .. confval:: osd_mclock_profile
 .. confval:: osd_mclock_max_capacity_iops_hdd
 .. confval:: osd_mclock_max_capacity_iops_ssd
-.. confval:: osd_mclock_cost_per_io_usec
-.. confval:: osd_mclock_cost_per_io_usec_hdd
-.. confval:: osd_mclock_cost_per_io_usec_ssd
-.. confval:: osd_mclock_cost_per_byte_usec
-.. confval:: osd_mclock_cost_per_byte_usec_hdd
-.. confval:: osd_mclock_cost_per_byte_usec_ssd
+.. confval:: osd_mclock_max_sequential_bandwidth_hdd
+.. confval:: osd_mclock_max_sequential_bandwidth_ssd
 .. confval:: osd_mclock_force_run_benchmark_on_init
 .. confval:: osd_mclock_skip_benchmark
 .. confval:: osd_mclock_override_recovery_settings
