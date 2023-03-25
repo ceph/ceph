@@ -2,9 +2,9 @@
  Monitoring a Cluster
 ======================
 
-Once you have a running cluster, you may use the ``ceph`` tool to monitor your
-cluster. Monitoring a cluster typically involves checking OSD status, monitor 
-status, placement group status and metadata server status.
+After you have a running cluster, you can use the ``ceph`` tool to monitor your
+cluster. Monitoring a cluster typically involves checking OSD status, monitor
+status, placement group status, and metadata server status.
 
 Using the command line
 ======================
@@ -13,11 +13,11 @@ Interactive mode
 ----------------
 
 To run the ``ceph`` tool in interactive mode, type ``ceph`` at the command line
-with no arguments.  For example:
+with no arguments. For example:
 
 .. prompt:: bash $
 
-	ceph
+    ceph
 
 .. prompt:: ceph>
     :prompts: ceph>
@@ -30,8 +30,9 @@ with no arguments.  For example:
 Non-default paths
 -----------------
 
-If you specified non-default locations for your configuration or keyring,
-you may specify their locations:
+If you specified non-default locations for your configuration or keyring when
+you install the cluster, you may specify their locations to the ``ceph`` tool
+by running the following command:
 
 .. prompt:: bash $
 
@@ -40,30 +41,32 @@ you may specify their locations:
 Checking a Cluster's Status
 ===========================
 
-After you start your cluster, and before you start reading and/or
-writing data, check your cluster's status first.
+After you start your cluster, and before you start reading and/or writing data,
+you should check your cluster's status.
 
-To check a cluster's status, execute the following:
+To check a cluster's status, run the following command:
 
 .. prompt:: bash $
 
    ceph status
-	
-Or:
+
+Alternatively, you can run the following command:
 
 .. prompt:: bash $
 
    ceph -s
 
-In interactive mode, type ``status`` and press **Enter**:
+In interactive mode, this operation is performed by typing ``status`` and
+pressing **Enter**:
 
 .. prompt:: ceph>
     :prompts: ceph>
-   
+
     status
 
-Ceph will print the cluster status. For example, a tiny Ceph demonstration
-cluster with one of each service may print the following:
+Ceph will print the cluster status. For example, a tiny Ceph "demonstration
+cluster" that is running one instance of each service (monitor, manager, and
+OSD) might print the following:
 
 ::
 
@@ -84,33 +87,35 @@ cluster with one of each service may print the following:
     pgs:     16 active+clean
 
 
-.. topic:: How Ceph Calculates Data Usage
+How Ceph Calculates Data Usage
+------------------------------
 
-   The ``usage`` value reflects the *actual* amount of raw storage used. The 
-   ``xxx GB / xxx GB`` value means the amount available (the lesser number)
-   of the overall storage capacity of the cluster. The notional number reflects 
-   the size of the stored data before it is replicated, cloned or snapshotted.
-   Therefore, the amount of data actually stored typically exceeds the notional
-   amount stored, because Ceph creates replicas of the data and may also use 
-   storage capacity for cloning and snapshotting.
+The ``usage`` value reflects the *actual* amount of raw storage used. The ``xxx
+GB / xxx GB`` value means the amount available (the lesser number) of the
+overall storage capacity of the cluster. The notional number reflects the size
+of the stored data before it is replicated, cloned or snapshotted.  Therefore,
+the amount of data actually stored typically exceeds the notional amount
+stored, because Ceph creates replicas of the data and may also use storage
+capacity for cloning and snapshotting.
 
 
 Watching a Cluster
 ==================
 
-In addition to local logging by each daemon, Ceph clusters maintain
-a *cluster log* that records high level events about the whole system.
-This is logged to disk on monitor servers (as ``/var/log/ceph/ceph.log`` by
-default), but can also be monitored via the command line.
+Each daemon in the Ceph cluster maintains a log of events, and the Ceph cluster
+itself maintains a *cluster log* that records high-level events about the
+entire Ceph cluster.  These events are logged to disk on monitor servers (in
+the default location ``/var/log/ceph/ceph.log``), and they can be monitored via
+the command line.
 
-To follow the cluster log, use the following command:
+To follow the cluster log, run the following command:
 
 .. prompt:: bash $
 
    ceph -w
 
-Ceph will print the status of the system, followed by each log message as it
-is emitted. For example:
+Ceph will print the status of the system, followed by each log message as it is
+added. For example:
 
 :: 
 
@@ -135,21 +140,20 @@ is emitted. For example:
   2017-07-24 08:15:14.258143 mon.a mon.0 172.21.9.34:6789/0 39 : cluster [INF] Activating manager daemon x
   2017-07-24 08:15:15.446025 mon.a mon.0 172.21.9.34:6789/0 47 : cluster [INF] Manager daemon x is now available
 
-
-In addition to using ``ceph -w`` to print log lines as they are emitted,
-use ``ceph log last [n]`` to see the most recent ``n`` lines from the cluster
-log.
+Instead of printing log lines as they are added, you might want to print only
+the most recent lines. Run ``ceph log last [n]`` to see the most recent ``n``
+lines from the cluster log.
 
 Monitoring Health Checks
 ========================
 
-Ceph continuously runs various *health checks* against its own status.  When
-a health check fails, this is reflected in the output of ``ceph status`` (or
-``ceph health``).  In addition, messages are sent to the cluster log to
-indicate when a check fails, and when the cluster recovers.
+Ceph continuously runs various *health checks*. When
+a health check fails, this failure is reflected in the output of ``ceph status`` and
+``ceph health``. The cluster log receives messages that
+indicate when a check has failed and when the cluster has recovered.
 
 For example, when an OSD goes down, the ``health`` section of the status
-output may be updated as follows:
+output is updated as follows:
 
 ::
 
@@ -157,7 +161,7 @@ output may be updated as follows:
             1 osds down
             Degraded data redundancy: 21/63 objects degraded (33.333%), 16 pgs unclean, 16 pgs degraded
 
-At this time, cluster log messages are also emitted to record the failure of the 
+At the same time, cluster log messages are emitted to record the failure of the 
 health checks:
 
 ::
@@ -166,13 +170,14 @@ health checks:
     2017-07-25 10:09:01.302624 mon.a mon.0 172.21.9.34:6789/0 94 : cluster [WRN] Health check failed: Degraded data redundancy: 21/63 objects degraded (33.333%), 16 pgs unclean, 16 pgs degraded (PG_DEGRADED)
 
 When the OSD comes back online, the cluster log records the cluster's return
-to a health state:
+to a healthy state:
 
 ::
 
     2017-07-25 10:11:11.526841 mon.a mon.0 172.21.9.34:6789/0 109 : cluster [WRN] Health check update: Degraded data redundancy: 2 pgs unclean, 2 pgs degraded, 2 pgs undersized (PG_DEGRADED)
     2017-07-25 10:11:13.535493 mon.a mon.0 172.21.9.34:6789/0 110 : cluster [INF] Health check cleared: PG_DEGRADED (was: Degraded data redundancy: 2 pgs unclean, 2 pgs degraded, 2 pgs undersized)
     2017-07-25 10:11:13.535577 mon.a mon.0 172.21.9.34:6789/0 111 : cluster [INF] Cluster is now healthy
+
 
 Network Performance Checks
 --------------------------
