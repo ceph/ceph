@@ -9,6 +9,7 @@ import time
 import os
 import string
 import boto
+from botocore.exceptions import ClientError
 from http import server as http_server
 from random import randint
 import hashlib
@@ -515,6 +516,22 @@ def connection2():
     return conn
 
 
+def another_user(tenant=None):
+    access_key = str(time.time())
+    secret_key = str(time.time())
+    uid = 'superman' + str(time.time())
+    if tenant:
+        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+    else:
+        _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
+
+    assert_equal(result, 0)
+    conn = S3Connection(aws_access_key_id=access_key,
+                  aws_secret_access_key=secret_key,
+                      is_secure=False, port=get_config_port(), host=get_config_host(), 
+                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    return conn
+
 ##############
 # bucket notifications tests
 ##############
@@ -523,17 +540,8 @@ def connection2():
 @attr('basic_test')
 def test_ps_s3_topic_on_master():
     """ test s3 topics set/get/delete on master """
-    
-    access_key = str(time.time())
-    secret_key = str(time.time())
-    uid = 'superman' + str(time.time())
     tenant = 'kaboom'
-    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
-    assert_equal(result, 0)
-    conn = S3Connection(aws_access_key_id=access_key,
-                  aws_secret_access_key=secret_key,
-                      is_secure=False, port=get_config_port(), host=get_config_host(), 
-                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = another_user(tenant)
     zonegroup = 'default' 
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -604,17 +612,8 @@ def test_ps_s3_topic_on_master():
 @attr('basic_test')
 def test_ps_s3_topic_admin_on_master():
     """ test s3 topics set/get/delete on master """
-    
-    access_key = str(time.time())
-    secret_key = str(time.time())
-    uid = 'superman' + str(time.time())
     tenant = 'kaboom'
-    _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
-    assert_equal(result, 0)
-    conn = S3Connection(aws_access_key_id=access_key,
-                  aws_secret_access_key=secret_key,
-                      is_secure=False, port=get_config_port(), host=get_config_host(), 
-                      calling_format='boto.s3.connection.OrdinaryCallingFormat')
+    conn = another_user(tenant)
     zonegroup = 'default' 
     bucket_name = gen_bucket_name()
     topic_name = bucket_name + TOPIC_SUFFIX
@@ -1124,6 +1123,87 @@ def test_ps_s3_notification_errors_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
+@attr('basic_test')
+def test_ps_s3_notification_permissions():
+    """ test s3 notification set/get/delete permissions """
+    conn1 = connection()
+    conn2 = another_user()
+    zonegroup = 'default'
+    bucket_name = gen_bucket_name()
+    # create bucket
+    bucket = conn1.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    # create s3 topic
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # one user create a notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': []
+                       }]
+    s3_notification_conf1 = PSNotificationS3(conn1, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf1.set_config()
+    assert_equal(status, 200)
+    # another user try to fetch it
+    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+    try:
+        _, _ = s3_notification_conf2.get_config()
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as error:
+        assert_equal(error.response['Error']['Code'], 'AccessDenied')
+    # other user try to delete the notification
+    _, status = s3_notification_conf2.del_config()
+    assert_equal(status, 403)
+
+    # bucket policy is added by the 1st user
+    client = boto3.client('s3',
+            endpoint_url='http://'+conn1.host+':'+str(conn1.port),
+            aws_access_key_id=conn1.aws_access_key_id,
+            aws_secret_access_key=conn1.aws_secret_access_key)
+    bucket_policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "Statement",
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": ["s3:GetBucketNotification", "s3:PutBucketNotification"],
+                "Resource": f"arn:aws:s3:::{bucket_name}"
+            }
+        ]
+    })
+    response = client.put_bucket_policy(Bucket=bucket_name, Policy=bucket_policy)
+    assert_equal(int(response['ResponseMetadata']['HTTPStatusCode']/100), 2) 
+    result = client.get_bucket_policy(Bucket=bucket_name)
+    print(result['Policy'])
+    
+    # 2nd user try to fetch it again
+    _, status = s3_notification_conf2.get_config()
+    assert_equal(status, 200)
+
+    # 2nd user try to delete it again
+    result, status = s3_notification_conf2.del_config()
+    assert_equal(status, 200)
+
+    # 2nd user try to add another notification
+    topic_conf_list = [{'Id': notification_name+"2",
+                        'TopicArn': topic_arn,
+                        'Events': []
+                       }]
+    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+    result, status = s3_notification_conf2.set_config()
+    assert_equal(status, 200)
+
+    # cleanup
+    s3_notification_conf1.del_config()
+    s3_notification_conf2.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn1.delete_bucket(bucket_name)
 
 @attr('amqp_test')
 def test_ps_s3_notification_push_amqp_on_master():
