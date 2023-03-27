@@ -54,35 +54,65 @@ static constexpr auto max_list_entries = 1000u;
 ///
 /// Append a call to a write operation that adds a set of entries to the log
 ///
-/// \param op Write operation to modify
 /// \param entries Entries to push
-void add(WriteOp& op, std::vector<entry> entries);
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto add(std::vector<entry> entries)
+{
+  buffer::list in;
+  ::cls::log::ops::add_op call;
+  call.entries = std::move(entries);
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("log", "add", in);
+  }};
+}
 
 /// \brief Push an entry to the log
 ///
 /// Append a call to a write operation that adds an entry to the log
 ///
-/// \param op Write operation to modify
 /// \param entry Entry to push
-void add(WriteOp& op, const entry& entry);
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto add(entry e)
+{
+  bufferlist in;
+  ::cls::log::ops::add_op call;
+  call.entries.push_back(std::move(e));
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("log", "add", in);
+  }};
+}
 
-/// \brief List log entries
+/// \brief Push an entry to the log
 ///
 /// Append a call to a write operation that adds an entry to the log
 ///
-/// \param op Write operation to modify
 /// \param timestamp Timestamp of the log entry
 /// \param section Annotation string included in the entry
 /// \param name Log entry name
 /// \param bl Data held in the log entry
-void add(WriteOp& op, ceph::real_time timestamp, std::string section,
-	 std::string name, buffer::list&& bl);
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto add(ceph::real_time timestamp, std::string section,
+		       std::string name, buffer::list&& bl)
+{
+  bufferlist in;
+  ::cls::log::ops::add_op call;
+  call.entries.emplace_back(timestamp, std::move(section),
+			    std::move(name), std::move(bl));
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("log", "add", in);
+  }};
+}
 
 /// \brief List log entries
 ///
 /// Append a call to a read operation that lists log entries
 ///
-/// \param op Write operation to modify
 /// \param from Start of range
 /// \param to End of range
 /// \param in_marker Point to resume truncated listing
@@ -91,10 +121,44 @@ void add(WriteOp& op, ceph::real_time timestamp, std::string section,
 /// \param marker Place to store marker to resume truncated listing
 /// \param truncated Place to store truncation status (true means
 ///                  there's more to list)
-void list(ReadOp& op, ceph::real_time from, ceph::real_time to,
-	  std::optional<std::string> in_marker, std::span<entry> entries,
-	  std::span<entry>* result,
-	  std::optional<std::string>* const out_marker);
+///
+/// \return The ClsReadOp to be passed to WriteOp::exec
+[[nodiscard]] auto list(ceph::real_time from, ceph::real_time to,
+			std::optional<std::string> in_marker,
+			std::span<entry> entries, std::span<entry>* result,
+			std::optional<std::string>* const out_marker)
+{
+  using boost::system::error_code;
+  bufferlist in;
+  ::cls::log::ops::list_op call;
+  call.from_time = from;
+  call.to_time = to;
+  call.marker = std::move(in_marker).value_or("");
+  call.max_entries = entries.size();
+
+  encode(call, in);
+  return ClsReadOp{[entries, result, out_marker,
+		    in = std::move(in)](ReadOp& op) {
+    op.exec("log", "list", in,
+	    [entries, result, out_marker](error_code ec, const buffer::list& bl) {
+	      ::cls::log::ops::list_ret ret;
+	      if (!ec) {
+		auto iter = bl.cbegin();
+		decode(ret, iter);
+		if (result) {
+		  *result = entries.first(ret.entries.size());
+		  std::move(ret.entries.begin(), ret.entries.end(),
+			    entries.begin());
+		}
+		if (out_marker) {
+		  *out_marker = (ret.truncated ?
+				 std::move(ret.marker) :
+				 std::optional<std::string>{});
+		}
+	      }
+	    });
+  }};
+}
 
 /// \brief List log entries
 ///
@@ -141,9 +205,31 @@ auto list(RADOS& r, Object o, IOContext ioc, ceph::real_time from,
 ///
 /// Append a call to a read operation that returns the log header
 ///
-/// \param op Write operation to modify
 /// \param header Place to store the log header
-void info(ReadOp& op, header* const header);
+///
+/// \return The ClsReadOp to be passed to WriteOp::exec
+[[nodiscard]] auto info(header* const header)
+{
+  using boost::system::error_code;
+  buffer::list in;
+  ::cls::log::ops::info_op call;
+
+  encode(call, in);
+
+  return ClsReadOp{[header, in = std::move(in)](ReadOp& op) {
+    op.exec("log", "info", in,
+	    [header](error_code ec,
+		     const buffer::list& bl) {
+	      ::cls::log::ops::info_ret ret;
+	      if (!ec) {
+		auto iter = bl.cbegin();
+		decode(ret, iter);
+		if (header)
+		*header = std::move(ret.header);
+	      }
+	    });
+  }};
+}
 
 /// \brief Get log header
 ///
@@ -176,14 +262,25 @@ auto info(RADOS& r, Object o, IOContext ioc, CompletionToken&& token)
 /// Append a call to a write operation that trims a range of entries
 /// from the log.
 ///
-/// \param op Write operation to modify
 /// \param from_time Start of range, based on the timestamp supplied to add
 /// \param to_time End of range, based on the timestamp supplied to add
 ///
 /// \warning This operation may succeed even if not all entries have been trimmed.
 /// to ensure completion, call repeatedly until the operation returns
 /// boost::system::errc::no_message_available
-void trim(WriteOp& op, ceph::real_time from_time, ceph::real_time to_time);
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto trim(ceph::real_time from_time, ceph::real_time to_time)
+{
+  bufferlist in;
+  ::cls::log::ops::trim_op call;
+  call.from_time = from_time;
+  call.to_time = to_time;
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("log", "trim", in);
+  }};
+}
 
 /// \brief Beginning marker for trim
 ///
@@ -202,7 +299,6 @@ inline constexpr std::string end_marker{"9"};
 /// Append a call to a write operation that trims a range of entries
 /// from the log.
 ///
-/// \param op Write operation to modify
 /// \param from_marker Start of range, based on markers from list
 /// \param to_marker End of range, based on markers from list
 ///
@@ -213,7 +309,19 @@ inline constexpr std::string end_marker{"9"};
 /// \warning This operation may succeed even if not all entries have been trimmed.
 /// to ensure completion, call repeatedly until the operation returns
 /// boost::system::errc::no_message_available
-void trim(WriteOp& op, std::string from_marker, std::string to_marker);
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto trim(std::string from_marker, std::string to_marker)
+{
+  bufferlist in;
+  ::cls::log::ops::trim_op call;
+  call.from_marker = std::move(from_marker);
+  call.to_marker = std::move(to_marker);
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("log", "trim", in);
+  }};
+}
 
 /// \brief Trim entries from the log
 ///
@@ -249,9 +357,9 @@ auto trim(RADOS& r, Object oid, IOContext ioc, std::string from_marker,
 	 std::string from_marker, std::string to_marker) -> void {
        try {
 	 for (;;) {
-	   WriteOp op;
-	   trim(op, from_marker, to_marker);
-	   co_await r.execute(oid, ioc, std::move(op), asio::deferred);
+	   co_await r.execute(oid, ioc,
+			      WriteOp{}.exec(trim(from_marker, to_marker)),
+			      asio::deferred);
 	 }
        } catch (const system_error& e) {
 	 if (e.code() != no_message_available) {
@@ -295,9 +403,9 @@ auto trim(RADOS& r, Object oid, IOContext ioc, ceph::real_time from_time,
 	 real_time from_time, real_time to_time) -> void {
        try {
 	 for (;;) {
-	   WriteOp op;
-	   trim(op, from_time, to_time);
-	   co_await r.execute(oid, ioc, std::move(op), asio::deferred);
+	   
+	   co_await r.execute(oid, ioc, WriteOp{}.exec(trim(from_time, to_time)),
+			      asio::deferred);
 	 }
        } catch (const system_error& e) {
 	 if (e.code() != no_message_available) {

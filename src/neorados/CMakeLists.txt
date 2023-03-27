@@ -13,5 +13,3 @@ add_library(libneorados STATIC
 target_link_libraries(libneorados PRIVATE
   osdc ceph-common cls_lock_client fmt::fmt
   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
-
-add_library(neorados_cls_log STATIC cls/log.cc)

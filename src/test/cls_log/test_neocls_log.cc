@@ -53,7 +53,7 @@ using neorados::Object;
 using neorados::WriteOp;
 using neorados::ReadOp;
 
-using neorados::cls::log::entry;
+namespace l = neorados::cls::log;
 
 inline constexpr auto section = "global"s;
 inline constexpr auto oid = "obj"sv;
@@ -105,14 +105,13 @@ auto generate_log(RADOS& r, Object oid, IOContext ioc,
        static constexpr auto maxops = 50;
        try {
 	 for (auto i = 0; i < max;) {
-	   std::vector<entry> entries;
+	   std::vector<l::entry> entries;
 	   for (auto ops = 0; (ops < maxops) && (i < max); ++i, ++ops) {
 	     entries.emplace_back(get_time(start_time, i * 1s, modify_time),
 				  section, get_name(i), encode(i));
 	   }
-	   WriteOp op;
-	   neorados::cls::log::add(op, std::move(entries));
-	   co_await r.execute(oid, ioc, std::move(op), asio::deferred);
+	   co_await r.execute(oid, ioc, WriteOp{}.exec(l::add(std::move(entries))),
+			      asio::deferred);
 	 }
        } catch (const system_error& e) {
 	 co_return {e.code()};
@@ -124,7 +123,7 @@ auto generate_log(RADOS& r, Object oid, IOContext ioc,
 #pragma GCC diagnostic pop
 }
 
-void check_entry(const entry& entry, real_time start_time,
+void check_entry(const l::entry& entry, real_time start_time,
 		 int i, bool modified_time)
 {
   auto name = get_name(i);
@@ -149,11 +148,11 @@ auto check_log(RADOS& r, Object oid, IOContext ioc, real_time start_time,
      ([](auto state, RADOS& rados, Object oid, IOContext ioc,
 	 real_time start_time, int max) -> void {
        try {
-	 std::vector<entry> entries{neorados::cls::log::max_list_entries};
+	 std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
 	 std::optional<std::string> marker;
 	 int i = 0;
 	 do {
-	   std::span<entry> result;
+	   std::span<l::entry> result;
 	   std::tie(result, marker) =
 	     co_await neorados::cls::log::list(rados, oid, ioc, {}, {},
 					       marker, entries,
@@ -180,9 +179,8 @@ template<typename CompletionToken>
 auto trim(RADOS& rados, Object oid, const IOContext ioc,
 	  real_time from, real_time to, CompletionToken&& token)
 {
-  WriteOp op;
-  neorados::cls::log::trim(op, from, to);
-  return rados.execute(std::move(oid), std::move(ioc), std::move(op),
+  return rados.execute(std::move(oid), std::move(ioc),
+		       WriteOp{}.exec(l::trim(from, to)),
 		       std::forward<CompletionToken>(token));
 }
 
@@ -190,35 +188,32 @@ template<typename CompletionToken>
 auto trim(RADOS& rados, Object oid, IOContext ioc,
 	  std::string from, std::string to, CompletionToken&& token)
 {
-  neorados::WriteOp op;
-  neorados::cls::log::trim(op, std::move(from), std::move(to));
-  return rados.execute(std::move(oid), std::move(ioc), std::move(op),
+  return rados.execute(std::move(oid), std::move(ioc),
+		       WriteOp{}.exec(l::trim(std::move(from), std::move(to))),
 		       std::forward<CompletionToken>(token));
 }
 
 template<typename CompletionToken>
 auto list(RADOS& rados, Object oid, IOContext ioc,
-	  std::span<entry> entries, std::span<entry>* result,
+	  std::span<l::entry> entries, std::span<l::entry>* result,
 	  CompletionToken&& token)
 {
-  ReadOp rop;
-  neorados::cls::log::list(rop, {}, {}, {}, entries, result, nullptr);
-  return rados.execute(oid, ioc, std::move(rop), nullptr,
-		       asio::use_awaitable);
+  return rados.execute(oid, ioc,
+		       ReadOp{}.exec(l::list({}, {}, {}, entries, result, nullptr)),
+		       nullptr, asio::use_awaitable);
 }
 
 template<typename CompletionToken>
 auto list(RADOS& rados, Object oid, IOContext ioc,
 	  real_time from, real_time to,
 	  std::optional<std::string> in_marker,
-	  std::span<entry> entries, std::span<entry>* result,
+	  std::span<l::entry> entries, std::span<l::entry>* result,
 	  std::optional<std::string>* marker, CompletionToken&& token)
 {
-  ReadOp rop;
-  neorados::cls::log::list(rop, from, to, std::move(in_marker),
-			   entries, result, marker);
-  return rados.execute(oid, ioc, std::move(rop), nullptr,
-		       asio::use_awaitable);
+  return rados.execute(
+    oid, ioc,
+    ReadOp{}.exec(l::list(from, to, std::move(in_marker), entries, result, marker)),
+    nullptr, asio::use_awaitable);
 }
 
 CORO_TEST_F(neocls_log, test_log_add_same_time, NeoRadosTest)
@@ -230,7 +225,7 @@ CORO_TEST_F(neocls_log, test_log_add_same_time, NeoRadosTest)
   co_await generate_log(rados, oid, pool, 10, start_time, false,
 			asio::use_awaitable);
 
-  std::vector<entry> entries{neorados::cls::log::max_list_entries};
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
   auto [res, marker] =
     co_await neorados::cls::log::list(rados, oid, pool, start_time, to_time,
 				      {}, entries, asio::use_awaitable);
@@ -238,7 +233,7 @@ CORO_TEST_F(neocls_log, test_log_add_same_time, NeoRadosTest)
   EXPECT_FALSE(marker);
 
   /* need to sort returned entries, all were using the same time as key */
-  std::map<int, entry> check_ents;
+  std::map<int, l::entry> check_ents;
 
   for (const auto& entry : res) {
     auto num = decode<int>(entry.data);
@@ -275,9 +270,9 @@ CORO_TEST_F(neocls_log, test_log_add_different_time, NeoRadosTest)
   co_await generate_log(rados, oid, pool, 10, start_time, true,
 			asio::use_awaitable);
 
-  std::vector<entry> entries{neorados::cls::log::max_list_entries};
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
   std::optional<std::string> marker;
-  std::span<entry> result;
+  std::span<l::entry> result;
 
   auto to_time = start_time + (10 * 1s);
 
@@ -338,7 +333,7 @@ CORO_TEST_F(neocls_log, trim_by_time, NeoRadosTest)
   co_await generate_log(rados, oid, pool, 10, start_time, true,
 			asio::use_awaitable);
 
-  std::vector<entry> entries{neorados::cls::log::max_list_entries};
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
   std::optional<std::string> marker;
 
   /* trim */
@@ -352,7 +347,7 @@ CORO_TEST_F(neocls_log, trim_by_time, NeoRadosTest)
 		  asio::redirect_error(asio::use_awaitable, ec));
     EXPECT_EQ(no_message_available, ec);
 
-    std::span<entry> result;
+    std::span<l::entry> result;
     co_await list(rados, oid, pool, start_time, to_time, {},
 		  entries, &result, &marker, asio::use_awaitable);
     EXPECT_EQ(9u - i, result.size());
@@ -367,10 +362,10 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
   auto start_time = real_clock::now();
   co_await generate_log(rados, oid, pool, 10, start_time, true,
 			asio::use_awaitable);
-  std::vector<entry> log1;
+  std::vector<l::entry> log1;
   {
-    std::vector<entry> entries{neorados::cls::log::max_list_entries};
-    std::span<entry> result;
+    std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+    std::span<l::entry> result;
     co_await list(rados, oid, pool, entries, &result, asio::use_awaitable);
     EXPECT_EQ(10u, result.size());
     log1.assign(std::make_move_iterator(result.begin()),
@@ -382,8 +377,8 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
     const std::string to = log1[0].id;
     co_await trim(rados, oid, pool, from, to, asio::use_awaitable);
 
-    std::vector<entry> entries{neorados::cls::log::max_list_entries};
-    std::span<entry> result;
+    std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+    std::span<l::entry> result;
     co_await list(rados, oid, pool, entries, &result, asio::use_awaitable);
 
     EXPECT_EQ(9u, result.size());
@@ -400,8 +395,8 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
     const std::string to = neorados::cls::log::end_marker;
     co_await trim(rados, oid, pool, from, to, asio::use_awaitable);
 
-    std::vector<entry> entries{neorados::cls::log::max_list_entries};
-    std::span<entry> result;
+    std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+    std::span<l::entry> result;
     co_await list(rados, oid, pool, entries, &result, asio::use_awaitable);
     EXPECT_EQ(8u, result.size());
     EXPECT_EQ(log1[8].id, result.rbegin()->id);
@@ -417,8 +412,8 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
     const std::string to = log1[4].id;
     co_await trim(rados, oid, pool, from, to, asio::use_awaitable);
 
-    std::vector<entry> entries{neorados::cls::log::max_list_entries};
-    std::span<entry> result;
+    std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+    std::span<l::entry> result;
     co_await list(rados, oid, pool, entries, &result, asio::use_awaitable);
 
     EXPECT_EQ(7u, result.size());
@@ -434,8 +429,8 @@ CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
     const std::string to = neorados::cls::log::end_marker;
     co_await trim(rados, oid, pool, from, to, asio::use_awaitable);
 
-    std::vector<entry> entries{neorados::cls::log::max_list_entries};
-    std::span<entry> result;
+    std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
+    std::span<l::entry> result;
     co_await list(rados, oid, pool, entries, &result, asio::use_awaitable);
     EXPECT_EQ(0u, result.size());
 
@@ -457,7 +452,7 @@ TEST(neocls_log_bare, lambdata)
 
   std::optional<neorados::RADOS> rados;
   neorados::IOContext pool;
-  std::vector<entry> entries{neorados::cls::log::max_list_entries};
+  std::vector<l::entry> entries{neorados::cls::log::max_list_entries};
 
   bool completed = false;
   neorados::RADOS::Builder{}.build(c, [&](error_code ec, neorados::RADOS r_) {
@@ -481,10 +476,10 @@ TEST(neocls_log_bare, lambdata)
 		  neorados::cls::log::end_marker,
 		  [&](error_code ec) {
 		    ASSERT_FALSE(ec);
-		    neorados::cls::log::list(
+		    l::list(
 		      *rados, oid, pool, {}, {}, {}, entries,
 		      [&](error_code ec,
-			  std::span<entry> result,
+			  std::span<l::entry> result,
 			  std::optional<std::string> marker) {
 			ASSERT_FALSE(ec);
 			ASSERT_FALSE(marker);
