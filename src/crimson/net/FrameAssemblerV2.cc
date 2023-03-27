@@ -30,6 +30,13 @@ FrameAssemblerV2::FrameAssemblerV2(SocketConnection &_conn)
   : conn{_conn}
 {}
 
+FrameAssemblerV2::~FrameAssemblerV2()
+{
+  if (has_socket()) {
+    std::ignore = move_socket();
+  }
+}
+
 #ifdef UNIT_TESTS_BUILT
 // should be consistent to intercept() in ProtocolV2.cc
 void FrameAssemblerV2::intercept_frame(Tag tag, bool is_write)
@@ -69,9 +76,8 @@ FrameAssemblerV2::mover_t
 FrameAssemblerV2::to_replace()
 {
   assert(is_socket_valid());
-  socket = nullptr;
   return mover_t{
-      std::move(conn.socket),
+      move_socket(),
       std::move(session_stream_handlers),
       std::move(session_comp_handlers)};
 }
@@ -117,11 +123,18 @@ bool FrameAssemblerV2::is_socket_valid() const
   return has_socket() && !socket->is_shutdown();
 }
 
+SocketRef FrameAssemblerV2::move_socket()
+{
+  assert(has_socket());
+  conn.set_socket(nullptr);
+  return std::move(socket);
+}
+
 void FrameAssemblerV2::set_socket(SocketRef &&new_socket)
 {
   assert(!has_socket());
-  socket = new_socket.get();
-  conn.socket = std::move(new_socket);
+  socket = std::move(new_socket);
+  conn.set_socket(socket.get());
   assert(is_socket_valid());
 }
 
@@ -141,8 +154,7 @@ seastar::future<> FrameAssemblerV2::replace_shutdown_socket(SocketRef &&new_sock
 {
   assert(has_socket());
   assert(socket->is_shutdown());
-  socket = nullptr;
-  auto old_socket = std::move(conn.socket);
+  auto old_socket = move_socket();
   set_socket(std::move(new_socket));
   return old_socket->close(
   ).then([sock = std::move(old_socket)] {});

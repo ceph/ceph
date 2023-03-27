@@ -146,6 +146,10 @@ SocketConnection::get_local_shared_foreign_from_this()
       seastar::make_foreign(shared_from_this()));
 }
 
+void SocketConnection::set_socket(Socket *s) {
+  socket = s;
+}
+
 void SocketConnection::print(ostream& out) const {
     out << (void*)this << " ";
     messenger.print(out);
