@@ -360,7 +360,7 @@ class MDSCluster(CephCluster):
         """
         def _fail_restart(id_):
             self.mds_daemons[id_].stop()
-            self.get_ceph_cmd_stdout("mds", "fail", id_)
+            self.run_ceph_cmd("mds", "fail", id_)
             self.mds_daemons[id_].restart()
 
         self._one_or_all(mds_id, _fail_restart)
@@ -571,21 +571,21 @@ class Filesystem(MDSCluster):
         assert(mds_map['in'] == list(range(0, mds_map['max_mds'])))
 
     def reset(self):
-        self.get_ceph_cmd_stdout("fs", "reset", str(self.name), '--yes-i-really-mean-it')
+        self.run_ceph_cmd("fs", "reset", str(self.name), '--yes-i-really-mean-it')
 
     def fail(self):
-        self.get_ceph_cmd_stdout("fs", "fail", str(self.name))
+        self.run_ceph_cmd("fs", "fail", str(self.name))
 
     def set_flag(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
-        self.get_ceph_cmd_stdout("fs", "flag", "set", var, *a)
+        self.run_ceph_cmd("fs", "flag", "set", var, *a)
 
     def set_allow_multifs(self, yes=True):
         self.set_flag("enable_multiple", yes)
 
     def set_var(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
-        self.get_ceph_cmd_stdout("fs", "set", self.name, var, *a)
+        self.run_ceph_cmd("fs", "set", self.name, var, *a)
 
     def set_down(self, down=True):
         self.set_var("down", str(down).lower())
@@ -607,7 +607,7 @@ class Filesystem(MDSCluster):
 
     def compat(self, *args):
         a = map(lambda x: str(x).lower(), args)
-        self.get_ceph_cmd_stdout("fs", "compat", self.name, *a)
+        self.run_ceph_cmd("fs", "compat", self.name, *a)
 
     def add_compat(self, *args):
         self.compat("add_compat", *args)
@@ -652,24 +652,23 @@ class Filesystem(MDSCluster):
         log.debug("Creating filesystem '{0}'".format(self.name))
 
         try:
-            self.get_ceph_cmd_stdout('osd', 'pool', 'create',
-                                     self.metadata_pool_name,
-                                     '--pg_num_min', str(self.pg_num_min))
+            self.run_ceph_cmd('osd', 'pool', 'create',self.metadata_pool_name,
+                              '--pg_num_min', str(self.pg_num_min))
 
-            self.get_ceph_cmd_stdout('osd', 'pool', 'create',
-                                     data_pool_name, str(self.pg_num),
-                                     '--pg_num_min', str(self.pg_num_min),
-                                     '--target_size_ratio',
-                                     str(self.target_size_ratio))
+            self.run_ceph_cmd('osd', 'pool', 'create', data_pool_name,
+                              str(self.pg_num),
+                              '--pg_num_min', str(self.pg_num_min),
+                              '--target_size_ratio',
+                              str(self.target_size_ratio))
         except CommandFailedError as e:
             if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                self.get_ceph_cmd_stdout('osd', 'pool', 'create',
-                                         self.metadata_pool_name,
-                                         str(self.pg_num_min))
+                self.run_ceph_cmd('osd', 'pool', 'create',
+                                  self.metadata_pool_name,
+                                  str(self.pg_num_min))
 
-                self.get_ceph_cmd_stdout('osd', 'pool', 'create',
-                                         data_pool_name, str(self.pg_num),
-                                         str(self.pg_num_min))
+                self.run_ceph_cmd('osd', 'pool', 'create',
+                                  data_pool_name, str(self.pg_num),
+                                  str(self.pg_num_min))
             else:
                 raise
 
@@ -678,7 +677,7 @@ class Filesystem(MDSCluster):
             args.append('--recover')
         if metadata_overlay:
             args.append('--allow-dangerous-metadata-overlay')
-        self.get_ceph_cmd_stdout(*args)
+        self.run_ceph_cmd(*args)
 
         if not recover:
             if self.ec_profile and 'disabled' not in self.ec_profile:
@@ -686,23 +685,22 @@ class Filesystem(MDSCluster):
                 log.debug("EC profile is %s", self.ec_profile)
                 cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
                 cmd.extend(self.ec_profile)
-                self.get_ceph_cmd_stdout(*cmd)
+                self.run_ceph_cmd(*cmd)
                 try:
-                    self.get_ceph_cmd_stdout(
+                    self.run_ceph_cmd(
                         'osd', 'pool', 'create', ec_data_pool_name,
                         'erasure', ec_data_pool_name,
                         '--pg_num_min', str(self.pg_num_min),
                         '--target_size_ratio', str(self.target_size_ratio_ec))
                 except CommandFailedError as e:
                     if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                        self.get_ceph_cmd_stdout(
+                        self.run_ceph_cmd(
                             'osd', 'pool', 'create', ec_data_pool_name,
                             str(self.pg_num_min), 'erasure', ec_data_pool_name)
                     else:
                         raise
-                self.get_ceph_cmd_stdout(
-                    'osd', 'pool', 'set',
-                    ec_data_pool_name, 'allow_ec_overwrites', 'true')
+                self.run_ceph_cmd('osd', 'pool', 'set', ec_data_pool_name,
+                                  'allow_ec_overwrites', 'true')
                 self.add_data_pool(ec_data_pool_name, create=False)
                 self.check_pool_application(ec_data_pool_name)
 
@@ -713,7 +711,8 @@ class Filesystem(MDSCluster):
 
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
-            self.get_ceph_cmd_stdout('fs', 'set', self.name, 'standby_count_wanted', '0')
+            self.run_ceph_cmd('fs', 'set', self.name, 'standby_count_wanted',
+                              '0')
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 # standby_count_wanted not available prior to luminous (upgrade tests would fail otherwise)
@@ -862,15 +861,15 @@ class Filesystem(MDSCluster):
     def add_data_pool(self, name, create=True):
         if create:
             try:
-                self.get_ceph_cmd_stdout('osd', 'pool', 'create', name,
-                                         '--pg_num_min', str(self.pg_num_min))
+                self.run_ceph_cmd('osd', 'pool', 'create', name,
+                                  '--pg_num_min', str(self.pg_num_min))
             except CommandFailedError as e:
                 if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                  self.get_ceph_cmd_stdout('osd', 'pool', 'create', name,
-                                           str(self.pg_num_min))
+                  self.run_ceph_cmd('osd', 'pool', 'create', name,
+                                    str(self.pg_num_min))
                 else:
                     raise
-        self.get_ceph_cmd_stdout('fs', 'add_data_pool', self.name, name)
+        self.run_ceph_cmd('fs', 'add_data_pool', self.name, name)
         self.get_pool_names(refresh = True)
         for poolid, fs_name in self.data_pools.items():
             if name == fs_name:
@@ -1056,13 +1055,13 @@ class Filesystem(MDSCluster):
         self.mds_signal(name, signal)
 
     def rank_freeze(self, yes, rank=0):
-        self.get_ceph_cmd_stdout("mds", "freeze", "{}:{}".format(self.id, rank), str(yes).lower())
+        self.run_ceph_cmd("mds", "freeze", "{}:{}".format(self.id, rank), str(yes).lower())
 
     def rank_repaired(self, rank):
-        self.get_ceph_cmd_stdout("mds", "repaired", "{}:{}".format(self.id, rank))
+        self.run_ceph_cmd("mds", "repaired", "{}:{}".format(self.id, rank))
 
     def rank_fail(self, rank=0):
-        self.get_ceph_cmd_stdout("mds", "fail", "{}:{}".format(self.id, rank))
+        self.run_ceph_cmd("mds", "fail", "{}:{}".format(self.id, rank))
 
     def rank_is_running(self, rank=0, status=None):
         name = self.get_rank(rank=rank, status=status)['name']
