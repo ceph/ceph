@@ -198,6 +198,9 @@ class Module(MgrModule):
         Option(name='leaderboard',
                type='bool',
                default=False),
+        Option(name='leaderboard_description',
+               type='str',
+               default=None),
         Option(name='description',
                type='str',
                default=None),
@@ -261,6 +264,7 @@ class Module(MgrModule):
             self.enabled = False
             self.last_opt_revision = 0
             self.leaderboard = ''
+            self.leaderboard_description = ''
             self.interval = 0
             self.proxy = ''
             self.channel_basic = True
@@ -980,6 +984,7 @@ class Module(MgrModule):
             channels = self.get_active_channels()
         report = {
             'leaderboard': self.leaderboard,
+            'leaderboard_description': self.leaderboard_description,
             'report_version': 1,
             'report_timestamp': datetime.utcnow().isoformat(),
             'report_id': self.report_id,
