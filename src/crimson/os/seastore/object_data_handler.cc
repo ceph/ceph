@@ -476,7 +476,7 @@ using operate_ret_bare = std::pair<
   std::optional<extent_to_write_t>,
   std::optional<bufferptr>>;
 using operate_ret = get_iertr::future<operate_ret_bare>;
-operate_ret operate_left(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &overwrite_plan)
+operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan_t &overwrite_plan)
 {
   if (overwrite_plan.get_left_size() == 0) {
     return get_iertr::make_ready_future<operate_ret_bare>(
@@ -555,7 +555,7 @@ operate_ret operate_left(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &
  *
  * Proceed overwrite_plan.right_operation.
  */
-operate_ret operate_right(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &overwrite_plan)
+operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_plan_t &overwrite_plan)
 {
   if (overwrite_plan.get_right_size() == 0) {
     return get_iertr::make_ready_future<operate_ret_bare>(

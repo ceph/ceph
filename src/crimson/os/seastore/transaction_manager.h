@@ -90,7 +90,7 @@ public:
    * Get the logical pin at offset
    */
   using get_pin_iertr = LBAManager::get_mapping_iertr;
-  using get_pin_ret = LBAManager::get_mapping_iertr::future<LBAPinRef>;
+  using get_pin_ret = LBAManager::get_mapping_iertr::future<LBAMappingRef>;
   get_pin_ret get_pin(
     Transaction &t,
     laddr_t offset) {
@@ -205,13 +205,13 @@ public:
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    if (!ret->has_pin()) {
+    if (!ret->has_laddr()) {
       SUBDEBUGT(seastore_tm,
 	"duplicating extent for write -- {} -> {}",
 	t,
 	*ref,
 	*ret);
-      ret->set_pin(ref->get_pin().duplicate());
+      ret->set_laddr(ref->get_laddr());
     } else {
       SUBTRACET(seastore_tm,
 	"extent is already duplicated -- {}",
@@ -283,8 +283,8 @@ public:
       len,
       ext->get_paddr(),
       ext.get()
-    ).si_then([ext=std::move(ext), laddr_hint, &t, FNAME](auto &&ref) mutable {
-      ext->set_pin(std::move(ref));
+    ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
+      LOG_PREFIX(TransactionManager::alloc_extent);
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
@@ -341,7 +341,6 @@ public:
       ext.get()
     ).si_then([ext=std::move(ext), laddr_hint, this](auto &&ref) {
       ceph_assert(laddr_hint == ref->get_key());
-      ext->set_pin(std::move(ref));
       return epm->read(
         ext->get_paddr(),
 	ext->get_length(),
@@ -355,7 +354,7 @@ public:
 
 
   using reserve_extent_iertr = alloc_extent_iertr;
-  using reserve_extent_ret = reserve_extent_iertr::future<LBAPinRef>;
+  using reserve_extent_ret = reserve_extent_iertr::future<LBAMappingRef>;
   reserve_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
@@ -672,8 +671,7 @@ private:
 	assert(pin->get_parent());
 	assert(!pin->get_parent()->is_pending());
 	pin->link_child(&lextent);
-	lextent.set_pin(std::move(pin));
-	lba_manager->add_pin(lextent.get_pin());
+	lextent.set_laddr(pin->get_key());
       }
     ).si_then([FNAME, &t](auto ref) {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);

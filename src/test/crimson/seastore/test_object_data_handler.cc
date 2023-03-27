@@ -135,7 +135,7 @@ struct object_data_handler_test_t:
       }
     }
   }
-  std::list<LBAPinRef> get_mappings(objaddr_t offset, extent_len_t length) {
+  std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
       return tm->get_pins(t, offset, length);

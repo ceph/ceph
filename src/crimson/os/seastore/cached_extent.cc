@@ -111,11 +111,6 @@ std::ostream &ChildableCachedExtent::print_detail(std::ostream &out) const {
 std::ostream &LogicalCachedExtent::_print_detail(std::ostream &out) const
 {
   out << ", laddr=" << laddr;
-  if (pin) {
-    out << ", pin=" << *pin;
-  } else {
-    out << ", pin=empty";
-  }
   return print_detail_l(out);
 }
 
@@ -161,9 +156,9 @@ parent_tracker_t::~parent_tracker_t() {
   }
 }
 
-std::ostream &operator<<(std::ostream &out, const LBAPin &rhs)
+std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
 {
-  return out << "LBAPin(" << rhs.get_key() << "~" << rhs.get_length()
+  return out << "LBAMapping(" << rhs.get_key() << "~" << rhs.get_length()
 	     << "->" << rhs.get_val();
 }
 
