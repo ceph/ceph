@@ -74,7 +74,7 @@ class SocketConnection : public Connection {
 
   std::unique_ptr<ProtocolV2> protocol;
 
-  SocketRef socket;
+  Socket *socket = nullptr;
 
   entity_name_t peer_name = {0, entity_name_t::NEW};
 
@@ -204,6 +204,8 @@ private:
   void set_features(uint64_t f) {
     features = f;
   }
+
+  void set_socket(Socket *s);
 
 #ifdef UNIT_TESTS_BUILT
   bool is_closed_clean() const override;

@@ -19,7 +19,7 @@ class FrameAssemblerV2 {
 public:
   FrameAssemblerV2(SocketConnection &conn);
 
-  ~FrameAssemblerV2() = default;
+  ~FrameAssemblerV2();
 
   FrameAssemblerV2(const FrameAssemblerV2 &) = delete;
 
@@ -127,6 +127,8 @@ public:
 private:
   bool has_socket() const;
 
+  SocketRef move_socket();
+
   void log_main_preamble(const ceph::bufferlist &bl);
 
 #ifdef UNIT_TESTS_BUILT
@@ -135,7 +137,7 @@ private:
 
   SocketConnection &conn;
 
-  Socket *socket = nullptr;
+  SocketRef socket;
 
   /*
    * auth signature
