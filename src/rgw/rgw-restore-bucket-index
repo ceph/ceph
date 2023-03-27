@@ -54,6 +54,7 @@ else
   exit 1
 fi
 
+
 clean() {
   if [ -n "$clean_temps" ] ;then
     rm -f $bkt_entry $bkt_inst $bkt_inst_new $obj_list $zone_info
@@ -67,10 +68,15 @@ super_exit() {
 usage() {
   >&2 cat << EOF
 
-Usage: $0 [--proceed] <bucket-name> [data-pool-name]
-  NOTE: This tool is currently considered EXPERIMENTAL.
-  NOTE: If a data-pool-name is not supplied then it will be inferred from bucket and zone information.
-  NOTE: If --proceed is provided then user will not be prompted to proceed. Use with caution.
+Usage: $0 -b <bucketname> [-l <rados-ls-file>] [-p <pool>] [-y]
+
+where:
+  -b <bucketname>     Required - The name of the bucket to operate on
+  -l <rados-ls-file>  Optional - A file with the output of 'rados ls -p <pool>'
+  -p <pool>           Optional - If not provided, will be inferred from bucket and zone information.
+  -y                  Optional - Proceed with correction without prompting the user
+                      USE WITH CAUTION.
+
 EOF
   super_exit
 }
@@ -90,11 +96,6 @@ strip_quotes() {
 # in the bucket instance data, and finally the "placement_rule" in the
 # bucket instance data.
 get_pool() {
-  # command-line
-  if [ -n "$1" ] ;then
-    echo "$1"
-    exit 0
-  fi
 
   # explicit_placement
   expl_pool=$(strip_quotes $(jq '.data.bucket_info.bucket.explicit_placement.data_pool' $bkt_inst))
@@ -121,18 +122,44 @@ get_pool() {
   echo "$pool"
 }
 
-if [ $1 == "--proceed" ] ;then
-    echo "NOTICE: This tool is currently considered EXPERIMENTAL."
-    proceed=1
-    shift
-fi
+bucket=""
+pool=""
+lsoutput=""
+while getopts ":b:l:p:y" o; do
+  case "${o}" in
+    b)
+      bucket="${OPTARG}"
+    ;;
+    l)
+      if [ -e "${OPTARG}" ]; then
+        lsoutput="${OPTARG}"
+      else
+        echo 
+        echo "ERROR: Provided 'rados ls' output file name does not exist. ${OPTARG}"
+        exit 1
+      fi
+    ;;
+    p)
+      pool="${OPTARG}"
+    ;;
+    y)
+      echo "NOTICE: This tool is currently considered EXPERIMENTAL."
+      proceed=1
+    ;;
+    *)
+      echo
+      echo "ERROR: Unrecognized argument: ${o}"
+      usage
+    ;;
+  esac
+done
+shift $((OPTIND-1))
 
-# expect 1 or 2 arguments
-if [ $# -eq 0 -o $# -gt 2 ] ;then
-   usage
+if [ -z "$bucket" ]; then
+  echo
+  echo "ERROR: Bucket option ( -b ) is required."
+  usage
 fi
-
-bucket=$1
 
 # read bucket entry metadata
 radosgw-admin metadata get bucket:$bucket >$bkt_entry 2>/dev/null
@@ -170,13 +197,19 @@ num_shards=$(jq ".data.bucket_info.num_shards" $bkt_inst)
 echo number of bucket index shards is $num_shards
 
 # determine data pool
-pool=$(get_pool $2)
+if [ -z "$pool" ]; then
+  pool=$(get_pool)
+fi
 echo data pool is $pool
 
 # search the data pool for all of the head objects that begin with the
 # marker that are not in namespaces (indicated by an extra underscore)
 # and then strip away all but the rgw object name
-( rados -p $pool ls | grep "^${marker}_[^_]" | sed "s/^${marker}_\(.*\)/\1/" >$obj_list ) 2>/dev/null
+if [ -z "$lsoutput" ]; then
+  ( rados -p $pool ls | grep "^${marker}_[^_]" | sed "s/^${marker}_\(.*\)/\1/" >$obj_list ) 2>/dev/null
+else
+  ( grep "^${marker}_[^_]" "${lsoutput}" | sed "s/^${marker}_\(.*\)/\1/" >$obj_list ) 2>/dev/null
+fi
 
 # handle the case where the resulting object list file is empty
 if [ -s $obj_list ] ;then
