@@ -140,6 +140,8 @@ See `Pool & PG Config Reference`_ for details.
 
 .. index:: OSD; scrubbing
 
+.. _rados_config_scrubbing:
+
 Scrubbing
 =========
 
