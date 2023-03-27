@@ -19,7 +19,6 @@ add_executable(ceph_test_neocls_version
   test_neocls_version.cc
   )
 target_link_libraries(ceph_test_neocls_version
-  neorados_cls_version
   libneorados
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}

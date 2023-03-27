@@ -41,17 +41,35 @@ namespace neorados::cls::version {
 ///
 /// Append a call to a write operation to set the object's version.
 ///
-/// \param op Write operation to modify
 /// \param ver Version to set
-void set(WriteOp& op, const obj_version& ver);
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto set(const obj_version& ver)
+{
+  buffer::list in;
+  cls_version_set_op call;
+  call.objv = ver;
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("version", "set", in);
+  }};
+}
 
 /// \brief Unconditional increment version
 ///
 /// Append a call to a write operation to increment the integral
 /// portion of a version.
 ///
-/// \param op Write operation to modify
-void inc(WriteOp& op);
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto inc()
+{
+  buffer::list in;
+  cls_version_inc_op call;
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("version", "inc", in);
+  }};
+}
 
 /// \brief Conditionally increment version
 ///
@@ -59,10 +77,27 @@ void inc(WriteOp& op);
 /// version if condition is met. If the condition is not met, the
 /// operation fails with `std::errc::resource_unavailable_try_again`.
 ///
-/// \param op Write operation to modify
 /// \param ver Version to compare stored object version against
 /// \param cond Comparison operator
-void inc(WriteOp& op, const obj_version& ver, const VersionCond cond);
+///
+/// \return The ClsWriteOp to be passed to WriteOp::exec
+[[nodiscard]] auto inc(const obj_version& objv, const VersionCond cond)
+{
+  buffer::list in;
+  cls_version_inc_op call;
+  call.objv = objv;
+
+  obj_version_cond c;
+  c.cond = cond;
+  c.ver = objv;
+
+  call.conds.push_back(c);
+
+  encode(call, in);
+  return ClsWriteOp{[in = std::move(in)](WriteOp& op) {
+    op.exec("version", "inc_conds", in);
+  }};
+}
 
 /// \brief Assert condition on stored version
 ///
@@ -70,18 +105,52 @@ void inc(WriteOp& op, const obj_version& ver, const VersionCond cond);
 /// the specified relationship to the supplied version. If the
 /// condition is not met, the operation fails with `std::errc::canceled`.
 ///
-/// \param op Operation to modify
 /// \param ver Version to compare stored object version against
 /// \param cond Comparison operator
-void check(Op& op, const obj_version& ver, const VersionCond cond);
+///
+/// \return The ClsOp to be passed to {Read,Write}Op::exec
+[[nodiscard]] auto check(const obj_version& ver, const VersionCond cond)
+{
+  buffer::list in;
+  cls_version_check_op call;
+  call.objv = ver;
+
+  obj_version_cond c;
+  c.cond = cond;
+  c.ver = ver;
+
+  call.conds.push_back(c);
+
+  encode(call, in);
+  return ClsOp{[in = std::move(in)](Op& op) {
+    op.exec("version", "check_conds", in);
+  }};
+}
 
 /// \brief Read the stored object version
 ///
 /// Append a call to a read operation that reads the stored version.
 ///
-/// \param op Read operation to modify
 /// \param objv Location to store the version
-void read(ReadOp& op, obj_version* const objv);
+///
+/// \return The ClsReadOp to be passed to ReadOp::exec
+[[nodiscard]] auto read(obj_version* const objv)
+{
+  using boost::system::error_code;
+  return ClsReadOp{[objv](Op& op) {
+    op.exec("version", "read", {},
+	    [objv](error_code ec,
+		   const buffer::list& bl) {
+	      cls_version_read_ret ret;
+	      if (!ec) {
+		auto iter = bl.cbegin();
+		decode(ret, iter);
+		if (objv)
+		  *objv = std::move(ret.objv);
+	      }
+	    });
+  }};
+}
 
 /// \brief Read the stored object version
 ///
