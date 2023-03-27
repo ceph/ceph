@@ -1,3 +1,4 @@
+import ipaddress
 import hashlib
 import json
 import logging
@@ -608,14 +609,19 @@ class CephadmServe:
 
         def matches_network(host):
             # type: (str) -> bool
-            # make sure we have 1 or more IPs for any of those networks on that
-            # host
-            for network in public_networks:
-                if len(self.mgr.cache.networks[host].get(network, [])) > 0:
-                    return True
+            # make sure the host has at least one network that belongs to some configured public network(s)
+            for pn in public_networks:
+                public_network = ipaddress.ip_network(pn)
+                for hn in self.mgr.cache.networks[host]:
+                    host_network = ipaddress.ip_network(hn)
+                    if host_network.overlaps(public_network):
+                        return True
+
+            host_networks = ','.join(self.mgr.cache.networks[host])
+            pub_networks = ','.join(public_networks)
             self.log.info(
-                f"Filtered out host {host}: does not belong to mon public_network"
-                f" ({','.join(public_networks)})"
+                f"Filtered out host {host}: does not belong to mon public_network(s): "
+                f" {pub_networks}, host network(s): {host_networks}"
             )
             return False
 
