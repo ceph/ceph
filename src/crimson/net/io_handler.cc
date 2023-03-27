@@ -47,7 +47,8 @@ namespace crimson::net {
 
 IOHandler::IOHandler(ChainedDispatchers &dispatchers,
                      SocketConnection &conn)
-  : dispatchers(dispatchers),
+  : sid(seastar::this_shard_id()),
+    dispatchers(dispatchers),
     conn(conn),
     conn_ref(conn.get_local_shared_foreign_from_this())
 {}
@@ -123,6 +124,7 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
 
 seastar::future<> IOHandler::send(MessageURef msg)
 {
+  ceph_assert_always(seastar::this_shard_id() == sid);
   if (io_state != io_state_t::drop) {
     out_pending_msgs.push_back(std::move(msg));
     notify_out_dispatch();
@@ -132,6 +134,7 @@ seastar::future<> IOHandler::send(MessageURef msg)
 
 seastar::future<> IOHandler::send_keepalive()
 {
+  ceph_assert_always(seastar::this_shard_id() == sid);
   if (!need_keepalive) {
     need_keepalive = true;
     notify_out_dispatch();
@@ -141,6 +144,7 @@ seastar::future<> IOHandler::send_keepalive()
 
 void IOHandler::mark_down()
 {
+  ceph_assert_always(seastar::this_shard_id() == sid);
   ceph_assert_always(io_state != io_state_t::none);
   need_dispatch_reset = false;
   if (io_state == io_state_t::drop) {
