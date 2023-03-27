@@ -373,6 +373,28 @@
                 provides a gateway to both the Amazon S3 RESTful API and the
                 OpenStack Swift API. 
 
+        scrubs
+
+                The processes by which Ceph ensures data integrity. During the
+                process of scrubbing, Ceph generates a catalog of all objects
+                in a placement group, then ensures that none of the objects are
+                missing or mismatched by comparing each primary object against
+                its replicas, which are stored across other OSDs. Any PG
+                is determined to have a copy of an object that is different
+                than the other copies or is missing entirely is marked
+                "inconsistent" (that is, the PG is marked "inconsistent"). 
+
+                There are two kinds of scrubbing: light scrubbing and deep
+                scrubbing (also called "normal scrubbing" and "deep scrubbing",
+                respectively). Light scrubbing is performed daily and does
+                nothing more than confirm that a given object exists and that
+                its metadata is correct. Deep scrubbing is performed weekly and
+                reads the data and uses checksums to ensure data integrity.
+
+                See :ref:`Scrubbing <rados_config_scrubbing>` in the RADOS OSD
+                Configuration Reference Guide and page 141 of *Mastering Ceph,
+                second edition* (Fisk, Nick. 2019).
+
         secrets
                 Secrets are credentials used to perform digital authentication
                 whenever privileged users must access systems that require
