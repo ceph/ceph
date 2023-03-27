@@ -220,7 +220,7 @@ class TestEnsureAssociatedLVs(object):
 
 class TestWipeFs(object):
 
-    def setup(self):
+    def setup_method(self):
         os.environ['CEPH_VOLUME_WIPEFS_INTERVAL'] = '0'
 
     def test_works_on_second_try(self, stub_call):
