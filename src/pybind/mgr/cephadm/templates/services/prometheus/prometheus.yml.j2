@@ -30,6 +30,11 @@ alerting:
 {% endif %}
 
 scrape_configs:
+  - job_name: 'prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['localhost:9095']
+
   - job_name: 'ceph'
 {% if secure_monitoring_stack %}
     scheme: https

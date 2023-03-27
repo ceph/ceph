@@ -511,6 +511,11 @@ class TestMonitoring:
                         - url: http://[::1]:8765/sd/prometheus/sd-config?service=alertmanager
 
                 scrape_configs:
+                  - job_name: 'prometheus'
+                    scrape_interval: 5s
+                    static_configs:
+                      - targets: ['localhost:9095']
+
                   - job_name: 'ceph'
                     honor_labels: true
                     http_sd_configs:
@@ -611,6 +616,11 @@ class TestMonitoring:
                             ca_file: root_cert.pem
 
                 scrape_configs:
+                  - job_name: 'prometheus'
+                    scrape_interval: 5s
+                    static_configs:
+                      - targets: ['localhost:9095']
+
                   - job_name: 'ceph'
                     scheme: https
                     tls_config:
