@@ -748,7 +748,7 @@ class RgwRealm(RESTController):
 
     @allow_empty_body
     # pylint: disable=W0613
-    def set(self, realm_name: str, new_realm_name: str, default: str = None, daemon_name=None):
+    def set(self, realm_name: str, new_realm_name: str, default: str = '', daemon_name=None):
         try:
             instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.edit_realm(realm_name, new_realm_name, default)

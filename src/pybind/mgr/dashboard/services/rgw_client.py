@@ -661,7 +661,7 @@ class RgwClient(RestClient):
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
 
-    def edit_realm(self, realm_name: str, new_realm_name: str, default: str = None):
+    def edit_realm(self, realm_name: str, new_realm_name: str, default: str = ''):
         rgw_realm_edit_cmd = []
         if new_realm_name != realm_name:
             rgw_realm_edit_cmd = ['realm', 'rename', '--rgw-realm',

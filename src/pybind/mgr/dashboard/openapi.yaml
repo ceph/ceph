@@ -8552,6 +8552,7 @@ paths:
                 daemon_name:
                   type: string
                 default:
+                  default: ''
                   type: string
                 new_realm_name:
                   type: string
