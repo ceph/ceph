@@ -17,8 +17,10 @@ from teuthology import misc
 from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
 from teuthology import contextutil
+
 from tasks.ceph_manager import write_conf
 from tasks.ceph_manager import CephManager
+from tasks.cephfs.cephfs_test_case import RunCephCmd
 
 
 log = logging.getLogger(__name__)
@@ -66,16 +68,16 @@ class FSMissing(Exception):
     def __str__(self):
         return f"File system {self.ident} does not exist in the map"
 
-class FSStatus(object):
+class FSStatus(RunCephCmd):
     """
     Operations on a snapshot of the FSMap.
     """
     def __init__(self, mon_manager, epoch=None):
-        self.mon = mon_manager
+        self.mon_manager = mon_manager
         cmd = ["fs", "dump", "--format=json"]
         if epoch is not None:
             cmd.append(str(epoch))
-        self.map = json.loads(self.mon.raw_cluster_cmd(*cmd))
+        self.map = json.loads(self.get_ceph_cmd_stdout(*cmd))
 
     def __str__(self):
         return json.dumps(self.map, indent = 2, sort_keys = True)
@@ -216,7 +218,7 @@ class FSStatus(object):
         #all matching
         return False
 
-class CephCluster(object):
+class CephCluster(RunCephCmd):
     @property
     def admin_remote(self):
         first_mon = misc.get_first_mon(self._ctx, None)
@@ -278,7 +280,7 @@ class CephCluster(object):
             return None
 
     def is_addr_blocklisted(self, addr):
-        blocklist = json.loads(self.mon_manager.raw_cluster_cmd(
+        blocklist = json.loads(self.get_ceph_cmd_stdout(
             "osd", "dump", "--format=json"))['blocklist']
         if addr in blocklist:
             return True
@@ -357,7 +359,7 @@ class MDSCluster(CephCluster):
         Inform MDSMonitor of the death of the daemon process(es).  If it held
         a rank, that rank will be relinquished.
         """
-        self._one_or_all(mds_id, lambda id_: self.mon_manager.raw_cluster_cmd("mds", "fail", id_))
+        self._one_or_all(mds_id, lambda id_: self.get_ceph_cmd_stdout("mds", "fail", id_))
 
     def mds_restart(self, mds_id=None):
         self._one_or_all(mds_id, lambda id_: self.mds_daemons[id_].restart())
@@ -371,7 +373,7 @@ class MDSCluster(CephCluster):
         """
         def _fail_restart(id_):
             self.mds_daemons[id_].stop()
-            self.mon_manager.raw_cluster_cmd("mds", "fail", id_)
+            self.get_ceph_cmd_stdout("mds", "fail", id_)
             self.mds_daemons[id_].restart()
 
         self._one_or_all(mds_id, _fail_restart)
@@ -475,7 +477,7 @@ class MDSCluster(CephCluster):
         return FSStatus(self.mon_manager).get_mds(mds_id)
 
     def is_pool_full(self, pool_name):
-        pools = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
+        pools = json.loads(self.get_ceph_cmd_stdout("osd", "dump", "--format=json-pretty"))['pools']
         for pool in pools:
             if pool['pool_name'] == pool_name:
                 return 'full' in pool['flags_names'].split(",")
@@ -582,21 +584,21 @@ class Filesystem(MDSCluster):
         assert(mds_map['in'] == list(range(0, mds_map['max_mds'])))
 
     def reset(self):
-        self.mon_manager.raw_cluster_cmd("fs", "reset", str(self.name), '--yes-i-really-mean-it')
+        self.get_ceph_cmd_stdout("fs", "reset", str(self.name), '--yes-i-really-mean-it')
 
     def fail(self):
-        self.mon_manager.raw_cluster_cmd("fs", "fail", str(self.name))
+        self.get_ceph_cmd_stdout("fs", "fail", str(self.name))
 
     def set_flag(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
-        self.mon_manager.raw_cluster_cmd("fs", "flag", "set", var, *a)
+        self.get_ceph_cmd_stdout("fs", "flag", "set", var, *a)
 
     def set_allow_multifs(self, yes=True):
         self.set_flag("enable_multiple", yes)
 
     def set_var(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
+        self.get_ceph_cmd_stdout("fs", "set", self.name, var, *a)
 
     def set_down(self, down=True):
         self.set_var("down", str(down).lower())
@@ -627,7 +629,7 @@ class Filesystem(MDSCluster):
 
     def compat(self, *args):
         a = map(lambda x: str(x).lower(), args)
-        self.mon_manager.raw_cluster_cmd("fs", "compat", self.name, *a)
+        self.get_ceph_cmd_stdout("fs", "compat", self.name, *a)
 
     def add_compat(self, *args):
         self.compat("add_compat", *args)
@@ -643,7 +645,7 @@ class Filesystem(MDSCluster):
 
     def required_client_features(self, *args, **kwargs):
         c = ["fs", "required_client_features", self.name, *args]
-        return self.mon_manager.run_cluster_cmd(args=c, **kwargs)
+        return self.run_ceph_cmd(args=c, **kwargs)
 
     # Since v15.1.0 the pg autoscale mode has been enabled as default,
     # will let the pg autoscale mode to calculate the pg_num as needed.
@@ -672,24 +674,24 @@ class Filesystem(MDSCluster):
         log.debug("Creating filesystem '{0}'".format(self.name))
 
         try:
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                             self.metadata_pool_name,
-                                             '--pg_num_min', str(self.pg_num_min))
+            self.get_ceph_cmd_stdout('osd', 'pool', 'create',
+                                     self.metadata_pool_name,
+                                     '--pg_num_min', str(self.pg_num_min))
 
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                             data_pool_name, str(self.pg_num),
-                                             '--pg_num_min', str(self.pg_num_min),
-                                             '--target_size_ratio',
-                                             str(self.target_size_ratio))
+            self.get_ceph_cmd_stdout('osd', 'pool', 'create',
+                                     data_pool_name, str(self.pg_num),
+                                     '--pg_num_min', str(self.pg_num_min),
+                                     '--target_size_ratio',
+                                     str(self.target_size_ratio))
         except CommandFailedError as e:
             if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                                 self.metadata_pool_name,
-                                                 str(self.pg_num_min))
+                self.get_ceph_cmd_stdout('osd', 'pool', 'create',
+                                         self.metadata_pool_name,
+                                         str(self.pg_num_min))
 
-                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                                 data_pool_name, str(self.pg_num),
-                                                 str(self.pg_num_min))
+                self.get_ceph_cmd_stdout('osd', 'pool', 'create',
+                                         data_pool_name, str(self.pg_num),
+                                         str(self.pg_num_min))
             else:
                 raise
 
@@ -698,7 +700,7 @@ class Filesystem(MDSCluster):
             args.append('--recover')
         if metadata_overlay:
             args.append('--allow-dangerous-metadata-overlay')
-        self.mon_manager.raw_cluster_cmd(*args)
+        self.get_ceph_cmd_stdout(*args)
 
         if not recover:
             if self.ec_profile and 'disabled' not in self.ec_profile:
@@ -706,21 +708,21 @@ class Filesystem(MDSCluster):
                 log.debug("EC profile is %s", self.ec_profile)
                 cmd = ['osd', 'erasure-code-profile', 'set', ec_data_pool_name]
                 cmd.extend(self.ec_profile)
-                self.mon_manager.raw_cluster_cmd(*cmd)
+                self.get_ceph_cmd_stdout(*cmd)
                 try:
-                    self.mon_manager.raw_cluster_cmd(
+                    self.get_ceph_cmd_stdout(
                         'osd', 'pool', 'create', ec_data_pool_name,
                         'erasure', ec_data_pool_name,
                         '--pg_num_min', str(self.pg_num_min),
                         '--target_size_ratio', str(self.target_size_ratio_ec))
                 except CommandFailedError as e:
                     if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                        self.mon_manager.raw_cluster_cmd(
+                        self.get_ceph_cmd_stdout(
                             'osd', 'pool', 'create', ec_data_pool_name,
                             str(self.pg_num_min), 'erasure', ec_data_pool_name)
                     else:
                         raise
-                self.mon_manager.raw_cluster_cmd(
+                self.get_ceph_cmd_stdout(
                     'osd', 'pool', 'set',
                     ec_data_pool_name, 'allow_ec_overwrites', 'true')
                 self.add_data_pool(ec_data_pool_name, create=False)
@@ -733,7 +735,7 @@ class Filesystem(MDSCluster):
 
         # Turn off spurious standby count warnings from modifying max_mds in tests.
         try:
-            self.mon_manager.raw_cluster_cmd('fs', 'set', self.name, 'standby_count_wanted', '0')
+            self.get_ceph_cmd_stdout('fs', 'set', self.name, 'standby_count_wanted', '0')
         except CommandFailedError as e:
             if e.exitstatus == 22:
                 # standby_count_wanted not available prior to luminous (upgrade tests would fail otherwise)
@@ -781,15 +783,14 @@ class Filesystem(MDSCluster):
                     ]
                     if subvol_options:
                         cmd.append(subvol_options)
-                    self.mon_manager.raw_cluster_cmd(*cmd)
+                    self.get_ceph_cmd_stdout(cmd)
 
                     if self.name not in self._ctx.created_subvols:
                         self._ctx.created_subvols[self.name] = []
                     
-                    subvol_path = self.mon_manager.raw_cluster_cmd(
+                    subvol_path = self.get_ceph_cmd_stdout(
                         'fs', 'subvolume', 'getpath', self.name,
-                        '--group_name', 'qa',
-                        sv_name)
+                        '--group_name', 'qa', sv_name)
                     subvol_path = subvol_path.strip()
                     self._ctx.created_subvols[self.name].append(subvol_path)
             else:
@@ -881,7 +882,7 @@ class Filesystem(MDSCluster):
         """
         Whether a filesystem exists in the mon's filesystem list
         """
-        fs_list = json.loads(self.mon_manager.raw_cluster_cmd('fs', 'ls', '--format=json-pretty'))
+        fs_list = json.loads(self.get_ceph_cmd_stdout('fs', 'ls', '--format=json-pretty'))
         return self.name in [fs['name'] for fs in fs_list]
 
     def legacy_configured(self):
@@ -890,7 +891,7 @@ class Filesystem(MDSCluster):
         the case, the caller should avoid using Filesystem.create
         """
         try:
-            out_text = self.mon_manager.raw_cluster_cmd('--format=json-pretty', 'osd', 'lspools')
+            out_text = self.get_ceph_cmd_stdout('--format=json-pretty', 'osd', 'lspools')
             pools = json.loads(out_text)
             metadata_pool_exists = 'metadata' in [p['poolname'] for p in pools]
             if metadata_pool_exists:
@@ -906,7 +907,7 @@ class Filesystem(MDSCluster):
         return metadata_pool_exists
 
     def _df(self):
-        return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
+        return json.loads(self.get_ceph_cmd_stdout("df", "--format=json-pretty"))
 
     # may raise FSMissing
     def get_mds_map(self, status=None):
@@ -924,15 +925,15 @@ class Filesystem(MDSCluster):
     def add_data_pool(self, name, create=True):
         if create:
             try:
-                self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name,
-                                                 '--pg_num_min', str(self.pg_num_min))
+                self.get_ceph_cmd_stdout('osd', 'pool', 'create', name,
+                                         '--pg_num_min', str(self.pg_num_min))
             except CommandFailedError as e:
                 if e.exitstatus == 22: # nautilus couldn't specify --pg_num_min option
-                  self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name,
-                                                   str(self.pg_num_min))
+                  self.get_ceph_cmd_stdout('osd', 'pool', 'create', name,
+                                           str(self.pg_num_min))
                 else:
                     raise
-        self.mon_manager.raw_cluster_cmd('fs', 'add_data_pool', self.name, name)
+        self.get_ceph_cmd_stdout('fs', 'add_data_pool', self.name, name)
         self.get_pool_names(refresh = True)
         for poolid, fs_name in self.data_pools.items():
             if name == fs_name:
@@ -985,9 +986,9 @@ class Filesystem(MDSCluster):
         self.data_pool_name = name
 
     def get_pool_pg_num(self, pool_name):
-        pgs = json.loads(self.mon_manager.raw_cluster_cmd('osd', 'pool', 'get',
-                                                          pool_name, 'pg_num',
-                                                          '--format=json-pretty'))
+        pgs = json.loads(self.get_ceph_cmd_stdout('osd', 'pool', 'get',
+                                                  pool_name, 'pg_num',
+                                                  '--format=json-pretty'))
         return int(pgs['pg_num'])
 
     def get_namespace_id(self):
@@ -1118,13 +1119,13 @@ class Filesystem(MDSCluster):
         self.mds_signal(name, signal)
 
     def rank_freeze(self, yes, rank=0):
-        self.mon_manager.raw_cluster_cmd("mds", "freeze", "{}:{}".format(self.id, rank), str(yes).lower())
+        self.get_ceph_cmd_stdout("mds", "freeze", "{}:{}".format(self.id, rank), str(yes).lower())
 
     def rank_repaired(self, rank):
-        self.mon_manager.raw_cluster_cmd("mds", "repaired", "{}:{}".format(self.id, rank))
+        self.get_ceph_cmd_stdout("mds", "repaired", "{}:{}".format(self.id, rank))
 
     def rank_fail(self, rank=0):
-        self.mon_manager.raw_cluster_cmd("mds", "fail", "{}:{}".format(self.id, rank))
+        self.get_ceph_cmd_stdout("mds", "fail", "{}:{}".format(self.id, rank))
 
     def rank_is_running(self, rank=0, status=None):
         name = self.get_rank(rank=rank, status=status)['name']
@@ -1263,7 +1264,7 @@ class Filesystem(MDSCluster):
         if mds_id is None:
             return self.rank_tell(command)
 
-        return json.loads(self.mon_manager.raw_cluster_cmd("tell", f"mds.{mds_id}", *command))
+        return json.loads(self.get_ceph_cmd_stdout("tell", f"mds.{mds_id}", *command))
 
     def rank_asok(self, command, rank=0, status=None, timeout=None):
         info = self.get_rank(rank=rank, status=status)
@@ -1271,7 +1272,7 @@ class Filesystem(MDSCluster):
 
     def rank_tell(self, command, rank=0, status=None):
         try:
-            out = self.mon_manager.raw_cluster_cmd("tell", f"mds.{self.id}:{rank}", *command)
+            out = self.get_ceph_cmd_stdout("tell", f"mds.{self.id}:{rank}", *command)
             return json.loads(out)
         except json.decoder.JSONDecodeError:
             log.error("could not decode: {}".format(out))
@@ -1671,8 +1672,8 @@ class Filesystem(MDSCluster):
             caps = tuple(x)
 
         client_name = 'client.' + client_id
-        return self.mon_manager.raw_cluster_cmd('fs', 'authorize', self.name,
-                                                client_name, *caps)
+        return self.get_ceph_cmd_stdout('fs', 'authorize', self.name,
+                                        client_name, *caps)
 
     def grow(self, new_max_mds, status=None):
         oldmax = self.get_var('max_mds', status=status)
