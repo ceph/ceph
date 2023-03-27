@@ -43,6 +43,7 @@ set(crimson_seastore_srcs
   random_block_manager/avlallocator.cc
   journal/segmented_journal.cc
   journal/segment_allocator.cc
+  journal/record_submitter.cc
   journal.cc
   device.cc
   segment_manager_group.cc
