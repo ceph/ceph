@@ -61,7 +61,12 @@ public:
  * as ConnectionHandler
  */
 private:
+  seastar::shard_id get_shard_id() const final {
+    return sid;
+  }
+
   bool is_connected() const final {
+    ceph_assert_always(seastar::this_shard_id() == sid);
     return protocol_is_connected;
   }
 
@@ -70,14 +75,17 @@ private:
   seastar::future<> send_keepalive() final;
 
   clock_t::time_point get_last_keepalive() const final {
+    ceph_assert_always(seastar::this_shard_id() == sid);
     return last_keepalive;
   }
 
   clock_t::time_point get_last_keepalive_ack() const final {
+    ceph_assert_always(seastar::this_shard_id() == sid);
     return last_keepalive_ack;
   }
 
   void set_last_keepalive_ack(clock_t::time_point when) final {
+    ceph_assert_always(seastar::this_shard_id() == sid);
     last_keepalive_ack = when;
   }
 
@@ -183,6 +191,8 @@ public:
   void do_in_dispatch();
 
 private:
+  seastar::shard_id sid;
+
   ChainedDispatchers &dispatchers;
 
   SocketConnection &conn;
