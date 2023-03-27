@@ -213,7 +213,7 @@ public:
       return leaf.pos == 0;
     }
 
-    PhysicalNodePinRef<node_key_t, typename pin_t::val_type>
+    PhysicalNodeMappingRef<node_key_t, typename pin_t::val_type>
     get_pin(op_context_t<node_key_t> ctx) const {
       assert(!is_end());
       auto val = get_val();
@@ -360,7 +360,7 @@ public:
     root_leaf->set_size(0);
     fixed_kv_node_meta_t<node_key_t> meta{min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, 1};
     root_leaf->set_meta(meta);
-    root_leaf->pin.set_range(meta);
+    root_leaf->range = meta;
     get_tree_stats<self_type>(c.trans).depth = 1u;
     get_tree_stats<self_type>(c.trans).extents_num_delta++;
     link_phy_tree_root_node(root_block, root_leaf.get());
@@ -483,6 +483,152 @@ public:
   }
   iterator_fut end(op_context_t<node_key_t> c) const {
     return upper_bound(c, min_max_t<node_key_t>::max);
+  }
+
+  template <typename child_node_t, typename node_t>
+  void check_node(
+    op_context_t<node_key_t> c,
+    TCachedExtentRef<node_t> node)
+  {
+    for (auto i : *node) {
+      CachedExtentRef child_node;
+      Transaction::get_extent_ret ret;
+
+      if constexpr (std::is_base_of_v<typename internal_node_t::base_t, child_node_t>) {
+        ret = c.trans.get_extent(
+          i->get_val().maybe_relative_to(node->get_paddr()),
+          &child_node);
+      } else {
+        if constexpr (leaf_has_children) {
+          ret = c.trans.get_extent(
+            i->get_val().paddr.maybe_relative_to(node->get_paddr()),
+            &child_node);
+        }
+      }
+      if (ret == Transaction::get_extent_ret::PRESENT) {
+        if (child_node->is_mutation_pending()) {
+          auto &prior = (child_node_t &)*child_node->prior_instance;
+          assert(prior.is_valid());
+          assert(prior.is_parent_valid());
+          if (node->is_mutation_pending()) {
+            auto &n = node->get_stable_for_key(i->get_key());
+            assert(prior.get_parent_node().get() == &n);
+            auto pos = n.lower_bound_offset(i->get_key());
+            assert(pos < n.get_node_size());
+            assert(n.children[pos] == &prior);
+          } else {
+            assert(prior.get_parent_node().get() == node.get());
+            assert(node->children[i->get_offset()] == &prior);
+          }
+        } else if (child_node->is_initial_pending()) {
+          auto cnode = child_node->template cast<child_node_t>();
+          auto pos = node->find(i->get_key()).get_offset();
+          auto child = node->children[pos];
+          assert(child);
+          assert(child == cnode.get());
+          assert(cnode->is_parent_valid());
+        } else {
+          assert(child_node->is_valid());
+          auto cnode = child_node->template cast<child_node_t>();
+          assert(cnode->has_parent_tracker());
+          if (node->is_pending()) {
+            auto &n = node->get_stable_for_key(i->get_key());
+            assert(cnode->get_parent_node().get() == &n);
+            auto pos = n.lower_bound_offset(i->get_key());
+            assert(pos < n.get_node_size());
+            assert(n.children[pos] == cnode.get());
+          } else {
+            assert(cnode->get_parent_node().get() == node.get());
+            assert(node->children[i->get_offset()] == cnode.get());
+          }
+        }
+      } else if (ret == Transaction::get_extent_ret::ABSENT) {
+        ChildableCachedExtent* child = nullptr;
+        if (node->is_pending()) {
+          auto &n = node->get_stable_for_key(i->get_key());
+          auto pos = n.lower_bound_offset(i->get_key());
+          assert(pos < n.get_node_size());
+          child = n.children[pos];
+          if (is_valid_child_ptr(child)) {
+            auto c = (child_node_t*)child;
+            assert(c->has_parent_tracker());
+            assert(c->get_parent_node().get() == &n);
+          }
+        } else {
+          child = node->children[i->get_offset()];
+          if (is_valid_child_ptr(child)) {
+            auto c = (child_node_t*)child;
+            assert(c->has_parent_tracker());
+            assert(c->get_parent_node().get() == node.get());
+          }
+        }
+
+        if (!is_valid_child_ptr(child)) {
+          if constexpr (
+            std::is_base_of_v<typename internal_node_t::base_t, child_node_t>)
+          {
+            assert(!c.cache.query_cache(i->get_val(), nullptr));
+          } else {
+            if constexpr (leaf_has_children) {
+              assert(!c.cache.query_cache(i->get_val().paddr, nullptr));
+            }
+          }
+        }
+      } else {
+        ceph_abort("impossible");
+      }
+    }
+  }
+
+  using check_child_trackers_ret = base_iertr::future<>;
+  check_child_trackers_ret check_child_trackers(
+    op_context_t<node_key_t> c) {
+    mapped_space_visitor_t checker = [c, this](
+      paddr_t,
+      node_key_t,
+      extent_len_t,
+      depth_t depth,
+      extent_types_t,
+      iterator& iter) {
+      if constexpr (!leaf_has_children) {
+        if (depth == 1) {
+          return seastar::now();
+        }
+      }
+      if (depth > 1) {
+        auto &node = iter.get_internal(depth).node;
+        assert(node->is_valid());
+        check_node<typename internal_node_t::base_t>(c, node);
+      } else {
+        assert(depth == 1);
+        auto &node = iter.leaf.node;
+        assert(node->is_valid());
+        check_node<LogicalCachedExtent>(c, node);
+      }
+      return seastar::now();
+    };
+
+    return seastar::do_with(
+      std::move(checker),
+      [this, c](auto &checker) {
+      return iterate_repeat(
+        c,
+        lower_bound(
+          c,
+          min_max_t<node_key_t>::min,
+          &checker),
+        [](auto &pos) {
+          if (pos.is_end()) {
+            return base_iertr::make_ready_future<
+              seastar::stop_iteration>(
+                seastar::stop_iteration::yes);
+          }
+          return base_iertr::make_ready_future<
+            seastar::stop_iteration>(
+              seastar::stop_iteration::no);
+        },
+        &checker);
+    });
   }
 
   using iterate_repeat_ret_inner = base_iertr::future<
@@ -872,7 +1018,7 @@ public:
         fixed_kv_extent.get_length(),
         n_fixed_kv_extent->get_bptr().c_str());
       n_fixed_kv_extent->set_modify_time(fixed_kv_extent.get_modify_time());
-      n_fixed_kv_extent->pin.set_range(n_fixed_kv_extent->get_node_meta());
+      n_fixed_kv_extent->range = n_fixed_kv_extent->get_node_meta();
 
       if (fixed_kv_extent.get_type() == internal_node_t::TYPE ||
           leaf_node_t::do_has_children) {
@@ -1084,8 +1230,8 @@ private:
                           parent_pos=std::move(parent_pos)]
                           (internal_node_t &node) {
       assert(!node.is_pending());
-      assert(!node.pin.is_linked());
-      node.pin.set_range(fixed_kv_node_meta_t<node_key_t>{begin, end, depth});
+      assert(!node.is_linked());
+      node.range = fixed_kv_node_meta_t<node_key_t>{begin, end, depth};
       if (parent_pos) {
         auto &parent = parent_pos->node;
         parent->link_child(&node, parent_pos->pos);
@@ -1099,9 +1245,6 @@ private:
           assert(!root_block->is_pending());
           link_phy_tree_root_node(root_block, &node);
         }
-      }
-      if (c.pins) {
-        c.pins->add_pin(node.pin);
       }
     };
     return c.cache.template get_absent_extent<internal_node_t>(
@@ -1119,7 +1262,7 @@ private:
         *ret);
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
-      if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
+      if (!ret->is_pending() && !ret->is_linked()) {
         assert(ret->is_dirty()
           || (is_backref_node(ret->get_type())
             && ret->is_clean()));
@@ -1161,8 +1304,8 @@ private:
                       parent_pos=std::move(parent_pos)]
                       (leaf_node_t &node) {
       assert(!node.is_pending());
-      assert(!node.pin.is_linked());
-      node.pin.set_range(fixed_kv_node_meta_t<node_key_t>{begin, end, 1});
+      assert(!node.is_linked());
+      node.range = fixed_kv_node_meta_t<node_key_t>{begin, end, 1};
       if (parent_pos) {
         auto &parent = parent_pos->node;
         parent->link_child(&node, parent_pos->pos);
@@ -1176,9 +1319,6 @@ private:
           assert(!root_block->is_pending());
           link_phy_tree_root_node(root_block, &node);
         }
-      }
-      if (c.pins) {
-        c.pins->add_pin(node.pin);
       }
     };
     return c.cache.template get_absent_extent<leaf_node_t>(
@@ -1196,7 +1336,7 @@ private:
         *ret);
       // This can only happen during init_cached_extent
       // or when backref extent being rewritten by gc space reclaiming
-      if (c.pins && !ret->is_pending() && !ret->pin.is_linked()) {
+      if (!ret->is_pending() && !ret->is_linked()) {
         assert(ret->is_dirty()
           || (is_backref_node(ret->get_type())
             && ret->is_clean()));
@@ -1625,7 +1765,7 @@ private:
       fixed_kv_node_meta_t<node_key_t> meta{
         min_max_t<node_key_t>::min, min_max_t<node_key_t>::max, iter.get_depth() + 1};
       nroot->set_meta(meta);
-      nroot->pin.set_range(meta);
+      nroot->range = meta;
       nroot->journal_insert(
         nroot->begin(),
         min_max_t<node_key_t>::min,

@@ -35,7 +35,7 @@ template <
   bool leaf_has_children>
 class FixedKVBtree;
 template <typename, typename>
-class BtreeNodePin;
+class BtreeNodeMapping;
 
 // #define DEBUG_CACHED_EXTENT_REF
 #ifdef DEBUG_CACHED_EXTENT_REF
@@ -721,7 +721,8 @@ protected:
   friend class crimson::os::seastore::TransactionManager;
   friend class crimson::os::seastore::ExtentPlacementManager;
   template <typename, typename>
-  friend class BtreeNodePin;
+  friend class BtreeNodeMapping;
+  friend class ::btree_lba_manager_test;
 };
 
 std::ostream &operator<<(std::ostream &, CachedExtent::extent_state_t);
@@ -919,21 +920,19 @@ struct get_child_ret_t {
 };
 
 template <typename key_t, typename>
-class PhysicalNodePin;
+class PhysicalNodeMapping;
 
 template <typename key_t, typename val_t>
-using PhysicalNodePinRef = std::unique_ptr<PhysicalNodePin<key_t, val_t>>;
+using PhysicalNodeMappingRef = std::unique_ptr<PhysicalNodeMapping<key_t, val_t>>;
 
 template <typename key_t, typename val_t>
-class PhysicalNodePin {
+class PhysicalNodeMapping {
 public:
-  virtual void link_extent(LogicalCachedExtent *ref) = 0;
-  virtual void take_pin(PhysicalNodePin<key_t, val_t> &pin) = 0;
   virtual extent_len_t get_length() const = 0;
   virtual extent_types_t get_type() const = 0;
   virtual val_t get_val() const = 0;
   virtual key_t get_key() const = 0;
-  virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
+  virtual PhysicalNodeMappingRef<key_t, val_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
   virtual uint16_t get_pos() const = 0;
@@ -946,24 +945,24 @@ public:
     child_pos->link_child(c);
   }
 
-  virtual ~PhysicalNodePin() {}
+  virtual ~PhysicalNodeMapping() {}
 protected:
   std::optional<child_pos_t> child_pos = std::nullopt;
 };
 
-using LBAPin = PhysicalNodePin<laddr_t, paddr_t>;
-using LBAPinRef = PhysicalNodePinRef<laddr_t, paddr_t>;
+using LBAMapping = PhysicalNodeMapping<laddr_t, paddr_t>;
+using LBAMappingRef = PhysicalNodeMappingRef<laddr_t, paddr_t>;
 
-std::ostream &operator<<(std::ostream &out, const LBAPin &rhs);
+std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs);
 
-using lba_pin_list_t = std::list<LBAPinRef>;
+using lba_pin_list_t = std::list<LBAMappingRef>;
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs);
 
-using BackrefPin = PhysicalNodePin<paddr_t, laddr_t>;
-using BackrefPinRef = PhysicalNodePinRef<paddr_t, laddr_t>;
+using BackrefMapping = PhysicalNodeMapping<paddr_t, laddr_t>;
+using BackrefMappingRef = PhysicalNodeMappingRef<paddr_t, laddr_t>;
 
-using backref_pin_list_t = std::list<BackrefPinRef>;
+using backref_pin_list_t = std::list<BackrefMappingRef>;
 
 /**
  * RetiredExtentPlaceholder
@@ -1095,20 +1094,8 @@ public:
     : ChildableCachedExtent(std::forward<T>(t)...)
   {}
 
-  void set_pin(LBAPinRef &&npin) {
-    assert(!pin);
-    pin = std::move(npin);
-    laddr = pin->get_key();
-    pin->link_extent(this);
-  }
-
-  bool has_pin() const {
-    return !!pin;
-  }
-
-  LBAPin &get_pin() {
-    assert(pin);
-    return *pin;
+  bool has_laddr() const {
+    return laddr != L_ADDR_NULL;
   }
 
   laddr_t get_laddr() const {
@@ -1147,15 +1134,11 @@ protected:
   void on_delta_write(paddr_t record_block_offset) final {
     assert(is_exist_mutation_pending() ||
 	   get_prior_instance());
-    if (get_prior_instance()) {
-      pin->take_pin(*(get_prior_instance()->cast<LogicalCachedExtent>()->pin));
-    }
     logical_on_delta_write();
   }
 
 private:
   laddr_t laddr = L_ADDR_NULL;
-  LBAPinRef pin;
 
   template <
     typename node_key_t,
@@ -1222,5 +1205,5 @@ using lextent_list_t = addr_extent_list_base_t<
 template <> struct fmt::formatter<crimson::os::seastore::lba_pin_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::CachedExtent> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::LogicalCachedExtent> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::LBAPin> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::LBAMapping> : fmt::ostream_formatter {};
 #endif

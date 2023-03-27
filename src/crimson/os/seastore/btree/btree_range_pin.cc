@@ -8,7 +8,7 @@ namespace crimson::os::seastore {
 
 template <typename key_t, typename val_t>
 get_child_ret_t<LogicalCachedExtent>
-BtreeNodePin<key_t, val_t>::get_logical_extent(
+BtreeNodeMapping<key_t, val_t>::get_logical_extent(
   Transaction &t)
 {
   assert(parent);
@@ -22,7 +22,6 @@ BtreeNodePin<key_t, val_t>::get_logical_extent(
   return v;
 }
 
-template class BtreeNodePin<laddr_t, paddr_t>;
-template class BtreeNodePin<paddr_t, laddr_t>;
-
+template class BtreeNodeMapping<laddr_t, paddr_t>;
+template class BtreeNodeMapping<paddr_t, laddr_t>;
 } // namespace crimson::os::seastore

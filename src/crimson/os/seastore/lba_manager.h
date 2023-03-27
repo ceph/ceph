@@ -62,7 +62,7 @@ public:
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<LBAPinRef>;
+  using get_mapping_ret = get_mapping_iertr::future<LBAMappingRef>;
   virtual get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) = 0;
@@ -72,10 +72,10 @@ public:
    *
    * Offset will be relative to the block offset of the record
    * This mapping will block from transaction submission until set_paddr
-   * is called on the LBAPin.
+   * is called on the LBAMapping.
    */
   using alloc_extent_iertr = base_iertr;
-  using alloc_extent_ret = alloc_extent_iertr::future<LBAPinRef>;
+  using alloc_extent_ret = alloc_extent_iertr::future<LBAMappingRef>;
   virtual alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
@@ -110,17 +110,9 @@ public:
     Transaction &t,
     laddr_t addr) = 0;
 
-  virtual void complete_transaction(
-    Transaction &t,
-    std::vector<CachedExtentRef> &to_clear,	///< extents whose pins are to be cleared,
-						//   as the results of their retirements
-    std::vector<CachedExtentRef> &to_link	///< fresh extents whose pins are to be inserted
-						//   into backref manager's pin set
-  ) = 0;
-
   /**
    * Should be called after replay on each cached extent.
-   * Implementation must initialize the LBAPin on any
+   * Implementation must initialize the LBAMapping on any
    * LogicalCachedExtent's and may also read in any dependent
    * structures, etc.
    *
@@ -199,8 +191,6 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) = 0;
-
-  virtual void add_pin(LBAPin &pin) = 0;
 
   virtual ~LBAManager() {}
 };

@@ -74,12 +74,6 @@ void unlink_phy_tree_root_node<paddr_t>(RootBlockRef &root_block) {
 
 namespace crimson::os::seastore::backref {
 
-static depth_t get_depth(const CachedExtent &e)
-{
-  assert(is_backref_node(e.get_type()));
-  return e.cast<BackrefNode>()->get_node_meta().depth;
-}
-
 BtreeBackrefManager::mkfs_ret
 BtreeBackrefManager::mkfs(
   Transaction &t)
@@ -106,7 +100,7 @@ BtreeBackrefManager::get_mapping(
   LOG_PREFIX(BtreeBackrefManager::get_mapping);
   TRACET("{}", t, offset);
   auto c = get_context(t);
-  return with_btree_ret<BackrefBtree, BackrefPinRef>(
+  return with_btree_ret<BackrefBtree, BackrefMappingRef>(
     cache,
     c,
     [c, offset](auto &btree) {
@@ -544,40 +538,6 @@ BtreeBackrefManager::remove_mapping(
 	});
       });
     });
-}
-
-void BtreeBackrefManager::complete_transaction(
-  Transaction &t,
-  std::vector<CachedExtentRef> &to_clear,
-  std::vector<CachedExtentRef> &to_link)
-{
-  LOG_PREFIX(BtreeBackrefManager::complete_transaction);
-  DEBUGT("start", t);
-  // need to call check_parent from leaf->parent
-  std::sort(
-    to_clear.begin(), to_clear.end(),
-    [](auto &l, auto &r) { return get_depth(*l) < get_depth(*r); });
-
-  for (auto &e: to_clear) {
-    auto &pin = e->cast<BackrefNode>()->pin;
-    DEBUGT("retiring extent {} -- {}", t, pin, *e);
-    pin_set.retire(pin);
-  }
-
-  std::sort(
-    to_link.begin(), to_link.end(),
-    [](auto &l, auto &r) -> bool { return get_depth(*l) > get_depth(*r); });
-
-  for (auto &e : to_link) {
-    DEBUGT("linking extent -- {}", t, *e);
-    pin_set.add_pin(e->cast<BackrefNode>()->pin);
-  }
-
-  for (auto &e: to_clear) {
-    auto &pin = e->cast<BackrefNode>()->pin;
-    TRACET("checking extent {} -- {}", t, pin, *e);
-    pin_set.check_parent(pin);
-  }
 }
 
 Cache::backref_entry_query_mset_t

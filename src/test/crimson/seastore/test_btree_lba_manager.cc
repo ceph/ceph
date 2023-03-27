@@ -328,23 +328,7 @@ struct btree_lba_manager_test : btree_test_base {
 
   btree_lba_manager_test() = default;
 
-  void complete_commit(Transaction &t) final {
-    std::vector<CachedExtentRef> lba_to_clear;
-    lba_to_clear.reserve(t.get_retired_set().size());
-    for (auto &e: t.get_retired_set()) {
-      if (e->is_logical() || is_lba_node(e->get_type()))
-	lba_to_clear.push_back(e);
-    }
-    std::vector<CachedExtentRef> lba_to_link;
-    lba_to_link.reserve(t.get_fresh_block_stats().num);
-    t.for_each_fresh_block([&](auto &e) {
-      if (e->is_valid() &&
-	  (is_lba_node(e->get_type()) || e->is_logical()))
-	  lba_to_link.push_back(e);
-    });
-
-    lba_manager->complete_transaction(t, lba_to_clear, lba_to_link);
-  }
+  void complete_commit(Transaction &t) final {}
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
     lba_manager.reset(new BtreeLBAManager(*cache));
