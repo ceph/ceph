@@ -42,7 +42,7 @@ public:
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
-  using get_mapping_ret = get_mapping_iertr::future<BackrefPinRef>;
+  using get_mapping_ret = get_mapping_iertr::future<BackrefMappingRef>;
   virtual get_mapping_ret  get_mapping(
     Transaction &t,
     paddr_t offset) = 0;
@@ -62,7 +62,7 @@ public:
    * Insert new paddr_t -> laddr_t mapping
    */
   using new_mapping_iertr = base_iertr;
-  using new_mapping_ret = new_mapping_iertr::future<BackrefPinRef>;
+  using new_mapping_ret = new_mapping_iertr::future<BackrefMappingRef>;
   virtual new_mapping_ret new_mapping(
     Transaction &t,
     paddr_t key,
@@ -139,17 +139,6 @@ public:
   virtual scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
     scan_mapped_space_func_t &&f) = 0;
-
-  virtual void complete_transaction(
-    Transaction &t,
-    std::vector<CachedExtentRef> &to_clear,	///< extents whose pins are to be cleared,
-						//   as the results of their retirements
-    std::vector<CachedExtentRef> &to_link	///< fresh extents whose pins are to be inserted
-						//   into backref manager's pin set
-  ) = 0;
-
-  virtual void add_pin(BackrefPin &pin) = 0;
-  virtual void remove_pin(BackrefPin &pin) = 0;
 
   virtual ~BackrefManager() {}
 };

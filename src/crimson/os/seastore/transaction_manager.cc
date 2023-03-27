@@ -377,30 +377,6 @@ TransactionManager::do_submit_transaction(
 	  backref_to_clear.push_back(e);
       }
 
-      // ...but add_pin from parent->leaf
-      std::vector<CachedExtentRef> lba_to_link;
-      std::vector<CachedExtentRef> backref_to_link;
-      lba_to_link.reserve(tref.get_fresh_block_stats().num +
-			  tref.get_existing_block_stats().valid_num);
-      backref_to_link.reserve(tref.get_fresh_block_stats().num);
-      tref.for_each_fresh_block([&](auto &e) {
-	if (e->is_valid()) {
-	  if (is_lba_node(e->get_type()) || e->is_logical())
-	    lba_to_link.push_back(e);
-	  else if (is_backref_node(e->get_type()))
-	    backref_to_link.push_back(e);
-	}
-      });
-
-      for (auto &e: tref.get_existing_block_list()) {
-	if (e->is_valid()) {
-	  lba_to_link.push_back(e);
-	}
-      }
-
-      lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
-      backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
-
       journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
@@ -473,7 +449,6 @@ TransactionManager::rewrite_logical_extent(
     lextent->get_length(),
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
-  nlextent->set_pin(lextent->get_pin().duplicate());
   nlextent->set_modify_time(lextent->get_modify_time());
 
   DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
@@ -581,7 +556,7 @@ TransactionManager::get_extents_if_live(
           return trans_intr::parallel_for_each(
             pin_list,
             [=, this, &list, &t](
-              LBAPinRef &pin) -> Cache::get_extent_iertr::future<>
+              LBAMappingRef &pin) -> Cache::get_extent_iertr::future<>
           {
             auto pin_paddr = pin->get_val();
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
