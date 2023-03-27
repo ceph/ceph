@@ -109,7 +109,7 @@ void intercept(Breakpoint bp,
                bp_type_t type,
                SocketConnection& conn,
                Interceptor *interceptor,
-               SocketRef& socket) {
+               Socket *socket) {
   if (interceptor) {
     auto action = interceptor->intercept(conn, Breakpoint(bp));
     socket->set_trap(type, action, &interceptor->blocker);
