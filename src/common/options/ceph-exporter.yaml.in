@@ -52,15 +52,3 @@ options:
   - ceph-exporter
   flags:
   - runtime
-- name: exporter_get_labeled_counters
-  type: bool
-  level: advanced
-  desc: If true will fetch and export labeled performance counters
-  long_desc: Ceph perf counters now support labels to provide fine-grained
-    stats using ``counter dump`` command and exporter can fetch these counters
-    and add the labels in Prometheus format.
-  default: true
-  services:
-  - ceph-exporter
-  flags:
-  - runtime
