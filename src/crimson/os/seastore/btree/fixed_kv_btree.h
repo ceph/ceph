@@ -525,7 +525,7 @@ public:
             return handle_split(
               c, ret
             ).si_then([c, laddr, val, &ret] {
-              if (!ret.leaf.node->is_pending()) {
+              if (!ret.leaf.node->is_mutable()) {
                 CachedExtentRef mut = c.cache.duplicate_for_write(
                   c.trans, ret.leaf.node
                 );
@@ -581,7 +581,7 @@ public:
       "update element at {}",
       c.trans,
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
-    if (!iter.leaf.node->is_pending()) {
+    if (!iter.leaf.node->is_mutable()) {
       CachedExtentRef mut = c.cache.duplicate_for_write(
         c.trans, iter.leaf.node
       );
@@ -622,7 +622,7 @@ public:
     return seastar::do_with(
       iter,
       [this, c](auto &ret) {
-        if (!ret.leaf.node->is_pending()) {
+        if (!ret.leaf.node->is_mutable()) {
           CachedExtentRef mut = c.cache.duplicate_for_write(
             c.trans, ret.leaf.node
           );
@@ -1460,7 +1460,7 @@ private:
 
     for (; split_from > 0; --split_from) {
       auto &parent_pos = iter.get_internal(split_from + 1);
-      if (!parent_pos.node->is_pending()) {
+      if (!parent_pos.node->is_mutable()) {
         parent_pos.node = c.cache.duplicate_for_write(
           c.trans, parent_pos.node
         )->template cast<internal_node_t>();
@@ -1632,7 +1632,7 @@ private:
     node_position_t<NodeType> &pos)
   {
     LOG_PREFIX(FixedKVBtree::merge_level);
-    if (!parent_pos.node->is_pending()) {
+    if (!parent_pos.node->is_mutable()) {
       parent_pos.node = c.cache.duplicate_for_write(
         c.trans, parent_pos.node
       )->template cast<internal_node_t>();
