@@ -38,6 +38,9 @@ import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zo
 import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 import { RgwSystemUserComponent } from './rgw-system-user/rgw-system-user.component';
 import { RgwMultisiteMigrateComponent } from './rgw-multisite-migrate/rgw-multisite-migrate.component';
+import { RgwMultisiteImportComponent } from './rgw-multisite-import/rgw-multisite-import.component';
+import { RgwMultisiteExportComponent } from './rgw-multisite-export/rgw-multisite-export.component';
+import { CreateRgwServiceEntitiesComponent } from './create-rgw-service-entities/create-rgw-service-entities.component';
 
 @NgModule({
   imports: [
@@ -85,7 +88,10 @@ import { RgwMultisiteMigrateComponent } from './rgw-multisite-migrate/rgw-multis
     RgwMultisiteZoneDeletionFormComponent,
     RgwMultisiteZonegroupDeletionFormComponent,
     RgwSystemUserComponent,
-    RgwMultisiteMigrateComponent
+    RgwMultisiteMigrateComponent,
+    RgwMultisiteImportComponent,
+    RgwMultisiteExportComponent,
+    CreateRgwServiceEntitiesComponent
   ]
 })
 export class RgwModule {}

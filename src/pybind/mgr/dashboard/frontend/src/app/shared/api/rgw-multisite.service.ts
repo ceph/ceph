@@ -1,7 +1,7 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { RgwDaemonService } from './rgw-daemon.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
+import { RgwDaemonService } from './rgw-daemon.service';
 
 @Injectable({
   providedIn: 'root'
@@ -9,25 +9,20 @@ import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multi
 export class RgwMultisiteService {
   private url = 'ui-api/rgw/multisite';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(private http: HttpClient, public rgwDaemonService: RgwDaemonService) {}
 
-  getMultisiteSyncStatus() {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get(`${this.url}/sync_status`);
-    });
-  }
-
-  migrate(realm: RgwRealm, zonegroup: RgwZonegroup, zone: RgwZone, user: string) {
-    return this.rgwDaemonService.request((requestBody: any) => {
-      requestBody = {
+  migrate(realm: RgwRealm, zonegroup: RgwZonegroup, zone: RgwZone) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
         realm_name: realm.name,
         zonegroup_name: zonegroup.name,
         zone_name: zone.name,
         zonegroup_endpoints: zonegroup.endpoints,
         zone_endpoints: zone.endpoints,
-        user: user
-      };
-      return this.http.put(`${this.url}/migrate`, requestBody);
+        access_key: zone.system_key.access_key,
+        secret_key: zone.system_key.secret_key
+      });
+      return this.http.put(`${this.url}/migrate`, null, { params: params });
     });
   }
 }
