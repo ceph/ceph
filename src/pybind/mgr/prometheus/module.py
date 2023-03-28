@@ -10,6 +10,7 @@ import threading
 import time
 import enum
 from collections import namedtuple
+from datetime import datetime
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
@@ -114,6 +115,8 @@ RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version', 'instance_id')
 
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
+
+RBD_MIRROR_SCHEDULE = ('pool', 'namespace', 'image')
 
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance', 'devices', 'device_ids')
@@ -738,6 +741,20 @@ class Module(MgrModule):
             RBD_MIRROR_METADATA
         )
 
+        metrics['rbd_mirror_schedule_interval'] = Metric(
+            'gauge',
+            'rbd_mirror_schedule_interval',
+            'RBD Mirror Schedule Interval',
+            RBD_MIRROR_SCHEDULE
+        )
+
+        metrics['rbd_mirror_next_snapshot'] = Metric(
+            'gauge',
+            'rbd_mirror_next_snapshot',
+            'RBD Mirror Schedule Interval',
+            RBD_MIRROR_SCHEDULE
+        )
+
         metrics['pg_total'] = Metric(
             'gauge',
             'pg_total',
@@ -960,6 +977,65 @@ class Module(MgrModule):
         blocklist_count = blocklist_entries[1]
         for stat in OSD_BLOCKLIST:
             self.metrics['cluster_{}'.format(stat)].set(int(blocklist_count))
+
+class test:
+    @profile_method()
+    def get_mirror_schedule(self) -> None:
+        prefix_list = "rbd mirror snapshot schedule list"
+        prefix_status = "rbd mirror snapshot schedule status"
+        format = "json"
+
+        r = self.mon_command({"prefix": prefix_list, "format": format})
+        if not r[0]:
+            schedules = json.loads(r[1])
+            for key, value in schedules.items():
+                parts = key.split("/")
+                if len(parts) == 1:  # global pool
+                    pool_id = parts[0]
+                    namespace = ""
+                    image_id = ""
+                elif len(parts) == 2:  # pool and namespace
+                    pool_id, namespace = parts
+                    image_id = ""
+                else:  # pool, namespace, and image
+                    pool_id, namespace, image_id = parts
+                interval = value["schedule"][0]["interval"]
+
+                match = re.match(r"^(\d+)(d|h|m)?$", interval)
+                if not match:
+                    raise ValueError("Invalid interval ({})".format(interval))
+                minutes = int(match.group(1))
+                if match.group(2) == "d":
+                    minutes *= 60 * 24
+                elif match.group(2) == "h":
+                    minutes *= 60
+
+                self.metrics["rbd_mirror_schedule_interval"].set(
+                    minutes, (pool_id, namespace, image_id)
+                )
+        else:
+            raise ValueError(f"failed to get mirror schedule: {r[2]}")
+
+        r = self.mon_command({"prefix": prefix_status, "format": format})
+        if not r[0]:
+            schedules = json.loads(r[1])
+            for image in schedules["scheduled_images"]:
+                parts = image["image"].split("/")
+                if len(parts) == 2:  # pool and image
+                    pool_name, image_name = parts
+                    namespace = ""
+                else:  # pool, namespace, and image
+                    pool_name, namespace, image_name = parts
+
+                schedule_time_str = image["schedule_time"]
+                schedule_time = datetime.strptime(
+                    schedule_time_str, "%Y-%m-%d %H:%M:%S"
+                )
+                self.metrics["rbd_mirror_next_snapshot"].set(
+                    int(schedule_time.timestamp()), (pool_name, namespace, image_name)
+                )
+        else:
+            raise ValueError(f"failed to get mirror schedule status : {r[2]}")
 
     @profile_method()
     def get_fs(self) -> None:
@@ -1637,6 +1713,7 @@ class Module(MgrModule):
         self.get_pool_repaired_objects()
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
+        self.get_mirror_schedule()
 
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
