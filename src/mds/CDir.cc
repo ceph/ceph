@@ -1909,7 +1909,8 @@ CDentry *CDir::_load_dentry(
   } else if (type == 'r') {
     // hard link with referent inode
     InodeStore inode_data;
-    inodeno_t ino;
+    inodeno_t remote_ino;
+    inodeno_t referent_ino;
     unsigned char d_type;
     mempool::mds_co::string alternate_name;
 
@@ -1922,7 +1923,8 @@ CDentry *CDir::_load_dentry(
     DECODE_FINISH(q);
 
     //Fill in remote inode details
-    ino = inode_data.inode->remote_ino;
+    remote_ino = inode_data.inode->remote_ino;
+    referent_ino = inode_data.inode->ino;
     d_type = IFTODT(inode_data.inode->mode);
 
     //TODO - Referent CInode is not loaded.
@@ -1940,7 +1942,7 @@ CDentry *CDir::_load_dentry(
       if (committed_version == 0 &&
 	  dnl->is_referent() &&
 	  dn->is_dirty() &&
-	  ino == dnl->get_remote_ino() &&
+	  remote_ino == dnl->get_remote_ino() &&
 	  d_type == dnl->get_remote_d_type() &&
           alternate_name == dn->get_alternate_name()) {
 	// see comment below
@@ -1949,15 +1951,48 @@ CDentry *CDir::_load_dentry(
       }
     } else {
       // (remote) link
-      dn = add_remote_dentry(dname, ino, d_type, std::move(alternate_name), first, last);
+      dn = add_remote_dentry(dname, remote_ino, d_type, std::move(alternate_name), first, last);
+
+      // referent inode
+      bool ref_in_found = false;
+      CInode *ref_in = mdcache->get_inode(referent_ino, last);
+      if (ref_in) {
+	ref_in->first = first;
+	ref_in_found = true;
+      } else {
+        ref_in = new CInode(mdcache, true, first, last);
+      }
+
+      ref_in->reset_inode(std::move(inode_data.inode));
+      ref_in->reset_xattrs(std::move(inode_data.xattrs));
+      //Ignore snap related stuff for referent inode
+      /*
+      in->dirfragtree.swap(inode_data.dirfragtree);
+      in->reset_old_inodes(std::move(inode_data.old_inodes));
+      if (in->is_any_old_inodes()) {
+        snapid_t min_first = in->get_old_inodes()->rbegin()->first + 1;
+        if (min_first > in->first)
+          in->first = min_first;
+      }
+
+      in->oldest_snap = inode_data.oldest_snap;
+      in->decode_snap_blob(inode_data.snap_blob);
+      if (snaps && !in->snaprealm)
+        in->purge_stale_snap_data(*snaps);
+      */
+      if (!ref_in_found) {
+        mdcache->add_inode(ref_in); // add
+        ref_in->set_primary_parent(dn);
+      }
 
       // link to inode?
-      CInode *in = mdcache->get_inode(ino);   // we may or may not have it.
-      if (in) {
-        dn->link_remote(dn->get_linkage(), in);
-        dout(12) << "_fetched  got remote link " << ino << " which we have " << *in << dendl;
+      CInode *remote_in = mdcache->get_inode(remote_ino);   // we may or may not have it.
+      if (remote_in) {
+        dn->link_remote(dn->get_linkage(), remote_in, ref_in);
+        dout(12) << "_fetched  got remote link " << remote_ino << " which we have " << *remote_in << dendl;
       } else {
-        dout(12) << "_fetched  got remote link " << ino << " (don't have it)" << dendl;
+        dout(12) << "_fetched  got remote link " << remote_ino << " (don't have it)" << dendl;
+	dn->get_linkage()->ref_inode = ref_in;
       }
     }
   } else if (type == 'I' || type == 'i') {

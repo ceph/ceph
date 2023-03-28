@@ -271,14 +271,19 @@ void CDentry::make_path(filepath& fp, bool projected) const
  * active (no longer projected).  if the passed dnl is projected,
  * don't link in, and do that work later in pop_projected_linkage().
  */
-void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
+void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *remote_in, CInode *ref_in)
 {
   ceph_assert(dnl->is_remote() || dnl->is_referent());
-  ceph_assert(in->ino() == dnl->get_remote_ino());
-  dnl->inode = in;
+  ceph_assert(remote_in->ino() == dnl->get_remote_ino());
+  dnl->inode = remote_in;
+
+  if (ref_in) {
+    ceph_assert(ref_in->get_remote_ino() == dnl->get_remote_ino());
+    dnl->ref_inode = ref_in;
+  }
 
   if (dnl == &linkage)
-    in->add_remote_parent(this);
+    remote_in->add_remote_parent(this);
 
   // check for reintegration
   dir->mdcache->eval_remote(this);

@@ -262,7 +262,7 @@ public:
   int get_num_dir_auth_pins() const;
   
   // remote links
-  void link_remote(linkage_t *dnl, CInode *in);
+  void link_remote(linkage_t *dnl, CInode *remote_in, CInode *ref_in=nullptr);
   void unlink_remote(linkage_t *dnl);
   
   // copy cons
