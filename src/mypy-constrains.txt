@@ -2,7 +2,7 @@
 # Unfortunately this means we have to manually update those 
 # packages regularly. 
 
-mypy==0.901
+mypy==0.981
 
 # global
 types-python-dateutil==0.1.3
