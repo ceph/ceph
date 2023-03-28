@@ -17,12 +17,14 @@ import { RgwRealm } from '../models/rgw-multisite';
 export class RgwMultisiteRealmFormComponent implements OnInit {
   action: string;
   multisiteRealmForm: CdFormGroup;
+  info: any;
   editing = false;
   resource: string;
   multisiteInfo: object[] = [];
   realm: RgwRealm;
   realmList: RgwRealm[] = [];
   realmNames: string[];
+  newRealmName: string;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -42,7 +44,11 @@ export class RgwMultisiteRealmFormComponent implements OnInit {
         validators: [
           Validators.required,
           CdValidators.custom('uniqueName', (realmName: string) => {
-            return this.realmNames && this.realmNames.indexOf(realmName) !== -1;
+            return (
+              this.action === 'create' &&
+              this.realmNames &&
+              this.realmNames.indexOf(realmName) !== -1
+            );
           })
         ]
       }),
@@ -58,23 +64,47 @@ export class RgwMultisiteRealmFormComponent implements OnInit {
     this.realmNames = this.realmList.map((realm) => {
       return realm['name'];
     });
+    if (this.action === 'edit') {
+      this.multisiteRealmForm.get('realmName').setValue(this.info.data.name);
+      this.multisiteRealmForm.get('default_realm').setValue(this.info.data.is_default);
+      if (this.info.data.is_default) {
+        this.multisiteRealmForm.get('default_realm').disable();
+      }
+    }
   }
 
   submit() {
     const values = this.multisiteRealmForm.value;
     this.realm = new RgwRealm();
-    this.realm.name = values['realmName'];
-    this.rgwRealmService.create(this.realm, values['default_realm']).subscribe(
-      () => {
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`Realm: '${values['realmName']}' created successfully`
-        );
-        this.activeModal.close();
-      },
-      () => {
-        this.multisiteRealmForm.setErrors({ cdSubmitButton: true });
-      }
-    );
+    if (this.action === 'create') {
+      this.realm.name = values['realmName'];
+      this.rgwRealmService.create(this.realm, values['default_realm']).subscribe(
+        () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Realm: '${values['realmName']}' created successfully`
+          );
+          this.activeModal.close();
+        },
+        () => {
+          this.multisiteRealmForm.setErrors({ cdSubmitButton: true });
+        }
+      );
+    } else if (this.action === 'edit') {
+      this.realm.name = this.info.data.name;
+      this.newRealmName = values['realmName'];
+      this.rgwRealmService.update(this.realm, values['default_realm'], this.newRealmName).subscribe(
+        () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Realm: '${values['realmName']}' updated successfully`
+          );
+          this.activeModal.close();
+        },
+        () => {
+          this.multisiteRealmForm.setErrors({ cdSubmitButton: true });
+        }
+      );
+    }
   }
 }
