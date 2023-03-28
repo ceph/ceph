@@ -79,4 +79,15 @@ export class RgwDaemonService {
       })
     );
   }
+
+  setMultisiteConfig(realm_name: string, zonegroup_name: string, zone_name: string) {
+    return this.request((params: HttpParams) => {
+      params = params.appendAll({
+        realm_name: realm_name,
+        zonegroup_name: zonegroup_name,
+        zone_name: zone_name
+      });
+      return this.http.put(`${this.url}/set_multisite_config`, null, { params: params });
+    });
+  }
 }

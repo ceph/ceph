@@ -24,6 +24,8 @@ export class AlertPanelComponent implements OnInit {
   showTitle = true;
   @Input()
   dismissible = false;
+  @Input()
+  spacingClass = '';
 
   /**
    * The event that is triggered when the close button (x) has been

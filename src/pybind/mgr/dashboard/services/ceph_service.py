@@ -294,6 +294,35 @@ class CephService(object):
         return {}
 
     @classmethod
+    def set_multisite_config(cls, realm_name, zonegroup_name, zone_name, daemon_name):
+        full_daemon_name = 'rgw.' + daemon_name
+
+        KMS_CONFIG = [
+            ['rgw_realm', realm_name],
+            ['rgw_zonegroup', zonegroup_name],
+            ['rgw_zone', zone_name]
+        ]
+
+        for (key, value) in KMS_CONFIG:
+            if value == 'null':
+                continue
+            CephService.send_command('mon', 'config set',
+                                     who=name_to_config_section(full_daemon_name),
+                                     name=key, value=value)
+        return {}
+
+    @classmethod
+    def get_realm_tokens(cls):
+        tokens_info = mgr.remote('rgw', 'get_realm_tokens')
+        return tokens_info
+
+    @classmethod
+    def import_realm_token(cls, realm_token, zone_name):
+        tokens_info = mgr.remote('rgw', 'import_realm_token', zone_name=zone_name,
+                                 realm_token=realm_token, start_radosgw=True)
+        return tokens_info
+
+    @classmethod
     def get_pool_pg_status(cls, pool_name):
         # type: (str) -> dict
         pool = cls.get_pool_by_attribute('pool_name', pool_name)

@@ -11,9 +11,8 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
+import { RgwRealm, RgwZone, RgwZonegroup, SystemKey } from '../models/rgw-multisite';
 import { ModalService } from '~/app/shared/services/modal.service';
-import { RgwSystemUserComponent } from '../rgw-system-user/rgw-system-user.component';
 
 @Component({
   selector: 'cd-rgw-multisite-zone-form',
@@ -55,6 +54,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
   access_key: any;
   master_zonegroup_of_realm: RgwZonegroup;
   compressionTypes = ['lz4', 'zlib', 'snappy'];
+  userListReady: boolean = false;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -87,7 +87,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       default_zone: new FormControl(false),
       master_zone: new FormControl(false),
       selectedZonegroup: new FormControl(null),
-      zone_endpoints: new FormControl([], {
+      zone_endpoints: new FormControl(null, {
         validators: [
           CdValidators.custom('endpoint', (value: string) => {
             if (_.isEmpty(value)) {
@@ -112,7 +112,8 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           Validators.required
         ]
       }),
-      users: new FormControl(null),
+      access_key: new FormControl(null),
+      secret_key: new FormControl(null),
       placementTarget: new FormControl(null),
       placementDataPool: new FormControl(''),
       placementIndexPool: new FormControl(null),
@@ -135,24 +136,6 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
         this.multisiteZoneForm.get('master_zone').setValue(false);
         this.multisiteZoneForm.get('master_zone').disable();
         this.disableMaster = true;
-      }
-      const zonegroupInfo = this.zonegroupList.filter((zgroup: any) => zgroup.name === zg.name)[0];
-      if (zonegroupInfo) {
-        const realm_id = zonegroupInfo.realm_id;
-        this.master_zonegroup_of_realm = this.zonegroupList.filter(
-          (zg: any) => zg.realm_id === realm_id && zg.is_master === true
-        )[0];
-      }
-      if (this.master_zonegroup_of_realm) {
-        this.master_zone_of_master_zonegroup = this.zoneList.filter(
-          (zone: any) => zone.id === this.master_zonegroup_of_realm.master_zone
-        )[0];
-      }
-      if (this.master_zone_of_master_zonegroup) {
-        this.getUserInfo(this.master_zone_of_master_zonegroup);
-      }
-      if (zonegroupInfo.is_master && this.multisiteZoneForm.getValue('master_zone') === true) {
-        this.createSystemUser = true;
       }
     });
     if (
@@ -193,7 +176,9 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.multisiteZoneForm.get('selectedZonegroup').setValue(this.info.data.parent);
       this.multisiteZoneForm.get('default_zone').setValue(this.info.data.is_default);
       this.multisiteZoneForm.get('master_zone').setValue(this.info.data.is_master);
-      this.multisiteZoneForm.get('zone_endpoints').setValue(this.info.data.endpoints);
+      this.multisiteZoneForm.get('zone_endpoints').setValue(this.info.data.endpoints.toString());
+      this.multisiteZoneForm.get('access_key').setValue(this.info.data.access_key);
+      this.multisiteZoneForm.get('secret_key').setValue(this.info.data.secret_key);
       this.multisiteZoneForm
         .get('placementTarget')
         .setValue(this.info.parent.data.default_placement);
@@ -209,9 +194,6 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       const zone = new RgwZone();
       zone.name = this.info.data.name;
       this.onZoneGroupChange(this.info.data.parent);
-      setTimeout(() => {
-        this.getUserInfo(zone);
-      }, 1000);
     }
     if (
       this.multisiteZoneForm.getValue('selectedZonegroup') !==
@@ -220,22 +202,6 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.disableDefault = true;
       this.multisiteZoneForm.get('default_zone').disable();
     }
-  }
-
-  getUserInfo(zone: RgwZone) {
-    this.rgwZoneService
-      .getUserList(this.master_zone_of_master_zonegroup.name)
-      .subscribe((users: any) => {
-        this.users = users.filter((user: any) => user.keys.length !== 0);
-        this.rgwZoneService.get(zone).subscribe((zone: RgwZone) => {
-          const access_key = zone.system_key['access_key'];
-          const user = this.users.filter((user: any) => user.keys[0].access_key === access_key);
-          if (user.length > 0) {
-            this.multisiteZoneForm.get('users').setValue(user[0].user_id);
-          }
-          return user[0].user_id;
-        });
-      });
   }
 
   getZonePlacementData(placementTarget: string) {
@@ -296,20 +262,17 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.zonegroup.name = values['selectedZonegroup'];
       this.zone = new RgwZone();
       this.zone.name = values['zoneName'];
-      this.zone.endpoints = this.checkUrlArray(values['zone_endpoints']);
-      if (this.createSystemUser) {
-        values['users'] = values['zoneName'] + '_User';
-      }
+      this.zone.endpoints = values['zone_endpoints'];
+      this.zone.system_key = new SystemKey();
+      this.zone.system_key.access_key = values['access_key'];
+      this.zone.system_key.secret_key = values['secret_key'];
       this.rgwZoneService
         .create(
           this.zone,
           this.zonegroup,
           values['default_zone'],
           values['master_zone'],
-          this.zone.endpoints,
-          values['users'],
-          this.createSystemUser,
-          this.master_zone_of_master_zonegroup
+          this.zone.endpoints
         )
         .subscribe(
           () => {
@@ -328,10 +291,10 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.zonegroup.name = values['selectedZonegroup'];
       this.zone = new RgwZone();
       this.zone.name = this.info.data.name;
-      this.zone.endpoints =
-        values['zone_endpoints'] === this.info.data.endpoints
-          ? values['zone_endpoints']
-          : this.checkUrlArray(values['zone_endpoints']);
+      this.zone.endpoints = values['zone_endpoints'];
+      this.zone.system_key = new SystemKey();
+      this.zone.system_key.access_key = values['access_key'];
+      this.zone.system_key.secret_key = values['secret_key'];
       this.rgwZoneService
         .update(
           this.zone,
@@ -340,15 +303,13 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           values['default_zone'],
           values['master_zone'],
           this.zone.endpoints,
-          values['users'],
           values['placementTarget'],
           values['placementDataPool'],
           values['placementIndexPool'],
           values['placementDataExtraPool'],
           values['storageClass'],
           values['storageDataPool'],
-          values['storageCompression'],
-          this.master_zone_of_master_zonegroup
+          values['storageCompression']
         )
         .subscribe(
           () => {
@@ -373,15 +334,5 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       endpointsArray.push(endpoints);
     }
     return endpointsArray;
-  }
-
-  CreateSystemUser() {
-    const initialState = {
-      zoneName: this.master_zone_of_master_zonegroup.name
-    };
-    this.bsModalRef = this.modalService.show(RgwSystemUserComponent, initialState);
-    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
-      this.getUserInfo(this.master_zone_of_master_zonegroup);
-    });
   }
 }
