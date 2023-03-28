@@ -848,7 +848,7 @@ class NFSGanesha(object):
     entrypoint = '/usr/bin/ganesha.nfsd'
     daemon_args = ['-F', '-L', 'STDERR']
 
-    required_files = ['ganesha.conf']
+    required_files = ['ganesha.conf', 'idmap.conf']
 
     port_map = {
         'nfs': 2049,
