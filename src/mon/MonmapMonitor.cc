@@ -1212,8 +1212,11 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
 reply:
   getline(ss, rs);
-  mon.reply_command(op, err, rs, get_last_committed());
-  // we are returning to the user; do not propose.
+  if (propose) {
+    wait_for_commit(op, new Monitor::C_Command(mon, op, err, rs, get_last_committed() + 1));
+  } else {
+    mon.reply_command(op, err, rs, get_last_committed());
+  }
   return propose;
 }
 
