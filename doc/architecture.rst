@@ -199,6 +199,8 @@ For details on configuring monitors, see the `Monitor Config Reference`_.
 
 .. index:: architecture; high availability authentication
 
+.. _arch_high_availability_authentication:
+
 High Availability Authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
