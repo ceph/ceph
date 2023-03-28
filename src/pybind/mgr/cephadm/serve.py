@@ -1208,11 +1208,11 @@ class CephadmServe:
                 ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
 
                 if daemon_spec.daemon_type == 'container':
-                    spec = cast(CustomContainerSpec,
-                                self.mgr.spec_store[daemon_spec.service_name].spec)
-                    image = spec.image
-                    if spec.ports:
-                        ports.extend(spec.ports)
+                    custom_container_spec = cast(CustomContainerSpec,
+                                                 self.mgr.spec_store[daemon_spec.service_name].spec)
+                    image = custom_container_spec.image
+                    if custom_container_spec.ports:
+                        ports.extend(custom_container_spec.ports)
 
                 # TCP port to open in the host firewall
                 if len(ports) > 0:
@@ -1229,12 +1229,12 @@ class CephadmServe:
                         raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
                     daemon_spec.extra_args.extend(['--osd-fsid', osd_uuid])
                     if daemon_spec.service_name in self.mgr.spec_store:
-                        spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-                        objectstore = spec.objectstore
+                        osd_spec = cast(DriveGroupSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+                        objectstore = osd_spec.objectstore
                         if objectstore:
-                            daemon_spec.extra_args.extend(['--objectstore', spec.objectstore])
+                            daemon_spec.extra_args.extend(['--objectstore', objectstore])
                             final_conf = daemon_spec.final_config['config']
-                            objectstore_str = '\n\tosd_objectstore = ' + spec.objectstore
+                            objectstore_str = '\n\tosd_objectstore = ' + objectstore
                             index = 0
                             if final_conf.find("[osd]") != -1:
                                 index = final_conf.index("[osd]") + 5
