@@ -12,12 +12,11 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
-from ..services.orchestrator import OrchClient
-from ..services.rgw_client import NoRgwDaemonsException, RgwClient
+from ..services.rgw_client import NoRgwDaemonsException, RgwClient, RgwMultisite
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     CRUDCollectionMethod, CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, \
-    RESTController, UIRouter, allow_empty_body
+    RESTController, UIRouter, UpdatePermission, allow_empty_body
 from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, \
     TableAction, Validator, VerticalContainer
 from ._version import APIVersion
@@ -82,49 +81,31 @@ class Rgw(BaseController):
 
 
 @UIRouter('/rgw/multisite')
-class RgwStatus(BaseController):
+class RgwMultisiteStatus(RESTController):
     @Endpoint()
     @ReadPermission
     # pylint: disable=R0801
     def status(self):
         status = {'available': True, 'message': None}
-        try:
-            instance = RgwClient.admin_instance()
-            is_multisite_configured = instance.get_multisite_status()
-            if not is_multisite_configured:
-                status['available'] = False
-                status['message'] = 'Multi-site provides disaster recovery and may also \
-                    serve as a foundation for content delivery networks'  # type: ignore
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+        multisite_instance = RgwMultisite()
+        is_multisite_configured = multisite_instance.get_multisite_status()
+        if not is_multisite_configured:
+            status['available'] = False
+            status['message'] = 'Multi-site provides disaster recovery and may also \
+                serve as a foundation for content delivery networks'  # type: ignore
         return status
 
-    @Endpoint()
-    @ReadPermission
-    # pylint: disable=R0801
-    def sync_status(self):
-        try:
-            instance = RgwClient.admin_instance()
-            result = instance.get_multisite_sync_status()
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')  # noqa: E501 pylint: disable=line-too-long
-        return result
-
-    @Endpoint(method='PUT')
-    # pylint: disable=W0102
-    def migrate(self, realm_name=None, zonegroup_name=None, zone_name=None,
-                zonegroup_endpoints: List[str] = [], zone_endpoints: List[str] = [],
-                user=None, daemon_name: Optional[str] = None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.migrate_to_multisite(realm_name, zonegroup_name, zone_name,
-                                                   zonegroup_endpoints, zone_endpoints, user)
-            orch = OrchClient.instance()
-            daemons = orch.services.list_daemons(service_name='rgw')
-            for daemon in daemons:
-                orch.daemons.action(action='reload', daemon_name=daemon.daemon_id)
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    @RESTController.Collection(method='PUT', path='/migrate')
+    @allow_empty_body
+    # pylint: disable=W0102,W0613
+    def migrate(self, daemon_name=None, realm_name=None, zonegroup_name=None, zone_name=None,
+                zonegroup_endpoints=None, zone_endpoints=None, access_key=None,
+                secret_key=None):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.migrate_to_multisite(realm_name, zonegroup_name,
+                                                         zone_name, zonegroup_endpoints,
+                                                         zone_endpoints, access_key,
+                                                         secret_key)
         return result
 
 
@@ -186,6 +167,12 @@ class RgwDaemon(RESTController):
         daemon['rgw_metadata'] = metadata
         daemon['rgw_status'] = status
         return daemon
+
+    @RESTController.Collection(method='PUT', path='/set_multisite_config')
+    @allow_empty_body
+    def set_multisite_config(self, realm_name=None, zonegroup_name=None,
+                             zone_name=None, daemon_name=None):
+        CephService.set_multisite_config(realm_name, zonegroup_name, zone_name, daemon_name)
 
 
 class RgwRESTController(RESTController):
@@ -738,61 +725,65 @@ class RgwUserRole(NamedTuple):
 class RgwRealm(RESTController):
     @allow_empty_body
     # pylint: disable=W0613
-    def create(self, realm_name, default, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.create_realm(realm_name, default)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def create(self, realm_name, default):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.create_realm(realm_name, default)
+        return result
 
     @allow_empty_body
     # pylint: disable=W0613
-    def list(self, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.list_realms()
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def list(self):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.list_realms()
+        return result
 
     @allow_empty_body
     # pylint: disable=W0613
-    def get(self, realm_name, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.get_realm(realm_name)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def get(self, realm_name):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_realm(realm_name)
+        return result
 
     @Endpoint()
     @ReadPermission
     def get_all_realms_info(self):
-        try:
-            instance = RgwClient.admin_instance()
-            result = instance.get_all_realms_info()
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_all_realms_info()
+        return result
 
     @allow_empty_body
     # pylint: disable=W0613
-    def set(self, realm_name: str, new_realm_name: str, default: str = '', daemon_name=None):
+    def set(self, realm_name: str, new_realm_name: str, default: str = ''):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.edit_realm(realm_name, new_realm_name, default)
+        return result
+
+    @Endpoint()
+    @ReadPermission
+    def get_realm_tokens(self):
         try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.edit_realm(realm_name, new_realm_name, default)
+            result = CephService.get_realm_tokens()
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
 
-    def delete(self, realm_name, daemon_name=None):
+    @Endpoint(method='POST')
+    @UpdatePermission
+    @allow_empty_body
+    # pylint: disable=W0613
+    def import_realm_token(self, realm_token, zone_name, daemon_name=None):
         try:
-            instance = RgwClient.admin_instance(daemon_name)
-            result = instance.delete_realm(realm_name)
+            multisite_instance = RgwMultisite()
+            result = CephService.import_realm_token(realm_token, zone_name)
+            multisite_instance.update_period()
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
+
+    def delete(self, realm_name):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.delete_realm(realm_name)
+        return result
 
 
 @APIRouter('/rgw/zonegroup', Scope.RGW)
@@ -800,70 +791,54 @@ class RgwZonegroup(RESTController):
     @allow_empty_body
     # pylint: disable=W0613
     def create(self, realm_name, zonegroup_name, default=None, master=None,
-               zonegroup_endpoints=None, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.create_zonegroup(realm_name, zonegroup_name, default,
-                                               master, zonegroup_endpoints)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+               zonegroup_endpoints=None):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.create_zonegroup(realm_name, zonegroup_name, default,
+                                                     master, zonegroup_endpoints)
+        return result
 
     @allow_empty_body
     # pylint: disable=W0613
-    def list(self, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.list_zonegroups()
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def list(self):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.list_zonegroups()
+        return result
 
     @allow_empty_body
     # pylint: disable=W0613
-    def get(self, zonegroup_name, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.get_zonegroup(zonegroup_name)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def get(self, zonegroup_name):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_zonegroup(zonegroup_name)
+        return result
 
     @Endpoint()
     @ReadPermission
     def get_all_zonegroups_info(self):
-        try:
-            instance = RgwClient.admin_instance()
-            result = instance.get_all_zonegroups_info()
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_all_zonegroups_info()
+        return result
 
-    def delete(self, zonegroup_name, delete_pools, pools: Optional[List[str]] = None,
-               daemon_name=None):
+    def delete(self, zonegroup_name, delete_pools, pools: Optional[List[str]] = None):
         if pools is None:
             pools = []
         try:
-            instance = RgwClient.admin_instance(daemon_name)
-            result = instance.delete_zonegroup(zonegroup_name, delete_pools, pools)
+            multisite_instance = RgwMultisite()
+            result = multisite_instance.delete_zonegroup(zonegroup_name, delete_pools, pools)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
 
     @allow_empty_body
     # pylint: disable=W0613,W0102
-    def set(self, zonegroup_name: str, realm_name: str, new_zonegroup_name: str, default: str = '',
-            master: str = '', zonegroup_endpoints: List[str] = [], add_zones: List[str] = [],
-            remove_zones: List[str] = [], placement_targets: List[Dict[str, str]] = [],
-            daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance()
-            result = instance.edit_zonegroup(realm_name, zonegroup_name, new_zonegroup_name,
-                                             default, master, zonegroup_endpoints, add_zones,
-                                             remove_zones, placement_targets)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def set(self, zonegroup_name: str, realm_name: str, new_zonegroup_name: str,
+            default: str = '', master: str = '', zonegroup_endpoints: str = '',
+            add_zones: List[str] = [], remove_zones: List[str] = [],
+            placement_targets: List[Dict[str, str]] = []):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.edit_zonegroup(realm_name, zonegroup_name, new_zonegroup_name,
+                                                   default, master, zonegroup_endpoints, add_zones,
+                                                   remove_zones, placement_targets)
+        return result
 
 
 @APIRouter('/rgw/zone', Scope.RGW)
@@ -871,56 +846,43 @@ class RgwZone(RESTController):
     @allow_empty_body
     # pylint: disable=W0613
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
-               zone_endpoints=None, user=None, createSystemUser=False, daemon_name=None,
-               master_zone_of_master_zonegroup=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.create_zone(zone_name, zonegroup_name, default,
-                                          master, zone_endpoints, user, createSystemUser,
-                                          master_zone_of_master_zonegroup)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+               zone_endpoints=None, access_key=None, secret_key=None):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.create_zone(zone_name, zonegroup_name, default,
+                                                master, zone_endpoints, access_key,
+                                                secret_key)
+        return result
 
     @allow_empty_body
     # pylint: disable=W0613
-    def list(self, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.list_zones()
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def list(self):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.list_zones()
+        return result
 
     @allow_empty_body
     # pylint: disable=W0613
-    def get(self, zone_name, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.get_zone(zone_name)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def get(self, zone_name):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_zone(zone_name)
+        return result
 
     @Endpoint()
     @ReadPermission
     def get_all_zones_info(self):
-        try:
-            instance = RgwClient.admin_instance()
-            result = instance.get_all_zones_info()
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_all_zones_info()
+        return result
 
     def delete(self, zone_name, delete_pools, pools: Optional[List[str]] = None,
-               zonegroup_name=None, daemon_name=None):
+               zonegroup_name=None):
         if pools is None:
             pools = []
         if zonegroup_name is None:
             zonegroup_name = ''
         try:
-            instance = RgwClient.admin_instance(daemon_name)
-            result = instance.delete_zone(zone_name, delete_pools, pools, zonegroup_name)
+            multisite_instance = RgwMultisite()
+            result = multisite_instance.delete_zone(zone_name, delete_pools, pools, zonegroup_name)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
@@ -928,20 +890,17 @@ class RgwZone(RESTController):
     @allow_empty_body
     # pylint: disable=W0613,W0102
     def set(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
-            master: str = '', zone_endpoints: List[str] = [], user: str = '',
+            master: str = '', zone_endpoints: str = '', access_key: str = '', secret_key: str = '',
             placement_target: str = '', data_pool: str = '', index_pool: str = '',
             data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
-            compression: str = '', daemon_name=None, master_zone_of_master_zonegroup=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
-                                        master, zone_endpoints, user, placement_target,
-                                        data_pool, index_pool, data_extra_pool, storage_class,
-                                        data_pool_class, compression,
-                                        master_zone_of_master_zonegroup)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+            compression: str = ''):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
+                                              master, zone_endpoints, access_key, secret_key,
+                                              placement_target, data_pool, index_pool,
+                                              data_extra_pool, storage_class, data_pool_class,
+                                              compression)
+        return result
 
     @Endpoint()
     @ReadPermission
@@ -957,20 +916,14 @@ class RgwZone(RESTController):
 
     @Endpoint('PUT')
     @CreatePermission
-    def create_system_user(self, userName: str, zoneName: str, daemon_name=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.create_system_user(userName, zoneName)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def create_system_user(self, userName: str, zoneName: str):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.create_system_user(userName, zoneName)
+        return result
 
     @Endpoint()
     @ReadPermission
-    def get_user_list(self, daemon_name=None, zoneName=None):
-        try:
-            instance = RgwClient.admin_instance(daemon_name=daemon_name)
-            result = instance.get_user_list(zoneName)
-            return result
-        except NoRgwDaemonsException as e:
-            raise DashboardException(e, http_status_code=404, component='rgw')
+    def get_user_list(self, zoneName=None):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_user_list(zoneName)
+        return result

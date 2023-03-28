@@ -191,29 +191,18 @@ describe('ServiceFormComponent', () => {
         formHelper.expectValid('service_id');
       });
 
-      it('should test rgw invalid service id', () => {
-        formHelper.setValue('service_id', '.');
-        formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'svc.');
-        formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'svc.realm');
-        formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'svc.realm.');
-        formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', '.svc.realm');
-        formHelper.expectError('service_id', 'rgwPattern');
-        formHelper.setValue('service_id', 'svc.realm.zone.');
-        formHelper.expectError('service_id', 'rgwPattern');
-      });
-
-      it('should submit rgw with realm and zone', () => {
-        formHelper.setValue('service_id', 'svc.my-realm.my-zone');
+      it('should submit rgw with realm, zonegroup and zone', () => {
+        formHelper.setValue('service_id', 'svc');
+        formHelper.setValue('realm_name', 'my-realm');
+        formHelper.setValue('zone_name', 'my-zone');
+        formHelper.setValue('zonegroup_name', 'my-zonegroup');
         component.onSubmit();
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'rgw',
           service_id: 'svc',
           rgw_realm: 'my-realm',
           rgw_zone: 'my-zone',
+          rgw_zonegroup: 'my-zonegroup',
           placement: {},
           unmanaged: false,
           ssl: false
@@ -227,6 +216,9 @@ describe('ServiceFormComponent', () => {
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'rgw',
           service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
           placement: {},
           unmanaged: false,
           rgw_frontend_port: 1234,
@@ -271,6 +263,9 @@ describe('ServiceFormComponent', () => {
         expect(cephServiceService.create).toHaveBeenCalledWith({
           service_type: 'rgw',
           service_id: 'svc',
+          rgw_realm: null,
+          rgw_zone: null,
+          rgw_zonegroup: null,
           placement: {},
           unmanaged: false,
           ssl: false
