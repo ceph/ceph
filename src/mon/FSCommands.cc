@@ -93,6 +93,10 @@ class FailHandler : public FileSystemCommandHandler
   {
   }
 
+  bool batched_propose() override {
+    return true;
+  }
+
   int handle(
       Monitor* mon,
       FSMap& fsmap,
@@ -320,6 +324,10 @@ public:
   SetHandler()
     : FileSystemCommandHandler("fs set")
   {}
+
+  bool batched_propose() override {
+    return true;
+  }
 
   int handle(
       Monitor *mon,
@@ -1038,6 +1046,10 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
   RemoveFilesystemHandler()
     : FileSystemCommandHandler("fs rm")
   {}
+
+  bool batched_propose() override {
+    return true;
+  }
 
   int handle(
       Monitor *mon,
