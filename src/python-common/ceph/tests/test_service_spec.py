@@ -396,6 +396,12 @@ service_type: nfs
 service_id: mynfs
 service_name: nfs.mynfs
 spec:
+  idmap_conf:
+    general:
+      local-realms: domain.org
+    mapping:
+      nobody-group: nfsnobody
+      nobody-user: nfsnobody
   port: 1234
 ---
 service_type: iscsi

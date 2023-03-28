@@ -5,6 +5,8 @@ import os
 import subprocess
 import tempfile
 from typing import Dict, Tuple, Any, List, cast, Optional
+from configparser import ConfigParser
+from io import StringIO
 
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
@@ -79,6 +81,8 @@ class NFSService(CephService):
 
         nodeid = f'{daemon_spec.service_name}.{daemon_spec.rank}'
 
+        nfs_idmap_conf = '/etc/ganesha/idmap.conf'
+
         # create the RADOS recovery pool keyring
         rados_user = f'{daemon_type}.{daemon_id}'
         rados_keyring = self.create_keyring(daemon_spec)
@@ -115,11 +119,26 @@ class NFSService(CephService):
                 "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
                 "bind_addr": bind_addr,
                 "haproxy_hosts": [],
+                "nfs_idmap_conf": nfs_idmap_conf,
             }
             if spec.enable_haproxy_protocol:
                 context["haproxy_hosts"] = self._haproxy_hosts()
                 logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
+
+        # generate the idmap config
+        def get_idmap_conf() -> str:
+            idmap_conf = spec.idmap_conf
+            output = ''
+            if idmap_conf is not None:
+                cp = ConfigParser()
+                out = StringIO()
+                cp.read_dict(idmap_conf)
+                cp.write(out)
+                out.seek(0)
+                output = out.read()
+                out.close()
+            return output
 
         # generate the cephadm config json
         def get_cephadm_config() -> Dict[str, Any]:
@@ -130,6 +149,7 @@ class NFSService(CephService):
             config['extra_args'] = ['-N', 'NIV_EVENT']
             config['files'] = {
                 'ganesha.conf': get_ganesha_conf(),
+                'idmap.conf': get_idmap_conf()
             }
             config.update(
                 self.get_config_and_keyring(

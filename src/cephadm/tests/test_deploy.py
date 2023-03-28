@@ -49,6 +49,7 @@ def test_deploy_nfs_container(cephadm_fs, funkypatch):
             'pool': 'foo',
             'files': {
                 'ganesha.conf': 'FAKE',
+                'idmap.conf': 'FAKE',
             },
             'config': 'BALONEY',
             'keyring': 'BUNKUS',
