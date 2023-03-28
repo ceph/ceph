@@ -34,7 +34,7 @@ def serialize_dashboard_exception(e, include_http_status=False, task=None):
     component = getattr(e, 'component', None)
     out['component'] = component if component else None
     if include_http_status:
-        out['status'] = getattr(e, 'status', 500)
+        out['status'] = getattr(e, 'status', 500)  # type: ignore
     if task:
         out['task'] = dict(name=task.name, metadata=task.metadata)  # type: ignore
     return out
