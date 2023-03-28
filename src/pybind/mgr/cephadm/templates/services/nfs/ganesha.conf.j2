@@ -16,6 +16,9 @@ NFSv4 {
         Delegations = false;
         RecoveryBackend = 'rados_cluster';
         Minor_Versions = 1, 2;
+{% if nfs_idmap_conf %}
+        IdmapConf = "{{ nfs_idmap_conf }}";
+{% endif %}
 }
 
 RADOS_KV {
