@@ -188,9 +188,12 @@
                 Storage Clusters receive data from :term:`Ceph Client`\s.
 
 	CephX
-                The Ceph authentication protocol. CephX operates like Kerberos,
-                but it has no single point of failure. See the :ref:`CephX
-                Configuration Reference<rados-cephx-config-ref>`.
+                The Ceph authentication protocol. CephX authenticates users and
+                daemons. CephX operates like Kerberos, but it has no single
+                point of failure. See the :ref:`High-availability
+                Authentication section<arch_high_availability_authentication>`
+                of the Architecture document and the :ref:`CephX Configuration
+                Reference<rados-cephx-config-ref>`. 
 
 	Client
                 A client is any program external to Ceph that uses a Ceph
