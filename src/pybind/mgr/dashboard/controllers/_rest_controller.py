@@ -70,6 +70,7 @@ class RESTController(BaseController, skip_registry=True):
         for k, v in cls._method_mapping.items():
             func = getattr(cls, k, None)
             while hasattr(func, "__wrapped__"):
+                assert func
                 func = func.__wrapped__
             if v['resource'] and func:
                 path_params = cls.get_path_param_names()
