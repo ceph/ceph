@@ -87,7 +87,7 @@ OMapInnerNode::handle_split(
 {
   LOG_PREFIX(OMapInnerNode::handle_split);
   DEBUGT("this: {}",  oc.t, *this);
-  if (!is_pending()) {
+  if (!is_mutable()) {
     auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
     auto mut_iter = mut->iter_idx(iter.get_index());
     return mut->handle_split(oc, mut_iter, mresult);
@@ -379,7 +379,7 @@ OMapInnerNode::merge_entry(
 {
   LOG_PREFIX(OMapInnerNode::merge_entry);
   DEBUGT("{}, parent: {}", oc.t, *entry, *this);
-  if (!is_pending()) {
+  if (!is_mutable()) {
     auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapInnerNode>();
     auto mut_iter = mut->iter_idx(iter->get_index());
     return mut->merge_entry(oc, mut_iter, entry);
@@ -520,7 +520,7 @@ OMapLeafNode::insert(
   DEBUGT("{} -> {}, this: {}", oc.t, key, value, *this);
   bool overflow = extent_will_overflow(key.size(), value.length());
   if (!overflow) {
-    if (!is_pending()) {
+    if (!is_mutable()) {
       auto mut = oc.tm.get_mutable_extent(oc.t, this)->cast<OMapLeafNode>();
       return mut->insert(oc, key, value);
     }
@@ -579,7 +579,7 @@ OMapLeafNode::rm_key(omap_context_t oc, const std::string &key)
   LOG_PREFIX(OMapLeafNode::rm_key);
   DEBUGT("{}, this: {}", oc.t, key, *this);
   auto rm_pt = find_string_key(key);
-  if (!is_pending() && rm_pt != iter_end()) {
+  if (!is_mutable() && rm_pt != iter_end()) {
     auto mut =  oc.tm.get_mutable_extent(oc.t, this)->cast<OMapLeafNode>();
     return mut->rm_key(oc, key);
   }

@@ -999,7 +999,7 @@ CachedExtentRef Cache::duplicate_for_write(
   Transaction &t,
   CachedExtentRef i) {
   LOG_PREFIX(Cache::duplicate_for_write);
-  if (i->is_pending())
+  if (i->is_mutable())
     return i;
 
   if (i->is_exist_clean()) {

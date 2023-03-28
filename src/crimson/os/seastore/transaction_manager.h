@@ -261,7 +261,7 @@ public:
 	"extent is already duplicated -- {}",
 	t,
 	*ref);
-      assert(ref->is_pending());
+      assert(ref->is_mutable());
       assert(&*ref == &*ret);
     }
     return ret;
