@@ -449,7 +449,8 @@ class TestCephadm(object):
                 _run_cephadm.assert_called_with(
                     'test', 'mon.test', 'deploy', [
                         '--name', 'mon.test',
-                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null}',
+                        '--meta-json', ('{"service_name": "mon", "ports": [], "ip": null, "deployed_by": [], "rank": null, '
+                                        '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--reconfig',
                     ],
@@ -465,12 +466,91 @@ class TestCephadm(object):
                 _run_cephadm.assert_called_with(
                     'test', 'crash.test', 'deploy', [
                         '--name', 'crash.test',
-                        '--meta-json', '{"service_name": "crash", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": ["--cpus=2", "--quiet"]}',
+                        '--meta-json', ('{"service_name": "crash", "ports": [], "ip": null, "deployed_by": [], "rank": null, '
+                                        '"rank_generation": null, "extra_container_args": ["--cpus=2", "--quiet"], "extra_entrypoint_args": null}'),
                         '--config-json', '-',
                         '--extra-container-args=--cpus=2',
                         '--extra-container-args=--quiet'
                     ],
                     stdin='{"config": "", "keyring": ""}',
+                    image='',
+                )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_extra_entrypoint_args(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='node-exporter',
+                              extra_entrypoint_args=['--collector.textfile.directory=/var/lib/node_exporter/textfile_collector', '--some-other-arg']),
+                              CephadmOrchestrator.apply_node_exporter):
+                _run_cephadm.assert_called_with(
+                    'test', 'node-exporter.test', 'deploy', [
+                        '--name', 'node-exporter.test',
+                        '--meta-json', ('{"service_name": "node-exporter", "ports": [9100], "ip": null, "deployed_by": [], "rank": null, '
+                                        '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": '
+                                        '["--collector.textfile.directory=/var/lib/node_exporter/textfile_collector", '
+                                        '"--some-other-arg"]}'),
+                        '--config-json', '-',
+                        '--tcp-ports', '9100',
+                        '--extra-entrypoint-args=--collector.textfile.directory=/var/lib/node_exporter/textfile_collector',
+                        '--extra-entrypoint-args=--some-other-arg'
+                    ],
+                    stdin='{}',
+                    image='',
+                )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_extra_entrypoint_and_container_args(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='node-exporter',
+                              extra_entrypoint_args=['--collector.textfile.directory=/var/lib/node_exporter/textfile_collector', '--some-other-arg'],
+                              extra_container_args=['--cpus=2', '--quiet']),
+                              CephadmOrchestrator.apply_node_exporter):
+                _run_cephadm.assert_called_with(
+                    'test', 'node-exporter.test', 'deploy', [
+                        '--name', 'node-exporter.test',
+                        '--meta-json', ('{"service_name": "node-exporter", "ports": [9100], "ip": null, "deployed_by": [], "rank": null, '
+                                        '"rank_generation": null, "extra_container_args": ["--cpus=2", "--quiet"], "extra_entrypoint_args": '
+                                        '["--collector.textfile.directory=/var/lib/node_exporter/textfile_collector", '
+                                        '"--some-other-arg"]}'),
+                        '--config-json', '-',
+                        '--tcp-ports', '9100',
+                        '--extra-container-args=--cpus=2',
+                        '--extra-container-args=--quiet',
+                        '--extra-entrypoint-args=--collector.textfile.directory=/var/lib/node_exporter/textfile_collector',
+                        '--extra-entrypoint-args=--some-other-arg'
+                    ],
+                    stdin='{}',
+                    image='',
+                )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_extra_entrypoint_and_container_args_with_spaces(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.return_value = ('{}', '', 0)
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, ServiceSpec(service_type='node-exporter',
+                              extra_entrypoint_args=['--entrypoint-arg-with-value value', '--some-other-arg   3'],
+                              extra_container_args=['--cpus    2', '--container-arg-with-value value']),
+                              CephadmOrchestrator.apply_node_exporter):
+                _run_cephadm.assert_called_with(
+                    'test', 'node-exporter.test', 'deploy', [
+                        '--name', 'node-exporter.test',
+                        '--meta-json', ('{"service_name": "node-exporter", "ports": [9100], "ip": null, "deployed_by": [], "rank": null, '
+                                        '"rank_generation": null, "extra_container_args": ["--cpus    2", "--container-arg-with-value value"], '
+                                        '"extra_entrypoint_args": ["--entrypoint-arg-with-value value", "--some-other-arg   3"]}'),
+                        '--config-json', '-',
+                        '--tcp-ports', '9100',
+                        '--extra-container-args=--cpus',
+                        '--extra-container-args=2',
+                        '--extra-container-args=--container-arg-with-value',
+                        '--extra-container-args=value',
+                        '--extra-entrypoint-args=--entrypoint-arg-with-value',
+                        '--extra-entrypoint-args=value',
+                        '--extra-entrypoint-args=--some-other-arg',
+                        '--extra-entrypoint-args=3'
+                    ],
+                    stdin='{}',
                     image='',
                 )
 
