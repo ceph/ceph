@@ -78,7 +78,7 @@ By default, `cephfs-top` connects to cluster name `ceph`. To use a non-default c
 
   $ cephfs-top -d <seconds>
 
-Interval should be greater than or equal to 0.5 seconds. Fractional seconds are honoured.
+Refresh interval should be a positive integer.
 
 To dump the metrics to stdout without creating a curses display use::
 
