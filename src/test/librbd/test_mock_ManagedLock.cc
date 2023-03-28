@@ -716,7 +716,7 @@ TEST_F(TestMockManagedLock, ShutDownWhileWaiting) {
   managed_lock.acquire_lock(&acquire_ctx);
 
   ASSERT_EQ(0, when_shut_down(managed_lock));
-  ASSERT_EQ(-ESHUTDOWN, acquire_ctx.wait());
+  ASSERT_EQ(-ERESTART, acquire_ctx.wait());
   ASSERT_FALSE(is_lock_owner(managed_lock));
 }
 

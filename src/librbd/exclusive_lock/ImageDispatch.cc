@@ -293,7 +293,7 @@ void ImageDispatch<I>::handle_acquire_lock(int r) {
 
   Context* failed_dispatch = nullptr;
   Contexts on_dispatches;
-  if (r == -ESHUTDOWN) {
+  if (r == -ERESTART) {
     ldout(cct, 5) << "IO raced with exclusive lock shutdown" << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to acquire exclusive lock: " << cpp_strerror(r)
