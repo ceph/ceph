@@ -24,6 +24,7 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   RGWSI_RADOS::Obj obj;
   uint64_t watch_handle;
   int register_ret{0};
+  bool unregister_done{false};
   librados::AioCompletion *register_completion{nullptr};
 
   class C_ReinitWatch : public Context {
@@ -77,20 +78,23 @@ public:
   }
 
   void reinit() {
-    int ret = unregister_watch();
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
-      return;
+    if(!unregister_done) {
+      int ret = unregister_watch();
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
+      }
     }
-    ret = register_watch();
+    int ret = register_watch();
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: register_watch() returned ret=" << ret << dendl;
+      svc->schedule_context(new C_ReinitWatch(this));
       return;
     }
   }
 
   int unregister_watch() {
     int r = svc->unwatch(obj, watch_handle);
+    unregister_done = true;
     if (r < 0) {
       return r;
     }
@@ -127,6 +131,7 @@ public:
       return r;
     }
     svc->add_watcher(index);
+    unregister_done = false;
     return 0;
   }
 
@@ -136,6 +141,7 @@ public:
       return r;
     }
     svc->add_watcher(index);
+    unregister_done = false;
     return 0;
   }
 };
