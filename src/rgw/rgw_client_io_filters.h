@@ -88,8 +88,8 @@ public:
     return sent;
   }
 
-  size_t complete_header() override {
-    const auto sent = DecoratedRestfulClient<T>::complete_header();
+  size_t complete_header(bool close_conn = false) override {
+    const auto sent = DecoratedRestfulClient<T>::complete_header(close_conn);
     lsubdout(cct, rgw, 30) << "AccountingFilter::complete_header: e="
         << (enabled ? "1" : "0") << ", sent=" << sent << ", total="
         << total_sent << dendl;
@@ -170,7 +170,7 @@ public:
 
   size_t send_content_length(const uint64_t len) override;
   size_t send_chunked_transfer_encoding() override;
-  size_t complete_header() override;
+  size_t complete_header(bool close_conn = false) override;
   size_t send_body(const char* buf, size_t len) override;
   size_t complete_request() override;
 };
@@ -205,7 +205,7 @@ size_t BufferingFilter<T>::send_chunked_transfer_encoding()
 }
 
 template <typename T>
-size_t BufferingFilter<T>::complete_header()
+size_t BufferingFilter<T>::complete_header(bool close_conn)
 {
   if (! has_content_length) {
     /* We will dump everything in complete_request(). */
@@ -215,7 +215,7 @@ size_t BufferingFilter<T>::complete_header()
     return 0;
   }
 
-  return DecoratedRestfulClient<T>::complete_header();
+  return DecoratedRestfulClient<T>::complete_header(close_conn);
 }
 
 template <typename T>
@@ -424,7 +424,7 @@ public:
     }
   }
 
-  size_t complete_header() override {
+  size_t complete_header(bool close_conn = false) override {
     size_t sent = 0;
 
     /* Change state in order to immediately send everything we get. */
@@ -441,7 +441,7 @@ public:
     }
     headers.clear();
 
-    return sent + DecoratedRestfulClient<T>::complete_header();
+    return sent + DecoratedRestfulClient<T>::complete_header(close_conn);
   }
 };
 

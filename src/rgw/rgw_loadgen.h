@@ -51,7 +51,7 @@ public:
   size_t send_100_continue() override;
   size_t send_header(const std::string_view& name,
                      const std::string_view& value) override;
-  size_t complete_header() override;
+  size_t complete_header(bool close_conn = false) override;
   size_t send_content_length(uint64_t len) override;
 
   size_t recv_body(char* buf, size_t max) override {

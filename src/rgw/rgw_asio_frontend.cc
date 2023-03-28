@@ -266,6 +266,7 @@ void handle_connection(boost::asio::io_context& context,
 
       StreamIO real_client{cct, stream, timeout, parser, yield, buffer,
                            is_ssl, local_endpoint, remote_endpoint};
+      real_client.set_expect_continue(expect_continue);
 
       auto real_client_io = rgw::io::add_reordering(
                               rgw::io::add_buffering(cct,

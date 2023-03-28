@@ -120,7 +120,7 @@ size_t RGWLoadGenIO::send_header(const std::string_view& name,
   return 0;
 }
 
-size_t RGWLoadGenIO::complete_header()
+size_t RGWLoadGenIO::complete_header(bool close_conn)
 {
   return 0;
 }

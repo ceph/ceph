@@ -30,6 +30,7 @@ class ClientIO : public io::RestfulClient,
 
   rgw::io::StaticOutputBufferer<> txbuf;
   bool sent100continue = false;
+  bool expect_continue = false;
 
  public:
   ClientIO(parser_type& parser, bool is_ssl,
@@ -45,7 +46,7 @@ class ClientIO : public io::RestfulClient,
   size_t send_header(const std::string_view& name,
                      const std::string_view& value) override;
   size_t send_content_length(uint64_t len) override;
-  size_t complete_header() override;
+  size_t complete_header(bool close_conn = false) override;
 
   size_t send_body(const char* buf, size_t len) override {
     return write_data(buf, len);
@@ -56,6 +57,7 @@ class ClientIO : public io::RestfulClient,
   }
 
   bool sent_100_continue() const { return sent100continue; }
+  void set_expect_continue(bool flag) { expect_continue = flag; }
 };
 
 } // namespace asio
