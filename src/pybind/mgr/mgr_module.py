@@ -342,7 +342,7 @@ def _extract_target_func(
     wrapped = getattr(f, "__wrapped__", None)
     if not wrapped:
         return f, {}
-    extra_args = {}
+    extra_args: Dict[str, Any] = {}
     while wrapped is not None:
         extra_args.update(getattr(f, "extra_args", {}))
         f = wrapped
