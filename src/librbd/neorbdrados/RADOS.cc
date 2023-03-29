@@ -966,7 +966,7 @@ void RADOS::create_pool_snap(std::int64_t pool,
 {
   impl->objecter->create_pool_snap(
     pool, snapName,
-    Objecter::PoolOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
 	ca::dispatch(std::move(c), e);
@@ -990,7 +990,7 @@ void RADOS::delete_pool_snap(std::int64_t pool,
 {
   impl->objecter->delete_pool_snap(
     pool, snapName,
-    Objecter::PoolOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
 	ca::dispatch(std::move(c), e);
@@ -1003,7 +1003,7 @@ void RADOS::delete_selfmanaged_snap(std::int64_t pool,
 {
   impl->objecter->delete_selfmanaged_snap(
     pool, snap,
-    Objecter::PoolOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
 	ca::dispatch(std::move(c), e);
@@ -1016,7 +1016,7 @@ void RADOS::create_pool(std::string_view name,
 {
   impl->objecter->create_pool(
     name,
-    Objecter::PoolOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
 	ca::dispatch(std::move(c), e);
@@ -1029,7 +1029,7 @@ void RADOS::delete_pool(std::string_view name,
 {
   impl->objecter->delete_pool(
     name,
-    Objecter::PoolOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
 	ca::dispatch(std::move(c), e);
@@ -1041,7 +1041,7 @@ void RADOS::delete_pool(std::int64_t pool,
 {
   impl->objecter->delete_pool(
     pool,
-    Objecter::PoolOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c)](bs::error_code e, const bufferlist&) mutable {
 	ca::dispatch(std::move(c), e);
@@ -1123,7 +1123,7 @@ void RADOS::watch(const Object& o, const IOContext& _ioc,
   bufferlist bl;
   impl->objecter->linger_watch(
     linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
-    Objecter::LingerOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
 	ca::dispatch(std::move(c), e, cookie);
@@ -1152,7 +1152,7 @@ void RADOS::watch(const Object& o, std::int64_t pool,
   bufferlist bl;
   impl->objecter->linger_watch(
     linger_op, op, {}, ceph::real_clock::now(), bl,
-    Objecter::LingerOp::OpComp::create(
+    ca::Completion<Objecter::PoolOp::OpSig>::create(
       get_executor(),
       [c = std::move(c), cookie](bs::error_code e, bufferlist) mutable {
 	ca::dispatch(std::move(c), e, cookie);
@@ -1215,7 +1215,7 @@ void RADOS::unwatch(uint64_t cookie, const IOContext& _ioc,
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   impl->objecter->mutate(linger_op->target.base_oid, ioc->oloc, std::move(op),
 			 ioc->snapc, ceph::real_clock::now(), ioc->extra_op_flags,
-			 Objecter::Op::OpComp::create(
+			 ca::Completion<Objecter::Op::OpSig>::create(
 			   get_executor(),
 			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
@@ -1243,7 +1243,7 @@ void RADOS::unwatch(uint64_t cookie, std::int64_t pool,
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   impl->objecter->mutate(linger_op->target.base_oid, oloc, std::move(op),
 			 {}, ceph::real_clock::now(), 0,
-			 Objecter::Op::OpComp::create(
+			 ca::Completion<Objecter::Op::OpSig>::create(
 			   get_executor(),
 			   [objecter = impl->objecter,
 			    linger_op, c = std::move(c)]
@@ -1325,7 +1325,7 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
   auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter,
                                             linger_op, std::move(c));
   linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
+    boost::asio::bind_executor(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
 	(*cb)(ec, std::move(bl));
@@ -1339,7 +1339,7 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
 
   impl->objecter->linger_notify(
     linger_op, rd, ioc->snap_seq, inbl,
-    Objecter::LingerOp::OpComp::create(
+    ca::Completion<Objecter::LingerOp::OpSig>::create(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
 	cb->handle_ack(ec, std::move(bl));
@@ -1364,7 +1364,7 @@ void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
   auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter,
                                             linger_op, std::move(c));
   linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
+    boost::asio::bind_executor(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist&& bl) mutable {
 	(*cb)(ec, std::move(bl));
@@ -1378,7 +1378,7 @@ void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
 
   impl->objecter->linger_notify(
     linger_op, rd, CEPH_NOSNAP, inbl,
-    Objecter::LingerOp::OpComp::create(
+    ca::Completion<Objecter::LingerOp::OpSig>::create(
       get_executor(),
       [cb](bs::error_code ec, bufferlist&& bl) mutable {
 	cb->handle_ack(ec, std::move(bl));
