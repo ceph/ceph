@@ -110,7 +110,7 @@ std::pair<Extents, ImageArea> object_to_area_extents(
 template <>
 struct ObjectRequest<librbd::MockTestImageCtx> {
   static void add_write_hint(librbd::MockTestImageCtx&,
-                             neorados::WriteOp*) {
+                             neorbdrados::WriteOp*) {
   }
 };
 
@@ -124,7 +124,7 @@ struct AbstractObjectWriteRequest<librbd::MockTestImageCtx> {
   MOCK_CONST_METHOD0(get_pre_write_object_map_state, uint8_t());
   MOCK_CONST_METHOD0(is_empty_write_op, bool());
 
-  MOCK_METHOD1(add_copyup_ops, void(neorados::WriteOp*));
+  MOCK_METHOD1(add_copyup_ops, void(neorbdrados::WriteOp*));
 };
 
 } // namespace io
@@ -309,7 +309,7 @@ struct TestMockIoCopyupRequest : public TestMockFixture {
 
   void expect_add_copyup_ops(MockAbstractObjectWriteRequest& mock_write_request) {
     EXPECT_CALL(mock_write_request, add_copyup_ops(_))
-      .WillOnce(Invoke([](neorados::WriteOp* op) {
+      .WillOnce(Invoke([](neorbdrados::WriteOp* op) {
                   op->write(0, bufferlist{});
                 }));
   }

@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockSafeTimer.h"
 #include "test/librbd/mock/crypto/MockEncryptionFormat.h"
@@ -130,7 +130,7 @@ void MockImageCtx::wait_for_async_ops() {
 }
 
 IOContext MockImageCtx::get_data_io_context() {
-  auto ctx = std::make_shared<neorados::IOContext>(
+  auto ctx = std::make_shared<neorbdrados::IOContext>(
     data_ctx.get_id(), data_ctx.get_namespace());
   if (snap_id != CEPH_NOSNAP) {
     ctx->read_snap(snap_id);
@@ -143,7 +143,7 @@ IOContext MockImageCtx::get_data_io_context() {
 }
 
 IOContext MockImageCtx::duplicate_data_io_context() {
-  return std::make_shared<neorados::IOContext>(*get_data_io_context());
+  return std::make_shared<neorbdrados::IOContext>(*get_data_io_context());
 }
 
 } // namespace librbd

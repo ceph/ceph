@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/io/CopyupRequest.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "common/ceph_context.h"
 #include "common/ceph_mutex.h"
 #include "common/dout.h"
@@ -420,9 +420,9 @@ void CopyupRequest<I>::copyup() {
     m_copyup_extent_map.clear();
   }
 
-  neorados::WriteOp copyup_op;
-  neorados::WriteOp write_op;
-  neorados::WriteOp* op;
+  neorbdrados::WriteOp copyup_op;
+  neorbdrados::WriteOp write_op;
+  neorbdrados::WriteOp* op;
   if (copy_on_read || deep_copyup) {
     // copyup-op will use its own request issued to the initial object revision
     op = &copyup_op;
@@ -461,7 +461,7 @@ void CopyupRequest<I>::copyup() {
   m_lock.unlock();
 
   // issue librados ops at the end to simplify test cases
-  auto object = neorados::Object{data_object_name(m_image_ctx, m_object_no)};
+  auto object = neorbdrados::Object{data_object_name(m_image_ctx, m_object_no)};
   if (copyup_op.size() > 0) {
     // send only the copyup request with a blank snapshot context so that
     // all snapshots are detected from the parent for this object.  If

@@ -4,7 +4,7 @@
 #include <boost/assign/list_of.hpp>
 #include <stddef.h>
 
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 
 #include "common/ceph_context.h"
 #include "common/dout.h"
@@ -992,7 +992,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
   }
 
   void ImageCtx::rebuild_data_io_context() {
-    auto ctx = std::make_shared<neorados::IOContext>(
+    auto ctx = std::make_shared<neorbdrados::IOContext>(
       data_ctx.get_id(), data_ctx.get_namespace());
     if (snap_id != CEPH_NOSNAP) {
       ctx->read_snap(snap_id);
@@ -1015,7 +1015,7 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
   IOContext ImageCtx::duplicate_data_io_context() const {
     auto ctx = get_data_io_context();
-    return std::make_shared<neorados::IOContext>(*ctx);
+    return std::make_shared<neorbdrados::IOContext>(*ctx);
   }
 
   void ImageCtx::get_timer_instance(CephContext *cct, SafeTimer **timer,

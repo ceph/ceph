@@ -3,7 +3,7 @@
 
 #include "test/librbd/test_mock_fixture.h"
 #include "include/interval_set.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "include/rbd/librbd.hpp"
 #include "include/rbd/object_map_types.h"
 #include "librbd/AsioEngine.h"

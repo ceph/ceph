@@ -177,7 +177,7 @@ struct MockImageCtx {
   std::string lock_tag;
 
   std::shared_ptr<AsioEngine> asio_engine;
-  neorados::RADOS& rados_api;
+  neorbdrados::RADOS& rados_api;
 
   librados::IoCtx md_ctx;
   librados::IoCtx data_ctx;

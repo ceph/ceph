@@ -3,7 +3,7 @@
 
 #include "librbd/AsioEngine.h"
 #include "include/Context.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "librbd/asio/ContextWQ.h"
@@ -16,8 +16,8 @@
 namespace librbd {
 
 AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
-  : m_rados_api(std::make_shared<neorados::RADOS>(
-      neorados::RADOS::make_with_librados(*rados))),
+  : m_rados_api(std::make_shared<neorbdrados::RADOS>(
+      neorbdrados::RADOS::make_with_librados(*rados))),
     m_cct(m_rados_api->cct()),
     m_io_context(m_rados_api->get_io_context()),
     m_api_strand(std::make_unique<boost::asio::io_context::strand>(
