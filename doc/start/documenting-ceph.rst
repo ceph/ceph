@@ -793,8 +793,9 @@ commits will be squashed into a single commit.
 Notify Us
 ---------
 
-In case The PR did not got a review within in a reasonable timeframe, please get in touch
-with the corresponding component lead :ref:`ctl`.
+If some time has passed and the pull request that you raised has not been
+reviewed, contact the component lead and ask what's taking so long. See
+:ref:`ctl` for a list of component leads.
 
 Documentation Style Guide
 =========================
