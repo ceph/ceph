@@ -4,3 +4,4 @@ overrides:
   selinux:
     whitelist:
       - scontext=system_u:system_r:logrotate_t:s0
+ktype: distro

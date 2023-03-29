@@ -1,2 +1,3 @@
 os_type: ubuntu
 os_version: "12.04"
+ktype: distro
