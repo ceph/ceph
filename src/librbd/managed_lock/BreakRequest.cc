@@ -4,7 +4,7 @@
 #include "librbd/managed_lock/BreakRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "include/stringify.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/lock/cls_lock_types.h"

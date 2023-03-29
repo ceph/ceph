@@ -5,7 +5,7 @@
 #include "common/dout.h"
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
@@ -23,7 +23,7 @@ namespace librbd {
 namespace io {
 namespace util {
 
-void apply_op_flags(uint32_t op_flags, uint32_t flags, neorados::Op* op) {
+void apply_op_flags(uint32_t op_flags, uint32_t flags, neorbdrados::Op* op) {
   if (op_flags & LIBRADOS_OP_FLAG_FADVISE_RANDOM)
     op->set_fadvise_random();
   if (op_flags & LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL)

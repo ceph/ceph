@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/io/SimpleSchedulerObjectDispatch.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "common/ceph_time.h"
 #include "common/Timer.h"
 #include "common/errno.h"

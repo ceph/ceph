@@ -6,7 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "common/zipkin_trace.h"
 #include "librbd/ObjectMap.h"
@@ -17,7 +17,7 @@
 class Context;
 class ObjectExtent;
 
-namespace neorados { struct WriteOp; }
+namespace neorbdrados { struct WriteOp; }
 
 namespace librbd {
 
@@ -63,7 +63,7 @@ public:
   }
 
   static void add_write_hint(ImageCtxT& image_ctx,
-                             neorados::WriteOp *wr);
+                             neorbdrados::WriteOp *wr);
 
   virtual void send() = 0;
 
@@ -166,7 +166,7 @@ public:
     return OBJECT_EXISTS;
   }
 
-  virtual void add_copyup_ops(neorados::WriteOp *wr) {
+  virtual void add_copyup_ops(neorbdrados::WriteOp *wr) {
     add_write_ops(wr);
   }
 
@@ -193,8 +193,8 @@ protected:
     return false;
   }
 
-  virtual void add_write_hint(neorados::WriteOp *wr);
-  virtual void add_write_ops(neorados::WriteOp *wr) = 0;
+  virtual void add_write_hint(neorbdrados::WriteOp *wr);
+  virtual void add_write_ops(neorbdrados::WriteOp *wr) = 0;
 
   virtual int filter_write_result(int r) const {
     return r;
@@ -281,8 +281,8 @@ public:
   }
 
 protected:
-  void add_write_ops(neorados::WriteOp *wr) override;
-  void add_write_hint(neorados::WriteOp *wr) override;
+  void add_write_ops(neorbdrados::WriteOp *wr) override;
+  void add_write_hint(neorbdrados::WriteOp *wr) override;
 
 private:
   ceph::bufferlist m_write_data;
@@ -355,11 +355,11 @@ protected:
     return (m_discard_action == DISCARD_ACTION_REMOVE);
   }
 
-  void add_write_hint(neorados::WriteOp *wr) override {
+  void add_write_hint(neorbdrados::WriteOp *wr) override {
     // no hint for discard
   }
 
-  void add_write_ops(neorados::WriteOp *wr) override;
+  void add_write_ops(neorbdrados::WriteOp *wr) override;
 
 private:
   enum DiscardAction {
@@ -392,7 +392,7 @@ public:
   }
 
 protected:
-  void add_write_ops(neorados::WriteOp *wr) override;
+  void add_write_ops(neorbdrados::WriteOp *wr) override;
 
 private:
   ceph::bufferlist m_write_data;
@@ -419,7 +419,7 @@ public:
     return "compare_and_write";
   }
 
-  void add_copyup_ops(neorados::WriteOp *wr) override {
+  void add_copyup_ops(neorbdrados::WriteOp *wr) override {
     // no-op on copyup
   }
 
@@ -428,7 +428,7 @@ protected:
     return true;
   }
 
-  void add_write_ops(neorados::WriteOp *wr) override;
+  void add_write_ops(neorbdrados::WriteOp *wr) override;
 
   int filter_write_result(int r) const override;
 
@@ -475,7 +475,7 @@ private:
   int m_list_snaps_flags;
   SnapshotDelta* m_snapshot_delta;
 
-  neorados::SnapSet m_snap_set;
+  neorbdrados::SnapSet m_snap_set;
   boost::system::error_code m_ec;
 
   ImageArea m_image_area = ImageArea::DATA;

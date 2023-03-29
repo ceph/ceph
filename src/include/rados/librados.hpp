@@ -20,6 +20,7 @@ namespace libradosstriper
 }
 
 namespace neorados { class RADOS; }
+namespace neorbdrados { class RADOS; }
 
 namespace librados {
 
@@ -1554,6 +1555,7 @@ inline namespace v14_2_0 {
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
   private:
     friend class neorados::RADOS;
+    friend class neorbdrados::RADOS;
 
     // We don't allow assignment or copying
     Rados(const Rados& rhs);

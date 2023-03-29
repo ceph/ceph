@@ -7,7 +7,7 @@
 #include "include/encoding.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "common/bit_vector.hpp"
 
 #include <errno.h>
@@ -847,8 +847,8 @@ void copyup(O* op, ceph::buffer::list data) {
   op->exec("rbd", "copyup", data);
 }
 
-void copyup(neorados::WriteOp* op, ceph::buffer::list data) {
-  copyup<neorados::WriteOp>(op, data);
+void copyup(neorbdrados::WriteOp* op, ceph::buffer::list data) {
+  copyup<neorbdrados::WriteOp>(op, data);
 }
 
 void copyup(librados::ObjectWriteOperation *op, bufferlist data) {
@@ -871,10 +871,10 @@ void sparse_copyup(O* op, const E& extent_map, ceph::buffer::list data) {
   op->exec("rbd", "sparse_copyup", bl);
 }
 
-void sparse_copyup(neorados::WriteOp* op,
+void sparse_copyup(neorbdrados::WriteOp* op,
                    const std::vector<std::pair<uint64_t, uint64_t>>& extent_map,
                    ceph::buffer::list data) {
-  sparse_copyup<neorados::WriteOp>(op, extent_map, data);
+  sparse_copyup<neorbdrados::WriteOp>(op, extent_map, data);
 }
 
 void sparse_copyup(librados::ObjectWriteOperation *op,
@@ -1762,10 +1762,10 @@ void assert_snapc_seq(O* op, uint64_t snapc_seq,
   op->exec("rbd", "assert_snapc_seq", bl);
 }
 
-void assert_snapc_seq(neorados::WriteOp* op,
+void assert_snapc_seq(neorbdrados::WriteOp* op,
                       uint64_t snapc_seq,
                       cls::rbd::AssertSnapcSeqState state) {
-  assert_snapc_seq<neorados::WriteOp>(op, snapc_seq, state);
+  assert_snapc_seq<neorbdrados::WriteOp>(op, snapc_seq, state);
 }
 
 void assert_snapc_seq(librados::ObjectWriteOperation *op,
