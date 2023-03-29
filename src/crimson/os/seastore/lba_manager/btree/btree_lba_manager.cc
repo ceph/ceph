@@ -205,11 +205,12 @@ BtreeLBAManager::get_mapping(
 }
 
 BtreeLBAManager::alloc_extent_ret
-BtreeLBAManager::alloc_extent(
+BtreeLBAManager::_alloc_extent(
   Transaction &t,
   laddr_t hint,
   extent_len_t len,
-  paddr_t addr,
+  pladdr_t addr,
+  paddr_t actual_addr,
   LogicalCachedExtent* nextent)
 {
   struct state_t {
@@ -221,7 +222,7 @@ BtreeLBAManager::alloc_extent(
     state_t(laddr_t hint) : last_end(hint) {}
   };
 
-  LOG_PREFIX(BtreeLBAManager::alloc_extent);
+  LOG_PREFIX(BtreeLBAManager::_alloc_extent);
   TRACET("{}~{}, hint={}", t, addr, len, hint);
   auto c = get_context(t);
   ++stats.num_alloc_extents;
@@ -272,21 +273,30 @@ BtreeLBAManager::alloc_extent(
 	    c,
 	    *state.insert_iter,
 	    state.last_end,
-	    lba_map_val_t{len, pladdr_t(addr), 1, 0}
+	    lba_map_val_t{len, pladdr_t(addr), 1, 0},
 	    nextent
 	  ).si_then([&state, FNAME, c, addr, len, hint, nextent](auto &&p) {
 	    auto [iter, inserted] = std::move(p);
 	    TRACET("{}~{}, hint={}, inserted at {}",
 	           c.trans, addr, len, hint, state.last_end);
 	    if (nextent) {
+	      ceph_assert(addr.is_paddr());
 	      nextent->set_laddr(iter.get_key());
 	    }
 	    ceph_assert(inserted);
 	    state.ret = iter;
 	  });
 	});
-    }).si_then([c](auto &&state) {
-      return state.ret->get_pin(c);
+    }).si_then([c, actual_addr, addr](auto &&state) {
+      auto ret_pin = state.ret->get_pin(c);
+      if (actual_addr != P_ADDR_NULL) {
+	ceph_assert(addr.is_laddr());
+	ret_pin->set_paddr(actual_addr);
+      } else {
+	ceph_assert(addr.is_paddr());
+      }
+      return alloc_extent_iertr::make_ready_future<LBAMappingRef>(
+	std::move(ret_pin));
     });
 }
 
