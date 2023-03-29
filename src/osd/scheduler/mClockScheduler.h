@@ -83,7 +83,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const int whoami;
   const uint32_t num_shards;
   const int shard_id;
-  bool is_rotational;
+  const bool is_rotational;
   MonClient *monc;
 
   /**
