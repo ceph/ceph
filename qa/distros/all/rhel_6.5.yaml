@@ -1,2 +1,3 @@
 os_type: rhel
 os_version: "6.5"
+ktype: distro

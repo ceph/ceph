@@ -1,2 +1,3 @@
 os_type: sle
 os_version: "12.2"
+ktype: distro

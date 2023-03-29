@@ -1,2 +1,16 @@
+teuthology:
+  postmerge:
+  - local function is_kupstream()
+      return yaml.ktype == 'upstream'
+    end
+  - local function is_kdistro()
+      return yaml.ktype == 'distro'
+    end
+  - local function is_fuse()
+      return false
+    end
+  - local function syntax_version()
+      return yaml.overrides.kclient.syntax
+    end
 tasks:
 - kclient:
