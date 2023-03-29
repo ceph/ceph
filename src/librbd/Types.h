@@ -11,7 +11,7 @@
 #include <memory>
 #include <string>
 
-namespace neorados { class IOContext; }
+namespace neorbdrados { class IOContext; }
 
 namespace librbd {
 
@@ -58,7 +58,7 @@ enum {
   l_librbd_last,
 };
 
-typedef std::shared_ptr<neorados::IOContext> IOContext;
+typedef std::shared_ptr<neorbdrados::IOContext> IOContext;
 
 typedef std::map<uint64_t, uint64_t> SnapSeqs;
 

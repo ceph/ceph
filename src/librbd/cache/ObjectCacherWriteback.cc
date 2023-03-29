@@ -9,7 +9,7 @@
 #include "common/ceph_mutex.h"
 #include "osdc/Striper.h"
 #include "include/Context.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
 

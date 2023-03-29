@@ -12,6 +12,11 @@ struct IOContext;
 struct RADOS;
 } // namespace neorados
 
+namespace neorbdrados {
+struct IOContext;
+struct RADOS;
+} // namespace neorados
+
 namespace librados {
 
 class MockTestMemIoCtxImpl;
@@ -22,8 +27,11 @@ class TestClassHandler;
 MockTestMemIoCtxImpl &get_mock_io_ctx(IoCtx &ioctx);
 MockTestMemIoCtxImpl &get_mock_io_ctx(neorados::RADOS& rados,
                                       neorados::IOContext& io_context);
+MockTestMemIoCtxImpl &get_mock_io_ctx(neorbdrados::RADOS& rados,
+                                      neorbdrados::IOContext& io_context);
 
 MockTestMemRadosClient &get_mock_rados_client(neorados::RADOS& rados);
+MockTestMemRadosClient &get_mock_rados_client(neorbdrados::RADOS& rados);
 
 } // namespace librados
 

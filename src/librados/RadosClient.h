@@ -41,11 +41,13 @@ class Messenger;
 class AioCompletionImpl;
 
 namespace neorados { namespace detail { class RadosClient; }}
+namespace neorbdrados { namespace detail { class RadosClient; }}
 
 class librados::RadosClient : public Dispatcher,
 			      public md_config_obs_t
 {
   friend neorados::detail::RadosClient;
+  friend neorbdrados::detail::RadosClient;
 public:
   using Dispatcher::cct;
 private:

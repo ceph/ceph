@@ -5192,6 +5192,17 @@ void Objecter::enumerate_objects<neorados::Entry>(
 			    std::vector<neorados::Entry>,
 			    hobject_t) &&> on_finish);
 
+template
+void Objecter::enumerate_objects<neorbdrados::Entry>(
+  int64_t pool_id,
+  std::string_view ns,
+  hobject_t start,
+  hobject_t end,
+  const uint32_t max,
+  const cb::list& filter_bl,
+  fu2::unique_function<void(bs::error_code,
+			    std::vector<neorbdrados::Entry>,
+			    hobject_t) &&> on_finish);
 
 
 template<typename T>
@@ -5224,6 +5235,9 @@ void Objecter::_issue_enumerate<librados::ListObjectImpl>(
 template
 void Objecter::_issue_enumerate<neorados::Entry>(
   hobject_t start, std::unique_ptr<EnumerationContext<neorados::Entry>> ctx);
+template
+void Objecter::_issue_enumerate<neorbdrados::Entry>(
+  hobject_t start, std::unique_ptr<EnumerationContext<neorbdrados::Entry>> ctx);
 
 template<typename T>
 void Objecter::_enumerate_reply(
@@ -5328,6 +5342,12 @@ void Objecter::_enumerate_reply<neorados::Entry>(
   cb::list&& bl,
   bs::error_code ec,
   std::unique_ptr<EnumerationContext<neorados::Entry>>&& ctx);
+
+template
+void Objecter::_enumerate_reply<neorbdrados::Entry>(
+  cb::list&& bl,
+  bs::error_code ec,
+  std::unique_ptr<EnumerationContext<neorbdrados::Entry>>&& ctx);
 
 namespace {
   using namespace librados;

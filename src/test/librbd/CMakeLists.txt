@@ -205,7 +205,7 @@ target_link_libraries(ceph_test_librbd
   journal
   cls_journal_client
   cls_rbd_client
-  libneorados
+  libneorbdrados
   librados
   ${UNITTEST_LIBS}
   radostest)
