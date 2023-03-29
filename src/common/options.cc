@@ -8688,6 +8688,11 @@ std::vector<Option> get_mds_options() {
     .set_default(true)
     .set_description("MDS will abort if dentry is detected newly corrupted."),
 
+    Option("mds_go_bad_corrupt_dentry", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("MDS will mark a corrupt dentry as bad and isolate"),
+
     Option("mds_inject_rename_corrupt_dentry_first", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.0)
     .set_flag(Option::FLAG_RUNTIME)
