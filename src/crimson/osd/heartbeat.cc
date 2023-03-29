@@ -124,7 +124,7 @@ void Heartbeat::add_peer(osd_id_t _peer, epoch_t epoch)
   assert(whoami != _peer);
   auto [iter, added] = peers.try_emplace(_peer, *this, _peer);
   auto& peer = iter->second;
-  peer.set_epoch(epoch);
+  peer.set_epoch_added(epoch);
 }
 
 Heartbeat::osds_t Heartbeat::remove_down_peers()
@@ -136,7 +136,7 @@ Heartbeat::osds_t Heartbeat::remove_down_peers()
     if (!osdmap->is_up(osd)) {
       i = peers.erase(i);
     } else {
-      if (peer.get_epoch() < osdmap->get_epoch()) {
+      if (peer.get_epoch_added() < osdmap->get_epoch()) {
         old_osds.push_back(osd);
       }
       ++i;

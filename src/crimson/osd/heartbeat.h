@@ -274,8 +274,8 @@ class Heartbeat::Session {
  public:
   Session(osd_id_t peer) : peer{peer} {}
 
-  void set_epoch(epoch_t epoch_) { epoch = epoch_; }
-  epoch_t get_epoch() const { return epoch; }
+  void set_epoch_added(epoch_t epoch_) { epoch = epoch_; }
+  epoch_t get_epoch_added() const { return epoch; }
   bool is_started() const { return connected; }
   bool pinged() const {
     if (clock::is_zero(first_tx)) {
@@ -404,8 +404,9 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   Peer& operator=(Peer&&) = delete;
   Peer& operator=(const Peer&) = delete;
 
-  void set_epoch(epoch_t epoch) { session.set_epoch(epoch); }
-  epoch_t get_epoch() const { return session.get_epoch(); }
+  // set/get the epoch at which the peer was added
+  void set_epoch_added(epoch_t epoch) { session.set_epoch_added(epoch); }
+  epoch_t get_epoch_added() const { return session.get_epoch_added(); }
 
   // if failure, return time_point since last active
   // else, return clock::zero()
