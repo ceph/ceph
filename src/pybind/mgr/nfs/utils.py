@@ -1,6 +1,12 @@
+import errno
+import functools
+import logging
+import stat
 from typing import List, TYPE_CHECKING
 
 import orchestrator
+import cephfs
+from mgr_util import CephfsClient, open_filesystem
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -8,6 +14,8 @@ if TYPE_CHECKING:
 EXPORT_PREFIX: str = "export-"
 CONF_PREFIX: str = "conf-nfs."
 USER_CONF_PREFIX: str = "userconf-nfs."
+
+log = logging.getLogger(__name__)
 
 
 def export_obj_name(export_id: int) -> str:
@@ -57,3 +65,25 @@ def check_fs(mgr: 'Module', fs_name: str) -> bool:
     '''
     fs_map = mgr.get('fs_map')
     return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
+
+
+def check_cephfs_path(mgr: 'Module', fs: str, path: str) -> None:
+    @functools.lru_cache(maxsize=1)
+    def _get_cephfs_client() -> CephfsClient:
+        return CephfsClient(mgr)
+    try:
+        cephfs_client = _get_cephfs_client()
+        with open_filesystem(cephfs_client, fs) as fs_handle:
+            stx = fs_handle.statx(path.encode('utf-8'),
+                                  cephfs.CEPH_STATX_MODE, 0)
+            if not stat.S_ISDIR(stx.get('mode')):
+                raise NotADirectoryError(f"{path} is not a dir")
+    except cephfs.ObjectNotFound as e:
+        log.exception(f"{-errno.ENOENT}: {e.args[1]}")
+        raise e
+    except cephfs.Error as e:
+        log.exception(f"{e.args[0]}: {e.args[1]}")
+        raise e
+    except Exception as e:
+        log.exception(f"unknown exception occurred: {e}")
+        raise e
