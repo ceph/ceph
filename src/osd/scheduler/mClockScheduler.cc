@@ -52,8 +52,7 @@ mClockScheduler::mClockScheduler(CephContext *cct,
   cct->_conf.add_observer(this);
   ceph_assert(num_shards > 0);
   set_osd_capacity_params_from_config();
-  set_mclock_profile();
-  enable_mclock_profile_settings();
+  set_config_defaults_from_profile();
   client_registry.update_from_config(
     cct->_conf, osd_bandwidth_capacity_per_shard);
 }
@@ -191,167 +190,146 @@ void mClockScheduler::set_osd_capacity_params_from_config()
           << dendl;
 }
 
-void mClockScheduler::set_mclock_profile()
+/**
+ * profile_t
+ *
+ * mclock profile -- 3 params for each of 3 client classes
+ * 0 (min): specifies no minimum reservation
+ * 0 (max): specifies no upper limit
+ */
+struct profile_t {
+  struct client_config_t {
+    double reservation;
+    uint64_t weight;
+    double limit;
+  };
+  client_config_t client;
+  client_config_t background_recovery;
+  client_config_t background_best_effort;
+};
+
+static std::ostream &operator<<(
+  std::ostream &lhs, const profile_t::client_config_t &rhs)
 {
-  mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
-  dout(1) << __func__ << " mclock profile: " << mclock_profile << dendl;
+  return lhs << "{res: " << rhs.reservation
+             << ", wgt: " << rhs.weight
+             << ", lim: " << rhs.limit
+             << "}";
 }
 
-std::string mClockScheduler::get_mclock_profile()
+static std::ostream &operator<<(std::ostream &lhs, const profile_t &rhs)
 {
-  return mclock_profile;
+  return lhs << "[client: " << rhs.client
+             << ", background_recovery: " << rhs.background_recovery
+             << ", background_best_effort: " << rhs.background_best_effort
+             << "]";
 }
 
-// Sets allocations for 'balanced' mClock profile
-//
-// min and max specification:
-//   0 (min): specifies no minimum reservation
-//   0 (max): specifies no upper limit
-//
-//  Client Allocation:
-//    reservation: 40% | weight: 1 | limit: 100% |
-//  Background Recovery Allocation:
-//    reservation: 40% | weight: 1 | limit: 70% |
-//  Background Best Effort Allocation:
-//    reservation: 20% | weight: 1 | limit: 0 (max) |
-void mClockScheduler::set_balanced_profile_allocations()
-{
-  // Set [res, wgt, lim] in that order for each mClock client class.
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::client)].update(
-      0.4, 1.0, 1.0);
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_recovery)].update(
-      0.4, 1.0, 0.7);
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_best_effort)].update(
-      0.2, 1.0, 0.0);
-}
-
-// Sets allocations for 'high_recovery_ops' mClock profile
-//
-// min and max specification:
-//   0 (min): specifies no minimum reservation
-//   0 (max): specifies no upper limit
-//
-// Client Allocation:
-//   reservation: 30% | weight: 1 | limit: 80% |
-// Background Recovery Allocation:
-//   reservation: 60% | weight: 2 | limit: 0 (max) |
-// Background Best Effort Allocation:
-//   reservation: 0 (min) | weight: 1 | limit: 0 (max) |
-void mClockScheduler::set_high_recovery_ops_profile_allocations()
-{
-  // Set [res, wgt, lim] in that order for each mClock client class.
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::client)].update(
-      0.3, 1.0, 0.8);
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_recovery)].update(
-      0.6, 2.0, 0.0);
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_best_effort)].update(
-      0.0, 1.0, 0.0);
-}
-
-// Sets allocations for 'high_client_ops' mClock profile
-//
-// min and max specification:
-//   0 (min): specifies no minimum reservation
-//   0 (max): specifies no upper limit
-//
-// Client Allocation:
-//   reservation: 60% | weight: 5 | limit: 0 (max) |
-// Background Recovery Allocation:
-//   reservation: 20% | weight: 1 | limit: 50% |
-// Background Best Effort Allocation:
-//   reservation: 20% | weight: 1 | limit: 0 (max) |
-void mClockScheduler::set_high_client_ops_profile_allocations()
-{
-  // Set [res, wgt, lim] in that order for each mClock client class.
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::client)].update(
-      0.6, 5.0, 0.0);
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_recovery)].update(
-      0.2, 1.0, 0.5);
-  client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_best_effort)].update(
-      0.2, 1.0, 0.0);
-}
-
-void mClockScheduler::enable_mclock_profile_settings()
-{
-  // Nothing to do for "custom" profile
-  if (mclock_profile == "custom") {
-    return;
-  }
-
-  // Set mclock and ceph config options for the chosen profile
-  if (mclock_profile == "balanced") {
-    set_balanced_profile_allocations();
-  } else if (mclock_profile == "high_recovery_ops") {
-    set_high_recovery_ops_profile_allocations();
-  } else if (mclock_profile == "high_client_ops") {
-    set_high_client_ops_profile_allocations();
-  } else {
-    ceph_assert("Invalid choice of mclock profile" == 0);
-    return;
-  }
-
-  // Set the mclock config parameters
-  set_profile_config();
-}
-
-void mClockScheduler::set_profile_config()
+void mClockScheduler::set_config_defaults_from_profile()
 {
   // Let only a single osd shard (id:0) set the profile configs
   if (shard_id > 0) {
     return;
   }
 
-  ClientAllocs client = client_allocs[
-    static_cast<size_t>(op_scheduler_class::client)];
-  ClientAllocs rec = client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_recovery)];
-  ClientAllocs best_effort = client_allocs[
-    static_cast<size_t>(op_scheduler_class::background_best_effort)];
+  /**
+   * high_client_ops
+   *
+   * Client Allocation:
+   *   reservation: 60% | weight: 5 | limit: 0 (max) |
+   * Background Recovery Allocation:
+   *   reservation: 20% | weight: 1 | limit: 50% |
+   * Background Best Effort Allocation:
+   *   reservation: 20% | weight: 1 | limit: 0 (max) |
+   */
+  static constexpr profile_t high_client_ops_profile{
+    { .6, 5, 0 },
+    { .2, 1, .5},
+    { .2, 1, 0 }
+  };
 
-  // Set external client params
-  cct->_conf.set_val_default("osd_mclock_scheduler_client_res",
-    std::to_string(client.res));
-  cct->_conf.set_val_default("osd_mclock_scheduler_client_wgt",
-    std::to_string(uint64_t(client.wgt)));
-  cct->_conf.set_val_default("osd_mclock_scheduler_client_lim",
-    std::to_string(client.lim));
-  dout(10) << __func__ << " client QoS params: " << "["
-           << client.res << "," << client.wgt << "," << client.lim
-           << "]" << dendl;
+  /**
+   * high_recovery_ops
+   *
+   * Client Allocation:
+   *   reservation: 30% | weight: 1 | limit: 80% |
+   * Background Recovery Allocation:
+   *   reservation: 60% | weight: 2 | limit: 0 (max) |
+   * Background Best Effort Allocation:
+   *   reservation: 0 (min) | weight: 1 | limit: 0 (max) |
+   */
+  static constexpr profile_t high_recovery_ops_profile{
+    { .3, 1, .8 },
+    { .6, 2, 0 },
+    { 0, 1, 0 }
+  };
 
-  // Set background recovery client params
-  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_res",
-    std::to_string(rec.res));
-  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_wgt",
-    std::to_string(uint64_t(rec.wgt)));
-  cct->_conf.set_val_default("osd_mclock_scheduler_background_recovery_lim",
-    std::to_string(rec.lim));
-  dout(10) << __func__ << " Recovery QoS params: " << "["
-           << rec.res << "," << rec.wgt << "," << rec.lim
-           << "]" << dendl;
+  /**
+   * balanced
+   *
+   * Client Allocation:
+   *   reservation: 40% | weight: 1 | limit: 100% |
+   * Background Recovery Allocation:
+   *   reservation: 40% | weight: 1 | limit: 70% |
+   * Background Best Effort Allocation:
+   *   reservation: 20% | weight: 1 | limit: 0 (max) |
+   */
+  static constexpr profile_t balanced_profile{
+    { .4, 1, 1.0 },
+    { .4, 1, .7 },
+    { .2, 1, 0 }
+  };
 
-  // Set background best effort client params
-  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_res",
-    std::to_string(best_effort.res));
-  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_wgt",
-    std::to_string(uint64_t(best_effort.wgt)));
-  cct->_conf.set_val_default("osd_mclock_scheduler_background_best_effort_lim",
-    std::to_string(best_effort.lim));
-  dout(10) << __func__ << " Best effort QoS params: " << "["
-    << best_effort.res << "," << best_effort.wgt << "," << best_effort.lim
-    << "]" << dendl;
+  const profile_t *profile = nullptr;
+  auto mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
+  if (mclock_profile == "high_client_ops") {
+    profile = &high_client_ops_profile;
+    dout(10) << "Setting high_client_ops profile " << *profile << dendl;
+  } else if (mclock_profile == "high_recovery_ops") {
+    profile = &high_recovery_ops_profile;
+    dout(10) << "Setting high_recovery_ops profile " << *profile << dendl;
+  } else if (mclock_profile == "balanced") {
+    profile = &balanced_profile;
+    dout(10) << "Setting balanced profile " << *profile << dendl;
+  } else if (mclock_profile == "custom") {
+    dout(10) << "Profile set to custom, not setting defaults" << dendl;
+    return;
+  } else {
+    derr << "Invalid mclock profile: " << mclock_profile << dendl;
+    ceph_assert("Invalid choice of mclock profile" == 0);
+    return;
+  }
+  ceph_assert(nullptr != profile);
 
-  // Apply the configuration changes
-  update_configuration();
+  auto set_config = [&conf = cct->_conf](const char *key, auto val) {
+    conf.set_val_default(key, std::to_string(val));
+  };
+
+  set_config("osd_mclock_scheduler_client_res", profile->client.reservation);
+  set_config("osd_mclock_scheduler_client_wgt", profile->client.weight);
+  set_config("osd_mclock_scheduler_client_lim", profile->client.limit);
+
+  set_config(
+    "osd_mclock_scheduler_background_recovery_res",
+    profile->background_recovery.reservation);
+  set_config(
+    "osd_mclock_scheduler_background_recovery_wgt",
+    profile->background_recovery.weight);
+  set_config(
+    "osd_mclock_scheduler_background_recovery_lim",
+    profile->background_recovery.limit);
+
+  set_config(
+    "osd_mclock_scheduler_background_best_effort_res",
+    profile->background_best_effort.reservation);
+  set_config(
+    "osd_mclock_scheduler_background_best_effort_wgt",
+    profile->background_best_effort.weight);
+  set_config(
+    "osd_mclock_scheduler_background_best_effort_lim",
+    profile->background_best_effort.limit);
+
+  cct->_conf.apply_changes(nullptr);
 }
 
 uint32_t mClockScheduler::calc_scaled_cost(int item_cost)
@@ -538,9 +516,6 @@ void mClockScheduler::handle_conf_change(
   if (changed.count("osd_mclock_max_capacity_iops_hdd") ||
       changed.count("osd_mclock_max_capacity_iops_ssd")) {
     set_osd_capacity_params_from_config();
-    if (mclock_profile != "custom") {
-      enable_mclock_profile_settings();
-    }
     client_registry.update_from_config(
       conf, osd_bandwidth_capacity_per_shard);
   }
@@ -551,12 +526,9 @@ void mClockScheduler::handle_conf_change(
       conf, osd_bandwidth_capacity_per_shard);
   }
   if (changed.count("osd_mclock_profile")) {
-    set_mclock_profile();
-    if (mclock_profile != "custom") {
-      enable_mclock_profile_settings();
-      client_registry.update_from_config(
-        conf, osd_bandwidth_capacity_per_shard);
-    }
+    set_config_defaults_from_profile();
+    client_registry.update_from_config(
+      conf, osd_bandwidth_capacity_per_shard);
   }
 
   auto get_changed_key = [&changed]() -> std::optional<std::string> {
@@ -581,6 +553,7 @@ void mClockScheduler::handle_conf_change(
   };
 
   if (auto key = get_changed_key(); key.has_value()) {
+    auto mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
     if (mclock_profile == "custom") {
       client_registry.update_from_config(
         conf, osd_bandwidth_capacity_per_shard);
