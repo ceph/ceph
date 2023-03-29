@@ -952,6 +952,40 @@ options:
   - mds
   fmt_desc: The debug subtree invariants (for developers only).
   with_legacy: true
+- name: mds_abort_on_newly_corrupt_dentry
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will abort if dentry is detected newly corrupted.
+- name: mds_go_bad_corrupt_dentry
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will mark a corrupt dentry as bad and isolate
+  flags:
+  - runtime
+- name: mds_inject_rename_corrupt_dentry_first
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  fmt_desc: probabilistically inject corrupt CDentry::first at rename
+  flags:
+  - runtime
+- name: mds_inject_journal_corrupt_dentry_first
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  fmt_desc: probabilistically inject corrupt CDentry::first at journal load
+  flags:
+  - runtime
 - name: mds_kill_mdstable_at
   type: int
   level: dev
