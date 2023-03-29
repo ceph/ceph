@@ -22,6 +22,7 @@
 #include <boost/system/system_error.hpp>
 
 namespace bs = boost::system;
+namespace asio = boost::asio;
 using namespace std::literals;
 using namespace std::placeholders;
 
@@ -82,7 +83,7 @@ public:
 namespace {
 
 struct CompletionPayload {
-  std::unique_ptr<Op::Completion> c;
+  Op::Completion c;
 };
 
 void completion_callback_adapter(rados_completion_t c, void *arg) {
@@ -91,14 +92,14 @@ void completion_callback_adapter(rados_completion_t c, void *arg) {
   impl->release();
 
   auto payload = reinterpret_cast<CompletionPayload*>(arg);
-  payload->c->defer(std::move(payload->c),
-                    (r < 0) ? bs::error_code(-r, osd_category()) :
-                              bs::error_code());
+  asio::dispatch(asio::append(std::move(payload->c),
+			      (r < 0) ? bs::error_code(-r, osd_category()) :
+			      bs::error_code()));
   delete payload;
 }
 
 librados::AioCompletionImpl* create_aio_completion(
-    std::unique_ptr<Op::Completion>&& c) {
+  Op::Completion&& c) {
   auto payload = new CompletionPayload{std::move(c)};
 
   auto impl = new librados::AioCompletionImpl();
@@ -588,12 +589,12 @@ boost::asio::io_context::executor_type neorados::RADOS::get_executor() const {
   return impl->io_context.get_executor();
 }
 
-void RADOS::execute(Object o, IOContext ioc, ReadOp op,
-                    ceph::buffer::list* bl, std::unique_ptr<Op::Completion> c,
-                    uint64_t* objver, const blkin_trace_info* trace_info) {
+void RADOS::execute_(Object o, IOContext ioc, ReadOp op,
+		     ceph::buffer::list* bl, Op::Completion c,
+		     uint64_t* objver, const blkin_trace_info* trace_info) {
   auto io_ctx = impl->get_io_ctx(ioc);
   if (io_ctx == nullptr) {
-    c->dispatch(std::move(c), osdc_errc::pool_dne);
+    asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne));
     return;
   }
 
@@ -607,12 +608,12 @@ void RADOS::execute(Object o, IOContext ioc, ReadOp op,
   ceph_assert(r == 0);
 }
 
-void RADOS::execute(Object o, IOContext ioc, WriteOp op,
-                    std::unique_ptr<Op::Completion> c, uint64_t* objver,
-                    const blkin_trace_info* trace_info) {
+void RADOS::execute_(Object o, IOContext ioc, WriteOp op,
+		     Op::Completion c, uint64_t* objver,
+		     const blkin_trace_info* trace_info) {
   auto io_ctx = impl->get_io_ctx(ioc);
   if (io_ctx == nullptr) {
-    c->dispatch(std::move(c), osdc_errc::pool_dne);
+    asio::dispatch(asio::append(std::move(c), osdc_errc::pool_dne));
     return;
   }
 
@@ -629,29 +630,33 @@ void RADOS::execute(Object o, IOContext ioc, WriteOp op,
   ceph_assert(r == 0);
 }
 
-void RADOS::mon_command(std::vector<std::string> command,
-                        bufferlist bl,
-                        std::string* outs, bufferlist* outbl,
-                        std::unique_ptr<Op::Completion> c) {
+void RADOS::mon_command_(std::vector<std::string> command,
+			 bufferlist bl,
+			 std::string* outs, bufferlist* outbl,
+			 Op::Completion c) {
   auto r = impl->test_rados_client->mon_command(command, bl, outbl, outs);
-  c->post(std::move(c),
-          (r < 0 ? bs::error_code(-r, osd_category()) : bs::error_code()));
+  asio::post(get_executor(),
+	     asio::append(std::move(c),
+			  (r < 0 ? bs::error_code(-r, osd_category()) :
+			   bs::error_code())));
 }
 
-void RADOS::blocklist_add(std::string client_address,
-                          std::optional<std::chrono::seconds> expire,
-                          std::unique_ptr<SimpleOpComp> c) {
+void RADOS::blocklist_add_(std::string client_address,
+			   std::optional<std::chrono::seconds> expire,
+			   SimpleOpComp c) {
   auto r = impl->test_rados_client->blocklist_add(
     std::string(client_address), expire.value_or(0s).count());
-  c->post(std::move(c),
-          (r < 0 ? bs::error_code(-r, mon_category()) : bs::error_code()));
+  asio::post(get_executor(),
+	     asio::append(std::move(c),
+			  (r < 0 ? bs::error_code(-r, mon_category()) :
+			   bs::error_code())));
 }
 
-void RADOS::wait_for_latest_osd_map(std::unique_ptr<Op::Completion> c) {
+void RADOS::wait_for_latest_osd_map_(Op::Completion c) {
   auto r = impl->test_rados_client->wait_for_latest_osd_map();
-  c->dispatch(std::move(c),
-              (r < 0 ? bs::error_code(-r, osd_category()) :
-                       bs::error_code()));
+  asio::dispatch(asio::append(std::move(c),
+			      (r < 0 ? bs::error_code(-r, osd_category()) :
+			       bs::error_code())));
 }
 
 } // namespace neorados
