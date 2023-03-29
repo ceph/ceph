@@ -282,7 +282,7 @@ public:
       laddr_hint,
       len,
       ext->get_paddr(),
-      ext.get()
+      *ext
     ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
       LOG_PREFIX(TransactionManager::alloc_extent);
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
@@ -419,12 +419,50 @@ public:
     LOG_PREFIX(TransactionManager::reserve_region);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}", t, len, hint);
     ceph_assert(is_aligned(hint, epm->get_block_size()));
-    return lba_manager->alloc_extent(
+    return lba_manager->reserve_region(
       t,
       hint,
-      len,
-      P_ADDR_ZERO,
-      nullptr);
+      len);
+  }
+
+  /*
+   * clone_pin
+   *
+   * create an indirect lba mapping pointing to the physical
+   * lba mapping whose key is clone_offset. Resort to btree_lba_manager.h
+   * for the definition of "indirect lba mapping" and "physical lba mapping"
+   *
+   */
+  using clone_extent_iertr = alloc_extent_iertr;
+  using clone_extent_ret = clone_extent_iertr::future<LBAMappingRef>;
+  clone_extent_ret clone_pin(
+    Transaction &t,
+    laddr_t hint,
+    const LBAMapping &mapping) {
+    auto clone_offset =
+      mapping.is_indirect()
+	? mapping.get_intermediate_key()
+	: mapping.get_key();
+
+    LOG_PREFIX(TransactionManager::clone_pin);
+    SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}, clone_offset {}",
+      t, mapping.get_length(), hint, clone_offset);
+    ceph_assert(is_aligned(hint, epm->get_block_size()));
+    return lba_manager->clone_extent(
+      t,
+      hint,
+      mapping.get_length(),
+      clone_offset,
+      mapping.get_val()
+    ).si_then([this, &t, clone_offset](auto pin) {
+      return inc_ref(t, clone_offset
+      ).si_then([pin=std::move(pin)](auto) mutable {
+	return std::move(pin);
+      }).handle_error_interruptible(
+	crimson::ct_error::input_output_error::pass_further(),
+	crimson::ct_error::assert_all("not possible")
+      );
+    });
   }
 
   /* alloc_extents
@@ -780,7 +818,7 @@ private:
       remap_laddr,
       remap_length,
       remap_paddr,
-      ext.get()
+      *ext
     ).si_then([remap_laddr, remap_length, remap_paddr](auto &&ref) {
       assert(ref->get_key() == remap_laddr);
       assert(ref->get_val() == remap_paddr);

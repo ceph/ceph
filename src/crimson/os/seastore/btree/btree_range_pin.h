@@ -132,10 +132,6 @@ class BtreeNodeMapping : public PhysicalNodeMapping<key_t, val_t> {
   fixed_kv_node_meta_t<key_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
 
-  pladdr_t _get_val() const final {
-    return value;
-  }
-
 public:
   using val_type = val_t;
   BtreeNodeMapping(op_context_t<key_t> ctx) : ctx(ctx) {}
@@ -186,7 +182,12 @@ public:
   }
 
   val_t get_val() const final {
-    return value;
+    if constexpr (std::is_same_v<val_t, paddr_t>) {
+      return value.get_paddr();
+    } else {
+      static_assert(std::is_same_v<val_t, laddr_t>);
+      return value.get_laddr();
+    }
   }
 
   key_t get_key() const final {

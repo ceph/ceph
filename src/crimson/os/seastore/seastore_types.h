@@ -1042,9 +1042,9 @@ struct pladdr_t {
 
   pladdr_t() = default;
   pladdr_t(const pladdr_t &) = default;
-  explicit pladdr_t(laddr_t laddr)
+  pladdr_t(laddr_t laddr)
     : pladdr(laddr) {}
-  explicit pladdr_t(paddr_t paddr)
+  pladdr_t(paddr_t paddr)
     : pladdr(paddr) {}
 
   bool is_laddr() const {
