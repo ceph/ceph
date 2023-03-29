@@ -913,6 +913,8 @@ is above the *backfillfull* threshold.
 See the discussion for *OSD_BACKFILLFULL* above for
 steps to resolve this condition.
 
+.. _rados-operations-health-checks-pg-damaged:
+
 PG_DAMAGED
 __________
 
@@ -928,7 +930,7 @@ OSD_SCRUB_ERRORS
 ________________
 
 Recent OSD scrubs have uncovered inconsistencies. This error is generally
-paired with *PG_DAMAGED* (see above).
+paired with *PG_DAMAGED* (see :ref:`PG_DAMAGE <rados-operations-health-checks-pg-damaged>`).
 
 See :doc:`pg-repair` for more information.
 
