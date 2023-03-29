@@ -18,19 +18,7 @@ def gen_mon_cap_str(caps):
 
     caps = ((perm1, fsname1), (perm2, fsname2))
     """
-    def _unpack_tuple(c):
-        if len(c) == 1:
-            perm, fsname = c[0], None
-        elif len(c) == 2:
-            perm, fsname = c
-        elif len(c) < 1:
-            raise RuntimeError('received no items caps tuple')
-        else: # len(c) > 2
-            raise RuntimeError('received too many items in caps tuple')
-        return perm, fsname
-
-    def _gen_mon_cap_str(c):
-        perm, fsname = _unpack_tuple(c)
+    def _gen_mon_cap_str(perm, fsname=None):
         mon_cap = f'allow {perm}'
         if fsname:
             mon_cap += f' fsname={fsname}'
@@ -41,7 +29,7 @@ def gen_mon_cap_str(caps):
 
     mon_cap = ''
     for i, c in enumerate(caps):
-        mon_cap += _gen_mon_cap_str(c)
+        mon_cap += _gen_mon_cap_str(*c)
         if i != len(caps) - 1:
             mon_cap += ', '
 
@@ -54,8 +42,7 @@ def gen_osd_cap_str(caps):
 
     caps = ((perm1, fsname1), (perm2, fsname2))
     """
-    def _gen_osd_cap_str(c):
-        perm, fsname = c
+    def _gen_osd_cap_str(perm, fsname):
         osd_cap = f'allow {perm} tag cephfs'
         if fsname:
             osd_cap += f' data={fsname}'
@@ -66,7 +53,7 @@ def gen_osd_cap_str(caps):
 
     osd_cap = ''
     for i, c in enumerate(caps):
-        osd_cap += _gen_osd_cap_str(c)
+        osd_cap += _gen_osd_cap_str(*c)
         if i != len(caps) - 1:
             osd_cap += ', '
 
@@ -79,22 +66,7 @@ def gen_mds_cap_str(caps):
 
     caps = ((perm1, fsname1, cephfs_mntpt1), (perm2, fsname2, cephfs_mntpt2))
     """
-    def _unpack_tuple(c):
-        if len(c) == 1:
-            perm, fsname, cephfs_mntpt = c[0], None, '/'
-        elif len(c) == 2:
-            perm, fsname, cephfs_mntpt = c[0], c[1], '/'
-        elif len(c) == 3:
-            perm, fsname, cephfs_mntpt = c
-        elif len(c) < 1:
-            raise RuntimeError('received no items caps tuple')
-        else: # len(c) > 3
-            raise RuntimeError('received too many items in caps tuple')
-
-        return perm, fsname, cephfs_mntpt
-
-    def _gen_mds_cap_str(c):
-        perm, fsname, cephfs_mntpt = _unpack_tuple(c)
+    def _gen_mds_cap_str(perm, fsname=None, cephfs_mntpt='/'):
         mds_cap = f'allow {perm}'
         if fsname:
             mds_cap += f' fsname={fsname}'
@@ -109,7 +81,7 @@ def gen_mds_cap_str(caps):
 
     mds_cap = ''
     for i, c in enumerate(caps):
-        mds_cap +=  _gen_mds_cap_str(c)
+        mds_cap +=  _gen_mds_cap_str(*c)
         if i != len(caps) - 1:
             mds_cap += ', '
 
