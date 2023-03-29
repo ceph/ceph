@@ -40,6 +40,7 @@
 #include "include/rados/rados_types.hpp"
 #include "include/function2.hpp"
 #include "include/neorados/RADOS_Decodable.hpp"
+#include "librbd/neorbdrados/RADOS_Decodable.hpp"
 
 #include "common/admin_socket.h"
 #include "common/async/completion.h"
@@ -771,17 +772,54 @@ struct ObjectOperation {
       }
     }
   };
+  struct CB_ObjectOperation_decodewatchersneorbd {
+    std::vector<neorbdrados::ObjWatcher>* pwatchers;
+    int* prval;
+    boost::system::error_code* pec;
+    CB_ObjectOperation_decodewatchersneorbd(std::vector<neorbdrados::ObjWatcher>* pw,
+					    int* pr,
+					    boost::system::error_code* pec)
+      : pwatchers(pw), prval(pr), pec(pec) {}
+    void operator()(boost::system::error_code ec, int r,
+		    const ceph::buffer::list& bl) {
+      if (r >= 0) {
+	auto p = bl.cbegin();
+	try {
+	  obj_list_watch_response_t resp;
+	  decode(resp, p);
+	  if (pwatchers) {
+	    for (const auto& watch_item : resp.entries) {
+	      neorbdrados::ObjWatcher ow;
+	      ow.addr = watch_item.addr.get_legacy_str();
+	      ow.watcher_id = watch_item.name.num();
+	      ow.cookie = watch_item.cookie;
+	      ow.timeout_seconds = watch_item.timeout_seconds;
+	      pwatchers->push_back(std::move(ow));
+	    }
+	  }
+	} catch (const ceph::buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
+	  if (pec)
+	    *pec = e.code();
+	}
+      }
+    }
+  };
 
 
   struct CB_ObjectOperation_decodesnaps {
     librados::snap_set_t *psnaps;
     neorados::SnapSet *neosnaps;
+    neorbdrados::SnapSet *neorbdsnaps;
     int *prval;
     boost::system::error_code* pec;
     CB_ObjectOperation_decodesnaps(librados::snap_set_t* ps,
-				   neorados::SnapSet* ns, int* pr,
+				   neorados::SnapSet* ns,
+				   neorbdrados::SnapSet* nsrbd,
+				   int* pr,
 				   boost::system::error_code* pec)
-      : psnaps(ps), neosnaps(ns), prval(pr), pec(pec) {}
+      : psnaps(ps), neosnaps(ns), neorbdsnaps(nsrbd), prval(pr), pec(pec) {}
     void operator()(boost::system::error_code ec, int r, const ceph::buffer::list& bl) {
       if (r >= 0) {
 	using ceph::decode;
@@ -822,6 +860,21 @@ struct ObjectOperation {
 	      neosnaps->clones.push_back(std::move(clone));
 	    }
 	    neosnaps->seq = resp.seq;
+	  }
+	  if (neorbdsnaps) {
+	    neorbdsnaps->clones.clear();
+	    for (auto&& c : resp.clones) {
+	      neorbdrados::CloneInfo clone;
+
+	      clone.cloneid = std::move(c.cloneid);
+	      clone.snaps.reserve(c.snaps.size());
+	      std::move(c.snaps.begin(), c.snaps.end(),
+			std::back_inserter(clone.snaps));
+	      clone.overlap = c.overlap;
+	      clone.size = c.size;
+	      neorbdsnaps->clones.push_back(std::move(clone));
+	    }
+	    neorbdsnaps->seq = resp.seq;
 	  }
 	} catch (const ceph::buffer::error& e) {
 	  if (prval)
@@ -1416,12 +1469,18 @@ struct ObjectOperation {
     set_handler(CB_ObjectOperation_decodewatchersneo(out, nullptr, ec));
     out_ec.back() = ec;
   }
+  void list_watchers(std::vector<neorbdrados::ObjWatcher>* out,
+		     boost::system::error_code* ec) {
+    add_op(CEPH_OSD_OP_LIST_WATCHERS);
+    set_handler(CB_ObjectOperation_decodewatchersneorbd(out, nullptr, ec));
+    out_ec.back() = ec;
+  }
 
   void list_snaps(librados::snap_set_t *out, int *prval,
 		  boost::system::error_code* ec = nullptr) {
     add_op(CEPH_OSD_OP_LIST_SNAPS);
     if (prval || out || ec) {
-      set_handler(CB_ObjectOperation_decodesnaps(out, nullptr, prval, ec));
+      set_handler(CB_ObjectOperation_decodesnaps(out, nullptr, nullptr, prval, ec));
       out_rval.back() = prval;
       out_ec.back() = ec;
     }
@@ -1431,7 +1490,16 @@ struct ObjectOperation {
 		  boost::system::error_code* ec = nullptr) {
     add_op(CEPH_OSD_OP_LIST_SNAPS);
     if (prval || out || ec) {
-      set_handler(CB_ObjectOperation_decodesnaps(nullptr, out, prval, ec));
+      set_handler(CB_ObjectOperation_decodesnaps(nullptr, out, nullptr, prval, ec));
+      out_rval.back() = prval;
+      out_ec.back() = ec;
+    }
+  }
+  void list_snaps(neorbdrados::SnapSet *out, int *prval,
+		  boost::system::error_code* ec = nullptr) {
+    add_op(CEPH_OSD_OP_LIST_SNAPS);
+    if (prval || out || ec) {
+      set_handler(CB_ObjectOperation_decodesnaps(nullptr, nullptr, out, prval, ec));
       out_rval.back() = prval;
       out_ec.back() = ec;
     }

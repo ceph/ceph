@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/dout.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "librbd/cache/pwl/AbstractWriteLog.h"
 #include "librbd/cache/pwl/ShutdownRequest.h"
 #include "librbd/cache/WriteLogImageDispatch.h"

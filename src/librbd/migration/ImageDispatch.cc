@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "librbd/migration/ImageDispatch.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/AioCompletion.h"

@@ -3,7 +3,7 @@
 
 #include "librbd/crypto/CryptoObjectDispatch.h"
 #include "include/ceph_assert.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "common/dout.h"
 #include "osdc/Striper.h"
 #include "librbd/ImageCtx.h"

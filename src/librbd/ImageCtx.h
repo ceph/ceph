@@ -36,10 +36,10 @@
 #include <boost/lockfree/policies.hpp>
 #include <boost/lockfree/queue.hpp>
 
-namespace neorados {
+namespace neorbdrados {
 class IOContext;
 class RADOS;
-} // namespace neorados
+} // namespace neorbdrados
 
 namespace librbd {
 
@@ -116,7 +116,7 @@ namespace librbd {
     std::shared_ptr<AsioEngine> asio_engine;
 
     // New ASIO-style RADOS API
-    neorados::RADOS& rados_api;
+    neorbdrados::RADOS& rados_api;
 
     // Legacy RADOS API
     librados::IoCtx data_ctx;
@@ -361,7 +361,7 @@ namespace librbd {
                                    ceph::mutex **timer_lock);
 
   private:
-    std::shared_ptr<neorados::IOContext> data_io_context;
+    std::shared_ptr<neorbdrados::IOContext> data_io_context;
   };
 }
 

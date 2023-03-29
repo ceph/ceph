@@ -89,7 +89,7 @@ target_link_libraries(ceph_test_rbd_mirror
   cls_rbd_client
   cls_journal_client
   rbd_types
-  libneorados
+  libneorbdrados
   librados
   radostest-cxx
   ${UNITTEST_LIBS}

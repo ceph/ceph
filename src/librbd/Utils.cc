@@ -8,7 +8,7 @@
 #include "include/random.h"
 #include "include/rbd_types.h"
 #include "include/stringify.h"
-#include "include/neorados/RADOS.hpp"
+#include "neorbdrados/RADOS.hpp"
 #include "include/rbd/features.h"
 #include "common/dout.h"
 #include "common/errno.h"

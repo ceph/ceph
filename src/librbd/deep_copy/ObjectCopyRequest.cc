@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "ObjectCopyRequest.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "common/errno.h"
 #include "librados/snap_set_diff.h"
 #include "librbd/ExclusiveLock.h"

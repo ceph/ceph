@@ -13,7 +13,7 @@
 #include <boost/asio/post.hpp>
 
 struct Context;
-namespace neorados { struct RADOS; }
+namespace neorbdrados { struct RADOS; }
 
 namespace librbd {
 
@@ -29,7 +29,7 @@ public:
   AsioEngine(const AsioEngine&) = delete;
   AsioEngine& operator=(const AsioEngine&) = delete;
 
-  inline neorados::RADOS& get_rados_api() {
+  inline neorbdrados::RADOS& get_rados_api() {
     return *m_rados_api;
   }
 
@@ -67,7 +67,7 @@ public:
   void post(Context* ctx, int r);
 
 private:
-  std::shared_ptr<neorados::RADOS> m_rados_api;
+  std::shared_ptr<neorbdrados::RADOS> m_rados_api;
   CephContext* m_cct;
 
   boost::asio::io_context& m_io_context;

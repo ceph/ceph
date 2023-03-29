@@ -8,7 +8,7 @@
 #include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "include/err.h"
-#include "include/neorados/RADOS.hpp"
+#include "librbd/neorbdrados/RADOS.hpp"
 #include "osd/osd_types.h"
 #include "librados/snap_set_diff.h"
 #include "librbd/AsioEngine.h"
@@ -131,8 +131,8 @@ ObjectRequest<I>::ObjectRequest(
 }
 
 template <typename I>
-void ObjectRequest<I>::add_write_hint(I& image_ctx, neorados::WriteOp* wr) {
-  auto alloc_hint_flags = static_cast<neorados::alloc_hint::alloc_hint_t>(
+void ObjectRequest<I>::add_write_hint(I& image_ctx, neorbdrados::WriteOp* wr) {
+  auto alloc_hint_flags = static_cast<neorbdrados::alloc_hint::alloc_hint_t>(
     image_ctx.alloc_hint_flags);
   if (image_ctx.enable_alloc_hint) {
     wr->set_alloc_hint(image_ctx.get_object_size(),
@@ -233,7 +233,7 @@ void ObjectReadRequest<I>::read_object() {
 
   ldout(image_ctx->cct, 20) << "snap_id=" << read_snap_id << dendl;
 
-  neorados::ReadOp read_op;
+  neorbdrados::ReadOp read_op;
   for (auto& extent: *this->m_extents) {
     if (extent.length >= image_ctx->sparse_read_threshold_bytes) {
       read_op.sparse_read(extent.offset, extent.length, &extent.bl,
@@ -397,7 +397,7 @@ void AbstractObjectWriteRequest<I>::compute_parent_info() {
 
 template <typename I>
 void AbstractObjectWriteRequest<I>::add_write_hint(
-    neorados::WriteOp *wr) {
+    neorbdrados::WriteOp *wr) {
   I *image_ctx = this->m_ictx;
   std::shared_lock image_locker{image_ctx->image_lock};
   if (image_ctx->object_map == nullptr || !this->m_object_may_exist ||
@@ -488,7 +488,7 @@ void AbstractObjectWriteRequest<I>::write_object() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << dendl;
 
-  neorados::WriteOp write_op;
+  neorbdrados::WriteOp write_op;
   if (m_copyup_enabled) {
     if (m_guarding_migration_write) {
       auto snap_seq = (this->m_io_context->write_snap_context() ?
@@ -649,7 +649,7 @@ void AbstractObjectWriteRequest<I>::handle_post_write_object_map_update(int r) {
 }
 
 template <typename I>
-void ObjectWriteRequest<I>::add_write_hint(neorados::WriteOp* wr) {
+void ObjectWriteRequest<I>::add_write_hint(neorbdrados::WriteOp* wr) {
   if ((m_write_flags & OBJECT_WRITE_FLAG_CREATE_EXCLUSIVE) != 0) {
     wr->create(true);
   } else if (m_assert_version.has_value()) {
@@ -659,7 +659,7 @@ void ObjectWriteRequest<I>::add_write_hint(neorados::WriteOp* wr) {
 }
 
 template <typename I>
-void ObjectWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
+void ObjectWriteRequest<I>::add_write_ops(neorbdrados::WriteOp* wr) {
   if (this->m_full_object) {
     wr->write_full(bufferlist{m_write_data});
   } else {
@@ -669,7 +669,7 @@ void ObjectWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
 }
 
 template <typename I>
-void ObjectDiscardRequest<I>::add_write_ops(neorados::WriteOp* wr) {
+void ObjectDiscardRequest<I>::add_write_ops(neorbdrados::WriteOp* wr) {
   switch (m_discard_action) {
   case DISCARD_ACTION_REMOVE:
     wr->remove();
@@ -690,14 +690,14 @@ void ObjectDiscardRequest<I>::add_write_ops(neorados::WriteOp* wr) {
 }
 
 template <typename I>
-void ObjectWriteSameRequest<I>::add_write_ops(neorados::WriteOp* wr) {
+void ObjectWriteSameRequest<I>::add_write_ops(neorbdrados::WriteOp* wr) {
   wr->writesame(this->m_object_off, this->m_object_len,
                 bufferlist{m_write_data});
   util::apply_op_flags(m_op_flags, 0U, wr);
 }
 
 template <typename I>
-void ObjectCompareAndWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
+void ObjectCompareAndWriteRequest<I>::add_write_ops(neorbdrados::WriteOp* wr) {
   wr->cmpext(this->m_object_off, bufferlist{m_cmp_bl}, nullptr);
 
   if (this->m_full_object) {
@@ -760,7 +760,7 @@ void ObjectListSnapsRequest<I>::list_snaps() {
   I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << dendl;
 
-  neorados::ReadOp read_op;
+  neorbdrados::ReadOp read_op;
   read_op.list_snaps(&m_snap_set, &m_ec);
 
   image_ctx->rados_api.execute(

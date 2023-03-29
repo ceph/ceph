@@ -1,3 +1,5 @@
+add_subdirectory(neorbdrados)
+
 set(librbd_types_srcs
   journal/Types.cc
   mirroring_watcher/Types.cc
@@ -252,7 +254,7 @@ add_library(librbd_plugin_parent_cache SHARED
   ${rbd_plugin_parent_cache_srcs})
 target_link_libraries(librbd_plugin_parent_cache PRIVATE
   ceph_immutable_object_cache_lib ceph-common librbd
-  libneorados
+  libneorbdrados
   librados)
 set_target_properties(librbd_plugin_parent_cache PROPERTIES
   OUTPUT_NAME ceph_librbd_parent_cache
@@ -302,7 +304,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
     blk
     ceph-common
     cls_rbd_client
-    libneorados
+    libneorbdrados
     librados
     StdFilesystem::filesystem)
 
@@ -333,7 +335,7 @@ target_link_libraries(librbd PRIVATE
   cls_rbd_client
   cls_lock_client
   cls_journal_client
-  libneorados
+  libneorbdrados
   librados
   ceph-common
   pthread
