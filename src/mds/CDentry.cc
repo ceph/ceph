@@ -709,7 +709,9 @@ bool CDentry::check_corruption(bool load)
     } else {
       derr << "newly corrupt dentry to be committed: " << *this << dendl;
     }
-    dir->go_bad_dentry(last, get_name());
+    if (g_conf().get_val<bool>("mds_go_bad_corrupt_dentry")) {
+      dir->go_bad_dentry(last, get_name());
+    }
     if (!load && g_conf().get_val<bool>("mds_abort_on_newly_corrupt_dentry")) {
       dir->mdcache->mds->clog->error() << "MDS abort because newly corrupt dentry to be committed: " << *this;
       ceph_abort("detected newly corrupt dentry"); /* avoid writing out newly corrupted dn */
