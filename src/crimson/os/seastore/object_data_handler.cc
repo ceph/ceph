@@ -883,6 +883,31 @@ auto with_object_data(
     });
 }
 
+template <typename F>
+auto with_objects_data(
+  ObjectDataHandler::context_t ctx,
+  F &&f)
+{
+  ceph_assert(ctx.d_onode);
+  return seastar::do_with(
+    ctx.onode.get_layout().object_data.get(),
+    ctx.d_onode->get_layout().object_data.get(),
+    std::forward<F>(f),
+    [ctx](auto &object_data, auto &d_object_data, auto &f) {
+      return std::invoke(f, object_data, d_object_data
+      ).si_then([ctx, &object_data, &d_object_data] {
+	if (object_data.must_update()) {
+	  ctx.onode.get_mutable_layout(ctx.t).object_data.update(object_data);
+	}
+	if (d_object_data.must_update()) {
+	  ctx.d_onode->get_mutable_layout(
+	    ctx.t).object_data.update(d_object_data);
+	}
+	return seastar::now();
+      });
+    });
+}
+
 ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   context_t ctx,
   object_data_t &object_data,
@@ -1454,6 +1479,128 @@ ObjectDataHandler::clear_ret ObjectDataHandler::clear(
       }
       return trim_data_reservation(ctx, object_data, 0);
     });
+}
+
+ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
+  context_t ctx,
+  object_data_t &object_data,
+  lba_pin_list_t &pins,
+  laddr_t data_base)
+{
+  LOG_PREFIX(ObjectDataHandler::clone_extents);
+  TRACET(" object_data: {}~{}, data_base: {}",
+    ctx.t,
+    object_data.get_reserved_data_base(),
+    object_data.get_reserved_data_len(),
+    data_base);
+  return ctx.tm.dec_ref(
+    ctx.t,
+    object_data.get_reserved_data_base()
+  ).si_then(
+    [&pins, &object_data, ctx, data_base](auto) mutable {
+      return seastar::do_with(
+	(extent_len_t)0,
+	[&object_data, ctx, data_base, &pins](auto &last_pos) {
+	return trans_intr::do_for_each(
+	  pins,
+	  [&last_pos, &object_data, ctx, data_base](auto &pin) {
+	  auto offset = pin->get_key() - data_base;
+	  ceph_assert(offset == last_pos);
+	  auto fut = TransactionManager::alloc_extent_iertr
+	    ::make_ready_future<LBAMappingRef>();
+	  auto addr = object_data.get_reserved_data_base() + offset;
+	  if (pin->get_val().is_zero()) {
+	    fut = ctx.tm.reserve_region(ctx.t, addr, pin->get_length());
+	  } else {
+	    fut = ctx.tm.clone_pin(ctx.t, addr, *pin);
+	  }
+	  return fut.si_then(
+	    [&pin, &last_pos, offset](auto) {
+	    last_pos = offset + pin->get_length();
+	    return seastar::now();
+	  }).handle_error_interruptible(
+	    crimson::ct_error::input_output_error::pass_further(),
+	    crimson::ct_error::assert_all("not possible")
+	  );
+	}).si_then([&last_pos, &object_data, ctx] {
+	  if (last_pos != object_data.get_reserved_data_len()) {
+	    return ctx.tm.reserve_region(
+	      ctx.t,
+	      object_data.get_reserved_data_base() + last_pos,
+	      object_data.get_reserved_data_len() - last_pos
+	    ).si_then([](auto) {
+	      return seastar::now();
+	    });
+	  }
+	  return TransactionManager::reserve_extent_iertr::now();
+	});
+      });
+    },
+    ObjectDataHandler::write_iertr::pass_further{},
+    crimson::ct_error::assert_all{
+      "object_data_handler::clone invalid error"
+    }
+  );
+}
+
+ObjectDataHandler::clone_ret ObjectDataHandler::clone(
+  context_t ctx)
+{
+  // the whole clone procedure can be seperated into the following steps:
+  // 	1. let clone onode(d_object_data) take the head onode's
+  // 	   object data base;
+  // 	2. reserve a new region in lba tree for the head onode;
+  // 	3. clone all extents of the clone onode, see transaction_manager.h
+  // 	   for the details of clone_pin;
+  // 	4. reserve the space between the head onode's size and its reservation
+  // 	   length.
+  return with_objects_data(
+    ctx,
+    [ctx, this](auto &object_data, auto &d_object_data) {
+    ceph_assert(d_object_data.is_null());
+    if (object_data.is_null()) {
+      return clone_iertr::now();
+    }
+    return prepare_data_reservation(
+      ctx,
+      d_object_data,
+      object_data.get_reserved_data_len()
+    ).si_then([&object_data, &d_object_data, ctx, this] {
+      assert(!object_data.is_null());
+      auto base = object_data.get_reserved_data_base();
+      auto len = object_data.get_reserved_data_len();
+      object_data.clear();
+      LOG_PREFIX(ObjectDataHandler::clone);
+      DEBUGT("cloned obj reserve_data_base: {}, len {}",
+	ctx.t,
+	d_object_data.get_reserved_data_base(),
+	d_object_data.get_reserved_data_len());
+      return prepare_data_reservation(
+	ctx,
+	object_data,
+	d_object_data.get_reserved_data_len()
+      ).si_then([&d_object_data, ctx, &object_data, base, len, this] {
+	LOG_PREFIX("ObjectDataHandler::clone");
+	DEBUGT("head obj reserve_data_base: {}, len {}",
+	  ctx.t,
+	  object_data.get_reserved_data_base(),
+	  object_data.get_reserved_data_len());
+	return ctx.tm.get_pins(ctx.t, base, len
+	).si_then([ctx, &object_data, &d_object_data, base, this](auto pins) {
+	  return seastar::do_with(
+	    std::move(pins),
+	    [ctx, &object_data, &d_object_data, base, this](auto &pins) {
+	    return clone_extents(ctx, object_data, pins, base
+	    ).si_then([ctx, &d_object_data, base, &pins, this] {
+	      return clone_extents(ctx, d_object_data, pins, base);
+	    }).si_then([&pins, ctx] {
+	      return do_removals(ctx, pins);
+	    });
+	  });
+	});
+      });
+    });
+  });
 }
 
 } // namespace crimson::os::seastore

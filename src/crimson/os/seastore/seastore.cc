@@ -1196,8 +1196,9 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     op_type_t::TRANSACTION,
     [this](auto &ctx) {
       return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
-        return seastar::do_with(std::vector<OnodeRef>(ctx.iter.objects.size()),
-          std::vector<OnodeRef>(),
+        return seastar::do_with(
+	  std::vector<OnodeRef>(ctx.iter.objects.size()),
+          std::vector<OnodeRef>(ctx.iter.objects.size()),
           [this, &ctx](auto& onodes, auto& d_onodes) mutable {
           return trans_intr::repeat(
             [this, &ctx, &onodes, &d_onodes]() mutable
@@ -1289,20 +1290,42 @@ SeaStore::Shard::_do_transaction_step(
         *ctx.transaction, i.get_oid(op->oid));
     }
   }
-  return fut.si_then([&, op, this](auto&& get_onode) -> tm_ret {
-    LOG_PREFIX(SeaStore::_do_transaction_step);
+  return fut.si_then([&, op](auto get_onode) {
     OnodeRef &o = onodes[op->oid];
     if (!o) {
       assert(get_onode);
       o = get_onode;
-      d_onodes.push_back(get_onode);
+      d_onodes[op->oid] = get_onode;
     }
+    if (op->op == Transaction::OP_CLONE && !d_onodes[op->dest_oid]) {
+      //TODO: use when_all_succeed after making onode tree
+      //      support parallel extents loading
+      return onode_manager->get_or_create_onode(
+	*ctx.transaction, i.get_oid(op->dest_oid)
+      ).si_then([&, op](auto dest_onode) {
+	assert(dest_onode);
+	auto &d_o = onodes[op->dest_oid];
+	assert(!d_o);
+	assert(!d_onodes[op->dest_oid]);
+	d_o = dest_onode;
+	d_onodes[op->dest_oid] = dest_onode;
+	return seastar::now();
+      });
+    } else {
+      return OnodeManager::get_or_create_onode_iertr::now();
+    }
+  }).si_then([&, op, this]() -> tm_ret {
+    LOG_PREFIX(SeaStore::_do_transaction_step);
     try {
       switch (op->op) {
       case Transaction::OP_REMOVE:
       {
 	TRACET("removing {}", *ctx.transaction, i.get_oid(op->oid));
-        return _remove(ctx, onodes[op->oid]);
+        return _remove(ctx, onodes[op->oid]
+	).si_then([&onodes, &d_onodes, op] {
+	  onodes[op->oid].reset();
+	  d_onodes[op->oid].reset();
+	});
       }
       case Transaction::OP_CREATE:
       case Transaction::OP_TOUCH:
@@ -1389,6 +1412,10 @@ SeaStore::Shard::_do_transaction_step(
       {
         // TODO
         return tm_iertr::now();
+      }
+      case Transaction::OP_CLONE:
+      {
+	return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid]);
       }
       default:
         ERROR("bad op {}", static_cast<unsigned>(op->op));
@@ -1505,6 +1532,31 @@ SeaStore::Shard::_write(
         offset,
         bl);
     });
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_clone(
+  internal_context_t &ctx,
+  OnodeRef &onode,
+  OnodeRef &d_onode)
+{
+  LOG_PREFIX(SeaStore::_clone);
+  DEBUGT("onode={} d_onode={}", *ctx.transaction, *onode, *d_onode);
+  return seastar::do_with(
+    ObjectDataHandler(max_object_size),
+    [this, &ctx, &onode, &d_onode](auto &objHandler) {
+    //TODO: currently, we only care about object data, leaving cloning
+    //      of xattr/omap for future work
+    auto &object_size = onode->get_layout().size;
+    auto &d_object_size = d_onode->get_mutable_layout(*ctx.transaction).size;
+    d_object_size = object_size;
+    return objHandler.clone(
+      ObjectDataHandler::context_t{
+	*transaction_manager,
+	*ctx.transaction,
+	*onode,
+	d_onode.get()});
+  });
 }
 
 SeaStore::Shard::tm_ret

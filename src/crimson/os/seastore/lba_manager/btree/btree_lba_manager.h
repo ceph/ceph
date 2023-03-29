@@ -89,12 +89,34 @@ public:
     Transaction &t,
     laddr_t offset) final;
 
+  alloc_extent_ret reserve_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len)
+  {
+    return _alloc_extent(t, hint, len, P_ADDR_ZERO, P_ADDR_NULL, nullptr);
+  }
+
+  alloc_extent_ret clone_extent(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len,
+    laddr_t intermediate_key,
+    paddr_t actual_addr)
+  {
+    return _alloc_extent(t, hint, len, intermediate_key, actual_addr, nullptr);
+  }
+
   alloc_extent_ret alloc_extent(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
-    LogicalCachedExtent*) final;
+    LogicalCachedExtent &ext) final
+  {
+    assert(ext);
+    return _alloc_extent(t, hint, len, addr, P_ADDR_NULL, &ext);
+  }
 
   ref_ret decref_extent(
     Transaction &t,
@@ -186,6 +208,14 @@ private:
     Transaction &t,
     laddr_t addr,
     update_func_t &&f,
+    LogicalCachedExtent*);
+
+  alloc_extent_ret _alloc_extent(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len,
+    pladdr_t addr,
+    paddr_t actual_addr,
     LogicalCachedExtent*);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
