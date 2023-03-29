@@ -81,33 +81,6 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   bool is_rotational;
   MonClient *monc;
 
-  std::string mclock_profile = "high_client_ops";
-  struct ClientAllocs {
-    double res;
-    double wgt;
-    double lim;
-
-    ClientAllocs(double _res, double _wgt, double _lim) {
-      update(_res, _wgt, _lim);
-    }
-
-    inline void update(double _res, double _wgt, double _lim) {
-      res = _res;
-      wgt = _wgt;
-      lim = _lim;
-    }
-  };
-  std::array<
-    ClientAllocs,
-    static_cast<size_t>(op_scheduler_class::client) + 1
-  > client_allocs = {
-    // Placeholder, get replaced with configured values
-    ClientAllocs(0, 1, 0), // background_recovery
-    ClientAllocs(0, 1, 0), // background_best_effort
-    ClientAllocs(0, 1, 0), // immediate (not used)
-    ClientAllocs(0, 1, 0)  // client
-  };
-
   /**
    * osd_bandwidth_cost_per_io
    *
@@ -238,31 +211,13 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
    */
   void set_osd_capacity_params_from_config();
 
+  // Set the mclock related config params based on the profile
+  void set_config_defaults_from_profile();
+
 public:
   mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, MonClient *monc);
   ~mClockScheduler() override;
-
-  // Set the mclock profile type to enable
-  void set_mclock_profile();
-
-  // Get the active mclock profile
-  std::string get_mclock_profile();
-
-  // Set "balanced" profile allocations
-  void set_balanced_profile_allocations();
-
-  // Set "high_recovery_ops" profile allocations
-  void set_high_recovery_ops_profile_allocations();
-
-  // Set "high_client_ops" profile allocations
-  void set_high_client_ops_profile_allocations();
-
-  // Set the mclock related config params based on the profile
-  void enable_mclock_profile_settings();
-
-  // Set mclock config parameter based on allocations
-  void set_profile_config();
 
   /// Calculate scaled cost per item
   uint32_t calc_scaled_cost(int cost);
