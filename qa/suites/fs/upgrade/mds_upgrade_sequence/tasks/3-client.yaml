@@ -1,0 +1,4 @@
+teuthology:
+  postmerge:
+    - if is_fuse() then reject() end
+tasks:
