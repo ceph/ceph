@@ -968,6 +968,15 @@ options:
   services:
   - mds
   fmt_desc: MDS will abort if dentry is detected newly corrupted.
+- name: mds_go_bad_corrupt_dentry
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will mark a corrupt dentry as bad and isolate
+  flags:
+  - runtime
 - name: mds_inject_rename_corrupt_dentry_first
   type: float
   level: dev
