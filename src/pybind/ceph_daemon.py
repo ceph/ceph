@@ -22,7 +22,7 @@ from prettytable import PrettyTable, HEADER
 from signal import signal, Signals, SIGWINCH
 from termios import TIOCGWINSZ
 from types import FrameType
-from typing import Any, Callable, Dict, List, Optional, Sequence, TextIO, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, TextIO, Tuple, Union
 
 from ceph_argparse import parse_json_funcsigs, validate_command
 
@@ -367,8 +367,8 @@ class DaemonWatcher(object):
             raise RuntimeError("no stats selected by filters")
 
     def _handle_sigwinch(self,
-                         signo: Signals,
-                         frame: FrameType) -> None:
+                         signo: Union[int, Signals],
+                         frame: Optional[FrameType]) -> None:
         self.termsize.update()
 
     def run(self,
