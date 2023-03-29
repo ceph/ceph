@@ -5975,8 +5975,11 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
       // latest map. One day if COMPACT_VERSION of MClientRequest >=3,
       // we can remove those code.
       mdr->waited_for_osdmap = true;
-      mds->objecter->wait_for_latest_osdmap(std::ref(*new C_IO_Wrapper(
-        mds, new C_MDS_RetryRequest(mdcache, mdr))));
+      mds->objecter->wait_for_latest_osdmap(
+	[c = new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr))]
+	(boost::system::error_code ec) {
+	  c->complete(ceph::from_error_code(ec));
+	});
       return r;
     }
   }
