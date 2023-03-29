@@ -16,7 +16,7 @@ used to rebuild the data. At scale, erasure coding saves space relative to
 replication.
 
 In this documentation, data blocks are referred to as "data chunks"
-and parity blocks are referred to as "encoding chunks".
+and parity blocks are referred to as "coding chunks".
 
 Erasure codes are also called "forward error correction codes". The
 first forward error correction code was developed in 1950 by Richard
