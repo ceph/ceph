@@ -380,6 +380,8 @@ seastar::future<std::map<epoch_t, bufferlist>> OSDSingletonState::load_map_bls(
   epoch_t first,
   epoch_t last)
 {
+  logger().debug("{} loading maps [{},{}]",
+                 __func__, first, last);
   ceph_assert(first <= last);
   return seastar::map_reduce(boost::make_counting_iterator<epoch_t>(first),
 			     boost::make_counting_iterator<epoch_t>(last + 1),
