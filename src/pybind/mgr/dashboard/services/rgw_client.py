@@ -17,7 +17,7 @@ from ..awsauth import S3Auth
 from ..exceptions import DashboardException
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
-from ..tools import dict_contains_path, dict_get, json_str_to_object
+from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
 
 try:
     from typing import Any, Dict, List, Optional, Tuple, Union
@@ -656,9 +656,31 @@ class RgwClient(RestClient):
             exit_code, _, err = mgr.send_rgwadmin_command(rgw_update_period_cmd)
             if exit_code > 0:
                 raise DashboardException(e=err, msg='Unable to update period',
-                                         http_status_code=500, component='rgw')
+                                         http_status_code=400, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def edit_realm(self, realm_name: str, new_realm_name: str, default: str = ''):
+        rgw_realm_edit_cmd = []
+        if new_realm_name != realm_name:
+            rgw_realm_edit_cmd = ['realm', 'rename', '--rgw-realm',
+                                  realm_name, '--realm-new-name', new_realm_name]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to edit realm',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+        if default and str_to_bool(default):
+            rgw_realm_edit_cmd = ['realm', 'default', '--rgw-realm', new_realm_name]
+            try:
+                exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(msg='Unable to set {} as default realm'.format(new_realm_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
 
     def create_zonegroup(self, realm_name: str, zonegroup_name: str,
                          default: bool, master: bool, endpoints: List[str]):
@@ -680,13 +702,12 @@ class RgwClient(RestClient):
             cmd_create_zonegroup_options.append(endpoint)
         rgw_zonegroup_create_cmd += cmd_create_zonegroup_options
         try:
-            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_create_cmd)
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_zonegroup_create_cmd)
             if exit_code > 0:
-                raise DashboardException('Unable to get realm info',
+                raise DashboardException(e=err, msg='Unable to get realm info',
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
         return out
 
     def list_zonegroups(self):
@@ -724,7 +745,7 @@ class RgwClient(RestClient):
                 for rgw_zonegroup in rgw_zonegroup_list['zonegroups']:
                     zonegroup_info = self.get_zonegroup(rgw_zonegroup)
                     zonegroups_info.append(zonegroup_info)
-                    all_zonegroups_info['zonegroups'] = zonegroups_info  # type: ignore
+                all_zonegroups_info['zonegroups'] = zonegroups_info  # type: ignore
             else:
                 all_zonegroups_info['zonegroups'] = []  # type: ignore
         if 'default_info' in rgw_zonegroup_list and rgw_zonegroup_list['default_info'] != '':
@@ -759,12 +780,13 @@ class RgwClient(RestClient):
             cmd_create_zone_options.append(secret_key)
         rgw_zone_create_cmd += cmd_create_zone_options
         try:
-            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_create_cmd)
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_zone_create_cmd)
             if exit_code > 0:
-                raise DashboardException(msg='Unable to create zone',
+                raise DashboardException(e=err, msg='Unable to create zone',
                                          http_status_code=500, component='rgw')
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+
         self.update_period()
         return out
 

@@ -307,7 +307,7 @@ class XFSTestsDev(CephFSTestCase):
         # These tests will fail or take too much time and will
         # make the test timedout, just skip them for now.
         xfstests_exclude_contents = dedent('''\
-            {c}/001 {g}/003 {g}/020 {g}/075 {g}/538 {g}/531
+            {c}/001 {g}/003 {g}/075 {g}/538 {g}/531
             ''').format(g="generic", c="ceph")
 
         self.mount_a.client_remote.write_file(join(self.xfstests_repo_path, 'ceph.exclude'),

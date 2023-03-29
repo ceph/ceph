@@ -1,2 +1,3 @@
 os_type: fedora
 os_version: "17"
+ktype: distro
