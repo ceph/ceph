@@ -5692,6 +5692,12 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
     yield call(new ReadCR(dpp, env->driver,
                           status_obj, &bucket_status, false, &objv));
     if (retcode == -ENOENT) {
+      // if the full sync status object didn't exist yet, run the backward
+      // compatability logic in InitBucketFullSyncStatusCR below. if it did
+      // exist, a `bucket sync init` probably requested its re-initialization,
+      // and shouldn't try to resume incremental sync
+      init_check_compat = true;
+
       // use exclusive create to set state=Init
       objv.generate_new_write_ver(cct);
       yield call(new WriteCR(dpp, env->driver, status_obj, bucket_status, &objv, true));
