@@ -2973,6 +2973,7 @@ void MDSRank::command_scrub_start(Formatter *f,
   bool force = false;
   bool recursive = false;
   bool repair = false;
+  bool scrub_mdsdir = false;
   for (auto &op : scrubop_vec) {
     if (op == "force")
       force = true;
@@ -2980,10 +2981,20 @@ void MDSRank::command_scrub_start(Formatter *f,
       recursive = true;
     else if (op == "repair")
       repair = true;
+    else if (op == "scrub_mdsdir" && path == "/")
+      scrub_mdsdir = true;
   }
 
   std::lock_guard l(mds_lock);
-  mdcache->enqueue_scrub(path, tag, force, recursive, repair, f, on_finish);
+  if (scrub_mdsdir) {
+    MDSGatherBuilder gather(g_ceph_context);
+    mdcache->enqueue_scrub("~mdsdir", "", false, true, false, scrub_mdsdir,
+                           f, gather.new_sub());
+    gather.set_finisher(new C_MDSInternalNoop);
+    gather.activate();
+  }
+  mdcache->enqueue_scrub(path, tag, force, recursive, repair, scrub_mdsdir,
+                         f, on_finish);
   // scrub_dentry() finishers will dump the data for us; we're done!
 }
 
@@ -2993,7 +3004,7 @@ void MDSRank::command_tag_path(Formatter *f,
   C_SaferCond scond;
   {
     std::lock_guard l(mds_lock);
-    mdcache->enqueue_scrub(path, tag, true, true, false, f, &scond);
+    mdcache->enqueue_scrub(path, tag, true, true, false, false, f, &scond);
   }
   scond.wait();
 }
