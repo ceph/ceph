@@ -137,9 +137,20 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
     this.zonegroupNames = this.zonegroupList.map((zonegroup) => {
       return zonegroup['name'];
     });
+    let allZonegroupZonesList = this.zonegroupList.map((zonegroup: RgwZonegroup) => {
+      return zonegroup['zones'];
+    });
+    const allZonegroupZonesInfo = allZonegroupZonesList.reduce(
+      (accumulator, value) => accumulator.concat(value),
+      []
+    );
+    const allZonegroupZonesNames = allZonegroupZonesInfo.map((zone) => {
+      return zone['name'];
+    });
     this.allZoneNames = this.zoneList.map((zone: RgwZone) => {
       return zone['name'];
     });
+    this.allZoneNames = _.difference(this.allZoneNames, allZonegroupZonesNames);
     if (this.action === 'create' && this.defaultsInfo['defaultRealmName'] !== null) {
       this.multisiteZonegroupForm
         .get('selectedRealm')

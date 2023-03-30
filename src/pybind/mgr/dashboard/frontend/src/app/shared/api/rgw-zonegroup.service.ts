@@ -30,10 +30,10 @@ export class RgwZonegroupService {
     realm: RgwRealm,
     zonegroup: RgwZonegroup,
     newZonegroupName: string,
-    defaultZonegroup: boolean,
-    master: boolean,
-    removedZones: string[],
-    addedZones: string[]
+    defaultZonegroup?: boolean,
+    master?: boolean,
+    removedZones?: string[],
+    addedZones?: string[]
   ) {
     return this.rgwDaemonService.request((requestBody: any) => {
       requestBody = {
@@ -93,6 +93,7 @@ export class RgwZonegroupService {
     nodes['master_zone'] = zonegroup.master_zone;
     nodes['zones'] = zonegroup.zones;
     nodes['placement_targets'] = zonegroup.placement_targets;
+    nodes['default_placement'] = zonegroup.default_placement;
     return nodes;
   }
 }
