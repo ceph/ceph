@@ -406,7 +406,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def enter_host_maintenance(self, hostname: str, force: bool = False) -> OrchResult:
+    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult:
         """
         Place a host in maintenance, stopping daemons and disabling it's systemd target
         """

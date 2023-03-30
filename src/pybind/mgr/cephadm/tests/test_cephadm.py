@@ -1717,6 +1717,33 @@ class TestCephadm(object):
         assert not cephadm_module.inventory._inventory[hostname]['status']
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    @mock.patch("cephadm.CephadmOrchestrator._host_ok_to_stop")
+    @mock.patch("cephadm.module.HostCache.get_daemon_types")
+    @mock.patch("cephadm.module.HostCache.get_hosts")
+    def test_maintenance_enter_i_really_mean_it(self, _hosts, _get_daemon_types, _host_ok, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        hostname = 'host1'
+        err_str = 'some kind of error'
+        _run_cephadm.side_effect = async_side_effect(
+            ([''], ['something\nfailed - disable the target'], 0))
+        _host_ok.return_value = 1, err_str
+        _get_daemon_types.return_value = ['mon']
+        _hosts.return_value = [hostname, 'other_host']
+        cephadm_module.inventory.add_host(HostSpec(hostname))
+
+        with pytest.raises(OrchestratorError, match=err_str):
+            cephadm_module.enter_host_maintenance(hostname)
+        assert not cephadm_module.inventory._inventory[hostname]['status']
+
+        with pytest.raises(OrchestratorError, match=err_str):
+            cephadm_module.enter_host_maintenance(hostname, force=True)
+        assert not cephadm_module.inventory._inventory[hostname]['status']
+
+        retval = cephadm_module.enter_host_maintenance(hostname, force=True, yes_i_really_mean_it=True)
+        assert retval.result_str().startswith('Daemons for Ceph cluster')
+        assert not retval.exception_str
+        assert cephadm_module.inventory._inventory[hostname]['status'] == 'maintenance'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     @mock.patch("cephadm.module.HostCache.get_daemon_types")
     @mock.patch("cephadm.module.HostCache.get_hosts")
     def test_maintenance_exit_success(self, _hosts, _get_daemon_types, _run_cephadm, cephadm_module: CephadmOrchestrator):
