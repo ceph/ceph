@@ -313,10 +313,10 @@ class SizeMatcher(Matcher):
         and raises if none could be found.
         """
         low_high = re.match(r"\d+[A-Z]{1,2}:\d+[A-Z]{1,2}", self.value)
-        if low_high:
-            low, high = low_high.group().split(":")
-            self.low = self._get_k_v(low)
-            self.high = self._get_k_v(high)
+        if low_high is not None:
+            lowpart, highpart = low_high.group().split(":")
+            self.low = self._get_k_v(lowpart)
+            self.high = self._get_k_v(highpart)
 
         low = re.match(r"\d+[A-Z]{1,2}:$", self.value)
         if low:
