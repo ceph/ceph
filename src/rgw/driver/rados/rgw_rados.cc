@@ -6214,29 +6214,15 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
       return ret;
     }
 
-    r = call(bs);
+    r = store->inner_guard_reshard(dpp, bs, obj_instance, target->bucket_info, call);
     if (r != -ERR_BUSY_RESHARDING) {
       break;
-    }
-
-    ldpp_dout(dpp, 10) <<
-      "NOTICE: resharding operation on bucket index detected, blocking. obj=" << 
-      obj_instance.key << dendl;
-
-    r = store->block_while_resharding(bs, obj_instance, target->bucket_info, null_yield, dpp);
-    if (r == -ERR_BUSY_RESHARDING) {
-      ldpp_dout(dpp, 10) << __func__ <<
-	" NOTICE: block_while_resharding() still busy. obj=" <<
-        obj_instance.key << dendl;
+    } else if (r == -ERR_BUSY_RESHARDING) {
       continue;
     } else if (r < 0) {
-      ldpp_dout(dpp, 0) << __func__ <<
-	" ERROR: block_while_resharding() failed. obj=" <<
-        obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
       return r;
     }
 
-    ldpp_dout(dpp, 20) << "reshard completion identified. obj=" << obj_instance.key << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
     invalidate_bs();
   } // for loop
@@ -6825,11 +6811,43 @@ int RGWRados::olh_init_modification(const DoutPrefixProvider *dpp, const RGWBuck
   return ret;
 }
 
+int RGWRados::inner_guard_reshard(const DoutPrefixProvider *dpp,
+                                  BucketShard *bs,
+                                  const rgw_obj& obj_instance,
+                                  RGWBucketInfo& bucket_info,
+                                  std::function<int(BucketShard *)> call)
+{
+  int r = call(bs);
+  if (r != -ERR_BUSY_RESHARDING) {
+    return r; // breaks the loop
+  }
+
+  ldpp_dout(dpp, 10) <<
+                     "NOTICE: resharding operation on bucket index detected, blocking. obj=" <<
+                     obj_instance.key << dendl;
+
+  r = block_while_resharding(bs, obj_instance, bucket_info, null_yield, dpp);
+  if (r == -ERR_BUSY_RESHARDING) {
+    ldpp_dout(dpp, 10) << __func__ <<
+                       " NOTICE: block_while_resharding() still busy. obj=" <<
+                       obj_instance.key << dendl;
+    return r; // continues the loop
+  } else if (r < 0) {
+    ldpp_dout(dpp, 0) << __func__ <<
+                      " ERROR: block_while_resharding() failed. obj=" <<
+                      obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
+    return r; // returns out the function
+  }
+
+  ldpp_dout(dpp, 20) << "reshard completion identified. obj=" << obj_instance.key << dendl;
+  return r;
+}
+
 int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
                             BucketShard *bs,
-			    const rgw_obj& obj_instance,
-			    RGWBucketInfo& bucket_info,
-			    std::function<int(BucketShard *)> call)
+                            const rgw_obj& obj_instance,
+                            RGWBucketInfo& bucket_info,
+                            std::function<int(BucketShard *)> call)
 {
   rgw_obj obj;
   const rgw_obj *pobj = &obj_instance;
@@ -6842,29 +6860,15 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
       return r;
     }
 
-    r = call(bs);
+    r = this->inner_guard_reshard(dpp, bs, obj_instance, bucket_info, call);
     if (r != -ERR_BUSY_RESHARDING) {
       break;
-    }
-
-    ldpp_dout(dpp, 10) <<
-      "NOTICE: resharding operation on bucket index detected, blocking. obj=" <<
-      obj_instance.key << dendl;
-
-    r = block_while_resharding(bs, obj_instance, bucket_info, null_yield, dpp);
-    if (r == -ERR_BUSY_RESHARDING) {
-      ldpp_dout(dpp, 10) << __func__ <<
-	" NOTICE: block_while_resharding() still busy. obj=" <<
-        obj_instance.key << dendl;
+    } else if (r == -ERR_BUSY_RESHARDING) {
       continue;
     } else if (r < 0) {
-      ldpp_dout(dpp, 0) << __func__ <<
-	" ERROR: block_while_resharding() failed. obj=" <<
-        obj_instance.key << ". ret=" << cpp_strerror(-r) << dendl;
       return r;
     }
 
-    ldpp_dout(dpp, 20) << "reshard completion identified" << dendl;
     i = 0; /* resharding is finished, make sure we can retry */
   } // for loop
 

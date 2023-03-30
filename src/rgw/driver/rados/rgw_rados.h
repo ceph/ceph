@@ -1291,6 +1291,12 @@ public:
   int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectWriteOperation *op);
   int obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::ObjectReadOperation *op);
 
+  int inner_guard_reshard(const DoutPrefixProvider *dpp,
+                                    BucketShard *bs,
+                                    const rgw_obj& obj_instance,
+                                    RGWBucketInfo& bucket_info,
+                                    std::function<int(BucketShard *)> call);
+
   int guard_reshard(const DoutPrefixProvider *dpp,
                     BucketShard *bs,
 		    const rgw_obj& obj_instance,
