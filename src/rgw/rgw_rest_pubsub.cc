@@ -565,12 +565,7 @@ int delete_all_notifications(const DoutPrefixProvider *dpp, const rgw_pubsub_buc
 // a "notification" and a subscription will be auto-generated
 // actual configuration is XML encoded in the body of the message
 class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
-  private:
-  std::string bucket_name;
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  rgw_pubsub_s3_notifications configurations;
-
-  int get_params() {
+  int verify_params() override {
     bool exists;
     const auto no_value = s->info.args.get("notification", &exists);
     if (!exists) {
@@ -585,22 +580,10 @@ class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
       return -EINVAL;
     }
-    bucket_name = s->bucket_name;
     return 0;
   }
 
-  public:
-  int verify_permission(optional_yield y) override;
-
-  void pre_exec() override {
-    rgw_bucket_object_pre_exec(s);
-  }
-
-  const char* name() const override { return "pubsub_notification_create_s3"; }
-  RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_CREATE; }
-  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-
-  int get_params_from_body() {
+  int get_params_from_body(rgw_pubsub_s3_notifications& configurations) {
     const auto max_size = s->cct->_conf->rgw_max_put_param_size;
     int r;
     bufferlist data;
@@ -635,13 +618,38 @@ class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
     }
     return 0;
   }
+public:
+  int verify_permission(optional_yield y) override;
+
+  void pre_exec() override {
+    rgw_bucket_object_pre_exec(s);
+  }
+
+  const char* name() const override { return "pubsub_notification_create_s3"; }
+  RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_CREATE; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
+
 
   void execute(optional_yield) override;
 };
 
 void RGWPSCreateNotifOp::execute(optional_yield y) {
-  op_ret = get_params_from_body();
+  op_ret = verify_params();
   if (op_ret < 0) {
+    return;
+  }
+
+  rgw_pubsub_s3_notifications configurations;
+  op_ret = get_params_from_body(configurations);
+  if (op_ret < 0) {
+    return;
+  }
+
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  op_ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, s->bucket_name, &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to get bucket '" << s->bucket_name << "' info, ret = " << op_ret << dendl;
     return;
   }
 
@@ -653,7 +661,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     rgw_pubsub_bucket_topics bucket_topics;
     op_ret = b.get_topics(this, bucket_topics, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_name << "', ret=" << op_ret << dendl;
+      ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
       return;
     }
 
@@ -728,44 +736,16 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
 }
 
 int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
-  int ret = get_params();
-  if (ret < 0) {
-    return ret;
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
-  ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
-  if (ret < 0) {
-    ldpp_dout(this, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
-    return ret;
-  }
-
-  if (bucket->get_info().owner != s->owner.get_id()) {
-    ldpp_dout(this, 1) << "user doesn't own bucket, not allowed to create notification" << dendl;
-    return -EPERM;
-  }
   return 0;
 }
 
 // command (extension to S3): DELETE /bucket?notification[=<notification-id>]
 class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
-  private:
-  std::string bucket_name;
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  std::string notif_name;
-  
-  public:
-  int verify_permission(optional_yield y) override;
-
-  void pre_exec() override {
-    rgw_bucket_object_pre_exec(s);
-  }
-  
-  const char* name() const override { return "pubsub_notification_delete_s3"; }
-  RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_DELETE; }
-  uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
-
-  int get_params() {
+  int get_params(std::string& notif_name) const {
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
@@ -776,16 +756,35 @@ class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
       ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
       return -EINVAL;
     }
-    bucket_name = s->bucket_name;
     return 0;
   }
+
+public:
+  int verify_permission(optional_yield y) override;
+
+  void pre_exec() override {
+    rgw_bucket_object_pre_exec(s);
+  }
+  
+  const char* name() const override { return "pubsub_notification_delete_s3"; }
+  RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_DELETE; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
   void execute(optional_yield y) override;
 };
 
 void RGWPSDeleteNotifOp::execute(optional_yield y) {
-  op_ret = get_params();
+  std::string notif_name;
+  op_ret = get_params(notif_name);
   if (op_ret < 0) {
+    return;
+  }
+
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  op_ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, s->bucket_name, &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to get bucket '" << s->bucket_name << "' info, ret = " << op_ret << dendl;
     return;
   }
 
@@ -796,7 +795,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
   rgw_pubsub_bucket_topics bucket_topics;
   op_ret = b.get_topics(this, bucket_topics, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
     return;
   }
 
@@ -817,33 +816,18 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
 }
 
 int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
-  int ret = get_params();
-  if (ret < 0) {
-    return ret;
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
+    return -EACCES;
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
-  ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (bucket->get_info().owner != s->owner.get_id()) {
-    ldpp_dout(this, 1) << "user doesn't own bucket, cannot remove notification" << dendl;
-    return -EPERM;
-  }
   return 0;
 }
 
 // command (S3 compliant): GET /bucket?notification[=<notification-id>]
 class RGWPSListNotifsOp : public RGWOp {
-private:
-  std::string bucket_name;
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  std::string notif_name;
   rgw_pubsub_s3_notifications notifications;
 
-  int get_params() {
+  int get_params(std::string& notif_name) const {
     bool exists;
     notif_name = s->info.args.get("notification", &exists);
     if (!exists) {
@@ -854,11 +838,10 @@ private:
       ldpp_dout(this, 1) << "request must be on a bucket" << dendl;
       return -EINVAL;
     }
-    bucket_name = s->bucket_name;
     return 0;
   }
 
-  public:
+public:
   int verify_permission(optional_yield y) override;
 
   void pre_exec() override {
@@ -886,6 +869,20 @@ private:
 };
 
 void RGWPSListNotifsOp::execute(optional_yield y) {
+  std::string notif_name;
+  op_ret = get_params(notif_name);
+  if (op_ret < 0) {
+    return;
+  }
+
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+  op_ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, s->bucket_name, &bucket, y);
+  if (op_ret < 0) {
+    ldpp_dout(this, 1) << "failed to get bucket '" << s->bucket_name << "' info, ret = " << op_ret << dendl;
+    return;
+  }
+
   const RGWPubSub ps(driver, s->owner.get_id().tenant);
   const RGWPubSub::Bucket b(ps, bucket.get());
   
@@ -893,7 +890,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
   rgw_pubsub_bucket_topics bucket_topics;
   op_ret = b.get_topics(this, bucket_topics, y);
   if (op_ret < 0) {
-    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << bucket_name << "', ret=" << op_ret << dendl;
+    ldpp_dout(this, 1) << "failed to get list of topics from bucket '" << s->bucket_name << "', ret=" << op_ret << dendl;
     return;
   }
   if (!notif_name.empty()) {
@@ -918,20 +915,8 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
 }
 
 int RGWPSListNotifsOp::verify_permission(optional_yield y) {
-  int ret = get_params();
-  if (ret < 0) {
-    return ret;
-  }
-
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
-  ret = driver->get_bucket(this, user.get(), s->owner.get_id().tenant, bucket_name, &bucket, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  if (bucket->get_info().owner != s->owner.get_id()) {
-    ldpp_dout(this, 1) << "user doesn't own bucket, cannot get notification list" << dendl;
-    return -EPERM;
+  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketNotification)) {
+    return -EACCES;
   }
 
   return 0;
