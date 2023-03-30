@@ -35,9 +35,9 @@ class CInode;
 class ScrubHeader {
 public:
   ScrubHeader(std::string_view tag_, bool is_tag_internal_, bool force_,
-              bool recursive_, bool repair_)
+              bool recursive_, bool repair_, bool scrub_mdsdir_ = false)
     : tag(tag_), is_tag_internal(is_tag_internal_), force(force_),
-      recursive(recursive_), repair(repair_) {}
+      recursive(recursive_), repair(repair_), scrub_mdsdir(scrub_mdsdir_) {}
 
   // Set after construction because it won't be known until we've
   // started resolving path and locking
@@ -46,6 +46,7 @@ public:
   bool get_recursive() const { return recursive; }
   bool get_repair() const { return repair; }
   bool get_force() const { return force; }
+  bool get_scrub_mdsdir() const { return scrub_mdsdir; }
   bool is_internal_tag() const { return is_tag_internal; }
   inodeno_t get_origin() const { return origin; }
   const std::string& get_tag() const { return tag; }
@@ -69,6 +70,7 @@ protected:
   const bool force;
   const bool recursive;
   const bool repair;
+  const bool scrub_mdsdir;
   inodeno_t origin;
 
   bool repaired = false;  // May be set during scrub if repairs happened
