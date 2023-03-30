@@ -1618,7 +1618,9 @@ extern bool match_policy(std::string_view pattern, std::string_view input,
                          uint32_t flag);
 
 extern std::string camelcase_dash_http_attr(const std::string& orig);
+extern std::string camelcase_http_attr(const std::string& orig);
 extern std::string lowercase_dash_http_attr(const std::string& orig);
+extern std::string lowercase_dash_underscore_http_attr(const std::string& orig);
 
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
