@@ -528,8 +528,6 @@ class TestMonitoring:
                     honor_labels: true
                     http_sd_configs:
                     - url: http://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
-                      tls_config:
-                        ca_file: root_cert.pem
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(
@@ -650,8 +648,14 @@ class TestMonitoring:
 
                   - job_name: 'ceph-exporter'
                     honor_labels: true
+                    scheme: https
+                    tls_config:
+                      ca_file: root_cert.pem
                     http_sd_configs:
                     - url: https://[::1]:8765/sd/prometheus/sd-config?service=ceph-exporter
+                      basic_auth:
+                        username: admin
+                        password: fake_password
                       tls_config:
                         ca_file: root_cert.pem
                 """).lstrip()
