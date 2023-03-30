@@ -27,11 +27,11 @@ import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helpe
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 
 @Component({
-  selector: 'cd-dashboard',
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.scss']
+  selector: 'cd-dashboard-v3',
+  templateUrl: './dashboard-v3.component.html',
+  styleUrls: ['./dashboard-v3.component.scss']
 })
-export class DashboardComponent extends PrometheusListHelper implements OnInit, OnDestroy {
+export class DashboardV3Component extends PrometheusListHelper implements OnInit, OnDestroy {
   detailsCardData: DashboardDetails = {};
   osdSettingsService: any;
   osdSettings: any;
@@ -105,6 +105,9 @@ export class DashboardComponent extends PrometheusListHelper implements OnInit, 
 
   ngOnDestroy() {
     this.interval.unsubscribe();
+    if (this.timerGetPrometheusDataSub) {
+      this.timerGetPrometheusDataSub.unsubscribe();
+    }
   }
 
   getHealth() {
