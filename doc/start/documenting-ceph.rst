@@ -799,9 +799,9 @@ commits will be squashed into a single commit.
 Notify Us
 ---------
 
-After you make a pull request, please email ceph-docs@redhat.com.
-
-
+If some time has passed and the pull request that you raised has not been
+reviewed, contact the component lead and ask what's taking so long. See
+:ref:`clt` for a list of component leads.
 
 Documentation Style Guide
 =========================
