@@ -9,7 +9,7 @@
     </div>
     <div class="card">
       <div class="card-header"
-           i18n>Multi-site Topology viewer</div>
+           i18n>Topology Viewer</div>
       <div class="card-body">
         <div class="row">
           <div class="col-sm-6 col-lg-6 tree-container">
@@ -26,10 +26,6 @@
                   <i [ngClass]="node.data.icon"></i>
                     {{ node.data.name }}
                 </span>
-                <span *ngIf="node.data.type"
-                      class="badge badge-info me-3">
-                    {{ node.data.type }}
-                </span>
                 <span class="badge badge-success me-2"
                       *ngIf="node.data.is_default">
                   default
@@ -45,8 +41,7 @@
                   <button type="button"
                           class="btn btn-light dropdown-toggle-split ms-1"
                           (click)="openModal(node, true)"
-                          [disabled]="getDisable()"
-                          ngbDropdownToggle>
+                          [disabled]="getDisable()">
                     <i [ngClass]="[icons.edit]"></i>
                   </button>
                   <button type="button"
@@ -63,7 +58,11 @@
           <div class="col-sm-6 col-lg-6 metadata"
                *ngIf="metadata">
             <legend>{{ metadataTitle }}</legend>
-            <cd-table-key-value [data]="metadata"></cd-table-key-value>
+            <cd-table-key-value cdTableDetail
+                                [data]="metadata"
+                                [renderObjects]="true"
+                                [customCss]="customCss">
+            </cd-table-key-value>
           </div>
         </div>
       </div>
