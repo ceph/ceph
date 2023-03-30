@@ -284,6 +284,13 @@ target_link_libraries(ceph_test_librgw_file
   )
 install(TARGETS ceph_test_librgw_file DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_dependencies(ceph_test_librgw_file
+  ceph_test_librgw_file_cd
+  ceph_test_librgw_file_gp
+  ceph_test_librgw_file_nfsns
+  ceph_test_librgw_file_aw
+  ceph_test_librgw_file_marker)
+
 # ceph_test_librgw_file_cd (just the rgw_file create-delete bucket ops)
 add_executable(ceph_test_librgw_file_cd
   librgw_file_cd.cc
