@@ -28,8 +28,17 @@
 #endif 
 
 #include <sys/stat.h>
+
+#ifdef _WIN32
+#include "include/win32/fs_compat.h"
+#endif
+
 #ifndef ACCESSPERMS
 #define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
+#endif
+
+#ifndef ALLPERMS
+#define ALLPERMS (S_ISUID|S_ISGID|S_ISVTX|S_IRWXU|S_IRWXG|S_IRWXO)
 #endif
 
 #if defined(__FreeBSD__)
@@ -233,7 +242,6 @@ int ceph_memzero_s(void *dest, size_t destsz, size_t count);
 #include <time.h>
 
 #include "include/win32/win32_errno.h"
-#include "include/win32/fs_compat.h"
 
 // There are a few name collisions between Windows headers and Ceph.
 // Updating Ceph definitions would be the prefferable fix in order to avoid

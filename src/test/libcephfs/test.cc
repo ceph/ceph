@@ -43,10 +43,6 @@
 #include <thread>
 #include <regex>
 
-#ifndef ALLPERMS
-#define ALLPERMS (S_ISUID|S_ISGID|S_ISVTX|S_IRWXU|S_IRWXG|S_IRWXO)
-#endif
-
 using namespace std;
 
 TEST(LibCephFS, OpenEmptyComponent) {
