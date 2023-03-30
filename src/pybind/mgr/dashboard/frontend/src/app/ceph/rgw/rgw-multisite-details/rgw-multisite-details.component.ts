@@ -76,6 +76,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   defaultZoneId = '';
   multisiteInfo: object[] = [];
   defaultsInfo: string[] = [];
+  title: string = 'Edit';
 
   constructor(
     private modalService: ModalService,
@@ -291,18 +292,21 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   }
 
   getDisable() {
+    let isMasterZone = true;
     if (this.defaultRealmId === '') {
       return this.messages.noDefaultRealm;
     } else {
-      let isMasterZone = true;
       this.zonegroups.forEach((zgp: any) => {
         if (_.isEmpty(zgp.master_zone)) {
           isMasterZone = false;
         }
       });
       if (!isMasterZone) {
+        this.title =
+          'Please create a master zone for each existing zonegroup to enable this feature';
         return this.messages.noMasterZone;
       } else {
+        this.title = 'Edit';
         return false;
       }
     }

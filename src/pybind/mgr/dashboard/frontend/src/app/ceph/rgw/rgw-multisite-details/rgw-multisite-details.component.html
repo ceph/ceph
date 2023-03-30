@@ -34,17 +34,18 @@
                       *ngIf="node.data.is_default">
                   default
                 </span>
-                <span class="badge badge-info me-2"
+                <span class="badge badge-warning me-2"
                       *ngIf="node.data.is_master">
                   master
                 </span>
                 <div class="btn-group align-inline-btns"
-                     *ngIf="node.isFocused && node.data.type === 'realm'"
+                     *ngIf="node.isFocused"
+                     [title]="title"
                      role="group">
                   <button type="button"
-                          title="Edit realm"
                           class="btn btn-light dropdown-toggle-split ms-1"
                           (click)="openModal(node, true)"
+                          [disabled]="getDisable()"
                           ngbDropdownToggle>
                     <i [ngClass]="[icons.edit]"></i>
                   </button>
