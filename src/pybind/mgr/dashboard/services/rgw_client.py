@@ -8,6 +8,7 @@ import json
 import logging
 import os
 import re
+import subprocess
 import xml.etree.ElementTree as ET  # noqa: N814
 from subprocess import SubprocessError
 
@@ -791,6 +792,15 @@ class RgwClient(RestClient):
             if placement_target['tags']:
                 cmd_add_placement_options += ['--tags', placement_target['tags']]
             rgw_add_placement_cmd += cmd_add_placement_options
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_add_placement_cmd)
+                if exit_code > 0:
+                    raise DashboardException(e=err,
+                                             msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
             storage_classes = placement_target['storage_class'].split(",") if placement_target['storage_class'] else []  # noqa E501  #pylint: disable=line-too-long
             if storage_classes:
                 for sc in storage_classes:
@@ -805,16 +815,6 @@ class RgwClient(RestClient):
                     except SubprocessError as error:
                         raise DashboardException(error, http_status_code=500, component='rgw')
                     self.update_period()
-                return
-            try:
-                exit_code, _, err = mgr.send_rgwadmin_command(rgw_add_placement_cmd)
-                if exit_code > 0:
-                    raise DashboardException(e=err,
-                                             msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
-                                             http_status_code=500, component='rgw')
-            except SubprocessError as error:
-                raise DashboardException(error, http_status_code=500, component='rgw')
-        self.update_period()
 
     def modify_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
         rgw_add_placement_cmd = ['zonegroup', 'placement', 'modify']
@@ -944,9 +944,10 @@ class RgwClient(RestClient):
                 zone_info = self.get_zone(zone['name'])
                 self.delete_zone_pools(zone['name'], zone_info)
 
-    def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, user):
+    def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, user,
+                    createSystemUser, master_zone_of_master_zonegroup):
         if user != 'null':
-            access_key, secret_key = _get_user_keys(user)
+            access_key, secret_key = self.get_rgw_user_keys(user, master_zone_of_master_zonegroup)
         else:
             access_key = None  # type: ignore
             secret_key = None  # type: ignore
@@ -978,7 +979,132 @@ class RgwClient(RestClient):
             raise DashboardException(error, http_status_code=500, component='rgw')
 
         self.update_period()
+
+        if createSystemUser == 'true':
+            self.create_system_user(user, zone_name)
+            access_key, secret_key = self.get_rgw_user_keys(user, zone_name)
+            rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zone', zone_name,
+                                   '--access-key', access_key, '--secret', secret_key]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to modify zone',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+
         return out
+
+    def get_rgw_user_keys(self, user, zone_name):
+        access_key = ''
+        secret_key = ''
+        rgw_user_info_cmd = ['user', 'info', '--uid', user, '--rgw-zone', zone_name]
+        try:
+            _, out, _ = mgr.send_rgwadmin_command(rgw_user_info_cmd)
+            if out:
+                access_key, secret_key = self.parse_secrets(user, out)
+        except SubprocessError as error:
+            logger.exception(error)
+
+        return access_key, secret_key
+
+    def parse_secrets(self, user, data):
+        for key in data.get('keys', []):
+            if key.get('user') == user:
+                access_key = key.get('access_key')
+                secret_key = key.get('secret_key')
+                return access_key, secret_key
+        return '', ''
+
+    def modify_zone(self, zone_name: str, zonegroup_name: str, default: str, master: str,
+                    endpoints: List[str], user: str, master_zone_of_master_zonegroup):
+        if user:
+            access_key, secret_key = self.get_rgw_user_keys(user, master_zone_of_master_zonegroup)
+        else:
+            access_key = None
+            secret_key = None
+        rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zonegroup',
+                               zonegroup_name, '--rgw-zone', zone_name]
+        if endpoints:
+            if len(endpoints) > 1:
+                endpoint = ','.join(str(e) for e in endpoints)
+            else:
+                endpoint = endpoints[0]
+            rgw_zone_modify_cmd.append('--endpoints')
+            rgw_zone_modify_cmd.append(endpoint)
+        if default and str_to_bool(default):
+            rgw_zone_modify_cmd.append('--default')
+        if master and str_to_bool(master):
+            rgw_zone_modify_cmd.append('--master')
+        if access_key is not None:
+            rgw_zone_modify_cmd.append('--access-key')
+            rgw_zone_modify_cmd.append(access_key)
+        if secret_key is not None:
+            rgw_zone_modify_cmd.append('--secret')
+            rgw_zone_modify_cmd.append(secret_key)
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to modify zone',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
+    def add_placement_targets_zone(self, zone_name: str, placement_target: str, data_pool: str,
+                                   index_pool: str, data_extra_pool: str):
+        rgw_zone_add_placement_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
+                                      '--placement-id', placement_target, '--data-pool', data_pool,
+                                      '--index-pool', index_pool,
+                                      '--data-extra-pool', data_extra_pool]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_placement_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to add placement target {} to zone {}'.format(placement_target, zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
+    def add_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
+                               data_pool: str, compression: str):
+        rgw_zone_add_storage_class_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
+                                          '--placement-id', placement_target,
+                                          '--storage-class', storage_class,
+                                          '--data-pool', data_pool,
+                                          '--compression', compression]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_storage_class_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to add storage class {} to zone {}'.format(storage_class, zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
+    def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
+                  master: str = '', endpoints: List[str] = [], user: str = '',
+                  placement_target: str = '', data_pool: str = '', index_pool: str = '',
+                  data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
+                  compression: str = '', master_zone_of_master_zonegroup=None):
+        if new_zone_name != zone_name:
+            rgw_zone_rename_cmd = ['zone', 'rename', '--rgw-zone',
+                                   zone_name, '--zone-new-name', new_zone_name]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_rename_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to rename zone to {}'.format(new_zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+        self.modify_zone(new_zone_name, zonegroup_name, default, master, endpoints, user,
+                         master_zone_of_master_zonegroup)
+        self.add_placement_targets_zone(new_zone_name, placement_target,
+                                        data_pool, index_pool, data_extra_pool)
+        self.add_storage_class_zone(new_zone_name, placement_target, storage_class,
+                                    data_pool_class, compression)
 
     def list_zones(self):
         rgw_zone_list = {}
@@ -1082,6 +1208,57 @@ class RgwClient(RestClient):
                 and len(rgw_zone_list['zones']) < 1:
             is_multisite_configured = False
         return is_multisite_configured
+
+    def get_multisite_sync_status(self):
+        sync_status = ''
+        rgw_sync_status_cmd = ['sync', 'status']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_sync_status_cmd, False)
+            if exit_code > 0:
+                raise DashboardException('Unable to get sync status',
+                                         http_status_code=500, component='rgw')
+            sync_status = out
+        except subprocess.TimeoutExpired:
+            sync_status = 'Timeout Expired'
+        return sync_status
+
+    def create_system_user(self, userName: str, zoneName: str):
+        rgw_user_create_cmd = ['user', 'create', '--uid', userName,
+                               '--display-name', userName, '--rgw-zone', zoneName, '--system']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_create_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to create system user',
+                                         http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def get_user_list(self, zoneName: str):
+        all_users_info = []
+        user_list = []
+        rgw_user_list_cmd = ['user', 'list', '--rgw-zone', zoneName]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_list_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get user list',
+                                         http_status_code=500, component='rgw')
+            user_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        if len(user_list) > 0:
+            for user_name in user_list:
+                rgw_user_info_cmd = ['user', 'info', '--uid', user_name, '--rgw-zone', zoneName]
+                try:
+                    exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_info_cmd)
+                    if exit_code > 0:
+                        raise DashboardException('Unable to get user info',
+                                                 http_status_code=500, component='rgw')
+                    all_users_info.append(out)
+                except SubprocessError as error:
+                    raise DashboardException(error, http_status_code=500, component='rgw')
+        return all_users_info
 
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):

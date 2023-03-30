@@ -6,6 +6,7 @@ from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import cherrypy
 
+from .. import mgr
 from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..security import Permission, Scope
@@ -13,11 +14,11 @@ from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
-from . import APIDoc, APIRouter, BaseController, CRUDCollectionMethod, \
-    CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, RESTController, \
-    UIRouter, allow_empty_body
-from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, \
-    TableAction, Validator, VerticalContainer
+from . import APIDoc, APIRouter, BaseController, CreatePermission, \
+    CRUDCollectionMethod, CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, \
+    RESTController, UIRouter, allow_empty_body
+from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, TableAction, \
+    Validator, VerticalContainer
 from ._version import APIVersion
 
 logger = logging.getLogger("controllers.rgw")
@@ -96,6 +97,17 @@ class RgwStatus(BaseController):
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
         return status
+
+    @Endpoint()
+    @ReadPermission
+    # pylint: disable=R0801
+    def sync_status(self):
+        try:
+            instance = RgwClient.admin_instance()
+            result = instance.get_multisite_sync_status()
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')  # noqa: E501 pylint: disable=line-too-long
+        return result
 
 
 @APIRouter('/rgw/daemon', Scope.RGW)
@@ -838,11 +850,13 @@ class RgwZone(RESTController):
     @allow_empty_body
     # pylint: disable=W0613
     def create(self, zone_name, zonegroup_name=None, default=False, master=False,
-               zone_endpoints=None, user=None, daemon_name=None):
+               zone_endpoints=None, user=None, createSystemUser=False, daemon_name=None,
+               master_zone_of_master_zonegroup=None):
         try:
             instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.create_zone(zone_name, zonegroup_name, default,
-                                          master, zone_endpoints, user)
+                                          master, zone_endpoints, user, createSystemUser,
+                                          master_zone_of_master_zonegroup)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
@@ -881,6 +895,56 @@ class RgwZone(RESTController):
         try:
             instance = RgwClient.admin_instance(daemon_name)
             result = instance.delete_zone(zonegroup_name, zone_name, delete_pools)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @allow_empty_body
+    # pylint: disable=W0613,W0102
+    def set(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
+            master: str = '', zone_endpoints: List[str] = [], user: str = '',
+            placement_target: str = '', data_pool: str = '', index_pool: str = '',
+            data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
+            compression: str = '', daemon_name=None, master_zone_of_master_zonegroup=None):
+        try:
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
+            result = instance.edit_zone(zone_name, new_zone_name, zonegroup_name, default,
+                                        master, zone_endpoints, user, placement_target,
+                                        data_pool, index_pool, data_extra_pool, storage_class,
+                                        data_pool_class, compression,
+                                        master_zone_of_master_zonegroup)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @Endpoint()
+    @ReadPermission
+    def get_pool_names(self):
+        pool_names = []
+        ret, out, _ = mgr.check_mon_command({
+            'prefix': 'osd lspools',
+            'format': 'json',
+        })
+        if ret == 0 and out is not None:
+            pool_names = json.loads(out)
+        return pool_names
+
+    @Endpoint('PUT')
+    @CreatePermission
+    def create_system_user(self, userName: str, zoneName: str, daemon_name=None):
+        try:
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
+            result = instance.create_system_user(userName, zoneName)
+            return result
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
+
+    @Endpoint()
+    @ReadPermission
+    def get_user_list(self, daemon_name=None, zoneName=None):
+        try:
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
+            result = instance.get_user_list(zoneName)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')

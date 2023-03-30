@@ -49,30 +49,38 @@
                  id="default_zonegroup"
                  name="default_zonegroup"
                  formControlName="default_zonegroup"
+                 [attr.disabled]="action === 'edit' ? true : null"
                  type="checkbox">
           <label class="form-check-label"
                  for="default_zonegroup"
                  i18n>Default</label>
-          <span *ngIf="disableDefault">
-          <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
-          </span><br>
+          <span *ngIf="disableDefault && action === 'create'">
+            <cd-helper i18n>Zonegroup doesn't belong to the default realm.</cd-helper>
+          </span>
+          <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
+            <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+          </cd-helper>
+          <cd-helper *ngIf="action === 'edit' && info.data.is_default">
+            <span i18n>You cannot unset the default flag.</span>
+          </cd-helper><br>
           <input class="form-check-input"
                  id="master_zonegroup"
                  name="master_zonegroup"
                  formControlName="master_zonegroup"
+                 [attr.disabled]="action === 'edit' ? true : null"
                  type="checkbox">
           <label class="form-check-label"
                  for="master_zonegroup"
                  i18n>Master</label>
-          <span *ngIf="!isMaster">
-          <cd-helper i18n>RGW multi-site configuration must have a master zonegroup. Setting
-            the first zonegroup created as master, to avoid any errors on udating the period.
-            Can be modified later by editing a zonegroup.
-          </cd-helper>
-          </span>
-          <span *ngIf="disableMaster">
+          <span *ngIf="disableMaster && action === 'create'">
             <cd-helper i18n>Multiple master zonegroups can't be configured. If you want to create a new zonegroup and make it the master zonegroup, you must delete the default zonegroup.</cd-helper>
           </span>
+          <cd-helper *ngIf="action === 'edit' && !info.data.is_master">
+            <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+          </cd-helper>
+          <cd-helper *ngIf="action === 'edit' && info.data.is_master">
+            <span i18n>You cannot unset the master flag.</span>
+          </cd-helper>
         </div>
         </div>
       </div>
