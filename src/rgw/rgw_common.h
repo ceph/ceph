@@ -2263,8 +2263,10 @@ static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 extern bool match_policy(std::string_view pattern, std::string_view input,
                          uint32_t flag);
 
-extern string camelcase_dash_http_attr(const string& orig);
-extern string lowercase_dash_http_attr(const string& orig);
+extern std::string camelcase_dash_http_attr(const std::string& orig);
+extern std::string camelcase_http_attr(const std::string& orig);
+extern std::string lowercase_dash_http_attr(const std::string& orig);
+extern std::string lowercase_dash_underscore_http_attr(const std::string& orig);
 
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
