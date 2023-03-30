@@ -1616,8 +1616,7 @@ class CephManager:
             client_id = client_id.replace('client.', '')
 
         keyring = self.run_cluster_cmd(args=f'auth get client.{client_id}',
-                                       stdout=StringIO()).\
-            stdout.getvalue().strip()
+                                       stdout=StringIO()).stdout.getvalue()
 
         assert isinstance(keyring, str) and keyring != ''
         return keyring
