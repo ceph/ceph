@@ -89,9 +89,21 @@ scrape_configs:
 
 {% if ceph_exporter_sd_url %}
   - job_name: 'ceph-exporter'
+{% if secure_monitoring_stack %}
+    honor_labels: true
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
+    http_sd_configs:
+    - url: {{ ceph_exporter_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
+      tls_config:
+        ca_file: root_cert.pem
+{% else %}
     honor_labels: true
     http_sd_configs:
     - url: {{ ceph_exporter_sd_url }}
-      tls_config:
-        ca_file: root_cert.pem
+{% endif %}
 {% endif %}
