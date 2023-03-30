@@ -44,7 +44,7 @@ CEPH_QA_EMAIL="ceph-qa@ceph.io"
 # 01 01 * * 0 CEPH_BRANCH=main; MACHINE_NAME=smithi; SUITE_NAME=crimson-rados; KERNEL=distro;  /home/teuthology/bin/cron_wrapper /home/teuthology/bin/schedule_subset.sh 100000 $CEPH_BRANCH $MACHINE_NAME $SUITE_NAME $CEPH_QA_EMAIL $KERNEL
 
 ## ********** teuthology/nop on main branch - daily
-0 0 * * * CEPH_BRANCH=main; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -m $MACHINE_NAME -s teuthology/nop -k distro -e $CEPH_QA_EMAIL -p 50
+0 0 * * * CEPH_BRANCH=main; MACHINE_NAME=smithi; /home/teuthology/bin/cron_wrapper teuthology-suite -v -c $CEPH_BRANCH -n 10 -m $MACHINE_NAME -s teuthology/nop -k distro -e $CEPH_QA_EMAIL -p 50
 
 ## quincy branch runs - weekly
 ## suites rados and rbd use --subset arg and must be call with schedule_subset.sh
