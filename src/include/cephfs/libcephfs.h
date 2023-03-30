@@ -127,6 +127,8 @@ struct snap_info {
 #define CEPH_SETATTR_KILL_SGUID		(1 << 10)
 #define CEPH_SETATTR_FSCRYPT_AUTH	(1 << 11)
 #define CEPH_SETATTR_FSCRYPT_FILE	(1 << 12)
+#define CEPH_SETATTR_KILL_SUID		(1 << 13)
+#define CEPH_SETATTR_KILL_SGID		(1 << 14)
 #endif
 
 /* define error codes for the mount function*/
