@@ -168,7 +168,7 @@ class CapTester(CephFSTestCase):
                         f'cephfs_mntpt = {mount_x.cephfs_mntpt}\n'
                         f'hostfs_mntpt = {mount_x.hostfs_mntpt}')
             mount_x.write_file(filepath, filedata)
-            self.test_set.append((mount_x, filepath, filedata))
+            self.test_set.append([mount_x, filepath, filedata])
             log.info(f'Test file created at "{filepath}" with the following '
                      f'data -\n"{filedata}"')
 
