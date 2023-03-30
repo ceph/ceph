@@ -679,9 +679,8 @@ if(WITH_SYSTEM_NPM)
     message(FATAL_ERROR "Can't find npm.")
   endif()
 endif()
-set(DASHBOARD_FRONTEND_LANGS "" CACHE STRING
-  "List of comma separated ceph-dashboard frontend languages to build. \
-  Use value `ALL` to build all languages")
+set(DASHBOARD_FRONTEND_LANGS "cs,de,es,fr,id,it,ja,ko,pl,zh-Hans,zh-Hant,pt" CACHE STRING
+  "List of comma separated ceph-dashboard frontend languages to build.")
 CMAKE_DEPENDENT_OPTION(WITH_MGR_ROOK_CLIENT "Enable the mgr's Rook support" ON
   "WITH_MGR" OFF)
 
