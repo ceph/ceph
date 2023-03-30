@@ -541,35 +541,57 @@ number of ways, but the example here will deal with a situation in which there
 are three commits and the changes in all three of the commits are kept. The three
 commits will be squashed into a single commit.
 
-#. Make the first commit.
+#. Make the commits that you will later squash.
 
-   ::
-
-      doc/glossary: improve "CephX" entry
-
-      Improve the glossary entry for "CephX".
-
-      Signed-off-by: Zac Dover <zac.dover@proton.me>
-
-      # Please enter the commit message for your changes. Lines starting
-      # with '#' will be ignored, and an empty message aborts the commit.
-      #
-      # On branch wip-doc-2023-03-28-glossary-cephx
-      # Changes to be committed:
-      #       modified:   glossary.rst
-      #
-
-#. Make the second commit.
-
-   ::
-
-      doc/glossary: add link to architecture doc
-      
-      Add a link to a section in the architecture document, which link
-      will be used in the process of improving the "CephX" glossary entry.
-      
-      Signed-off-by: Zac Dover <zac.dover@proton.me>
+   #. Make the first commit.
    
+      ::
+   
+         doc/glossary: improve "CephX" entry
+   
+         Improve the glossary entry for "CephX".
+   
+         Signed-off-by: Zac Dover <zac.dover@proton.me>
+   
+         # Please enter the commit message for your changes. Lines starting
+         # with '#' will be ignored, and an empty message aborts the commit.
+         #
+         # On branch wip-doc-2023-03-28-glossary-cephx
+         # Changes to be committed:
+         #       modified:   glossary.rst
+         #
+   
+   #. Make the second commit.
+   
+      ::
+   
+         doc/glossary: add link to architecture doc
+         
+         Add a link to a section in the architecture document, which link
+         will be used in the process of improving the "CephX" glossary entry.
+         
+         Signed-off-by: Zac Dover <zac.dover@proton.me>
+      
+            # Please enter the commit message for your changes. Lines starting
+            # with '#' will be ignored, and an empty message aborts the commit.
+            #
+            # On branch wip-doc-2023-03-28-glossary-cephx
+            # Your branch is up to date with 'origin/wip-doc-2023-03-28-glossary-cephx'.
+            #
+            # Changes to be committed:
+            #       modified:   architecture.rst
+      
+   #. Make the third commit.
+   
+      ::
+      
+         doc/glossary: link to Arch doc in "CephX" glossary
+         
+         Link to the Architecture document from the "CephX" entry in the
+         Glossary.
+         
+         Signed-off-by: Zac Dover <zac.dover@proton.me>
+         
          # Please enter the commit message for your changes. Lines starting
          # with '#' will be ignored, and an empty message aborts the commit.
          #
@@ -577,27 +599,7 @@ commits will be squashed into a single commit.
          # Your branch is up to date with 'origin/wip-doc-2023-03-28-glossary-cephx'.
          #
          # Changes to be committed:
-         #       modified:   architecture.rst
-   
-#. Make the third commit.
-
-   ::
-   
-      doc/glossary: link to Arch doc in "CephX" glossary
-      
-      Link to the Architecture document from the "CephX" entry in the
-      Glossary.
-      
-      Signed-off-by: Zac Dover <zac.dover@proton.me>
-      
-      # Please enter the commit message for your changes. Lines starting
-      # with '#' will be ignored, and an empty message aborts the commit.
-      #
-      # On branch wip-doc-2023-03-28-glossary-cephx
-      # Your branch is up to date with 'origin/wip-doc-2023-03-28-glossary-cephx'.
-      #
-      # Changes to be committed:
-      #       modified:   glossary.rst
+         #       modified:   glossary.rst
 
 #. There are now three commits in the feature branch. We will now begin the
    process of squashing them into a single commit. 
