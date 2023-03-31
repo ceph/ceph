@@ -2590,8 +2590,8 @@ void BlueStore::Blob::copy_from(
   if (bto.get_logical_length() == 0) {
     // this is initialization
     bto.adjust_to(from.blob, end_roundup);
-    uint32_t used_size = p2roundup(start + len, from.used_in_blob.au_size);
-    used_in_blob.init(used_size, from.used_in_blob.au_size);
+    ceph_assert(min_release_size == from.used_in_blob.au_size);
+    used_in_blob.init(end_roundup, min_release_size);
   }
   if (bto.get_logical_length() < end_roundup) {
     ceph_assert(!bto.is_compressed());
