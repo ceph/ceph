@@ -5781,6 +5781,71 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
   return 0;
 }
 
+// reads meta but insists they match
+int BlueStore::read_meta_check(const std::string& key, std::string *value)
+{
+  bluestore_bdev_label_t label;
+  string p = path + "/block";
+  int r = _read_bdev_label(cct, p, &label);
+  if (r < 0) {
+    derr << __func__ << " corrupted bdev label" << dendl;
+    return -EIO;
+  }
+  std::string value_os;
+  int ros = ObjectStore::read_meta(key, &value_os);
+
+  auto i = label.meta.find(key);
+  if (i == label.meta.end() && ros != 0) {
+    //it ok, value does not exist in both systems
+    return -ENOENT;
+  }
+  if ((i == label.meta.end()) != (ros != 0)) {
+    derr << __func__ << " mismatch! bdev_meta." << key
+	 << (i == label.meta.end() ? " missing":" exists")
+	 << " os_meta." << key
+	 << (ros != 0 ? " missing":" exists") << dendl;
+    return -EIO;
+  }
+  if (value_os != i->second) {
+    derr << __func__ << " mismatch! bdev_meta." << key << "=" << i->second
+	 << " os_meta." << key << "=" << value_os << dendl;
+    return -EIO;
+  }
+  *value = i->second;
+  return 0;
+}
+
+// Reads configuration.
+// Values from disk superblock and ObjectStore meta files must match.
+// Validates values.
+//
+// In future this should be the only place that reads meta,
+// except initialization of components, like BlueFS, FreeListManager
+//
+// NOTE: Any configuration settings that affect data layout on disk
+//       must be persisted to meta.
+int BlueStore::read_meta_conf_check_env()
+{
+  int r = 0;
+  std::string esb;
+  r = read_meta_check("reuse_shared_blobs",&esb);
+  if (r == 0) {
+    if (esb != "1" && esb != "0") {
+      derr << __func__ << " wrong meta.reuse_shared_blobs=" << esb << dendl;
+      r = -EIO;
+    } else {
+      reuse_shared_blobs = esb == "1";
+    }
+  } else {
+    if (r == -ENOENT) {
+      dout(1) << __func__ << " meta.reuse_shared_blobs not set, using legacy mode" << dendl;
+      r = 0;
+    }
+  }
+  return r;
+}
+
+
 void BlueStore::_init_logger()
 {
   PerfCountersBuilder b(cct, "bluestore",
@@ -8052,6 +8117,11 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fm;
 
+  r = write_meta("reuse_shared_blobs",
+		 cct->_conf->bluestore_reuse_shared_blobs ? "1" : "0");
+  if (r < 0)
+    goto out_close_fm;
+
   if (fsid != old_fsid) {
     r = _write_fsid();
     if (r < 0) {
@@ -8480,11 +8550,17 @@ bool BlueStore::has_null_manager() const
 
 int BlueStore::_mount()
 {
-  dout(5) << __func__ << "NCB:: path " << path << dendl;
+  dout(5) << __func__ << " path " << path << dendl;
+
+  {
+    int r = read_meta_conf_check_env();
+    if (r < 0) {
+      return r;
+    }
+  }
 
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
-    dout(5) << __func__ << "::NCB::calling fsck()" << dendl;
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
