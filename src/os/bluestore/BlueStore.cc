@@ -17904,7 +17904,11 @@ int BlueStore::_do_clone_range(
   _dump_onode<30>(cct, *oldo);
   _dump_onode<30>(cct, *newo);
 
-  oldo->extent_map.dup(this, txc, c, oldo, newo, srcoff, length, dstoff);
+  if (!reuse_shared_blobs) {
+    oldo->extent_map.dup_original(this, txc, c, oldo, newo, srcoff, length, dstoff);
+  } else {
+    oldo->extent_map.dup(this, txc, c, oldo, newo, srcoff, length, dstoff);
+  }
 
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr()) {
