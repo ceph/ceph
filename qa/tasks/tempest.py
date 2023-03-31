@@ -179,7 +179,7 @@ def task(ctx, config):
           conf:
             client:
               rgw keystone api version: 3
-              rgw keystone accepted roles: admin,Member
+              rgw keystone accepted roles: admin,member
               rgw keystone implicit tenants: true
               rgw keystone accepted admin roles: admin
               rgw swift enforce content length: true
