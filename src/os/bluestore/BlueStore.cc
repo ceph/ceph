@@ -5908,6 +5908,38 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
   return 0;
 }
 
+
+// Reads configuration.
+// Validates values.
+//
+// In future this should be the only place that reads meta,
+// except initialization of components, like BlueFS, FreeListManager
+//
+// NOTE: Any configuration settings that affect data layout on disk
+//       must be persisted to meta.
+int BlueStore::read_meta_conf_check_env()
+{
+  int r = 0;
+  std::string esb;
+  r = read_meta("elastic_shared_blobs",&esb);
+  if (r == 0) {
+    if (esb != "1" && esb != "0") {
+      derr << __func__ << " wrong meta.elastic_shared_blobs=" << esb << dendl;
+      r = -EIO;
+    } else {
+      elastic_shared_blobs = esb == "1";
+    }
+  } else {
+    if (r == -ENOENT) {
+      dout(1) << __func__ << " meta.elastic_shared_blobs not set, using legacy mode" << dendl;
+      elastic_shared_blobs = false;
+      r = 0;
+    }
+  }
+  return r;
+}
+
+
 void BlueStore::_init_logger()
 {
   PerfCountersBuilder b(cct, "bluestore",
@@ -8179,6 +8211,11 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fm;
 
+  r = write_meta("elastic_shared_blobs",
+		 cct->_conf.get_val<bool>("bluestore_elastic_shared_blobs") ? "1" : "0");
+  if (r < 0)
+    goto out_close_fm;
+
   if (fsid != old_fsid) {
     r = _write_fsid();
     if (r < 0) {
@@ -8607,11 +8644,17 @@ bool BlueStore::has_null_manager() const
 
 int BlueStore::_mount()
 {
-  dout(5) << __func__ << "NCB:: path " << path << dendl;
+  dout(5) << __func__ << " path " << path << dendl;
+
+  {
+    int r = read_meta_conf_check_env();
+    if (r < 0) {
+      return r;
+    }
+  }
 
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
-    dout(5) << __func__ << "::NCB::calling fsck()" << dendl;
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
     if (rc < 0)
       return rc;
