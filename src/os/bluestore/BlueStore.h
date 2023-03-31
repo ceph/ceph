@@ -407,21 +407,6 @@ public:
       cache->_audit("_rm_buffer end");
       return p;
     }
-    Buffer*
-    _extract_buffer(BufferCacheShard* cache,
-	    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator& p) {
-      ceph_assert(p != buffer_map.end());
-      cache->_audit("_rm_buffer start");
-      if (p->second->is_writing()) {
-        writing.erase(writing.iterator_to(*p->second));
-      } else {
-	cache->_rm(p->second.get());
-      }
-      Buffer* buf = p->second.release();
-      p = buffer_map.erase(p);
-      cache->_audit("_rm_buffer end");
-      return buf;
-    }
 
     std::map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
       uint32_t offset) {
