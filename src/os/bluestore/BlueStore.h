@@ -1503,7 +1503,6 @@ private:
     OnodeCacheShard *cache;
 
   private:
-  public:
     /// forward lookups
     mempool::bluestore_cache_meta::unordered_map<ghobject_t,OnodeRef> onode_map;
 
