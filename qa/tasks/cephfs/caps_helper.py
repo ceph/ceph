@@ -143,7 +143,10 @@ class CapTester:
     run_mon_cap_tests() or run_mds_cap_tests() as per the need.
     """
 
-    def write_test_files(self, mounts, testpath=''):
+    def __init__(self, mount=None, path=''):
+        self._create_test_files(mount, path)
+
+    def _create_test_files(self, mount, path):
         """
         Exercising 'r' and 'w' access levels on a file on CephFS mount is
         pretty routine across all tests for caps. Adding to method to write
@@ -153,39 +156,47 @@ class CapTester:
         at the path passed in testpath for the given list of mounts. If
         testpath is empty, the file is created at the root of the CephFS.
         """
-        dirname, filename = 'testdir', 'testfile'
-        self.test_set = []
-        # XXX: The reason behind testpath[1:] below is that the testpath is
+        # CephFS mount where read/write test will be conducted.
+        self.mount = mount
+        # Path where out test file located.
+        self.path = self._gen_test_file_path(path)
+        # Data that out test file will contain.
+        self.data = self._gen_test_file_data()
+
+        self.mount.write_file(self.path, self.data)
+        log.info(f'Test file has been created on FS '
+                 f'"{self.mount.cephfs_name}" at path "{self.path}" with the '
+                 f'following data -\n{self.data}')
+
+    def _gen_test_file_path(self, path=''):
+        # XXX: The reason behind path[1:] below is that the path is
         # supposed to contain a path inside CephFS (which might be passed as
         # an absolute path). os.path.join() deletes all previous path
         # components when it encounters a path component starting with '/'.
-        # Deleting the first '/' from the string in testpath ensures that
+        # Deleting the first '/' from the string in path ensures that
         # previous path components are not deleted by os.path.join().
-        if testpath:
-            testpath = testpath[1:] if testpath[0] == '/' else testpath
-        # XXX: passing just '/' screw up os.path.join() ahead.
-        if testpath == '/':
-            testpath = ''
+        if path:
+            path = path[1:] if path[0] == '/' else path
+        # XXX: passing just '/' messes up os.path.join() ahead.
+        if path == '/':
+            path = ''
 
-        for mount_x in mounts:
-            log.info(f'creating test file on FS {mount_x.cephfs_name} '
-                     f'mounted at {mount_x.mountpoint}...')
-            dirpath = os_path_join(mount_x.hostfs_mntpt, testpath, dirname)
-            mount_x.run_shell(f'mkdir {dirpath}')
-            filepath = os_path_join(dirpath, filename)
-            # XXX: the reason behind adding filepathm, cephfs_name and both
-            # mntpts is to avoid a test bug where we mount cephfs1 but what
-            # ends up being mounted cephfs2. since filepath and filedata are
-            # identical, how would tests figure otherwise that they are
-            # accessing the right filename but on wrong CephFS.
-            filedata = (f'filepath = {filepath}\n'
-                        f'cephfs_name = {mount_x.cephfs_name}\n'
-                        f'cephfs_mntpt = {mount_x.cephfs_mntpt}\n'
-                        f'hostfs_mntpt = {mount_x.hostfs_mntpt}')
-            mount_x.write_file(filepath, filedata)
-            self.test_set.append([mount_x, filepath, filedata])
-            log.info(f'Test file created at "{filepath}" with the following '
-                     f'data -\n"{filedata}"')
+        dirname, filename = 'testdir', 'testfile'
+        dirpath = os_path_join(self.mount.hostfs_mntpt, path, dirname)
+        self.mount.run_shell(f'mkdir {dirpath}')
+        return os_path_join(dirpath, filename)
+
+    def _gen_test_file_data(self):
+        # XXX: the reason behind adding path, cephfs_name and both
+        # mntpts is to avoid a test bug where we mount cephfs1 but what
+        # ends up being mounted cephfs2. since self.path and self.data are
+        # identical, how would tests figure otherwise that they are
+        # accessing the right filename but on wrong CephFS.
+        return dedent(f'''\
+            self.path = {self.path}
+            cephfs_name = {self.mount.cephfs_name}
+            cephfs_mntpt = {self.mount.cephfs_mntpt}
+            hostfs_mntpt = {self.mount.hostfs_mntpt}''')
 
     def run_cap_tests(self, perm, mntpt=None):
         # TODO
@@ -259,15 +270,17 @@ class CapTester:
         Run test for read perm and, for write perm, run positive test if it
         is present and run negative test if not.
         """
-        # XXX: mntpt is path inside cephfs that serves as root for current
-        # mount. Therefore, this path must me deleted from self.filepaths.
-        # Example -
-        #   orignal path: /mnt/cephfs_x/dir1/dir2/testdir
-        #   cephfs dir serving as root for current mnt: /dir1/dir2
-        #   therefore, final path: /mnt/cephfs_x/testdir
         if mntpt:
-            self.test_set = [(x, y.replace(mntpt, ''), z) for x, y, z in \
-                             self.test_set]
+            # beacaue we want to value of mntpt from test_set.path along with
+            # slash that precedes it.
+            mntpt = '/' + mntpt if mntpt[0] != '/' else mntpt
+            # XXX: mntpt is path inside cephfs that serves as root for current
+            # mount. Therefore, this path must me deleted from self.path.
+            # Example -
+            #   orignal path: /mnt/cephfs_x/dir1/dir2/testdir
+            #   cephfs dir serving as root for current mnt: /dir1/dir2
+            #   therefore, final path: /mnt/cephfs_x/testdir
+            self.path = self.path.replace(mntpt, '')
 
         self.conduct_pos_test_for_read_caps()
 
@@ -279,23 +292,22 @@ class CapTester:
             raise RuntimeError(f'perm = {perm}\nIt should be "r" or "rw".')
 
     def conduct_pos_test_for_read_caps(self):
-        for mount, path, data in self.test_set:
-            log.info(f'test read perm: read file {path} and expect data '
-                     f'"{data}"')
-            contents = mount.read_file(path)
-            assert_equal(data, contents)
-            log.info(f'read perm was tested successfully: "{data}" was '
-                     f'successfully read from path {path}')
+        log.info(f'test read perm: read file {self.path} and expect data '
+                 f'"{self.data}"')
+        contents = self.mount.read_file(self.path)
+        assert_equal(self.data, contents)
+        log.info(f'read perm was tested successfully: "{self.data}" was '
+                 f'successfully read from path {self.path}')
 
     def conduct_pos_test_for_write_caps(self):
-        for mount, path, data in self.test_set:
-            log.info(f'test write perm: try writing data "{data}" to '
-                     f'file {path}.')
-            mount.write_file(path=path, data=data)
-            contents = mount.read_file(path=path)
-            assert_equal(data, contents)
-            log.info(f'write perm was tested was successfully: data '
-                     f'"{data}" was successfully written to file "{path}".')
+        log.info(f'test write perm: try writing data "{self.data}" to '
+                 f'file {self.path}.')
+        self.mount.write_file(path=self.path, data=self.data)
+        contents = self.mount.read_file(path=self.path)
+        assert_equal(self.data, contents)
+        log.info(f'write perm was tested was successfully: self.data '
+                 f'"{self.data}" was successfully written to file '
+                 f'"{self.path}".')
 
     def conduct_neg_test_for_write_caps(self, sudo_write=False):
         possible_errmsgs = ('permission denied', 'operation not permitted')
@@ -303,11 +315,10 @@ class CapTester:
         cmdargs += ['sudo', 'tee'] if sudo_write else ['tee']
 
         # don't use data, cmd args to write are set already above.
-        for mount, path, data in self.test_set:
-            log.info('test absence of write perm: expect failure '
-                     f'writing data to file {path}.')
-            cmdargs.append(path)
-            mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
-            cmdargs.pop(-1)
-            log.info('absence of write perm was tested successfully: '
-                     f'failed to be write data to file {path}.')
+        log.info('test absence of write perm: expect failure '
+                 f'writing data to file {self.path}.')
+        cmdargs.append(self.path)
+        self.mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+        cmdargs.pop(-1)
+        log.info('absence of write perm was tested successfully: '
+                 f'failed to be write data to file {self.path}.')
