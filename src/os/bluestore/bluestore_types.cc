@@ -1110,6 +1110,8 @@ void bluestore_blob_t::dup(const bluestore_blob_t& from)
   csum_chunk_order = from.csum_chunk_order;
   if (from.csum_data.length()) {
     csum_data = ceph::buffer::ptr(from.csum_data.c_str(), from.csum_data.length());
+  } else {
+    csum_data = ceph::buffer::ptr();
   }
 }
 
