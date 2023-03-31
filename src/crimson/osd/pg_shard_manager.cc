@@ -23,12 +23,12 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
         auto[coll, shard_core] = coll_core;
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
-	  auto core = get_osd_singleton_state(
-	  ).pg_to_shard_mapping.maybe_create_pg(
-	    pgid, shard_core);
-	  return with_remote_shard_state(
-	    core,
-	    [pgid](
+          return pg_to_shard_mapping.maybe_create_pg(
+            pgid, shard_core
+          ).then([this, pgid] (auto core) {
+            return this->template with_remote_shard_state(
+              core,
+              [pgid](
 	      PerShardState &per_shard_state,
 	      ShardServices &shard_services) {
 	      return shard_services.load_pg(
@@ -39,6 +39,7 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
 		return seastar::now();
 	      });
 	    });
+          });
 	} else if (coll.is_temp(&pgid)) {
 	  logger().warn(
 	    "found temp collection on crimson osd, should be impossible: {}",

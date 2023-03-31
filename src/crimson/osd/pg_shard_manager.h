@@ -26,6 +26,7 @@ namespace crimson::osd {
 class PGShardManager {
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
   seastar::sharded<ShardServices> &shard_services;
+  PGShardMapping &pg_to_shard_mapping;
 
 #define FORWARD_CONST(FROM_METHOD, TO_METHOD, TARGET)		\
   template <typename... Args>					\
@@ -48,9 +49,11 @@ public:
 
   PGShardManager(
     seastar::sharded<OSDSingletonState> &osd_singleton_state,
-    seastar::sharded<ShardServices> &shard_services)
+    seastar::sharded<ShardServices> &shard_services,
+    PGShardMapping &pg_to_shard_mapping)
   : osd_singleton_state(osd_singleton_state),
-    shard_services(shard_services) {}
+    shard_services(shard_services),
+    pg_to_shard_mapping(pg_to_shard_mapping) {}
 
   auto &get_osd_singleton_state() {
     ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
@@ -188,15 +191,15 @@ public:
     static_assert(T::can_create());
     logger.debug("{}: can_create", *op);
 
-    auto core = get_osd_singleton_state().pg_to_shard_mapping.maybe_create_pg(
-      op->get_pgid());
-
     get_local_state().registry.remove_from_registry(*op);
-    return with_remote_shard_state_and_op<T>(
-      core, std::move(op),
-      [](PerShardState &per_shard_state,
-         ShardServices &shard_services,
-         typename T::IRef op) {
+    return pg_to_shard_mapping.maybe_create_pg(
+      op->get_pgid()
+    ).then([this, op = std::move(op)](auto core) mutable {
+      return this->template with_remote_shard_state_and_op<T>(
+        core, std::move(op),
+        [](PerShardState &per_shard_state,
+           ShardServices &shard_services,
+           typename T::IRef op) {
 	per_shard_state.registry.add_to_registry(*op);
 	auto &logger = crimson::get_logger(ceph_subsys_osd);
 	auto &opref = *op;
@@ -219,6 +222,7 @@ public:
 	    })
 	  ).then([op=std::move(op)] {});
       });
+    });
   }
 
   /// Runs opref on the appropriate core, waiting for pg as necessary
@@ -232,15 +236,15 @@ public:
     static_assert(!T::can_create());
     logger.debug("{}: !can_create", *op);
 
-     auto core = get_osd_singleton_state().pg_to_shard_mapping.maybe_create_pg(
-      op->get_pgid());
-
     get_local_state().registry.remove_from_registry(*op);
-    return with_remote_shard_state_and_op<T>(
-      core, std::move(op),
-      [](PerShardState &per_shard_state,
-         ShardServices &shard_services,
-         typename T::IRef op) {
+    return pg_to_shard_mapping.maybe_create_pg(
+      op->get_pgid()
+    ).then([this, op = std::move(op)](auto core) mutable {
+      return this->template with_remote_shard_state_and_op<T>(
+        core, std::move(op),
+        [](PerShardState &per_shard_state,
+           ShardServices &shard_services,
+           typename T::IRef op) {
 	per_shard_state.registry.add_to_registry(*op);
 	auto &logger = crimson::get_logger(ceph_subsys_osd);
 	auto &opref = *op;
@@ -260,6 +264,7 @@ public:
 	    })
 	  ).then([op=std::move(op)] {});
       });
+    });
   }
 
   seastar::future<> load_pgs(crimson::os::FuturizedStore& store);
@@ -308,20 +313,19 @@ public:
    */
   template <typename F>
   void for_each_pgid(F &&f) const {
-    return get_osd_singleton_state().pg_to_shard_mapping.for_each_pgid(
+    return pg_to_shard_mapping.for_each_pgid(
       std::forward<F>(f));
   }
 
   auto get_num_pgs() const {
-    return get_osd_singleton_state().pg_to_shard_mapping.get_num_pgs();
+    return pg_to_shard_mapping.get_num_pgs();
   }
 
   seastar::future<> broadcast_map_to_pgs(epoch_t epoch);
 
   template <typename F>
   auto with_pg(spg_t pgid, F &&f) {
-    core_id_t core = get_osd_singleton_state(
-    ).pg_to_shard_mapping.get_pg_mapping(pgid);
+    core_id_t core = pg_to_shard_mapping.get_pg_mapping(pgid);
     return with_remote_shard_state(
       core,
       [pgid, f=std::move(f)](auto &local_state, auto &local_service) mutable {

@@ -21,9 +21,11 @@ class PG;
 /**
  * PGShardMapping
  *
- * Maps pgs to shards.
+ * Maintains a mapping from spg_t to the core containing that PG.  Internally, each
+ * core has a local copy of the mapping to enable core-local lookups.  Updates
+ * are proxied to core 0, and the back out to all other cores -- see maybe_create_pg.
  */
-class PGShardMapping {
+class PGShardMapping : public seastar::peering_sharded_service<PGShardMapping> {
 public:
   /// Returns mapping if present, NULL_CORE otherwise
   core_id_t get_pg_mapping(spg_t pgid) {
@@ -33,44 +35,69 @@ public:
   }
 
   /// Returns mapping for pgid, creates new one if it doesn't already exist
-  core_id_t maybe_create_pg(spg_t pgid, core_id_t core = NULL_CORE) {
-    auto [insert_iter, inserted] = pg_to_core.emplace(pgid, core);
-    if (!inserted) {
-      ceph_assert_always(insert_iter->second != NULL_CORE);
+  seastar::future<core_id_t> maybe_create_pg(
+    spg_t pgid,
+    core_id_t core = NULL_CORE) {
+    auto find_iter = pg_to_core.find(pgid);
+    if (find_iter != pg_to_core.end()) {
+      ceph_assert_always(find_iter->second != NULL_CORE);
       if (core != NULL_CORE) {
-	ceph_assert_always(insert_iter->second == core);
+        ceph_assert_always(find_iter->second == core);
       }
-      return insert_iter->second;
+      return seastar::make_ready_future<core_id_t>(find_iter->second);
     } else {
-      ceph_assert_always(core_to_num_pgs.size() > 0);
-      std::map<core_id_t, unsigned>::iterator core_iter;
-      if (core == NULL_CORE) {
-        core_iter = std::min_element(
-          core_to_num_pgs.begin(),
-          core_to_num_pgs.end(),
-          [](const auto &left, const auto &right) {
-            return left.second < right.second;
+      return container().invoke_on(0,[pgid, core]
+        (auto &primary_mapping) {
+        auto [insert_iter, inserted] = primary_mapping.pg_to_core.emplace(pgid, core);
+        ceph_assert_always(inserted);
+        ceph_assert_always(primary_mapping.core_to_num_pgs.size() > 0);
+        std::map<core_id_t, unsigned>::iterator core_iter;
+        if (core == NULL_CORE) {
+          core_iter = std::min_element(
+            primary_mapping.core_to_num_pgs.begin(),
+            primary_mapping.core_to_num_pgs.end(),
+              [](const auto &left, const auto &right) {
+              return left.second < right.second;
+          });
+        } else {
+          core_iter = primary_mapping.core_to_num_pgs.find(core);
+        }
+        ceph_assert_always(primary_mapping.core_to_num_pgs.end() != core_iter);
+        insert_iter->second = core_iter->first;
+        core_iter->second++;
+        return primary_mapping.container().invoke_on_others(
+          [pgid = insert_iter->first, core = insert_iter->second]
+          (auto &other_mapping) {
+          ceph_assert_always(core != NULL_CORE);
+          auto [insert_iter, inserted] = other_mapping.pg_to_core.emplace(pgid, core);
+          ceph_assert_always(inserted);
         });
-      } else {
-	core_iter = core_to_num_pgs.find(core);
-      }
-      ceph_assert_always(core_to_num_pgs.end() != core_iter);
-      insert_iter->second = core_iter->first;
-      core_iter->second++;
-      return insert_iter->second;
+      }).then([this, pgid] {
+        auto find_iter = pg_to_core.find(pgid);
+        return seastar::make_ready_future<core_id_t>(find_iter->second);
+      });
     }
   }
 
   /// Remove pgid
-  void remove_pg(spg_t pgid) {
-    auto iter = pg_to_core.find(pgid);
-    ceph_assert_always(iter != pg_to_core.end());
-    ceph_assert_always(iter->second != NULL_CORE);
-    auto count_iter = core_to_num_pgs.find(iter->second);
-    ceph_assert_always(count_iter != core_to_num_pgs.end());
-    ceph_assert_always(count_iter->second > 0);
-    --(count_iter->second);
-    pg_to_core.erase(iter);
+  seastar::future<> remove_pg(spg_t pgid) {
+    return container().invoke_on(0, [pgid](auto &primary_mapping) {
+      auto iter = primary_mapping.pg_to_core.find(pgid);
+      ceph_assert_always(iter != primary_mapping.pg_to_core.end());
+      ceph_assert_always(iter->second != NULL_CORE);
+      auto count_iter = primary_mapping.core_to_num_pgs.find(iter->second);
+      ceph_assert_always(count_iter != primary_mapping.core_to_num_pgs.end());
+      ceph_assert_always(count_iter->second > 0);
+      --(count_iter->second);
+      primary_mapping.pg_to_core.erase(iter);
+      return primary_mapping.container().invoke_on_others(
+        [pgid](auto &other_mapping) {
+        auto iter = other_mapping.pg_to_core.find(pgid);
+        ceph_assert_always(iter != other_mapping.pg_to_core.end());
+        ceph_assert_always(iter->second != NULL_CORE);
+        other_mapping.pg_to_core.erase(iter);
+      });
+    });
   }
 
   size_t get_num_pgs() const { return pg_to_core.size(); }
