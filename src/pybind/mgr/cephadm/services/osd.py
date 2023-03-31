@@ -537,9 +537,12 @@ class RemoveUtil(object):
     def zap_osd(self, osd: "OSD") -> str:
         "Zaps all devices that are associated with an OSD"
         if osd.hostname is not None:
+            cmd = ['--', 'lvm', 'zap', '--osd-id', str(osd.osd_id)]
+            if not osd.no_destroy:
+                cmd.append('--destroy')
             out, err, code = CephadmServe(self.mgr)._run_cephadm(
                 osd.hostname, 'osd', 'ceph-volume',
-                ['--', 'lvm', 'zap', '--destroy', '--osd-id', str(osd.osd_id)],
+                cmd,
                 error_ok=True)
             self.mgr.cache.invalidate_host_devices(osd.hostname)
             if code:
@@ -602,7 +605,8 @@ class OSD:
                  replace: bool = False,
                  force: bool = False,
                  hostname: Optional[str] = None,
-                 zap: bool = False):
+                 zap: bool = False,
+                 no_destroy: bool = False):
         # the ID of the OSD
         self.osd_id = osd_id
 
@@ -641,6 +645,8 @@ class OSD:
 
         # Whether devices associated with the OSD should be zapped (DATA ERASED)
         self.zap = zap
+        # Whether all associated LV devices should be destroyed.
+        self.no_destroy = no_destroy
 
     def start(self) -> None:
         if self.started:
