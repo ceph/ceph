@@ -16,7 +16,11 @@
       [data]="data$ | async"
       [columns]="meta.table.columns"
       [columnMode]="meta.table.columnMode"
-      [toolHeader]="meta.table.toolHeader">
+      [toolHeader]="meta.table.toolHeader"
+      selectionType="single"
+      (setExpandedRow)="setExpandedRow($event)"
+      (updateSelection)="updateSelection($event)"
+      [hasDetails]="meta.detail_columns.length > 0">
     <div class="table-actions btn-toolbar">
       <cd-table-actions [permission]="permission"
                         [selection]="selection"

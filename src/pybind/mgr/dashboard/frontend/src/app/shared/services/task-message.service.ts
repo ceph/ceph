@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import _ from 'lodash';
 
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
@@ -340,8 +341,8 @@ export class TaskMessageService {
     'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.service(metadata)
     ),
-    'ceph-users/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.cephUser(metadata)
+    'crud-component': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.crudMessage(metadata)
     )
   };
 
@@ -387,8 +388,15 @@ export class TaskMessageService {
     return $localize`Service '${metadata.service_name}'`;
   }
 
-  cephUser(metadata: any) {
-    return $localize`Ceph User '${metadata.user_entity}'`;
+  crudMessage(metadata: any) {
+    let message = metadata.__message;
+    _.forEach(metadata, (value, key) => {
+      if (key != '__message') {
+        let regex = '{' + key + '}';
+        message = message.replace(regex, value);
+      }
+    });
+    return $localize`${message}`;
   }
 
   _getTaskTitle(task: Task) {
