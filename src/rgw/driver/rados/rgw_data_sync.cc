@@ -1153,6 +1153,9 @@ std::ostream& operator<<(std::ostream& out, const bucket_shard_str& rhs) {
   }
   return out;
 }
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<bucket_shard_str> : fmt::ostream_formatter {};
+#endif
 
 struct all_bucket_info {
   RGWBucketInfo bucket_info;
@@ -3738,8 +3741,18 @@ int RGWReadRecoveringBucketShardsCoroutine::operate(const DoutPrefixProvider *dp
 
       count += error_entries.size();
       marker = *error_entries.rbegin();
-      recovering_buckets.insert(std::make_move_iterator(error_entries.begin()),
-                                std::make_move_iterator(error_entries.end()));
+      for (const std::string& key : error_entries) {
+        rgw_bucket_shard bs;
+        std::optional<uint64_t> gen;
+        if (int r = rgw::error_repo::decode_key(key, bs, gen); r < 0) {
+          // insert the key as-is
+          recovering_buckets.insert(std::move(key));
+        } else if (gen) {
+          recovering_buckets.insert(fmt::format("{}[{}]", bucket_shard_str{bs}, *gen));
+        } else {
+          recovering_buckets.insert(fmt::format("{}[full]", bucket_shard_str{bs}));
+        }
+      }
     } while (omapkeys->more && count < max_entries);
   
     return set_cr_done();
