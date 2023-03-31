@@ -673,6 +673,14 @@ public:
 			uint32_t b_offset,
 			uint32_t *length0);
 
+    void dup(Blob& o) {
+      o.shared_blob = shared_blob;
+      o.blob = blob;
+#ifdef CACHE_BLOB_BL
+      o.blob_bl = blob_bl;
+#endif
+    }
+
     void dup(const Blob& from, bool copy_used_in_blob);
     void copy_from(CephContext* cct, const Blob& from,
 		   uint32_t min_release_size, uint32_t start, uint32_t len);
