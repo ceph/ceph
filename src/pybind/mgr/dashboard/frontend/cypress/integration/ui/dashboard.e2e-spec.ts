@@ -1,5 +1,6 @@
 import { IscsiPageHelper } from '../block/iscsi.po';
 import { HostsPageHelper } from '../cluster/hosts.po';
+import { ManagerModulesPageHelper } from '../cluster/mgr-modules.po';
 import { MonitorsPageHelper } from '../cluster/monitors.po';
 import { OSDsPageHelper } from '../cluster/osds.po';
 import { PageHelper } from '../page-helper.po';
@@ -15,6 +16,15 @@ describe('Dashboard Main Page', () => {
   const pools = new PoolPageHelper();
   const monitors = new MonitorsPageHelper();
   const iscsi = new IscsiPageHelper();
+  const mgrmodules = new ManagerModulesPageHelper();
+
+  before(() => {
+    cy.login();
+    mgrmodules.navigateTo();
+    mgrmodules.navigateEdit('dashboard');
+    cy.get('#FEATURE_TOGGLE_DASHBOARD').uncheck();
+    cy.contains('button', 'Update').click();
+  });
 
   beforeEach(() => {
     cy.login();
@@ -120,5 +130,13 @@ describe('Dashboard Main Page', () => {
         });
       });
     }
+  });
+
+  after(() => {
+    cy.login();
+    mgrmodules.navigateTo();
+    mgrmodules.navigateEdit('dashboard');
+    cy.get('#FEATURE_TOGGLE_DASHBOARD').click();
+    cy.contains('button', 'Update').click();
   });
 });
