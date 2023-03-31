@@ -78,7 +78,7 @@ class Deploy(object):
             print(cmd)
         else:
             logger.info('Running ceph-volume command: {}'.format(cmd))
-            batch_args = cmd.split(' ')[2:]
+            batch_args = cmd[0].split(' ')[2:]
             b = Batch(batch_args)
             b.main()
 
