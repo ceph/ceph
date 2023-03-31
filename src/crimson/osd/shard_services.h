@@ -281,9 +281,6 @@ private:
   void requeue_pg_temp();
   seastar::future<> send_pg_temp();
 
-  // TODO: add config to control mapping
-  PGShardMapping pg_to_shard_mapping{0, seastar::smp::count};
-
   std::set<pg_t> pg_created;
   seastar::future<> send_pg_created(pg_t pgid);
   seastar::future<> send_pg_created();
@@ -327,6 +324,7 @@ class ShardServices : public OSDMapService {
 
   PerShardState local_state;
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
+  PGShardMapping& pg_to_shard_mapping;
 
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
@@ -369,9 +367,11 @@ public:
   template <typename... PSSArgs>
   ShardServices(
     seastar::sharded<OSDSingletonState> &osd_singleton_state,
+    PGShardMapping& pg_to_shard_mapping,
     PSSArgs&&... args)
     : local_state(std::forward<PSSArgs>(args)...),
-      osd_singleton_state(osd_singleton_state) {}
+      osd_singleton_state(osd_singleton_state),
+      pg_to_shard_mapping(pg_to_shard_mapping) {}
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
@@ -381,10 +381,7 @@ public:
 
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
-    return with_singleton(
-      [pgid](auto &osstate) {
-      osstate.pg_to_shard_mapping.remove_pg(pgid);
-    });
+    return pg_to_shard_mapping.remove_pg(pgid);
   }
 
   crimson::common::CephContext *get_cct() {
