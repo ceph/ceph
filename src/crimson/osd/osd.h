@@ -69,8 +69,10 @@ public:
     ShardDispatcher(
       OSD& osd,
       int whoami,
-      crimson::os::FuturizedStore& store)
-    : pg_shard_manager(osd.osd_singleton_state, osd.shard_services),
+      crimson::os::FuturizedStore& store,
+      PGShardMapping& pg_to_shard_mapping)
+    : pg_shard_manager(osd.osd_singleton_state,
+                       osd.shard_services, pg_to_shard_mapping),
       osd(osd),
       whoami(whoami),
       store(store) {}
@@ -185,6 +187,7 @@ public:
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
+  seastar::sharded<PGShardMapping> pg_to_shard_mappings;
   seastar::sharded<OSDSingletonState> osd_singleton_state;
   seastar::sharded<ShardServices> shard_services;
   seastar::sharded<ShardDispatcher> shard_dispatchers;

@@ -357,13 +357,16 @@ seastar::future<> OSD::start()
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   return store.start().then([this] {
-    return osd_singleton_state.start_single(
-      whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
-      std::ref(*monc), std::ref(*mgrc)
+    return pg_to_shard_mappings.start(0, seastar::smp::count
     ).then([this] {
+      return osd_singleton_state.start_single(
+        whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
+        std::ref(*monc), std::ref(*mgrc));
+    }).then([this] {
       ceph::mono_time startup_time = ceph::mono_clock::now();
       return shard_services.start(
         std::ref(osd_singleton_state),
+        std::ref(pg_to_shard_mappings),
         whoami,
         startup_time,
         osd_singleton_state.local().perf,
@@ -373,7 +376,8 @@ seastar::future<> OSD::start()
       return shard_dispatchers.start(
         std::ref(*this),
         whoami,
-        std::ref(store));
+        std::ref(store),
+        std::ref(pg_to_shard_mappings));
     });
   }).then([this] {
     heartbeat.reset(new Heartbeat{
@@ -681,6 +685,8 @@ seastar::future<> OSD::stop()
       return shard_services.stop();
     }).then([this] {
       return osd_singleton_state.stop();
+    }).then([this] {
+      return pg_to_shard_mappings.stop();
     }).then([fut=std::move(gate_close_fut)]() mutable {
       return std::move(fut);
     }).then([this] {
