@@ -488,10 +488,9 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   if (!s->src_bucket_name.empty()) {
     std::unique_ptr<rgw::sal::Bucket> src_bucket;
     ret = driver->get_bucket(dpp, nullptr,
-			    rgw_bucket(s->src_tenant_name,
-				       s->src_bucket_name,
-				       s->bucket_instance_id),
-			    &src_bucket, y);
+                             rgw_bucket_key(s->src_tenant_name,
+                                            s->src_bucket_name),
+                             &src_bucket, y);
     if (ret == 0) {
       string& zonegroup = src_bucket->get_info().zonegroup;
       s->local_source = driver->get_zone()->get_zonegroup().equals(zonegroup);
@@ -511,7 +510,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 
     /* This is the only place that s->bucket is created.  It should never be
      * overwritten. */
-    ret = driver->get_bucket(dpp, s->user.get(), rgw_bucket(rgw_bucket_key(s->bucket_tenant, s->bucket_name, s->bucket_instance_id)), &s->bucket, y);
+    ret = driver->get_bucket(dpp, s->user.get(), rgw_bucket(s->bucket_tenant, s->bucket_name, s->bucket_instance_id), &s->bucket, y);
     if (ret < 0) {
       if (ret != -ENOENT) {
 	string bucket_log;
@@ -5220,10 +5219,13 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
   return true;
 }
 
-int RGWCopyObj::verify_permission(optional_yield y)
+int RGWCopyObj::init_processing(optional_yield y)
 {
-  RGWAccessControlPolicy src_acl(s->cct);
-  boost::optional<Policy> src_policy;
+  op_ret = RGWOp::init_processing(y);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   op_ret = get_params(y);
   if (op_ret < 0)
     return op_ret;
@@ -5234,10 +5236,9 @@ int RGWCopyObj::verify_permission(optional_yield y)
   }
 
   op_ret = driver->get_bucket(this, s->user.get(),
-			     rgw_bucket(src_tenant_name,
-					src_bucket_name,
-					s->bucket_instance_id),
-			     &src_bucket, y);
+                              rgw_bucket_key(s->src_tenant_name,
+                                             s->src_bucket_name),
+                              &src_bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_BUCKET;
@@ -5247,6 +5248,14 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   /* This is the only place the bucket is set on src_object */
   s->src_object->set_bucket(src_bucket.get());
+  return 0;
+}
+
+int RGWCopyObj::verify_permission(optional_yield y)
+{
+  RGWAccessControlPolicy src_acl(s->cct);
+  boost::optional<Policy> src_policy;
+
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
     s->src_object->set_atomic();
@@ -5345,45 +5354,30 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
 
-  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source
-                                                           or intra region sync */
-    dest_bucket = src_bucket->clone();
-  } else {
-    op_ret = driver->get_bucket(this, s->user.get(), dest_tenant_name, dest_bucket_name, &dest_bucket, y);
-    if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        ldpp_dout(this, 0) << "ERROR: Destination Bucket not found for user: " << s->user->get_id().to_str() << dendl;
-	op_ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return op_ret;
-    }
-  }
-
-  dest_object = dest_bucket->get_object(rgw_obj_key(dest_obj_name));
-  dest_object->set_atomic();
+  s->object->set_atomic();
 
   /* check dest bucket permissions */
-  op_ret = read_bucket_policy(this, driver, s, dest_bucket->get_info(),
-			      dest_bucket->get_attrs(),
-                              &dest_bucket_policy, dest_bucket->get_key(), y);
+  op_ret = read_bucket_policy(this, driver, s, s->bucket->get_info(),
+			      s->bucket->get_attrs(),
+                              &dest_bucket_policy, s->bucket->get_key(), y);
   if (op_ret < 0) {
     return op_ret;
   }
-  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, dest_bucket->get_attrs(), dest_bucket->get_tenant());
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket->get_tenant());
   /* admin request overrides permission checks */
   if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
     if (dest_iam_policy != boost::none || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
       //Add destination bucket tags for authorization
       auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, dest_iam_policy, s->iam_user_policies, s->session_policies);
       if (has_s3_resource_tag)
-        rgw_iam_add_buckettags(this, s, dest_bucket.get());
+        rgw_iam_add_buckettags(this, s, s->bucket.get());
 
       rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
       if (md_directive)
 	rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
 				   *md_directive);
 
-      ARN obj_arn(dest_object->get_obj());
+      ARN obj_arn(s->object->get_obj());
       auto identity_policy_res = eval_identity_or_session_policies(this, s->iam_user_policies,
                                                                   s->env,
                                                                   rgw::IAM::s3PutObject,
@@ -5521,13 +5515,13 @@ void RGWCopyObj::execute(optional_yield y)
   }
 
   if ( ! version_id.empty()) {
-    dest_object->set_instance(version_id);
-  } else if (dest_bucket->versioning_enabled()) {
-    dest_object->gen_rand_obj_instance_name();
+    s->object->set_instance(version_id);
+  } else if (s->bucket->versioning_enabled()) {
+    s->object->gen_rand_obj_instance_name();
   }
 
   s->src_object->set_atomic();
-  dest_object->set_atomic();
+  s->object->set_atomic();
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -5580,7 +5574,7 @@ void RGWCopyObj::execute(optional_yield y)
         return;
       }
       // enforce quota against the destination bucket owner
-      op_ret = dest_bucket->check_quota(this, quota, astate->accounted_size, y);
+      op_ret = s->bucket->check_quota(this, quota, astate->accounted_size, y);
       if (op_ret < 0) {
         return;
       }
@@ -5591,7 +5585,7 @@ void RGWCopyObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. In case of copying to remote this
    * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
-  op_ret = dest_object->swift_versioning_copy(this, s->yield);
+  op_ret = s->object->swift_versioning_copy(this, s->yield);
   if (op_ret < 0) {
     return;
   }
@@ -5599,8 +5593,8 @@ void RGWCopyObj::execute(optional_yield y)
   op_ret = s->src_object->copy_object(s->user.get(),
 	   &s->info,
 	   source_zone,
-	   dest_object.get(),
-	   dest_bucket.get(),
+	   s->object.get(),
+	   s->bucket.get(),
 	   src_bucket.get(),
 	   s->dest_placement,
 	   &src_mtime,
@@ -5624,7 +5618,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   s->yield);
 
   // send request to notification manager
-  int ret = res->publish_commit(this, obj_size, mtime, etag, dest_object->get_instance());
+  int ret = res->publish_commit(this, obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
