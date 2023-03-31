@@ -309,8 +309,14 @@ std::string
 WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, optional_yield y) const
 {
   string cert_url;
-  string openidc_wellknown_url = iss + "/.well-known/openid-configuration";
+  string openidc_wellknown_url = iss;
   bufferlist openidc_resp;
+
+  if (openidc_wellknown_url.back() == '/') {
+    openidc_wellknown_url.pop_back();
+  }
+  openidc_wellknown_url.append("/.well-known/openid-configuration");
+
   RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
 
   //Headers
@@ -761,7 +767,7 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}}
 };
 
-bool RGWHandler_REST_STS::action_exists(const req_state* s) 
+bool RGWHandler_REST_STS::action_exists(const req_state* s)
 {
   if (s->info.args.exists("Action")) {
     const std::string action_name = s->info.args.get("Action");
