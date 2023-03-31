@@ -701,6 +701,7 @@ void bluestore_blob_t::adjust_to(const bluestore_blob_t& other, uint32_t target_
   ceph_assert(!has_csum());
   if (other.has_csum()) {
     init_csum(other.csum_type, other.csum_chunk_order, logical_length);
+    ceph_assert(csum_data.length() <= other.csum_data.length());
     memcpy(csum_data.c_str(), other.csum_data.c_str(), csum_data.length());
   }
   compressed_length = 0;
