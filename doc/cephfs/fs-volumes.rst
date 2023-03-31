@@ -51,17 +51,16 @@ module (see :doc:`/mgr/orchestrator`), e.g. rook.
 
 <vol_name> is the volume name (an arbitrary string), and
 
-<placement> is an optional string signifying which hosts should have NFS Ganesha
-daemon containers running on them and, optionally, the total number of NFS
-Ganesha daemons the cluster (should you want to have more than one NFS Ganesha
-daemon running per node). For example, the following placement string means
-"deploy NFS Ganesha daemons on nodes host1 and host2 (one daemon per host):
+<placement> is an optional string signifying which hosts should have MDS
+running on them and, optionally, the total number of MDSes the cluster (should
+you want to have more than one MDS running per node). For example, the
+following placement string means "deploy MDS on nodes host1 and host2 (one
+MDS per host):
 
     "host1,host2"
 
-and this placement specification says to deploy two NFS Ganesha daemons each
-on nodes host1 and host2 (for a total of four NFS Ganesha daemons in the
-cluster):
+and this placement specification says to deploy two MDS each on nodes host1 and
+host2 (for a total of four MDS in the cluster):
 
     "4 host1,host2"
 
