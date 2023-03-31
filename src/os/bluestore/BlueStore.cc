@@ -4913,32 +4913,8 @@ void BlueStore::Collection::split_cache(
       // move over shared blobs and buffers.  cover shared blobs from
       // both extent map and spanning blob map (the full extent map
       // may not be faulted in)
-      vector<Blob*> bvec;
-      for (auto& e : o->extent_map.extent_map) {
-	e.blob->last_encoded_id = -1;
-      }
-      for (auto& b : o->extent_map.spanning_blob_map) {
-	b.second->last_encoded_id = -1;
-      }
-      for (auto& e : o->extent_map.extent_map) {
-	Blob* tb = e.blob.get();
-	if (tb->last_encoded_id == -1) {
-	  bvec.push_back(tb);
-	  tb->last_encoded_id = 0;
-	}
-      }
-      for (auto& b : o->extent_map.spanning_blob_map) {
-	Blob* tb = b.second.get();
-	if (tb->last_encoded_id == -1) {
-	  // Having blob in spanning but not mapped is an error.
-	  // It will be dropped during encode_some(),
-	  // but in the meantime we want cache to be consistent.
-	  bvec.push_back(tb);
-	  tb->last_encoded_id = 0;
-	}
-      }
 
-      for (auto b : bvec) {
+      auto rehome_blob = [&](Blob* b) {
 	for (auto& i : b->bc.buffer_map) {
 	  if (!i.second->is_writing()) {
 	    ldout(store->cct, 1) << __func__ << "   moving " << *i.second
@@ -4953,7 +4929,7 @@ void BlueStore::Collection::split_cache(
 	if (sb->coll == dest) {
 	  ldout(store->cct, 20) << __func__ << "  already moved " << *sb
 				<< dendl;
-	  continue;
+	  return;
 	}
 	ldout(store->cct, 20) << __func__ << "  moving " << *sb << dendl;
 	if (sb->get_sbid()) {
@@ -4963,6 +4939,31 @@ void BlueStore::Collection::split_cache(
 	  dest->shared_blob_set.add(dest, sb);
 	}
 	sb->coll = dest;
+      };
+
+      for (auto& e : o->extent_map.extent_map) {
+	e.blob->last_encoded_id = -1;
+      }
+      for (auto& b : o->extent_map.spanning_blob_map) {
+	b.second->last_encoded_id = -1;
+      }
+      for (auto& e : o->extent_map.extent_map) {
+	Blob* tb = e.blob.get();
+	if (tb->last_encoded_id == -1) {
+	  rehome_blob(tb);
+	  tb->last_encoded_id = 0;
+	}
+      }
+      for (auto& b : o->extent_map.spanning_blob_map) {
+	Blob* tb = b.second.get();
+	if (tb->last_encoded_id == -1) {
+	  // Having blob in spanning but not mapped is an error.
+	  // It will be dropped during encode_some(),
+	  // but in the meantime we want cache to be consistent.
+	  ldout(store->cct, 10) << __func__ << " spanning blob not in map " << *tb << dendl;
+	  rehome_blob(tb);
+	  tb->last_encoded_id = 0;
+	}
       }
     }
   }
