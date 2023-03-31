@@ -2616,6 +2616,8 @@ void BlueStore::Blob::copy_from(
     size_t csd_value_size = bto.get_csum_value_size();
     size_t csd_item_start = p2align(start, uint32_t(1 << bto.csum_chunk_order)) >> bto.csum_chunk_order;
     size_t csd_item_end = p2roundup(start + len, uint32_t(1 << bto.csum_chunk_order)) >> bto.csum_chunk_order;
+    ceph_assert(bto.  csum_data.length() <= csd_item_end * csd_value_size);
+    ceph_assert(bfrom.csum_data.length() <= csd_item_end * csd_value_size);
     memcpy(bto.  csum_data.c_str() + csd_item_start * csd_value_size,
 	   bfrom.csum_data.c_str() + csd_item_start * csd_value_size,
 	   (csd_item_end - csd_item_start) * csd_value_size);
