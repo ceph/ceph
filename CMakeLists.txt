@@ -263,6 +263,8 @@ if(WITH_LIBURING)
     include(Builduring)
     build_uring()
   endif()
+  # enable uring in boost::asio
+  add_compile_definitions("BOOST_ASIO_HAS_IO_URING")
 endif()
 
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
