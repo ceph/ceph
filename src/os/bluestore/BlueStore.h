@@ -916,6 +916,8 @@ public:
     void reblob_extents(uint32_t blob_start, uint32_t blob_end,
 			BlobRef from_blob, BlobRef to_blob);
 
+    void dup_original(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
+      uint64_t&, uint64_t&, uint64_t&);
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
 
