@@ -136,12 +136,9 @@ def set_authtoken_params(ctx, cclient, cconfig):
                         ['sed', '-i',
                          '/[[]filter:authtoken]/{p;s##'+'auth_uri = {}'.format(url)+'#;}',
                          'etc/barbican/barbican-api-paste.ini'])
-    admin_host, admin_port = ctx.keystone.admin_endpoints[keystone_role]
-    admin_url = 'http://{host}:{port}/v3'.format(host=admin_host,
-                                                 port=admin_port)
     run_in_barbican_dir(ctx, cclient,
                         ['sed', '-i',
-                         '/[[]filter:authtoken]/{p;s##'+'auth_url = {}'.format(admin_url)+'#;}',
+                         '/[[]filter:authtoken]/{p;s##'+'auth_url = {}'.format(url)+'#;}',
                          'etc/barbican/barbican-api-paste.ini'])
 
 def fix_barbican_api_paste(ctx, cclient):

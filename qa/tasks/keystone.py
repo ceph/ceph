@@ -42,9 +42,9 @@ def run_in_keystone_venv(ctx, client, args):
                             run.Raw('&&')
                         ] + args)
 
-def get_keystone_venved_cmd(ctx, cmd, args):
+def get_keystone_venved_cmd(ctx, cmd, args, env=[]):
     kbindir = get_keystone_dir(ctx) + '/.tox/venv/bin/'
-    return [ kbindir + 'python', kbindir + cmd ] + args
+    return env + [ kbindir + 'python', kbindir + cmd ] + args
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -143,6 +143,30 @@ def install_packages(ctx, config):
             for dep in packages[client]:
                 remove_package(dep, remote)
 
+def run_mysql_query(ctx, client, query):
+    query_arg = '--execute="{}"'.format(query)
+    args = ['sudo', 'mysql', run.Raw(query_arg)]
+    ctx.cluster.only(client).run(args=args)
+
+@contextlib.contextmanager
+def setup_database(ctx, config):
+    """
+    Setup database for Keystone.
+    """
+    assert isinstance(config, dict)
+    log.info('Setting up database for keystone...')
+
+    for (client, cconf) in config.items():
+        run_mysql_query(ctx, client, "CREATE USER 'keystone'@'localhost' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'SECRET';")
+        run_mysql_query(ctx, client, "CREATE DATABASE keystone;")
+        run_mysql_query(ctx, client, "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost';")
+        run_mysql_query(ctx, client, "FLUSH PRIVILEGES;")
+
+    try:
+        yield
+    finally:
+        pass
+
 @contextlib.contextmanager
 def setup_venv(ctx, config):
     """
@@ -151,6 +175,9 @@ def setup_venv(ctx, config):
     assert isinstance(config, dict)
     log.info('Setting up virtualenv for keystone...')
     for (client, _) in config.items():
+        run_in_keystone_dir(ctx, client,
+            ['sed', '-i', 's/usedevelop.*/usedevelop=false/g', 'tox.ini'])
+
         run_in_keystone_dir(ctx, client,
             [   'source',
                 '{tvdir}/bin/activate'.format(tvdir=get_toxvenv_dir(ctx)),
@@ -173,7 +200,9 @@ def configure_instance(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring keystone...')
 
-    keyrepo_dir = '{kdir}/etc/fernet-keys'.format(kdir=get_keystone_dir(ctx))
+    kdir = get_keystone_dir(ctx)
+    keyrepo_dir = '{kdir}/etc/fernet-keys'.format(kdir=kdir)
+    db_path = '{kdir}/etc/keystone.db'.format(kdir=kdir)
     for (client, _) in config.items():
         # prepare the config file
         run_in_keystone_dir(ctx, client,
@@ -195,6 +224,12 @@ def configure_instance(ctx, config):
                 '-e', 's^#key_repository =.*^key_repository = {kr}^'.format(kr = keyrepo_dir),
                 '-i', 'etc/keystone.conf'
             ])
+        run_in_keystone_dir(ctx, client,
+            [
+                'sed',
+                '-e', 's^#connection =.*^connection = mysql+pymysql://keystone:SECRET@localhost/keystone^',
+                '-i', 'etc/keystone.conf'
+            ])
         # log to a file that gets archived
         log_file = '{p}/archive/keystone.{c}.log'.format(p=teuthology.get_testdir(ctx), c=client)
         run_in_keystone_dir(ctx, client,
@@ -209,18 +244,22 @@ def configure_instance(ctx, config):
                 '{}/archive/keystone.{}.conf'.format(teuthology.get_testdir(ctx), client)
             ])
 
+        conf_file = '{kdir}/etc/keystone.conf'.format(kdir=get_keystone_dir(ctx))
+
         # prepare key repository for Fetnet token authenticator
         run_in_keystone_dir(ctx, client, [ 'mkdir', '-p', keyrepo_dir ])
-        run_in_keystone_venv(ctx, client, [ 'keystone-manage', 'fernet_setup' ])
+        run_in_keystone_venv(ctx, client, [ 'keystone-manage', '--config-file', conf_file, 'fernet_setup' ])
 
         # sync database
-        run_in_keystone_venv(ctx, client, [ 'keystone-manage', 'db_sync' ])
+        run_in_keystone_venv(ctx, client, [ 'keystone-manage', '--config-file', conf_file, 'db_sync' ])
     yield
 
 @contextlib.contextmanager
 def run_keystone(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring keystone...')
+
+    conf_file = '{kdir}/etc/keystone.conf'.format(kdir=get_keystone_dir(ctx))
 
     for (client, _) in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
@@ -238,7 +277,10 @@ def run_keystone(ctx, config):
                 # our other daemons, doesn't quit on stdin.close().
                 # Teuthology relies on this behaviour.
 		run.Raw('& { read; kill %1; }')
-            ]
+            ],
+            [
+                run.Raw('OS_KEYSTONE_CONFIG_FILES={}'.format(conf_file)),
+            ],
         )
         ctx.daemons.add_daemon(
             remote, 'keystone', client_public_with_id,
@@ -246,27 +288,6 @@ def run_keystone(ctx, config):
             args=run_cmd,
             logger=log.getChild(client),
             stdin=run.PIPE,
-            cwd=get_keystone_dir(ctx),
-            wait=False,
-            check_status=False,
-        )
-
-        # start the admin endpoint
-        client_admin_with_id = 'keystone.admin' + '.' + client_id
-
-        admin_host, admin_port = ctx.keystone.admin_endpoints[client]
-        run_cmd = get_keystone_venved_cmd(ctx, 'keystone-wsgi-admin',
-            [   '--host', admin_host, '--port', str(admin_port),
-                run.Raw('& { read; kill %1; }')
-            ]
-        )
-        ctx.daemons.add_daemon(
-            remote, 'keystone', client_admin_with_id,
-            cluster=cluster_name,
-            args=run_cmd,
-            logger=log.getChild(client),
-            stdin=run.PIPE,
-            cwd=get_keystone_dir(ctx),
             wait=False,
             check_status=False,
         )
@@ -276,10 +297,6 @@ def run_keystone(ctx, config):
     try:
         yield
     finally:
-        log.info('Stopping Keystone admin instance')
-        ctx.daemons.get_daemon('keystone', client_admin_with_id,
-                               cluster_name).stop()
-
         log.info('Stopping Keystone public instance')
         ctx.daemons.get_daemon('keystone', client_public_with_id,
                                cluster_name).stop()
@@ -305,7 +322,7 @@ def dict_to_args(specials, items):
 
 def run_section_cmds(ctx, cclient, section_cmd, specials,
                      section_config_list):
-    admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
+    public_host, public_port = ctx.keystone.public_endpoints[cclient]
 
     auth_section = [
         ( 'os-username', 'admin' ),
@@ -314,8 +331,8 @@ def run_section_cmds(ctx, cclient, section_cmd, specials,
         ( 'os-project-name', 'admin' ),
         ( 'os-project-domain-id', 'default' ),
         ( 'os-identity-api-version', '3' ),
-        ( 'os-auth-url', 'http://{host}:{port}/v3'.format(host=admin_host,
-                                                          port=admin_port) ),
+        ( 'os-auth-url', 'http://{host}:{port}/v3'.format(host=public_host,
+                                                          port=public_port) ),
     ]
 
     for section_item in section_config_list:
@@ -344,18 +361,16 @@ def fill_keystone(ctx, config):
         public_host, public_port = ctx.keystone.public_endpoints[cclient]
         url = 'http://{host}:{port}/v3'.format(host=public_host,
                                                port=public_port)
-        admin_host, admin_port = ctx.keystone.admin_endpoints[cclient]
-        admin_url = 'http://{host}:{port}/v3'.format(host=admin_host,
-                                                     port=admin_port)
         opts = {'password': 'ADMIN',
                 'region-id': 'RegionOne',
                 'internal-url': url,
-                'admin-url': admin_url,
+                'admin-url': url,
                 'public-url': url}
         bootstrap_args = chain.from_iterable(('--bootstrap-{}'.format(k), v)
                                              for k, v in opts.items())
+        conf_file = '{kdir}/etc/keystone.conf'.format(kdir=get_keystone_dir(ctx))
         run_in_keystone_venv(ctx, cclient,
-                             ['keystone-manage', 'bootstrap'] +
+                             ['keystone-manage', '--config-file', conf_file, 'bootstrap'] +
                              list(bootstrap_args))
 
         # configure tenants/projects
@@ -450,11 +465,11 @@ def task(ctx, config):
 
     ctx.keystone = argparse.Namespace()
     ctx.keystone.public_endpoints = assign_ports(ctx, config, 5000)
-    ctx.keystone.admin_endpoints = assign_ports(ctx, config, 35357)
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
         lambda: install_packages(ctx=ctx, config=config),
+        lambda: setup_database(ctx=ctx, config=config),
         lambda: setup_venv(ctx=ctx, config=config),
         lambda: configure_instance(ctx=ctx, config=config),
         lambda: run_keystone(ctx=ctx, config=config),
