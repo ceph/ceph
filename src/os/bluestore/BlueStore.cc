@@ -1902,7 +1902,6 @@ bool BlueStore::BufferSpace::_dup_writing(BufferCacheShard* cache, BufferSpace* 
   if (!writing.empty()) {
     copied = true;
     for (auto it = writing.begin(); it != writing.end(); ++it) {
-      copied = true;
       Buffer& b = *it;
       Buffer* to_b = new Buffer(to, b.state, b.seq, b.offset, b.data, b.flags);
       ceph_assert(to_b->is_writing());
