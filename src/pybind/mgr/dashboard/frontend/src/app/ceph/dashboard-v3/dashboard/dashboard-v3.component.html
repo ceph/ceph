@@ -4,7 +4,8 @@
     <cd-card cardTitle="Details"
              i18n-title
              class="col-sm-3 px-3"
-             [ngClass]="{'d-flex': flexHeight}">
+             [ngClass]="{'d-flex': flexHeight}"
+             aria-label="Details card">
       <dl class="ms-4 me-4">
         <dt>FSID</dt>
         <dd>{{ detailsCardData.fsid }}</dd>
@@ -17,7 +18,8 @@
 
     <cd-card cardTitle="Status"
              i18n-title
-             class="col-sm-6 px-3 d-flex">
+             class="col-sm-6 px-3 d-flex"
+             aria-label="Status card">
       <div class="d-flex ms-4 me-4 mb-5 center-content">
         <i *ngIf="healthData.health?.status"
            [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
@@ -78,7 +80,8 @@
     <cd-card cardTitle="Capacity"
              i18n-title
              class="col-sm-3 px-3"
-             [ngClass]="{'d-flex': flexHeight}">
+             [ngClass]="{'d-flex': flexHeight}"
+             aria-label="Capacity card">
       <ng-container class="ms-4 me-4"
                     *ngIf="capacity && osdSettings">
         <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
@@ -93,7 +96,8 @@
     <!-- Inventory Card -->
     <cd-card cardTitle="Inventory"
              i18n-title
-             class="col-sm-3 px-3 d-flex">
+             class="col-sm-3 px-3 d-flex"
+             aria-label="Inventory card">
       <hr>
       <!-- Hosts -->
       <li class="list-group-item">
@@ -181,7 +185,8 @@
 
     <cd-card cardTitle="Cluster utilization"
              i18n-title
-             class="col-sm-9 px-3 d-flex">
+             class="col-sm-9 px-3 d-flex"
+             aria-label="Cluster utilization card">
       <div class="ms-4 me-4 mt-0">
         <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
         </cd-dashboard-time-selector>
