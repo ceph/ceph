@@ -51,6 +51,7 @@
 #include "common/numa.h"
 #include "common/pretty_binary.h"
 #include "kv/KeyValueHistogram.h"
+#include "BlueAdmin.h"
 
 #ifdef HAVE_LIBZBD
 #include "ZonedAllocator.h"
@@ -5519,10 +5520,13 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  asok_hook = new SocketHook(*this);
 }
 
 BlueStore::~BlueStore()
 {
+  delete asok_hook;
+  asok_hook = nullptr;
   cct->_conf.remove_observer(this);
   _shutdown_logger();
   ceph_assert(!mounted);
