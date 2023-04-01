@@ -46,7 +46,14 @@ int BlueStore::SocketHook::call(
 {
   int r = 0;
   if (command == "bluestore enable shared blob reuse") {
-    //out.append(s.str());
+    if (store.cct->_conf->bluestore_reuse_shared_blobs) {
+      ss << "Reuse shared blobs already enabled" << std::endl;
+      return 0;
+    }
+    store.write_meta("reuse_shared_blobs", "1");
+    store.reuse_shared_blobs = true;
+    store.cct->_conf->bluestore_reuse_shared_blobs = true;
+    out.append("reuse_shared_blobs enabled");
     return 0;
   } else {
     ss << "Invalid command" << std::endl;
