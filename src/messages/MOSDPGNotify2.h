@@ -33,7 +33,12 @@ public:
 	spgid,
 	pg_shard_t(get_source().num(), notify.from),
 	notify,
-	get_connection()->get_features()),
+#ifdef WITH_SEASTAR
+	features
+#else
+	get_connection()->get_features()
+#endif
+      ),
       true,
       new PGCreateInfo(
 	spgid,
