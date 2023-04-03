@@ -208,11 +208,11 @@ public:
 
   seastar::future<> with_pg_int(
     ShardServices &shard_services, Ref<PG> pg);
-public:
-  bool same_session_and_pg(const ClientRequest& other_op) const;
 
+public:
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pgref);
+
 private:
   template <typename FuncT>
   interruptible_future<> with_sequencer(FuncT&& func);
@@ -231,7 +231,6 @@ private:
       Ref<PG> &pg);
   bool is_pg_op() const;
 
-  ConnectionPipeline &cp();
   PGPipeline &pp(PG &pg);
 
   template <typename Errorator>

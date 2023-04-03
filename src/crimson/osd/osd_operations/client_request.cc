@@ -80,20 +80,9 @@ ConnectionPipeline &ClientRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).client_request_conn_pipeline;
 }
 
-ConnectionPipeline &ClientRequest::cp()
-{
-  return get_osd_priv(conn.get()).client_request_conn_pipeline;
-}
-
 ClientRequest::PGPipeline &ClientRequest::pp(PG &pg)
 {
   return pg.request_pg_pipeline;
-}
-
-bool ClientRequest::same_session_and_pg(const ClientRequest& other_op) const
-{
-  return &get_osd_priv(conn.get()) == &get_osd_priv(other_op.conn.get()) &&
-         m->get_spg() == other_op.m->get_spg();
 }
 
 bool ClientRequest::is_pg_op() const
