@@ -107,7 +107,7 @@ namespace crimson::net {
 // should be consistent to intercept_frame() in FrameAssemblerV2.cc
 void intercept(Breakpoint bp,
                bp_type_t type,
-               Connection& conn,
+               SocketConnection& conn,
                Interceptor *interceptor,
                SocketRef& socket) {
   if (interceptor) {
