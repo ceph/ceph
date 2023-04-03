@@ -6092,7 +6092,7 @@ RGWBucketPipeSyncStatusManager::read_sync_status(
   }
   uint64_t num_shards, latest_gen;
   auto ret = remote_info(dpp, *sz, nullptr, &latest_gen, &num_shards);
-  if (!ret) {
+  if (ret < 0) {
     ldpp_dout(this, 5) << "Unable to get remote info: "
 		       << ret << dendl;
     return tl::unexpected(ret);
