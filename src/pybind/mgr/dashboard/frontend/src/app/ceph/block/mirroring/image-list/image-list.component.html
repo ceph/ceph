@@ -56,8 +56,11 @@
              let-value="value">
   <div *ngIf="row.state === 'Replaying'">
   </div>
-  <ngb-progressbar *ngIf="row.state === 'Syncing'"
-                   type="info"
-                   [value]="value"
-                   [showValue]="true"></ngb-progressbar>
+  <div class="w-100 h-100 d-flex justify-content-center align-items-center">
+    <ngb-progressbar *ngIf="row.state === 'Replaying'"
+                     type="info"
+                     class="w-100"
+                     [value]="value"
+                     [showValue]="true"></ngb-progressbar>
+  </div>
 </ng-template>
