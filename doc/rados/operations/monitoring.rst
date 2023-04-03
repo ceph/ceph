@@ -375,12 +375,9 @@ error.
 Detecting configuration issues
 ==============================
 
-In addition to the health checks that Ceph continuously runs on its
-own status, there are some configuration issues that may only be detected
-by an external tool.
-
-Use the `ceph-medic`_ tool to run these additional checks on your Ceph
-cluster's configuration.
+Although Ceph continuously monitors itself, some configuration issues can be
+detected only with an external tool called `ceph-medic
+<https://docs.ceph.com/_/downloads/ceph-medic/en/latest/pdf/>`_.
 
 Checking a Cluster's Usage Stats
 ================================
@@ -649,4 +646,3 @@ directly to the host in question ).
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
-.. _ceph-medic: http://docs.ceph.com/ceph-medic/master/
