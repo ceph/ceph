@@ -1156,7 +1156,9 @@ ReplicatedRecoveryBackend::handle_recovery_delete_reply(
 }
 
 RecoveryBackend::interruptible_future<>
-ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDispatchOp> m)
+ReplicatedRecoveryBackend::handle_recovery_op(
+  Ref<MOSDFastDispatchOp> m,
+  crimson::net::ConnectionRef conn)
 {
   switch (m->get_header().type) {
   case MSG_OSD_PG_PULL:
@@ -1174,7 +1176,7 @@ ReplicatedRecoveryBackend::handle_recovery_op(Ref<MOSDFastDispatchOp> m)
 	boost::static_pointer_cast<MOSDPGRecoveryDeleteReply>(m));
   default:
     // delegate to parent class for handling backend-agnostic recovery ops.
-    return RecoveryBackend::handle_recovery_op(std::move(m));
+    return RecoveryBackend::handle_recovery_op(std::move(m), conn);
   }
 }
 

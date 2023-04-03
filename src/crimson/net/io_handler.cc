@@ -48,7 +48,8 @@ namespace crimson::net {
 IOHandler::IOHandler(ChainedDispatchers &dispatchers,
                      SocketConnection &conn)
   : dispatchers(dispatchers),
-    conn(conn)
+    conn(conn),
+    conn_ref(conn.get_local_shared_foreign_from_this())
 {}
 
 IOHandler::~IOHandler()
@@ -318,8 +319,7 @@ void IOHandler::dispatch_accept()
   // protocol_is_connected can be from true to true here if the replacing is
   // happening to a connected connection.
   protocol_is_connected = true;
-  dispatchers.ms_handle_accept(
-    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  dispatchers.ms_handle_accept(conn_ref);
 }
 
 void IOHandler::dispatch_connect()
@@ -329,8 +329,7 @@ void IOHandler::dispatch_connect()
   }
   ceph_assert_always(protocol_is_connected == false);
   protocol_is_connected = true;
-  dispatchers.ms_handle_connect(
-    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  dispatchers.ms_handle_connect(conn_ref);
 }
 
 void IOHandler::dispatch_reset(bool is_replace)
@@ -340,9 +339,7 @@ void IOHandler::dispatch_reset(bool is_replace)
     return;
   }
   need_dispatch_reset = false;
-  dispatchers.ms_handle_reset(
-    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()),
-    is_replace);
+  dispatchers.ms_handle_reset(conn_ref, is_replace);
 }
 
 void IOHandler::dispatch_remote_reset()
@@ -350,8 +347,7 @@ void IOHandler::dispatch_remote_reset()
   if (io_state == io_state_t::drop) {
     return;
   }
-  dispatchers.ms_handle_remote_reset(
-    seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  dispatchers.ms_handle_remote_reset(conn_ref);
 }
 
 void IOHandler::ack_out_sent(seq_num_t seq)
@@ -545,10 +541,8 @@ IOHandler::read_message(utime_t throttle_stamp, std::size_t msg_size)
     ceph_msg_footer footer{ceph_le32(0), ceph_le32(0),
                            ceph_le32(0), ceph_le64(0), current_header.flags};
 
-    auto conn_ref = seastar::static_pointer_cast<SocketConnection>(
-        conn.shared_from_this());
     Message *message = decode_message(nullptr, 0, header, footer,
-        msg_frame.front(), msg_frame.middle(), msg_frame.data(), conn_ref);
+        msg_frame.front(), msg_frame.middle(), msg_frame.data(), nullptr);
     if (!message) {
       logger().warn("{} decode message failed", conn);
       abort_in_fault();

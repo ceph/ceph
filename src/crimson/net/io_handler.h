@@ -107,6 +107,10 @@ public:
     if (is_dispatch_reset) {
       dispatch_reset(is_replace);
     }
+
+    ceph_assert_always(conn_ref);
+    conn_ref.reset();
+
     assert(!gate.is_closed());
     return gate.close();
   }
@@ -182,6 +186,9 @@ private:
   ChainedDispatchers &dispatchers;
 
   SocketConnection &conn;
+
+  // core local reference for dispatching, valid until reset/close
+  ConnectionRef conn_ref;
 
   HandshakeListener *handshake_listener = nullptr;
 

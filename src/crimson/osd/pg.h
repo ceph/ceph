@@ -536,7 +536,9 @@ public:
   void replica_clear_repop_obc(
     const std::vector<pg_log_entry_t> &logv);
   void handle_rep_op_reply(const MOSDRepOpReply& m);
-  interruptible_future<> do_update_log_missing(Ref<MOSDPGUpdateLogMissing> m);
+  interruptible_future<> do_update_log_missing(
+    Ref<MOSDPGUpdateLogMissing> m,
+    crimson::net::ConnectionRef conn);
   interruptible_future<> do_update_log_missing_reply(
                          Ref<MOSDPGUpdateLogMissingReply> m);
 
@@ -564,6 +566,7 @@ private:
                do_osd_ops_iertr::future<Ret>>;
   do_osd_ops_iertr::future<pg_rep_op_fut_t<MURef<MOSDOpReply>>> do_osd_ops(
     Ref<MOSDOp> m,
+    crimson::net::ConnectionRef conn,
     ObjectContextRef obc,
     const OpInfo &op_info,
     const SnapContext& snapc);
@@ -773,7 +776,7 @@ private:
 };
 
 struct PG::do_osd_ops_params_t {
-  crimson::net::ConnectionFRef &get_connection() const {
+  crimson::net::ConnectionRef &get_connection() const {
     return conn;
   }
   osd_reqid_t get_reqid() const {
@@ -794,8 +797,9 @@ struct PG::do_osd_ops_params_t {
   // Only used by InternalClientRequest, no op flags
   bool has_flag(uint32_t flag) const {
     return false;
- }
-  crimson::net::ConnectionFRef &conn;
+  }
+
+  crimson::net::ConnectionRef &conn;
   osd_reqid_t reqid;
   utime_t mtime;
   epoch_t map_epoch;

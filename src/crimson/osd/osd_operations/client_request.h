@@ -32,7 +32,7 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
   // used by put_historic
   ShardServices *put_historic_shard_services = nullptr;
 
-  crimson::net::ConnectionFRef conn;
+  crimson::net::ConnectionRef conn;
   // must be after conn due to ConnectionPipeline's life-time
   Ref<MOSDOp> m;
   OpInfo op_info;
@@ -202,9 +202,22 @@ public:
   spg_t get_pgid() const {
     return m->get_spg();
   }
-  ConnectionPipeline &get_connection_pipeline();
   PipelineHandle &get_handle() { return instance_handle->handle; }
   epoch_t get_epoch() const { return m->get_min_epoch(); }
+
+  ConnectionPipeline &get_connection_pipeline();
+  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
+    assert(conn);
+    return conn.get_foreign(
+    ).then([this](auto f_conn) {
+      conn.reset();
+      return f_conn;
+    });
+  }
+  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
+    assert(!conn);
+    conn = make_local_shared_foreign(std::move(_conn));
+  }
 
   seastar::future<> with_pg_int(
     ShardServices &shard_services, Ref<PG> pg);

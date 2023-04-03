@@ -65,7 +65,8 @@ public:
   }
 
   virtual interruptible_future<> handle_recovery_op(
-    Ref<MOSDFastDispatchOp> m);
+    Ref<MOSDFastDispatchOp> m,
+    crimson::net::ConnectionRef conn);
 
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
@@ -210,18 +211,23 @@ protected:
   virtual seastar::future<> on_stop() = 0;
 private:
   void handle_backfill_finish(
-    MOSDPGBackfill& m);
+    MOSDPGBackfill& m,
+    crimson::net::ConnectionRef conn);
   interruptible_future<> handle_backfill_progress(
     MOSDPGBackfill& m);
   interruptible_future<> handle_backfill_finish_ack(
     MOSDPGBackfill& m);
-  interruptible_future<> handle_backfill(MOSDPGBackfill& m);
+  interruptible_future<> handle_backfill(
+    MOSDPGBackfill& m,
+    crimson::net::ConnectionRef conn);
 
   interruptible_future<> handle_scan_get_digest(
-    MOSDPGScan& m);
+    MOSDPGScan& m,
+    crimson::net::ConnectionRef conn);
   interruptible_future<> handle_scan_digest(
     MOSDPGScan& m);
   interruptible_future<> handle_scan(
-    MOSDPGScan& m);
+    MOSDPGScan& m,
+    crimson::net::ConnectionRef conn);
   interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 };

@@ -239,12 +239,12 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
 
   if (auto found = lookup_conn(peer_addr); found) {
     logger().debug("{} connect to existing", *found);
-    return found->shared_from_this();
+    return found->get_local_shared_foreign_from_this();
   }
   SocketConnectionRef conn =
     seastar::make_shared<SocketConnection>(*this, dispatchers);
   conn->start_connect(peer_addr, peer_name);
-  return conn->shared_from_this();
+  return conn->get_local_shared_foreign_from_this();
 }
 
 seastar::future<> SocketMessenger::shutdown()

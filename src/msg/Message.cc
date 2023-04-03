@@ -314,6 +314,10 @@ Message *decode_message(CephContext *cct,
                         ceph::bufferlist& data,
                         Message::ConnectionRef conn)
 {
+#ifdef WITH_SEASTAR
+  // In crimson, conn is independently maintained outside Message.
+  ceph_assert(conn == nullptr);
+#endif
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
     __u32 front_crc = front.crc32c(0);
