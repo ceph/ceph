@@ -1226,6 +1226,7 @@ seastar::future<> OSD::handle_peering_op(
 {
   const int from = m->get_source().num();
   logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
+  m->set_features(conn->get_features());
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
   (void) pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
     conn,
