@@ -455,13 +455,13 @@ bool MgrMonitor::prepare_update(MonOpRequestRef op)
       } catch (const bad_cmd_get& e) {
 	bufferlist bl;
 	mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
-	return true;
+	return false; /* nothing to propose! */
       }
 
     default:
       mon.no_reply(op);
       derr << "Unhandled message type " << m->get_type() << dendl;
-      return true;
+      return false; /* nothing to propose! */
   }
 }
 
@@ -504,6 +504,10 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   auto m = op->get_req<MMgrBeacon>();
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
+  // Track whether we modified pending_map
+  bool updated = false;
+  bool plugged = false;
+
   // See if we are seeing same name, new GID for the active daemon
   if (m->get_name() == pending_map.active_name
       && m->get_gid() != pending_map.active_gid)
@@ -517,7 +521,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return false;
     }
-    drop_active();
+    plugged |= drop_active();
+    updated = true;
   }
 
   // See if we are seeing same name, new GID for any standbys
@@ -528,14 +533,12 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       mon.clog->debug() << "Standby manager daemon " << m->get_name()
                          << " restarted";
       drop_standby(i.first);
+      updated = true;
       break;
     }
   }
 
   last_beacon[m->get_gid()] = ceph::coarse_mono_clock::now();
-
-  // Track whether we modified pending_map
-  bool updated = false;
 
   if (pending_map.active_gid == m->get_gid()) {
     if (pending_map.services != m->get_services()) {
@@ -588,6 +591,11 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       pending_map.clients = clients;
       updated = true;
     }
+  } else if (m->get_available()) {
+    dout(4) << "mgr thinks it is active but it is not, dropping!" << dendl;
+    auto m = make_message<MMgrMap>(MgrMap::create_null_mgrmap());
+    mon.send_reply(op, m.detach());
+    goto out;
   } else if (pending_map.active_gid == 0) {
     // There is no currently active daemon, select this one.
     if (pending_map.standbys.count(m->get_gid())) {
@@ -640,6 +648,12 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     wait_for_finished_proposal(op, new C_Updated(this, op));
   } else {
     dout(10) << "no change" << dendl;
+  }
+
+out:
+
+  if (plugged) {
+    paxos.unplug();
   }
 
   return updated;
@@ -804,6 +818,7 @@ void MgrMonitor::tick()
   }
 
   bool propose = false;
+  bool plugged = false;
 
   for (auto i : dead_standbys) {
     dout(4) << "Dropping laggy standby " << i << dendl;
@@ -815,7 +830,7 @@ void MgrMonitor::tick()
       && last_beacon.at(pending_map.active_gid) < cutoff
       && mon.osdmon()->is_writeable()) {
     const std::string old_active_name = pending_map.active_name;
-    drop_active();
+    plugged |= drop_active();
     propose = true;
     dout(4) << "Dropping active" << pending_map.active_gid << dendl;
     if (promote_standby()) {
@@ -858,6 +873,11 @@ void MgrMonitor::tick()
   if (propose) {
     propose_pending();
   }
+  if (plugged) {
+    paxos.unplug();
+    ceph_assert(propose);
+    paxos.trigger_propose();
+  }
 }
 
 void MgrMonitor::on_restart()
@@ -892,9 +912,15 @@ bool MgrMonitor::promote_standby()
   }
 }
 
-void MgrMonitor::drop_active()
+bool MgrMonitor::drop_active()
 {
   ceph_assert(mon.osdmon()->is_writeable());
+
+  bool plugged = false;
+  if (!paxos.is_plugged()) {
+    paxos.plug();
+    plugged = true;
+  }
 
   if (last_beacon.count(pending_map.active_gid) > 0) {
     last_beacon.erase(pending_map.active_gid);
@@ -926,9 +952,16 @@ void MgrMonitor::drop_active()
   pending_map.clients.clear();
   pending_map.last_failure_osd_epoch = blocklist_epoch;
 
+  /* If we are dropping the active, we need to notify clients immediately.
+   * Additionally, avoid logical races with ::prepare_beacon which cannot
+   * accurately determine if a mgr is a standby or an old active.
+   */
+  force_immediate_propose();
+
   // So that when new active mgr subscribes to mgrdigest, it will
   // get an immediate response instead of waiting for next timer
   cancel_timer();
+  return plugged;
 }
 
 void MgrMonitor::drop_standby(uint64_t gid, bool drop_meta)
@@ -1160,6 +1193,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
 
   const auto prefix = cmd_getval_or<string>(cmdmap, "prefix", string{});
   int r = 0;
+  bool plugged = false;
 
   if (prefix == "mgr fail") {
     string who;
@@ -1181,7 +1215,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
           mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
-        drop_active();
+        plugged |= drop_active();
         changed = true;
       } else {
         gid = 0;
@@ -1204,7 +1238,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
           mon.osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
           return false;
         }
-        drop_active();
+        plugged |= drop_active();
         changed = true;
       } else if (pending_map.standbys.count(gid) > 0) {
         drop_standby(gid);
@@ -1286,22 +1320,19 @@ out:
   getline(ss, rs);
 
   if (r >= 0) {
-    bool do_update = false;
-    if (prefix == "mgr fail" && is_writeable()) {
-      propose_pending();
-      do_update = false;
-    } else {
-      do_update = true;
-    }
     // success.. delay reply
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
-    return do_update;
   } else {
     // reply immediately
     mon.reply_command(op, r, rs, rdata, get_last_committed());
-    return false;
   }
+
+  if (plugged) {
+    paxos.unplug();
+  }
+
+  return r >= 0;
 }
 
 void MgrMonitor::init()
