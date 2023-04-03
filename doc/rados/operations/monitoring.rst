@@ -377,8 +377,9 @@ one or more additional OSDs go down, then the health mute disappears. This behav
 Detecting Configuration Issues
 ==============================
 
-Although Ceph continuously monitors itself, some configuration issues can be 
-detected only with an external tool called ``ceph-medic``.
+Although Ceph continuously monitors itself, some configuration issues can be
+detected only with an external tool called `ceph-medic
+<https://docs.ceph.com/_/downloads/ceph-medic/en/latest/pdf/>`_.
 
 Checking a Cluster's Usage Stats
 ================================
@@ -643,4 +644,3 @@ directly to the host in question ).
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
-.. _ceph-medic: http://docs.ceph.com/ceph-medic/master/
