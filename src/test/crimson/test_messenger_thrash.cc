@@ -200,8 +200,10 @@ class SyntheticDispatcher final
 };
 
 class SyntheticWorkload {
+  // messengers must be freed after its connections
   std::set<crimson::net::MessengerRef> available_servers;
   std::set<crimson::net::MessengerRef> available_clients;
+
   crimson::net::SocketPolicy server_policy;
   crimson::net::SocketPolicy client_policy;
   std::map<crimson::net::ConnectionRef,
@@ -453,8 +455,6 @@ class SyntheticWorkload {
          return server->shutdown();
        });
      }).then([this] {
-       available_servers.clear();
-     }).then([this] {
        return seastar::do_for_each(available_clients, [] (auto client) {
 	 if (verbose) {
            logger().info("client {} shutdown" , client->get_myaddrs());
@@ -462,8 +462,6 @@ class SyntheticWorkload {
          client->stop();
          return client->shutdown();
        });
-     }).then([this] {
-       available_clients.clear();
      });
    }
 
