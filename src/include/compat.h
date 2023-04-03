@@ -259,9 +259,6 @@ typedef unsigned int uint;
 
 typedef _sigset_t sigset_t;
 
-typedef unsigned int uid_t;
-typedef unsigned int gid_t;
-
 typedef unsigned int blksize_t;
 typedef unsigned __int64 blkcnt_t;
 typedef unsigned short nlink_t;
