@@ -238,7 +238,8 @@ class SSHManager:
                 f.write(content)
                 f.flush()
                 conn = await self._remote_connection(host, addr)
-                await asyncssh.scp(f.name, (conn, tmp_path))
+                async with conn.start_sftp_client() as sftp:
+                    await sftp.put(f.name, tmp_path)
             if uid is not None and gid is not None and mode is not None:
                 # shlex quote takes str or byte object, not int
                 await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
