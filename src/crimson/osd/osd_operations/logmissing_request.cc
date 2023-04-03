@@ -61,7 +61,7 @@ seastar::future<> LogMissingRequest::with_pg(
 
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    return pg->do_update_log_missing(req);
+    return pg->do_update_log_missing(req, conn);
   }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
 }
 

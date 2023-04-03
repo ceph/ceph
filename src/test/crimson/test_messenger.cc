@@ -14,6 +14,7 @@
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/net/Interceptor.h"
+#include "crimson/net/SocketConnection.h"
 
 #include <map>
 #include <random>
@@ -495,6 +496,7 @@ using crimson::net::Dispatcher;
 using crimson::net::Interceptor;
 using crimson::net::Messenger;
 using crimson::net::MessengerRef;
+using crimson::net::SocketConnection;
 using crimson::net::SocketPolicy;
 using crimson::net::tag_bp_t;
 using namespace ceph::net::test;
@@ -550,8 +552,8 @@ struct ConnResult {
   unsigned cnt_reset_dispatched = 0;
   unsigned cnt_remote_reset_dispatched = 0;
 
-  ConnResult(Connection& conn, unsigned index)
-    : conn(conn.shared_from_this()), index(index) {}
+  ConnResult(ConnectionRef conn, unsigned index)
+    : conn(conn), index(index) {}
 
   template <typename T>
   void _assert_eq(const char* expr_actual, T actual,
@@ -697,16 +699,23 @@ struct TestInterceptor : public Interceptor {
   }
 
  private:
-  void register_conn(Connection& conn) override {
+  void register_conn(SocketConnection& _conn) override {
+    auto conn = _conn.get_local_shared_foreign_from_this();
+    auto result = find_result(conn);
+    if (result != nullptr) {
+      logger().error("The connection [{}] {} already exists when register {}",
+                     result->index, *result->conn, _conn);
+      ceph_abort();
+    }
     unsigned index = results.size();
     results.emplace_back(conn, index);
-    conns[conn.shared_from_this()] = index;
+    conns[conn] = index;
     notify();
-    logger().info("[{}] {} new connection registered", index, conn);
+    logger().info("[{}] {} new connection registered", index, _conn);
   }
 
-  void register_conn_closed(Connection& conn) override {
-    auto result = find_result(conn.shared_from_this());
+  void register_conn_closed(SocketConnection& conn) override {
+    auto result = find_result(conn.get_local_shared_foreign_from_this());
     if (result == nullptr) {
       logger().error("Untracked closed connection: {}", conn);
       ceph_abort();
@@ -719,8 +728,8 @@ struct TestInterceptor : public Interceptor {
     logger().info("[{}] {} closed({})", result->index, conn, result->state);
   }
 
-  void register_conn_ready(Connection& conn) override {
-    auto result = find_result(conn.shared_from_this());
+  void register_conn_ready(SocketConnection& conn) override {
+    auto result = find_result(conn.get_local_shared_foreign_from_this());
     if (result == nullptr) {
       logger().error("Untracked ready connection: {}", conn);
       ceph_abort();
@@ -731,8 +740,8 @@ struct TestInterceptor : public Interceptor {
     logger().info("[{}] {} ready", result->index, conn);
   }
 
-  void register_conn_replaced(Connection& conn) override {
-    auto result = find_result(conn.shared_from_this());
+  void register_conn_replaced(SocketConnection& conn) override {
+    auto result = find_result(conn.get_local_shared_foreign_from_this());
     if (result == nullptr) {
       logger().error("Untracked replaced connection: {}", conn);
       ceph_abort();
@@ -742,10 +751,10 @@ struct TestInterceptor : public Interceptor {
     logger().info("[{}] {} {}", result->index, conn, result->state);
   }
 
-  bp_action_t intercept(Connection& conn, Breakpoint bp) override {
+  bp_action_t intercept(SocketConnection& conn, Breakpoint bp) override {
     ++breakpoints_counter[bp].counter;
 
-    auto result = find_result(conn.shared_from_this());
+    auto result = find_result(conn.get_local_shared_foreign_from_this());
     if (result == nullptr) {
       logger().error("Untracked intercepted connection: {}, at breakpoint {}({})",
                      conn, bp, breakpoints_counter[bp].counter);

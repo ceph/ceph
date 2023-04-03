@@ -951,6 +951,7 @@ seastar::future<> PG::submit_error_log(
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<MURef<MOSDOpReply>>>
 PG::do_osd_ops(
   Ref<MOSDOp> m,
+  crimson::net::ConnectionRef conn,
   ObjectContextRef obc,
   const OpInfo &op_info,
   const SnapContext& snapc)
@@ -960,7 +961,7 @@ PG::do_osd_ops(
   }
   return do_osd_ops_execute<MURef<MOSDOpReply>>(
     seastar::make_lw_shared<OpsExecuter>(
-      Ref<PG>{this}, obc, op_info, *m, snapc),
+      Ref<PG>{this}, obc, op_info, *m, conn, snapc),
     m->ops,
     [this, m, obc, may_write = op_info.may_write(),
      may_read = op_info.may_read(), rvec = op_info.allows_returnvec()] {
@@ -1082,7 +1083,13 @@ PG::do_osd_ops(
     [=, this, &ops, &op_info](auto &msg_params) {
     return do_osd_ops_execute<void>(
       seastar::make_lw_shared<OpsExecuter>(
-        Ref<PG>{this}, std::move(obc), op_info, msg_params, SnapContext{}),
+        Ref<PG>{this},
+        std::move(obc),
+        op_info,
+        msg_params,
+        msg_params.get_connection(),
+        SnapContext{}
+      ),
       ops,
       std::move(success_func),
       std::move(failure_func));
@@ -1279,7 +1286,8 @@ void PG::handle_rep_op_reply(const MOSDRepOpReply& m)
 }
 
 PG::interruptible_future<> PG::do_update_log_missing(
-  Ref<MOSDPGUpdateLogMissing> m)
+  Ref<MOSDPGUpdateLogMissing> m,
+  crimson::net::ConnectionRef conn)
 {
   if (__builtin_expect(stopping, false)) {
     return seastar::make_exception_future<>(
@@ -1301,7 +1309,7 @@ PG::interruptible_future<> PG::do_update_log_missing(
 
   return interruptor::make_interruptible(shard_services.get_store().do_transaction(
     coll_ref, std::move(t))).then_interruptible(
-    [m, lcod=peering_state.get_info().last_complete, this] {
+    [m, conn, lcod=peering_state.get_info().last_complete, this] {
     if (!peering_state.pg_has_reset_since(m->get_epoch())) {
       peering_state.update_last_complete_ondisk(lcod);
       auto reply =
@@ -1313,7 +1321,7 @@ PG::interruptible_future<> PG::do_update_log_missing(
           m->get_tid(),
           lcod);
       reply->set_priority(CEPH_MSG_PRIO_HIGH);
-      return m->get_connection()->send(std::move(reply));
+      return conn->send(std::move(reply));
     }
     return seastar::now();
   });

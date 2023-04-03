@@ -305,7 +305,7 @@ ClientRequest::do_process(
                      __func__, m->get_hobj());
     }
   }
-  return pg->do_osd_ops(m, obc, op_info, snapc).safe_then_unpack_interruptible(
+  return pg->do_osd_ops(m, conn, obc, op_info, snapc).safe_then_unpack_interruptible(
     [this, pg, &ihref](auto submitted, auto all_completed) mutable {
       return submitted.then_interruptible([this, pg, &ihref] {
 	return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);

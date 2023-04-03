@@ -252,10 +252,8 @@ class Message : public RefCountedObject {
 public:
 #ifdef WITH_SEASTAR
   using ConnectionRef = crimson::net::ConnectionRef;
-  using ConnectionFRef = crimson::net::ConnectionFRef;
 #else
   using ConnectionRef = ::ConnectionRef;
-  using ConnectionFRef = ::ConnectionRef;
 #endif // WITH_SEASTAR
 
 protected:
@@ -276,7 +274,7 @@ protected:
   /* time at which message was fully read */
   utime_t recv_complete_stamp;
 
-  ConnectionFRef connection;
+  ConnectionRef connection;
 
   uint32_t magic = 0;
 
@@ -351,8 +349,18 @@ protected:
       completion_hook->complete(0);
   }
 public:
-  const ConnectionFRef& get_connection() const { return connection; }
+  const ConnectionRef& get_connection() const {
+#ifdef WITH_SEASTAR
+    // In crimson, conn is independently maintained outside Message.
+    ceph_abort();
+#endif
+    return connection;
+  }
   void set_connection(ConnectionRef c) {
+#ifdef WITH_SEASTAR
+    // In crimson, conn is independently maintained outside Message.
+    ceph_assert(c == nullptr);
+#endif
     connection = std::move(c);
   }
   CompletionHook* get_completion_hook() { return completion_hook; }
