@@ -1000,13 +1000,7 @@ int PeeringState::clamp_recovery_priority(int priority, int pool_recovery_priori
   priority += pool_recovery_priority;
 
   // Clamp to valid range
-  if (priority > max) {
-    return max;
-  } else if (priority < OSD_RECOVERY_PRIORITY_MIN) {
-    return OSD_RECOVERY_PRIORITY_MIN;
-  } else {
-    return priority;
-  }
+  return std::clamp<int>(priority, OSD_RECOVERY_PRIORITY_MIN, max);
 }
 
 unsigned PeeringState::get_recovery_priority()
