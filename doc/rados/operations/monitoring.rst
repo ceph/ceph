@@ -178,25 +178,26 @@ to a healthy state:
     2017-07-25 10:11:13.535493 mon.a mon.0 172.21.9.34:6789/0 110 : cluster [INF] Health check cleared: PG_DEGRADED (was: Degraded data redundancy: 2 pgs unclean, 2 pgs degraded, 2 pgs undersized)
     2017-07-25 10:11:13.535577 mon.a mon.0 172.21.9.34:6789/0 111 : cluster [INF] Cluster is now healthy
 
-
 Network Performance Checks
 --------------------------
 
-Ceph OSDs send heartbeat ping messages amongst themselves to monitor daemon availability.  We
-also use the response times to monitor network performance.
-While it is possible that a busy OSD could delay a ping response, we can assume
-that if a network switch fails multiple delays will be detected between distinct pairs of OSDs.
+Ceph OSDs send heartbeat ping messages to each other in order to monitor daemon
+availability and network performance. If a single delayed response is detected,
+this might indicate nothing more than a busy OSD. But if multiple delays
+between distinct pairs of OSDs are detected, this might indicate a failed
+network switch, a NIC failure, or a layer 1 failure.
 
-By default we will warn about ping times which exceed 1 second (1000 milliseconds).
+By default, a heartbeat time that exceeds 1 second (1000 milliseconds) raises a
+health check (a ``HEALTH_WARN``. For example:
 
 ::
 
     HEALTH_WARN Slow OSD heartbeats on back (longest 1118.001ms)
 
-The health detail will add the combination of OSDs are seeing the delays and by how much.  There is a limit of 10
-detail line items.
-
-::
+In the output of the ``ceph health detail`` command, you can see which OSDs are
+experiencing delays and how long the delays are. The output of ``ceph health
+detail`` is limited to ten lines. Here is an example of the output you can
+expect from the ``ceph health detail`` command::
 
     [WRN] OSD_SLOW_PING_TIME_BACK: Slow OSD heartbeats on back (longest 1118.001ms)
         Slow OSD heartbeats on back from osd.0 [dc1,rack1] to osd.1 [dc1,rack1] 1118.001 msec possibly improving
@@ -204,11 +205,15 @@ detail line items.
         Slow OSD heartbeats on back from osd.2 [dc1,rack2] to osd.1 [dc1,rack1] 1015.321 msec
         Slow OSD heartbeats on back from osd.1 [dc1,rack1] to osd.0 [dc1,rack1] 1010.456 msec
 
-To see even more detail and a complete dump of network performance information the ``dump_osd_network`` command can be used.  Typically, this would be
-sent to a mgr, but it can be limited to a particular OSD's interactions by issuing it to any OSD.  The current threshold which defaults to 1 second
-(1000 milliseconds) can be overridden as an argument in milliseconds.
+To see more detail and to collect a complete dump of network performance
+information, use the ``dump_osd_network`` command. This command is usually sent
+to a Ceph Manager Daemon, but it can be used to collect information about a
+specific OSD's interactions by sending it to that OSD. The default threshold
+for a slow heartbeat is 1 second (1000 milliseconds), but this can be
+overridden by providing a number of milliseconds as an argument.
 
-The following command will show all gathered network performance data by specifying a threshold of 0 and sending to the mgr.
+To show all network performance data with a specified threshold of 0, send the
+following command to the mgr:
 
 .. prompt:: bash $
 
@@ -292,26 +297,26 @@ The following command will show all gathered network performance data by specify
 
 
 
-Muting health checks
+Muting Health Checks
 --------------------
 
-Health checks can be muted so that they do not affect the overall
-reported status of the cluster.  Alerts are specified using the health
-check code (see :ref:`health-checks`):
+Health checks can be muted so that they have no effect on the overall
+reported status of the cluster. For example, if the cluster has raised a
+single health check and then you mute that health check, then the cluster will report a status of ``HEALTH_OK``.
+To mute a specific health check, use the health check code that corresponds to that health check (see :ref:`health-checks`), and 
+run the following command:
 
 .. prompt:: bash $
 
    ceph health mute <code>
 
-For example, if there is a health warning, muting it will make the
-cluster report an overall status of ``HEALTH_OK``.  For example, to
-mute an ``OSD_DOWN`` alert,:
+For example, to mute an ``OSD_DOWN`` health check, run the following command:
 
 .. prompt:: bash $
 
    ceph health mute OSD_DOWN
 
-Mutes are reported as part of the short and long form of the ``ceph health`` command.
+Mutes are reported as part of the short and long form of the ``ceph health`` command's output.
 For example, in the above scenario, the cluster would report:
 
 .. prompt:: bash $
@@ -332,7 +337,7 @@ For example, in the above scenario, the cluster would report:
    (MUTED) OSD_DOWN 1 osds down
        osd.1 is down
 
-A mute can be explicitly removed with:
+A mute can be removed by running the following command:
 
 .. prompt:: bash $
 
@@ -344,56 +349,49 @@ For example:
 
    ceph health unmute OSD_DOWN
 
-A health check mute may optionally have a TTL (time to live)
-associated with it, such that the mute will automatically expire
-after the specified period of time has elapsed.  The TTL is specified as an optional
-duration argument, e.g.:
+A "health mute" can have a TTL (**T**\ime **T**\o **L**\ive)
+associated with it: this means that the mute will automatically expire
+after a specified period of time. The TTL is specified as an optional
+duration argument, as seen in the following examples:
 
 .. prompt:: bash $
 
    ceph health mute OSD_DOWN 4h    # mute for 4 hours
-   ceph health mute MON_DOWN 15m   # mute for 15  minutes
+   ceph health mute MON_DOWN 15m   # mute for 15 minutes
 
-Normally, if a muted health alert is resolved (e.g., in the example
-above, the OSD comes back up), the mute goes away.  If the alert comes
+Normally, if a muted health check is resolved (for example, if the OSD that raised the ``OSD_DOWN`` health check 
+in the example above has come back up), the mute goes away. If the health check comes
 back later, it will be reported in the usual way.
 
-It is possible to make a mute "sticky" such that the mute will remain even if the
-alert clears.  For example:
+It is possible to make a health mute "sticky": this means that the mute will remain even if the
+health check clears. For example, to make a health mute "sticky", you might run the following command:
 
 .. prompt:: bash $
 
    ceph health mute OSD_DOWN 1h --sticky   # ignore any/all down OSDs for next hour
 
-Most health mutes also disappear if the extent of an alert gets worse.  For example,
-if there is one OSD down, and the alert is muted, the mute will disappear if one
-or more additional OSDs go down.  This is true for any health alert that involves
-a count indicating how much or how many of something is triggering the warning or
-error.
+Most health mutes disappear if the unhealthy condition that triggered the health check gets worse.
+For example, suppose that there is one OSD down and the health check is muted. In that case, if
+one or more additional OSDs go down, then the health mute disappears. This behavior occurs in any health check with a threshold value.
 
-
-Detecting configuration issues
+Detecting Configuration Issues
 ==============================
 
-In addition to the health checks that Ceph continuously runs on its
-own status, there are some configuration issues that may only be detected
-by an external tool.
-
-Use the `ceph-medic`_ tool to run these additional checks on your Ceph
-cluster's configuration.
+Although Ceph continuously monitors itself, some configuration issues can be 
+detected only with an external tool called ``ceph-medic``.
 
 Checking a Cluster's Usage Stats
 ================================
 
-To check a cluster's data usage and data distribution among pools, you can
-use the ``df`` option. It is similar to Linux ``df``. Execute 
-the following:
+To check a cluster's data usage and data distribution among pools, use the
+``df`` command. This option is similar to Linux's ``df`` command. Run the
+following command:
 
 .. prompt:: bash $
 
    ceph df
 
-The output of ``ceph df`` looks like this::
+The output of ``ceph df`` resembles the following::
 
    CLASS     SIZE    AVAIL     USED  RAW USED  %RAW USED
    ssd    202 GiB  200 GiB  2.0 GiB   2.0 GiB       1.00
@@ -405,10 +403,6 @@ The output of ``ceph df`` looks like this::
    cephfs.a.meta           2   32  6.8 KiB  6.8 KiB      0 B        22   96 KiB  96 KiB      0 B       0    297 GiB            N/A          N/A     22         0 B          0 B
    cephfs.a.data           3   32      0 B      0 B      0 B         0      0 B     0 B      0 B       0     99 GiB            N/A          N/A      0         0 B          0 B
    test                    4   32   22 MiB   22 MiB   50 KiB       248   19 MiB  19 MiB   50 KiB       0    297 GiB            N/A          N/A    248         0 B          0 B
-
-
-
-
 
 - **CLASS:** for example, "ssd" or "hdd"
 - **SIZE:** The amount of storage capacity managed by the cluster.
