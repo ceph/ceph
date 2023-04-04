@@ -213,15 +213,6 @@ public:
 class PGOpItem : public PGOpQueueable {
   OpRequestRef op;
 
-  const MOSDOp *maybe_get_mosd_op() const {
-    auto req = op->get_req();
-    if (req->get_type() == CEPH_MSG_OSD_OP) {
-      return op->get_req<MOSDOp>();
-    } else {
-      return nullptr;
-    }
-  }
-
 public:
   PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
 
