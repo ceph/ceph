@@ -1314,6 +1314,7 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
         if (tail.segment_nonce != header.segment_nonce) {
           return scan_no_tail_segment(header, segment_id);
         }
+        ceph_assert(header.get_type() == tail.get_type());
 
         sea_time_point modify_time = mod_to_timepoint(tail.modify_time);
         std::size_t num_extents = tail.num_extents;
