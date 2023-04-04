@@ -40,14 +40,6 @@ std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id);
 
 class OpSchedulerItem {
 public:
-  class OrderLocker {
-  public:
-    using Ref = std::unique_ptr<OrderLocker>;
-    virtual void lock() = 0;
-    virtual void unlock() = 0;
-    virtual ~OrderLocker() {}
-  };
-
   // Abstraction for operations queueable in the op queue
   class OpQueueable {
   public:
@@ -59,7 +51,7 @@ public:
     /* Items will be dequeued and locked atomically w.r.t. other items with the
        * same ordering token */
     virtual const spg_t& get_ordering_token() const = 0;
-    virtual OrderLocker::Ref get_order_locker(PGRef pg) = 0;
+
     virtual std::optional<OpRequestRef> maybe_get_op() const {
       return std::nullopt;
     }
@@ -120,9 +112,6 @@ public:
   OpSchedulerItem &operator=(OpSchedulerItem &&) = default;
   OpSchedulerItem &operator=(const OpSchedulerItem &) = delete;
 
-  OrderLocker::Ref get_order_locker(PGRef pg) {
-    return qitem->get_order_locker(pg);
-  }
   uint32_t get_queue_token() const {
     return qitem->get_queue_token();
   }
@@ -218,22 +207,6 @@ public:
 
   const spg_t& get_ordering_token() const final {
     return get_pgid();
-  }
-
-  OpSchedulerItem::OrderLocker::Ref get_order_locker(PGRef pg) final {
-    class Locker : public OpSchedulerItem::OrderLocker {
-      PGRef pg;
-    public:
-      explicit Locker(PGRef pg) : pg(pg) {}
-      void lock() final {
-	pg->lock();
-      }
-      void unlock() final {
-	pg->unlock();
-      }
-    };
-    return OpSchedulerItem::OrderLocker::Ref(
-      new Locker(pg));
   }
 };
 
