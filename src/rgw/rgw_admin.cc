@@ -8362,7 +8362,16 @@ next:
   }
 
   if (opt_cmd == OPT::GC_PROCESS) {
-    int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_gc(!include_all);
+    rgw::sal::RadosStore* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!rados_store) {
+      cerr <<
+	"WARNING: this command can only work when the cluster has a RADOS backing store." <<
+	std::endl;
+      return 0;
+    }
+    RGWRados* store = rados_store->getRados();
+
+    int ret = store->process_gc(!include_all);
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
