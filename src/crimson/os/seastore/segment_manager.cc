@@ -13,16 +13,29 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore {
 
+std::ostream& operator<<(std::ostream& out, const block_shard_info_t& sf)
+{
+  out << "("
+      << "size=" << sf.size
+      << ", segments=" <<sf.segments
+      << ", tracker_offset=" <<sf.tracker_offset
+      << ", first_segment_offset=" <<sf.first_segment_offset
+      <<")";
+  return out;
+}
+
 std::ostream& operator<<(std::ostream& out, const block_sm_superblock_t& sb)
 {
   out << "superblock("
-      << "size=" << sb.size
+      << "shard_num=" << sb.shard_num
       << ", segment_size=" << sb.segment_size
       << ", block_size=" << sb.block_size
-      << ", segments=" << sb.segments
-      << ", tracker_offset=" << sb.tracker_offset
-      << ", first_segment_offset=" << sb.first_segment_offset
-      << ", config=" << sb.config
+      << ", shard_info:";
+  for (auto &sf : sb.shard_infos) {
+    out << sf
+        << ",";
+  }
+  out << "config=" << sb.config
       << ")";
   return out;
 }
@@ -52,7 +65,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
     static_cast<size_t>(0),
     [&](auto &nr_zones) {
       return seastar::open_file_dma(
-	device + "/block" + std::to_string(seastar::this_shard_id()),
+	device + "/block",
 	seastar::open_flags::rw
       ).then([&](auto file) {
 	return seastar::do_with(
@@ -67,11 +80,11 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
 	if (nr_zones != 0) {
 	  return std::make_unique<
 	    segment_manager::zns::ZNSSegmentManager
-	    >(device + "/block" + std::to_string(seastar::this_shard_id()));
+	    >(device + "/block");
 	} else {
 	  return std::make_unique<
 	    segment_manager::block::BlockSegmentManager
-	    >(device + "/block" + std::to_string(seastar::this_shard_id()), dtype);
+	    >(device + "/block", dtype);
 	}
       });
     });
@@ -79,7 +92,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
   return seastar::make_ready_future<crimson::os::seastore::SegmentManagerRef>(
     std::make_unique<
       segment_manager::block::BlockSegmentManager
-    >(device + "/block" + std::to_string(seastar::this_shard_id()), dtype));
+    >(device + "/block", dtype));
 #endif
 }
 

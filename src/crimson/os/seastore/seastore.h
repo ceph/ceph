@@ -173,13 +173,13 @@ public:
 
   // only exposed to SeaStore
   public:
-    mount_ertr::future<> mount();
-
     seastar::future<> umount();
+    // init managers and mount transaction_manager
+    seastar::future<> mount_managers();
 
-    seastar::future<> mkfs(
-      secondary_device_set_t &sds,
-      uuid_d new_osd_fsid);
+    void set_secondaries(Device& sec_dev) {
+      secondaries.emplace_back(&sec_dev);
+    }
 
     using coll_core_t = FuturizedStore::coll_core_t;
     seastar::future<std::vector<coll_core_t>> list_collections();
@@ -190,27 +190,10 @@ public:
     store_statfs_t stat() const;
 
     uuid_d get_fsid() const;
-    // for each shard store make device
-    seastar::future<> make_shard_stores();
 
     seastar::future<> mkfs_managers();
 
     void init_managers();
-
-    TransactionManagerRef& get_transaction_manager() {
-      return transaction_manager;
-    }
-    // for secondaries device mkfs
-    seastar::future<> sec_mkfs(
-      const std::string path,
-      device_type_t dtype,
-      device_id_t id,
-      secondary_device_set_t &sds,
-      uuid_d new_osd_fsid);
-
-    DeviceRef get_primary_device_ref() {
-      return std::move(device);
-    }
 
   private:
     struct internal_context_t {
@@ -452,11 +435,11 @@ public:
 
   private:
     std::string root;
-    DeviceRef device;
+    Device* device;
     const uint32_t max_object_size;
     bool is_test;
 
-    std::vector<DeviceRef> secondaries;
+    std::vector<Device*> secondaries;
     TransactionManagerRef transaction_manager;
     CollectionManagerRef collection_manager;
     OnodeManagerRef onode_manager;
@@ -476,24 +459,8 @@ public:
   seastar::future<> start() final;
   seastar::future<> stop() final;
 
-  mount_ertr::future<> mount() final {
-    ceph_assert(seastar::this_shard_id() == primary_core);
-    return shard_stores.invoke_on_all(
-      [](auto &local_store) {
-      return local_store.mount().handle_error(
-        crimson::ct_error::assert_all{
-        "Invalid error in SeaStore::mount"
-      });
-    });
-  }
-
-  seastar::future<> umount() final {
-    ceph_assert(seastar::this_shard_id() == primary_core);
-    return shard_stores.invoke_on_all(
-      [](auto &local_store) {
-      return local_store.umount();
-    });
-  }
+  mount_ertr::future<> mount() final;
+  seastar::future<> umount() final;
 
   mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) final;
   seastar::future<store_statfs_t> stat() const final;
@@ -532,8 +499,7 @@ public:
   mkfs_ertr::future<> test_mkfs(uuid_d new_osd_fsid);
 
   DeviceRef get_primary_device_ref() {
-    ceph_assert(seastar::this_shard_id() == primary_core);
-    return shard_stores.local().get_primary_device_ref();
+    return std::move(device);
   }
 
   seastar::future<> test_start(DeviceRef dev);
@@ -543,11 +509,13 @@ private:
 
   seastar::future<> prepare_meta(uuid_d new_osd_fsid);
 
-  seastar::future<> _mkfs(uuid_d new_osd_fsid);
+  seastar::future<> set_secondaries();
 
 private:
   std::string root;
   MDStoreRef mdstore;
+  DeviceRef device;
+  std::vector<DeviceRef> secondaries;
   seastar::sharded<SeaStore::Shard> shard_stores;
 };
 

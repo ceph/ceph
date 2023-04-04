@@ -124,7 +124,7 @@ SeaStore::Shard::Shard(
    throttler(
       get_conf<uint64_t>("seastore_max_concurrent_transactions"))
 {
-  device.reset(dev);
+  device = &(dev->get_sharded_device());
   register_metrics();
 }
 
@@ -200,67 +200,60 @@ seastar::future<> SeaStore::start()
 #else
   bool is_test = false;
 #endif
-  return shard_stores.start(root, nullptr, is_test)
-    .then([this] {
-    return shard_stores.invoke_on_all([](auto& local_store) {
-      return local_store.make_shard_stores();
-    });
+  using crimson::common::get_conf;
+  std::string type = get_conf<std::string>("seastore_main_device_type");
+  device_type_t d_type = string_to_device_type(type);
+  assert(d_type == device_type_t::SSD ||
+         d_type == device_type_t::RANDOM_BLOCK_SSD);
+
+  ceph_assert(root != "");
+  return Device::make_device(root, d_type
+  ).then([this](DeviceRef device_obj) {
+    device = std::move(device_obj);
+    return device->start();
+  }).then([this, is_test] {
+    ceph_assert(device);
+    return shard_stores.start(root, device.get(), is_test);
   });
 }
 
-seastar::future<> SeaStore::test_start(DeviceRef device)
+seastar::future<> SeaStore::test_start(DeviceRef device_obj)
 {
-  if (device) {
-    ceph_assert(root == "");
-    return shard_stores.start_single(root, device.release(), true);
-  } else {
-    ceph_assert(0 == "impossible no device");
-  }
+  ceph_assert(device_obj);
+  ceph_assert(root == "");
+  device = std::move(device_obj);
+  return shard_stores.start_single(root, device.get(), true);
 }
-
 
 seastar::future<> SeaStore::stop()
 {
   ceph_assert(seastar::this_shard_id() == primary_core);
-  return shard_stores.stop();
-}
-
-seastar::future<> SeaStore::Shard::make_shard_stores()
-{
-  if (root != "") {
-    using crimson::common::get_conf;
-    std::string type = get_conf<std::string>("seastore_main_device_type");
-    device_type_t d_type = string_to_device_type(type);
-    assert(d_type == device_type_t::SSD ||
-         d_type == device_type_t::RANDOM_BLOCK_SSD);
-
-    return Device::make_device(
-      root, d_type
-    ).then([this](DeviceRef device_obj) {
-      device = std::move(device_obj);
-    });
-  }
-  return seastar::now();
+  return seastar::do_for_each(secondaries, [](auto& sec_dev) {
+    return sec_dev->stop();
+  }).then([this] {
+    secondaries.clear();
+    if (device) {
+      return device->stop();
+    } else {
+      return seastar::now();
+    }
+  }).then([this] {
+    return shard_stores.stop();
+  });
 }
 
 SeaStore::mount_ertr::future<> SeaStore::test_mount()
 {
-
   ceph_assert(seastar::this_shard_id() == primary_core);
-  shard_stores.local().init_managers();
-    return shard_stores.local().get_transaction_manager()->mount(
-    ).handle_error(
-      crimson::ct_error::assert_all{
-        "Invalid error in SeaStore::test_mount"
-      }
-    );
+  return shard_stores.local().mount_managers();
 }
 
-SeaStore::mount_ertr::future<> SeaStore::Shard::mount()
+SeaStore::mount_ertr::future<> SeaStore::mount()
 {
+  ceph_assert(seastar::this_shard_id() == primary_core);
   return device->mount(
   ).safe_then([this] {
-    auto sec_devices = device->get_secondary_devices();
+    auto sec_devices = device->get_sharded_device().get_secondary_devices();
     return crimson::do_for_each(sec_devices, [this](auto& device_entry) {
       device_id_t id = device_entry.first;
       magic_t magic = device_entry.second.magic;
@@ -268,23 +261,47 @@ SeaStore::mount_ertr::future<> SeaStore::Shard::mount()
       std::string path =
         fmt::format("{}/block.{}.{}", root, dtype, std::to_string(id));
       return Device::make_device(path, dtype
-      ).then([this, magic](DeviceRef sec_dev) {
-        return sec_dev->mount(
-        ).safe_then([this, sec_dev=std::move(sec_dev), magic]() mutable {
-          boost::ignore_unused(magic);  // avoid clang warning;
-          assert(sec_dev->get_magic() == magic);
-          secondaries.emplace_back(std::move(sec_dev));
+      ).then([this, path, magic](DeviceRef sec_dev) {
+        return sec_dev->start(
+        ).then([this, magic, sec_dev = std::move(sec_dev)]() mutable {
+          return sec_dev->mount(
+          ).safe_then([this, sec_dev=std::move(sec_dev), magic]() mutable {
+            boost::ignore_unused(magic);  // avoid clang warning;
+            assert(sec_dev->get_sharded_device().get_magic() == magic);
+            secondaries.emplace_back(std::move(sec_dev));
+          });
+        }).safe_then([this] {
+          return set_secondaries();
         });
       });
+    }).safe_then([this] {
+      return shard_stores.invoke_on_all([](auto &local_store) {
+        return local_store.mount_managers();
+      });
     });
-  }).safe_then([this] {
-    init_managers();
-    return transaction_manager->mount();
   }).handle_error(
     crimson::ct_error::assert_all{
-      "Invalid error in Shard::mount"
+      "Invalid error in SeaStore::mount"
     }
   );
+}
+
+seastar::future<> SeaStore::Shard::mount_managers()
+{
+  init_managers();
+  return transaction_manager->mount(
+  ).handle_error(
+    crimson::ct_error::assert_all{
+      "Invalid error in mount_managers"
+  });
+}
+
+seastar::future<> SeaStore::umount()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  return shard_stores.invoke_on_all([](auto &local_store) {
+    return local_store.umount();
+  });
 }
 
 seastar::future<> SeaStore::Shard::umount()
@@ -367,75 +384,12 @@ SeaStore::Shard::mkfs_managers()
   );
 }
 
-seastar::future<>
-SeaStore::Shard::mkfs(
-  secondary_device_set_t &sds,
-  uuid_d new_osd_fsid)
+seastar::future<> SeaStore::set_secondaries()
 {
-  device_type_t d_type = device->get_device_type();
-  device_id_t id = (d_type == device_type_t::RANDOM_BLOCK_SSD) ?
-    static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN) : 0;
-
-  return device->mkfs(
-    device_config_t{
-      true,
-      device_spec_t{
-        (magic_t)std::rand(),
-        d_type,
-        id},
-      seastore_meta_t{new_osd_fsid},
-      sds}
-  ).safe_then([this] {
-    return crimson::do_for_each(secondaries, [](auto& sec_dev) {
-      return sec_dev->mount();
-    });
-  }).safe_then([this] {
-    return device->mount();
-  }).safe_then([this] {
-    return mkfs_managers();
-  }).handle_error(
-    crimson::ct_error::assert_all{
-      "Invalid error in SeaStore::Shard::mkfs"
-    }
-  );
-}
-
-seastar::future<> SeaStore::Shard::sec_mkfs(
-  const std::string path,
-  device_type_t dtype,
-  device_id_t id,
-  secondary_device_set_t &sds,
-  uuid_d new_osd_fsid)
-{
-  return Device::make_device(path, dtype
-  ).then([this, &sds, id, dtype, new_osd_fsid](DeviceRef sec_dev) {
-    magic_t magic = (magic_t)std::rand();
-    sds.emplace(
-      (device_id_t)id,
-      device_spec_t{magic, dtype, (device_id_t)id});
-    return sec_dev->mkfs(
-      device_config_t{
-        false,
-        device_spec_t{
-          magic,
-          dtype,
-          (device_id_t)id},
-        seastore_meta_t{new_osd_fsid},
-        secondary_device_set_t()}
-    ).safe_then([this, sec_dev=std::move(sec_dev), id]() mutable {
-      LOG_PREFIX(SeaStore::Shard::sec_mkfs);
-      DEBUG("mkfs: finished for device {}", id);
-      secondaries.emplace_back(std::move(sec_dev));
-    }).handle_error(crimson::ct_error::assert_all{"not possible"});
-  });
-}
-
-seastar::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
-{
-  ceph_assert(seastar::this_shard_id() == primary_core);
-  return shard_stores.local().mkfs_managers(
-  ).then([this, new_osd_fsid] {
-    return prepare_meta(new_osd_fsid);
+  auto sec_dev_ite = secondaries.rbegin();
+  Device* sec_dev = sec_dev_ite->get();
+  return shard_stores.invoke_on_all([sec_dev](auto &local_store) {
+    local_store.set_secondaries(sec_dev->get_sharded_device());
   });
 }
 
@@ -447,7 +401,10 @@ SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
     if (done == 0) {
       return seastar::now();
     } 
-    return _mkfs(new_osd_fsid);
+    return shard_stores.local().mkfs_managers(
+    ).then([this, new_osd_fsid] {
+      return prepare_meta(new_osd_fsid);
+    });
   });
 }
 
@@ -481,9 +438,8 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
       return seastar::now();
     } else {
       return seastar::do_with(
-        std::vector<secondary_device_set_t>(),
+        secondary_device_set_t(),
         [this, new_osd_fsid](auto& sds) {
-        sds.resize(seastar::smp::count);
         auto fut = seastar::now();
         LOG_PREFIX(SeaStore::mkfs);
         DEBUG("root: {}", root);
@@ -510,15 +466,22 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
                 }
                 auto id = std::stoi(entry_name.substr(dtype_end + 1));
                 std::string path = fmt::format("{}/{}", root, entry_name);
-                return shard_stores.invoke_on_all(
-                  [&sds, id, path, dtype, new_osd_fsid]
-                  (auto &local_store) {
-                  return local_store.sec_mkfs(
-                    path,
-                    dtype,
-                    id,
-                    sds[seastar::this_shard_id()],
-                    new_osd_fsid);
+                return Device::make_device(path, dtype
+                ).then([this, &sds, id, dtype, new_osd_fsid](DeviceRef sec_dev) {
+                  auto p_sec_dev = sec_dev.get();
+                  secondaries.emplace_back(std::move(sec_dev));
+                  return p_sec_dev->start(
+                  ).then([&sds, id, dtype, new_osd_fsid, p_sec_dev]() {
+                    magic_t magic = (magic_t)std::rand();
+                    sds.emplace(
+                      (device_id_t)id,
+                      device_spec_t{magic, dtype, (device_id_t)id});
+                    return p_sec_dev->mkfs(device_config_t::create_secondary(
+                      new_osd_fsid, id, dtype, magic)
+                    ).handle_error(crimson::ct_error::assert_all{"not possible"});
+                  });
+                }).then([this] {
+                   return set_secondaries();
                 });
               }
               return seastar::now();
@@ -527,17 +490,37 @@ SeaStore::mkfs_ertr::future<> SeaStore::mkfs(uuid_d new_osd_fsid)
           });
         }
         return fut.then([this, &sds, new_osd_fsid] {
-          return shard_stores.invoke_on_all(
-            [&sds, new_osd_fsid](auto &local_store) {
-            return local_store.mkfs(
-              sds[seastar::this_shard_id()], new_osd_fsid);
+          device_id_t id = 0;
+          device_type_t d_type = device->get_device_type();
+          assert(d_type == device_type_t::SSD ||
+            d_type == device_type_t::RANDOM_BLOCK_SSD);
+          if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
+            id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
+          }
+
+          return device->mkfs(
+            device_config_t::create_primary(new_osd_fsid, id, d_type, sds)
+          );
+        }).safe_then([this] {
+          return crimson::do_for_each(secondaries, [](auto& sec_dev) {
+            return sec_dev->mount();
           });
         });
-      }).then([this, new_osd_fsid] {
+      }).safe_then([this] {
+        return device->mount();
+      }).safe_then([this] {
+        return shard_stores.invoke_on_all([] (auto &local_store) {
+          return local_store.mkfs_managers();
+        });
+      }).safe_then([this, new_osd_fsid] {
         return prepare_meta(new_osd_fsid);
-      }).then([this] {
+      }).safe_then([this] {
 	return umount();
-      });
+      }).handle_error(
+        crimson::ct_error::assert_all{
+          "Invalid error in SeaStore::mkfs"
+        }
+      );
     }
   });
 }
@@ -2057,12 +2040,8 @@ void SeaStore::Shard::init_managers()
   collection_manager.reset();
   onode_manager.reset();
 
-  std::vector<Device*> sec_devices;
-  for (auto &dev : secondaries) {
-    sec_devices.emplace_back(dev.get());
-  }
   transaction_manager = make_transaction_manager(
-      device.get(), sec_devices, is_test);
+      device, secondaries, is_test);
   collection_manager = std::make_unique<collection_manager::FlatCollectionManager>(
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
