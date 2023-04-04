@@ -149,7 +149,8 @@ public:
   void doSyntheticLimitedTest(
     int initial_object_count,
     int num_ops,
-    uint64_t max_obj, uint64_t max_wr, uint64_t align);
+    uint64_t max_obj, uint64_t max_wr, uint64_t align,
+    bool inject_reuse_blobs);
 };
 
 class StoreTestDeferredSetup : public StoreTest {
@@ -180,7 +181,8 @@ public:
   }
 
   void SyntheticLimitedTest() {
-    doSyntheticLimitedTest(start_object_count, num_ops, max_size, max_write, alignment);
+    doSyntheticLimitedTest(start_object_count, num_ops, max_size, max_write, alignment,
+    inject_reuse_shared_blob_transition);
   }
 
 private:
@@ -190,7 +192,7 @@ private:
   uint64_t alignment = 0;
   uint64_t num_ops = 10000;
   uint64_t start_object_count = 1000;
-
+  bool inject_reuse_shared_blob_transition = false;
 protected:
   string matrix_get(const char *k) {
     if (string(k) == "max_write") {
@@ -203,6 +205,8 @@ protected:
       return stringify(num_ops);
     } else if (string(k) == "start_object_count") {
       return stringify(start_object_count);
+    } else if (string(k) == "inject_reuse_shared_blob_transition") {
+      return inject_reuse_shared_blob_transition ? "1" : "0";
     } else {
       char *buf;
       g_conf().get_val(k, &buf, -1);
@@ -223,6 +227,8 @@ protected:
       num_ops = atoll(v);
     } else if (string(k) == "start_object_count") {
       start_object_count = atoll(v);
+    } else if (string(k) == "inject_reuse_shared_blob_transition") {
+      inject_reuse_shared_blob_transition = true;
     } else {
       SetVal(g_conf(), k, v);
     }
@@ -5160,7 +5166,8 @@ void StoreTest::doSyntheticTest(
 void StoreTest::doSyntheticLimitedTest(
   int initial_object_count,
   int num_ops,
-  uint64_t max_obj, uint64_t max_wr, uint64_t align)
+  uint64_t max_obj, uint64_t max_wr, uint64_t align,
+  bool inject_reuse_blobs)
 {
   MixedGenerator gen(555);
   gen_type rng(time(NULL));
@@ -5177,10 +5184,28 @@ void StoreTest::doSyntheticLimitedTest(
     if (!(i % 500)) cerr << "seeding object " << i << std::endl;
     test_obj.touch();
   }
+  int inject_reuse_pos = -1;
+  if (inject_reuse_blobs) {
+    inject_reuse_pos = boost::uniform_int<>(0, num_ops)(rng);
+  }
   for (int i = 0; i < num_ops; ++i) {
     if (!(i % 1000)) {
       cerr << "Op " << i << std::endl;
       test_obj.print_internal_state();
+    }
+    if (i == inject_reuse_pos) {
+      cerr << "Injecting shared_blob_reuse" << std::endl;
+      AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+      ceph_assert(admin_socket);
+      ceph::bufferlist in, out;
+      ostringstream err;
+      int r = admin_socket->execute_command(
+	{ "{\"prefix\": \"bluestore enable shared blob reuse\"}" },
+	in, err, &out);
+      if (r != 0) {
+	cerr << "failure injecting: " << cpp_strerror(r) << std::endl;
+      }
+      cout << std::string(out.c_str(), out.length()) << std::endl;
     }
     boost::uniform_int<> true_false(0, 9999 /*999*/);
     int val = true_false(rng);
@@ -5209,6 +5234,9 @@ void StoreTest::doSyntheticLimitedTest(
     if (option(1500)) test_obj.unlink();
     if (option(1500)) test_obj.clone();
     ceph_assert(val == -1);
+  }
+  if (inject_reuse_blobs) {
+    g_ceph_context->_conf->bluestore_reuse_shared_blobs = false;
   }
   test_obj.wait_for_done();
   test_obj.shutdown();
@@ -5256,6 +5284,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticLimited) {
     { "bluestore_default_buffered_write", "true", 0 },
     { "bluestore_compression_mode", "force", "none", 0},
     { "bluestore_prefer_deferred_size", "32768", "0", 0},
+    { "inject_reuse_shared_blob_transition", "true", 0},
     { 0 },
   };
   do_matrix(m, &StoreTestSpecificAUSize::SyntheticLimitedTest);
@@ -5278,6 +5307,7 @@ TEST_P(StoreTestSpecificAUSize, SyntheticShardingLimited) {
     { "bluestore_extent_map_shard_target_size", "150", 0 },
     { "bluestore_default_buffered_read", "true", 0 },
     { "bluestore_default_buffered_write", "true", 0 },
+    { "inject_reuse_shared_blob_transition", "true", 0},
     { 0 },
   };
   do_matrix(m, &StoreTestSpecificAUSize::SyntheticLimitedTest);
