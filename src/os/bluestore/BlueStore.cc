@@ -3246,6 +3246,15 @@ void BlueStore::ExtentMap::dup_original(BlueStore* b, TransContext* txc,
           e.blob->shared_blob->get_ref(p.offset, p.length);
         }
       }
+      // By default do not copy buffers to clones, and let them read data by themselves.
+      // The exception are 'writing' buffers, which are not yet stable on device.
+      bool some_copied = e.blob->bc._dup_writing(cb->shared_blob->get_cache(), &cb->bc);
+      if (some_copied) {
+	// Pretend we just wrote those buffers;
+	// we need to get _finish_write called, so we can clear then from writing list.
+	// Otherwise it will be stuck until someone does write-op on the clone.
+	txc->blobs_written.insert(cb);
+      }
       txc->write_shared_blob(e.blob->shared_blob);
       dout(20) << __func__ << "    new " << *cb << dendl;
     }
