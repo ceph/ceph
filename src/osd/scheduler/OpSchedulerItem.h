@@ -51,14 +51,6 @@ public:
   // Abstraction for operations queueable in the op queue
   class OpQueueable {
   public:
-    enum class op_type_t {
-      client_op,
-      peering_event,
-      bg_snaptrim,
-      bg_recovery,
-      bg_scrub,
-      bg_pg_delete
-    };
     using Ref = std::unique_ptr<OpQueueable>;
 
     /// Items with the same queue token will end up in the same shard
@@ -68,7 +60,6 @@ public:
        * same ordering token */
     virtual const spg_t& get_ordering_token() const = 0;
     virtual OrderLocker::Ref get_order_locker(PGRef pg) = 0;
-    virtual op_type_t get_op_type() const = 0;
     virtual std::optional<OpRequestRef> maybe_get_op() const {
       return std::nullopt;
     }
@@ -137,10 +128,6 @@ public:
   }
   const spg_t& get_ordering_token() const {
     return qitem->get_ordering_token();
-  }
-  using op_type_t = OpQueueable::op_type_t;
-  OpQueueable::op_type_t get_op_type() const {
-    return qitem->get_op_type();
   }
   std::optional<OpRequestRef> maybe_get_op() const {
     return qitem->maybe_get_op();
@@ -264,10 +251,6 @@ class PGOpItem : public PGOpQueueable {
 
 public:
   PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
-  op_type_t get_op_type() const final {
-
-    return op_type_t::client_op;
-  }
 
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
@@ -294,9 +277,6 @@ class PGPeeringItem : public PGOpQueueable {
   PGPeeringEventRef evt;
 public:
   PGPeeringItem(spg_t pg, PGPeeringEventRef e) : PGOpQueueable(pg), evt(e) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::peering_event;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
@@ -322,9 +302,6 @@ public:
     spg_t pg,
     epoch_t epoch_queued)
     : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_snaptrim;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGSnapTrim(pgid=" << get_pgid()
 	       << " epoch_queued=" << epoch_queued
@@ -344,9 +321,6 @@ public:
     spg_t pg,
     epoch_t epoch_queued)
     : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGScrub(pgid=" << get_pgid()
 	       << "epoch_queued=" << epoch_queued
@@ -379,7 +353,6 @@ class PGScrubItem : public PGOpQueueable {
       , activation_index{op_index}
       , message_name{derivative_name}
   {}
-  op_type_t get_op_type() const final { return op_type_t::bg_scrub; }
   std::ostream& print(std::ostream& rhs) const final
   {
     return rhs << message_name << "(pgid=" << get_pgid()
@@ -567,9 +540,6 @@ public:
     : PGOpQueueable(pg),
       epoch_queued(epoch_queued),
       reserved_pushes(reserved_pushes) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_recovery;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecovery(pgid=" << get_pgid()
 	       << " epoch_queued=" << epoch_queued
@@ -594,9 +564,6 @@ public:
 		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch)
     : PGOpQueueable(pgid),
       c(c), epoch(epoch) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_recovery;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecoveryContext(pgid=" << get_pgid()
 	       << " c=" << c.get() << " epoch=" << epoch
@@ -617,9 +584,6 @@ public:
     epoch_t epoch_queued)
     : PGOpQueueable(pg),
       epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_pg_delete;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGDelete(" << get_pgid()
 	       << " e" << epoch_queued
@@ -637,9 +601,6 @@ class PGRecoveryMsg : public PGOpQueueable {
 
 public:
   PGRecoveryMsg(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_recovery;
-  }
 
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecoveryMsg(op=" << *(op->get_req()) << ")";
