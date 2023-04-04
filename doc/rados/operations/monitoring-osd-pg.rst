@@ -117,11 +117,12 @@ pseudo-random placement that takes into account the failure domains that you
 have set in your `CRUSH map`_; for this reason, PGs are rarely assigned to
 immediately adjacent OSDs in a large cluster.
 
-Ceph processes a client request using the **Acting Set**, which is the set of
-OSDs that will actually handle the requests since they have a full and working
-version of a placement group shard. The set of OSDs that should contain a shard
-of a particular placement group as the **Up Set**, i.e. where data is
-moved/copied to (or planned to be).
+Ceph processes client requests with the **Acting Set** of OSDs: this is the set
+of OSDs that currently have a full and working version of a PG shard and that
+are therefore responsible for handling requests. By contrast, the **Up Set** is
+the set of OSDs that contain a shard of a specific PG. Data is moved or copied
+to the **Up Set**, or planned to be moved or copied, to the **Up Set**. See
+:ref:`Placement Group Concepts <rados_operations_pg_concepts>`.
 
 Sometimes an OSD in the Acting Set is ``down`` or otherwise unable to
 service requests for objects in the PG. When this kind of situation
