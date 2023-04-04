@@ -8761,15 +8761,14 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
   ceph_assert(conn);
 
   auto session = conn->get_priv();
-  if (!session)
-    return;
 
   for (list<pair<watch_info_t,bool> >::iterator i = ctx->watch_connects.begin();
        i != ctx->watch_connects.end();
        ++i) {
     pair<uint64_t, entity_name_t> watcher(i->first.cookie, entity);
     dout(15) << "do_osd_op_effects applying watch connect on session "
-	     << session.get() << " watcher " << watcher << dendl;
+	     << (session ? session.get() : nullptr) << " watcher " << watcher
+	     << dendl;
     WatchRef watch;
     if (ctx->obc->watchers.count(watcher)) {
       dout(15) << "do_osd_op_effects found existing watch watcher " << watcher
