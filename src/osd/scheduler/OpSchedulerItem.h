@@ -89,8 +89,20 @@ private:
   utime_t start_time;
   uint64_t owner;  ///< global id (e.g., client.XXX)
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
-  uint32_t qos_cost;  ///< scaled cost calculated by the mclock scheduler
-  bool qos_item;  ///< set to true if item is scheduled by mclock scheduler
+
+  /**
+   * qos_cost
+   *
+   * Set by mClockScheduler iff queued into mclock proper and not the
+   * high/immediate queues.  Represents mClockScheduler's adjusted
+   * cost value.
+   */
+  uint32_t qos_cost = 0;
+
+  /// True iff queued via mclock proper, not the high/immediate queues
+  bool was_queued_via_mclock() const {
+    return qos_cost > 0;
+  }
 
 public:
   OpSchedulerItem(
@@ -105,8 +117,7 @@ public:
       priority(priority),
       start_time(start_time),
       owner(owner),
-      map_epoch(e)
-  { qos_cost = 0; qos_item = false; }
+      map_epoch(e) {}
   OpSchedulerItem(OpSchedulerItem &&) = default;
   OpSchedulerItem(const OpSchedulerItem &) = delete;
   OpSchedulerItem &operator=(OpSchedulerItem &&) = default;
@@ -149,36 +160,20 @@ public:
     return qitem->get_scheduler_class();
   }
 
-  void maybe_set_is_qos_item() {
-    if (get_scheduler_class() != op_scheduler_class::immediate) {
-      qos_item = true ;
-    }
-  }
-
-  bool is_qos_item() const {
-    return qos_item;
-  }
-
   void set_qos_cost(uint32_t scaled_cost) {
     qos_cost = scaled_cost;
-  }
-
-  uint32_t get_qos_cost() const {
-    return qos_cost;
   }
 
   friend std::ostream& operator<<(std::ostream& out, const OpSchedulerItem& item) {
     out << "OpSchedulerItem("
         << item.get_ordering_token() << " " << *item.qitem;
 
-    if (item.is_qos_item()) {
-      out << " class_id " << item.get_scheduler_class();
-    } else {
-      out << " prio " << item.get_priority();
-    }
+    out << " class_id " << item.get_scheduler_class();
 
-    if (item.get_qos_cost()) {
-      out << " qos_cost " << item.get_qos_cost();
+    out << " prio " << item.get_priority();
+
+    if (item.was_queued_via_mclock()) {
+      out << " qos_cost " << item.qos_cost;
     }
 
     out << " cost " << item.get_cost()
