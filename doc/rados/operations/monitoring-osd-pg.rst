@@ -3,35 +3,36 @@
 =========================
 
 High availability and high reliability require a fault-tolerant approach to
-managing hardware and software issues. Ceph has no single point-of-failure, and
-can service requests for data in a "degraded" mode. Ceph's `data placement`_
-introduces a layer of indirection to ensure that data doesn't bind directly to
-particular OSD addresses. This means that tracking down system faults requires
-finding the `placement group`_ and the underlying OSDs at root of the problem.
+managing hardware and software issues. Ceph has no single point of failure and
+it can service requests for data even when in a "degraded" mode. Ceph's `data
+placement`_ introduces a layer of indirection to ensure that data doesn't bind
+directly to specific OSDs. For this reason, tracking system faults
+requires finding the `placement group`_ (PG) and the underlying OSDs at the
+root of the problem.
 
-.. tip:: A fault in one part of the cluster may prevent you from accessing a 
-   particular object, but that doesn't mean that you cannot access other objects.
+.. tip:: A fault in one part of the cluster might prevent you from accessing a 
+   particular object, but that doesn't mean that you are prevented from accessing other objects.
    When you run into a fault, don't panic. Just follow the steps for monitoring
-   your OSDs and placement groups. Then, begin troubleshooting.
+   your OSDs and placement groups, and then begin troubleshooting.
 
-Ceph is generally self-repairing. However, when problems persist, monitoring
-OSDs and placement groups will help you identify the problem.
+Ceph is generally self-repairing. However, when problems persist and you want to find out 
+what exactly is going wrong, it can be helpful to monitor OSDs and PGs.
 
 
 Monitoring OSDs
 ===============
 
-An OSD's status is either in the cluster (``in``) or out of the cluster
-(``out``); and, it is either up and running (``up``), or it is down and not
-running (``down``). If an OSD is ``up``, it may be either ``in`` the cluster
-(you can read and write data) or it is ``out`` of the cluster. If it was
-``in`` the cluster and recently moved ``out`` of the cluster, Ceph will migrate
-placement groups to other OSDs. If an OSD is ``out`` of the cluster, CRUSH will
-not assign placement groups to the OSD. If an OSD is ``down``, it should also be
+An OSD's status is as follows: it is either in the cluster (``in``) or out of the cluster
+(``out``); likewise, it is either up and running (``up``) or down and not
+running (``down``). If an OSD is ``up``, it can be either ``in`` the cluster
+(if so, you can read and write data) or ``out`` of the cluster. If the OSD was previously
+``in`` the cluster but was recently moved ``out`` of the cluster, Ceph will migrate its
+PGs to other OSDs. If an OSD is ``out`` of the cluster, CRUSH will                               
+not assign any PGs to that OSD. If an OSD is ``down``, it should also be
 ``out``.
 
-.. note:: If an OSD is ``down`` and ``in``, there is a problem and the cluster 
-   will not be in a healthy state.
+.. note:: If an OSD is ``down`` and ``in``, then there is a problem and the cluster 
+   is not in a healthy state.
 
 .. ditaa::
 
@@ -50,72 +51,71 @@ not assign placement groups to the OSD. If an OSD is ``down``, it should also be
            |                |        |                |
            +----------------+        +----------------+
 
-If you execute a command such as ``ceph health``, ``ceph -s`` or ``ceph -w``,
-you may notice that the cluster does not always echo back ``HEALTH OK``. Don't
-panic. With respect to OSDs, you should expect that the cluster will **NOT**
-echo ``HEALTH OK`` in a few expected circumstances:
+If you run the commands ``ceph health``, ``ceph -s``, or ``ceph -w``,
+you might notice that the cluster does not always show ``HEALTH OK``. Don't
+panic. There are certain circumstances in which it is expected and normal that
+the cluster will **NOT** show ``HEALTH OK``:
 
-#. You haven't started the cluster yet (it won't respond).
-#. You have just started or restarted the cluster and it's not ready yet,
-   because the placement groups are getting created and the OSDs are in
-   the process of peering.
-#. You just added or removed an OSD.
-#. You just have modified your cluster map.
+#. You haven't started the cluster yet.
+#. You have just started or restarted the cluster and it's not ready to show
+   health statuses yet, because the PGs are in the process of being created and
+   the OSDs are in the process of peering.
+#. You have just added or removed an OSD.
+#. You have just have modified your cluster map.
 
-An important aspect of monitoring OSDs is to ensure that when the cluster
-is up and running that all OSDs that are ``in`` the cluster are ``up`` and
-running, too. To see if all OSDs are running, execute:
+Checking to see if OSDs are ``up`` and running is an important aspect of monitoring them:
+whenever the cluster is up and running, every OSD that is ``in`` the cluster should also
+be ``up`` and running. To see if all of the cluster's OSDs are running, run the following
+command:
 
 .. prompt:: bash $
 
-	ceph osd stat
+    ceph osd stat
 
-The result should tell you the total number of OSDs (x),
-how many are ``up`` (y), how many are ``in`` (z) and the map epoch (eNNNN). ::
+The output provides the following information: the total number of OSDs (x),
+how many OSDs are ``up`` (y), how many OSDs are ``in`` (z), and the map epoch (eNNNN). ::
 
-	x osds: y up, z in; epoch: eNNNN
+    x osds: y up, z in; epoch: eNNNN
 
-If the number of OSDs that are ``in`` the cluster is more than the number of
-OSDs that are ``up``, execute the following command to identify the ``ceph-osd``
+If the number of OSDs that are ``in`` the cluster is greater than the number of
+OSDs that are ``up``, run the following command to identify the ``ceph-osd``
 daemons that are not running:
 
 .. prompt:: bash $
 
-	ceph osd tree
+    ceph osd tree
 
 :: 
 
-	#ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
-	 -1       2.00000 pool openstack
-	 -3       2.00000 rack dell-2950-rack-A
-	 -2       2.00000 host dell-2950-A1
-	  0   ssd 1.00000      osd.0                up  1.00000 1.00000
-	  1   ssd 1.00000      osd.1              down  1.00000 1.00000
+    #ID CLASS WEIGHT  TYPE NAME             STATUS REWEIGHT PRI-AFF
+     -1       2.00000 pool openstack
+     -3       2.00000 rack dell-2950-rack-A
+     -2       2.00000 host dell-2950-A1
+      0   ssd 1.00000      osd.0                up  1.00000 1.00000
+      1   ssd 1.00000      osd.1              down  1.00000 1.00000
 
-.. tip:: The ability to search through a well-designed CRUSH hierarchy may help
-   you troubleshoot your cluster by identifying the physical locations faster.
+.. tip:: Searching through a well-designed CRUSH hierarchy to identify the physical
+   locations of particular OSDs might help you troubleshoot your cluster.
 
-If an OSD is ``down``, start it:
+If an OSD is ``down``, start it by running the following command:
 
 .. prompt:: bash $
 
-	sudo systemctl start ceph-osd@1
+    sudo systemctl start ceph-osd@1
 
-See `OSD Not Running`_ for problems associated with OSDs that stopped, or won't
-restart.
-	
+For problems associated with OSDs that have stopped or won't restart, see `OSD Not Running`_.
+
 
 PG Sets
 =======
 
-When CRUSH assigns placement groups to OSDs, it looks at the number of replicas
-for the pool and assigns the placement group to OSDs such that each replica of
-the placement group gets assigned to a different OSD. For example, if the pool
-requires three replicas of a placement group, CRUSH may assign them to
-``osd.1``, ``osd.2`` and ``osd.3`` respectively. CRUSH actually seeks a
-pseudo-random placement that will take into account failure domains you set in
-your `CRUSH map`_, so you will rarely see placement groups assigned to nearest
-neighbor OSDs in a large cluster.
+When CRUSH assigns a PG to OSDs, it takes note of how many replicas of the PG
+are required by the pool and then assigns each replica to a different OSD.
+For example, if the pool requires three replicas of a PG, CRUSH might assign
+them individually to ``osd.1``, ``osd.2`` and ``osd.3``. CRUSH seeks a
+pseudo-random placement that takes into account the failure domains that you
+have set in your `CRUSH map`_; for this reason, PGs are rarely assigned to
+immediately adjacent OSDs in a large cluster.
 
 Ceph processes a client request using the **Acting Set**, which is the set of
 OSDs that will actually handle the requests since they have a full and working
@@ -123,56 +123,55 @@ version of a placement group shard. The set of OSDs that should contain a shard
 of a particular placement group as the **Up Set**, i.e. where data is
 moved/copied to (or planned to be).
 
-In some cases, an OSD in the Acting Set is ``down`` or otherwise not able to
-service requests for objects in the placement group. When these situations
-arise, don't panic. Common examples include:
+Sometimes an OSD in the Acting Set is ``down`` or otherwise unable to
+service requests for objects in the PG. When this kind of situation
+arises, don't panic. Common examples of such a situation include:
 
-- You added or removed an OSD. Then, CRUSH reassigned the placement group to 
-  other OSDs--thereby changing the composition of the Acting Set and spawning
-  the migration of data with a "backfill" process.
+- You added or removed an OSD, CRUSH reassigned the PG to 
+  other OSDs, and this reassignment changed the composition of the Acting Set and triggered
+  the migration of data by means of a "backfill" process.
 - An OSD was ``down``, was restarted, and is now ``recovering``.
-- An OSD in the Acting Set is ``down`` or unable to service requests, 
+- An OSD in the Acting Set is ``down`` or unable to service requests,
   and another OSD has temporarily assumed its duties.
 
-In most cases, the Up Set and the Acting Set are identical. When they are not,
-it may indicate that Ceph is migrating the PG (it's remapped), an OSD is
-recovering, or that there is a problem (i.e., Ceph usually echoes a "HEALTH
-WARN" state with a "stuck stale" message in such scenarios).
+Typically, the Up Set and the Acting Set are identical. When they are not, it
+might indicate that Ceph is migrating the PG (in other words, that the PG has
+been remapped), that an OSD is recovering, or that there is a problem with the
+cluster (in such scenarios, Ceph usually shows a "HEALTH WARN" state with a
+"stuck stale" message).
 
-To retrieve a list of placement groups, execute:
-
-.. prompt:: bash $
-
-	ceph pg dump
-	
-To view which OSDs are within the Acting Set or the Up Set for a given placement
-group, execute:
+To retrieve a list of PGs, run the following command:
 
 .. prompt:: bash $
 
-	ceph pg map {pg-num}
+    ceph pg dump
 
-The result should tell you the osdmap epoch (eNNN), the placement group number
-({pg-num}), the OSDs in the Up Set (up[]), and the OSDs in the acting set
+To see which OSDs are within the Acting Set and the Up Set for a specific PG, run the following command:
+
+.. prompt:: bash $
+
+    ceph pg map {pg-num}
+
+The output provides the following information: the osdmap epoch (eNNN), the PG number
+({pg-num}), the OSDs in the Up Set (up[]), and the OSDs in the Acting Set
 (acting[])::
 
-	osdmap eNNN pg {raw-pg-num} ({pg-num}) -> up [0,1,2] acting [0,1,2]
+    osdmap eNNN pg {raw-pg-num} ({pg-num}) -> up [0,1,2] acting [0,1,2]
 
-.. note:: If the Up Set and Acting Set do not match, this may be an indicator
-   that the cluster rebalancing itself or of a potential problem with 
+.. note:: If the Up Set and the Acting Set do not match, this might indicate
+   that the cluster is rebalancing itself or that there is a problem with 
    the cluster.
- 
+
 
 Peering
 =======
 
-Before you can write data to a placement group, it must be in an ``active``
-state, and it **should** be in a ``clean`` state. For Ceph to determine the
-current state of a placement group, the primary OSD of the placement group
-(i.e., the first OSD in the acting set), peers with the secondary and tertiary
-OSDs to establish agreement on the current state of the placement group
-(assuming a pool with 3 replicas of the PG).
-
+Before you can write data to a PG, it must be in an ``active`` state and it
+will preferably be in a ``clean`` state. For Ceph to determine the current
+state of a PG, peering must take place.  That is, the primary OSD of the PG
+(that is, the first OSD in the Acting Set) must peer with the secondary and
+OSDs so that consensus on the current state of the PG can be established. In
+the following diagram, we assume a pool with three replicas of the PG:
 
 .. ditaa::
 
@@ -187,99 +186,100 @@ OSDs to establish agreement on the current state of the placement group
                 |    Peering                   |
                 |                              |
                 |         Request To           |
-                |            Peer              | 
+                |            Peer              |
                 |----------------------------->|
                 |<-----------------------------|
                 |          Peering             |
 
-The OSDs also report their status to the monitor. See `Configuring Monitor/OSD
-Interaction`_ for details. To troubleshoot peering issues, see `Peering
+The OSDs also report their status to the monitor. For details, see `Configuring Monitor/OSD
+Interaction`_. To troubleshoot peering issues, see `Peering
 Failure`_.
 
 
-Monitoring Placement Group States
-=================================
+Monitoring PG States
+====================
 
-If you execute a command such as ``ceph health``, ``ceph -s`` or ``ceph -w``,
-you may notice that the cluster does not always echo back ``HEALTH OK``. After
-you check to see if the OSDs are running, you should also check placement group
-states. You should expect that the cluster will **NOT** echo ``HEALTH OK`` in a
-number of placement group peering-related circumstances:
+If you run the commands ``ceph health``, ``ceph -s``, or ``ceph -w``,
+you might notice that the cluster does not always show ``HEALTH OK``. After
+first checking to see if the OSDs are running, you should also check PG
+states. There are certain PG-peering-related circumstances in which it is expected
+and normal that the cluster will **NOT** show ``HEALTH OK``:
 
-#. You have just created a pool and placement groups haven't peered yet.
-#. The placement groups are recovering.
+#. You have just created a pool and the PGs haven't peered yet.
+#. The PGs are recovering.
 #. You have just added an OSD to or removed an OSD from the cluster.
-#. You have just modified your CRUSH map and your placement groups are migrating.
-#. There is inconsistent data in different replicas of a placement group.
-#. Ceph is scrubbing a placement group's replicas.
+#. You have just modified your CRUSH map and your PGs are migrating.
+#. There is inconsistent data in different replicas of a PG.
+#. Ceph is scrubbing a PG's replicas.
 #. Ceph doesn't have enough storage capacity to complete backfilling operations.
 
-If one of the foregoing circumstances causes Ceph to echo ``HEALTH WARN``, don't
-panic. In many cases, the cluster will recover on its own. In some cases, you
-may need to take action. An important aspect of monitoring placement groups is
-to ensure that when the cluster is up and running that all placement groups are
-``active``, and preferably in the ``clean`` state. To see the status of all
-placement groups, execute:
+If one of these circumstances causes Ceph to show ``HEALTH WARN``, don't
+panic. In many cases, the cluster will recover on its own. In some cases, however, you
+might need to take action. An important aspect of monitoring PGs is to check their
+status as ``active`` and ``clean``: that is, it is important to ensure that, when the
+cluster is up and running, all PGs are ``active`` and (preferably) ``clean``.
+To see the status of every PG, run the following command:
 
 .. prompt:: bash $
 
-	ceph pg stat
+    ceph pg stat
 
-The result should tell you the total number of placement groups (x), how many
-placement groups are in a particular state such as ``active+clean`` (y) and the
+The output provides the following information: the total number of PGs (x), how many
+PGs are in a particular state such as ``active+clean`` (y), and the
 amount of data stored (z). ::
 
-	x pgs: y active+clean; z bytes data, aa MB used, bb GB / cc GB avail
+    x pgs: y active+clean; z bytes data, aa MB used, bb GB / cc GB avail
 
-.. note:: It is common for Ceph to report multiple states for placement groups.
+.. note:: It is common for Ceph to report multiple states for PGs (for example,
+   ``active+clean``, ``active+clean+remapped``, ``active+clean+scrubbing``.
 
-In addition to the placement group states, Ceph will also echo back the amount of
-storage capacity used (aa), the amount of storage capacity remaining (bb), and the total
-storage capacity for the placement group. These numbers can be important in a
-few cases: 
+Here Ceph shows not only the PG states, but also storage capacity used (aa),
+the amount of storage capacity remaining (bb), and the total storage capacity
+of the PG. These values can be important in a few cases:
 
-- You are reaching your ``near full ratio`` or ``full ratio``. 
-- Your data is not getting distributed across the cluster due to an 
-  error in your CRUSH configuration.
+- The cluster is reaching its ``near full ratio`` or ``full ratio``.
+- Data is not being distributed across the cluster due to an error in the
+  CRUSH configuration.
 
 
 .. topic:: Placement Group IDs
 
-   Placement group IDs consist of the pool number (not pool name) followed 
-   by a period (.) and the placement group ID--a hexadecimal number. You
-   can view pool numbers and their names from the output of ``ceph osd 
-   lspools``. For example, the first pool created corresponds to
-   pool number ``1``. A fully qualified placement group ID has the
+   PG IDs consist of the pool number (not the pool name) followed 
+   by a period (.) and the PG ID-- (a hexadecimal number). You
+   can view pool numbers and their names from in the output of ``ceph osd 
+   lspools``. For example, the first pool that was created corresponds to
+   pool number ``1``. A fully qualified PG ID has the
    following form::
-   
-   	{pool-num}.{pg-id}
-   
-   And it typically looks like this:: 
-   
-	1.1f
-   
 
-To retrieve a list of placement groups, execute the following:
+       {pool-num}.{pg-id}
 
-.. prompt:: bash $
+   It typically resembles the following:: 
 
-	ceph pg dump
-	
-You can also format the output in JSON format and save it to a file:
+    1.1701b
+
+
+To retrieve a list of PGs, run the following command:
 
 .. prompt:: bash $
 
-	ceph pg dump -o {filename} --format=json
+    ceph pg dump
 
-To query a particular placement group, execute the following:
+To format the output in JSON format and save it to a file, run the following command:
 
 .. prompt:: bash $
 
-	ceph pg {poolnum}.{pg-id} query
-	
+    ceph pg dump -o {filename} --format=json
+
+To query a specific PG, run the following command:
+
+.. prompt:: bash $
+
+    ceph pg {poolnum}.{pg-id} query
+
 Ceph will output the query in JSON format.
 
-The following subsections describe the common pg states in detail.
+The following subsections describe the most common PG states in detail.
+
 
 Creating
 --------
