@@ -72,6 +72,7 @@ void StoreTestFixture::TearDown()
     int r = store->umount();
     EXPECT_EQ(0, r);
     rm_r(data_dir);
+    store.reset();
   }
   // we keep this stuff 'unsafe' out of test case scope to be able to update ANY
   // config settings. Hence setting it to 'unsafe' here as test case is closing.
