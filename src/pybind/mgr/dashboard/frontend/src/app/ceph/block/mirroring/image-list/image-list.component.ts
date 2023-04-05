@@ -60,7 +60,7 @@ export class ImageListComponent implements OnInit, OnDestroy {
         flexGrow: 1
       },
       {
-        prop: 'progress',
+        prop: 'syncing_percent',
         name: $localize`Progress`,
         cellTemplate: this.progressTmpl,
         flexGrow: 2
