@@ -65,6 +65,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   provisionedNotAvailableTooltipTpl: TemplateRef<any>;
   @ViewChild('totalProvisionedNotAvailableTooltipTpl', { static: true })
   totalProvisionedNotAvailableTooltipTpl: TemplateRef<any>;
+  @ViewChild('forcePromoteConfirmation', { static: true })
+  forcePromoteConfirmation: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -77,6 +79,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   count = 0;
   private tableContext: CdTableFetchDataContext = null;
   modalRef: NgbModalRef;
+  errorMessage: string;
 
   builders = {
     'rbd/create': (metadata: object) =>
@@ -562,7 +565,32 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         }),
         call: this.rbdService.update(imageSpec, request)
       })
-      .subscribe();
+      .subscribe(
+        /* tslint:disable:no-empty */
+        () => {},
+        (error) => {
+          if (primary) {
+            this.errorMessage = error.error['detail'].replace(/\[.*?\]\s*/, '');
+            request.force = true;
+            this.modalRef = this.modalService.show(ConfirmationModalComponent, {
+              titleText: $localize`Warning`,
+              buttonText: $localize`Enforce`,
+              warning: true,
+              bodyTpl: this.forcePromoteConfirmation,
+              onSubmit: () => {
+                this.rbdService.update(imageSpec, request).subscribe(
+                  () => {
+                    this.modalRef.close();
+                  },
+                  () => {
+                    this.modalRef.close();
+                  }
+                );
+              }
+            });
+          }
+        }
+      );
   }
 
   hasSnapshots() {
