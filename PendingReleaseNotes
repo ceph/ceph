@@ -117,6 +117,9 @@
   registered a RADOS client in the `name` field added to elements of the
   `active_clients` array. Previously, only the address of a module's RADOS
   client was shown in the `active_clients` array.
+* RBD: list-watchers C++ API (`Image::list_watchers`) now clears the passed
+  `std::list` before potentially appending to it, aligning with the semantics
+  of the corresponding C API (`rbd_watchers_list`).
 
 >=17.2.1
 
