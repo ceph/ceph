@@ -2,9 +2,15 @@ from system import System
 from redfish_client import RedFishClient
 from threading import Thread
 from time import sleep
+from flask import request
+from util import logger
+
+log = logger(__name__)
+
 
 class RedfishSystem(System):
     def __init__(self, host, username, password):
+        log.info(f"redfish system initialization, host: {host}, user: {username}")
         self.client = RedFishClient(host, username, password)
         self.client.login()
         self._system = {}
@@ -43,20 +49,20 @@ class RedfishSystem(System):
         self._system = self._process_redfish_system(redfish_system)
 
     def _update_metadata(self):
-        print("Updating metadata")
+        log.info("Updating metadata")
         pass
 
     def _update_memory(self):
-        print("Updating memory")
+        log.info("Updating memory")
         pass
 
     def _update_power(self):
-        print("Updating power")
+        log.info("Updating power")
         pass
 
     def _update_network(self):
-        print("Updating network")
         net_path = self._system['EthernetInterfaces']['@odata.id']
+        log.info("Updating network")
         network_info = self.client.get_path(net_path)
         self._system['network'] = {}
         for interface in network_info['Members']:
@@ -65,7 +71,7 @@ class RedfishSystem(System):
             self._system['network'][interface_info['Id']] = interface_info
 
     def _update_storage(self):
-        print("Updating storage")
+        log.info("Updating storage")
         pass
 
     def start_update_loop(self):
