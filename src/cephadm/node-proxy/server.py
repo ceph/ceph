@@ -56,4 +56,4 @@ def delete():
 if __name__ == '__main__':
     system.start_update_loop()
     reporter_agent.run()
-    app.run(debug=True)
+    app.run(debug=True, use_reloader=False)
