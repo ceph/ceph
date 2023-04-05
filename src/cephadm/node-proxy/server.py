@@ -19,6 +19,12 @@ reporter_agent = Reporter(system, "http://127.0.0.1:8000")
 
 app = Flask(__name__)
 
+@app.route('/shutdown', methods=['POST'])
+def shutdown():
+    system.stop_update_loop()
+    system.client.logout()
+    return 'Server shutting down...\n'
+
 @app.route('/system', methods=['GET'])
 def get_system():
     return jsonify({'system': system.get_system()})
