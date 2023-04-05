@@ -13,6 +13,8 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
+#include "crimson/os/seastore/journal/record_submitter.h"
+#include "crimson/os/seastore/async_cleaner.h"
 
 namespace crimson::os::seastore {
   class SegmentProvider;
@@ -26,27 +28,19 @@ namespace crimson::os::seastore::journal {
  *
  * Maintain an available segment for writes.
  */
-class SegmentAllocator {
-  using base_ertr = crimson::errorator<
-      crimson::ct_error::input_output_error>;
+class SegmentAllocator : public JournalAllocator {
 
  public:
+  // SegmentAllocator specific methods
   SegmentAllocator(JournalTrimmer *trimmer,
                    data_category_t category,
                    rewrite_gen_t gen,
                    SegmentProvider &sp,
                    SegmentSeqAllocator &ssa);
 
-  const std::string& get_name() const {
-    return print_name;
-  }
-
-  SegmentProvider &get_provider() {
-    return segment_provider;
-  }
-
-  extent_len_t get_block_size() const {
-    return sm_group.get_block_size();
+  segment_id_t get_segment_id() const {
+    assert(can_write());
+    return current_segment->get_segment_id();
   }
 
   extent_len_t get_max_write_length() const {
@@ -55,27 +49,27 @@ class SegmentAllocator {
            sm_group.get_rounded_tail_length();
   }
 
-  bool can_write() const {
+ public:
+  // overriding methods
+  const std::string& get_name() const final {
+    return print_name;
+  }
+
+  extent_len_t get_block_size() const final {
+    return sm_group.get_block_size();
+  }
+
+  bool can_write() const final {
     return !!current_segment;
   }
 
-  segment_id_t get_segment_id() const {
-    assert(can_write());
-    return current_segment->get_segment_id();
-  }
-
-  segment_nonce_t get_nonce() const {
+  segment_nonce_t get_nonce() const final {
     assert(can_write());
     return current_segment_nonce;
   }
 
-  segment_off_t get_written_to() const {
-    assert(can_write());
-    return written_to;
-  }
-
   // returns true iff the current segment has insufficient space
-  bool needs_roll(std::size_t length) const {
+  bool needs_roll(std::size_t length) const final {
     assert(can_write());
     assert(current_segment->get_write_capacity() ==
            sm_group.get_segment_size());
@@ -85,24 +79,26 @@ class SegmentAllocator {
   }
 
   // open for write and generate the correct print name
-  using open_ertr = base_ertr;
-  using open_ret = open_ertr::future<journal_seq_t>;
-  open_ret open(bool is_mkfs);
+  open_ret open(bool is_mkfs) final;
 
   // close the current segment and initialize next one
-  using roll_ertr = base_ertr;
-  roll_ertr::future<> roll();
+  roll_ertr::future<> roll() final;
 
   // write the buffer, return the write result
   //
   // May be called concurrently, but writes may complete in any order.
   // If rolling/opening, no write is allowed.
-  using write_ertr = base_ertr;
-  using write_ret = write_ertr::future<write_result_t>;
-  write_ret write(ceph::bufferlist&& to_write);
+  write_ret write(ceph::bufferlist&& to_write) final;
 
   using close_ertr = base_ertr;
-  close_ertr::future<> close();
+  close_ertr::future<> close() final;
+
+  void update_modify_time(record_t& record) final {
+    segment_provider.update_modify_time(
+      get_segment_id(),
+      record.modify_time,
+      record.extents.size());
+  }
 
  private:
   open_ret do_open(bool is_mkfs);

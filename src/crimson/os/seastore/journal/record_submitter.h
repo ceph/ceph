@@ -13,7 +13,6 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/segment_manager_group.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
-#include "crimson/os/seastore/journal/segment_allocator.h"
 
 namespace crimson::os::seastore {
   class SegmentProvider;
@@ -21,6 +20,38 @@ namespace crimson::os::seastore {
 }
 
 namespace crimson::os::seastore::journal {
+
+class JournalAllocator {
+public:
+  using base_ertr = crimson::errorator<
+      crimson::ct_error::input_output_error>;
+  virtual const std::string& get_name() const = 0;
+  
+  virtual void update_modify_time(record_t& record) = 0;
+
+  virtual extent_len_t get_block_size() const = 0;
+
+  using close_ertr = base_ertr;
+  virtual close_ertr::future<> close() = 0;
+
+  virtual segment_nonce_t get_nonce() const  = 0;
+
+  using write_ertr = base_ertr;
+  using write_ret = write_ertr::future<write_result_t>;
+  virtual write_ret write(ceph::bufferlist&& to_write) = 0;
+
+  virtual bool can_write() const = 0;
+  
+  using roll_ertr = base_ertr;
+  virtual roll_ertr::future<> roll() = 0;
+
+  virtual bool needs_roll(std::size_t length) const = 0;
+
+  using open_ertr = base_ertr;
+  using open_ret = open_ertr::future<journal_seq_t>;
+  virtual open_ret open(bool is_mkfs) = 0;
+
+};
 
 /**
  * RecordBatch
@@ -111,7 +142,7 @@ public:
   //
   // Set write_result_t::write_length to 0 if the record is not the first one
   // in the batch.
-  using add_pending_ertr = SegmentAllocator::write_ertr;
+  using add_pending_ertr = JournalAllocator::write_ertr;
   using add_pending_ret = add_pending_ertr::future<record_locator_t>;
   add_pending_ret add_pending(
       const std::string& name,
@@ -204,10 +235,10 @@ public:
                   std::size_t batch_capacity,
                   std::size_t batch_flush_size,
                   double preferred_fullness,
-                  SegmentAllocator&);
+		  JournalAllocator&);
 
   const std::string& get_name() const {
-    return segment_allocator.get_name();
+    return journal_allocator.get_name();
   }
 
   journal_seq_t get_committed_to() const {
@@ -287,7 +318,7 @@ private:
   std::size_t io_depth_limit;
   double preferred_fullness;
 
-  SegmentAllocator& segment_allocator;
+  JournalAllocator& journal_allocator;
   // committed_to may be in a previous journal segment
   journal_seq_t committed_to = JOURNAL_SEQ_NULL;
 
