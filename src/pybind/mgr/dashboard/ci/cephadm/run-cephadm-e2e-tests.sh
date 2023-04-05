@@ -53,5 +53,7 @@ kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-prometheus-api-
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-grafana-api-url https://192.168.100.100:3000"'
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --placement 'count:2'"'
 
+kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'
+
 cypress_run ["orchestrator/workflow/*.feature, orchestrator/workflow/*-spec.ts"]
 cypress_run "orchestrator/grafana/*.feature"
