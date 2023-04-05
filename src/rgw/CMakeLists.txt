@@ -231,8 +231,6 @@ endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
-target_compile_definitions(rgw_common
-  PUBLIC "FMT_HEADER_ONLY")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
@@ -258,7 +256,6 @@ target_link_libraries(rgw_common
     cls_version_client
     librados
     rt
-    fmt::fmt
     ICU::uc
     OATH::OATH
     dmclock::dmclock
