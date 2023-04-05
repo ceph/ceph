@@ -79,10 +79,6 @@ public:
 
   static std::list<std::shared_ptr<FileSystemCommandHandler> > load(Paxos *paxos);
 
-  virtual bool batched_propose() {
-    return false;
-  }
-
   virtual int handle(
     Monitor *mon,
     FSMap &fsmap,

@@ -146,10 +146,6 @@ class FsNewHandler : public FileSystemCommandHandler
   {
   }
 
-  bool batched_propose() override {
-    return true;
-  }
-
   int handle(
       Monitor *mon,
       FSMap& fsmap,
@@ -934,10 +930,6 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     : FileSystemCommandHandler("fs add_data_pool"), m_paxos(paxos)
   {}
 
-  bool batched_propose() override {
-    return true;
-  }
-
   int handle(
       Monitor *mon,
       FSMap& fsmap,
@@ -1157,10 +1149,6 @@ class RenameFilesystemHandler : public FileSystemCommandHandler
   explicit RenameFilesystemHandler(Paxos *paxos)
     : FileSystemCommandHandler("fs rename"), m_paxos(paxos)
   {
-  }
-
-  bool batched_propose() override {
-    return true;
   }
 
   int handle(
