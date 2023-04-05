@@ -9,13 +9,18 @@ log = logger(__name__)
 
 
 class RedfishSystem(System):
-    def __init__(self, host, username, password):
+    def __init__(self,
+                 host,
+                 username,
+                 password,
+                 system_endpoint='/Systems/1'):
         log.info(f"redfish system initialization, host: {host}, user: {username}")
         self.client = RedFishClient(host, username, password)
         self.client.login()
         self._system = {}
         self.run = False
         self.thread = None
+        self.system_endpoint = system_endpoint
 
     def get_system(self):
         return self._system
@@ -45,7 +50,7 @@ class RedfishSystem(System):
         return redfish_system
 
     def _update_system(self):
-        redfish_system = self.client.get_path('/Systems/1')
+        redfish_system = self.client.get_path(self.system_endpoint)
         self._system = self._process_redfish_system(redfish_system)
 
     def _update_metadata(self):

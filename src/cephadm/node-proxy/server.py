@@ -13,8 +13,8 @@ username = "myuser"
 password = "mypassword"
 
 # create the redfish system and the obsever
-system = RedfishSystem(host, username, password)
 log.info(f"Server initialization...")
+system = RedfishSystem(host, username, password, system_endpoint='/Systems/System.Embedded.1')
 reporter_agent = Reporter(system, "http://127.0.0.1:8000")
 
 app = Flask(__name__)
