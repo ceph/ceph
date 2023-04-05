@@ -1,12 +1,15 @@
 from redfish.rest.v1 import ServerDownOrUnreachableError
 import redfish
-import logging
+from util import logger
+
+log = logger(__name__, level=10)
 
 class RedFishClient:
 
     PREFIX = '/redfish/v1'
 
     def __init__(self, host, username, password):
+        log.info(f"redfish client initialization...")
         self.host = host
         self.username = username
         self.password = password
@@ -19,14 +22,15 @@ class RedFishClient:
                                                   default_prefix=self.PREFIX)
         try:
             self.redfish_obj.login(auth="session")
+            log.info(f"Logging to redfish api at {self.host} with user: {self.username}")
         except ServerDownOrUnreachableError as e:
-            logging.error(f"Server not reachable or does not support RedFish {e}", e)
+            log.error(f"Server not reachable or does not support RedFish {e}", e)
 
     def get_path(self, path):
         try:
             if self.PREFIX not in path:
                 path = f"{self.PREFIX}{path}"
-            print(f"getting: {path}")
+            log.debug(f"getting: {path}")
             response = self.redfish_obj.get(path)
             return response.dict
         except Exception as e:
@@ -34,4 +38,5 @@ class RedFishClient:
             pass
 
     def logout(self):
+        log.info('logging out...')
         self.redfish_obj.logout()
