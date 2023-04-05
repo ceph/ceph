@@ -119,7 +119,7 @@ EOM
     fi
     cmake_opts+=" -DWITH_RBD_SSD_CACHE=ON"
 
-    cmake_opts+=$(detect_ceph_dev_pkgs)
+    cmake_opts+=" $(detect_ceph_dev_pkgs)"
 
     ci_debug "Our cmake_opts are: $cmake_opts"
     ci_debug "Running ./configure"
