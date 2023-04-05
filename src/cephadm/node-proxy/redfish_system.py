@@ -91,12 +91,18 @@ class RedfishSystem(System):
     def update(self):
         #  this loop can have:
         #  - caching logic
-        while self.run:
-            self._update_system()
-            # following calls in theory can be done in parallel
-            self._update_metadata()
-            self._update_memory()
-            self._update_power()
-            self._update_network()
-            self._update_storage()
-            sleep(3)
+        try:
+            while self.run:
+                self._update_system()
+                # following calls in theory can be done in parallel
+                self._update_metadata()
+                self._update_memory()
+                self._update_power()
+                self._update_network()
+                self._update_storage()
+                sleep(3)
+        # Catching 'Exception' is probably not a good idea (devel only)
+        except Exception:
+            log.error(f"Error detected, logging out from redfish api")
+            self.client.logout()
+            raise
