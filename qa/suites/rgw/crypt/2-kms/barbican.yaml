@@ -27,8 +27,7 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      sha1: 17.0.0.0rc2
-      force-branch: master
+      force-branch: stable/xena
       projects:
         - name: rgwcrypt
           description: Encryption Tenant
@@ -69,8 +68,7 @@ tasks:
           description: Swift Service
 - barbican:
     client.0:
-      sha1: 5.0.1
-      force-branch: master
+      force-branch: stable/xena
       use-keystone-role: client.0
       keystone_authtoken:
         auth_plugin: password

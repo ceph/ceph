@@ -100,7 +100,8 @@
                                                  [availDevices]="availDevices"
                                                  [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
                                                  (selected)="onDevicesSelected($event)"
-                                                 (cleared)="onDevicesCleared($event)">
+                                                 (cleared)="onDevicesCleared($event)"
+                                                 [hostname]="hostname">
                 </cd-osd-devices-selection-groups>
 
                 <!-- WAL slots -->
@@ -135,7 +136,8 @@
                                                  [availDevices]="availDevices"
                                                  [canSelect]="dataDeviceSelectionGroups.devices.length !== 0"
                                                  (selected)="onDevicesSelected($event)"
-                                                 (cleared)="onDevicesCleared($event)">
+                                                 (cleared)="onDevicesCleared($event)"
+                                                 [hostname]="hostname">
                 </cd-osd-devices-selection-groups>
 
                 <!-- DB slots -->

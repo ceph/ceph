@@ -69,6 +69,7 @@ class StreamIO : public rgw::asio::ClientIO {
   timeout_timer& timeout;
   yield_context yield;
   parse_buffer& buffer;
+  boost::system::error_code fatal_ec;
  public:
   StreamIO(CephContext *cct, Stream& stream, timeout_timer& timeout,
            rgw::asio::parser_type& parser, yield_context yield,
@@ -79,6 +80,8 @@ class StreamIO : public rgw::asio::ClientIO {
         cct(cct), stream(stream), timeout(timeout), yield(yield),
         buffer(buffer)
   {}
+
+  boost::system::error_code get_fatal_error_code() const { return fatal_ec; }
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
@@ -91,6 +94,9 @@ class StreamIO : public rgw::asio::ClientIO {
       if (ec == boost::asio::error::broken_pipe) {
         boost::system::error_code ec_ignored;
         stream.lowest_layer().shutdown(tcp_socket::shutdown_both, ec_ignored);
+      }
+      if (!fatal_ec) {
+        fatal_ec = ec;
       }
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
@@ -113,6 +119,9 @@ class StreamIO : public rgw::asio::ClientIO {
       }
       if (ec) {
         ldout(cct, 4) << "failed to read body: " << ec.message() << dendl;
+        if (!fatal_ec) {
+          fatal_ec = ec;
+        }
         throw rgw::io::Exception(ec.value(), std::system_category());
       }
     }
@@ -227,6 +236,8 @@ void handle_connection(boost::asio::io_context& context,
       return;
     }
 
+    bool expect_continue = (message[http::field::expect] == "100-continue");
+
     {
       auto lock = pause_mutex.async_lock_shared(yield[ec]);
       if (ec == boost::asio::error::operation_aborted) {
@@ -278,6 +289,17 @@ void handle_connection(boost::asio::io_context& context,
             << log_header{message, http::field::range} << " latency="
             << latency << dendl;
       }
+
+      // process_request() can't distinguish between connection errors and
+      // http/s3 errors, so check StreamIO for fatal connection errors
+      ec = real_client.get_fatal_error_code();
+      if (ec) {
+        return;
+      }
+
+      if (real_client.sent_100_continue()) {
+        expect_continue = false;
+      }
     }
 
     if (!parser.keep_alive()) {
@@ -286,7 +308,7 @@ void handle_connection(boost::asio::io_context& context,
 
     // if we failed before reading the entire message, discard any remaining
     // bytes before reading the next
-    while (!parser.is_done()) {
+    while (!expect_continue && !parser.is_done()) {
       static std::array<char, 1024> discard_buffer;
 
       auto& body = parser.get().body();
@@ -325,6 +347,8 @@ struct Connection : boost::intrusive::list_base_hook<>,
   void close(boost::system::error_code& ec) {
     socket.close(ec);
   }
+
+  tcp_socket& get_socket() { return socket; }
 };
 
 class ConnectionList {

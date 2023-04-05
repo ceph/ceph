@@ -554,7 +554,7 @@ In order to configure connections (from Ceph nodes) to the KDC:
         ...
 
 
-6. A new *set parameter* was added in Ceph, ``gss ktab client file`` which
+6. A new *set parameter* was added in Ceph, ``gss_ktab_client_file`` which
    points to the keytab file related to the Ceph node *(or principal)* in
    question.
 
@@ -614,10 +614,10 @@ In order to configure connections (from Ceph nodes) to the KDC:
         /etc/ceph/ceph.conf
         [global]
             ...
-            auth cluster required = gss
-            auth service required = gss
-            auth client required = gss
-            gss ktab client file = /{$my_new_location}/{$my_new_ktab_client_file.keytab}
+            auth_cluster_required = gss
+            auth_service_required = gss
+            auth_client_required = gss
+            gss_ktab_client_file = /{$my_new_location}/{$my_new_ktab_client_file.keytab}
             ...
 
 

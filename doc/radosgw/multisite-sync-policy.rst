@@ -1,3 +1,5 @@
+.. _radosgw-multisite-sync-policy:
+
 =====================
 Multisite Sync Policy
 =====================

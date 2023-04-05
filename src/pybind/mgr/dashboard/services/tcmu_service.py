@@ -20,6 +20,7 @@ class TcmuService(object):
     def get_iscsi_info():
         daemons = {}  # type: Dict[str, dict]
         images = {}  # type: Dict[str, dict]
+        daemon = None
         for service in CephService.get_service_list(SERVICE_TYPE):
             metadata = service['metadata']
             if metadata is None:

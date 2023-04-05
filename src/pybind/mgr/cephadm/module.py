@@ -496,6 +496,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.osd_service: OSDService = cast(OSDService, self.cephadm_services['osd'])
         self.iscsi_service: IscsiService = cast(IscsiService, self.cephadm_services['iscsi'])
 
+        self.scheduled_async_actions: List[Callable] = []
+
         self.template = TemplateMgr(self)
 
         self.requires_post_actions: Set[str] = set()
@@ -1606,8 +1608,8 @@ Then run the following:
                 self.log.info(f"removing: {d.name()}")
 
                 if d.daemon_type != 'osd':
-                    self.cephadm_services[str(d.daemon_type)].pre_remove(d)
-                    self.cephadm_services[str(d.daemon_type)].post_remove(d, is_failed_deploy=False)
+                    self.cephadm_services[daemon_type_to_service(str(d.daemon_type))].pre_remove(d)
+                    self.cephadm_services[daemon_type_to_service(str(d.daemon_type))].post_remove(d, is_failed_deploy=False)
                 else:
                     cmd_args = {
                         'prefix': 'osd purge-actual',

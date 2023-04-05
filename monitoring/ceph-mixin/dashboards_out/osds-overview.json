@@ -860,6 +860,91 @@
                "show": true
             }
          ]
+      },
+      {
+         "columns": [ ],
+         "datasource": "$datasource",
+         "description": "This table shows the 10 OSDs with the highest number of slow ops",
+         "gridPos": {
+            "h": 8,
+            "w": 4,
+            "x": 0,
+            "y": 20
+         },
+         "id": 13,
+         "links": [ ],
+         "sort": {
+            "col": 2,
+            "desc": true
+         },
+         "styles": [
+            {
+               "alias": "OSD ID",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "ceph_daemon",
+               "thresholds": [ ],
+               "type": "string",
+               "unit": "short",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "Slow Ops",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "Value",
+               "thresholds": [ ],
+               "type": "number",
+               "unit": "none",
+               "valueMaps": [ ]
+            },
+            {
+               "alias": "",
+               "colorMode": null,
+               "colors": [
+                  "rgba(245, 54, 54, 0.9)",
+                  "rgba(237, 129, 40, 0.89)",
+                  "rgba(50, 172, 45, 0.97)"
+               ],
+               "dateFormat": "YYYY-MM-DD HH:mm:ss",
+               "decimals": 2,
+               "mappingType": 1,
+               "pattern": "/.*/",
+               "thresholds": [ ],
+               "type": "hidden",
+               "unit": "short",
+               "valueMaps": [ ]
+            }
+         ],
+         "targets": [
+            {
+               "expr": "topk(10,\n  (ceph_daemon_health_metrics{type=\"SLOW_OPS\", ceph_daemon=~\"osd.*\"})\n)\n",
+               "format": "table",
+               "instant": true,
+               "intervalFactor": 1,
+               "legendFormat": "",
+               "refId": "A"
+            }
+         ],
+         "timeFrom": null,
+         "timeShift": null,
+         "title": "Top Slow Ops",
+         "transform": "table",
+         "type": "table"
       }
    ],
    "refresh": "30s",

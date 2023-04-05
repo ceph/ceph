@@ -32,8 +32,8 @@ defaults
     timeout connect         5s
     timeout http-request    1s
     timeout http-keep-alive 5s
-    timeout client          1s
-    timeout server          1s
+    timeout client          30s
+    timeout server          30s
     timeout check           5s
 {% endif %}
 {% if mode == 'tcp' %}
@@ -67,6 +67,10 @@ frontend frontend
 backend backend
 {% if mode == 'http' %}
     option forwardfor
+{% if backend_spec.ssl %}
+    default-server ssl
+    default-server verify none
+{% endif %}
     balance static-rr
     option httpchk HEAD / HTTP/1.0
     {% for server in servers %}

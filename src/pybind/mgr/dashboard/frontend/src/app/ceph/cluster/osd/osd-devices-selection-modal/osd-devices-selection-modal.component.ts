@@ -1,4 +1,11 @@
-import { AfterViewInit, Component, EventEmitter, Output, ViewChild } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectorRef,
+  Component,
+  EventEmitter,
+  Output,
+  ViewChild
+} from '@angular/core';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { TableColumnProp } from '@swimlane/ngx-datatable';
@@ -30,6 +37,7 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
 
   hostname: string;
   deviceType: string;
+  diskType: string;
   formGroup: CdFormGroup;
   action: string;
 
@@ -42,6 +50,7 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
 
   constructor(
     private formBuilder: CdFormBuilder,
+    private cdRef: ChangeDetectorRef,
     public activeModal: NgbActiveModal,
     public actionLabels: ActionLabelsI18n,
     public wizardStepService: WizardStepsService
@@ -83,6 +92,7 @@ export class OsdDevicesSelectionModalComponent implements AfterViewInit {
       this.capacity = _.sumBy(this.filteredDevices, 'sys_api.size');
       this.event = event;
     }
+    this.cdRef.detectChanges();
   }
 
   onSubmit() {

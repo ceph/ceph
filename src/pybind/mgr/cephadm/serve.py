@@ -1,3 +1,4 @@
+import ipaddress
 import hashlib
 import json
 import logging
@@ -90,6 +91,8 @@ class CephadmServe:
                         self.mgr.remote('dashboard', 'set_rgw_credentials')
 
                 if not self.mgr.paused:
+                    self._run_async_actions()
+
                     self.mgr.to_remove_osds.process_removal_queue()
 
                     self.mgr.migration.migrate()
@@ -192,11 +195,6 @@ class CephadmServe:
         bad_hosts = []
         failures = []
 
-        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
-            client_files = self._calc_client_files()
-        else:
-            client_files = {}
-
         @forall_hosts
         def refresh(host: str) -> None:
 
@@ -246,10 +244,9 @@ class CephadmServe:
                 self.log.debug(f"autotuning memory for {host}")
                 self._autotune_host_memory(host)
 
-            self._write_client_files(client_files, host)
-
         refresh(self.mgr.cache.get_hosts())
 
+        self._write_all_client_files()
         self.mgr.config_checker.run_checks()
 
         for k in [
@@ -339,6 +336,7 @@ class CephadmServe:
             sd.rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
             sd.extra_container_args = d.get('extra_container_args')
+            sd.extra_entrypoint_args = d.get('extra_entrypoint_args')
             if 'state' in d:
                 sd.status_desc = d['state']
                 sd.status = {
@@ -416,6 +414,10 @@ class CephadmServe:
         self.mgr.cache.osdspec_previews[search_host] = previews
         # Unset global 'pending' flag for host
         self.mgr.cache.loading_osdspec_preview.remove(search_host)
+
+    def _run_async_actions(self) -> None:
+        while self.mgr.scheduled_async_actions:
+            (self.mgr.scheduled_async_actions.pop(0))()
 
     def _check_for_strays(self) -> None:
         self.log.debug('_check_for_strays')
@@ -608,14 +610,19 @@ class CephadmServe:
 
         def matches_network(host):
             # type: (str) -> bool
-            # make sure we have 1 or more IPs for any of those networks on that
-            # host
-            for network in public_networks:
-                if len(self.mgr.cache.networks[host].get(network, [])) > 0:
-                    return True
+            # make sure the host has at least one network that belongs to some configured public network(s)
+            for pn in public_networks:
+                public_network = ipaddress.ip_network(pn)
+                for hn in self.mgr.cache.networks[host]:
+                    host_network = ipaddress.ip_network(hn)
+                    if host_network.overlaps(public_network):
+                        return True
+
+            host_networks = ','.join(self.mgr.cache.networks[host])
+            pub_networks = ','.join(public_networks)
             self.log.info(
-                f"Filtered out host {host}: does not belong to mon public_network"
-                f" ({','.join(public_networks)})"
+                f"Filtered out host {host}: does not belong to mon public_network(s): "
+                f" {pub_networks}, host network(s): {host_networks}"
             )
             return False
 
@@ -845,6 +852,12 @@ class CephadmServe:
             assert dd.hostname is not None
             assert dd.daemon_type is not None
             assert dd.daemon_id is not None
+
+            # any action we can try will fail for a daemon on an offline host,
+            # including removing the daemon
+            if dd.hostname in self.mgr.offline_hosts:
+                continue
+
             if not spec and dd.daemon_type not in ['mon', 'mgr', 'osd']:
                 # (mon and mgr specs should always exist; osds aren't matched
                 # to a service spec)
@@ -890,6 +903,12 @@ class CephadmServe:
                     f'{dd.name()} container cli args {dd.extra_container_args} -> {spec.extra_container_args}')
                 self.log.info(f'Redeploying {dd.name()}, (container cli args changed) . . .')
                 dd.extra_container_args = spec.extra_container_args
+                action = 'redeploy'
+            elif spec is not None and hasattr(spec, 'extra_entrypoint_args') and dd.extra_entrypoint_args != spec.extra_entrypoint_args:
+                self.log.info(f'Redeploying {dd.name()}, (entrypoint args changed) . . .')
+                self.log.debug(
+                    f'{dd.name()} daemon entrypoint args {dd.extra_entrypoint_args} -> {spec.extra_entrypoint_args}')
+                dd.extra_entrypoint_args = spec.extra_entrypoint_args
                 action = 'redeploy'
             elif self.mgr.last_monmap and \
                     self.mgr.last_monmap > last_config and \
@@ -1030,6 +1049,18 @@ class CephadmServe:
                     f'unable to calc client keyring {ks.entity} placement {ks.placement}: {e}')
         return client_files
 
+    def _write_all_client_files(self) -> None:
+        if self.mgr.manage_etc_ceph_ceph_conf or self.mgr.keys.keys:
+            client_files = self._calc_client_files()
+        else:
+            client_files = {}
+
+        @forall_hosts
+        def _write_files(host: str) -> None:
+            self._write_client_files(client_files, host)
+
+        _write_files(self.mgr.cache.get_hosts())
+
     def _write_client_files(self,
                             client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]],
                             host: str) -> None:
@@ -1109,13 +1140,7 @@ class CephadmServe:
                 if self.mgr.allow_ptrace:
                     daemon_spec.extra_args.append('--allow-ptrace')
 
-                try:
-                    eca = daemon_spec.extra_container_args
-                    if eca:
-                        for a in eca:
-                            daemon_spec.extra_args.append(f'--extra-container-args={a}')
-                except AttributeError:
-                    eca = None
+                daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec)
 
                 if self.mgr.cache.host_needs_registry_login(daemon_spec.host) and self.mgr.registry_url:
                     self._registry_login(daemon_spec.host,
@@ -1136,7 +1161,8 @@ class CephadmServe:
                             'deployed_by': self.mgr.get_active_mgr_digests(),
                             'rank': daemon_spec.rank,
                             'rank_generation': daemon_spec.rank_generation,
-                            'extra_container_args': eca
+                            'extra_container_args': extra_container_args,
+                            'extra_entrypoint_args': extra_entrypoint_args
                         }),
                         '--config-json', '-',
                     ] + daemon_spec.extra_args,
@@ -1177,6 +1203,39 @@ class CephadmServe:
                     self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
                 raise
 
+    def _setup_extra_deployment_args(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[CephadmDaemonDeploySpec, Optional[List[str]], Optional[List[str]]]:
+        # this function is for handling any potential user specified
+        # (in the service spec) extra runtime or entrypoint args for a daemon
+        # we are going to deploy. Effectively just adds a set of extra args to
+        # pass to the cephadm binary to indicate the daemon being deployed
+        # needs extra runtime/entrypoint args. Returns the modified daemon spec
+        # as well as what args were added (as those are included in unit.meta file)
+        try:
+            eca = daemon_spec.extra_container_args
+            if eca:
+                for a in eca:
+                    # args with spaces need to be split into multiple args
+                    # in order to work properly
+                    args = a.split(' ')
+                    for arg in args:
+                        if arg:
+                            daemon_spec.extra_args.append(f'--extra-container-args={arg}')
+        except AttributeError:
+            eca = None
+        try:
+            eea = daemon_spec.extra_entrypoint_args
+            if eea:
+                for a in eea:
+                    # args with spaces need to be split into multiple args
+                    # in order to work properly
+                    args = a.split(' ')
+                    for arg in args:
+                        if arg:
+                            daemon_spec.extra_args.append(f'--extra-entrypoint-args={arg}')
+        except AttributeError:
+            eea = None
+        return daemon_spec, eca, eea
+
     def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
         """
         Remove a daemon
@@ -1207,8 +1266,13 @@ class CephadmServe:
             self.mgr.cache.invalidate_host_daemons(host)
 
             if not no_post_remove:
-                self.mgr.cephadm_services[daemon_type_to_service(
-                    daemon_type)].post_remove(daemon, is_failed_deploy=False)
+                if daemon_type not in ['iscsi']:
+                    self.mgr.cephadm_services[daemon_type_to_service(
+                        daemon_type)].post_remove(daemon, is_failed_deploy=False)
+                else:
+                    self.mgr.scheduled_async_actions.append(lambda: self.mgr.cephadm_services[daemon_type_to_service(
+                                                            daemon_type)].post_remove(daemon, is_failed_deploy=False))
+                    self.mgr._kick_serve_loop()
 
             return "Removed {} from host '{}'".format(name, host)
 
@@ -1218,11 +1282,12 @@ class CephadmServe:
                           command: str,
                           args: List[str],
                           no_fsid: Optional[bool] = False,
+                          error_ok: Optional[bool] = False,
                           image: Optional[str] = "",
                           ) -> Any:
         try:
             out, err, code = self._run_cephadm(
-                host, entity, command, args, no_fsid=no_fsid, image=image)
+                host, entity, command, args, no_fsid=no_fsid, error_ok=error_ok, image=image)
             if code:
                 raise OrchestratorError(f'host {host} `cephadm {command}` returned {code}: {err}')
         except Exception as e:
@@ -1365,11 +1430,20 @@ class CephadmServe:
             self._registry_login(host,
                                  json.loads(str(self.mgr.get_store('registry_credentials'))))
 
-        pullargs: List[str] = []
-        if self.mgr.registry_insecure:
-            pullargs.append("--insecure")
+        j = None
+        if not self.mgr.use_repo_digest:
+            try:
+                j = self._run_cephadm_json(host, '', 'inspect-image', [],
+                                                 image=image_name, no_fsid=True,
+                                                 error_ok=True)
+            except OrchestratorError:
+                pass
 
-        j = self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
+        if not j:
+            pullargs: List[str] = []
+            if self.mgr.registry_insecure:
+                pullargs.append("--insecure")
+            j = self._run_cephadm_json(host, '', 'pull', pullargs, image=image_name, no_fsid=True)
 
         r = ContainerInspectInfo(
             j['image_id'],

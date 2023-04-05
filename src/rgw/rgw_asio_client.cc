@@ -121,6 +121,7 @@ size_t ClientIO::send_100_continue()
   const size_t sent = txbuf.sputn(HTTTP_100_CONTINUE,
                                   sizeof(HTTTP_100_CONTINUE) - 1);
   flush();
+  sent100continue = true;
   return sent;
 }
 

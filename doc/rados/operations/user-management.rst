@@ -4,10 +4,11 @@
  User Management
 =================
 
-This document describes :term:`Ceph Client` users, and their authentication and
-authorization with the :term:`Ceph Storage Cluster`. Users are either
-individuals or system actors such as applications, which use Ceph clients to
-interact with the Ceph Storage Cluster daemons.
+This document describes :term:`Ceph Client` users, and describes the process by
+which they perform authentication and authorization so that they can access the
+:term:`Ceph Storage Cluster`. Users are either individuals or system actors
+(for example, applications) that use Ceph clients to interact with the Ceph
+Storage Cluster daemons.
 
 .. ditaa::
             +-----+
@@ -24,19 +25,21 @@ interact with the Ceph Storage Cluster daemons.
              actor
 
 
-When Ceph runs with authentication and authorization enabled (enabled by
-default), you must specify a user name and a keyring containing the secret key
-of the specified user (usually via the command line). If you do not specify a
-user name, Ceph will use ``client.admin`` as the default user name. If you do
-not specify a keyring, Ceph will look for a keyring via the ``keyring`` setting
-in the Ceph configuration. For example, if you execute the ``ceph health``
-command without specifying a user or keyring:
+When Ceph runs with authentication and authorization enabled (both are enabled
+by default), you must specify a user name and a keyring that contains the
+secret key of the specified user (usually these are specified via the command
+line). If you do not specify a user name, Ceph will use ``client.admin`` as the
+default user name. If you do not specify a keyring, Ceph will look for a
+keyring via the ``keyring`` setting in the Ceph configuration. For example, if
+you execute the ``ceph health`` command without specifying a user or a keyring,
+Ceph will assume that the keyring is in ``/etc/ceph/ceph.client.admin.keyring``
+and will attempt to use that keyring. The following illustrates this behavior:
 
 .. prompt:: bash $
 
    ceph health
 
-Ceph interprets the command like this:
+Ceph will interpret the command like this:
 
 .. prompt:: bash $
 
@@ -45,118 +48,122 @@ Ceph interprets the command like this:
 Alternatively, you may use the ``CEPH_ARGS`` environment variable to avoid
 re-entry of the user name and secret.
 
-For details on configuring the Ceph Storage Cluster to use authentication,
-see `Cephx Config Reference`_. For details on the architecture of Cephx, see
+For details on configuring the Ceph Storage Cluster to use authentication, see
+`Cephx Config Reference`_. For details on the architecture of Cephx, see
 `Architecture - High Availability Authentication`_.
 
 Background
 ==========
 
-Irrespective of the type of Ceph client (e.g., Block Device, Object Storage,
-Filesystem, native API, etc.), Ceph stores all data as objects within `pools`_.
-Ceph users must have access to pools in order to read and write data.
-Additionally, Ceph users must have execute permissions to use Ceph's
-administrative commands. The following concepts will help you understand Ceph
-user management.
+No matter what type of Ceph client is used (for example: Block Device, Object
+Storage, Filesystem, native API), Ceph stores all data as RADOS objects within
+`pools`_.  Ceph users must have access to a given pool in order to read and
+write data, and Ceph users must have execute permissions in order to use Ceph's
+administrative commands. The following concepts will help you understand
+Ceph['s] user management.
+
+.. _rados-ops-user:
 
 User
 ----
 
-A user is either an individual or a system actor such as an application.
+A user is either an individual or a system actor (for example, an application).
 Creating users allows you to control who (or what) can access your Ceph Storage
-Cluster, its pools, and the data within pools.
+Cluster, its pools, and the data within those pools.
 
-Ceph has the notion of a ``type`` of user. For the purposes of user management,
-the type will always be ``client``. Ceph identifies users in period (.)
-delimited form consisting of the user type and the user ID: for example,
+Ceph has the concept of a ``type`` of user. For purposes of user management,
+the type will always be ``client``. Ceph identifies users in a "period-
+delimited form" that consists of the user type and the user ID: for example,
 ``TYPE.ID``, ``client.admin``, or ``client.user1``. The reason for user typing
-is that Ceph Monitors, OSDs, and Metadata Servers also use the Cephx protocol,
-but they are not clients. Distinguishing the user type helps to distinguish
-between client users and other users--streamlining access control, user
-monitoring and traceability.
+is that the Cephx protocol is used not only by clients but also non-clients,
+such as Ceph Monitors, OSDs, and Metadata Servers. Distinguishing the user type
+helps to distinguish between client users and other users. This distinction
+streamlines access control, user monitoring, and traceability.
 
-Sometimes Ceph's user type may seem confusing, because the Ceph command line
+Sometimes Ceph's user type might seem confusing, because the Ceph command line
 allows you to specify a user with or without the type, depending upon your
 command line usage. If you specify ``--user`` or ``--id``, you can omit the
-type. So ``client.user1`` can be entered simply as ``user1``. If you specify
-``--name`` or ``-n``, you must specify the type and name, such as
-``client.user1``. We recommend using the type and name as a best practice
-wherever possible.
+type. For example, ``client.user1`` can be entered simply as ``user1``. On the
+other hand, if you specify ``--name`` or ``-n``, you must supply the type and
+name: for example, ``client.user1``. We recommend using the type and name as a
+best practice wherever possible.
 
 .. note:: A Ceph Storage Cluster user is not the same as a Ceph Object Storage
    user or a Ceph File System user. The Ceph Object Gateway uses a Ceph Storage
    Cluster user to communicate between the gateway daemon and the storage
-   cluster, but the gateway has its own user management functionality for end
-   users. The Ceph File System uses POSIX semantics. The user space associated
-   with the Ceph File System is not the same as a Ceph Storage Cluster user.
-
-
+   cluster, but the Ceph Object Gateway has its own user-management
+   functionality for end users. The Ceph File System uses POSIX semantics, and
+   the user space associated with the Ceph File System is not the same as the
+   user space associated with a Ceph Storage Cluster user.
 
 Authorization (Capabilities)
 ----------------------------
 
-Ceph uses the term "capabilities" (caps) to describe authorizing an
-authenticated user to exercise the functionality of the monitors, OSDs and
+Ceph uses the term "capabilities" (caps) to describe the permissions granted to
+an authenticated user to exercise the functionality of the monitors, OSDs, and
 metadata servers. Capabilities can also restrict access to data within a pool,
 a namespace within a pool, or a set of pools based on their application tags.
-A Ceph administrative user sets a user's capabilities when creating or updating
-a user.
+A Ceph administrative user specifies the capabilities of a user when creating
+or updating that user.
 
-Capability syntax follows the form::
+Capability syntax follows this form::
 
-	{daemon-type} '{cap-spec}[, {cap-spec} ...]'
+    {daemon-type} '{cap-spec}[, {cap-spec} ...]'
 
 - **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` access
-  settings or ``profile {name}``. For example::
+  settings, and can be applied in aggregate from pre-defined profiles with
+  ``profile {name}``. For example::
 
-	mon 'allow {access-spec} [network {network/prefix}]'
+    mon 'allow {access-spec} [network {network/prefix}]'
 
-	mon 'profile {name}'
+    mon 'profile {name}'
 
   The ``{access-spec}`` syntax is as follows: ::
 
         * | all | [r][w][x]
 
-  The optional ``{network/prefix}`` is a standard network name and
-  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
-  the use of this capability is restricted to clients connecting from
-  this network.
+  The optional ``{network/prefix}`` is a standard network name and prefix
+  length in CIDR notation (for example, ``10.3.0.0/16``).  If
+  ``{network/prefix}`` is present, the monitor capability can be used only by
+  clients that connect from the specified network.
 
-- **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``,
-  ``class-write`` access settings or ``profile {name}``. Additionally, OSD
-  capabilities also allow for pool and namespace settings. ::
+- **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, and
+  ``class-read`` and ``class-write`` access settings. OSD capabilities can be
+  applied in aggregate from pre-defined profiles with ``profile {name}``. In
+  addition, OSD capabilities allow for pool and namespace settings. ::
 
-	osd 'allow {access-spec} [{match-spec}] [network {network/prefix}]'
+    osd 'allow {access-spec} [{match-spec}] [network {network/prefix}]'
 
-	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]] [network {network/prefix}]'
+    osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]] [network {network/prefix}]'
 
-  The ``{access-spec}`` syntax is either of the following: ::
+  There are two alternative forms of the ``{access-spec}`` syntax: ::
 
         * | all | [r][w][x] [class-read] [class-write]
 
         class {class name} [{method name}]
 
-  The optional ``{match-spec}`` syntax is either of the following: ::
+  There are two alternative forms of the optional ``{match-spec}`` syntax::
 
         pool={pool-name} [namespace={namespace-name}] [object_prefix {prefix}]
 
         [namespace={namespace-name}] tag {application} {key}={value}
 
-  The optional ``{network/prefix}`` is a standard network name and
-  prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
-  the use of this capability is restricted to clients connecting from
-  this network.
+  The optional ``{network/prefix}`` is a standard network name and prefix
+  length in CIDR notation (for example, ``10.3.0.0/16``). If
+  ``{network/prefix}`` is present, the OSD capability can be used only by
+  clients that connect from the specified network.
 
-- **Manager Caps:** Manager (``ceph-mgr``) capabilities include
-  ``r``, ``w``, ``x`` access settings or ``profile {name}``. For example: ::
+- **Manager Caps:** Manager (``ceph-mgr``) capabilities include ``r``, ``w``,
+  ``x`` access settings, and can be applied in aggregate from pre-defined
+  profiles with ``profile {name}``. For example::
 
-	mgr 'allow {access-spec} [network {network/prefix}]'
+    mgr 'allow {access-spec} [network {network/prefix}]'
 
-	mgr 'profile {name} [{key1} {match-type} {value1} ...] [network {network/prefix}]'
+    mgr 'profile {name} [{key1} {match-type} {value1} ...] [network {network/prefix}]'
 
-  Manager capabilities can also be specified for specific commands,
-  all commands exported by a built-in manager service, or all commands
-  exported by a specific add-on module. For example: ::
+  Manager capabilities can also be specified for specific commands, for all
+  commands exported by a built-in manager service, or for all commands exported
+  by a specific add-on module. For example::
 
         mgr 'allow command "{command-prefix}" [with {key1} {match-type} {value1} ...] [network {network/prefix}]'
 
@@ -176,15 +183,14 @@ Capability syntax follows the form::
 
         = | prefix | regex
 
-- **Metadata Server Caps:** For administrators, use ``allow *``.  For all
-  other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
-
+- **Metadata Server Caps:** For administrators, use ``allow *``. For all other
+  users (for example, CephFS clients), consult :doc:`/cephfs/client-auth`
 
 .. note:: The Ceph Object Gateway daemon (``radosgw``) is a client of the
-          Ceph Storage Cluster, so it is not represented as a Ceph Storage
-          Cluster daemon type.
+          Ceph Storage Cluster. For this reason, it is not represented as 
+          a Ceph Storage Cluster daemon type.
 
-The following entries describe each access capability.
+The following entries describe access capabilities.
 
 ``allow``
 
@@ -206,7 +212,7 @@ The following entries describe each access capability.
 ``x``
 
 :Description: Gives the user the capability to call class methods
-              (i.e., both read and write) and to conduct ``auth``
+              (that is, both read and write) and to conduct ``auth``
               operations on monitors.
 
 
@@ -224,75 +230,76 @@ The following entries describe each access capability.
 
 ``*``, ``all``
 
-:Description: Gives the user read, write and execute permissions for a
-              particular daemon/pool, and the ability to execute
+:Description: Gives the user read, write, and execute permissions for a
+              particular daemon/pool, as well as the ability to execute
               admin commands.
+
 
 The following entries describe valid capability profiles:
 
 ``profile osd`` (Monitor only)
 
 :Description: Gives a user permissions to connect as an OSD to other OSDs or
-              monitors. Conferred on OSDs to enable OSDs to handle replication
+              monitors. Conferred on OSDs in order to enable OSDs to handle replication
               heartbeat traffic and status reporting.
 
 
 ``profile mds`` (Monitor only)
 
-:Description: Gives a user permissions to connect as a MDS to other MDSs or
+:Description: Gives a user permissions to connect as an MDS to other MDSs or
               monitors.
 
 
 ``profile bootstrap-osd`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an OSD. Conferred on
-              deployment tools such as ``ceph-volume``, ``cephadm``, etc.
-              so that they have permissions to add keys, etc. when
+              deployment tools such as ``ceph-volume`` and ``cephadm``
+              so that they have permissions to add keys when
               bootstrapping an OSD.
 
 
 ``profile bootstrap-mds`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap a metadata server.
-              Conferred on deployment tools such as ``cephadm``, etc.
-              so they have permissions to add keys, etc. when bootstrapping
+              Conferred on deployment tools such as ``cephadm``
+              so that they have permissions to add keys when bootstrapping
               a metadata server.
 
 ``profile bootstrap-rbd`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an RBD user.
-              Conferred on deployment tools such as ``cephadm``, etc.
-              so they have permissions to add keys, etc. when bootstrapping
+              Conferred on deployment tools such as ``cephadm``
+              so that they have permissions to add keys when bootstrapping
               an RBD user.
 
 ``profile bootstrap-rbd-mirror`` (Monitor only)
 
 :Description: Gives a user permissions to bootstrap an ``rbd-mirror`` daemon
-              user. Conferred on deployment tools such as ``cephadm``, etc.
-              so they have permissions to add keys, etc. when bootstrapping
-              an ``rbd-mirror`` daemon.
+              user. Conferred on deployment tools such as ``cephadm`` so that
+              they have permissions to add keys when bootstrapping an
+              ``rbd-mirror`` daemon.
 
 ``profile rbd`` (Manager, Monitor, and OSD)
 
-:Description: Gives a user permissions to manipulate RBD images. When used
-              as a Monitor cap, it provides the minimal privileges required
-              by an RBD client application; this includes the ability
-	      to blocklist other client users. When used as an OSD cap, it
-              provides read-write access to the specified pool to an
-	      RBD client application. The Manager cap supports optional
-              ``pool`` and ``namespace`` keyword arguments.
+:Description: Gives a user permissions to manipulate RBD images. When used as a
+              Monitor cap, it provides the user with the minimal privileges
+              required by an RBD client application; such privileges include
+              the ability to blocklist other client users. When used as an OSD
+              cap, it provides an RBD client application with read-write access
+              to the specified pool. The Manager cap supports optional ``pool``
+              and ``namespace`` keyword arguments.
 
 ``profile rbd-mirror`` (Monitor only)
 
 :Description: Gives a user permissions to manipulate RBD images and retrieve
               RBD mirroring config-key secrets. It provides the minimal
-              privileges required for the ``rbd-mirror`` daemon.
+              privileges required for the user to manipulate the ``rbd-mirror``
+              daemon.
 
 ``profile rbd-read-only`` (Manager and OSD)
 
-:Description: Gives a user read-only permissions to RBD images. The Manager
-              cap supports optional ``pool`` and ``namespace`` keyword
-              arguments.
+:Description: Gives a user read-only permissions to RBD images. The Manager cap
+              supports optional ``pool`` and ``namespace`` keyword arguments.
 
 ``profile simple-rados-client`` (Monitor only)
 
@@ -303,27 +310,27 @@ The following entries describe valid capability profiles:
 
 :Description: Gives a user read-only permissions for monitor, OSD, and PG data.
               Intended for use by direct librados client applications. Also
-              includes permission to add blocklist entries to build HA
-              applications.
+              includes permissions to add blocklist entries to build
+              high-availability (HA) applications.
 
 ``profile fs-client`` (Monitor only)
 
 :Description: Gives a user read-only permissions for monitor, OSD, PG, and MDS
-              data.  Intended for CephFS clients.
+              data. Intended for CephFS clients.
 
 ``profile role-definer`` (Monitor and Auth)
 
 :Description: Gives a user **all** permissions for the auth subsystem, read-only
-              access to monitors, and nothing else.  Useful for automation
-              tools.  Do not assign this unless you really, **really** know what
-              you're doing as the security ramifications are substantial and
+              access to monitors, and nothing else. Useful for automation
+              tools. Do not assign this unless you really, **really** know what
+              you're doing, as the security ramifications are substantial and
               pervasive.
 
 ``profile crash`` (Monitor only)
 
-:Description: Gives a user read-only access to monitors, used in conjunction
-              with the manager ``crash`` module when collecting daemon crash
-              dumps for later analysis.
+:Description: Gives a user read-only access to monitors. Used in conjunction
+              with the manager ``crash`` module to upload daemon crash
+              dumps into monitor storage for later analysis.
 
 Pool
 ----
@@ -353,7 +360,8 @@ by users who have access to the namespace.
 
 .. note:: Namespaces are primarily useful for applications written on top of
    ``librados`` where the logical grouping can alleviate the need to create
-   different pools. Ceph Object Gateway (from ``luminous``) uses namespaces for various
+   different pools. Ceph Object Gateway (in releases beginning with
+   Luminous) uses namespaces for various
    metadata objects.
 
 The rationale for namespaces is that pools can be a computationally expensive

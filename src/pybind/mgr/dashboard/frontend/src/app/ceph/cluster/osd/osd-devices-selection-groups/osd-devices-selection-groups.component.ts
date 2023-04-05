@@ -76,13 +76,18 @@ export class OsdDevicesSelectionGroupsComponent implements OnInit, OnChanges {
   }
 
   showSelectionModal() {
-    let filterColumns = ['human_readable_type', 'sys_api.vendor', 'sys_api.model', 'sys_api.size'];
-    if (this.type === 'data') {
-      filterColumns = ['hostname', ...filterColumns];
-    }
+    const filterColumns = [
+      'hostname',
+      'human_readable_type',
+      'sys_api.vendor',
+      'sys_api.model',
+      'sys_api.size'
+    ];
+    const diskType = this.name === 'Primary' ? 'hdd' : 'ssd';
     const initialState = {
       hostname: this.hostname,
       deviceType: this.name,
+      diskType: diskType,
       devices: this.availDevices,
       filterColumns: filterColumns
     };

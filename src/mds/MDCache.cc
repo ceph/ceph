@@ -9947,6 +9947,7 @@ void MDCache::scan_stray_dir(dirfrag_t next)
 	}
       }
     }
+    next.frag = frag_t();
   }
 }
 

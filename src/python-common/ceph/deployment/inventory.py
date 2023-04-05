@@ -15,7 +15,8 @@ class Devices(object):
 
     def __init__(self, devices):
         # type: (List[Device]) -> None
-        self.devices = devices  # type: List[Device]
+        # sort devices by path name so ordering is consistent
+        self.devices: List[Device] = sorted(devices, key=lambda d: d.path if d.path else '')
 
     def __eq__(self, other: Any) -> bool:
         if not isinstance(other, Devices):
@@ -60,7 +61,7 @@ class Device(object):
                  sys_api=None,  # type: Optional[Dict[str, Any]]
                  available=None,  # type: Optional[bool]
                  rejected_reasons=None,  # type: Optional[List[str]]
-                 lvs=None,  # type: Optional[List[str]]
+                 lvs=None,  # type: Optional[List[Dict[str, str]]]
                  device_id=None,  # type: Optional[str]
                  lsm_data=None,  # type: Optional[Dict[str, Dict[str, str]]]
                  created=None,  # type: Optional[datetime.datetime]
@@ -119,7 +120,7 @@ class Device(object):
         return 'hdd' if self.sys_api["rotational"] == "1" else 'ssd'
 
     def __repr__(self) -> str:
-        device_desc: Dict[str, Union[str, List[str]]] = {
+        device_desc: Dict[str, Union[str, List[str], List[Dict[str, str]]]] = {
             'path': self.path if self.path is not None else 'unknown',
             'lvs': self.lvs if self.lvs else 'None',
             'available': str(self.available),

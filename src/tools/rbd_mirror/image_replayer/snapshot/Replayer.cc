@@ -277,9 +277,17 @@ bool Replayer<I>::get_replay_status(std::string* description,
       matching_remote_snap_it !=
         m_state_builder->remote_image_ctx->snap_info.end()) {
     root_obj["syncing_snapshot_timestamp"] = remote_snap_info->timestamp.sec();
-    root_obj["syncing_percent"] = static_cast<uint64_t>(
-        100 * m_local_mirror_snap_ns.last_copied_object_number /
-        static_cast<float>(std::max<uint64_t>(1U, m_local_object_count)));
+
+    if (m_local_object_count > 0) {
+      root_obj["syncing_percent"] =
+	100 * m_local_mirror_snap_ns.last_copied_object_number /
+	m_local_object_count;
+    } else {
+      // Set syncing_percent to 0 if m_local_object_count has
+      // not yet been set (last_copied_object_number may be > 0
+      // if the sync is being resumed).
+      root_obj["syncing_percent"] = 0;
+    }
   }
 
   m_bytes_per_second(0);
@@ -289,6 +297,9 @@ bool Replayer<I>::get_replay_status(std::string* description,
   auto bytes_per_snapshot = boost::accumulators::rolling_mean(
     m_bytes_per_snapshot);
   root_obj["bytes_per_snapshot"] = round_to_two_places(bytes_per_snapshot);
+
+  root_obj["last_snapshot_sync_seconds"] = m_last_snapshot_sync_seconds;
+  root_obj["last_snapshot_bytes"] = m_last_snapshot_bytes;
 
   auto pending_bytes = bytes_per_snapshot * m_pending_snapshots;
   if (bytes_per_second > 0 && m_pending_snapshots > 0) {
@@ -1102,21 +1113,23 @@ void Replayer<I>::handle_copy_image(int r) {
 
   {
     std::unique_lock locker{m_lock};
+    m_last_snapshot_bytes = m_snapshot_bytes;
     m_bytes_per_snapshot(m_snapshot_bytes);
-    auto time = ceph_clock_now() - m_snapshot_replay_start;
+    utime_t duration = ceph_clock_now() - m_snapshot_replay_start;
+    m_last_snapshot_sync_seconds = duration.sec();
+
     if (g_snapshot_perf_counters) {
       g_snapshot_perf_counters->inc(l_rbd_mirror_snapshot_replay_bytes,
                                     m_snapshot_bytes);
       g_snapshot_perf_counters->inc(l_rbd_mirror_snapshot_replay_snapshots);
       g_snapshot_perf_counters->tinc(
-        l_rbd_mirror_snapshot_replay_snapshots_time, time);
+        l_rbd_mirror_snapshot_replay_snapshots_time, duration);
     }
     if (m_perf_counters) {
       m_perf_counters->inc(l_rbd_mirror_snapshot_replay_bytes, m_snapshot_bytes);
       m_perf_counters->inc(l_rbd_mirror_snapshot_replay_snapshots);
-      m_perf_counters->tinc(l_rbd_mirror_snapshot_replay_snapshots_time, time);
+      m_perf_counters->tinc(l_rbd_mirror_snapshot_replay_snapshots_time, duration);
     }
-    m_snapshot_bytes = 0;
   }
 
   apply_image_state();

@@ -139,8 +139,7 @@ done
 
         # resume and verify
         self._resume_scrub(0)
-        out_json = self.fs.get_scrub_status()
-        self.assertTrue("no active" in out_json['status'])
+        self.assertTrue(self.fs.wait_until_scrub_complete(sleep=5, timeout=30))
 
         checked = self._check_task_status_na()
         self.assertTrue(checked)
