@@ -31,6 +31,7 @@ class D4NFilterDriver : public FilterDriver {
     RGWBlockDirectory* blockDir;
     CacheBlock* cacheBlock;
     RGWD4NCache* d4nCache;
+    RGWD4NPolicy* cachePolicy;
 
   public:
     D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
@@ -38,6 +39,7 @@ class D4NFilterDriver : public FilterDriver {
       blockDir = new RGWBlockDirectory(); /* Initialize directory address with cct */
       cacheBlock = new CacheBlock();
       d4nCache = new RGWD4NCache();
+      cachePolicy = new RGWD4NPolicy();
     }
     virtual ~D4NFilterDriver() {
       delete blockDir; 
@@ -60,6 +62,7 @@ class D4NFilterDriver : public FilterDriver {
     RGWBlockDirectory* get_block_dir() { return blockDir; }
     CacheBlock* get_cache_block() { return cacheBlock; }
     RGWD4NCache* get_d4n_cache() { return d4nCache; }
+    RGWD4NPolicy* get_cache_policy() { return cachePolicy; }
 };
 
 class D4NFilterUser : public FilterUser {
@@ -170,6 +173,7 @@ class D4NFilterWriter : public FilterWriter {
     D4NFilterDriver* driver; 
     const DoutPrefixProvider* save_dpp;
     bool atomic;
+    bool shouldCache;
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 

@@ -730,6 +730,130 @@ TEST_F(D4NFilterFixture, DelObject) {
   clientReset(&client);
 }
 
+TEST_F(D4NFilterFixture, CachePolicy) {
+  cpp_redis::client client;
+  clientSetUp(&client); 
+
+  createUser();
+  createBucket();
+
+  /* Create multipart object */
+  string object_name = "test_object_CachePolicy";
+  unique_ptr<rgw::sal::Object> obj = testBucket->get_object(rgw_obj_key(object_name));
+  rgw_user owner;
+  rgw_placement_rule ptail_placement_rule;
+  uint64_t olh_epoch = 123;
+  string unique_tag;
+
+  obj->get_obj_attrs(null_yield, dpp);
+
+  testWriter = driver->get_atomic_writer(dpp, 
+	      null_yield,
+	      obj.get(),
+	      owner,
+	      &ptail_placement_rule,
+	      olh_epoch,
+	      unique_tag);
+
+  size_t accounted_size = 15; /* Uploaded as multipart */
+  string etag("test_etag");
+  ceph::real_time mtime; 
+  ceph::real_time set_mtime;
+
+  buffer::list bl;
+  string tmp = "test_attrs_value_CachePolicy";
+  bl.append("test_attrs_value_CachePolicy");
+  map<string, bufferlist> attrs{{"test_attrs_key_CachePolicy", bl}};
+
+  ceph::real_time delete_at;
+  char if_match;
+  char if_nomatch;
+  string user_data;
+  rgw_zone_set zones_trace;
+  bool canceled;
+  
+  ASSERT_EQ(testWriter->complete(accounted_size, etag,
+		   &mtime, set_mtime,
+		   attrs,
+		   delete_at,
+		   &if_match, &if_nomatch,
+		   &user_data,
+		   &zones_trace, &canceled,
+		   null_yield), 0);
+
+
+  unique_ptr<rgw::sal::Object> testObject_CachePolicy = testBucket->get_object(rgw_obj_key("test_object_CachePolicy"));
+
+  ASSERT_NE(testObject_CachePolicy, nullptr);
+
+  /* Copy to new multipart object */
+  unique_ptr<rgw::sal::Writer> testWriterCopy = nullptr;
+  unique_ptr<rgw::sal::Object> obj_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
+  uint64_t olh_epoch_copy = 123;
+
+  obj_copy->get_obj_attrs(null_yield, dpp);
+
+  testWriterCopy = driver->get_atomic_writer(dpp, 
+	      null_yield,
+	      obj_copy.get(),
+	      owner,
+	      &ptail_placement_rule,
+	      olh_epoch_copy,
+	      unique_tag);
+
+  RGWEnv rgw_env;
+  req_info info(get_pointer(env->cct), &rgw_env);
+  rgw_zone_id source_zone;
+  rgw_placement_rule dest_placement; 
+  ceph::real_time src_mtime;
+  ceph::real_time mod_ptr;
+  ceph::real_time unmod_ptr;
+  rgw::sal::AttrsMod attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
+  RGWObjCategory category = RGWObjCategory::Main;
+  string tag;
+  
+  ASSERT_EQ(testWriterCopy->complete(accounted_size, etag,
+		   &mtime, set_mtime,
+		   attrs,
+		   delete_at,
+		   &if_match, &if_nomatch,
+		   &user_data,
+		   &zones_trace, &canceled,
+		   null_yield), 0);
+
+  unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
+
+  EXPECT_EQ(testObject_CachePolicy->copy_object(testUser.get(),
+			      &info, source_zone, testObject_copy.get(),
+			      testBucket.get(), testBucket.get(),
+                              dest_placement, &src_mtime, &mtime,
+			      &mod_ptr, &unmod_ptr, false,
+			      &if_match, &if_nomatch, attrs_mod,
+			      false, attrs, category, olh_epoch,
+			      delete_at, NULL, &tag, &etag,
+			      NULL, NULL, dpp, null_yield), 0);
+
+  /* Ensure data field doesn't exist for original object */
+  client.hexists("rgw-object:test_object_CachePolicy:cache", "data", [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0);
+    }
+  });
+
+  client.sync_commit();
+
+  /* Ensure data field doesn't exist for copy */
+  client.hexists("rgw-object:test_object_CachePolicy:cache", "data", [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0);
+    }
+  });
+
+  client.sync_commit();
+  
+  clientReset(&client);
+}
+
 /* Attribute-related tests */
 TEST_F(D4NFilterFixture, SetObjectAttrs) {
   cpp_redis::client client;
