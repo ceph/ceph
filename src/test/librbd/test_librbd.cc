@@ -10885,7 +10885,18 @@ TEST_F(TestLibRBD, TestListWatchers) {
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
   ASSERT_EQ(0, image.list_watchers(watchers));
   ASSERT_EQ(1U, watchers.size());
+  auto watcher1 = watchers.front();
   ASSERT_EQ(0, image.close());
+
+  // (Still) one watcher
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+  ASSERT_EQ(0, image.list_watchers(watchers));
+  ASSERT_EQ(1U, watchers.size());
+  auto watcher2 = watchers.front();
+  ASSERT_EQ(0, image.close());
+
+  EXPECT_EQ(watcher1.addr, watcher2.addr);
+  EXPECT_EQ(watcher1.id, watcher2.id);
 }
 
 TEST_F(TestLibRBD, TestSetSnapById) {
