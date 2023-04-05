@@ -128,10 +128,10 @@ RecordSubmitter::RecordSubmitter(
   std::size_t batch_capacity,
   std::size_t batch_flush_size,
   double preferred_fullness,
-  SegmentAllocator& sa)
+  JournalAllocator& ja)
   : io_depth_limit{io_depth},
     preferred_fullness{preferred_fullness},
-    segment_allocator{sa},
+    journal_allocator{ja},
     batches(new RecordBatch[io_depth + 1])
 {
   LOG_PREFIX(RecordSubmitter);
@@ -158,7 +158,7 @@ bool RecordSubmitter::is_available() const
 #ifndef NDEBUG
   if (ret) {
     // unconditional invariants
-    ceph_assert(segment_allocator.can_write());
+    ceph_assert(journal_allocator.can_write());
     ceph_assert(p_current_batch != nullptr);
     ceph_assert(!p_current_batch->is_submitting());
     // the current batch accepts a further write
@@ -166,7 +166,7 @@ bool RecordSubmitter::is_available() const
     if (!p_current_batch->is_empty()) {
       auto submit_length =
         p_current_batch->get_submit_size().get_encoded_length();
-      ceph_assert(!segment_allocator.needs_roll(submit_length));
+      ceph_assert(!journal_allocator.needs_roll(submit_length));
     }
     // I'm not rolling
   }
@@ -199,8 +199,8 @@ RecordSubmitter::check_action(
 {
   assert(is_available());
   auto eval = p_current_batch->evaluate_submit(
-      rsize, segment_allocator.get_block_size());
-  if (segment_allocator.needs_roll(eval.submit_size.get_encoded_length())) {
+      rsize, journal_allocator.get_block_size());
+  if (journal_allocator.needs_roll(eval.submit_size.get_encoded_length())) {
     return action_t::ROLL;
   } else if (eval.is_full) {
     return action_t::SUBMIT_FULL;
@@ -242,7 +242,7 @@ RecordSubmitter::roll_segment()
       return roll_segment_ertr::now();
     } else {
       // start rolling in background
-      std::ignore = segment_allocator.roll(
+      std::ignore = journal_allocator.roll(
       ).safe_then([FNAME, this] {
         // good
         DEBUG("{} rolling done, available", get_name());
@@ -276,12 +276,9 @@ RecordSubmitter::submit(
   LOG_PREFIX(RecordSubmitter::submit);
   ceph_assert(is_available());
   assert(check_action(record.size) != action_t::ROLL);
-  segment_allocator.get_provider().update_modify_time(
-      segment_allocator.get_segment_id(),
-      record.modify_time,
-      record.extents.size());
+  journal_allocator.update_modify_time(record);
   auto eval = p_current_batch->evaluate_submit(
-      record.size, segment_allocator.get_block_size());
+      record.size, journal_allocator.get_block_size());
   bool needs_flush = (
       state == state_t::IDLE ||
       eval.submit_size.get_fullness() > preferred_fullness ||
@@ -296,13 +293,13 @@ RecordSubmitter::submit(
     increment_io();
     auto [to_write, sizes] = p_current_batch->submit_pending_fast(
       std::move(record),
-      segment_allocator.get_block_size(),
-      committed_to,
-      segment_allocator.get_nonce());
+      journal_allocator.get_block_size(),
+      get_committed_to(),
+      journal_allocator.get_nonce());
     DEBUG("{} fast submit {}, committed_to={}, outstanding_io={} ...",
-          get_name(), sizes, committed_to, num_outstanding_io);
+          get_name(), sizes, get_committed_to(), num_outstanding_io);
     account_submission(1, sizes);
-    return segment_allocator.write(std::move(to_write)
+    return journal_allocator.write(std::move(to_write)
     ).safe_then([mdlength = sizes.get_mdlength()](auto write_result) {
       return record_locator_t{
         write_result.start_seq.offset.add_offset(mdlength),
@@ -316,7 +313,7 @@ RecordSubmitter::submit(
   auto write_fut = p_current_batch->add_pending(
     get_name(),
     std::move(record),
-    segment_allocator.get_block_size());
+    journal_allocator.get_block_size());
   if (needs_flush) {
     if (state == state_t::FULL) {
       // #2 block concurrent submissions due to lack of resource
@@ -358,7 +355,7 @@ RecordSubmitter::submit(
 RecordSubmitter::open_ret
 RecordSubmitter::open(bool is_mkfs)
 {
-  return segment_allocator.open(is_mkfs
+  return journal_allocator.open(is_mkfs
   ).safe_then([this](journal_seq_t ret) {
     LOG_PREFIX(RecordSubmitter::open);
     DEBUG("{} register metrics", get_name());
@@ -420,16 +417,16 @@ RecordSubmitter::open(bool is_mkfs)
 RecordSubmitter::close_ertr::future<>
 RecordSubmitter::close()
 {
+  committed_to = JOURNAL_SEQ_NULL;
   ceph_assert(state == state_t::IDLE);
   ceph_assert(num_outstanding_io == 0);
-  committed_to = JOURNAL_SEQ_NULL;
   ceph_assert(p_current_batch != nullptr);
   ceph_assert(p_current_batch->is_empty());
   ceph_assert(!wait_available_promise.has_value());
   has_io_error = false;
   ceph_assert(!wait_unfull_flush_promise.has_value());
   metrics.clear();
-  return segment_allocator.close();
+  return journal_allocator.close();
 }
 
 void RecordSubmitter::update_state()
@@ -511,11 +508,11 @@ void RecordSubmitter::flush_current_batch()
   increment_io();
   auto num = p_batch->get_num_records();
   auto [to_write, sizes] = p_batch->encode_batch(
-    committed_to, segment_allocator.get_nonce());
+    get_committed_to(), journal_allocator.get_nonce());
   DEBUG("{} {} records, {}, committed_to={}, outstanding_io={} ...",
-        get_name(), num, sizes, committed_to, num_outstanding_io);
+        get_name(), num, sizes, get_committed_to(), num_outstanding_io);
   account_submission(num, sizes);
-  std::ignore = segment_allocator.write(std::move(to_write)
+  std::ignore = journal_allocator.write(std::move(to_write)
   ).safe_then([this, p_batch, FNAME, num, sizes=sizes](auto write_result) {
     TRACE("{} {} records, {}, write done with {}",
           get_name(), num, sizes, write_result);
