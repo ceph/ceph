@@ -8,7 +8,7 @@ parameters:
  prefix: ceph
  numcpus: 1
  memory: 2048
- image: fedora34
+ image: fedora36
  notify: false
  admin_password: password
  disks:
