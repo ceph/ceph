@@ -2121,6 +2121,7 @@ template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ost
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};
