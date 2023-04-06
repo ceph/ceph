@@ -233,7 +233,7 @@ block_sm_superblock_t make_superblock(
   INFO("{} disk_size={}, segment_size={}, block_size={}",
        device_id_printer_t{device_id},
        size,
-       config_segment_size,
+       uint64_t(config_segment_size),
        data.block_size);
   for (unsigned int i = 0; i < seastar::smp::count; i++) {
     INFO("shard {} infos:", i, shard_infos[i]);

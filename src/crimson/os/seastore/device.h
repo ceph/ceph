@@ -171,4 +171,5 @@ WRITE_CLASS_DENC(crimson::os::seastore::device_config_t)
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::device_config_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::device_spec_t> : fmt::ostream_formatter {};
 #endif
