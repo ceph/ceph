@@ -194,6 +194,17 @@ protected:
   const spg_t& get_pgid() const {
     return pgid;
   }
+
+  static op_scheduler_class priority_to_scheduler_class(int priority) {
+    if (priority >= CEPH_MSG_PRIO_HIGH) {
+      return op_scheduler_class::immediate;
+    } else if (priority >= PeeringState::recovery_msg_priority_t::DEGRADED) {
+      return op_scheduler_class::background_recovery;
+    } else {
+      return op_scheduler_class::background_best_effort;
+    }
+  }
+
 public:
   explicit PGOpQueueable(spg_t pg) : pgid(pg) {}
   uint32_t get_queue_token() const final {
@@ -581,11 +592,7 @@ public:
   }
 
   op_scheduler_class get_scheduler_class() const final {
-    auto priority = op->get_req()->get_priority();
-    if (priority >= CEPH_MSG_PRIO_HIGH) {
-      return op_scheduler_class::immediate;
-    }
-    return op_scheduler_class::background_recovery;
+    return priority_to_scheduler_class(op->get_req()->get_priority());
   }
 
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
