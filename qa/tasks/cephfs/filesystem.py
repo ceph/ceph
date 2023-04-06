@@ -473,6 +473,17 @@ class MDSCluster(CephCluster):
         for fs in self.status().get_filesystems():
             Filesystem(ctx=self._ctx, fscid=fs['id']).destroy()
 
+    @property
+    def beacon_timeout(self):
+        """
+        Generate an acceptable timeout for the mons to drive some MDSMap change
+        because of missed beacons from some MDS. This involves looking up the
+        grace period in use by the mons and adding an acceptable buffer.
+        """
+
+        grace = float(self.get_config("mds_beacon_grace", service_type="mon"))
+        return grace*2+15
+
 
 class Filesystem(MDSCluster):
     """
