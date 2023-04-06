@@ -8,8 +8,13 @@ import { CrudMetadata } from '~/app/shared/models/crud-table-metadata';
 import { DataGatewayService } from '~/app/shared/services/data-gateway.service';
 import { TimerService } from '~/app/shared/services/timer.service';
 import { CdTableSelection } from '../../models/cd-table-selection';
+import { FinishedTask } from '../../models/finished-task';
 import { Permission, Permissions } from '../../models/permissions';
 import { AuthStorageService } from '../../services/auth-storage.service';
+import { TaskWrapperService } from '../../services/task-wrapper.service';
+import { ModalService } from '../../services/modal.service';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { CriticalConfirmationModalComponent } from '../../components/critical-confirmation-modal/critical-confirmation-modal.component';
 
 @Component({
   selector: 'cd-crud-table',
@@ -32,12 +37,16 @@ export class CRUDTableComponent implements OnInit {
   selection = new CdTableSelection();
   expandedRow: any = null;
   tabs = {};
+  resource: string;
+  modalRef: NgbModalRef;
 
   constructor(
     private authStorageService: AuthStorageService,
     private timerService: TimerService,
     private dataGatewayService: DataGatewayService,
-    private activatedRoute: ActivatedRoute
+    private activatedRoute: ActivatedRoute,
+    private taskWrapper: TaskWrapperService,
+    private modalService: ModalService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -54,6 +63,9 @@ export class CRUDTableComponent implements OnInit {
         .list(`ui-${resource}`)
         .subscribe((response: CrudMetadata) => this.processMeta(response));
       this.data$ = this.timerService.get(() => this.dataGatewayService.list(resource));
+    });
+    this.activatedRoute.data.subscribe((data: any) => {
+      this.resource = data.resource;
     });
   }
 
@@ -86,6 +98,34 @@ export class CRUDTableComponent implements OnInit {
       return !col['isHidden'];
     });
     this.meta = meta;
+    for (let i = 0; i < this.meta.actions.length; i++) {
+      if (this.meta.actions[i].click.toString() !== '') {
+        this.meta.actions[i].click = this[this.meta.actions[i].click.toString()].bind(this);
+      }
+    }
+  }
+
+  delete() {
+    const selectedKey = this.selection.first()[this.meta.columnKey];
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`${this.meta.columnKey}`,
+      itemNames: [selectedKey],
+      submitAction: () => {
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('crud-component/id', selectedKey),
+            call: this.dataGatewayService.delete(this.resource, selectedKey)
+          })
+          .subscribe({
+            error: () => {
+              this.modalRef.close();
+            },
+            complete: () => {
+              this.modalRef.close();
+            }
+          });
+      }
+    });
   }
 
   updateSelection(selection: CdTableSelection) {

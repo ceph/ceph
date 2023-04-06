@@ -12,4 +12,5 @@ export class CrudMetadata {
   permissions: string[];
   actions: CdTableAction[];
   forms: any;
+  columnKey: string;
 }
