@@ -224,7 +224,7 @@ void PGRecovery::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-  osd->do_recovery(pg.get(), epoch_queued, reserved_pushes, handle);
+  osd->do_recovery(pg.get(), epoch_queued, reserved_pushes, priority, handle);
   pg->unlock();
 }
 
