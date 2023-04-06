@@ -565,6 +565,7 @@ public:
     switch (op->get_req()->get_type()) {
     case MSG_OSD_PG_PUSH:
     case MSG_OSD_PG_PUSH_REPLY:
+    case MSG_OSD_PG_PULL:
       return true;
     default:
       return false;
