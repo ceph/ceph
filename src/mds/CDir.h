@@ -323,6 +323,11 @@ public:
    */
   bool scrub_local();
 
+  /**
+   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
+   */
+  void go_bad_dentry(snapid_t last, std::string_view dname);
+
   const scrub_info_t *scrub_info() const {
     if (!scrub_infop)
       scrub_info_create();
@@ -659,11 +664,6 @@ protected:
       bool *force_dirty);
 
   /**
-   * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
-   */
-  void go_bad_dentry(snapid_t last, std::string_view dname);
-
-  /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
    */
   void go_bad(bool complete);
@@ -766,7 +766,6 @@ private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
   void remove_null_dentries();
-  void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
   void prepare_new_fragment(bool replay);
   void prepare_old_fragment(std::map<string_snap_t, MDSContext::vec >& dentry_waiters, bool replay);

@@ -501,6 +501,8 @@ private:
   unsigned delegate_inos_pct = 0;
   uint64_t dir_max_entries = 0;
 
+  double inject_rename_corrupt_dentry_first = 0.0;
+
   DecayCounter recall_throttle;
   time last_recall_state;
 
