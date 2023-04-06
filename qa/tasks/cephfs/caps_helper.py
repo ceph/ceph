@@ -220,17 +220,7 @@ class CapTester:
 
         return fsnames
 
-    def run_mon_cap_tests(self, def_fs, client_id):
-        """
-        Check that MON cap is enforced for a client by searching for a Ceph
-        FS name in output of cmd "fs ls" executed with that client's caps.
-
-        def_fs stands for default FS on Ceph cluster.
-        """
-        get_cluster_cmd_op = def_fs.mon_manager.raw_cluster_cmd
-
-        keyring = get_cluster_cmd_op(args=f'auth get client.{client_id}')
-
+    def _get_mon_cap_from_keyring(self, keyring):
         moncap = None
         for line in keyring.split('\n'):
             if 'caps mon' in line:
@@ -239,29 +229,34 @@ class CapTester:
         else:
             raise RuntimeError('run_mon_cap_tests(): mon cap not found in '
                                'keyring. keyring -\n' + keyring)
+        return moncap
 
-        keyring_path = def_fs.admin_remote.mktemp(data=keyring)
+    def run_mon_cap_tests(self, fs, client_id):
+        """
+        Check that MON cap is enforced for a client by searching for a Ceph
+        FS name in output of cmd "fs ls" executed with that client's caps.
+
+        fs is any fs object so that ceph commands can be exceuted.
+        """
+        get_cluster_cmd_op = fs.mon_manager.raw_cluster_cmd
+        keyring = get_cluster_cmd_op(args=f'auth get client.{client_id}')
+        moncap = self._get_mon_cap_from_keyring(keyring)
+        keyring_path = fs.admin_remote.mktemp(data=keyring)
 
         fsls = get_cluster_cmd_op(
             args=f'fs ls --id {client_id} -k {keyring_path}')
         log.info(f'output of fs ls cmd run by client.{client_id} -\n{fsls}')
 
-        if 'fsname=' not in moncap:
+        fsnames = self._get_fsnames_from_moncap(moncap)
+        if fsnames == []:
             log.info('no FS name is mentioned in moncap, client has '
                      'permission to list all files. moncap -\n{moncap}')
-            log.info('testing for presence of all FS names in output of '
-                     '"fs ls" command run by client.')
-
-            fsls_admin = get_cluster_cmd_op(args='fs ls')
-            log.info('output of fs ls cmd run by admin -\n{fsls_admin}')
-
-            assert_equal(fsls, fsls_admin)
             return
 
         log.info('FS names are mentioned in moncap. moncap -\n{moncap}')
         log.info('testing for presence of these FS names in output of '
                  '"fs ls" command run by client.')
-        for fsname in self._get_fsnames_from_moncap(moncap):
+        for fsname in fsnames:
             fsname_cap_str = f'name: {fsname}'
             assert_in(fsname_cap_str, fsls)
 
