@@ -1560,6 +1560,15 @@ public:
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
+public:
+  /// get message priority for recovery messages
+  int get_recovery_op_priority() const {
+    int64_t pri = 0;
+    pool.info.opts.get(pool_opts_t::RECOVERY_OP_PRIORITY, &pri);
+    return  pri > 0 ? pri : cct->_conf->osd_recovery_op_priority;
+  }
+
+private:
   bool check_prior_readable_down_osds(const OSDMapRef& map);
 
   bool adjust_need_up_thru(const OSDMapRef osdmap);
