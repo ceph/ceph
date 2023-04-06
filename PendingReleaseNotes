@@ -107,9 +107,9 @@
 * The `perf dump` and `perf schema` commands are deprecated in favor of new
   `counter dump` and `counter schema` commands. These new commands add support
   for labeled perf counters and also emit existing unlabeled perf counters. Some
-  unlabeled perf counters may become labeled in future releases
-  and as such will no longer be emitted by the `perf dump` and `perf schema`
-  commands.
+  unlabeled perf counters became labeled in this release, with more to follow in
+  future releases; such converted perf counters are no longer emitted by the
+  `perf dump` and `perf schema` commands.
 * `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
   `active_clients` fields at the top level.  Previously, these fields were
   output under `always_on_modules` field.
@@ -117,6 +117,10 @@
   registered a RADOS client in the `name` field added to elements of the
   `active_clients` array. Previously, only the address of a module's RADOS
   client was shown in the `active_clients` array.
+* RBD: All rbd-mirror daemon perf counters became labeled and as such are now
+  emitted only by the new `counter dump` and `counter schema` commands.  As part
+  of the conversion, many also got renamed to better disambiguate journal-based
+  and snapshot-based mirroring.
 * RBD: list-watchers C++ API (`Image::list_watchers`) now clears the passed
   `std::list` before potentially appending to it, aligning with the semantics
   of the corresponding C API (`rbd_watchers_list`).
