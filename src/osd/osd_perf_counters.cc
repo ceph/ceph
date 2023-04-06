@@ -162,6 +162,31 @@ PerfCounters *build_osd_logger(CephContext *cct) {
    "recovery bytes",
    "rbt", PerfCountersBuilder::PRIO_INTERESTING);
 
+  osd_plb.add_time_avg(
+    l_osd_recovery_push_queue_lat,
+    "l_osd_recovery_push_queue_latency",
+    "MOSDPGPush queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_push_reply_queue_lat,
+    "l_osd_recovery_push_reply_queue_latency",
+    "MOSDPGPushReply queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_pull_queue_lat,
+    "l_osd_recovery_pull_queue_latency",
+    "MOSDPGPull queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_backfill_queue_lat,
+    "l_osd_recovery_backfill_queue_latency",
+    "MOSDPGBackfill queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_backfill_remove_queue_lat,
+    "l_osd_recovery_backfill_remove_queue_latency",
+    "MOSDPGBackfillDelete queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_scan_queue_lat,
+    "l_osd_recovery_scan_queue_latency",
+    "MOSDPGScan queue latency");
+
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
   osd_plb.add_u64(
     l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache");
