@@ -561,6 +561,16 @@ class PGRecoveryMsg : public PGOpQueueable {
 public:
   PGRecoveryMsg(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
 
+  static bool is_recovery_msg(OpRequestRef &op) {
+    switch (op->get_req()->get_type()) {
+    case MSG_OSD_PG_PUSH:
+    case MSG_OSD_PG_PUSH_REPLY:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecoveryMsg(op=" << *(op->get_req()) << ")";
   }
