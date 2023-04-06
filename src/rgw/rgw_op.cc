@@ -6168,6 +6168,9 @@ int RGWInitMultipart::verify_permission(optional_yield y)
   if (has_s3_existing_tag || has_s3_resource_tag)
     rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
 
+  // add server-side encryption headers
+  rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
+
   if (s->iam_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
     auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
                                               rgw::IAM::s3PutObject,
@@ -6280,6 +6283,9 @@ int RGWCompleteMultipart::verify_permission(optional_yield y)
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s);
   if (has_s3_existing_tag || has_s3_resource_tag)
     rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
+
+  // add server-side encryption headers
+  rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
   if (s->iam_policy || ! s->iam_user_policies.empty() || ! s->session_policies.empty()) {
     auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env,
