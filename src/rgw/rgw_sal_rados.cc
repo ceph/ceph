@@ -317,7 +317,7 @@ int RGWRadosBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
 int RGWRadosBucket::check_quota(RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
 {
-    return store->getRados()->check_quota(owner->get_user(), get_key(),
+    return store->getRados()->check_quota(info.owner, get_key(),
 					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 
