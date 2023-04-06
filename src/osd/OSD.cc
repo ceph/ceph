@@ -1640,7 +1640,8 @@ void OSDService::enqueue_front(OpSchedulerItem&& qi)
 void OSDService::queue_recovery_context(
   PG *pg,
   GenContext<ThreadPool::TPHandle&> *c,
-  uint64_t cost)
+  uint64_t cost,
+  int priority)
 {
   epoch_t e = get_osdmap_epoch();
 
@@ -1660,7 +1661,7 @@ void OSDService::queue_recovery_context(
   enqueue_back(
     OpSchedulerItem(
       unique_ptr<OpSchedulerItem::OpQueueable>(
-	new PGRecoveryContext(pg->get_pgid(), c, e)),
+	new PGRecoveryContext(pg->get_pgid(), c, e, priority)),
       cost_for_queue,
       cct->_conf->osd_recovery_priority,
       ceph_clock_now(),
@@ -2005,7 +2006,8 @@ void OSDService::_queue_for_recovery(
 	new PGRecovery(
 	  p.pg->get_pgid(),
 	  p.epoch_queued,
-          reserved_pushes)),
+          reserved_pushes,
+	  p.priority)),
       cost_for_queue,
       cct->_conf->osd_recovery_priority,
       ceph_clock_now(),
@@ -9670,7 +9672,7 @@ unsigned OSDService::get_target_pg_log_entries() const
 }
 
 void OSD::do_recovery(
-  PG *pg, epoch_t queued, uint64_t reserved_pushes,
+  PG *pg, epoch_t queued, uint64_t reserved_pushes, int priority,
   ThreadPool::TPHandle &handle)
 {
   uint64_t started = 0;
@@ -9687,13 +9689,14 @@ void OSD::do_recovery(
     std::lock_guard l(service.sleep_lock);
     if (recovery_sleep > 0 && service.recovery_needs_sleep) {
       PGRef pgref(pg);
-      auto recovery_requeue_callback = new LambdaContext([this, pgref, queued, reserved_pushes](int r) {
+      auto recovery_requeue_callback = new LambdaContext(
+	[this, pgref, queued, reserved_pushes, priority](int r) {
         dout(20) << "do_recovery wake up at "
                  << ceph_clock_now()
 	         << ", re-queuing recovery" << dendl;
 	std::lock_guard l(service.sleep_lock);
         service.recovery_needs_sleep = false;
-        service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
+        service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes, priority);
       });
 
       // This is true for the first recovery op and when the previous recovery op

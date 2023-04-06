@@ -538,7 +538,8 @@ public:
   AsyncReserver<spg_t, Finisher> snap_reserver;
   void queue_recovery_context(PG *pg,
                               GenContext<ThreadPool::TPHandle&> *c,
-                              uint64_t cost);
+                              uint64_t cost,
+			      int priority);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority);
 
@@ -618,6 +619,7 @@ private:
     const epoch_t epoch_queued;
     PGRef pg;
     const uint64_t cost_per_object;
+    const int priority;
   };
   std::list<pg_awaiting_throttle_t> awaiting_throttle;
 
@@ -680,25 +682,31 @@ public:
   unsigned get_target_pg_log_entries() const;
 
   // delayed pg activation
-  void queue_for_recovery(PG *pg, uint64_t cost_per_object) {
+  void queue_for_recovery(
+    PG *pg, uint64_t cost_per_object,
+    int priority) {
     std::lock_guard l(recovery_lock);
 
     if (pg->is_forced_recovery_or_backfill()) {
       awaiting_throttle.emplace_front(
         pg_awaiting_throttle_t{
-          pg->get_osdmap()->get_epoch(), pg, cost_per_object});
+          pg->get_osdmap()->get_epoch(), pg, cost_per_object, priority});
     } else {
       awaiting_throttle.emplace_back(
         pg_awaiting_throttle_t{
-          pg->get_osdmap()->get_epoch(), pg, cost_per_object});
+          pg->get_osdmap()->get_epoch(), pg, cost_per_object, priority});
     }
     _maybe_queue_recovery();
   }
-  void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
+  void queue_recovery_after_sleep(
+    PG *pg, epoch_t queued, uint64_t reserved_pushes,
+    int priority) {
     std::lock_guard l(recovery_lock);
     // Send cost as 1 in pg_awaiting_throttle_t below. The cost is ignored
     // as this path is only applicable for WeightedPriorityQueue scheduler.
-    _queue_for_recovery(pg_awaiting_throttle_t{queued, pg, 1}, reserved_pushes);
+    _queue_for_recovery(
+      pg_awaiting_throttle_t{queued, pg, 1, priority},
+      reserved_pushes);
   }
 
   void queue_check_readable(spg_t spgid,
@@ -1941,6 +1949,7 @@ protected:
 
   // -- pg recovery --
   void do_recovery(PG *pg, epoch_t epoch_queued, uint64_t pushes_reserved,
+		   int priority,
 		   ThreadPool::TPHandle &handle);
 
 
