@@ -44,6 +44,7 @@ set(crimson_seastore_srcs
   journal/segmented_journal.cc
   journal/segment_allocator.cc
   journal/record_submitter.cc
+  journal/circular_journal_space.cc
   journal.cc
   device.cc
   segment_manager_group.cc
