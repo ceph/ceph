@@ -30,7 +30,7 @@ cd quota-test
 
 # bytes
 setfattr . -n ceph.quota.max_bytes -v 100M
-expect_false write_file big 1000     # 1g
+expect_false write_file big 1024     # 1 GiB
 expect_false write_file second 10
 setfattr . -n ceph.quota.max_bytes -v 0
 dd if=/dev/zero of=third bs=1M count=10
@@ -57,16 +57,16 @@ rm -rf *
 # mix
 mkdir bytes bytes/files
 
-setfattr bytes -n ceph.quota.max_bytes -v 10M
+setfattr bytes -n ceph.quota.max_bytes -v 8Mi
 setfattr bytes/files -n ceph.quota.max_files -v 5
 dd if=/dev/zero of=bytes/files/1 bs=1M count=4
 dd if=/dev/zero of=bytes/files/2 bs=1M count=4
 expect_false write_file bytes/files/3 1000
 expect_false write_file bytes/files/4 1000
 expect_false write_file bytes/files/5 1000
-stat --printf="%n %s\n" bytes/files/1 #4M
-stat --printf="%n %s\n" bytes/files/2 #4M
-stat --printf="%n %s\n" bytes/files/3 #bigger than 2M
+stat --printf="%n %s\n" bytes/files/1 #4MiB
+stat --printf="%n %s\n" bytes/files/2 #4MiB
+stat --printf="%n %s\n" bytes/files/3 #bigger than 2MiB
 stat --printf="%n %s\n" bytes/files/4 #should be zero
 expect_false stat bytes/files/5       #shouldn't be exist
 
@@ -90,29 +90,57 @@ rm -rf *
 mkdir -p ancestor/p1/p2/parent/p3
 setfattr ancestor -n ceph.quota.max_bytes -v 1M
 setfattr ancestor/p1/p2/parent -n ceph.quota.max_bytes -v 1G
-expect_false write_file ancestor/p1/p2/parent/p3/file1 900 #900m
+expect_false write_file ancestor/p1/p2/parent/p3/file1 900 #900 MiB
 stat --printf="%n %s\n" ancestor/p1/p2/parent/p3/file1
 
 
 #get/set attribute
 
-setfattr -n ceph.quota.max_bytes -v 0 .
-expect_false setfattr -n ceph.quota.max_bytes -v 1 .
-setfattr -n ceph.quota.max_bytes -v 4096 .
-expect_false setfattr -n ceph.quota.max_bytes -v 0x7FFFFFFFFFFFFFFF .
-setfattr -n ceph.quota.max_bytes -v 0x7FFFFFFFFFC00000 .
-expect_false setfattr -n ceph.quota.max_bytes -v 0x8000000000000000 .
-expect_false setfattr -n ceph.quota.max_bytes -v -1 .
-expect_false setfattr -n ceph.quota.max_bytes -v -0x8000000000000000 .
-expect_false setfattr -n ceph.quota.max_bytes -v -0x8000000000000001 .
+#The value of ``ceph.quota.max_bytes`` must be aligned to 4MiB if greater
+#than or equal to 4MiB, otherwise it must be aligned to 4KiB.
 
 setfattr -n ceph.quota.max_bytes -v 0 .
+expect_false setfattr -n ceph.quota.max_bytes -v 1 .
+expect_false setfattr -n ceph.quota.max_bytes -v 1Ki .
+expect_false setfattr -n ceph.quota.max_bytes -v 2K .
+expect_false setfattr -n ceph.quota.max_bytes -v 3Ki .
+setfattr -n ceph.quota.max_bytes -v 4K .
+setfattr -n ceph.quota.max_bytes -v 4Ki .
+expect_false setfattr -n ceph.quota.max_bytes -v 5K .
+expect_false setfattr -n ceph.quota.max_bytes -v 7Ki .
+setfattr -n ceph.quota.max_bytes -v 8Ki .
+setfattr -n ceph.quota.max_bytes -v 8K .
+expect_false setfattr -n ceph.quota.max_bytes -v 99Ki .
+setfattr -n ceph.quota.max_bytes -v 100Ki .
+setfattr -n ceph.quota.max_bytes -v 1M .
+setfattr -n ceph.quota.max_bytes -v 2Mi .
+setfattr -n ceph.quota.max_bytes -v 3M .
+setfattr -n ceph.quota.max_bytes -v 4Mi .
+expect_false setfattr -n ceph.quota.max_bytes -v 5Mi .
+expect_false setfattr -n ceph.quota.max_bytes -v 6M .
+setfattr -n ceph.quota.max_bytes -v 8Mi .
+expect_false setfattr -n ceph.quota.max_bytes -v 13M .
+setfattr -n ceph.quota.max_bytes -v 88Mi .
+expect_false setfattr -n ceph.quota.max_bytes -v 102Mi .
+setfattr -n ceph.quota.max_bytes -v 1G .
+setfattr -n ceph.quota.max_bytes -v 1Gi .
+
+setfattr -n ceph.quota.max_bytes -v 0 .
+setfattr -n ceph.quota.max_bytes -v 1T .
 setfattr -n ceph.quota.max_bytes -v 1Ti .
+setfattr -n ceph.quota.max_bytes -v 4T .
+setfattr -n ceph.quota.max_bytes -v 8Ti .
 setfattr -n ceph.quota.max_bytes -v 8388607Ti .
 expect_false setfattr -n ceph.quota.max_bytes -v 8388608Ti .
 expect_false setfattr -n ceph.quota.max_bytes -v -1Ti .
+expect_false setfattr -n ceph.quota.max_bytes -v -8388609T .
 expect_false setfattr -n ceph.quota.max_bytes -v -8388609Ti .
+expect_false setfattr -n ceph.quota.max_bytes -v -8388610T .
 expect_false setfattr -n ceph.quota.max_bytes -v -8388610Ti .
+expect_false setfattr -n ceph.quota.max_bytes -v 8E .
+expect_false setfattr -n ceph.quota.max_bytes -v 8Ei .
+expect_false setfattr -n ceph.quota.max_bytes -v -1 .
+expect_false setfattr -n ceph.quota.max_bytes -v -8Ei .
 
 setfattr -n ceph.quota.max_files -v 0 .
 setfattr -n ceph.quota.max_files -v 1 .
