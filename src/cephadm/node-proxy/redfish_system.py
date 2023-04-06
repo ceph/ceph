@@ -70,10 +70,17 @@ class RedfishSystem(System):
         log.info("Updating network")
         network_info = self.client.get_path(net_path)
         self._system['network'] = {}
+        result = dict()
         for interface in network_info['Members']:
             interface_path = interface['@odata.id']
             interface_info = self.client.get_path(interface_path)
-            self._system['network'][interface_info['Id']] = interface_info
+            interface_id = interface_info['Id']
+            result[interface_id] = dict()
+            result[interface_id]['description'] = interface_info['Description']
+            result[interface_id]['name'] = interface_info['Name']
+            result[interface_id]['speed_mbps'] = interface_info['SpeedMbps']
+            result[interface_id]['status'] = interface_info['Status']
+        self._system['network'] = result
 
     def _update_processors(self):
         cpus_path = self._system['Processors']['@odata.id']
