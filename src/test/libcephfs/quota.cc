@@ -139,7 +139,7 @@ TEST(LibCephFS, QuotaRealm) {
   sprintf(test_quota_realm_pdir, "/test_quota_realm_pdir_%d", mypid);
   ASSERT_EQ(0, ceph_mkdir(cmount, test_quota_realm_pdir, 0777));
   sprintf(xattrk, "ceph.quota.max_bytes");
-  sprintf(xattrv, "8388608"); // 8MB
+  sprintf(xattrv, "8388608"); // 8MiB
   ASSERT_EQ(0, ceph_setxattr(cmount, test_quota_realm_pdir, xattrk, (void *)xattrv, 7, XATTR_CREATE));
 
   // create child directory and set quota file
@@ -153,13 +153,13 @@ TEST(LibCephFS, QuotaRealm) {
   ASSERT_EQ(ceph_conf_read_file(pmount1, NULL), 0);
   ASSERT_EQ(0, ceph_conf_parse_env(pmount1, NULL));
   ASSERT_EQ(ceph_mount(pmount1, test_quota_realm_pdir), 0);
-  statfs_quota_size_check(pmount1, "/", 2, 4194304); // 8MB
+  statfs_quota_size_check(pmount1, "/", 2, 4194304); // 8MiB
 
   ASSERT_EQ(ceph_create(&pmount2, NULL), 0);
   ASSERT_EQ(ceph_conf_read_file(pmount2, NULL), 0);
   ASSERT_EQ(0, ceph_conf_parse_env(pmount2, NULL));
   ASSERT_EQ(ceph_mount(pmount2, test_quota_realm_cdir), 0);
-  statfs_quota_size_check(pmount2, "/", 2, 4194304); // 8MB
+  statfs_quota_size_check(pmount2, "/", 2, 4194304); // 8MiB
 
   ceph_shutdown(pmount1);
   ceph_shutdown(pmount2);

@@ -46,9 +46,9 @@
 #define MAX_MDS                   0x100
 
 #define CEPH_4M_BLOCK_SHIFT 22
-#define CEPH_4M_BLOCK_SIZE (1 << CEPH_4M_BLOCK_SHIFT) // 4MB
+#define CEPH_4M_BLOCK_SIZE (1 << CEPH_4M_BLOCK_SHIFT) // 4MiB
 #define CEPH_4K_BLOCK_SHIFT 12
-#define CEPH_4K_BLOCK_SIZE (1 << CEPH_4K_BLOCK_SHIFT) // 4KB
+#define CEPH_4K_BLOCK_SIZE (1 << CEPH_4K_BLOCK_SHIFT) // 4KiB
 
 #define IS_ALIGNED(x, a) (((x) & (int64_t(a) - 1)) == 0)
 

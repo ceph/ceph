@@ -12341,10 +12341,10 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
   memset(stbuf, 0, sizeof(*stbuf));
 
   /*
-   * we're going to set a block size of 4MB so we can represent larger
+   * we're going to set a block size of 4MiB so we can represent larger
    * FSes without overflowing. Additionally convert the space
-   * measurements from KB to bytes while making them in terms of
-   * blocks.  We use 4MB only because it is big enough, and because it
+   * measurements from KiB to bytes while making them in terms of
+   * blocks.  We use 4MiB only because it is big enough, and because it
    * actually *is* the (ceph) default block size.
    */
   stbuf->f_frsize = CEPH_4M_BLOCK_SIZE;
