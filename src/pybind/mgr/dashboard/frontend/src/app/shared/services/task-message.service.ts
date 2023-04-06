@@ -343,6 +343,9 @@ export class TaskMessageService {
     ),
     'crud-component': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.crudMessage(metadata)
+    ),
+    'crud-component/id': this.newTaskMessage(this.commonOperations.delete, (id) =>
+      this.crudMessageId(id)
     )
   };
 
@@ -397,6 +400,10 @@ export class TaskMessageService {
       }
     });
     return $localize`${message}`;
+  }
+
+  crudMessageId(id: string) {
+    return $localize`${id}`;
   }
 
   _getTaskTitle(task: Task) {

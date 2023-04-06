@@ -35,6 +35,15 @@ export class DataGatewayService {
     });
   }
 
+  delete(dataPath: string, key: string): Observable<any> {
+    const { url, version } = this.getUrlAndVersion(dataPath);
+
+    return this.http.delete<any>(`${url}/${key}`, {
+      headers: { Accept: `application/vnd.ceph.api.v${version}+json` },
+      observe: 'response'
+    });
+  }
+
   form(dataPath: string): Observable<JsonFormUISchema> {
     const cacheable = this.getCacheable(dataPath, 'get');
     if (this.cache[cacheable] === undefined) {
