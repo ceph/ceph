@@ -81,7 +81,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.osdService.getDeploymentOptions().subscribe((options) => {
       this.deploymentOption = options;
-      this.selectedOption = { option: options.recommended_option };
+      this.selectedOption = { option: options.recommended_option, encrypted: false };
     });
 
     this.stepTitles.forEach((stepTitle) => {
