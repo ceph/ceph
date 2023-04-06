@@ -577,6 +577,9 @@ public:
     case MSG_OSD_PG_PUSH:
     case MSG_OSD_PG_PUSH_REPLY:
     case MSG_OSD_PG_PULL:
+    case MSG_OSD_PG_BACKFILL:
+    case MSG_OSD_PG_BACKFILL_REMOVE:
+    case MSG_OSD_PG_SCAN:
       return true;
     default:
       return false;
