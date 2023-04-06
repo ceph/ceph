@@ -4527,7 +4527,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
 	get_osdmap_epoch(),
 	m->query_epoch,
 	spg_t(info.pgid.pgid, get_primary().shard));
-      reply->set_priority(get_recovery_op_priority());
+      reply->set_priority(recovery_state.get_recovery_op_priority());
       osd->send_message_osd_cluster(reply, m->get_connection());
       queue_peering_event(
 	PGPeeringEventRef(
@@ -13495,7 +13495,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 	++skipped;
       } else {
 	int r = recover_missing(
-	  soid, need, get_recovery_op_priority(), h);
+	  soid, need, recovery_state.get_recovery_op_priority(), h);
 	switch (r) {
 	case PULL_YES:
 	  ++started;
@@ -13518,7 +13518,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
       recovery_state.set_last_requested(v);
   }
 
-  pgbackend->run_recovery_op(h, get_recovery_op_priority());
+  pgbackend->run_recovery_op(h, recovery_state.get_recovery_op_priority());
   return started;
 }
 
@@ -13588,7 +13588,7 @@ int PrimaryLogPG::prep_object_replica_pushes(
       } else {
 	int r = recover_missing(
 	    head, recovery_state.get_pg_log().get_missing().get_items().find(head)->second.need,
-	    get_recovery_op_priority(), h);
+	    recovery_state.get_recovery_op_priority(), h);
 	if (r != PULL_NONE)
 	  return 1;
 	return 0;
@@ -13738,7 +13738,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     }
   }
 
-  pgbackend->run_recovery_op(h, get_recovery_op_priority());
+  pgbackend->run_recovery_op(h, recovery_state.get_recovery_op_priority());
   return started;
 }
 
@@ -14063,7 +14063,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 				  get_osdmap_epoch());
   }
 
-  pgbackend->run_recovery_op(h, get_recovery_op_priority());
+  pgbackend->run_recovery_op(h, recovery_state.get_recovery_op_priority());
 
   hobject_t backfill_pos =
     std::min(backfill_info.begin, earliest_peer_backfill());
