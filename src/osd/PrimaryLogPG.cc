@@ -13885,6 +13885,12 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, get_last_peering_reset(),
 	  spg_t(info.pgid.pgid, bt.shard),
 	  pbi.end, hobject_t());
+
+	if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+	  /* This guard preserves legacy WeightedPriorityQueue behavior for
+	   * now, but should be removed after Reef */
+	  m->set_priority(recovery_state.get_recovery_op_priority());
+	}
 	osd->send_message_osd_cluster(bt.osd, m, get_osdmap_epoch());
 	ceph_assert(waiting_on_backfill.find(bt) == waiting_on_backfill.end());
 	waiting_on_backfill.insert(bt);
@@ -14052,6 +14058,11 @@ uint64_t PrimaryLogPG::recover_backfill(
       m = reqs[peer] = new MOSDPGBackfillRemove(
 	spg_t(info.pgid.pgid, peer.shard),
 	get_osdmap_epoch());
+      if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+	/* This guard preserves legacy WeightedPriorityQueue behavior for
+	   * now, but should be removed after Reef */
+	m->set_priority(recovery_state.get_recovery_op_priority());
+      }
     }
     m->ls.push_back(make_pair(oid, v));
 
@@ -14136,6 +14147,13 @@ uint64_t PrimaryLogPG::recover_backfill(
       }
       m->last_backfill = pinfo.last_backfill;
       m->stats = pinfo.stats;
+
+      if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+	/* This guard preserves legacy WeightedPriorityQueue behavior for
+	 * now, but should be removed after Reef */
+	m->set_priority(recovery_state.get_recovery_op_priority());
+      }
+
       osd->send_message_osd_cluster(bt.osd, m, get_osdmap_epoch());
       dout(10) << " peer " << bt
 	       << " num_objects now " << pinfo.stats.stats.sum.num_objects
