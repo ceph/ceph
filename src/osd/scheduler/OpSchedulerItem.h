@@ -502,14 +502,17 @@ class PGScrubChunkIsFree : public PGScrubItem {
 class PGRecovery : public PGOpQueueable {
   epoch_t epoch_queued;
   uint64_t reserved_pushes;
+  int priority;
 public:
   PGRecovery(
     spg_t pg,
     epoch_t epoch_queued,
-    uint64_t reserved_pushes)
+    uint64_t reserved_pushes,
+    int priority)
     : PGOpQueueable(pg),
       epoch_queued(epoch_queued),
-      reserved_pushes(reserved_pushes) {}
+      reserved_pushes(reserved_pushes),
+      priority(priority) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecovery(pgid=" << get_pgid()
 	       << " epoch_queued=" << epoch_queued
@@ -522,18 +525,20 @@ public:
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
   op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_recovery;
+    return priority_to_scheduler_class(priority);
   }
 };
 
 class PGRecoveryContext : public PGOpQueueable {
   std::unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
   epoch_t epoch;
+  int priority;
 public:
   PGRecoveryContext(spg_t pgid,
-		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch)
+		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch,
+		    int priority)
     : PGOpQueueable(pgid),
-      c(c), epoch(epoch) {}
+      c(c), epoch(epoch), priority(priority) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecoveryContext(pgid=" << get_pgid()
 	       << " c=" << c.get() << " epoch=" << epoch
@@ -542,7 +547,7 @@ public:
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
   op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_recovery;
+    return priority_to_scheduler_class(priority);
   }
 };
 

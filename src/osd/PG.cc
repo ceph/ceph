@@ -429,7 +429,9 @@ void PG::queue_recovery()
 	1, // ensure objects is non-negative and non-zero
 	info.stats.stats.sum.num_objects));
     uint64_t cost_per_object = std::max<uint64_t>(num_bytes / num_objects, 1);
-    osd->queue_for_recovery(this, cost_per_object);
+    osd->queue_for_recovery(
+      this, cost_per_object, recovery_state.get_recovery_op_priority()
+    );
   }
 }
 

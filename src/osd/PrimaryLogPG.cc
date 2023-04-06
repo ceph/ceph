@@ -526,7 +526,9 @@ void PrimaryLogPG::schedule_recovery_work(
   GenContext<ThreadPool::TPHandle&> *c,
   uint64_t cost)
 {
-  osd->queue_recovery_context(this, c, cost);
+  osd->queue_recovery_context(
+    this, c, cost,
+    recovery_state.get_recovery_op_priority());
 }
 
 void PrimaryLogPG::replica_clear_repop_obc(
