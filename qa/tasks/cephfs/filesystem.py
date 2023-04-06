@@ -1135,6 +1135,9 @@ class Filesystem(MDSCluster):
         if timeout is None:
             timeout = DAEMON_WAIT_TIMEOUT
 
+        if self.id is None:
+            status = self.getinfo(refresh=True)
+
         if status is None:
             status = self.status()
 
