@@ -285,28 +285,29 @@ OSDs
 OSD_DOWN
 ________
 
-One or more OSDs are marked down.  The ceph-osd daemon may have been stopped,
-or peer OSDs may be unable to reach the OSD over the network.  Common causes
-include a stopped or crashed daemon, a down host, or a network outage.
+One or more OSDs are marked "down". The ceph-osd daemon might have been
+stopped, or peer OSDs might be unable to reach the OSD over the network.
+Common causes include a stopped or crashed daemon, a "down" host, or a network
+outage.
 
-Verify the host is healthy, the daemon is started, and network is functioning.
-If the daemon has crashed, the daemon log file (``/var/log/ceph/ceph-osd.*``)
-may contain debugging information.
+Verify that the host is healthy, the daemon is started, and the network is
+functioning. If the daemon has crashed, the daemon log file
+(``/var/log/ceph/ceph-osd.*``) might contain debugging information.
 
 OSD_<crush type>_DOWN
 _____________________
 
-(e.g. OSD_HOST_DOWN, OSD_ROOT_DOWN)
+(for example, OSD_HOST_DOWN, OSD_ROOT_DOWN)
 
-All the OSDs within a particular CRUSH subtree are marked down, for example
-all OSDs on a host.
+All of the OSDs within a particular CRUSH subtree are marked "down" (for
+example, all OSDs on a host).
 
 OSD_ORPHAN
 __________
 
-An OSD is referenced in the CRUSH map hierarchy but does not exist.
+An OSD is referenced in the CRUSH map hierarchy, but does not exist.
 
-The OSD can be removed from the CRUSH hierarchy with:
+To remove the OSD from the CRUSH map hierarchy, run the following command:
 
 .. prompt:: bash $
 
@@ -315,12 +316,12 @@ The OSD can be removed from the CRUSH hierarchy with:
 OSD_OUT_OF_ORDER_FULL
 _____________________
 
-The utilization thresholds for `nearfull`, `backfillfull`, `full`,
-and/or `failsafe_full` are not ascending.  In particular, we expect
-`nearfull < backfillfull`, `backfillfull < full`, and `full <
+The utilization thresholds for `nearfull`, `backfillfull`, `full`, and/or
+`failsafe_full` are not ascending. In particular, the following pattern is
+expected: `nearfull < backfillfull`, `backfillfull < full`, and `full <
 failsafe_full`.
 
-The thresholds can be adjusted with:
+To adjust these utilization thresholds, run the following commands:
 
 .. prompt:: bash $
 
@@ -332,40 +333,41 @@ The thresholds can be adjusted with:
 OSD_FULL
 ________
 
-One or more OSDs has exceeded the `full` threshold and is preventing
-the cluster from servicing writes.
+One or more OSDs have exceeded the `full` threshold and are preventing the
+cluster from servicing writes.
 
-Utilization by pool can be checked with:
+To check utilization by pool, run the following command:
 
 .. prompt:: bash $
 
    ceph df
 
-The currently defined `full` ratio can be seen with:
+To see the currently defined `full` ratio, run the following command:
 
 .. prompt:: bash $
 
    ceph osd dump | grep full_ratio
 
 A short-term workaround to restore write availability is to raise the full
-threshold by a small amount:
+threshold by a small amount. To do so, run the following command:
 
 .. prompt:: bash $
 
    ceph osd set-full-ratio <ratio>
 
-New storage should be added to the cluster by deploying more OSDs or
-existing data should be deleted in order to free up space.
+Additional OSDs should be deployed in order to add new storage to the cluster,
+or existing data should be deleted in order to free up space in the cluster.
 
 OSD_BACKFILLFULL
 ________________
 
-One or more OSDs has exceeded the `backfillfull` threshold or *would* exceed
-when the currently mapped backfills finish, which will prevent data from being
-allowed to rebalance to this device.  This is an early warning that rebalancing
-may not be able to complete and that the cluster is approaching full.
+One or more OSDs have exceeded the `backfillfull` threshold or *would* exceed
+it if the currently-mapped backfills were to finish, which will prevent data
+from rebalancing to this OSD. This alert is an early warning that
+rebalancing might be unable to complete and that the cluster is approaching
+full.
 
-Utilization by pool can be checked with:
+To check utilization by pool, run the following command:
 
 .. prompt:: bash $
 
@@ -374,10 +376,10 @@ Utilization by pool can be checked with:
 OSD_NEARFULL
 ____________
 
-One or more OSDs has exceeded the `nearfull` threshold.  This is an early
+One or more OSDs have exceeded the `nearfull` threshold. This alert is an early
 warning that the cluster is approaching full.
 
-Utilization by pool can be checked with:
+To check utilization by pool, run the following command:
 
 .. prompt:: bash $
 
@@ -386,23 +388,24 @@ Utilization by pool can be checked with:
 OSDMAP_FLAGS
 ____________
 
-One or more cluster flags of interest has been set.  These flags include:
+One or more cluster flags of interest have been set. These flags include:
 
 * *full* - the cluster is flagged as full and cannot serve writes
-* *pauserd*, *pausewr* - paused reads or writes
+* *pauserd*, *pausewr* - there are paused reads or writes
 * *noup* - OSDs are not allowed to start
-* *nodown* - OSD failure reports are being ignored, such that the
-  monitors will not mark OSDs `down`
-* *noin* - OSDs that were previously marked `out` will not be marked
-  back `in` when they start
-* *noout* - down OSDs will not automatically be marked out after the
+* *nodown* - OSD failure reports are being ignored, and that means that the
+  monitors will not mark OSDs "down"
+* *noin* - OSDs that were previously marked ``out`` are not being marked
+  back ``in`` when they start
+* *noout* - "down" OSDs are not automatically being marked ``out`` after the
   configured interval
 * *nobackfill*, *norecover*, *norebalance* - recovery or data
   rebalancing is suspended
 * *noscrub*, *nodeep_scrub* - scrubbing is disabled
-* *notieragent* - cache tiering activity is suspended
+* *notieragent* - cache-tiering activity is suspended
 
-With the exception of *full*, these flags can be set or cleared with:
+With the exception of *full*, these flags can be set or cleared by running the
+following commands:
 
 .. prompt:: bash $
 
@@ -412,17 +415,17 @@ With the exception of *full*, these flags can be set or cleared with:
 OSD_FLAGS
 _________
 
-One or more OSDs or CRUSH {nodes,device classes} has a flag of interest set.
+One or more OSDs or CRUSH {nodes,device classes} have a flag of interest set.
 These flags include:
 
 * *noup*: these OSDs are not allowed to start
 * *nodown*: failure reports for these OSDs will be ignored
-* *noin*: if these OSDs were previously marked `out` automatically
-  after a failure, they will not be marked in when they start
-* *noout*: if these OSDs are down they will not automatically be marked
-  `out` after the configured interval
+* *noin*: if these OSDs were previously marked ``out`` automatically
+  after a failure, they will not be marked ``in`` when they start
+* *noout*: if these OSDs are "down" they will not automatically be marked
+  ``out`` after the configured interval
 
-These flags can be set and cleared in batch with:
+To set and clear these flags in batch, run the following commands:
 
 .. prompt:: bash $
 
@@ -443,30 +446,29 @@ For example:
 OLD_CRUSH_TUNABLES
 __________________
 
-The CRUSH map is using very old settings and should be updated.  The
-oldest tunables that can be used (i.e., the oldest client version that
-can connect to the cluster) without triggering this health warning is
-determined by the ``mon_crush_min_required_version`` config option.
-See :ref:`crush-map-tunables` for more information.
+The CRUSH map is using very old settings and should be updated. The oldest set
+of tunables that can be used (that is, the oldest client version that can
+connect to the cluster) without raising this health check is determined by the
+``mon_crush_min_required_version`` config option.  For more information, see
+:ref:`crush-map-tunables`.
 
 OLD_CRUSH_STRAW_CALC_VERSION
 ____________________________
 
-The CRUSH map is using an older, non-optimal method for calculating
-intermediate weight values for ``straw`` buckets.
+The CRUSH map is using an older, non-optimal method of calculating intermediate
+weight values for ``straw`` buckets.
 
-The CRUSH map should be updated to use the newer method
-(``straw_calc_version=1``).  See
-:ref:`crush-map-tunables` for more information.
+The CRUSH map should be updated to use the newer method (that is:
+``straw_calc_version=1``). For more information, see :ref:`crush-map-tunables`.
 
 CACHE_POOL_NO_HIT_SET
 _____________________
 
-One or more cache pools is not configured with a *hit set* to track
-utilization, which will prevent the tiering agent from identifying
-cold objects to flush and evict from the cache.
+One or more cache pools are not configured with a *hit set* to track
+utilization. This issue prevents the tiering agent from identifying cold
+objects that are to be flushed and evicted from the cache.
 
-Hit sets can be configured on the cache pool with:
+To configure hit sets on the cache pool, run the following commands:
 
 .. prompt:: bash $
 
@@ -478,11 +480,11 @@ Hit sets can be configured on the cache pool with:
 OSD_NO_SORTBITWISE
 __________________
 
-No pre-Luminous v12.y.z OSDs are running but the ``sortbitwise`` flag has not
+No pre-Luminous v12.y.z OSDs are running, but the ``sortbitwise`` flag has not
 been set.
 
-The ``sortbitwise`` flag must be set before OSDs running Luminous v12.y.z or newer
-can start.  You can safely set the flag with:
+The ``sortbitwise`` flag must be set in order for OSDs running Luminous v12.y.z
+or newer to start. To safely set the flag, run the following command:
 
 .. prompt:: bash $
 
@@ -491,50 +493,54 @@ can start.  You can safely set the flag with:
 OSD_FILESTORE
 __________________
 
-The Filestore OSD back end has been deprecated; the BlueStore back end has been
-the default objectstore for quite some time. Warn if OSDs are running Filestore.
+Warn if OSDs are running Filestore. The Filestore OSD back end has been
+deprecated; the BlueStore back end has been the default object store since the
+Ceph Luminous release.
 
-The 'mclock_scheduler' is not supported for Filestore OSDs. Therefore, the
-default 'osd_op_queue' is set to 'wpq' for Filestore OSDs and is enforced
+The 'mclock_scheduler' is not supported for Filestore OSDs. For this reason,
+the default 'osd_op_queue' is set to 'wpq' for Filestore OSDs and is enforced
 even if the user attempts to change it.
 
-Filestore OSDs can be listed with:
+
 
 .. prompt:: bash $
 
    ceph report | jq -c '."osd_metadata" | .[] | select(.osd_objectstore | contains("filestore")) | {id, osd_objectstore}'
 
-In order to upgrade to Reef or later releases, any Filestore OSDs must first be
-migrated to BlueStore.
-When upgrading a release prior to Reef to Reef or later: if it is not feasible to migrate Filestore OSDs to
-BlueStore immediately, you can silence this warning temporarily with:
+**In order to upgrade to Reef or a later release, you must first migrate any
+Filestore OSDs to BlueStore.**
+
+If you are upgrading a pre-Reef release to Reef or later, but it is not
+feasible to migrate Filestore OSDs to BlueStore immediately, you can
+temporarily silence this alert by running the following command:
 
 .. prompt:: bash $
 
    ceph health mute OSD_FILESTORE
 
-Since this migration can take considerable time to complete, we recommend that you
-begin the process well in advance of an update to Reef or later releases.
+Since this migration can take a considerable amount of time to complete, we
+recommend that you begin the process well in advance of any update to Reef or
+to later releases.
 
 POOL_FULL
 _________
 
-One or more pools has reached its quota and is no longer allowing writes.
+One or more pools have reached their quota and are no longer allowing writes.
 
-Pool quotas and utilization can be seen with:
+To see pool quotas and utilization, run the following command:
 
 .. prompt:: bash $
 
    ceph df detail
 
-You can either raise the pool quota with:
+If you opt to raise the pool quota, run the following commands:
 
 .. prompt:: bash $
 
    ceph osd pool set-quota <poolname> max_objects <num-objects>
    ceph osd pool set-quota <poolname> max_bytes <num-bytes>
 
-or delete some existing data to reduce utilization.
+If not, delete some existing data to reduce utilization.
 
 BLUEFS_SPILLOVER
 ________________
