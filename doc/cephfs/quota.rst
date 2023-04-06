@@ -15,13 +15,10 @@ If the extended attributes appear on a directory that means a quota is
 configured there. If they are not present then no quota is set on that
 directory (although one may still be configured on a parent directory).
 
-The value of ``ceph.quota.max_bytes`` must be aligned to 4MB if greater
-than or equal to 4MB, otherwise it must be aligned to 4KB.
-
 To set a quota, set the extended attribute on a CephFS directory with a
 value::
 
-  setfattr -n ceph.quota.max_bytes -v 104857600 /some/dir     # 100 MB
+  setfattr -n ceph.quota.max_bytes -v 104857600 /some/dir     # 100 MiB
   setfattr -n ceph.quota.max_files -v 10000 /some/dir         # 10,000 files
 
 ``ceph.quota.max_bytes`` can also be set using human-friendly units::
@@ -30,7 +27,9 @@ value::
   setfattr -n ceph.quota.max_bytes -v 5Gi /some/dir           # 5 GiB
 
 .. note:: Values will be strictly cast to IEC units even when SI units
-   are input, e.g. 1K to 1024 bytes.
+   are input, e.g. 1K to 1024 bytes. Additionally the values must be aligned
+   to 4MiB if greater than or equal to 4MiB, otherwise it must be aligned
+   to 4KiB.
 
 To view quota limit::
 
