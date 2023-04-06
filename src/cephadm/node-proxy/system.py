@@ -1,29 +1,30 @@
-
+from util import Config
 
 class System:
-    def __init__(self):
+    def __init__(self, **kw):
         self._system = {}
+        self.config: Config = kw['config']
 
     def get_system(self):
-        return self._system
+        raise NotImplementedError()
 
     def get_status(self):
-        return self._system['status']
+        raise NotImplementedError()
 
     def get_metadata(self):
-        return self._system['metadata']
+        raise NotImplementedError()
 
     def get_processors(self):
-        return self._system['processors']
+        raise NotImplementedError()
 
     def get_memory(self):
-        return self._system['memory']
+        raise NotImplementedError()
 
     def get_power(self):
-        return self._system['power']
+        raise NotImplementedError()
 
     def get_network(self):
-        return self._system['network']
+        raise NotImplementedError()
 
     def get_storage(self):
-        return self._system['storage']
+        raise NotImplementedError()

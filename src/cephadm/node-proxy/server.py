@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from system import System
-from redfish_system import RedfishSystem
+from redfish_dell import RedfishDell
 from reporter import Reporter
 from util import logger
 import time
@@ -14,7 +14,7 @@ password = "mypassword"
 
 # create the redfish system and the obsever
 log.info(f"Server initialization...")
-system = RedfishSystem(host, username, password, system_endpoint='/Systems/System.Embedded.1')
+system = RedfishDell(host=host, username=username, password=password, system_endpoint='/Systems/System.Embedded.1')
 reporter_agent = Reporter(system, "http://127.0.0.1:8000")
 
 app = Flask(__name__)
