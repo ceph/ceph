@@ -57,6 +57,23 @@ class CephUserEndpoints:
             raise DashboardException(msg, code=500)
         return f"Successfully created user '{user_entity}'"
 
+    @staticmethod
+    def user_delete(_, user_entity: str):
+        """
+        Delete a ceph user and it's defined capabilities.
+        :param user_entity: Entity to dlelete
+        """
+        logger.debug("Sending command 'auth del' of entity '%s'", user_entity)
+        try:
+            CephService.send_command('mon', 'auth del', entity=user_entity)
+        except SendCommandError as ex:
+            msg = f'{ex} in command {ex.prefix}'
+            if ex.errno == -EINVAL:
+                raise DashboardException(msg, code=400)
+            raise DashboardException(msg, code=500)
+        return f"Successfully eleted user '{user_entity}'"
+
+
 create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities', fields=[
     FormField('Entity', 'entity',
               field_type=str),
@@ -81,10 +98,13 @@ create_form = Form(path='/cluster/user/create',
     set_column={"caps": {"cellTemplate": "badgeDict"}},
     actions=[
         TableAction(name='create', permission='create', icon=Icon.add.value,
-                    routerLink='/cluster/user/create')
+                    routerLink='/cluster/user/create'),
+        TableAction(name='Delete', permission='delete', icon=Icon.destroy.value,
+                    click='delete')
     ],
     permissions=[Scope.CONFIG_OPT],
     forms=[create_form],
+    column_key='entity',
     get_all=CRUDCollectionMethod(
         func=CephUserEndpoints.user_list,
         doc=EndpointDoc("Get Ceph Users")
@@ -92,6 +112,10 @@ create_form = Form(path='/cluster/user/create',
     create=CRUDCollectionMethod(
         func=CephUserEndpoints.user_create,
         doc=EndpointDoc("Create Ceph User")
+    ),
+    delete=CRUDCollectionMethod(
+        func=CephUserEndpoints.user_delete,
+        doc=EndpointDoc("Delete Ceph User")
     ),
     meta=CRUDMeta()
 )

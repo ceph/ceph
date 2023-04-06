@@ -64,7 +64,8 @@ class TableAction(NamedTuple):
     name: str
     permission: str
     icon: str
-    routerLink: str  # redirect to...
+    routerLink: str = ''  # redirect to...
+    click: str = ''
 
 
 class TableComponent(SerializableClass):
@@ -76,6 +77,7 @@ class TableComponent(SerializableClass):
 
 class Icon(Enum):
     add = 'fa fa-plus'
+    destroy = 'fa fa-times'
 
 
 class Validator(Enum):
@@ -272,6 +274,7 @@ class CRUDMeta(SerializableClass):
         self.permissions = []
         self.actions = []
         self.forms = []
+        self.columnKey = ''
         self.detail_columns = []
 
 
@@ -285,18 +288,20 @@ class CRUDResourceMethod(NamedTuple):
     doc: EndpointDoc
 
 
+# pylint: disable=R0902
 class CRUDEndpoint:
     # for testing purposes
     CRUDClass: Optional[RESTController] = None
     CRUDClassMetadata: Optional[RESTController] = None
 
-    # pylint: disable=R0902
     def __init__(self, router: APIRouter, doc: APIDoc,
                  set_column: Optional[Dict[str, Dict[str, str]]] = None,
                  actions: Optional[List[TableAction]] = None,
                  permissions: Optional[List[str]] = None, forms: Optional[List[Form]] = None,
+                 column_key: Optional[str] = None,
                  meta: CRUDMeta = CRUDMeta(), get_all: Optional[CRUDCollectionMethod] = None,
                  create: Optional[CRUDCollectionMethod] = None,
+                 delete: Optional[CRUDCollectionMethod] = None,
                  detail_columns: Optional[List[str]] = None):
         self.router = router
         self.doc = doc
@@ -306,7 +311,9 @@ class CRUDEndpoint:
         self.meta = meta
         self.get_all = get_all
         self.create = create
+        self.delete = delete
         self.permissions = permissions if permissions is not None else []
+        self.column_key = column_key if column_key is not None else ''
         self.detail_columns = detail_columns if detail_columns is not None else []
 
     def __call__(self, cls: Any):
@@ -338,6 +345,12 @@ class CRUDEndpoint:
                 def create(self, *args, **kwargs):
                     return outer_self.create.func(self, *args, **kwargs)  # type: ignore
 
+            if self.delete:
+                @self.delete.doc
+                @wraps(self.delete.func)
+                def delete(self, *args, **kwargs):
+                    return outer_self.delete.func(self, *args, **kwargs)  # type: ignore
+
         cls.CRUDClass = CRUDClass
 
     def create_meta_class(self, cls):
@@ -346,6 +359,7 @@ class CRUDEndpoint:
             self.generate_actions()
             self.generate_forms()
             self.set_permissions()
+            self.set_column_key()
             self.get_detail_columns()
             return serialize(self.__class__.outer_self.meta)
 
@@ -385,6 +399,11 @@ class CRUDEndpoint:
         def set_permissions(self):
             if self.__class__.outer_self.permissions:
                 self.outer_self.meta.permissions.extend(self.__class__.outer_self.permissions)
+
+        def set_column_key(self):
+            if self.__class__.outer_self.column_key:
+                self.outer_self.meta.columnKey = self.__class__.outer_self.column_key
+
         class_name = self.router.path.replace('/', '')
         meta_class = type(f'{class_name}_CRUDClassMetadata',
                           (RESTController,),
@@ -394,6 +413,7 @@ class CRUDEndpoint:
                               'generate_actions': generate_actions,
                               'generate_forms': generate_forms,
                               'set_permissions': set_permissions,
+                              'set_column_key': set_column_key,
                               'get_detail_columns': get_detail_columns,
                               'outer_self': self,
                           })
