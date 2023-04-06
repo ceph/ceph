@@ -1,5 +1,6 @@
 <div [class]="wrappingClass">
-  <cd-back-button class="m-2"
+  <cd-back-button *ngIf="showCancel"
+                  class="m-2"
                   (backAction)="backAction()"
                   [name]="cancelText"></cd-back-button>
   <cd-submit-button *ngIf="showSubmit"

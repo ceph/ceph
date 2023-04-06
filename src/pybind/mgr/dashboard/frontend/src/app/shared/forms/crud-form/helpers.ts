@@ -1,6 +1,7 @@
 import { ValidatorFn } from '@angular/forms';
 import { FormlyFieldConfig } from '@ngx-formly/core';
 import { forEach } from 'lodash';
+import { formlyAsyncFileValidator } from './validators/file-validator';
 import { formlyAsyncJsonValidator } from './validators/json-validator';
 import { formlyRgwRoleNameValidator, formlyRgwRolePath } from './validators/rgw-role-validator';
 
@@ -27,6 +28,10 @@ export function setupValidators(field: FormlyFieldConfig, uiSchema: any[]) {
       }
       case 'rgwRolePath': {
         validators.push(formlyRgwRolePath);
+        break;
+      }
+      case 'file': {
+        validators.push(formlyAsyncFileValidator);
         break;
       }
     }
