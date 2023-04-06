@@ -5,6 +5,7 @@ class Table {
   columns: CdTableColumn[];
   columnMode: string;
   toolHeader: boolean;
+  selectionType: string;
 }
 
 export class CrudMetadata {
