@@ -8,6 +8,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -22,6 +23,7 @@ namespace librbd {
 namespace exclusive_lock {
 
 using util::create_context_callback;
+using util::create_async_context_callback;
 
 template <typename I>
 ImageDispatch<I>::ImageDispatch(I* image_ctx)
@@ -271,8 +273,9 @@ bool ImageDispatch<I>::needs_exclusive_lock(bool read_op, uint64_t tid,
     locker.unlock();
 
     *dispatch_result = io::DISPATCH_RESULT_RESTART;
-    auto ctx = create_context_callback<
-      ImageDispatch<I>, &ImageDispatch<I>::handle_acquire_lock>(this);
+    auto ctx = create_async_context_callback(
+      *m_image_ctx, create_context_callback<
+        ImageDispatch<I>, &ImageDispatch<I>::handle_acquire_lock>(this));
     m_image_ctx->exclusive_lock->acquire_lock(ctx);
     return true;
   }
@@ -290,7 +293,7 @@ void ImageDispatch<I>::handle_acquire_lock(int r) {
 
   Context* failed_dispatch = nullptr;
   Contexts on_dispatches;
-  if (r == -ESHUTDOWN) {
+  if (r == -ERESTART) {
     ldout(cct, 5) << "IO raced with exclusive lock shutdown" << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to acquire exclusive lock: " << cpp_strerror(r)
