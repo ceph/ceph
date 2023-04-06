@@ -795,6 +795,22 @@ static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, struct req_stat
   return rgw_iam_add_buckettags(dpp, s, s->bucket.get());
 }
 
+static void rgw_iam_add_crypt_attrs(rgw::IAM::Environment& e,
+                                    const meta_map_t& attrs)
+{
+  constexpr auto encrypt_attr = "x-amz-server-side-encryption";
+  constexpr auto s3_encrypt_attr = "s3:x-amz-server-side-encryption";
+  if (auto h = attrs.find(encrypt_attr); h != attrs.end()) {
+    rgw_add_to_iam_environment(e, s3_encrypt_attr, h->second);
+  }
+
+  constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
+  constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
+  if (auto h = attrs.find(kms_attr); h != attrs.end()) {
+    rgw_add_to_iam_environment(e, s3_kms_attr, h->second);
+  }
+}
+
 static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp,
                                                           boost::optional<rgw::IAM::Policy> iam_policy,
                                                           boost::optional<vector<rgw::IAM::Policy>> identity_policies,
@@ -3674,19 +3690,8 @@ int RGWPutObj::verify_permission(optional_yield y)
       }
     }
 
-    constexpr auto encrypt_attr = "x-amz-server-side-encryption";
-    constexpr auto s3_encrypt_attr = "s3:x-amz-server-side-encryption";
-    auto enc_header = s->info.crypt_attribute_map.find(encrypt_attr);
-    if (enc_header != s->info.crypt_attribute_map.end()){
-      rgw_add_to_iam_environment(s->env, s3_encrypt_attr, enc_header->second);
-    }
-
-    constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
-    constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
-    auto kms_header = s->info.crypt_attribute_map.find(kms_attr);
-    if (kms_header != s->info.crypt_attribute_map.end()){
-      rgw_add_to_iam_environment(s->env, s3_kms_attr, kms_header->second);
-    }
+    // add server-side encryption headers
+    rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
     // Add bucket tags for authorization
     auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
