@@ -735,7 +735,7 @@ int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
 int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuotaInfo& user_quota, RGWQuotaInfo& bucket_quota, uint64_t obj_size,
 				optional_yield y, bool check_size_only)
 {
-    return store->getRados()->check_quota(dpp, owner->get_id(), get_key(),
+    return store->getRados()->check_quota(dpp, info.owner, get_key(),
 					  user_quota, bucket_quota, obj_size, y, check_size_only);
 }
 
