@@ -41,6 +41,10 @@ def get_system_network():
 def get_system_processors():
     return jsonify({'processors': system.get_processors()})
 
+@app.route('/system/storage', methods=['GET'])
+def get_system_storage():
+    return jsonify({'storage': system.get_storage()})
+
 @app.route('/system/status', methods=['GET'])
 def get_system_status():
     return jsonify({'status': system.get_status()})
