@@ -6684,7 +6684,9 @@ void Monitor::try_engage_stretch_mode()
   dout(20) << __func__ << dendl;
   if (stretch_mode_engaged) return;
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonEnableStretchMode(this));
+    return;
   }
   if (osdmon()->osdmap.stretch_mode_enabled &&
       monmap->stretch_mode_enabled) {
@@ -6767,12 +6769,15 @@ void Monitor::go_recovery_stretch_mode()
   }
   
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonGoRecovery(this));
     return;
   }
 
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoRecovery(this));
+    return;
   }
   osdmon()->trigger_recovery_stretch_mode();
 }
@@ -6808,10 +6813,14 @@ void Monitor::maybe_go_degraded_stretch_mode()
 						   &matched_down_mons);
   if (dead) {
     if (!osdmon()->is_writeable()) {
+      dout(20) << "osdmon is not writeable" << dendl;
       osdmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     if (!monmon()->is_writeable()) {
+      dout(20) << "monmon is not writeable" << dendl;
       monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     trigger_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
   }
@@ -6861,10 +6870,14 @@ void Monitor::trigger_healthy_stretch_mode()
   if (!is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
   if (!monmon()->is_writeable()) {
+    dout(20) << "monmon is not writeable" << dendl;
     monmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
 
   ceph_assert(osdmon()->osdmap.recovering_stretch_mode);
