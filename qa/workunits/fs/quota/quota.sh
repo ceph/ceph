@@ -97,12 +97,14 @@ stat --printf="%n %s\n" ancestor/p1/p2/parent/p3/file1
 #get/set attribute
 
 setfattr -n ceph.quota.max_bytes -v 0 .
-setfattr -n ceph.quota.max_bytes -v 1 .
-setfattr -n ceph.quota.max_bytes -v 9223372036854775807 .
-expect_false setfattr -n ceph.quota.max_bytes -v 9223372036854775808 .
+expect_false setfattr -n ceph.quota.max_bytes -v 1 .
+setfattr -n ceph.quota.max_bytes -v 4096 .
+expect_false setfattr -n ceph.quota.max_bytes -v 0x7FFFFFFFFFFFFFFF .
+setfattr -n ceph.quota.max_bytes -v 0x7FFFFFFFFFC00000 .
+expect_false setfattr -n ceph.quota.max_bytes -v 0x8000000000000000 .
 expect_false setfattr -n ceph.quota.max_bytes -v -1 .
-expect_false setfattr -n ceph.quota.max_bytes -v -9223372036854775808 .
-expect_false setfattr -n ceph.quota.max_bytes -v -9223372036854775809 .
+expect_false setfattr -n ceph.quota.max_bytes -v -0x8000000000000000 .
+expect_false setfattr -n ceph.quota.max_bytes -v -0x8000000000000001 .
 
 setfattr -n ceph.quota.max_bytes -v 0 .
 setfattr -n ceph.quota.max_bytes -v 1Ti .
@@ -121,9 +123,9 @@ expect_false setfattr -n ceph.quota.max_files -v -9223372036854775808 .
 expect_false setfattr -n ceph.quota.max_files -v -9223372036854775809 .
 
 setfattr -n ceph.quota -v "max_bytes=0 max_files=0" .
-setfattr -n ceph.quota -v "max_bytes=1 max_files=0" .
+setfattr -n ceph.quota -v "max_bytes=4096 max_files=0" .
 setfattr -n ceph.quota -v "max_bytes=0 max_files=1" .
-setfattr -n ceph.quota -v "max_bytes=1 max_files=1" .
+setfattr -n ceph.quota -v "max_bytes=4096 max_files=1" .
 expect_false setfattr -n ceph.quota -v "max_bytes=-1 max_files=0" .
 expect_false setfattr -n ceph.quota -v "max_bytes=0 max_files=-1" .
 expect_false setfattr -n ceph.quota -v "max_bytes=-1 max_files=-1" .
