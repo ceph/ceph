@@ -65,6 +65,9 @@ enum {
   l_osd_recovery_backfill_remove_queue_lat,
   l_osd_recovery_scan_queue_lat,
 
+  l_osd_recovery_queue_lat,
+  l_osd_recovery_context_queue_lat,
+
   l_osd_loadavg,
   l_osd_cached_crc,
   l_osd_cached_crc_adjusted,

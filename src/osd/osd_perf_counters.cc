@@ -187,6 +187,15 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "l_osd_recovery_scan_queue_latency",
     "MOSDPGScan queue latency");
 
+  osd_plb.add_time_avg(
+    l_osd_recovery_queue_lat,
+    "l_osd_recovery_queue_latency",
+    "PGRecovery queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_context_queue_lat,
+    "l_osd_recovery_context_queue_latency",
+    "PGRecoveryContext queue latency");
+
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
   osd_plb.add_u64(
     l_osd_cached_crc, "cached_crc", "Total number getting crc from crc_cache");

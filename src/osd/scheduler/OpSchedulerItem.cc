@@ -224,6 +224,9 @@ void PGRecovery::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
+  osd->logger->tinc(
+    l_osd_recovery_queue_lat,
+    time_queued - ceph_clock_now());
   osd->do_recovery(pg.get(), epoch_queued, reserved_pushes, priority, handle);
   pg->unlock();
 }
@@ -234,6 +237,9 @@ void PGRecoveryContext::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
+  osd->logger->tinc(
+    l_osd_recovery_context_queue_lat,
+    time_queued - ceph_clock_now());
   c.release()->complete(handle);
   pg->unlock();
 }
