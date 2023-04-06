@@ -572,10 +572,12 @@ public:
 };
 
 class PGRecoveryMsg : public PGOpQueueable {
+  utime_t time_queued;
   OpRequestRef op;
 
 public:
-  PGRecoveryMsg(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
+  PGRecoveryMsg(spg_t pg, OpRequestRef op)
+    : PGOpQueueable(pg), time_queued(ceph_clock_now()), op(std::move(op)) {}
 
   static bool is_recovery_msg(OpRequestRef &op) {
     switch (op->get_req()->get_type()) {
