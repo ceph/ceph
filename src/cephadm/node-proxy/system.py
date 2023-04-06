@@ -13,8 +13,8 @@ class System:
     def get_metadata(self):
         return self._system['metadata']
 
-    def get_processor(self):
-        return self._system['processor']
+    def get_processors(self):
+        return self._system['processors']
 
     def get_memory(self):
         return self._system['memory']

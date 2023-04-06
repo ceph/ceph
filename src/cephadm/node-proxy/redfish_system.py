@@ -37,8 +37,8 @@ class RedfishSystem(System):
     def get_power(self):
         return self._system['power']
 
-    def get_processor(self):
-        return self._system['processor']
+    def get_processors(self):
+        return self._system['processors']
 
     def get_network(self):
         return self._system['network']
@@ -75,6 +75,27 @@ class RedfishSystem(System):
             interface_info = self.client.get_path(interface_path)
             self._system['network'][interface_info['Id']] = interface_info
 
+    def _update_processors(self):
+        cpus_path = self._system['Processors']['@odata.id']
+        log.info("Updating processors")
+        cpus_info = self.client.get_path(cpus_path)
+        self._system['processors'] = {}
+        result = dict()
+        for cpu in cpus_info['Members']:
+            cpu_path = cpu['@odata.id']
+            cpu_info = self.client.get_path(cpu_path)
+            cpu_id = cpu_info['Id']
+            result[cpu_id] = dict()
+            result[cpu_id]['description'] = cpu_info['Description']
+            result[cpu_id]['cores'] = cpu_info['TotalCores']
+            result[cpu_id]['threads'] = cpu_info['TotalThreads']
+            result[cpu_id]['type'] = cpu_info['ProcessorType']
+            result[cpu_id]['model'] = cpu_info['Model']
+            result[cpu_id]['status'] = cpu_info['Status']
+            result[cpu_id]['manufacturer'] = cpu_info['Manufacturer']
+        self._system['processors'] = result
+
+
     def _update_storage(self):
         log.info("Updating storage")
         pass
@@ -99,6 +120,7 @@ class RedfishSystem(System):
                 self._update_memory()
                 self._update_power()
                 self._update_network()
+                self._update_processors()
                 self._update_storage()
                 sleep(3)
         # Catching 'Exception' is probably not a good idea (devel only)
