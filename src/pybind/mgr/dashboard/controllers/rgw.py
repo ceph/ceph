@@ -650,7 +650,7 @@ create_role_form = Form(path='/rgw/user/roles/create',
     router=APIRouter('/rgw/user/roles', Scope.RGW),
     doc=APIDoc("List of RGW roles", "RGW"),
     actions=[
-        TableAction(name='Create', permission='create', icon=Icon.add.value,
+        TableAction(name='Create', permission='create', icon=Icon.ADD.value,
                     routerLink='/rgw/user/roles/create')
     ],
     forms=[create_role_form],

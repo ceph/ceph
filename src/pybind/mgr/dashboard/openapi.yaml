@@ -2207,11 +2207,12 @@ paths:
               properties:
                 capabilities:
                   type: string
-                user_entity:
+                import_data:
+                  default: ''
                   type: string
-              required:
-              - user_entity
-              - capabilities
+                user_entity:
+                  default: ''
+                  type: string
               type: object
       responses:
         '201':
@@ -2236,6 +2237,44 @@ paths:
       security:
       - jwt: []
       summary: Create Ceph User
+      tags:
+      - Cluster
+  /api/cluster/user/export:
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                entities:
+                  type: string
+              required:
+              - entities
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Export Ceph Users
       tags:
       - Cluster
   /api/cluster/user/{user_entity}:
@@ -10906,7 +10945,7 @@ tags:
   name: Auth
 - description: Cephfs Management API
   name: Cephfs
-- description: Get Ceph Users
+- description: Get Cluster Details
   name: Cluster
 - description: Manage Cluster Configurations
   name: ClusterConfiguration
