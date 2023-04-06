@@ -104,8 +104,26 @@ class RedfishSystem(System):
 
 
     def _update_storage(self):
+        storage_path = self._system['Storage']['@odata.id']
         log.info("Updating storage")
-        pass
+        storage_info = self.client.get_path(storage_path)
+        result = dict()
+        for storage in storage_info['Members']:
+           entity_path = storage['@odata.id']
+           entity_info = self.client.get_path(entity_path)
+           for drive in entity_info['Drives']:
+               drive_path = drive['@odata.id']
+               drive_info = self.client.get_path(drive_path)
+               drive_id = drive_info['Id']
+               result[drive_id] = dict()
+               result[drive_id]['description'] = drive_info['Description']
+               result[drive_id]['capacity_bytes'] = drive_info['CapacityBytes']
+               result[drive_id]['model'] = drive_info['Model']
+               result[drive_id]['protocol'] = drive_info['Protocol']
+               result[drive_id]['serial_number'] = drive_info['SerialNumber']
+               result[drive_id]['status'] = drive_info['Status']
+               result[drive_id]['location'] = drive_info['PhysicalLocation']
+        self._system['storage'] = result
 
     def start_update_loop(self):
         self.run = True
