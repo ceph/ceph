@@ -500,6 +500,7 @@ class PGScrubChunkIsFree : public PGScrubItem {
 };
 
 class PGRecovery : public PGOpQueueable {
+  utime_t time_queued;
   epoch_t epoch_queued;
   uint64_t reserved_pushes;
   int priority;
@@ -510,6 +511,7 @@ public:
     uint64_t reserved_pushes,
     int priority)
     : PGOpQueueable(pg),
+      time_queued(ceph_clock_now()),
       epoch_queued(epoch_queued),
       reserved_pushes(reserved_pushes),
       priority(priority) {}
@@ -530,6 +532,7 @@ public:
 };
 
 class PGRecoveryContext : public PGOpQueueable {
+  utime_t time_queued;
   std::unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
   epoch_t epoch;
   int priority;
@@ -538,6 +541,7 @@ public:
 		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch,
 		    int priority)
     : PGOpQueueable(pgid),
+      time_queued(ceph_clock_now()),
       c(c), epoch(epoch), priority(priority) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecoveryContext(pgid=" << get_pgid()
