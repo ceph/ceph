@@ -1,6 +1,6 @@
-#!/bin/sh -x
+#!/bin/sh
 
-set -e
+set -ex
 
 # To skirt around GPL compatibility issues:
 wget http://download.ceph.com/qa/fsync-tester.c
