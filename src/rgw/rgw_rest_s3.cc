@@ -2518,8 +2518,15 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
-  if (!s->length)
-    return -ERR_LENGTH_REQUIRED;
+  if (!s->length) {
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || strcmp(encoding, "chunked") != 0) {
+      ldout(s->cct, 20) << "neither length nor chunked encoding" << dendl;
+      return -ERR_LENGTH_REQUIRED;
+    }
+
+    chunked_upload = true;
+  }
 
   int ret;
 
