@@ -111,7 +111,7 @@ int RadosWriter::process(bufferlist&& bl, uint64_t offset)
   }
   constexpr uint64_t id = 0; // unused
   auto& ref = stripe_obj.get_ref();
-  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
+  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y, &trace), cost, id);
   return process_completed(c, &written);
 }
 
@@ -126,7 +126,7 @@ int RadosWriter::write_exclusive(const bufferlist& data)
 
   constexpr uint64_t id = 0; // unused
   auto& ref = stripe_obj.get_ref();
-  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y), cost, id);
+  auto c = aio->get(ref.obj, Aio::librados_op(ref.pool.ioctx(), std::move(op), y, &trace), cost, id);
   auto d = aio->drain();
   c.splice(c.end(), d);
   return process_completed(c, &written);
@@ -341,7 +341,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y, writer.get_trace());
   if (r < 0) {
     if (r == -ETIMEDOUT) {
       // The head object write may eventually succeed, clear the set of objects for deletion. if it
@@ -469,7 +469,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y, writer.get_trace());
   if (r < 0)
     return r;
 
@@ -707,7 +707,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   }
   r = obj_op.write_meta(dpp, actual_size + cur_size,
 			accounted_size + *cur_accounted_size,
-			attrs, y);
+			attrs, y, writer.get_trace());
   if (r < 0) {
     return r;
   }

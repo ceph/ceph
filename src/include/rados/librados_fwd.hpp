@@ -3,6 +3,18 @@
 
 struct blkin_trace_info;
 
+namespace opentelemetry {
+inline namespace v1 {
+namespace trace {
+
+class SpanContext;
+
+} // namespace trace
+} // inline namespace v1
+} // namespace opentelemetry
+
+using jspan_context = opentelemetry::v1::trace::SpanContext;
+
 namespace libradosstriper {
 
 class RadosStriper;
