@@ -360,7 +360,7 @@ def is_device(dev):
             return False
 
     # fallback to stat
-    return _stat_is_device(os.lstat(dev).st_mode)
+    return _stat_is_device(os.stat(dev).st_mode)
 
 
 def is_partition(dev):
