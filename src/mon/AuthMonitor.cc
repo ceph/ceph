@@ -1334,6 +1334,7 @@ bool AuthMonitor::valid_caps(
   if (type == "mon") {
     MonCap moncap;
     if (!moncap.parse(caps, out)) {
+      dout(20) << "Parsing MON caps failed. MON cap: " << caps << dendl;
       return false;
     }
     return true;
@@ -1346,16 +1347,19 @@ bool AuthMonitor::valid_caps(
   if (type == "mgr") {
     MgrCap mgrcap;
     if (!mgrcap.parse(caps, out)) {
+      dout(20) << "Parsing MGR caps failed. MGR cap: " << caps << dendl;
       return false;
     }
   } else if (type == "osd") {
     OSDCap ocap;
     if (!ocap.parse(caps, out)) {
+      dout(20) << "Parsing OSD caps failed. OSD cap: " << caps << dendl;
       return false;
     }
   } else if (type == "mds") {
     MDSAuthCaps mdscap;
     if (!mdscap.parse(g_ceph_context, caps, out)) {
+      dout(20) << "Parsing MDS caps failed. MDS cap: " << caps << dendl;
       return false;
     }
   } else {
