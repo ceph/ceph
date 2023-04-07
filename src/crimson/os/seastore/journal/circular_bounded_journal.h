@@ -179,6 +179,12 @@ public:
 
   submit_record_ret do_submit_record(record_t &&record, OrderingHandle &handle);
 
+  // Test interfaces
+  
+  CircularJournalSpace& get_cjs() {
+    return cjs;
+  }
+
 private:
   JournalTrimmer &trimmer;
   std::string path;
