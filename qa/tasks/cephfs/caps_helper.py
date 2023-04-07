@@ -26,7 +26,7 @@ def gen_mon_cap_str(caps):
         return mon_cap
 
     if len(caps) == 1:
-        return _gen_mon_cap_str(caps[0])
+        return _gen_mon_cap_str(*caps[0])
 
     mon_cap = ''
     for i, c in enumerate(caps):
@@ -50,7 +50,7 @@ def gen_osd_cap_str(caps):
         return osd_cap
 
     if len(caps) == 1:
-        return _gen_osd_cap_str(caps[0])
+        return _gen_osd_cap_str(*caps[0])
 
     osd_cap = ''
     for i, c in enumerate(caps):
@@ -78,7 +78,7 @@ def gen_mds_cap_str(caps):
         return mds_cap
 
     if len(caps) == 1:
-        return _gen_mds_cap_str(caps[0])
+        return _gen_mds_cap_str(*caps[0])
 
     mds_cap = ''
     for i, c in enumerate(caps):
