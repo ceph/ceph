@@ -79,7 +79,7 @@ public:
     ~ShardDispatcher() = default;
 
     // Dispatcher methods
-    seastar::future<> ms_dispatch(crimson::net::ConnectionRef,
+    seastar::future<> ms_dispatch(crimson::net::ConnectionFRef,
                                                  MessageRef);
 
   private:
