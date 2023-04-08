@@ -4,11 +4,17 @@
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "tracer.h"
+#include "common/debug.h"
 
 #ifdef HAVE_JAEGER
 #include "opentelemetry/sdk/trace/batch_span_processor.h"
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_osd
+#undef dout_prefix
+#define dout_prefix *_dout << "opentelemetry_jaeger_tracing "
 
 namespace tracing {
 
@@ -23,6 +29,7 @@ Tracer::Tracer(opentelemetry::nostd::string_view service_name) {
 
 void Tracer::init(opentelemetry::nostd::string_view service_name) {
   if (!tracer) {
+    dout(3) << "tracer was not loaded, initializing tracing" << dendl;
     opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
     if (g_ceph_context) {
       exporter_options.server_port = g_ceph_context->_conf.get_val<int64_t>("jaeger_agent_port");
@@ -39,13 +46,16 @@ void Tracer::init(opentelemetry::nostd::string_view service_name) {
 
 jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
   if (is_enabled()) {
+    dout(20) << "start trace for " << trace_name << " " << dendl;
     return tracer->StartSpan(trace_name);
   }
   return noop_span;
 }
 
 jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled) {
+  dout(20) << "start trace enabled " << trace_is_enabled << " " << dendl;
   if (trace_is_enabled) {
+    dout(20) << "start trace for " << trace_name << " " << dendl;
     return tracer->StartSpan(trace_name);
   }
   return noop_tracer->StartSpan(trace_name);
@@ -55,6 +65,7 @@ jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan&
   if (is_enabled() && parent_span->IsRecording()) {
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_span->GetContext();
+    dout(20) << "adding span " << span_name << " " << dendl;
     return tracer->StartSpan(span_name, span_opts);
   }
   return noop_span;
@@ -64,6 +75,7 @@ jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_
   if (is_enabled() && parent_ctx.IsValid()) {
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_ctx;
+    dout(20) << "adding span " << span_name << " " << dendl;
     return tracer->StartSpan(span_name, span_opts);
   }
   return noop_span;
