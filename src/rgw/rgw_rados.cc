@@ -7254,7 +7254,7 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, const RGWBuck
 		      cls_rgw_bucket_link_olh(op, key, olh_state.olh_tag,
                                               delete_marker, op_tag, meta, olh_epoch,
 					      unmod_since, high_precision_time,
-					      svc.zone->get_zone().log_data, zones_trace);
+					      svc.zone->need_to_log_data(), zones_trace);
                       return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
                     });
   if (r < 0) {
@@ -7301,7 +7301,7 @@ int RGWRados::bucket_index_unlink_instance(const DoutPrefixProvider *dpp, const 
 		      op.assert_exists(); // bucket index shard must exist
 		      cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
 		      cls_rgw_bucket_unlink_instance(op, key, op_tag,
-						     olh_tag, olh_epoch, svc.zone->get_zone().log_data, zones_trace);
+						     olh_tag, olh_epoch, svc.zone->need_to_log_data(), zones_trace);
                       return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
                     });
   if (r < 0) {
@@ -8731,7 +8731,7 @@ int RGWRados::cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs,
 
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
-  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), svc.zone->get_zone().log_data, bilog_flags, zones_trace);
+  cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), svc.zone->need_to_log_data(), bilog_flags, zones_trace);
   return bs.bucket_obj.operate(dpp, &o, y);
 }
 
@@ -8759,10 +8759,10 @@ int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModify
   cls_rgw_obj_key key(ent.key.name, ent.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_complete_op(o, op, tag, ver, key, dir_meta, remove_objs,
-                             svc.zone->get_zone().log_data, bilog_flags, &zones_trace);
+                             svc.zone->need_to_log_data(), bilog_flags, &zones_trace);
   complete_op_data *arg;
   index_completion_manager->create_completion(obj, op, tag, ver, key, dir_meta, remove_objs,
-                                              svc.zone->get_zone().log_data, bilog_flags, &zones_trace, &arg);
+                                              svc.zone->need_to_log_data(), bilog_flags, &zones_trace, &arg);
   librados::AioCompletion *completion = arg->rados_completion;
   int ret = bs.bucket_obj.aio_operate(arg->rados_completion, &o);
   completion->release(); /* can't reference arg here, as it might have already been released */
@@ -9497,7 +9497,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
   const rgw_bucket& bucket = bucket_info.bucket;
-  uint8_t suggest_flag = (svc.zone->get_zone().log_data ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
+  uint8_t suggest_flag = (svc.zone->need_to_log_data() ? CEPH_RGW_DIR_SUGGEST_LOG_OP : 0);
 
   std::string loc;
 
