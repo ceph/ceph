@@ -926,6 +926,10 @@ bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
     return false;
   }
 
+  if (!zone_svc->sync_module_exports_data()) {
+    return false;
+  }
+
   if (bucket_is_sync_source()) {
     return true;
   }
