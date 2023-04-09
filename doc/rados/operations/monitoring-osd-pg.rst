@@ -244,11 +244,10 @@ of the PG. These values can be important in a few cases:
 
 .. topic:: Placement Group IDs
 
-   PG IDs consist of the pool number (not the pool name) followed 
-   by a period (.) and the PG ID-- (a hexadecimal number). You
-   can view pool numbers and their names from in the output of ``ceph osd 
-   lspools``. For example, the first pool that was created corresponds to
-   pool number ``1``. A fully qualified PG ID has the
+   PG IDs consist of the pool number (not the pool name) followed by a period
+   (.) and a hexadecimal number. You can view pool numbers and their names from
+   in the output of ``ceph osd lspools``. For example, the first pool that was
+   created corresponds to pool number ``1``. A fully qualified PG ID has the
    following form::
 
        {pool-num}.{pg-id}
