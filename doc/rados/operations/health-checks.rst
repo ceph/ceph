@@ -797,68 +797,68 @@ Device health
 DEVICE_HEALTH
 _____________
 
-One or more devices is expected to fail soon, where the warning
-threshold is controlled by the ``mgr/devicehealth/warn_threshold``
-config option.
+One or more OSD devices are expected to fail soon, where the warning threshold
+is determined by the ``mgr/devicehealth/warn_threshold`` config option.
 
-This warning only applies to OSDs that are currently marked "in", so
-the expected response to this failure is to mark the device "out" so
-that data is migrated off of the device, and then to remove the
-hardware from the system.  Note that the marking out is normally done
-automatically if ``mgr/devicehealth/self_heal`` is enabled based on
-the ``mgr/devicehealth/mark_out_threshold``.
+Because this alert applies only to OSDs that are currently marked ``in``, the
+appropriate response to this expected failure is (1) to mark the OSD ``out`` so
+that data is migrated off of the OSD, and then (2) to remove the hardware from
+the system. Note that this marking ``out`` is normally done automatically if
+``mgr/devicehealth/self_heal`` is enabled (as determined by
+``mgr/devicehealth/mark_out_threshold``).
 
-Device health can be checked with:
+To check device health, run the following command:
 
 .. prompt:: bash $
 
    ceph device info <device-id>
 
-Device life expectancy is set by a prediction model run by
-the mgr or an by external tool via the command:
+Device life expectancy is set either by a prediction model that the mgr runs or
+by an external tool that is activated by running the following command:
 
 .. prompt:: bash $
 
    ceph device set-life-expectancy <device-id> <from> <to>
 
-You can change the stored life expectancy manually, but that usually
-doesn't accomplish anything as whatever tool originally set it will
-probably set it again, and changing the stored value does not affect
-the actual health of the hardware device.
+You can change the stored life expectancy manually, but such a change usually
+doesn't accomplish anything. The reason for this is that whichever tool
+originally set the stored life expectancy will probably undo your change by
+setting it again, and a change to the stored value does not affect the actual
+health of the hardware device.
 
 DEVICE_HEALTH_IN_USE
 ____________________
 
-One or more devices is expected to fail soon and has been marked "out"
-of the cluster based on ``mgr/devicehealth/mark_out_threshold``, but it
-is still participating in one more PGs.  This may be because it was
-only recently marked "out" and data is still migrating, or because data
-cannot be migrated off for some reason (e.g., the cluster is nearly
-full, or the CRUSH hierarchy is such that there isn't another suitable
-OSD to migrate the data too).
+One or more devices (that is, OSDs) are expected to fail soon and have been
+marked ``out`` of the cluster (as controlled by
+``mgr/devicehealth/mark_out_threshold``), but they are still participating in
+one or more Placement Groups. This might be because the OSD(s) were marked
+``out`` only recently and data is still migrating, or because data cannot be
+migrated off of the OSD(s) for some reason (for example, the cluster is nearly
+full, or the CRUSH hierarchy is structured so that there isn't another suitable
+OSD to migrate the data to).
 
-This message can be silenced by disabling the self heal behavior
-(setting ``mgr/devicehealth/self_heal`` to false), by adjusting the
-``mgr/devicehealth/mark_out_threshold``, or by addressing what is
-preventing data from being migrated off of the ailing device.
+This message can be silenced by disabling self-heal behavior (that is, setting
+``mgr/devicehealth/self_heal`` to ``false``), by adjusting
+``mgr/devicehealth/mark_out_threshold``, or by addressing whichever condition
+is preventing data from being migrated off of the ailing OSD(s).
 
 DEVICE_HEALTH_TOOMANY
 _____________________
 
-Too many devices is expected to fail soon and the
-``mgr/devicehealth/self_heal`` behavior is enabled, such that marking
-out all of the ailing devices would exceed the clusters
-``mon_osd_min_in_ratio`` ratio that prevents too many OSDs from being
-automatically marked "out".
+Too many devices (that is, OSDs) are expected to fail soon, and because
+``mgr/devicehealth/self_heal`` behavior is enabled, marking ``out`` all of the
+ailing OSDs would exceed the cluster's ``mon_osd_min_in_ratio`` ratio.  This
+ratio prevents a cascade of too many OSDs from being automatically marked
+``out``.
 
-This generally indicates that too many devices in your cluster are
-expected to fail soon and you should take action to add newer
-(healthier) devices before too many devices fail and data is lost.
+You should promptly add new OSDs to the cluster to prevent data loss, or
+incrementally replace the failing OSDs.
 
-The health message can also be silenced by adjusting parameters like
-``mon_osd_min_in_ratio`` or ``mgr/devicehealth/mark_out_threshold``,
-but be warned that this will increase the likelihood of unrecoverable
-data loss in the cluster.
+Alternatively, you can silence this health check by adjusting options including
+``mon_osd_min_in_ratio`` or ``mgr/devicehealth/mark_out_threshold``.  Be
+warned, however, that this will increase the likelihood of unrecoverable data
+loss.
 
 
 Data health (pools & placement groups)
@@ -867,23 +867,24 @@ Data health (pools & placement groups)
 PG_AVAILABILITY
 _______________
 
-Data availability is reduced, meaning that the cluster is unable to
-service potential read or write requests for some data in the cluster.
-Specifically, one or more PGs is in a state that does not allow IO
-requests to be serviced.  Problematic PG states include *peering*,
-*stale*, *incomplete*, and the lack of *active* (if those conditions do not clear
-quickly).
+Data availability is reduced. In other words, the cluster is unable to service
+potential read or write requests for at least some data in the cluster.  More
+precisely, one or more Placement Groups (PGs) are in a state that does not
+allow I/O requests to be serviced. Any of the following PG states are
+problematic if they do not clear quickly: *peering*, *stale*, *incomplete*, and
+the lack of *active*.
 
-Detailed information about which PGs are affected is available from:
+For detailed information about which PGs are affected, run the following
+command:
 
 .. prompt:: bash $
 
    ceph health detail
 
-In most cases the root cause is that one or more OSDs is currently
-down; see the discussion for ``OSD_DOWN`` above.
+In most cases, the root cause of this issue is that one or more OSDs are
+currently ``down``: see ``OSD_DOWN`` above.
 
-The state of specific problematic PGs can be queried with:
+To see the state of a specific problematic PG, run the following command:
 
 .. prompt:: bash $
 
@@ -892,25 +893,26 @@ The state of specific problematic PGs can be queried with:
 PG_DEGRADED
 ___________
 
-Data redundancy is reduced for some data, meaning the cluster does not
-have the desired number of replicas for all data (for replicated
-pools) or erasure code fragments (for erasure coded pools).
-Specifically, one or more PGs:
+Data redundancy is reduced for some data: in other words, the cluster does not
+have the desired number of replicas for all data (in the case of replicated
+pools) or erasure code fragments (in the case of erasure-coded pools).  More
+precisely, one or more Placement Groups (PGs):
 
-* has the *degraded* or *undersized* flag set, meaning there are not
-  enough instances of that placement group in the cluster;
-* has not had the *clean* flag set for some time.
+* have the *degraded* or *undersized* flag set, which means that there are not
+  enough instances of that PG in the cluster; or
+* have not had the *clean* state set for a long time.
 
-Detailed information about which PGs are affected is available from:
+For detailed information about which PGs are affected, run the following
+command:
 
 .. prompt:: bash $
 
    ceph health detail
 
-In most cases the root cause is that one or more OSDs is currently
-down; see the discussion for ``OSD_DOWN`` above.
+In most cases, the root cause of this issue is that one or more OSDs are
+currently "down": see ``OSD_DOWN`` above.
 
-The state of specific problematic PGs can be queried with:
+To see the state of a specific problematic PG, run the following command:
 
 .. prompt:: bash $
 
@@ -920,72 +922,71 @@ The state of specific problematic PGs can be queried with:
 PG_RECOVERY_FULL
 ________________
 
-Data redundancy may be reduced or at risk for some data due to a lack
-of free space in the cluster.  Specifically, one or more PGs has the
-*recovery_toofull* flag set, meaning that the
-cluster is unable to migrate or recover data because one or more OSDs
-is above the *full* threshold.
+Data redundancy might be reduced or even put at risk for some data due to a
+lack of free space in the cluster. More precisely, one or more Placement Groups
+have the *recovery_toofull* flag set, which means that the cluster is unable to
+migrate or recover data because one or more OSDs are above the ``full``
+threshold.
 
-See the discussion for *OSD_FULL* above for steps to resolve this condition.
+For steps to resolve this condition, see *OSD_FULL* above.
 
 PG_BACKFILL_FULL
 ________________
 
-Data redundancy may be reduced or at risk for some data due to a lack
-of free space in the cluster.  Specifically, one or more PGs has the
-*backfill_toofull* flag set, meaning that the
-cluster is unable to migrate or recover data because one or more OSDs
-is above the *backfillfull* threshold.
+Data redundancy might be reduced or even put at risk for some data due to a
+lack of free space in the cluster. More precisely, one or more Placement Groups
+have the *backfill_toofull* flag set, which means that the cluster is unable to
+migrate or recover data because one or more OSDs are above the ``backfillfull``
+threshold.
 
-See the discussion for *OSD_BACKFILLFULL* above for
-steps to resolve this condition.
-
-.. _rados-operations-health-checks-pg-damaged:
+For steps to resolve this condition, see *OSD_BACKFILLFULL* above.
 
 PG_DAMAGED
 __________
 
-Data scrubbing has discovered some problems with data consistency in
-the cluster.  Specifically, one or more PGs has the *inconsistent* or
-*snaptrim_error* flag is set, indicating an earlier scrub operation
-found a problem, or that the *repair* flag is set, meaning a repair
-for such an inconsistency is currently in progress.
+Data scrubbing has discovered problems with data consistency in the cluster.
+More precisely, one or more Placement Groups either (1) have the *inconsistent*
+or ``snaptrim_error`` flag set, which indicates that an earlier data scrub
+operation found a problem, or (2) have the *repair* flag set, which means that
+a repair for such an inconsistency is currently in progress.
 
-See :doc:`pg-repair` for more information.
+For more information, see :doc:`pg-repair`.
 
 OSD_SCRUB_ERRORS
 ________________
 
-Recent OSD scrubs have uncovered inconsistencies. This error is generally
-paired with *PG_DAMAGED* (see :ref:`PG_DAMAGE <rados-operations-health-checks-pg-damaged>`).
+Recent OSD scrubs have discovered inconsistencies. This alert is generally
+paired with *PG_DAMAGED* (see above).
 
-See :doc:`pg-repair` for more information.
+For more information, see :doc:`pg-repair`.
 
 OSD_TOO_MANY_REPAIRS
 ____________________
 
-When a read error occurs and another replica is available it is used to repair
-the error immediately, so that the client can get the object data.  Scrub
-handles errors for data at rest.  In order to identify possible failing disks
-that aren't seeing scrub errors, a count of read repairs is maintained.  If
-it exceeds a config value threshold *mon_osd_warn_num_repaired* default 10,
-this health warning is generated.
+The count of read repairs has exceeded the config value threshold
+``mon_osd_warn_num_repaired`` (default: ``10``).  Because scrub handles errors
+only for data at rest, and because any read error that occurs when another
+replica is available will be repaired immediately so that the client can get
+the object data, there might exist failing disks that are not registering any
+scrub errors. This repair count is maintained as a way of identifying any such
+failing disks.
+
 
 LARGE_OMAP_OBJECTS
 __________________
 
-One or more pools contain large omap objects as determined by
-``osd_deep_scrub_large_omap_object_key_threshold`` (threshold for number of keys
-to determine a large omap object) or
-``osd_deep_scrub_large_omap_object_value_sum_threshold`` (the threshold for
-summed size (bytes) of all key values to determine a large omap object) or both.
-More information on the object name, key count, and size in bytes can be found
-by searching the cluster log for 'Large omap object found'. Large omap objects
-can be caused by RGW bucket index objects that do not have automatic resharding
-enabled. Please see :ref:`RGW Dynamic Bucket Index Resharding
-<rgw_dynamic_bucket_index_resharding>` for more information on resharding.
+One or more pools contain large omap objects, as determined by
+``osd_deep_scrub_large_omap_object_key_threshold`` (threshold for the number of
+keys to determine what is considered a large omap object) or
+``osd_deep_scrub_large_omap_object_value_sum_threshold`` (the threshold for the
+summed size in bytes of all key values to determine what is considered a large
+omap object) or both.  To find more information on object name, key count, and
+size in bytes, search the cluster log for 'Large omap object found'. This issue
+can be caused by RGW-bucket index objects that do not have automatic resharding
+enabled. For more information on resharding, see :ref:`RGW Dynamic Bucket Index
+Resharding <rgw_dynamic_bucket_index_resharding>`.
 
-The thresholds can be adjusted with:
+To adjust the thresholds mentioned above, run the following commands:
 
 .. prompt:: bash $
 
@@ -995,54 +996,53 @@ The thresholds can be adjusted with:
 CACHE_POOL_NEAR_FULL
 ____________________
 
-A cache tier pool is nearly full.  Full in this context is determined
-by the ``target_max_bytes`` and ``target_max_objects`` properties on
-the cache pool.  Once the pool reaches the target threshold, write
-requests to the pool may block while data is flushed and evicted
-from the cache, a state that normally leads to very high latencies and
-poor performance.
+A cache-tier pool is nearly full, as determined by the ``target_max_bytes`` and
+``target_max_objects`` properties of the cache pool. Once the pool reaches the
+target threshold, write requests to the pool might block while data is flushed
+and evicted from the cache. This state normally leads to very high latencies
+and poor performance.
 
-The cache pool target size can be adjusted with:
+To adjust the cache pool's target size, run the following commands:
 
 .. prompt:: bash $
 
    ceph osd pool set <cache-pool-name> target_max_bytes <bytes>
    ceph osd pool set <cache-pool-name> target_max_objects <objects>
 
-Normal cache flush and evict activity may also be throttled due to reduced
-availability or performance of the base tier, or overall cluster load.
+There might be other reasons that normal cache flush and evict activity are
+throttled: for example, reduced availability of the base tier, reduced
+performance of the base tier, or overall cluster load.
 
 TOO_FEW_PGS
 ___________
 
-The number of PGs in use in the cluster is below the configurable
-threshold of ``mon_pg_warn_min_per_osd`` PGs per OSD.  This can lead
-to suboptimal distribution and balance of data across the OSDs in
-the cluster, and similarly reduce overall performance.
+The number of Placement Groups (PGs) that are in use in the cluster is below
+the configurable threshold of ``mon_pg_warn_min_per_osd`` PGs per OSD. This can
+lead to suboptimal distribution and suboptimal balance of data across the OSDs
+in the cluster, and a reduction of overall performance.
 
-This may be an expected condition if data pools have not yet been
-created.
+If data pools have not yet been created, this condition is expected.
 
-The PG count for existing pools can be increased or new pools can be created.
-Please refer to :ref:`choosing-number-of-placement-groups` for more
-information.
+To address this issue, you can increase the PG count for existing pools or
+create new pools.  For more information, see
+:ref:`choosing-number-of-placement-groups`.
 
 POOL_PG_NUM_NOT_POWER_OF_TWO
 ____________________________
 
-One or more pools has a ``pg_num`` value that is not a power of two.
-Although this is not strictly incorrect, it does lead to a less
-balanced distribution of data because some PGs have roughly twice as
-much data as others.
+One or more pools have a ``pg_num`` value that is not a power of two.  Although
+this is not strictly incorrect, it does lead to a less balanced distribution of
+data because some Placement Groups will have roughly twice as much data as
+others have.
 
-This is easily corrected by setting the ``pg_num`` value for the
-affected pool(s) to a nearby power of two:
+This is easily corrected by setting the ``pg_num`` value for the affected
+pool(s) to a nearby power of two. To do so, run the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_num <value>
 
-This health warning can be disabled with:
+To disable this health check, run the following command:
 
 .. prompt:: bash $
 
@@ -1051,92 +1051,94 @@ This health warning can be disabled with:
 POOL_TOO_FEW_PGS
 ________________
 
-One or more pools should probably have more PGs, based on the amount
-of data that is currently stored in the pool.  This can lead to
-suboptimal distribution and balance of data across the OSDs in the
-cluster, and similarly reduce overall performance.  This warning is
-generated if the ``pg_autoscale_mode`` property on the pool is set to
-``warn``.
+One or more pools should probably have more Placement Groups (PGs), given the
+amount of data that is currently stored in the pool. This issue can lead to
+suboptimal distribution and suboptimal balance of data across the OSDs in the
+cluster, and a reduction of overall performance. This alert is raised only if
+the ``pg_autoscale_mode`` property on the pool is set to ``warn``.
 
-To disable the warning, you can disable auto-scaling of PGs for the
-pool entirely with:
+To disable the alert, entirely disable auto-scaling of PGs for the pool by
+running the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_autoscale_mode off
 
-To allow the cluster to automatically adjust the number of PGs,:
+To allow the cluster to automatically adjust the number of PGs for the pool,
+run the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_autoscale_mode on
 
-You can also manually set the number of PGs for the pool to the
-recommended amount with:
+Alternatively, to manually set the number of PGs for the pool to the
+recommended amount, run the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_num <new-pg-num>
 
-Please refer to :ref:`choosing-number-of-placement-groups` and
-:ref:`pg-autoscaler` for more information.
+For more information, see :ref:`choosing-number-of-placement-groups` and
+:ref:`pg-autoscaler`.
 
 TOO_MANY_PGS
 ____________
 
-The number of PGs in use in the cluster is above the configurable
-threshold of ``mon_max_pg_per_osd`` PGs per OSD.  If this threshold is
-exceed the cluster will not allow new pools to be created, pool `pg_num` to
-be increased, or pool replication to be increased (any of which would lead to
-more PGs in the cluster).  A large number of PGs can lead
-to higher memory utilization for OSD daemons, slower peering after
-cluster state changes (like OSD restarts, additions, or removals), and
-higher load on the Manager and Monitor daemons.
+The number of Placement Groups (PGs) in use in the cluster is above the
+configurable threshold of ``mon_max_pg_per_osd`` PGs per OSD. If this threshold
+is exceeded, the cluster will not allow new pools to be created, pool `pg_num`
+to be increased, or pool replication to be increased (any of which, if allowed,
+would lead to more PGs in the cluster). A large number of PGs can lead to
+higher memory utilization for OSD daemons, slower peering after cluster state
+changes (for example, OSD restarts, additions, or removals), and higher load on
+the Manager and Monitor daemons.
 
-The simplest way to mitigate the problem is to increase the number of
-OSDs in the cluster by adding more hardware.  Note that the OSD count
-used for the purposes of this health check is the number of "in" OSDs,
-so marking "out" OSDs "in" (if there are any) can also help:
+The simplest way to mitigate the problem is to increase the number of OSDs in
+the cluster by adding more hardware. Note that, because the OSD count that is
+used for the purposes of this health check is the number of ``in`` OSDs,
+marking ``out`` OSDs ``in`` (if there are any ``out`` OSDs available) can also
+help. To do so, run the following command:
 
 .. prompt:: bash $
 
    ceph osd in <osd id(s)>
 
-Please refer to :ref:`choosing-number-of-placement-groups` for more
-information.
+For more information, see :ref:`choosing-number-of-placement-groups`.
 
 POOL_TOO_MANY_PGS
 _________________
 
-One or more pools should probably have more PGs, based on the amount
-of data that is currently stored in the pool.  This can lead to higher
-memory utilization for OSD daemons, slower peering after cluster state
-changes (like OSD restarts, additions, or removals), and higher load
-on the Manager and Monitor daemons.  This warning is generated if the
+One or more pools should probably have fewer Placement Groups (PGs), given the
+amount of data that is currently stored in the pool. This issue can lead to
+higher memory utilization for OSD daemons, slower peering after cluster state
+changes (for example, OSD restarts, additions, or removals), and higher load on
+the Manager and Monitor daemons. This alert is raised only if the
 ``pg_autoscale_mode`` property on the pool is set to ``warn``.
 
-To disable the warning, you can disable auto-scaling of PGs for the
-pool entirely with:
+To disable the alert, entirely disable auto-scaling of PGs for the pool by
+running the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_autoscale_mode off
 
-To allow the cluster to automatically adjust the number of PGs,:
+To allow the cluster to automatically adjust the number of PGs for the pool,
+run the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_autoscale_mode on
 
-You can also manually set the number of PGs for the pool to the
-recommended amount with:
+Alternatively, to manually set the number of PGs for the pool to the
+recommended amount, run the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> pg_num <new-pg-num>
 
-Please refer to :ref:`choosing-number-of-placement-groups` and
-:ref:`pg-autoscaler` for more information.
+For more information, see :ref:`choosing-number-of-placement-groups` and
+:ref:`pg-autoscaler`.
+
 
 POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
 ____________________________________
