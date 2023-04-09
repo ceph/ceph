@@ -26,27 +26,51 @@ Read more about jaeger tracing:.
 JAEGER DEPLOYMENT
 -----------------
 
-Jaeger can be deployed using cephadm, and Jaeger can be deployed manually.
+Jaeger can be deployed using cephadm, or manually.
 
-Refer to one of the following:
+CEPHADM BASED DEPLOYMENT AS A SERVICE
+-------------------------------------
 
 `Cephadm Jaeger Services Deployment <../cephadm/services/tracing/>`_
+
+
+MANUAL TEST DEPLOYMENT FOR JAEGER OPENTELEMETRY ALL IN ONE CONTAINER
+--------------------------------------------------------------------
+
+For single node testing Jaeger opentelemetry can be deployed using:
+
+.. prompt:: bash $
+
+   docker run -d --name jaeger \
+  -e COLLECTOR_ZIPKIN_HOST_PORT=:9411 \
+  -e COLLECTOR_OTLP_ENABLED=true \
+  -p 6799:6799/udp \
+  -p 6832:6832/udp \
+  -p 5778:5778 \
+  -p 16686:16686 \
+  -p 4317:4317 \
+  -p 4318:4318 \
+  -p 14250:14250 \
+  -p 14268:14268 \
+  -p 14269:14269 \
+  -p 9411:9411 \
+  jaegertracing/all-in-one:latest --processor.jaeger-compact.server-host-port=6799
+
 
 `Jaeger Deployment <https://www.jaegertracing.io/docs/1.25/deployment/>`_
 
 `Jaeger Performance Tuning <https://www.jaegertracing.io/docs/1.25/performance-tuning/>`_
 
+.. note::
 
-Important Notes:
-^^^^^^^^^^^^^^^^
-
-- The Jaeger agent must be running on each host (and not running in all-in-one
+  The Jaeger agent must be running on each host (and not running in all-in-one
   mode). This is because spans are sent to the local Jaeger agent. Spans of
   hosts that do not have active Jaeger agents will be lost.
 
-- Ceph tracers are configured to send tracers to agents that listen to port
-  6799. Use the option "--processor.jaeger-compact.server-host-port=6799" for
-  manual Jaeger deployments. 
+  The default configured port for Jaeger agent differs from the official default
+  6831, since Ceph tracers are configured to send tracers to agents that listen
+  to port the configured 6799. Use the option "--processor.jaeger-compact.server-host-port=6799" for manual Jaeger
+  deployments.
 
 
 HOW TO ENABLE TRACING IN CEPH
