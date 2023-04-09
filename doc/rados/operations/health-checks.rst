@@ -545,32 +545,33 @@ If not, delete some existing data to reduce utilization.
 BLUEFS_SPILLOVER
 ________________
 
-One or more OSDs that use the BlueStore backend have been allocated
-`db` partitions (storage space for metadata, normally on a faster
-device) but that space has filled, such that metadata has "spilled
-over" onto the normal slow device.  This isn't necessarily an error
-condition or even unexpected, but if the administrator's expectation
-was that all metadata would fit on the faster device, it indicates
+One or more OSDs that use the BlueStore back end have been allocated `db`
+partitions (that is, storage space for metadata, normally on a faster device),
+but because that space has been filled, metadata has "spilled over" onto the
+slow device. This is not necessarily an error condition or even unexpected
+behavior, but may result in degraded performance. If the administrator had
+expected that all metadata would fit on the faster device, this alert indicates
 that not enough space was provided.
 
-This warning can be disabled on all OSDs with:
+To disable this alert on all OSDs, run the following command:
 
 .. prompt:: bash $
 
    ceph config set osd bluestore_warn_on_bluefs_spillover false
 
-Alternatively, it can be disabled on a specific OSD with:
+Alternatively, to disable the alert on a specific OSD, run the following
+command:
 
 .. prompt:: bash $
 
    ceph config set osd.123 bluestore_warn_on_bluefs_spillover false
 
-To provide more metadata space, the OSD in question could be destroyed and
-reprovisioned.  This will involve data migration and recovery.
+To secure more metadata space, you can destroy and reprovision the OSD in
+question. This process involves data migration and recovery.
 
-It may also be possible to expand the LVM logical volume backing the
-`db` storage.  If the underlying LV has been expanded, the OSD daemon
-needs to be stopped and BlueFS informed of the device size change with:
+It might also be possible to expand the LVM logical volume that backs the `db`
+storage. If the underlying LV has been expanded, you must stop the OSD daemon
+and inform BlueFS of the device-size change by running the following command:
 
 .. prompt:: bash $
 
@@ -579,26 +580,29 @@ needs to be stopped and BlueFS informed of the device size change with:
 BLUEFS_AVAILABLE_SPACE
 ______________________
 
-To check how much space is free for BlueFS do:
+To see how much space is free for BlueFS, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon osd.123 bluestore bluefs available
 
-This will output up to 3 values: `BDEV_DB free`, `BDEV_SLOW free` and
-`available_from_bluestore`. `BDEV_DB` and `BDEV_SLOW` report amount of space that
-has been acquired by BlueFS and is considered free. Value `available_from_bluestore`
-denotes ability of BlueStore to relinquish more space to BlueFS.
-It is normal that this value is different from amount of BlueStore free space, as
-BlueFS allocation unit is typically larger than BlueStore allocation unit.
-This means that only part of BlueStore free space will be acceptable for BlueFS.
+This will output up to three values: ``BDEV_DB free``, ``BDEV_SLOW free``, and
+``available_from_bluestore``. ``BDEV_DB`` and ``BDEV_SLOW`` report the amount
+of space that has been acquired by BlueFS and is now considered free. The value
+``available_from_bluestore`` indicates the ability of BlueStore to relinquish
+more space to BlueFS.  It is normal for this value to differ from the amount of
+BlueStore free space, because the BlueFS allocation unit is typically larger
+than the BlueStore allocation unit.  This means that only part of the BlueStore
+free space will be available for BlueFS.
 
 BLUEFS_LOW_SPACE
 _________________
 
-If BlueFS is running low on available free space and there is little
-`available_from_bluestore` one can consider reducing BlueFS allocation unit size.
-To simulate available space when allocation unit is different do:
+If BlueFS is running low on available free space and there is not much free
+space available from BlueStore (in other words, `available_from_bluestore` has
+a low value), consider reducing the BlueFS allocation unit size. To simulate
+available space when the allocation unit is different, run the following
+command: 
 
 .. prompt:: bash $
 
@@ -607,35 +611,35 @@ To simulate available space when allocation unit is different do:
 BLUESTORE_FRAGMENTATION
 _______________________
 
-As BlueStore works free space on underlying storage will get fragmented.
-This is normal and unavoidable but excessive fragmentation will cause slowdown.
-To inspect BlueStore fragmentation one can do:
+As BlueStore operates, the free space on the underlying storage will become
+fragmented.  This is normal and unavoidable, but excessive fragmentation causes
+slowdown.  To inspect BlueStore fragmentation, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon osd.123 bluestore allocator score block
 
-Score is given in [0-1] range.
+The fragmentation score is given in a [0-1] range.
 [0.0 .. 0.4] tiny fragmentation
 [0.4 .. 0.7] small, acceptable fragmentation
 [0.7 .. 0.9] considerable, but safe fragmentation
-[0.9 .. 1.0] severe fragmentation, may impact BlueFS ability to get space from BlueStore
+[0.9 .. 1.0] severe fragmentation, might impact BlueFS's ability to get space from BlueStore
 
-If detailed report of free fragments is required do:
+To see a detailed report of free fragments, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon osd.123 bluestore allocator dump block
 
-In case when handling OSD process that is not running fragmentation can be
-inspected with `ceph-bluestore-tool`.
-Get fragmentation score:
+For OSD processes that are not currently running, fragmentation can be
+inspected with `ceph-bluestore-tool`. To see the fragmentation score, run the
+following command:
 
 .. prompt:: bash $
 
    ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-score
 
-And dump detailed free chunks:
+To dump detailed free chunks, run the following command:
 
 .. prompt:: bash $
 
@@ -644,15 +648,19 @@ And dump detailed free chunks:
 BLUESTORE_LEGACY_STATFS
 _______________________
 
-In the Nautilus release, BlueStore tracks its internal usage
-statistics on a per-pool granular basis, and one or more OSDs have
-BlueStore volumes that were created prior to Nautilus.  If *all* OSDs
-are older than Nautilus, this just means that the per-pool metrics are
-not available.  However, if there is a mix of pre-Nautilus and
-post-Nautilus OSDs, the cluster usage statistics reported by ``ceph
-df`` will not be accurate.
+One or more OSDs have BlueStore volumes that were created prior to the
+Nautilus release. (In Nautilus, BlueStore tracks its internal usage
+statistics on a granular, per-pool basis.)
 
-The old OSDs can be updated to use the new usage tracking scheme by stopping each OSD, running a repair operation, and the restarting it.  For example, if ``osd.123`` needed to be updated,:
+If *all* OSDs
+are older than Nautilus, this means that the per-pool metrics are
+simply unavailable. But if there is a mixture of pre-Nautilus and
+post-Nautilus OSDs, the cluster usage statistics reported by ``ceph
+df`` will be inaccurate.
+
+The old OSDs can be updated to use the new usage-tracking scheme by stopping
+each OSD, running a repair operation, and then restarting the OSD. For example,
+to update ``osd.123``, run the following commands:
 
 .. prompt:: bash $
 
@@ -660,7 +668,7 @@ The old OSDs can be updated to use the new usage tracking scheme by stopping eac
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
    systemctl start ceph-osd@123
 
-This warning can be disabled with:
+To disable this alert, run the following command:
 
 .. prompt:: bash $
 
@@ -669,15 +677,17 @@ This warning can be disabled with:
 BLUESTORE_NO_PER_POOL_OMAP
 __________________________
 
-Starting with the Octopus release, BlueStore tracks omap space utilization
-by pool, and one or more OSDs have volumes that were created prior to
-Octopus.  If all OSDs are not running BlueStore with the new tracking
-enabled, the cluster will report and approximate value for per-pool omap usage
-based on the most recent deep-scrub.
+One or more OSDs have volumes that were created prior to the Octopus release.
+(In Octopus and later releases, BlueStore tracks omap space utilization by
+pool.)
 
-The old OSDs can be updated to track by pool by stopping each OSD,
-running a repair operation, and the restarting it.  For example, if
-``osd.123`` needed to be updated,:
+If there are any BlueStore OSDs that do not have the new tracking enabled, the
+cluster will report an approximate value for per-pool omap usage based on the
+most recent deep scrub.
+
+The OSDs can be updated to track by pool by stopping each OSD, running a repair
+operation, and then restarting the OSD. For example, to update ``osd.123``, run
+the following commands:
 
 .. prompt:: bash $
 
@@ -685,7 +695,7 @@ running a repair operation, and the restarting it.  For example, if
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
    systemctl start ceph-osd@123
 
-This warning can be disabled with:
+To disable this alert, run the following command:
 
 .. prompt:: bash $
 
@@ -694,13 +704,15 @@ This warning can be disabled with:
 BLUESTORE_NO_PER_PG_OMAP
 __________________________
 
-Starting with the Pacific release, BlueStore tracks omap space utilization
-by PG, and one or more OSDs have volumes that were created prior to
-Pacific.  Per-PG omap enables faster PG removal when PGs migrate.
+One or more OSDs have volumes that were created prior to Pacific.  (In Pacific
+and later releases Bluestore tracks omap space utilitzation by Placement Group
+(PG).)
 
-The older OSDs can be updated to track by PG by stopping each OSD,
-running a repair operation, and the restarting it.  For example, if
-``osd.123`` needed to be updated,:
+Per-PG omap allows faster PG removal when PGs migrate.
+
+The older OSDs can be updated to track by PG by stopping each OSD, running a
+repair operation, and then restarting the OSD. For example, to update
+``osd.123``, run the following commands:
 
 .. prompt:: bash $
 
@@ -708,7 +720,7 @@ running a repair operation, and the restarting it.  For example, if
    ceph-bluestore-tool repair --path /var/lib/ceph/osd/ceph-123
    systemctl start ceph-osd@123
 
-This warning can be disabled with:
+To disable this alert, run the following command:
 
 .. prompt:: bash $
 
@@ -718,13 +730,14 @@ This warning can be disabled with:
 BLUESTORE_DISK_SIZE_MISMATCH
 ____________________________
 
-One or more OSDs using BlueStore has an internal inconsistency between the size
-of the physical device and the metadata tracking its size.  This can lead to
-the OSD crashing in the future.
+One or more BlueStore OSDs have an internal inconsistency between the size of
+the physical device and the metadata that tracks its size. This inconsistency
+can lead to the OSD(s) crashing in the future.
 
-The OSDs in question should be destroyed and reprovisioned.  Care should be
-taken to do this one OSD at a time, and in a way that doesn't put any data at
-risk.  For example, if osd ``$N`` has the error:
+The OSDs that have this inconsistency should be destroyed and reprovisioned. Be
+very careful to execute this procedure on only one OSD at a time, so as to
+minimize the risk of losing any data. To execute this procedure, where ``$N``
+is the OSD that has the inconsistency, run the following commands:
 
 .. prompt:: bash $
 
@@ -734,46 +747,49 @@ risk.  For example, if osd ``$N`` has the error:
    ceph-volume lvm zap /path/to/device
    ceph-volume lvm create --osd-id $N --data /path/to/device
 
+.. note::
+
+   Wait for this recovery procedure to completely on one OSD before running it
+   on the next.
+
 BLUESTORE_NO_COMPRESSION
 ________________________
 
-One or more OSDs is unable to load a BlueStore compression plugin.
-This can be caused by a broken installation, in which the ``ceph-osd``
-binary does not match the compression plugins, or a recent upgrade
-that did not include a restart of the ``ceph-osd`` daemon.
+One or more OSDs is unable to load a BlueStore compression plugin.  This issue
+might be caused by a broken installation, in which the ``ceph-osd`` binary does
+not match the compression plugins. Or it might be caused by a recent upgrade in
+which the ``ceph-osd`` daemon was not restarted.
 
-Verify that the package(s) on the host running the OSD(s) in question
-are correctly installed and that the OSD daemon(s) have been
-restarted.  If the problem persists, check the OSD log for any clues
-as to the source of the problem.
+To resolve this issue, verify that all of the packages on the host that is
+running the affected OSD(s) are correctly installed and that the OSD daemon(s)
+have been restarted. If the problem persists, check the OSD log for information
+about the source of the problem.
 
 BLUESTORE_SPURIOUS_READ_ERRORS
 ______________________________
 
-One or more OSDs using BlueStore detects spurious read errors at main device.
-BlueStore has recovered from these errors by retrying disk reads.
-Though this might show some issues with underlying hardware, I/O subsystem,
-etc.
-Which theoretically might cause permanent data corruption.
-Some observations on the root cause can be found at 
-https://tracker.ceph.com/issues/22464
+One or more BlueStore OSDs detect spurious read errors on the main device.
+BlueStore has recovered from these errors by retrying disk reads.  This alert
+might indicate issues with underlying hardware, issues with the I/O subsystem,
+or something similar.  In theory, such issues can cause permanent data
+corruption.  Some observations on the root cause of spurious read errors can be
+found here: https://tracker.ceph.com/issues/22464
 
-This alert doesn't require immediate response but corresponding host might need
-additional attention, e.g. upgrading to the latest OS/kernel versions and
-H/W resource utilization monitoring.
+This alert does not require an immediate response, but the affected host might
+need additional attention: for example, upgrading the host to the latest
+OS/kernel versions and implementing hardware-resource-utilization monitoring.
 
-This warning can be disabled on all OSDs with:
+To disable this alert on all OSDs, run the following command:
 
 .. prompt:: bash $
 
    ceph config set osd bluestore_warn_on_spurious_read_errors false
 
-Alternatively, it can be disabled on a specific OSD with:
+Or, to disable this alert on a specific OSD, run the following command:
 
 .. prompt:: bash $
 
    ceph config set osd.123 bluestore_warn_on_spurious_read_errors false
-
 
 Device health
 -------------
