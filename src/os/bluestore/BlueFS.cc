@@ -3929,7 +3929,7 @@ int BlueFS::open_for_write(
   std::string_view dirname,
   std::string_view filename,
   FileWriter **h,
-  bool overwrite)/*_N_LD*/
+  bool overwrite)/*_LND*/
 {
   _maybe_check_vselector_LNF();
   FileRef file;
@@ -3937,7 +3937,8 @@ int BlueFS::open_for_write(
   bool truncate = false;
   mempool::bluefs::vector<bluefs_extent_t> pending_release_extents;
   {
-  std::unique_lock nl(nodes.lock);
+  std::lock_guard ll(log.lock);
+  std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
   map<string,DirRef>::iterator p = nodes.dir_map.find(dirname);
   DirRef dir;
@@ -3995,17 +3996,15 @@ int BlueFS::open_for_write(
   dout(20) << __func__ << " mapping " << dirname << "/" << filename
 	   << " vsel_hint " << file->vselector_hint
 	   << dendl;
-  }
-  {
-    std::lock_guard ll(log.lock);
-    log.t.op_file_update(file->fnode);
-    if (create)
-      log.t.op_dir_link(dirname, filename, file->fnode.ino);
 
-    std::lock_guard dl(dirty.lock);
-    for (auto& p : pending_release_extents) {
-      dirty.pending_release[p.bdev].insert(p.offset, p.length);
-    }
+  log.t.op_file_update(file->fnode);
+  if (create)
+    log.t.op_dir_link(dirname, filename, file->fnode.ino);
+
+  std::lock_guard dl(dirty.lock);
+  for (auto& p : pending_release_extents) {
+    dirty.pending_release[p.bdev].insert(p.offset, p.length);
+  }
   }
   *h = _create_writer(file);
 
