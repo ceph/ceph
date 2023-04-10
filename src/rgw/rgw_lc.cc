@@ -528,17 +528,9 @@ static int remove_expired_obj(
     obj_key.instance = "null";
   }
 
+  auto& obj = oc.obj;
   std::unique_ptr<rgw::sal::User> user;
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  std::unique_ptr<rgw::sal::Object> obj;
-
   user = driver->get_user(bucket_info.owner);
-  ret = driver->get_bucket(user.get(), bucket_info, &bucket);
-  if (ret < 0) {
-    return ret;
-  }
-
-  obj = bucket->get_object(obj_key);
 
   RGWObjState* obj_state{nullptr};
   ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
@@ -557,8 +549,8 @@ static int remove_expired_obj(
   del_op->params.marker_version_id = version_id;
 
   // notification supported only for RADOS driver for now
-  notify = driver->get_notification(dpp, obj.get(), nullptr, event_type,
-				   bucket.get(), lc_id,
+  notify = driver->get_notification(dpp, oc.obj.get(), nullptr, event_type,
+				   oc.bucket, lc_id,
 				   const_cast<std::string&>(oc.bucket->get_tenant()),
 				   lc_req_id, null_yield);
 
@@ -869,7 +861,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 	  sal_obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
 	  version_id);
 	if (ret < 0) {
-	  ldpp_dout(dpp, 1) <<
+	  ldpp_dout(wk->get_lc(), 1) <<
 	    "ERROR: notify publish_commit failed, with error: " << ret << dendl;
 	}
 	if (perfcounter) {
@@ -1320,28 +1312,21 @@ public:
                      (oc.o.is_current() && oc.bucket->versioned()));
 
     /* notifications */
-    std::unique_ptr<rgw::sal::Bucket> bucket;
-    std::unique_ptr<rgw::sal::Object> obj;
+    auto& bucket = oc.bucket;
     auto& bucket_info = oc.bucket->get_info();
     std::string version_id;
 
-    ret = oc.driver->get_bucket(nullptr, bucket_info, &bucket);
-    if (ret < 0) {
-      return ret;
-    }
-
     std::unique_ptr<rgw::sal::User> user;
+    user = oc.driver->get_user(bucket_info.owner);
     if (! bucket->get_owner()) {
-      auto& bucket_info = bucket->get_info();
-      user = oc.driver->get_user(bucket_info.owner);
       if (user) {
 	bucket->set_owner(user.get());
       }
     }
 
-    obj = bucket->get_object(oc.o.key);
+    auto& obj = oc.obj;
 
-    auto event_type = (oc.bucket->versioned() &&
+    auto event_type = (bucket->versioned() &&
 		       oc.o.is_current() && !oc.o.is_delete_marker()) ?
       rgw::notify::ObjectTransitionCurrent :
       rgw::notify::ObjectTransitionNoncurrent;
@@ -1349,7 +1334,7 @@ public:
     std::unique_ptr<rgw::sal::Notification> notify
       = oc.driver->get_notification(
 	oc.dpp, obj.get(), nullptr, event_type,
-	bucket.get(), lc_id,
+	bucket, lc_id,
 	const_cast<std::string&>(oc.bucket->get_tenant()),
 	lc_req_id, null_yield);
 
@@ -1375,7 +1360,7 @@ public:
 				    obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
 				    version_id);
       if (ret < 0) {
-	ldpp_dout(dpp, 1) <<
+	ldpp_dout(oc.dpp, 1) <<
 	  "ERROR: notify publish_commit failed, with error: " << ret << dendl;
       }
     }
