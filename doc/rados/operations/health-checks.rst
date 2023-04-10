@@ -1399,44 +1399,43 @@ Miscellaneous
 RECENT_CRASH
 ____________
 
-One or more Ceph daemons has crashed recently, and the crash has not
-yet been archived (acknowledged) by the administrator.  This may
-indicate a software bug, a hardware problem (e.g., a failing disk), or
-some other problem.
+One or more Ceph daemons have crashed recently, and the crash(es) have not yet
+been acknowledged and archived by the administrator. This alert might indicate
+a software bug, a hardware problem (for example, a failing disk), or some other
+problem.
 
-New crashes can be listed with:
+To list recent crashes, run the following command:
 
 .. prompt:: bash $
 
    ceph crash ls-new
 
-Information about a specific crash can be examined with:
+To examine information about a specific crash, run the following command:
 
 .. prompt:: bash $
 
    ceph crash info <crash-id>
 
-This warning can be silenced by "archiving" the crash (perhaps after
-being examined by an administrator) so that it does not generate this
-warning:
+To silence this alert, you can archive the crash (perhaps after the crash
+has been examined by an administrator) by running the following command:
 
 .. prompt:: bash $
 
    ceph crash archive <crash-id>
 
-Similarly, all new crashes can be archived with:
+Similarly, to archive all recent crashes, run the following command:
 
 .. prompt:: bash $
 
    ceph crash archive-all
 
-Archived crashes will still be visible via ``ceph crash ls`` but not
-``ceph crash ls-new``.
+Archived crashes will still be visible by running the command ``ceph crash
+ls``, but not by running the command ``ceph crash ls-new``.
 
-The time period for what "recent" means is controlled by the option
+The time period that is considered recent is determined by the option
 ``mgr/crash/warn_recent_interval`` (default: two weeks).
 
-These warnings can be disabled entirely with:
+To entirely disable this alert, run the following command:
 
 .. prompt:: bash $
 
@@ -1445,40 +1444,40 @@ These warnings can be disabled entirely with:
 RECENT_MGR_MODULE_CRASH
 _______________________
 
-One or more ceph-mgr modules has crashed recently, and the crash as
-not yet been archived (acknowledged) by the administrator.  This
-generally indicates a software bug in one of the software modules run
-inside the ceph-mgr daemon.  Although the module that experienced the
-problem maybe be disabled as a result, the function of other modules
-is normally unaffected.
+One or more ``ceph-mgr`` modules have crashed recently, and the crash(es) have
+not yet been acknowledged and archived by the administrator.  This alert
+usually indicates a software bug in one of the software modules that are
+running inside the ``ceph-mgr`` daemon. The module that experienced the problem
+might be disabled as a result, but other modules are unaffected and continue to
+function as expected.
 
-As with the *RECENT_CRASH* health alert, the crash can be inspected with:
+As with the *RECENT_CRASH* health check, a specific crash can be inspected by
+running the following command:
 
 .. prompt:: bash $
 
    ceph crash info <crash-id>
 
-This warning can be silenced by "archiving" the crash (perhaps after
-being examined by an administrator) so that it does not generate this
-warning:
+To silence this alert, you can archive the crash (perhaps after the crash has
+been examined by an administrator) by running the following command:
 
 .. prompt:: bash $
 
    ceph crash archive <crash-id>
 
-Similarly, all new crashes can be archived with:
+Similarly, to archive all recent crashes, run the following command:
 
 .. prompt:: bash $
 
    ceph crash archive-all
 
-Archived crashes will still be visible via ``ceph crash ls`` but not
-``ceph crash ls-new``.
+Archived crashes will still be visible by running the command ``ceph crash ls``
+but not by running the command ``ceph crash ls-new``.
 
-The time period for what "recent" means is controlled by the option
+The time period that is considered recent is determined by the option
 ``mgr/crash/warn_recent_interval`` (default: two weeks).
 
-These warnings can be disabled entirely with:
+To entirely disable this alert, run the following command:
 
 .. prompt:: bash $
 
@@ -1487,33 +1486,32 @@ These warnings can be disabled entirely with:
 TELEMETRY_CHANGED
 _________________
 
-Telemetry has been enabled, but the contents of the telemetry report
-have changed since that time, so telemetry reports will not be sent.
+Telemetry has been enabled, but because the contents of the telemetry report
+have changed in the meantime, telemetry reports will not be sent.
 
-The Ceph developers periodically revise the telemetry feature to
-include new and useful information, or to remove information found to
-be useless or sensitive.  If any new information is included in the
-report, Ceph will require the administrator to re-enable telemetry to
-ensure they have an opportunity to (re)review what information will be
+Ceph developers occasionally revise the telemetry feature to include new and
+useful information, or to remove information found to be useless or sensitive.
+If any new information is included in the report, Ceph requires the
+administrator to re-enable telemetry. This requirement ensures that the
+administrator has an opportunity to (re)review the information that will be
 shared.
 
-To review the contents of the telemetry report:
+To review the contents of the telemetry report, run the following command:
 
 .. prompt:: bash $
 
    ceph telemetry show
 
-Note that the telemetry report consists of several optional channels
-that may be independently enabled or disabled.  For more information, see
-:ref:`telemetry`.
+Note that the telemetry report consists of several channels that may be
+independently enabled or disabled. For more information, see :ref:`telemetry`.
 
-To re-enable telemetry (and make this warning go away):
+To re-enable telemetry (and silence the alert), run the following command:
 
 .. prompt:: bash $
 
    ceph telemetry on
 
-To disable telemetry (and make this warning go away):
+To disable telemetry (and silence the alert), run the following command:
 
 .. prompt:: bash $
 
@@ -1522,25 +1520,26 @@ To disable telemetry (and make this warning go away):
 AUTH_BAD_CAPS
 _____________
 
-One or more auth users has capabilities that cannot be parsed by the
-monitor.  This generally indicates that the user will not be
-authorized to perform any action with one or more daemon types.
+One or more auth users have capabilities that cannot be parsed by the monitors.
+As a general rule, this alert indicates that there are one or more daemon types
+that the user is not authorized to use to perform any action.
 
-This error is mostly likely to occur after an upgrade if the
-capabilities were set with an older version of Ceph that did not
-properly validate their syntax, or if the syntax of the capabilities
-has changed.
+This alert is most likely to be raised after an upgrade if (1) the capabilities
+were set with an older version of Ceph that did not properly validate the
+syntax of those capabilities, or if (2) the syntax of the capabilities has
+changed.
 
-The user in question can be removed with:
+To remove the user(s) in question, run the following command:
 
 .. prompt:: bash $
 
    ceph auth rm <entity-name>
 
-(This will resolve the health alert, but obviously clients will not be
-able to authenticate as that user.)
+(This resolves the health check, but it prevents clients from being able to
+authenticate as the removed user.)
 
-Alternatively, the capabilities for the user can be updated with:
+Alternatively, to update the capabilities for the user(s), run the following
+command:
 
 .. prompt:: bash $
 
@@ -1551,17 +1550,17 @@ For more information about auth capabilities, see :ref:`user-management`.
 OSD_NO_DOWN_OUT_INTERVAL
 ________________________
 
-The ``mon_osd_down_out_interval`` option is set to zero, which means
-that the system will not automatically perform any repair or healing
-operations after an OSD fails.  Instead, an administrator (or some
-other external entity) will need to manually mark down OSDs as 'out'
-(i.e., via ``ceph osd out <osd-id>``) in order to trigger recovery.
+The ``mon_osd_down_out_interval`` option is set to zero, which means that the
+system does not automatically perform any repair or healing operations when an
+OSD fails. Instead, an administrator an external orchestrator must manually
+mark "down" OSDs as ``out`` (by running ``ceph osd out <osd-id>``) in order to
+trigger recovery.
 
-This option is normally set to five or ten minutes--enough time for a
-host to power-cycle or reboot.
+This option is normally set to five or ten minutes, which should be enough time
+for a host to power-cycle or reboot.
 
-This warning can silenced by setting the
-``mon_warn_on_osd_down_out_interval_zero`` to false:
+To silence this alert, set ``mon_warn_on_osd_down_out_interval_zero`` to
+``false`` by running the following command:
 
 .. prompt:: bash $
 
@@ -1570,13 +1569,12 @@ This warning can silenced by setting the
 DASHBOARD_DEBUG
 _______________
 
-The Dashboard debug mode is enabled. This means, if there is an error
-while processing a REST API request, the HTTP error response contains
-a Python traceback. This behaviour should be disabled in production
-environments because such a traceback might contain and expose sensible
-information.
+The Dashboard debug mode is enabled. This means that if there is an error while
+processing a REST API request, the HTTP error response will contain a Python
+traceback. This mode should be disabled in production environments because such
+a traceback might contain and expose sensitive information.
 
-The debug mode can be disabled with:
+To disable the debug mode, run the following command:
 
 .. prompt:: bash $
 
