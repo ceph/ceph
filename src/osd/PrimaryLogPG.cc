@@ -632,6 +632,7 @@ void PrimaryLogPG::wait_for_unreadable_object(
   maybe_kick_recovery(soid);
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
+  osd->logger->inc(l_osd_op_delayed_unreadable);
 }
 
 bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
@@ -691,6 +692,7 @@ void PrimaryLogPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   maybe_kick_recovery(soid);
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed("waiting for degraded object");
+  osd->logger->inc(l_osd_op_delayed_degraded);
 }
 
 void PrimaryLogPG::block_write_on_full_cache(
