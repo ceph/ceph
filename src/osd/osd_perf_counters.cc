@@ -57,6 +57,13 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "Latency of client operations (excluding queue time and wait for finished)");
 
   osd_plb.add_u64_counter(
+    l_osd_op_delayed_unreadable, "op_delayed_unreadable",
+    "Count of ops delayed due to target object being unreadable");
+  osd_plb.add_u64_counter(
+    l_osd_op_delayed_degraded, "op_delayed_degraded",
+    "Count of ops delayed due to target object being degraded");
+
+  osd_plb.add_u64_counter(
     l_osd_op_r, "op_r", "Client read operations");
   osd_plb.add_u64_counter(
     l_osd_op_r_outb, "op_r_out_bytes", "Client data read", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));

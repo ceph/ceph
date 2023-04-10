@@ -36,6 +36,9 @@ enum {
   l_osd_op_rw_process_lat,
   l_osd_op_rw_prepare_lat,
 
+  l_osd_op_delayed_unreadable,
+  l_osd_op_delayed_degraded,
+
   l_osd_op_before_queue_op_lat,
   l_osd_op_before_dequeue_op_lat,
 
