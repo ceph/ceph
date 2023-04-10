@@ -269,3 +269,20 @@ completely optional, and disabled by default.::
   ceph config set mgr mgr/telemetry/description 'My first Ceph cluster'
   ceph config set mgr mgr/telemetry/channel_ident true
 
+Leaderboard
+-----------
+
+Users who are interested in participating in a leaderboard in the `public
+dashboards <https://telemetry-public.ceph.com/>`_ can do so with::
+
+  ceph config set mgr mgr/telemetry/leaderboard true
+
+The leaderboard displays basic information about the cluster, like total
+storage capacity, number of OSDs, etc. A description of the cluster can be
+added with::
+
+  ceph config set mgr mgr/telemetry/leaderboard_description 'Ceph cluster for Computational Biology at the University of XYZ'
+
+In case the 'ident' channel is enabled, its details will not be displayed in
+the leaderboard.
+
