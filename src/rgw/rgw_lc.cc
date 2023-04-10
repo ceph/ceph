@@ -573,13 +573,17 @@ static int remove_expired_obj(
   ret =  del_op->delete_obj(dpp, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
-      "ERROR: publishing notification failed, with error: " << ret << dendl;
+      fmt::format("ERROR: {} failed, with error: {}", __func__, ret) << dendl;
   } else {
     // send request to notification manager
-    (void) notify->publish_commit(dpp, obj_state->size,
-				  ceph::real_clock::now(),
-				  obj_state->attrset[RGW_ATTR_ETAG].to_str(),
-				  version_id);
+    ret = notify->publish_commit(dpp, obj_state->size,
+				 ceph::real_clock::now(),
+				 obj_state->attrset[RGW_ATTR_ETAG].to_str(),
+				 version_id);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) <<
+	"ERROR: notify publish_commit failed, with error: " << ret << dendl;
+    }
   }
 
   return ret;
@@ -859,12 +863,15 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       ret = mpu->abort(this, cct, null_yield);
       if (ret == 0) {
 
-        (void) notify->publish_commit(
+        ret = notify->publish_commit(
 	  this, sal_obj->get_obj_size(),
 	  ceph::real_clock::now(),
 	  sal_obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
 	  version_id);
-
+	if (ret < 0) {
+	  ldpp_dout(dpp, 1) <<
+	    "ERROR: notify publish_commit failed, with error: " << ret << dendl;
+	}
 	if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
         }
@@ -1363,10 +1370,14 @@ public:
       return ret;
     } else {
       // send request to notification manager
-      (void) notify->publish_commit(oc.dpp, obj->get_obj_size(),
+      ret =  notify->publish_commit(oc.dpp, obj->get_obj_size(),
 				    ceph::real_clock::now(),
 				    obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
 				    version_id);
+      if (ret < 0) {
+	ldpp_dout(dpp, 1) <<
+	  "ERROR: notify publish_commit failed, with error: " << ret << dendl;
+      }
     }
 
     if (delete_object) {
