@@ -1,7 +1,7 @@
 import ceph_module  # noqa
 
 from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
-    Mapping, NamedTuple, Sequence, Union, TYPE_CHECKING
+    Mapping, NamedTuple, Sequence, Union, Set, TYPE_CHECKING
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -379,6 +379,10 @@ class CLICommand(object):
         positional = True
         for index, arg in enumerate(full_argspec.args):
             if arg in cls.KNOWN_ARGS:
+                # record that this function takes an inbuf if it is present
+                # in the full_argspec and not already in the arg_spec
+                if arg == 'inbuf' and 'inbuf' not in arg_spec:
+                    arg_spec['inbuf'] = 'str'
                 continue
             if arg == '_end_positional_':
                 positional = False
@@ -435,11 +439,13 @@ class CLICommand(object):
             k, v = key, val
         return kwargs_switch, k.replace('-', '_'), v
 
-    def _collect_args_by_argspec(self, cmd_dict: Dict[str, Any]) -> Dict[str, Any]:
+    def _collect_args_by_argspec(self, cmd_dict: Dict[str, Any]) -> Tuple[Dict[str, Any], Set[str]]:
         kwargs = {}
+        special_args = set()
         kwargs_switch = False
         for index, (name, tp) in enumerate(self.arg_spec.items()):
             if name in CLICommand.KNOWN_ARGS:
+                special_args.add(name)
                 continue
             assert self.first_default >= 0
             raw_v = cmd_dict.get(name)
@@ -449,14 +455,20 @@ class CLICommand(object):
             kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
                                                       name, raw_v)
             kwargs[k] = CephArgtype.cast_to(tp, v)
-        return kwargs
+        return kwargs, special_args
 
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],
              inbuf: Optional[str] = None) -> HandleCommandResult:
-        kwargs = self._collect_args_by_argspec(cmd_dict)
+        kwargs, specials = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
+            if 'inbuf' not in specials:
+                return HandleCommandResult(
+                    -errno.EINVAL,
+                    '',
+                    'Invalid command: Input file data (-i) not supported',
+                )
             kwargs['inbuf'] = inbuf
         assert self.func
         return self.func(mgr, **kwargs)
