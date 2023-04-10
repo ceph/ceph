@@ -245,6 +245,17 @@ std::unique_ptr<Notification> POSIXDriver::get_notification(const DoutPrefixProv
   return next->get_notification(dpp, obj, src_obj, event_type, _bucket, _user_id, _user_tenant, _req_id, y);
 }
 
+int POSIXDriver::close()
+{
+  if (root_fd < 0) {
+    return 0;
+  }
+
+  ::close(root_fd);
+
+  return 0;
+}
+
 int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &buckets, optional_yield y)
@@ -789,7 +800,7 @@ int POSIXBucket::open(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int POSIXBucket::close(const DoutPrefixProvider* dpp)
+int POSIXBucket::close()
 {
   if (dir_fd < 0) {
     return 0;
