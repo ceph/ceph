@@ -824,7 +824,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = &mp_filter;
 
-  auto event_type = rgw::notify::ObjectExpirationAbortMPU;
+  const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
   std::string version_id;
 
   auto pf = [&](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
@@ -1326,8 +1326,8 @@ public:
 
     auto& obj = oc.obj;
 
-    auto event_type = (bucket->versioned() &&
-		       oc.o.is_current() && !oc.o.is_delete_marker()) ?
+    const auto event_type = (bucket->versioned() &&
+			     oc.o.is_current() && !oc.o.is_delete_marker()) ?
       rgw::notify::ObjectTransitionCurrent :
       rgw::notify::ObjectTransitionNoncurrent;
 
