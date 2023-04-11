@@ -5868,6 +5868,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(128)
     .set_description("Max number of concurrent RADOS requests when handling bucket shards."),
 
+    Option("rgw_multi_obj_del_max_aio", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(16)
+    .set_description("Max number of concurrent RADOS requests per multi-object delete request."),
+
     Option("rgw_enable_quota_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Enables the quota maintenance thread.")
