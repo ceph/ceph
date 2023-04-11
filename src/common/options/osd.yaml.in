@@ -1172,7 +1172,7 @@ options:
     parameters [*reservation, weight, limit*] and some Ceph
     configuration parameters are set transparently. Note that the
     above does not apply for the *custom* profile.
-  default: high_client_ops
+  default: balanced
   see_also:
   - osd_op_queue
   enum_values:
