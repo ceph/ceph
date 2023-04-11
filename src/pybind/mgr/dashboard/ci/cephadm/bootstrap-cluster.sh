@@ -5,6 +5,8 @@ set -x
 export PATH=/root/bin:$PATH
 mkdir /root/bin
 
+export CEPHADM_IMAGE='quay.ceph.io/ceph-ci/ceph:pacific'
+
 cp /mnt/{{ ceph_dev_folder }}/src/cephadm/cephadm /root/bin/cephadm
 chmod +x /root/bin/cephadm
 mkdir -p /etc/ceph
