@@ -1,9 +1,10 @@
 import enum
 import errno
 import json
-from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence
+from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping
 import re
 import datetime
+import math
 
 import yaml
 from prettytable import PrettyTable
@@ -43,6 +44,89 @@ def nice_bytes(v: Optional[int]) -> str:
     if not v:
         return '-'
     return format_bytes(v, 5)
+
+
+class HostDetails:
+    def __init__(self,
+                 host: Optional[HostSpec] = None,
+                 facts: Optional[Dict[str, Any]] = None,
+                 object_dump: Optional[Dict[str, Any]] = None):
+        self._hostspec = host
+        self._facts = facts
+        self.hdd_summary = 'N/A'
+        self.ram = 'N/A'
+        self.cpu_summary = 'N/A'
+        self.server = 'N/A'
+        self.os = 'N/A'
+        self.ssd_summary = 'N/A'
+        self.nic_count = 'N/A'
+
+        assert host or object_dump
+        if object_dump:
+            self._load(object_dump)
+        else:
+            self._build()
+
+    def _load(self, object_dump: Dict[str, Any]) -> None:
+        """Build the object from predefined dictionary"""
+        self.addr = object_dump.get('addr')
+        self.hostname = object_dump.get('hostname')
+        self.labels = object_dump.get('labels')
+        self.status = object_dump.get('status')
+        self.location = object_dump.get('location')
+        self.server = object_dump.get('server', 'N/A')
+        self.hdd_summary = object_dump.get('hdd_summary', 'N/A')
+        self.ssd_summary = object_dump.get('ssd_summary', 'N/A')
+        self.os = object_dump.get('os', 'N/A')
+        self.cpu_summary = object_dump.get('cpu_summary', 'N/A')
+        self.ram = object_dump.get('ram', 'N/A')
+        self.nic_count = object_dump.get('nic_count', 'N/A')
+
+    def _build(self) -> None:
+        """build host details from the HostSpec and facts"""
+        for a in self._hostspec.__dict__:
+            setattr(self, a, getattr(self._hostspec, a))
+
+        if self._facts:
+            self.server = f"{self._facts.get('vendor', '').strip()} {self._facts.get('model', '').strip()}"
+            _cores = self._facts.get('cpu_cores', 0) * self._facts.get('cpu_count', 0)
+            _threads = self._facts.get('cpu_threads', 0) * _cores
+            self.os = self._facts.get('operating_system', 'N/A')
+            self.cpu_summary = f"{_cores}C/{_threads}T" if _cores > 0 else 'N/A'
+
+            _total_bytes = self._facts.get('memory_total_kb', 0) * 1024
+            divisor, suffix = (1073741824, 'GiB') if _total_bytes > 1073741824 else (1048576, 'MiB')
+            self.ram = f'{math.ceil(_total_bytes / divisor)} {suffix}'
+            _hdd_capacity = self._facts.get('hdd_capacity', '')
+            _ssd_capacity = self._facts.get('flash_capacity', '')
+            if _hdd_capacity:
+                if self._facts.get('hdd_count', 0) == 0:
+                    self.hdd_summary = '-'
+                else:
+                    self.hdd_summary = f"{self._facts.get('hdd_count', 0)}/{self._facts.get('hdd_capacity', 0)}"
+
+            if _ssd_capacity:
+                if self._facts.get('flash_count', 0) == 0:
+                    self.ssd_summary = '-'
+                else:
+                    self.ssd_summary = f"{self._facts.get('flash_count', 0)}/{self._facts.get('flash_capacity', 0)}"
+
+            self.nic_count = self._facts.get('nic_count', '')
+
+    def to_json(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.__dict__.items() if not k.startswith('_')}
+
+    @classmethod
+    def from_json(cls, host_details: dict) -> 'HostDetails':
+        _cls = cls(object_dump=host_details)
+        return _cls
+
+    @staticmethod
+    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'HostDetails') -> Any:
+        return dumper.represent_dict(cast(Mapping, data.to_json().items()))
+
+
+yaml.add_representer(HostDetails, HostDetails.yaml_representer)
 
 
 class ServiceType(enum.Enum):
@@ -377,10 +461,18 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_read_command('orch host ls')
-    def _get_hosts(self, format: Format = Format.plain, host_pattern: str = '', label: str = '', host_status: str = '') -> HandleCommandResult:
-        """List hosts"""
+    def _get_hosts(self,
+                   format: Format = Format.plain,
+                   host_pattern: str = '',
+                   label: str = '',
+                   host_status: str = '',
+                   detail: bool = False) -> HandleCommandResult:
+        """List high level host information"""
         completion = self.get_hosts()
         hosts = raise_if_exception(completion)
+
+        cephadm_active = True if self._select_orchestrator() == "cephadm" else False
+        show_detail = cephadm_active and detail
 
         filter_spec = PlacementSpec(
             host_pattern=host_pattern,
@@ -392,18 +484,42 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         if host_status:
             hosts = [h for h in hosts if h.status.lower() == host_status]
 
+        if show_detail:
+            # switch to a HostDetails based representation
+            _hosts = []
+            for h in hosts:
+                facts_completion = self.get_facts(h.hostname)
+                host_facts = raise_if_exception(facts_completion)
+                _hosts.append(HostDetails(host=h, facts=host_facts[0]))
+            hosts: List[HostDetails] = _hosts  # type: ignore [no-redef]
+
         if format != Format.plain:
-            output = to_format(hosts, format, many=True, cls=HostSpec)
+            if show_detail:
+                output = to_format(hosts, format, many=True, cls=HostDetails)
+            else:
+                output = to_format(hosts, format, many=True, cls=HostSpec)
         else:
+            if show_detail:
+                table_headings = ['HOST', 'ADDR', 'LABELS', 'STATUS',
+                                  'VENDOR/MODEL', 'CPU', 'RAM', 'HDD', 'SSD', 'NIC']
+            else:
+                table_headings = ['HOST', 'ADDR', 'LABELS', 'STATUS']
+
             table = PrettyTable(
-                ['HOST', 'ADDR', 'LABELS', 'STATUS'],
+                table_headings,
                 border=False)
             table.align = 'l'
             table.left_padding_width = 0
             table.right_padding_width = 2
             for host in natsorted(hosts, key=lambda h: h.hostname):
-                table.add_row((host.hostname, host.addr, ' '.join(
-                    host.labels), host.status.capitalize()))
+                row = (host.hostname, host.addr, ','.join(
+                    host.labels), host.status.capitalize())
+
+                if show_detail and isinstance(host, HostDetails):
+                    row += (host.server, host.cpu_summary, host.ram,
+                            host.hdd_summary, host.ssd_summary, host.nic_count)
+
+                table.add_row(row)
             output = table.get_string()
         if format == Format.plain:
             output += f'\n{len(hosts)} hosts in cluster'
