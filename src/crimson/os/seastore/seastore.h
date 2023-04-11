@@ -233,10 +233,10 @@ private:
 	transaction_manager->create_transaction(src, tname)),
       std::forward<F>(f),
       [this, op_type](auto &ctx, auto &f) {
-	return throttler.get(1).then([&ctx] {
-	  return ctx.transaction->get_handle().take_collection_lock(
-	    static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
-	  );
+	return ctx.transaction->get_handle().take_collection_lock(
+	  static_cast<SeastoreCollection&>(*(ctx.ch)).ordering_lock
+	).then([this] {
+	  return throttler.get(1);
 	}).then([&, this] {
 	  return repeat_eagain([&, this] {
 	    ctx.reset_preserve_handle(*transaction_manager);
