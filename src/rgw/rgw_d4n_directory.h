@@ -14,7 +14,8 @@ struct CacheObj {
 struct CacheBlock {
   CacheObj cacheObj;
   uint64_t size; /* block size in bytes */
-  std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:post> of block locations */
+  int globalWeight = 0;
+  std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of block locations */
 };
 
 class RGWDirectory {
