@@ -1408,19 +1408,22 @@ Then run the following:
             self.log.debug(
                 f'Received loopback address resolving ip for {host}: {ip_addr}. Falling back to previous address.')
             ip_addr = self.inventory.get_addr(host)
-        out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
-            host, cephadmNoImage, 'check-host',
-            ['--expect-hostname', host],
-            addr=addr,
-            error_ok=True, no_fsid=True))
-        if code:
-            msg = 'check-host failed:\n' + '\n'.join(err)
-            # err will contain stdout and stderr, so we filter on the message text to
-            # only show the errors
-            errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
-            if errors:
-                msg = f'Host {host} ({addr}) failed check(s): {errors}'
-            raise OrchestratorError(msg)
+        try:
+            out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                host, cephadmNoImage, 'check-host',
+                ['--expect-hostname', host],
+                addr=addr,
+                error_ok=True, no_fsid=True))
+            if code:
+                msg = 'check-host failed:\n' + '\n'.join(err)
+                # err will contain stdout and stderr, so we filter on the message text to
+                # only show the errors
+                errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
+                if errors:
+                    msg = f'Host {host} ({addr}) failed check(s): {errors}'
+                raise OrchestratorError(msg)
+        except ssh.HostConnectionError as e:
+            raise OrchestratorError(str(e))
         return ip_addr
 
     def _add_host(self, spec):
