@@ -186,6 +186,8 @@ with_mgr_restful=false
 filestore_path=
 kstore_path=
 declare -a block_devs
+declare -a bluestore_db_devs
+declare -a bluestore_wal_devs
 declare -a secondary_block_devs
 secondary_block_devs_type="SSD"
 
@@ -248,6 +250,8 @@ options:
 	--crimson-foreground: use crimson-osd, but run it in the foreground
 	--osd-args: specify any extra osd specific options
 	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
+	--bluestore-db-devs: comma-separated list of db-devs to use for bluestore
+	--bluestore-wal-devs: comma-separated list of wal-devs to use for bluestore
 	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
 	--bluestore-io-uring: enable io_uring backend
 	--inc-osd: append some more osds into existing vcluster
@@ -275,6 +279,36 @@ parse_block_devs() {
     local dev
     IFS=',' read -r -a block_devs <<< "$devs"
     for dev in "${block_devs[@]}"; do
+        if [ ! -b $dev ] || [ ! -w $dev ]; then
+            echo "All $opt_name must refer to writable block devices"
+            exit 1
+        fi
+    done
+}
+
+parse_bluestore_db_devs() {
+    local opt_name=$1
+    shift
+    local devs=$1
+    shift
+    local dev
+    IFS=',' read -r -a bluestore_db_devs <<< "$devs"
+    for dev in "${bluestore_db_devs[@]}"; do
+        if [ ! -b $dev ] || [ ! -w $dev ]; then
+            echo "All $opt_name must refer to writable block devices"
+            exit 1
+        fi
+    done
+}
+
+parse_bluestore_wal_devs() {
+    local opt_name=$1
+    shift
+    local devs=$1
+    shift
+    local dev
+    IFS=',' read -r -a bluestore_wal_devs <<< "$devs"
+    for dev in "${bluestore_wal_devs[@]}"; do
         if [ ! -b $dev ] || [ ! -w $dev ]; then
             echo "All $opt_name must refer to writable block devices"
             exit 1
@@ -542,6 +576,14 @@ case $1 in
         parse_block_devs --bluestore-devs "$2"
         shift
         ;;
+    --bluestore-db-devs)
+        parse_bluestore_db_devs --bluestore-db-devs "$2"
+        shift
+        ;;
+    --bluestore-wal-devs)
+        parse_bluestore_wal_devs --bluestore-wal-devs "$2"
+        shift
+        ;;
     --bluestore-zoned)
         zoned_enabled=1
         ;;
@@ -780,6 +822,12 @@ EOF
         bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true"
+            if [ ${#block_devs[@]} -gt 0 ] || \
+               [ ${#bluestore_db_devs[@]} -gt 0 ] || \
+               [ ${#bluestore_wal_devs[@]} -gt 0 ]; then
+                # when use physical disk, not create file for db/wal
+                BLUESTORE_OPTS=""
+            fi
         fi
         if [ "$zoned_enabled" -eq 1 ]; then
             BLUESTORE_OPTS+="
@@ -1040,6 +1088,14 @@ EOF
                 if [ -n "${block_devs[$osd]}" ]; then
                     dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
                     ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
+                fi
+                if [ -n "${bluestore_db_devs[$osd]}" ]; then
+                    dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
+                    ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
+                fi
+                if [ -n "${bluestore_wal_devs[$osd]}" ]; then
+                    dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
+                    ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
                 fi
                 if [ -n "${secondary_block_devs[$osd]}" ]; then
                     dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
