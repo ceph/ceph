@@ -1143,30 +1143,34 @@ For more information, see :ref:`choosing-number-of-placement-groups` and
 POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
 ____________________________________
 
-One or more pools have a ``target_size_bytes`` property set to
-estimate the expected size of the pool,
-but the value(s) exceed the total available storage (either by
-themselves or in combination with other pools' actual usage).
+One or more pools have a ``target_size_bytes`` property that is set in order to
+estimate the expected size of the pool, but the value(s) of this property are
+greater than the total available storage (either by themselves or in
+combination with other pools).
 
-This is usually an indication that the ``target_size_bytes`` value for
-the pool is too large and should be reduced or set to zero with:
+This alert is usually an indication that the ``target_size_bytes`` value for
+the pool is too large and should be reduced or set to zero. To reduce the
+``target_size_bytes`` value or set it to zero, run the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set <pool-name> target_size_bytes 0
+
+The above command sets the value of ``target_size_bytes`` to zero. To set the
+value of ``target_size_bytes`` to a non-zero value, replace the ``0`` with that
+non-zero value.
 
 For more information, see :ref:`specifying_pool_target_size`.
 
 POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO
 ____________________________________
 
-One or more pools have both ``target_size_bytes`` and
-``target_size_ratio`` set to estimate the expected size of the pool.
-Only one of these properties should be non-zero. If both are set,
-``target_size_ratio`` takes precedence and ``target_size_bytes`` is
-ignored.
+One or more pools have both ``target_size_bytes`` and ``target_size_ratio`` set
+in order to estimate the expected size of the pool.  Only one of these
+properties should be non-zero. If both are set to a non-zero value, then
+``target_size_ratio`` takes precedence and ``target_size_bytes`` is ignored.
 
-To reset ``target_size_bytes`` to zero:
+To reset ``target_size_bytes`` to zero, run the following command:
 
 .. prompt:: bash $
 
@@ -1177,22 +1181,23 @@ For more information, see :ref:`specifying_pool_target_size`.
 TOO_FEW_OSDS
 ____________
 
-The number of OSDs in the cluster is below the configurable
-threshold of ``osd_pool_default_size``.
+The number of OSDs in the cluster is below the configurable threshold of
+``osd_pool_default_size``. This means that some or all data may not be able to
+satisfy the data protection policy specified in CRUSH rules and pool settings.
 
 SMALLER_PGP_NUM
 _______________
 
-One or more pools has a ``pgp_num`` value less than ``pg_num``.  This
-is normally an indication that the PG count was increased without
-also increasing the placement behavior.
+One or more pools have a ``pgp_num`` value less than ``pg_num``. This alert is
+normally an indication that the Placement Group (PG) count was increased
+without any increase in the placement behavior.
 
-This is sometimes done deliberately to separate out the `split` step
-when the PG count is adjusted from the data migration that is needed
-when ``pgp_num`` is changed.
+This disparity is sometimes brought about deliberately, in order to separate
+out the `split` step when the PG count is adjusted from the data migration that
+is needed when ``pgp_num`` is changed.
 
-This is normally resolved by setting ``pgp_num`` to match ``pg_num``,
-triggering the data migration, with:
+This issue is normally resolved by setting ``pgp_num`` to match ``pg_num``, so
+as to trigger the data migration, by running the following command:
 
 .. prompt:: bash $
 
@@ -1201,37 +1206,36 @@ triggering the data migration, with:
 MANY_OBJECTS_PER_PG
 ___________________
 
-One or more pools has an average number of objects per PG that is
-significantly higher than the overall cluster average.  The specific
-threshold is controlled by the ``mon_pg_warn_max_object_skew``
-configuration value.
+One or more pools have an average number of objects per Placement Group (PG)
+that is significantly higher than the overall cluster average. The specific
+threshold is determined by the ``mon_pg_warn_max_object_skew`` configuration
+value.
 
-This is usually an indication that the pool(s) containing most of the
-data in the cluster have too few PGs, and/or that other pools that do
-not contain as much data have too many PGs.  See the discussion of
-*TOO_MANY_PGS* above.
+This alert is usually an indication that the pool(s) that contain most of the
+data in the cluster have too few PGs, or that other pools that contain less
+data have too many PGs. See *TOO_MANY_PGS* above.
 
-The threshold can be raised to silence the health warning by adjusting
-the ``mon_pg_warn_max_object_skew`` config option on the managers.
+To silence the health check, raise the threshold by adjusting the
+``mon_pg_warn_max_object_skew`` config option on the managers.
 
-The health warning will be silenced for a particular pool if
+The health check will be silenced for a specific pool only if
 ``pg_autoscale_mode`` is set to ``on``.
 
 POOL_APP_NOT_ENABLED
 ____________________
 
-A pool exists that contains one or more objects but has not been
+A pool exists that contains one or more objects, but the pool has not been
 tagged for use by a particular application.
 
-Resolve this warning by labeling the pool for use by an application.  For
-example, if the pool is used by RBD,:
+To resolve this issue, tag the pool for use by an application. For
+example, if the pool is used by RBD, run the following command:
 
 .. prompt:: bash $
 
    rbd pool init <poolname>
 
-If the pool is being used by a custom application 'foo', you can also label
-via the low-level command:
+Alternatively, if the pool is being used by a custom application (here 'foo'),
+you can label the pool by running the following low-level command:
 
 .. prompt:: bash $
 
@@ -1242,96 +1246,96 @@ For more information, see :ref:`associate-pool-to-application`.
 POOL_FULL
 _________
 
-One or more pools has reached (or is very close to reaching) its
-quota.  The threshold to trigger this error condition is controlled by
-the ``mon_pool_quota_crit_threshold`` configuration option.
+One or more pools have reached (or are very close to reaching) their quota. The
+threshold to raise this health check is determined by the
+``mon_pool_quota_crit_threshold`` configuration option.
 
-Pool quotas can be adjusted up or down (or removed) with:
+Pool quotas can be adjusted up or down (or removed) by running the following
+commands:
 
 .. prompt:: bash $
 
    ceph osd pool set-quota <pool> max_bytes <bytes>
    ceph osd pool set-quota <pool> max_objects <objects>
 
-Setting the quota value to 0 will disable the quota.
+To disable a quota, set the quota value to 0.
 
 POOL_NEAR_FULL
 ______________
 
-One or more pools is approaching a configured fullness threshold.
+One or more pools are approaching a configured fullness threshold.
 
-One threshold that can trigger this warning condition is the
-``mon_pool_quota_warn_threshold`` configuration option.
+One of the several thresholds that can raise this health check is determined by
+the ``mon_pool_quota_warn_threshold`` configuration option.
 
-Pool quotas can be adjusted up or down (or removed) with:
+Pool quotas can be adjusted up or down (or removed) by running the following
+commands:
 
 .. prompt:: bash $
 
    ceph osd pool set-quota <pool> max_bytes <bytes>
    ceph osd pool set-quota <pool> max_objects <objects>
 
-Setting the quota value to 0 will disable the quota.
+To disable a quota, set the quota value to 0.
 
-Other thresholds that can trigger the above two warning conditions are
-``mon_osd_nearfull_ratio`` and ``mon_osd_full_ratio``.  Visit the
-:ref:`storage-capacity` and :ref:`no-free-drive-space` documents for details
-and resolution.
+Other thresholds that can raise the two health checks above are
+``mon_osd_nearfull_ratio`` and ``mon_osd_full_ratio``. For details and
+resolution, see :ref:`storage-capacity` and :ref:`no-free-drive-space`.
 
 OBJECT_MISPLACED
 ________________
 
-One or more objects in the cluster is not stored on the node the
-cluster would like it to be stored on.  This is an indication that
-data migration due to some recent cluster change has not yet completed.
+One or more objects in the cluster are not stored on the node that CRUSH would
+prefer that they be stored on. This alert is an indication that data migration
+due to a recent cluster change has not yet completed.
 
-Misplaced data is not a dangerous condition in and of itself; data
-consistency is never at risk, and old copies of objects are never
-removed until the desired number of new copies (in the desired
-locations) are present.
+Misplaced data is not a dangerous condition in and of itself; data consistency
+is never at risk, and old copies of objects will not be removed until the
+desired number of new copies (in the desired locations) has been created.
 
 OBJECT_UNFOUND
 ______________
 
-One or more objects in the cluster cannot be found.  Specifically, the
-OSDs know that a new or updated copy of an object should exist, but a
-copy of that version of the object has not been found on OSDs that are
-currently online.
+One or more objects in the cluster cannot be found. More precisely, the OSDs
+know that a new or updated copy of an object should exist, but no such copy has
+been found on OSDs that are currently online.
 
 Read or write requests to unfound objects will block.
 
-Ideally, a down OSD can be brought back online that has the more
-recent copy of the unfound object.  Candidate OSDs can be identified from the
-peering state for the PG(s) responsible for the unfound object:
+Ideally, a "down" OSD that has a more recent copy of the unfound object can be
+brought back online. To identify candidate OSDs, check the peering state of the
+PG(s) responsible for the unfound object. To see the peering state, run the
+following command:
 
 .. prompt:: bash $
 
    ceph tell <pgid> query
 
-If the latest copy of the object is not available, the cluster can be
-told to roll back to a previous version of the object. See
-:ref:`failures-osd-unfound` for more information.
+On the other hand, if the latest copy of the object is not available, the
+cluster can be told to roll back to a previous version of the object. For more
+information, see :ref:`failures-osd-unfound`.
 
 SLOW_OPS
 ________
 
-One or more OSD or monitor requests is taking a long time to process.  This can
-be an indication of extreme load, a slow storage device, or a software
-bug.
+One or more OSD requests or monitor requests are taking a long time to process.
+This alert might be an indication of extreme load, a slow storage device, or a
+software bug.
 
-The request queue for the daemon in question can be queried with the
-following command, executed from the daemon's host:
+To query the request queue for the daemon that is causing the slowdown, run the
+following command from the daemon's host:
 
 .. prompt:: bash $
 
    ceph daemon osd.<id> ops
 
-A summary of the slowest recent requests can be seen with:
+To see a summary of the slowest recent requests, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon osd.<id> dump_historic_ops
 
-The location of an OSD can be found with:
+To see the location of a specific OSD, run the following command:
 
 .. prompt:: bash $
 
@@ -1348,13 +1352,16 @@ interval can be overriden on per-pool basis with
 ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed without a
 scrub since it was due.
 
-PGs will not scrub if they are not flagged as *clean*, which may
-happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
-*PG_DEGRADED* above).
+PGs will be scrubbed only if they are flagged as ``clean`` (which means that
+they are to be cleaned, and not that they have been examined and found to be
+clean). Misplaced or degraded PGs will not be flagged as ``clean`` (see
+*PG_AVAILABILITY* and *PG_DEGRADED* above).
 
-You can manually initiate a scrub of a clean PG with::
+To manually initiate a scrub of a clean PG, run the following command:
 
-  ceph pg scrub <pgid>
+.. prompt: bash $
+
+   ceph pg scrub <pgid>
 
 PG_NOT_DEEP_SCRUBBED
 ____________________
@@ -1364,11 +1371,12 @@ scrubbed every ``osd_deep_scrub_interval`` seconds, and this warning
 triggers when ``mon_warn_pg_not_deep_scrubbed_ratio`` percentage of interval has elapsed
 without a scrub since it was due.
 
-PGs will not (deep) scrub if they are not flagged as *clean*, which may
-happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
-*PG_DEGRADED* above).
+PGs will receive a deep scrub only if they are flagged as *clean* (which means
+that they are to be cleaned, and not that they have been examined and found to
+be clean). Misplaced or degraded PGs might not be flagged as ``clean`` (see
+*PG_AVAILABILITY* and *PG_DEGRADED* above).
 
-You can manually initiate a scrub of a clean PG with:
+To manually initiate a deep scrub of a clean PG, run the following command:
 
 .. prompt:: bash $
 
@@ -1378,22 +1386,21 @@ You can manually initiate a scrub of a clean PG with:
 PG_SLOW_SNAP_TRIMMING
 _____________________
 
-The snapshot trim queue for one or more PGs has exceeded the
-configured warning threshold.  This indicates that either an extremely
-large number of snapshots were recently deleted, or that the OSDs are
-unable to trim snapshots quickly enough to keep up with the rate of
-new snapshot deletions.
+The snapshot trim queue for one or more PGs has exceeded the configured warning
+threshold. This alert indicates either that an extremely large number of
+snapshots was recently deleted, or that OSDs are unable to trim snapshots
+quickly enough to keep up with the rate of new snapshot deletions.
 
-The warning threshold is controlled by the
-``mon_osd_snap_trim_queue_warn_on`` option (default: 32768).
+The warning threshold is determined by the ``mon_osd_snap_trim_queue_warn_on``
+option (default: 32768).
 
-This warning may trigger if OSDs are under excessive load and unable
-to keep up with their background work, or if the OSDs' internal
-metadata database is heavily fragmented and unable to perform.  It may
-also indicate some other performance issue with the OSDs.
+This alert might be raised if OSDs are under excessive load and unable to keep
+up with their background work, or if the OSDs' internal metadata database is
+heavily fragmented and unable to perform. The alert might also indicate some
+other performance issue with the OSDs.
 
-The exact size of the snapshot trim queue is reported by the
-``snaptrimq_len`` field of ``ceph pg ls -f json-detail``.
+The exact size of the snapshot trim queue is reported by the ``snaptrimq_len``
+field of ``ceph pg ls -f json-detail``.
 
 Miscellaneous
 -------------
