@@ -3433,13 +3433,13 @@ def deploy_daemon_units(
 ) -> None:
     # cmd
 
-    def add_stop_actions(f: TextIO) -> None:
+    def add_stop_actions(f: TextIO, timeout: Optional[int]) -> None:
         # following generated script basically checks if the container exists
         # before stopping it. Exit code will be success either if it doesn't
         # exist or if it exists and is stopped successfully.
         container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
-        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
-        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
+        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True, timeout=timeout))} \n')
+        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd(timeout=timeout))} \n')
 
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f, \
@@ -3525,11 +3525,12 @@ def deploy_daemon_units(
         os.rename(data_dir + '/unit.meta.new',
                   data_dir + '/unit.meta')
 
+    timeout = 30 if daemon_type == 'osd' else None
     # post-stop command(s)
     with open(data_dir + '/unit.poststop.new', 'w') as f:
         # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
         # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
-        add_stop_actions(f)
+        add_stop_actions(f, timeout)
         if daemon_type == 'osd':
             assert osd_fsid
             poststop = get_ceph_volume_container(
@@ -3556,7 +3557,7 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.stop.new', 'w') as f:
-        add_stop_actions(f)
+        add_stop_actions(f, timeout)
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.stop.new',
                   data_dir + '/unit.stop')
@@ -4155,11 +4156,18 @@ class CephContainer:
             ret.append(self.cname)
         return ret
 
-    def stop_cmd(self, old_cname: bool = False) -> List[str]:
-        ret = [
-            str(self.ctx.container_engine.path),
-            'stop', self.old_cname if old_cname else self.cname,
-        ]
+    def stop_cmd(self, old_cname: bool = False, timeout: Optional[int] = None) -> List[str]:
+        if timeout is None:
+            ret = [
+                str(self.ctx.container_engine.path),
+                'stop', self.old_cname if old_cname else self.cname,
+            ]
+        else:
+            ret = [
+                str(self.ctx.container_engine.path),
+                'stop', '-t', f'{timeout}',
+                self.old_cname if old_cname else self.cname,
+            ]
         return ret
 
     def run(self, timeout=DEFAULT_TIMEOUT, verbosity=CallVerbosity.VERBOSE_ON_FAILURE):
