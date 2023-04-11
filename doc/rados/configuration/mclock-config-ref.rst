@@ -17,6 +17,9 @@ the QoS related parameters:
 * total capacity (IOPS) of each OSD (determined automatically -
   See `OSD Capacity Determination (Automated)`_)
 
+* the max sequential bandwidth capacity (MiB/s) of each OSD -
+  See *osd_mclock_max_sequential_bandwidth_[hdd|ssd]* option
+
 * an mclock profile type to enable
 
 Using the settings in the specified profile, an OSD determines and applies the
@@ -35,15 +38,15 @@ Each service can be considered as a type of client from mclock's perspective.
 Depending on the type of requests handled, mclock clients are classified into
 the buckets as shown in the table below,
 
-+------------------------+----------------------------------------------------+
-|  Client Type           | Request Types                                      |
-+========================+====================================================+
-| Client                 | I/O requests issued by external clients of Ceph    |
-+------------------------+----------------------------------------------------+
-| Background recovery    | Internal recovery/backfill requests                |
-+------------------------+----------------------------------------------------+
-| Background best-effort | Internal scrub, snap trim and PG deletion requests |
-+------------------------+----------------------------------------------------+
++------------------------+--------------------------------------------------------------+
+|  Client Type           | Request Types                                                |
++========================+==============================================================+
+| Client                 | I/O requests issued by external clients of Ceph              |
++------------------------+--------------------------------------------------------------+
+| Background recovery    | Internal recovery requests                                   |
++------------------------+--------------------------------------------------------------+
+| Background best-effort | Internal backfill, scrub, snap trim and PG deletion requests |
++------------------------+--------------------------------------------------------------+
 
 The mclock profiles allocate parameters like reservation, weight and limit
 (see :ref:`dmclock-qos`) differently for each client type. The next sections
@@ -81,32 +84,54 @@ Built-in Profiles
 -----------------
 Users can choose between the following built-in profile types:
 
-.. note:: The values mentioned in the tables below represent the percentage
+.. note:: The values mentioned in the tables below represent the proportion
           of the total IOPS capacity of the OSD allocated for the service type.
 
-By default, the *high_client_ops* profile is enabled to ensure that a larger
-chunk of the bandwidth allocation goes to client ops. Background recovery ops
-are given lower allocation (and therefore take a longer time to complete). But
-there might be instances that necessitate giving higher allocations to either
-client ops or recovery ops. In order to deal with such a situation, the
-alternate built-in profiles may be enabled by following the steps mentioned
-in next sections.
+* balanced (default)
+* high_client_ops
+* high_recovery_ops
 
-high_client_ops (*default*)
-^^^^^^^^^^^^^^^^^^^^^^^^^^^
-This profile optimizes client performance over background activities by
-allocating more reservation and limit to client operations as compared to
-background operations in the OSD. This profile is enabled by default. The table
-shows the resource control parameters set by the profile:
+balanced (*default*)
+^^^^^^^^^^^^^^^^^^^^
+The *balanced* profile is the default mClock profile. This profile allocates
+equal reservation/priority to client operations and background recovery
+operations. Background best-effort ops are given lower reservation and therefore
+take a longer time to complete when are are competing operations. This profile
+helps meet the normal/steady-state requirements of the cluster. This is the
+case when external client performance requirement is not critical and there are
+other background operations that still need attention within the OSD.
+
+But there might be instances that necessitate giving higher allocations to either
+client ops or recovery ops. In order to deal with such a situation, the alternate
+built-in profiles may be enabled by following the steps mentioned in next sections.
 
 +------------------------+-------------+--------+-------+
 |  Service Type          | Reservation | Weight | Limit |
 +========================+=============+========+=======+
-| client                 | 60%         | 5      | MAX   |
+| client                 | 50%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
-| background recovery    | 20%         | 1      | 50%   |
+| background recovery    | 50%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | 20%         | 1      | MAX   |
+| background best-effort | MIN         | 1      | 90%   |
++------------------------+-------------+--------+-------+
+
+high_client_ops
+^^^^^^^^^^^^^^^
+This profile optimizes client performance over background activities by
+allocating more reservation and limit to client operations as compared to
+background operations in the OSD. This profile, for example, may be enabled
+to provide the needed performance for I/O intensive applications for a
+sustained period of time at the cost of slower recoveries. The table shows
+the resource control parameters set by the profile:
+
++------------------------+-------------+--------+-------+
+|  Service Type          | Reservation | Weight | Limit |
++========================+=============+========+=======+
+| client                 | 60%         | 2      | MAX   |
++------------------------+-------------+--------+-------+
+| background recovery    | 40%         | 1      | MAX   |
++------------------------+-------------+--------+-------+
+| background best-effort | MIN         | 1      | 70%   |
 +------------------------+-------------+--------+-------+
 
 high_recovery_ops
@@ -120,34 +145,16 @@ parameters set by the profile:
 +------------------------+-------------+--------+-------+
 |  Service Type          | Reservation | Weight | Limit |
 +========================+=============+========+=======+
-| client                 | 30%         | 1      | 80%   |
+| client                 | 30%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
-| background recovery    | 60%         | 2      | MAX   |
+| background recovery    | 70%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 | background best-effort | MIN         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
 
-balanced
-^^^^^^^^
-This profile allocates equal reservation to client I/O operations and background
-recovery operations. This means that equal I/O resources are allocated to both
-external and background recovery operations. This profile, for example, may be
-enabled by an administrator when external client performance requirement is not
-critical and there are other background operations that still need attention
-within the OSD.
-
-+------------------------+-------------+--------+-------+
-|  Service Type          | Reservation | Weight | Limit |
-+========================+=============+========+=======+
-| client                 | 40%         | 1      | 100%  |
-+------------------------+-------------+--------+-------+
-| background recovery    | 40%         | 1      | 70%   |
-+------------------------+-------------+--------+-------+
-| background best-effort | 20%         | 1      | MAX   |
-+------------------------+-------------+--------+-------+
-
 .. note:: Across the built-in profiles, internal background best-effort clients
-          of mclock include "scrub", "snap trim", and "pg deletion" operations.
+          of mclock include "backfill", "scrub", "snap trim", and "pg deletion"
+          operations.
 
 
 Custom Profile
@@ -184,6 +191,10 @@ config parameters cannot be modified when using any of the built-in profiles:
 
 Recovery/Backfill Options
 -------------------------
+.. warning:: The recommendation is to not change these options as the built-in
+   profiles are optimized based on them. Changing these defaults can result in
+   unexpected performance outcomes.
+
 The following recovery and backfill related Ceph options are overridden to
 mClock defaults:
 
@@ -192,13 +203,14 @@ mClock defaults:
 - :confval:`osd_recovery_max_active_hdd`
 - :confval:`osd_recovery_max_active_ssd`
 
-The following table shows the mClock defaults. This is done to maximize the
-impact of the built-in profile:
+The following table shows the mClock defaults which is the same as the current
+defaults. This is done to maximize the performance of the foreground (client)
+operations:
 
 +----------------------------------------+------------------+----------------+
 |  Config Option                         | Original Default | mClock Default |
 +========================================+==================+================+
-| :confval:`osd_max_backfills`           | 1                | 3              |
+| :confval:`osd_max_backfills`           | 1                | 1              |
 +----------------------------------------+------------------+----------------+
 | :confval:`osd_recovery_max_active`     | 0                | 0              |
 +----------------------------------------+------------------+----------------+
@@ -207,7 +219,7 @@ impact of the built-in profile:
 | :confval:`osd_recovery_max_active_ssd` | 10               | 10             |
 +----------------------------------------+------------------+----------------+
 
-The above mClock defaults, can be modified if necessary by enabling
+The above mClock defaults, can be modified only if necessary by enabling
 :confval:`osd_mclock_override_recovery_settings` (default: false). The
 steps for this is discussed in the
 `Steps to Modify mClock Max Backfills/Recovery Limits`_ section.
@@ -242,8 +254,8 @@ all its clients.
 Steps to Enable mClock Profile
 ==============================
 
-As already mentioned, the default mclock profile is set to *high_client_ops*.
-The other values for the built-in profiles include *balanced* and
+As already mentioned, the default mclock profile is set to *balanced*.
+The other values for the built-in profiles include *high_client_ops* and
 *high_recovery_ops*.
 
 If there is a requirement to change the default profile, then the option
