@@ -9991,7 +9991,7 @@ bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
       {"osd_recovery_max_active", 0},
       {"osd_recovery_max_active_hdd", 3},
       {"osd_recovery_max_active_ssd", 10},
-      {"osd_max_backfills", 3},
+      {"osd_max_backfills", 1},
     };
 
     // Check if we were called because of a configuration change
