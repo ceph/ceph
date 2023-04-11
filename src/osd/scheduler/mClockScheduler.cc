@@ -236,48 +236,48 @@ void mClockScheduler::set_config_defaults_from_profile()
    * high_client_ops
    *
    * Client Allocation:
-   *   reservation: 60% | weight: 5 | limit: 0 (max) |
+   *   reservation: 60% | weight: 2 | limit: 0 (max) |
    * Background Recovery Allocation:
-   *   reservation: 20% | weight: 1 | limit: 50% |
+   *   reservation: 40% | weight: 1 | limit: 0 (max) |
    * Background Best Effort Allocation:
-   *   reservation: 20% | weight: 1 | limit: 0 (max) |
+   *   reservation: 0 (min) | weight: 1 | limit: 70% |
    */
   static constexpr profile_t high_client_ops_profile{
-    { .6, 5, 0 },
-    { .2, 1, .5},
-    { .2, 1, 0 }
+    { .6, 2,  0 },
+    { .4, 1,  0 },
+    {  0, 1, .7 }
   };
 
   /**
    * high_recovery_ops
    *
    * Client Allocation:
-   *   reservation: 30% | weight: 1 | limit: 80% |
+   *   reservation: 30% | weight: 1 | limit: 0 (max) |
    * Background Recovery Allocation:
-   *   reservation: 60% | weight: 2 | limit: 0 (max) |
+   *   reservation: 70% | weight: 2 | limit: 0 (max) |
    * Background Best Effort Allocation:
    *   reservation: 0 (min) | weight: 1 | limit: 0 (max) |
    */
   static constexpr profile_t high_recovery_ops_profile{
-    { .3, 1, .8 },
-    { .6, 2, 0 },
-    { 0, 1, 0 }
+    { .3, 1, 0 },
+    { .7, 2, 0 },
+    {  0, 1, 0 }
   };
 
   /**
    * balanced
    *
    * Client Allocation:
-   *   reservation: 40% | weight: 1 | limit: 100% |
+   *   reservation: 50% | weight: 1 | limit: 0 (max) |
    * Background Recovery Allocation:
-   *   reservation: 40% | weight: 1 | limit: 70% |
+   *   reservation: 50% | weight: 1 | limit: 0 (max) |
    * Background Best Effort Allocation:
-   *   reservation: 20% | weight: 1 | limit: 0 (max) |
+   *   reservation: 0 (min) | weight: 1 | limit: 90% |
    */
   static constexpr profile_t balanced_profile{
-    { .4, 1, 1.0 },
-    { .4, 1, .7 },
-    { .2, 1, 0 }
+    { .5, 1, 0 },
+    { .5, 1, 0 },
+    {  0, 1, .9 }
   };
 
   const profile_t *profile = nullptr;
