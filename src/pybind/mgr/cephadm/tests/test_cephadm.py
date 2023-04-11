@@ -2197,3 +2197,48 @@ Traceback (most recent call last):
                 cephadm_module.inventory.all_specs = mock.Mock(
                     return_value=[mock.Mock().hostname, mock.Mock().hostname])
                 cephadm_module._validate_tuned_profile_spec(spec)
+
+    def test_inventory_known_hostnames(self, cephadm_module):
+        cephadm_module.inventory.add_host(HostSpec('host1', '1.2.3.1'))
+        cephadm_module.inventory.add_host(HostSpec('host2', '1.2.3.2'))
+        cephadm_module.inventory.add_host(HostSpec('host3.domain', '1.2.3.3'))
+        cephadm_module.inventory.add_host(HostSpec('host4.domain', '1.2.3.4'))
+        cephadm_module.inventory.add_host(HostSpec('host5', '1.2.3.5'))
+
+        # update_known_hostname expects args to be <hostname, shortname, fqdn>
+        # as are gathered from cephadm gather-facts. Although, passing the
+        # names in the wrong order should actually have no effect on functionality
+        cephadm_module.inventory.update_known_hostnames('host1', 'host1', 'host1.domain')
+        cephadm_module.inventory.update_known_hostnames('host2.domain', 'host2', 'host2.domain')
+        cephadm_module.inventory.update_known_hostnames('host3', 'host3', 'host3.domain')
+        cephadm_module.inventory.update_known_hostnames('host4.domain', 'host4', 'host4.domain')
+        cephadm_module.inventory.update_known_hostnames('host5', 'host5', 'host5')
+
+        assert 'host1' in cephadm_module.inventory
+        assert 'host1.domain' in cephadm_module.inventory
+        assert cephadm_module.inventory.get_addr('host1') == '1.2.3.1'
+        assert cephadm_module.inventory.get_addr('host1.domain') == '1.2.3.1'
+
+        assert 'host2' in cephadm_module.inventory
+        assert 'host2.domain' in cephadm_module.inventory
+        assert cephadm_module.inventory.get_addr('host2') == '1.2.3.2'
+        assert cephadm_module.inventory.get_addr('host2.domain') == '1.2.3.2'
+
+        assert 'host3' in cephadm_module.inventory
+        assert 'host3.domain' in cephadm_module.inventory
+        assert cephadm_module.inventory.get_addr('host3') == '1.2.3.3'
+        assert cephadm_module.inventory.get_addr('host3.domain') == '1.2.3.3'
+
+        assert 'host4' in cephadm_module.inventory
+        assert 'host4.domain' in cephadm_module.inventory
+        assert cephadm_module.inventory.get_addr('host4') == '1.2.3.4'
+        assert cephadm_module.inventory.get_addr('host4.domain') == '1.2.3.4'
+
+        assert 'host4.otherdomain' not in cephadm_module.inventory
+        with pytest.raises(OrchestratorError):
+            cephadm_module.inventory.get_addr('host4.otherdomain')
+
+        assert 'host5' in cephadm_module.inventory
+        assert cephadm_module.inventory.get_addr('host5') == '1.2.3.5'
+        with pytest.raises(OrchestratorError):
+            cephadm_module.inventory.get_addr('host5.domain')
