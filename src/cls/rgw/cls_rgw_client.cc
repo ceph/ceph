@@ -477,8 +477,9 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const std::string& oid,
   call.max = max;
   encode(call, in);
   int r = io_ctx.exec(oid, RGW_CLASS, RGW_BI_LIST, in, out);
-  if (r < 0)
+  if (r < 0) {
     return r;
+  }
 
   rgw_cls_bi_list_ret op_ret;
   auto iter = out.cbegin();

@@ -2763,7 +2763,7 @@ int RGWRados::BucketShard::init(const DoutPrefixProvider *dpp,
     ldpp_dout(dpp, 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20) << " bucket index object: " << bucket_obj << dendl;
+  ldpp_dout(dpp, 20) << "INFO: bucket index object: " << bucket_obj << dendl;
 
   return 0;
 }
@@ -8392,8 +8392,9 @@ int RGWRados::bi_list(BucketShard& bs, const string& obj_name_filter, const stri
 {
   auto& ref = bs.bucket_obj.get_ref();
   int ret = cls_rgw_bi_list(ref.pool.ioctx(), ref.obj.oid, obj_name_filter, marker, max, entries, is_truncated);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   return 0;
 }
@@ -9617,13 +9618,14 @@ int RGWRados::check_quota(const DoutPrefixProvider *dpp, const rgw_user& bucket_
   return quota_handler->check_quota(dpp, bucket_owner, bucket, quota, 1, obj_size, y);
 }
 
-int RGWRados::get_target_shard_id(const rgw::bucket_index_normal_layout& layout, const string& obj_key,
-                                  int *shard_id)
+int RGWRados::get_target_shard_id(const rgw::bucket_index_normal_layout& layout,
+				  const string& obj_key,
+                                  int* shard_id)
 {
   int r = 0;
   switch (layout.hash_type) {
     case rgw::BucketHashType::Mod:
-      if (!layout.num_shards) {
+      if (rgw::has_single_shard(layout.num_shards)) {
         if (shard_id) {
           *shard_id = -1;
         }

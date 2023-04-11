@@ -278,5 +278,9 @@ inline uint32_t current_num_shards(const BucketLayout& layout) {
 inline bool is_layout_indexless(const bucket_index_layout_generation& layout) {
   return layout.layout.type == BucketIndexType::Indexless;
 }
+inline bool has_single_shard(uint32_t num_shards) {
+  // due to historic reasons, one shard is represented as both 0 and 1 sometimes
+  return num_shards <= 1;
+}
 
 } // namespace rgw

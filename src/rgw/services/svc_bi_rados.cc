@@ -135,7 +135,7 @@ static void get_bucket_index_objects(const string& bucket_oid_base,
                                      int shard_id = -1)
 {
   auto& bucket_objects = *_bucket_objects;
-  if (!num_shards) {
+  if (rgw::has_single_shard(num_shards)) {
     bucket_objects[0] = bucket_oid_base;
   } else {
     char buf[bucket_oid_base.size() + 64];
@@ -171,7 +171,7 @@ static void get_bucket_instance_ids(const RGWBucketInfo& bucket_info,
   const rgw_bucket& bucket = bucket_info.bucket;
   string plain_id = bucket.name + ":" + bucket.bucket_id;
 
-  if (!num_shards) {
+  if (rgw::has_single_shard(num_shards)) {
     (*result)[0] = plain_id;
   } else {
     char buf[16];
@@ -222,7 +222,7 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(
     uint64_t gen_id, int shard_id,
     std::string* bucket_obj)
 {
-  if (!normal.num_shards) {
+  if (rgw::has_single_shard(normal.num_shards)) { // 0 or 1, which are equivalent
     // By default with no sharding, we use the bucket oid as itself
     (*bucket_obj) = bucket_oid_base;
   } else {
@@ -230,7 +230,7 @@ void RGWSI_BucketIndex_RADOS::get_bucket_index_object(
     if (gen_id) {
       bucket_obj_with_generation(buf, sizeof(buf), bucket_oid_base, gen_id, shard_id);
       (*bucket_obj) = buf;
-	  ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
+      ldout(cct, 10) << "bucket_obj is " << (*bucket_obj) << dendl;
     } else {
       // for backward compatibility, gen_id(0) will not be added in the object name
       bucket_obj_without_generation(buf, sizeof(buf), bucket_oid_base, shard_id);
@@ -248,7 +248,7 @@ int RGWSI_BucketIndex_RADOS::get_bucket_index_object(
   int r = 0;
   switch (normal.hash_type) {
     case rgw::BucketHashType::Mod:
-      if (!normal.num_shards) {
+      if (rgw::has_single_shard(normal.num_shards)) {
         // By default with no sharding, we use the bucket oid as itself
         (*bucket_obj) = bucket_oid_base;
         if (shard_id) {
