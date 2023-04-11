@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple,
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
-from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec
+from ceph.deployment.service_spec import ServiceSpec, CustomContainerSpec, PlacementSpec, RGWSpec
 from ceph.utils import datetime_now
 
 import orchestrator
@@ -563,6 +563,35 @@ class CephadmServe:
                 self.mgr.set_health_warning('CEPHADM_FAILED_SET_OPTION', f'Failed to set {len(options_failed_to_set)} option(s)', len(
                     options_failed_to_set), options_failed_to_set)
 
+    def _update_rgw_endpoints(self, rgw_spec: RGWSpec) -> None:
+
+        if not rgw_spec.update_endpoints or rgw_spec.rgw_realm_token is None:
+            return
+
+        ep = []
+        protocol = 'https' if rgw_spec.ssl else 'http'
+        for s in self.mgr.cache.get_daemons_by_service(rgw_spec.service_name()):
+            if s.ports:
+                for p in s.ports:
+                    ep.append(f'{protocol}://{s.hostname}:{p}')
+        zone_update_cmd = {
+            'prefix': 'rgw zone modify',
+            'realm_name': rgw_spec.rgw_realm,
+            'zonegroup_name': rgw_spec.rgw_zonegroup,
+            'zone_name': rgw_spec.rgw_zone,
+            'realm_token': rgw_spec.rgw_realm_token,
+            'zone_endpoints': ep,
+        }
+        self.log.debug(f'rgw cmd: {zone_update_cmd}')
+        rc, out, err = self.mgr.mon_command(zone_update_cmd)
+        rgw_spec.update_endpoints = (rc != 0)  # keep trying on failure
+        if rc != 0:
+            self.log.error(f'Error when trying to update rgw zone: {err}')
+            self.mgr.set_health_warning('CEPHADM_RGW', 'Cannot update rgw endpoints, error: {err}', 1,
+                                        [f'Cannot update rgw endpoints for daemon {rgw_spec.service_name()}, error: {err}'])
+        else:
+            self.mgr.remove_health_warning('CEPHADM_RGW')
+
     def _apply_service(self, spec: ServiceSpec) -> bool:
         """
         Schedule a service.  Deploy new daemons or remove old ones, depending
@@ -820,6 +849,9 @@ class CephadmServe:
                     # Need to fail over later so it can be removed on next pass.
                     # This can be accomplished by scheduling a restart of the active mgr.
                     self.mgr._schedule_daemon_action(active_mgr.name(), 'restart')
+
+            if service_type == 'rgw':
+                self._update_rgw_endpoints(cast(RGWSpec, spec))
 
             # remove any?
             def _ok_to_stop(remove_daemons: List[orchestrator.DaemonDescription]) -> bool:
