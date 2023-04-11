@@ -226,11 +226,12 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
           return pg->with_locked_obc(
             m->get_hobj(), op_info,
             [this, pg, &ihref](auto obc) mutable {
-              return ihref.enter_stage<interruptor>(pp(*pg).process, *this
-            ).then_interruptible([this, pg, obc, &ihref]() mutable {
-              return do_process(ihref, pg, obc);
+              return ihref.enter_stage<interruptor>(
+                pp(*pg).process, *this
+              ).then_interruptible([this, pg, obc, &ihref]() mutable {
+                return do_process(ihref, pg, obc);
+              });
             });
-          });
         });
       }
     });
