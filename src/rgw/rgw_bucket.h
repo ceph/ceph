@@ -49,9 +49,10 @@ extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
 extern std::string rgw_make_bucket_entry_name(const std::string& tenant_name,
                                               const std::string& bucket_name);
 
-extern void rgw_parse_url_bucket(const string& bucket,
-                                 const string& auth_tenant,
-                                 string &tenant_name, string &bucket_name);
+[[nodiscard]] int rgw_parse_url_bucket(const std::string& bucket,
+                                       const std::string& auth_tenant,
+                                       std::string &tenant_name,
+                                       std::string &bucket_name);
 
 // this is used as a filter to RGWRados::cls_bucket_list_ordered; it
 // conforms to the type declaration of RGWRados::check_filter_t.
