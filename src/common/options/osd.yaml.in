@@ -1100,7 +1100,7 @@ options:
     QoS calculations. Only considered for osd_op_queue = mclock_scheduler
   fmt_desc: The maximum sequential bandwidth in bytes/second to consider for the
     OSD (for solid state media)
-  default: 750_M
+  default: 1200_M
   flags:
   - runtime
 - name: osd_mclock_max_capacity_iops_hdd
