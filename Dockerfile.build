@@ -1,0 +1,27 @@
+ARG DISTRO='quay.io/centos/centos:stream8'
+FROM $DISTRO
+
+ARG JENKINS_HOME
+
+ARG JENKINS_USER=jenkins
+ARG JENKINS_USER_ID=1110
+ARG JENKINS_USER_GID=100
+
+
+#SHELL ["bash", "-x", "-c"]
+RUN useradd --uid ${JENKINS_USER_ID} --gid ${JENKINS_USER_GID} --create-home ${JENKINS_USER}
+
+COPY ./ /src/ceph
+ENV FOR_MAKE_CHECK=1
+ARG DISTRO
+ARG CLEAN_DNF=yes
+ARG CEPH_BRANCH=main
+# Note that we do not use ENV for the following. This is because we do not
+# want them permamently stored in the container's layer.
+RUN DISTRO=$DISTRO \
+    CEPH_BRANCH=$CEPH_BRANCH \
+    CLEAN_DNF=$CLEAN_DNF \
+    /src/ceph/src/script/buildcontainer-setup.sh
+
+
+USER ${JENKINS_USER}
