@@ -4018,6 +4018,9 @@ class CephContainer:
             if os.path.exists('/etc/ceph/podman-auth.json'):
                 cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
 
+        if isinstance(self.ctx.container_engine, Docker):
+            cmd_args.extend(['--ulimit', 'nofile=1048576'])
+
         envs: List[str] = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
