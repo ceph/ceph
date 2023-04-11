@@ -8,7 +8,9 @@
       <a ngbNavLink
          i18n>Devices</a>
       <ng-template ngbNavContent>
-        <cd-device-list [osdId]="osd?.id"></cd-device-list>
+        <cd-device-list [osdId]="osd?.id"
+                        [hostname]="selection?.host.name"
+                        [osdList]="true"></cd-device-list>
       </ng-template>
     </li>
     <li ngbNavItem="attributes">

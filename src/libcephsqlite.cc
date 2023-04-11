@@ -254,6 +254,7 @@ static int CheckReservedLock(sqlite3_file *file, int *result)
   auto f = (cephsqlite_file*)file;
   auto start = ceph::coarse_mono_clock::now();
   df(5) << dendl;
+  *result = 0;
 
   auto& lock = f->lock;
   if (lock > SQLITE_LOCK_SHARED) {
@@ -264,7 +265,6 @@ static int CheckReservedLock(sqlite3_file *file, int *result)
   f->io.rs->print_lockers(*_dout);
   *_dout << dendl;
 
-  *result = 0;
   auto end = ceph::coarse_mono_clock::now();
   getdata(f->vfs).logger->tinc(P_OPF_CHECKRESERVEDLOCK, end-start);
   return SQLITE_OK;

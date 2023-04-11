@@ -473,6 +473,17 @@ class MDSCluster(CephCluster):
         for fs in self.status().get_filesystems():
             Filesystem(ctx=self._ctx, fscid=fs['id']).destroy()
 
+    @property
+    def beacon_timeout(self):
+        """
+        Generate an acceptable timeout for the mons to drive some MDSMap change
+        because of missed beacons from some MDS. This involves looking up the
+        grace period in use by the mons and adding an acceptable buffer.
+        """
+
+        grace = float(self.get_config("mds_beacon_grace", service_type="mon"))
+        return grace*2+15
+
 
 class Filesystem(MDSCluster):
     """
@@ -485,7 +496,6 @@ class Filesystem(MDSCluster):
         self.name = name
         self.id = None
         self.metadata_pool_name = None
-        self.metadata_overlay = False
         self.data_pool_name = None
         self.data_pools = None
         self.fs_config = fs_config
@@ -538,11 +548,6 @@ class Filesystem(MDSCluster):
         self.name = fsmap['mdsmap']['fs_name']
         self.get_pool_names(status = status, refresh = refresh)
         return status
-
-    def set_metadata_overlay(self, overlay):
-        if self.id is not None:
-            raise RuntimeError("cannot specify fscid when configuring overlay")
-        self.metadata_overlay = overlay
 
     def deactivate(self, rank):
         if rank < 0:
@@ -644,7 +649,7 @@ class Filesystem(MDSCluster):
     target_size_ratio = 0.9
     target_size_ratio_ec = 0.9
 
-    def create(self):
+    def create(self, recover=False, metadata_overlay=False):
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
@@ -656,7 +661,7 @@ class Filesystem(MDSCluster):
 
         # will use the ec pool to store the data and a small amount of
         # metadata still goes to the primary data pool for all files.
-        if not self.metadata_overlay and self.ec_profile and 'disabled' not in self.ec_profile:
+        if not metadata_overlay and self.ec_profile and 'disabled' not in self.ec_profile:
             self.target_size_ratio = 0.05
 
         log.debug("Creating filesystem '{0}'".format(self.name))
@@ -683,16 +688,14 @@ class Filesystem(MDSCluster):
             else:
                 raise
 
-        if self.metadata_overlay:
-            self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                             self.name, self.metadata_pool_name, data_pool_name,
-                                             '--allow-dangerous-metadata-overlay')
-        else:
-            self.mon_manager.raw_cluster_cmd('fs', 'new',
-                                             self.name,
-                                             self.metadata_pool_name,
-                                             data_pool_name)
+        args = ["fs", "new", self.name, self.metadata_pool_name, data_pool_name]
+        if recover:
+            args.append('--recover')
+        if metadata_overlay:
+            args.append('--allow-dangerous-metadata-overlay')
+        self.mon_manager.raw_cluster_cmd(*args)
 
+        if not recover:
             if self.ec_profile and 'disabled' not in self.ec_profile:
                 ec_data_pool_name = data_pool_name + "_ec"
                 log.debug("EC profile is %s", self.ec_profile)
@@ -1070,6 +1073,9 @@ class Filesystem(MDSCluster):
     def rank_freeze(self, yes, rank=0):
         self.mon_manager.raw_cluster_cmd("mds", "freeze", "{}:{}".format(self.id, rank), str(yes).lower())
 
+    def rank_repaired(self, rank):
+        self.mon_manager.raw_cluster_cmd("mds", "repaired", "{}:{}".format(self.id, rank))
+
     def rank_fail(self, rank=0):
         self.mon_manager.raw_cluster_cmd("mds", "fail", "{}:{}".format(self.id, rank))
 
@@ -1118,6 +1124,9 @@ class Filesystem(MDSCluster):
 
         if timeout is None:
             timeout = DAEMON_WAIT_TIMEOUT
+
+        if self.id is None:
+            status = self.getinfo(refresh=True)
 
         if status is None:
             status = self.status()
@@ -1233,12 +1242,12 @@ class Filesystem(MDSCluster):
             out.append((rank, f(perf)))
         return out
 
-    def read_cache(self, path, depth=None):
+    def read_cache(self, path, depth=None, rank=None):
         cmd = ["dump", "tree", path]
         if depth is not None:
             cmd.append(depth.__str__())
-        result = self.mds_asok(cmd)
-        if len(result) == 0:
+        result = self.rank_asok(cmd, rank=rank)
+        if result is None or len(result) == 0:
             raise RuntimeError("Path not found in cache: {0}".format(path))
 
         return result
@@ -1622,6 +1631,9 @@ class Filesystem(MDSCluster):
 
     def get_scrub_status(self, rank=0):
         return self.run_scrub(["status"], rank)
+
+    def flush(self, rank=0):
+        return self.rank_tell(["flush", "journal"], rank=rank)
 
     def wait_until_scrub_complete(self, result=None, tag=None, rank=0, sleep=30,
                                   timeout=300, reverse=False):

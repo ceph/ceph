@@ -899,7 +899,8 @@ bool DataScan::valid_ino(inodeno_t ino) const
     || (MDS_INO_IS_STRAY(ino))
     || (MDS_INO_IS_MDSDIR(ino))
     || ino == CEPH_INO_ROOT
-    || ino == CEPH_INO_CEPH;
+    || ino == CEPH_INO_CEPH
+    || ino == CEPH_INO_LOST_AND_FOUND;
 }
 
 int DataScan::scan_links()
@@ -988,7 +989,9 @@ int DataScan::scan_links()
 	try {
 	  snapid_t dnfirst;
 	  decode(dnfirst, q);
-	  if (dnfirst <= CEPH_MAXSNAP) {
+          if (dnfirst == CEPH_NOSNAP) {
+            dout(20) << "injected ino detected" << dendl;
+          } else if (dnfirst <= CEPH_MAXSNAP) {
 	    if (dnfirst - 1 > last_snap)
 	      last_snap = dnfirst - 1;
 	  }
@@ -1060,8 +1063,10 @@ int DataScan::scan_links()
 		snaps.insert(make_move_iterator(begin(srnode.snaps)),
 			     make_move_iterator(end(srnode.snaps)));
 	      }
-	      if (dnfirst == CEPH_NOSNAP)
-		injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+	      if (dnfirst == CEPH_NOSNAP) {
+                injected_inos[ino] = link_info_t(dir_ino, frag_id, dname, inode.inode);
+                dout(20) << "adding " << ino << " for future processing to fix dnfirst" << dendl;
+              }
 	    }
 	  } else if (dentry_type == 'L' || dentry_type == 'l') {
 	    inodeno_t ino;
@@ -1235,6 +1240,7 @@ int DataScan::scan_links()
 
     InodeStore inode;
     snapid_t first;
+    dout(20) << " fixing linkage (dnfirst) of " << p.second.dirino << ":" << p.second.name << dendl;
     int r = read_dentry(p.second.dirino, p.second.frag, p.second.name, &inode, &first);
     if (r < 0) {
       derr << "Unexpected error reading dentry "
@@ -1243,10 +1249,13 @@ int DataScan::scan_links()
       return r;
     }
 
-    if (first != CEPH_NOSNAP)
+    if (first != CEPH_NOSNAP) {
+      dout(20) << " ????" << dendl;
       continue;
+    }
 
     first = last_snap + 1;
+    dout(20) << " first is now " << first << dendl;
     r = metadata_driver->inject_linkage(p.second.dirino, p.second.name, p.second.frag, inode, first);
     if (r < 0)
       return r;
@@ -1864,9 +1873,14 @@ int MetadataDriver::inject_with_backtrace(
           << " at 0x" << parent_ino << "/" << dname << std::dec
           << " with size=" << dentry.inode->size << " bytes" << dendl;
 
+        /* NOTE: dnfirst fixed in scan_links */
         r = inject_linkage(parent_ino, dname, fragment, dentry);
       } else {
         // This is the linkage for an ancestor directory
+        dout(10) << "Linking ancestor directory of inode 0x" << std::hex << ino
+                 << " at 0x" << std::hex << parent_ino
+                 << ":" << dname << dendl;
+
         InodeStore ancestor_dentry;
         auto inode = ancestor_dentry.get_inode();
         inode->mode = 0755 | S_IFDIR;
@@ -1885,6 +1899,7 @@ int MetadataDriver::inject_with_backtrace(
         inode->gid = g_conf()->mds_root_ino_gid;
         inode->version = 1;
         inode->backtrace_version = 1;
+        /* NOTE: dnfirst fixed in scan_links */
         r = inject_linkage(parent_ino, dname, fragment, ancestor_dentry);
       }
 
