@@ -1396,7 +1396,6 @@ public:
 
 class RGWMetaSyncShardCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
-  rgw_meta_sync_info sync_info;
   const rgw_pool& pool;
   const std::string& period; //< currently syncing period id
   const epoch_t realm_epoch; //< realm_epoch of period
@@ -1988,7 +1987,7 @@ class RGWMetaSyncCR : public RGWCoroutine {
   using ControlCRRef = boost::intrusive_ptr<RGWMetaSyncShardControlCR>;
   using StackRef = boost::intrusive_ptr<RGWCoroutinesStack>;
   using RefPair = std::pair<ControlCRRef, StackRef>;
-  RGWCoroutinesStack *notify_stack;
+  boost::intrusive_ptr<RGWCoroutinesStack> notify_stack;
   map<int, RefPair> shard_crs;
   int ret{0};
 
@@ -2006,7 +2005,7 @@ public:
     reenter(this) {
       yield {
         ldpp_dout(dpp, 10) << "broadcast sync lock notify" << dendl;
-        notify_stack = spawn(new RGWMetaSyncShardNotifyCR(sync_env, tn), false);
+        notify_stack.reset(spawn(new RGWMetaSyncShardNotifyCR(sync_env, tn), false));
       }
 
       // loop through one period at a time
@@ -2069,7 +2068,7 @@ public:
           yield wait_for_child();
           collect(&ret, nullptr);
         }
-        drain_all_but_stack(notify_stack);
+        drain_all_but_stack(notify_stack.get());
         {
           // drop shard cr refs under lock
           std::lock_guard<std::mutex> lock(mutex);
@@ -2089,7 +2088,7 @@ public:
                                                                  rgw_raw_obj(pool, sync_env->status_oid()),
                                                                  sync_status.sync_info));
       }
-      notify_stack->cancel();
+      notify_stack.get()->cancel();
 
       drain_all();
     }
