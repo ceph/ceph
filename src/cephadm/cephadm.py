@@ -4819,6 +4819,7 @@ def command_agent(ctx: CephadmContext) -> None:
 ##################################
 
 
+@infer_fsid
 @infer_image
 def command_version(ctx):
     # type: (CephadmContext) -> int
