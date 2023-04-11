@@ -29,8 +29,7 @@ private:
 public:
   POSIXDriver(Driver* _next) : FilterDriver(_next) 
   { }
-  virtual ~POSIXDriver() { }
-
+  virtual ~POSIXDriver() { close(); }
   virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
   virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
   virtual int get_user_by_access_key(const DoutPrefixProvider* dpp, const
@@ -91,6 +90,7 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_fd; }
   const std::string& get_base_path() const { return base_path; }
+  int close();
 };
 
 class POSIXUser : public FilterUser {
@@ -161,7 +161,7 @@ public:
     acls()
     { }
 
-  virtual ~POSIXBucket() = default;
+  virtual ~POSIXBucket() { close(); }
 
   virtual void set_owner(rgw::sal::User* _owner) override {
     StoreBucket::set_owner(_owner);
@@ -239,7 +239,7 @@ public:
   const std::string& get_fname() { return get_name(); }
 private:
   int open(const DoutPrefixProvider *dpp);
-  int close(const DoutPrefixProvider* dpp);
+  int close();
   int stat(const DoutPrefixProvider *dpp);
 };
 
