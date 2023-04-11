@@ -8,6 +8,7 @@ tasks:
       - qemu-kvm-block-rbd
       deb:
       - qemu-block-extra
+      - qemu-utils
 - ceph:
     fs: xfs
     conf:
