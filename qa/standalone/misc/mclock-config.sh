@@ -37,122 +37,113 @@ function run() {
 
 function TEST_profile_builtin_to_custom() {
     local dir=$1
-    local OSDS=1
 
-    setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    for osd in $(seq 0 $(expr $OSDS - 1))
-    do
-      run_osd $dir $osd --osd_op_queue=mclock_scheduler || return 1
-    done
+    run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
 
-    # Verify that the default mclock profile is set on the OSDs
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      local mclock_profile=$(ceph config get osd.$id osd_mclock_profile)
-      test "$mclock_profile" = "high_client_ops" || return 1
-    done
+    # Verify the default mclock profile on the OSD
+    local mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
+    test "$mclock_profile" = "balanced" || return 1
+
+    # Verify the running mClock profile
+    mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
+      $(get_asok_path osd.0) config get osd_mclock_profile |\
+      jq .osd_mclock_profile)
+    mclock_profile=$(eval echo $mclock_profile)
+    test "$mclock_profile" = "high_recovery_ops" || return 1
 
     # Change the mclock profile to 'custom'
-    ceph config set osd osd_mclock_profile custom || return 1
+    ceph tell osd.0 config set osd_mclock_profile custom || return 1
 
     # Verify that the mclock profile is set to 'custom' on the OSDs
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      local mclock_profile=$(ceph config get osd.$id osd_mclock_profile)
-      test "$mclock_profile" = "custom" || return 1
-    done
+    mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+      osd.0) config get osd_mclock_profile | jq .osd_mclock_profile)
+    mclock_profile=$(eval echo $mclock_profile)
+    test "$mclock_profile" = "custom" || return 1
 
     # Change a mclock config param and confirm the change
     local client_res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-      osd.$id) config get osd_mclock_scheduler_client_res | \
+      osd.0) config get osd_mclock_scheduler_client_res | \
       jq .osd_mclock_scheduler_client_res | bc)
     echo "client_res = $client_res"
     local client_res_new=$(echo "$client_res + 0.1" | bc -l)
     echo "client_res_new = $client_res_new"
-    ceph config set osd osd_mclock_scheduler_client_res \
+    ceph config set osd.0 osd_mclock_scheduler_client_res \
       $client_res_new || return 1
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      # Check value in config monitor db
-      local res=$(ceph config get osd.$id \
-        osd_mclock_scheduler_client_res) || return 1
-      if (( $(echo "$res != $client_res_new" | bc -l) )); then
-        return 1
-      fi
-      # Check value in the in-memory 'values' map
-      res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-        osd.$id) config get osd_mclock_scheduler_client_res | \
-        jq .osd_mclock_scheduler_client_res | bc)
-      if (( $(echo "$res != $client_res_new" | bc -l) )); then
-        return 1
-      fi
-    done
+
+    # Check value in config monitor db
+    local res=$(ceph config get osd.0 \
+      osd_mclock_scheduler_client_res) || return 1
+    if (( $(echo "$res != $client_res_new" | bc -l) )); then
+      return 1
+    fi
+    # Check value in the in-memory 'values' map
+    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+      osd.0) config get osd_mclock_scheduler_client_res | \
+      jq .osd_mclock_scheduler_client_res | bc)
+    if (( $(echo "$res != $client_res_new" | bc -l) )); then
+      return 1
+    fi
 
     teardown $dir || return 1
 }
 
 function TEST_profile_custom_to_builtin() {
     local dir=$1
-    local OSDS=1
 
     setup $dir || return 1
-    run_mon $dir a --osd_pool_default_size=$OSDS || return 1
+    run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    for osd in $(seq 0 $(expr $OSDS - 1))
-    do
-      run_osd $dir $osd --osd_op_queue=mclock_scheduler || return 1
-    done
+    run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
 
-    # Verify that the default mclock profile is set on the OSDs
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      local mclock_profile=$(ceph config get osd.$id osd_mclock_profile)
-      test "$mclock_profile" = "high_client_ops" || return 1
-    done
+    # Verify the default mclock profile on the OSD
+    local def_mclock_profile
+    def_mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
+    test "$def_mclock_profile" = "balanced" || return 1
+
+    # Verify the running mClock profile
+    local orig_mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
+      $(get_asok_path osd.0) config get osd_mclock_profile |\
+      jq .osd_mclock_profile)
+    orig_mclock_profile=$(eval echo $orig_mclock_profile)
+    test $orig_mclock_profile = "high_recovery_ops" || return 1
 
     # Change the mclock profile to 'custom'
-    ceph config set osd osd_mclock_profile custom || return 1
+    ceph tell osd.0 config set osd_mclock_profile custom || return 1
 
     # Verify that the mclock profile is set to 'custom' on the OSDs
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      local mclock_profile=$(ceph config get osd.$id osd_mclock_profile)
-      test "$mclock_profile" = "custom" || return 1
-    done
+    local mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
+      $(get_asok_path osd.0) config get osd_mclock_profile | \
+      jq .osd_mclock_profile)
+    mclock_profile=$(eval echo $mclock_profile)
+    test $mclock_profile = "custom" || return 1
 
     # Save the original client reservations allocated to the OSDs
-    local client_res=()
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      client_res+=( $(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-        osd.$id) config get osd_mclock_scheduler_client_res | \
-        jq .osd_mclock_scheduler_client_res | bc) )
-      echo "Original client_res for osd.$id = ${client_res[$id]}"
-    done
+    local client_res
+    client_res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+      osd.0) config get osd_mclock_scheduler_client_res | \
+      jq .osd_mclock_scheduler_client_res | bc)
+    echo "Original client_res for osd.0 = $client_res"
 
     # Change a mclock config param and confirm the change
-    local client_res_new=$(echo "${client_res[0]} + 0.1" | bc -l)
+    local client_res_new=$(echo "$client_res + 0.1" | bc -l)
     echo "client_res_new = $client_res_new"
     ceph config set osd osd_mclock_scheduler_client_res \
       $client_res_new || return 1
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      # Check value in config monitor db
-      local res=$(ceph config get osd.$id \
-        osd_mclock_scheduler_client_res) || return 1
-      if (( $(echo "$res != $client_res_new" | bc -l) )); then
-        return 1
-      fi
-      # Check value in the in-memory 'values' map
-      res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-        osd.$id) config get osd_mclock_scheduler_client_res | \
-        jq .osd_mclock_scheduler_client_res | bc)
-      if (( $(echo "$res != $client_res_new" | bc -l) )); then
-        return 1
-      fi
-    done
+    # Check value in config monitor db
+    local res=$(ceph config get osd.0 \
+      osd_mclock_scheduler_client_res) || return 1
+    if (( $(echo "$res != $client_res_new" | bc -l) )); then
+      return 1
+    fi
+    # Check value in the in-memory 'values' map
+    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+      osd.0) config get osd_mclock_scheduler_client_res | \
+      jq .osd_mclock_scheduler_client_res | bc)
+    if (( $(echo "$res != $client_res_new" | bc -l) )); then
+      return 1
+    fi
 
     # Switch the mclock profile back to the original built-in profile.
     # The config subsystem prevents the overwrite of the changed QoS config
@@ -160,46 +151,49 @@ function TEST_profile_custom_to_builtin() {
     # before proceeding to remove the entry from the config monitor db. After
     # the config entry is removed, the original value for the config option is
     # restored and is verified.
-    ceph config set osd osd_mclock_profile high_client_ops || return 1
-    # Verify that the mclock profile is set to 'high_client_ops' on the OSDs
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      local mclock_profile=$(ceph config get osd.$id osd_mclock_profile)
-      test "$mclock_profile" = "high_client_ops" || return 1
-    done
+    ceph tell osd.0 config set osd_mclock_profile $orig_mclock_profile || return 1
+    # Verify that the mclock profile is set back to the original on the OSD
+    eval mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
+      $(get_asok_path osd.0) config get osd_mclock_profile | \
+      jq .osd_mclock_profile)
+    #mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
+    test "$mclock_profile" = "$orig_mclock_profile" || return 1
 
     # Verify that the new value is still in effect
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      # Check value in config monitor db
-      local res=$(ceph config get osd.$id \
-        osd_mclock_scheduler_client_res) || return 1
-      if (( $(echo "$res != $client_res_new" | bc -l) )); then
-        return 1
-      fi
-      # Check value in the in-memory 'values' map
-      res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-        osd.$id) config get osd_mclock_scheduler_client_res | \
-        jq .osd_mclock_scheduler_client_res | bc)
-      if (( $(echo "$res != $client_res_new" | bc -l) )); then
-        return 1
-      fi
-    done
+    # Check value in config monitor db
+    local res=$(ceph config get osd.0 \
+      osd_mclock_scheduler_client_res) || return 1
+    if (( $(echo "$res != $client_res_new" | bc -l) )); then
+      return 1
+    fi
+    # Check value in the in-memory 'values' map
+    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+      osd.0) config get osd_mclock_scheduler_client_res | \
+      jq .osd_mclock_scheduler_client_res | bc)
+    if (( $(echo "$res != $client_res_new" | bc -l) )); then
+      return 1
+    fi
 
     # Remove the changed QoS config option from monitor db
     ceph config rm osd osd_mclock_scheduler_client_res || return 1
 
+    sleep 5 # Allow time for change to take effect
+
     # Verify that the original values are now restored
-    for id in $(seq 0 $(expr $OSDS - 1))
-    do
-      # Check value in the in-memory 'values' map
-      res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
-        osd.$id) config get osd_mclock_scheduler_client_res | \
-        jq .osd_mclock_scheduler_client_res | bc)
-      if (( $(echo "$res != ${client_res[$id]}" | bc -l) )); then
-        return 1
-      fi
-    done
+    # Check value in config monitor db
+    res=$(ceph config get osd.0 \
+      osd_mclock_scheduler_client_res) || return 1
+    if (( $(echo "$res != 0.0" | bc -l) )); then
+      return 1
+    fi
+
+    # Check value in the in-memory 'values' map
+    res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+      osd.0) config get osd_mclock_scheduler_client_res | \
+      jq .osd_mclock_scheduler_client_res | bc)
+    if (( $(echo "$res != $client_res" | bc -l) )); then
+      return 1
+    fi
 
     teardown $dir || return 1
 }
@@ -317,8 +311,15 @@ function TEST_profile_disallow_builtin_params_modify() {
     run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
 
     # Verify that the default mclock profile is set on the OSD
-    local mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
-    test "$mclock_profile" = "high_client_ops" || return 1
+    local def_mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
+    test "$def_mclock_profile" = "balanced" || return 1
+
+    # Verify the running mClock profile
+    local cur_mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
+      $(get_asok_path osd.0) config get osd_mclock_profile |\
+      jq .osd_mclock_profile)
+    cur_mclock_profile=$(eval echo $cur_mclock_profile)
+    test $cur_mclock_profile = "high_recovery_ops" || return 1
 
     declare -a options=("osd_mclock_scheduler_background_recovery_res"
       "osd_mclock_scheduler_client_res")
