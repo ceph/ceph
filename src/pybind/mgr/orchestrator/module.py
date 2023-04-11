@@ -854,6 +854,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                    unmanaged: Optional[bool] = None,
                    dry_run: bool = False,
                    no_overwrite: bool = False,
+                   method: Optional[OSDMethod] = None,
                    inbuf: Optional[str] = None  # deprecated. Was deprecated before Quincy
                    ) -> HandleCommandResult:
         """
@@ -896,7 +897,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     placement=PlacementSpec(host_pattern='*'),
                     data_devices=DeviceSelection(all=True),
                     unmanaged=unmanaged,
-                    preview_only=dry_run
+                    preview_only=dry_run,
+                    method=method
                 )
             ]
             return self._apply_misc(dg_specs, dry_run, format, no_overwrite)
