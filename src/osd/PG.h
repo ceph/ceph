@@ -269,6 +269,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
+    on_scrub_schedule_input_change();
   }
 
   static void set_last_deep_scrub_stamp(
@@ -283,6 +284,7 @@ public:
 	set_last_deep_scrub_stamp(t, history, stats);
 	return true;
       });
+    on_scrub_schedule_input_change();
   }
 
   static void add_objects_scrubbed_count(
@@ -538,11 +540,18 @@ public:
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
-  void on_info_history_change() override;
-
-  void on_primary_status_change(bool was_primary, bool now_primary) override;
-
-  void reschedule_scrub() override;
+  /**
+   * on_scrub_schedule_input_change
+   *
+   * To be called when inputs to scrub scheduling may have changed.
+   * - OSD config params related to scrub such as  osd_scrub_min_interval,
+   *   osd_scrub_max_interval
+   * - Pool params related to scrub such as osd_scrub_min_interval,
+   *   osd_scrub_max_interval
+   * - pg stat scrub timestamps
+   * - etc
+   */
+  void on_scrub_schedule_input_change();
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 

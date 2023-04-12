@@ -115,6 +115,9 @@ MEV(DigestUpdate)
 /// maps_compare_n_cleanup() transactions are done
 MEV(MapsCompared)
 
+/// event emitted when the replica grants a reservation to the primary
+MEV(ReplicaGrantReservation)
+
 /// initiating replica scrub
 MEV(StartReplica)
 
@@ -143,9 +146,8 @@ MEV(ScrubFinished)
 struct NotActive;	    ///< the quiescent state. No active scrubbing.
 struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
-struct ReplicaWaitUpdates;  ///< an active state for a replica. Waiting for all
-			    ///< active operations to finish.
-struct ActiveReplica;	    ///< an active state for a replica.
+struct ReplicaIdle;         ///< Initial reserved replica state
+struct ReplicaBuildingMap;	    ///< an active state for a replica.
 
 
 class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
@@ -310,8 +312,7 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
     mpl::list<sc::custom_reaction<StartScrub>,
 	      // a scrubbing that was initiated at recovery completion:
 	      sc::custom_reaction<AfterRepairScrub>,
-	      sc::transition<StartReplica, ReplicaWaitUpdates>,
-	      sc::transition<StartReplicaNoWait, ActiveReplica>>;
+	      sc::transition<ReplicaGrantReservation, ReplicaIdle>>;
   sc::result react(const StartScrub&);
   sc::result react(const AfterRepairScrub&);
 };
@@ -510,6 +511,49 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
 
 // ----------------------------- the "replica active" states
 
+/**
+ * ReservedReplica
+ *
+ * Parent state for replica states,  Controls lifecycle for
+ * PgScrubber::m_reservations.
+ */
+struct ReservedReplica : sc::state<ReservedReplica, ScrubMachine, ReplicaIdle>,
+			 NamedSimply {
+  explicit ReservedReplica(my_context ctx);
+  ~ReservedReplica();
+
+  using reactions = mpl::list<sc::transition<FullReset, NotActive>>;
+};
+
+struct ReplicaWaitUpdates;
+
+/**
+ * ReplicaIdle
+ *
+ * Replica is waiting for a map request.
+ */
+struct ReplicaIdle : sc::state<ReplicaIdle, ReservedReplica>,
+		     NamedSimply {
+  explicit ReplicaIdle(my_context ctx);
+  ~ReplicaIdle();
+
+  using reactions = mpl::list<
+    sc::transition<StartReplica, ReplicaWaitUpdates>,
+    sc::transition<StartReplicaNoWait, ReplicaBuildingMap>>;
+};
+
+/**
+ * ReservedActiveOp
+ *
+ * Lifetime matches handling for a single map request op
+ */
+struct ReplicaActiveOp
+  : sc::state<ReplicaActiveOp, ReservedReplica, ReplicaWaitUpdates>,
+    NamedSimply {
+  explicit ReplicaActiveOp(my_context ctx);
+  ~ReplicaActiveOp();
+};
+
 /*
  * Waiting for 'active_pushes' to complete
  *
@@ -517,24 +561,21 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
  * - the details of the Primary's request were internalized by PgScrubber;
  * - 'active' scrubbing is set
  */
-struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ScrubMachine>,
+struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReservedReplica>,
 			    NamedSimply {
   explicit ReplicaWaitUpdates(my_context ctx);
-  using reactions = mpl::list<sc::custom_reaction<ReplicaPushesUpd>,
-			      sc::custom_reaction<FullReset>>;
+  using reactions = mpl::list<sc::custom_reaction<ReplicaPushesUpd>>;
 
   sc::result react(const ReplicaPushesUpd&);
-  sc::result react(const FullReset&);
 };
 
 
-struct ActiveReplica : sc::state<ActiveReplica, ScrubMachine>, NamedSimply {
-  explicit ActiveReplica(my_context ctx);
-  using reactions = mpl::list<sc::custom_reaction<SchedReplica>,
-			      sc::custom_reaction<FullReset>>;
+struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReservedReplica>
+			  , NamedSimply {
+  explicit ReplicaBuildingMap(my_context ctx);
+  using reactions = mpl::list<sc::custom_reaction<SchedReplica>>;
 
   sc::result react(const SchedReplica&);
-  sc::result react(const FullReset&);
 };
 
 }  // namespace Scrub

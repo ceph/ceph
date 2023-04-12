@@ -226,7 +226,6 @@ void PeeringState::update_history(const pg_history_t& new_history)
 	       << info.history.prior_readable_until_ub << ")" << dendl;
     }
   }
-  pl->on_info_history_change();
 }
 
 hobject_t PeeringState::earliest_backfill() const
@@ -667,7 +666,6 @@ void PeeringState::start_peering_interval(
   }
 
   on_new_interval();
-  pl->on_info_history_change();
 
   psdout(1) << "up " << oldup << " -> " << up
 	    << ", acting " << oldacting << " -> " << acting
@@ -711,8 +709,6 @@ void PeeringState::start_peering_interval(
     // did primary change?
     if (was_old_primary != is_primary()) {
       state_clear(PG_STATE_CLEAN);
-      // queue/dequeue the scrubber
-      pl->on_primary_status_change(was_old_primary, is_primary());
     }
 
     pl->on_role_change();
@@ -734,10 +730,6 @@ void PeeringState::start_peering_interval(
 		 << ", replicas changed" << dendl;
       }
     }
-  }
-
-  if (is_primary() && was_old_primary) {
-    pl->reschedule_scrub();
   }
 
   if (acting.empty() && !up.empty() && up_primary == pg_whoami) {
@@ -4030,7 +4022,6 @@ void PeeringState::update_stats(
   if (f(info.history, info.stats)) {
     pl->publish_stats_to_osd();
   }
-  pl->reschedule_scrub();
 
   if (t) {
     dirty_info = true;
@@ -6572,7 +6563,6 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
     ps->info = msg->info;
-    pl->on_info_history_change();
     ps->dirty_info = true;
     ps->dirty_big_info = true;  // maybe.
 
