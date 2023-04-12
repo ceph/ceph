@@ -33,6 +33,17 @@ SegmentAllocator::SegmentAllocator(
   reset();
 }
 
+segment_nonce_t calc_new_nonce(
+  segment_type_t type,
+  uint32_t crc,
+  unsigned char const *data,
+  unsigned length)
+{
+  crc &= std::numeric_limits<uint32_t>::max() >> 1;
+  crc |= static_cast<uint32_t>(type) << 31;
+  return ceph_crc32c(crc, data, length);
+}
+
 SegmentAllocator::open_ret
 SegmentAllocator::do_open(bool is_mkfs)
 {
@@ -41,7 +52,8 @@ SegmentAllocator::do_open(bool is_mkfs)
   segment_seq_t new_segment_seq =
     segment_seq_allocator.get_and_inc_next_segment_seq();
   auto meta = sm_group.get_meta();
-  current_segment_nonce = ceph_crc32c(
+  current_segment_nonce = calc_new_nonce(
+    type,
     new_segment_seq,
     reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
     sizeof(meta.seastore_id.uuid));
