@@ -16891,8 +16891,8 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms, quota_max_t type
  * Traverse quota ancestors of the Inode, return true
  * if any of them passes the passed function
  */
-bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
-				   std::function<bool (const Inode &in)> test)
+bool Client::check_quota_condition(Inode *in, const UserPerm& perms, quota_max_t type,
+                                   std::function<bool (const Inode &in)> test)
 {
   if (!cct->_conf.get_val<bool>("client_quota"))
     return false;
@@ -16908,7 +16908,7 @@ bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
       return false;
     } else {
       // Continue up the tree
-      in = get_quota_root(in, perms);
+      in = get_quota_root(in, perms, type);
     }
   }
 
@@ -16917,7 +16917,7 @@ bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
 
 bool Client::is_quota_files_exceeded(Inode *in, const UserPerm& perms)
 {
-  return check_quota_condition(in, perms,
+  return check_quota_condition(in, perms, QUOTA_MAX_FILES,
       [](const Inode &in) {
         return in.quota.max_files && in.rstat.rsize() >= in.quota.max_files;
       });
@@ -16926,7 +16926,7 @@ bool Client::is_quota_files_exceeded(Inode *in, const UserPerm& perms)
 bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
 				     const UserPerm& perms)
 {
-  return check_quota_condition(in, perms,
+  return check_quota_condition(in, perms, QUOTA_MAX_BYTES,
       [&new_bytes](const Inode &in) {
         return in.quota.max_bytes && (in.rstat.rbytes + new_bytes)
                > in.quota.max_bytes;
@@ -16937,7 +16937,7 @@ bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
 {
   ceph_assert(in->size >= in->reported_size);
   const uint64_t size = in->size - in->reported_size;
-  return check_quota_condition(in, perms,
+  return check_quota_condition(in, perms, QUOTA_MAX_BYTES,
       [&size](const Inode &in) {
         if (in.quota.max_bytes) {
           if (in.rstat.rbytes >= in.quota.max_bytes) {
