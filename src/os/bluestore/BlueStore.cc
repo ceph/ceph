@@ -3123,7 +3123,7 @@ void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end
 }
 
 // Convert blobs in selected range to shared blobs.
-void BlueStore::ExtentMap::make_range_shared(
+void BlueStore::ExtentMap::make_range_shared_maybe_merge(
   BlueStore* store, TransContext* txc, CollectionRef& c,
   OnodeRef& oldo, uint64_t srcoff, uint64_t length)
 {
@@ -3210,7 +3210,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   dout(25) << __func__ << " start newo=" << dendl;
   _dump_onode<25>(onode->c->store->cct, *newo);
 
-  make_range_shared(b, txc, c, oldo, srcoff, length);
+  make_range_shared_maybe_merge(b, txc, c, oldo, srcoff, length);
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
   for (auto& e : oldo->extent_map.extent_map) {
     e.blob->last_encoded_id = -1;

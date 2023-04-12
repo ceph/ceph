@@ -896,8 +896,8 @@ public:
     Blob* find_mergable_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
 				  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
 
-    void make_range_shared(BlueStore* store, TransContext* txc, CollectionRef& c,
-			   OnodeRef& oldo, uint64_t srcoff, uint64_t length);
+    void make_range_shared_maybe_merge(BlueStore* store, TransContext* txc, CollectionRef& c,
+				       OnodeRef& oldo, uint64_t srcoff, uint64_t length);
     void reblob_extents(uint32_t blob_start, uint32_t blob_end,
 			BlobRef from_blob, BlobRef to_blob);
 
