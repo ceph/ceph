@@ -3038,7 +3038,8 @@ void BlueStore::ExtentMap::scan_shared_blobs(
   uint64_t end = start + length;
   // last_encoded_id will be used to process each blob only once
   // so reset them first
-  for (auto ep = oldo->extent_map.seek_lextent(start);
+  auto ep_start = oldo->extent_map.seek_lextent(start);
+  for (auto ep = ep_start;
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
     // ep->logical_offset and ep->blob_start() are different
@@ -3049,7 +3050,7 @@ void BlueStore::ExtentMap::scan_shared_blobs(
     ep->blob->last_encoded_id = -1;
   }
 
-  for (auto ep = oldo->extent_map.seek_lextent(start);
+  for (auto ep = ep_start; // reuse, extent_map could not change
        ep != oldo->extent_map.extent_map.end();
        ++ep) {
     if (ep->blob_start() >= end) {
