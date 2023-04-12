@@ -64,6 +64,20 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph_test_libcephfs_vxattr
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+  add_executable(ceph_test_libcephfs_quota
+    main.cc
+    quota.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_quota
+    ceph-common
+    cephfs
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
+  install(TARGETS ceph_test_libcephfs_quota
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   add_executable(ceph_test_libcephfs_newops
     main.cc
     newops.cc

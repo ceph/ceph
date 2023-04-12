@@ -24,7 +24,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/time.h>
-#include <sys/resource.h>
 
 #ifdef __linux__
 #include <limits.h>
@@ -163,5 +162,45 @@ TEST(LibCephFS, QuotaRealm) {
 
   ceph_shutdown(pmount1);
   ceph_shutdown(pmount2);
+  ceph_shutdown(cmount);
+}
+
+TEST(LibCephFS, QuotaRealmRstat) {
+  struct ceph_mount_info *cmount;
+  char test_quota_realm_pdir[128];
+  char xattrk[32] = {'\0'};
+  char xattrv[16] = {'\0'};
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  pid_t mypid = getpid();
+
+  // create parent directory and set quota size
+  sprintf(test_quota_realm_pdir, "/test_quota_realm_rstat_dir_%d", mypid);
+  ASSERT_EQ(0, ceph_mkdir(cmount, test_quota_realm_pdir, 0777));
+  sprintf(xattrk, "ceph.quota.max_bytes");
+  sprintf(xattrv, "4K");
+  ASSERT_EQ(0, ceph_setxattr(cmount, test_quota_realm_pdir, xattrk, (void *)xattrv, 2, XATTR_CREATE));
+
+  char c_path[1024];
+  sprintf(c_path, "%s/test_file_%d", test_quota_realm_pdir, getpid());
+  int fd = ceph_open(cmount, c_path, O_RDWR|O_CREAT|O_TRUNC, 0666);
+  ASSERT_LT(0, fd);
+
+  ASSERT_EQ(0, ceph_ftruncate(cmount, fd, 4092));
+  ASSERT_EQ(4090, ceph_lseek(cmount, fd, 4090, SEEK_SET));
+
+  // Wait for quota to be enforced. The client will take at most around 6
+  // seconds to flush the dirty Fx caps back to MDS.
+  sleep(10);
+
+  const char *out_buf = "abcdeghiklmnopqrstuvwxyz1234567890qwertyuioddd";
+  size_t size = strlen(out_buf);
+  ASSERT_EQ(-CEPHFS_EDQUOT, ceph_write(cmount, fd, out_buf, size, -1));
+
+  ceph_close(cmount, fd);
   ceph_shutdown(cmount);
 }
