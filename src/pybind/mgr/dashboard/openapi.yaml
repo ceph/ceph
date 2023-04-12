@@ -568,6 +568,9 @@ paths:
                   type: string
                 features:
                   type: string
+                force:
+                  default: false
+                  type: boolean
                 metadata:
                   type: string
                 mirror_mode:
