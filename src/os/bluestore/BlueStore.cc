@@ -4087,7 +4087,8 @@ void BlueStore::ExtentMap::fault_range(
   }
   auto start = seek_shard(offset);
   auto last = seek_shard(offset + length);
-  ceph_assert(last >= start && start >= 0);
+  ceph_assert(last >= start);
+  ceph_assert(start >= 0);
 
   string key;
   while (start <= last) {
