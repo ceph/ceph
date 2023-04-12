@@ -85,7 +85,6 @@ function TEST_recover_unexpected() {
 
     for qpg in $(ceph pg dump pgs --format=json-pretty | jq '.pg_stats[].pgid')
     do
-	primary=$(ceph pg dump pgs --format=json | jq ".pg_stats[] | select(.pgid == $qpg) | .acting_primary")
 	eval pg=$qpg   # strip quotes around qpg
 	ceph tell $pg scrub
     done

@@ -279,15 +279,6 @@ public:
       bool need_write_epoch,
       ObjectStore::Transaction &t) = 0;
 
-    /// Notify that info/history changed (generally to update scrub registration)
-    virtual void on_info_history_change() = 0;
-
-    /// Notify PG that Primary/Replica status has changed (to update scrub registration)
-    virtual void on_primary_status_change(bool was_primary, bool now_primary) = 0;
-
-    /// Need to reschedule next scrub. Assuming no change in role
-    virtual void reschedule_scrub() = 0;
-
     /// Notify that a scrub has been requested
     virtual void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) = 0;
 

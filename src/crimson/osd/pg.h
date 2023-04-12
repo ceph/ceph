@@ -159,18 +159,6 @@ public:
     bool need_write_epoch,
     ceph::os::Transaction &t) final;
 
-  void on_info_history_change() final {
-    // Not needed yet -- mainly for scrub scheduling
-  }
-
-  /// Notify PG that Primary/Replica status has changed (to update scrub registration)
-  void on_primary_status_change(bool was_primary, bool now_primary) final {
-  }
-
-  /// Need to reschedule next scrub. Assuming no change in role
-  void reschedule_scrub() final {
-  }
-
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
 
   uint64_t get_snap_trimq_size() const final {

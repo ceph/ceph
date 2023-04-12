@@ -7626,10 +7626,9 @@ void OSD::resched_all_scrubs()
     if (!pg)
       continue;
 
-    if (!pg->get_planned_scrub().must_scrub && !pg->get_planned_scrub().need_auto) {
-      dout(15) << __func__ << ": reschedule " << job.pgid << dendl;
-      pg->reschedule_scrub();
-    }
+    dout(15) << __func__ << ": updating scrub schedule on " << job.pgid << dendl;
+    pg->on_scrub_schedule_input_change();
+
     pg->unlock();
   }
   dout(10) << __func__ << ": done" << dendl;
@@ -8766,13 +8765,6 @@ bool OSD::advance_pg(
       double old_max_interval = 0, new_max_interval = 0;
       oldpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &old_max_interval);
       newpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &new_max_interval);
-
-      // Assume if an interval is change from set to unset or vice versa the actual config
-      // is different.  Keep it simple even if it is possible to call resched_all_scrub()
-      // unnecessarily.
-      if (old_min_interval != new_min_interval || old_max_interval != new_max_interval) {
-	pg->on_info_history_change();
-      }
     }
 
     if (new_pg_num && old_pg_num != new_pg_num) {
