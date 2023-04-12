@@ -404,48 +404,49 @@ The output of ``ceph df`` resembles the following::
    cephfs.a.meta           2   32  6.8 KiB  6.8 KiB      0 B        22   96 KiB  96 KiB      0 B       0    297 GiB            N/A          N/A     22         0 B          0 B
    cephfs.a.data           3   32      0 B      0 B      0 B         0      0 B     0 B      0 B       0     99 GiB            N/A          N/A      0         0 B          0 B
    test                    4   32   22 MiB   22 MiB   50 KiB       248   19 MiB  19 MiB   50 KiB       0    297 GiB            N/A          N/A    248         0 B          0 B
-
-- **CLASS:** for example, "ssd" or "hdd"
+   
+- **CLASS:** For example, "ssd" or "hdd".
 - **SIZE:** The amount of storage capacity managed by the cluster.
 - **AVAIL:** The amount of free space available in the cluster.
 - **USED:** The amount of raw storage consumed by user data (excluding
-  BlueStore's database)
+  BlueStore's database).
 - **RAW USED:** The amount of raw storage consumed by user data, internal
-  overhead, or reserved capacity.
-- **%RAW USED:** The percentage of raw storage used. Use this number in
-  conjunction with the ``full ratio`` and ``near full ratio`` to ensure that 
-  you are not reaching your cluster's capacity. See `Storage Capacity`_ for 
-  additional details.
+  overhead, and reserved capacity.
+- **%RAW USED:** The percentage of raw storage used. Watch this number in
+  conjunction with ``full ratio`` and ``near full ratio`` to be forewarned when
+  your cluster approaches the fullness thresholds. See `Storage Capacity`_.
 
 
-**POOLS:**  
+**POOLS:**
 
-The **POOLS** section of the output provides a list of pools and the notional 
-usage of each pool. The output from this section **DOES NOT** reflect replicas,
-clones or snapshots. For example, if you store an object with 1MB of data, the 
-notional usage will be 1MB, but the actual usage may be 2MB or more depending 
-on the number of replicas, clones and snapshots.  
+The POOLS section of the output provides a list of pools and the *notional*
+usage of each pool. This section of the output **DOES NOT** reflect replicas,
+clones, or snapshots. For example, if you store an object with 1MB of data,
+then the notional usage will be 1MB, but the actual usage might be 2MB or more
+depending on the number of replicas, clones, and snapshots.
 
-- **ID:** The number of the node within the pool.
-- **STORED:** actual amount of data user/Ceph has stored in a pool. This is
-  similar to the USED column in earlier versions of Ceph but the calculations
-  (for BlueStore!) are more precise (gaps are properly handled).
+- **ID:** The number of the specific node within the pool.
+- **STORED:** The actual amount of data that the user has stored in a pool.
+  This is similar to the USED column in earlier versions of Ceph, but the
+  calculations (for BlueStore!) are more precise (in that gaps are properly
+  handled).
 
-  - **(DATA):** usage for RBD (RADOS Block Device), CephFS file data, and RGW
+  - **(DATA):** Usage for RBD (RADOS Block Device), CephFS file data, and RGW
     (RADOS Gateway) object data.
-  - **(OMAP):** key-value pairs. Used primarily by CephFS and RGW (RADOS
+  - **(OMAP):** Key-value pairs. Used primarily by CephFS and RGW (RADOS
     Gateway) for metadata storage.
 
-- **OBJECTS:** The notional number of objects stored per pool. "Notional" is
-  defined above in the paragraph immediately under "POOLS".
-- **USED:** The space allocated for a pool over all OSDs. This includes
-  replication, allocation granularity, and erasure-coding overhead. Compression
-  savings and object content gaps are also taken into account. BlueStore's
-  database is not included in this amount.
+- **OBJECTS:** The notional number of objects stored per pool (that is, the
+  number of objects other than replicas, clones, or snapshots). 
+- **USED:** The space allocated for a pool over all OSDs. This includes space
+  for replication, space for allocation granularity, and space for the overhead
+  associated with erasure-coding. Compression savings and object-content gaps
+  are also taken into account. However, BlueStore's database is not included in
+  the amount reported under USED.
 
-  - **(DATA):** object usage for RBD (RADOS Block Device), CephFS file data, and RGW
-    (RADOS Gateway) object data.
-  - **(OMAP):** object key-value pairs. Used primarily by CephFS and RGW (RADOS
+  - **(DATA):** Object usage for RBD (RADOS Block Device), CephFS file data,
+    and RGW (RADOS Gateway) object data.
+  - **(OMAP):** Object key-value pairs. Used primarily by CephFS and RGW (RADOS
     Gateway) for metadata storage.
 
 - **%USED:** The notional percentage of storage used per pool.
@@ -454,50 +455,51 @@ on the number of replicas, clones and snapshots.
 - **QUOTA OBJECTS:** The number of quota objects.
 - **QUOTA BYTES:** The number of bytes in the quota objects.
 - **DIRTY:** The number of objects in the cache pool that have been written to
-  the cache pool but have not been flushed yet to the base pool. This field is
-  only available when cache tiering is in use.
-- **USED COMPR:** amount of space allocated for compressed data (i.e. this
-  includes compressed data plus all the allocation, replication and erasure
-  coding overhead).
-- **UNDER COMPR:** amount of data passed through compression (summed over all
-  replicas) and beneficial enough to be stored in a compressed form.
+  the cache pool but have not yet been flushed to the base pool. This field is
+  available only when cache tiering is in use.
+- **USED COMPR:** The amount of space allocated for compressed data. This
+  includes compressed data in addition to all of the space required for
+  replication, allocation granularity, and erasure- coding overhead.
+- **UNDER COMPR:** The amount of data that has passed through compression
+  (summed over all replicas) and that is worth storing in a compressed form.
 
 
-.. note:: The numbers in the POOLS section are notional. They are not
-   inclusive of the number of replicas, snapshots or clones. As a result, the
-   sum of the USED and %USED amounts will not add up to the USED and %USED
-   amounts in the RAW section of the output.
+.. note:: The numbers in the POOLS section are notional. They do not include
+   the number of replicas, clones, or snapshots. As a result, the sum of the
+   USED and %USED amounts in the POOLS section of the output will not be equal
+   to the sum of the USED and %USED amounts in the RAW section of the output.
 
-.. note:: The MAX AVAIL value is a complicated function of the replication
-   or erasure code used, the CRUSH rule that maps storage to devices, the
-   utilization of those devices, and the configured ``mon_osd_full_ratio``.
+.. note:: The MAX AVAIL value is a complicated function of the replication or
+   the kind of erasure coding used, the CRUSH rule that maps storage to
+   devices, the utilization of those devices, and the configured
+   ``mon_osd_full_ratio`` setting.
 
 
 Checking OSD Status
 ===================
 
-You can check OSDs to ensure they are ``up`` and ``in`` by executing the
+To check if OSDs are ``up`` and ``in``, run the
 following command:
 
 .. prompt:: bash #
 
   ceph osd stat
-	
-Or: 
+
+Alternatively, you can run the following command:
 
 .. prompt:: bash #
 
   ceph osd dump
-	
-You can also check view OSDs according to their position in the CRUSH map by
-using the following command:
+
+To view OSDs according to their position in the CRUSH map, run the following
+command:
 
 .. prompt:: bash #
 
    ceph osd tree
 
-Ceph will print out a CRUSH tree with a host, its OSDs, whether they are up
-and their weight:
+To print out a CRUSH tree that displays a host, its OSDs, whether the OSDs are
+``up``, and the weight of the OSDs, run the following command:
 
 .. code-block:: bash
 
@@ -509,88 +511,90 @@ and their weight:
      1   ssd 1.00000         osd.1             up  1.00000 1.00000
      2   ssd 1.00000         osd.2             up  1.00000 1.00000
 
-For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
+See `Monitoring OSDs and Placement Groups`_.
 
 Checking Monitor Status
 =======================
 
-If your cluster has multiple monitors (likely), you should check the monitor
-quorum status after you start the cluster and before reading and/or writing data. A
-quorum must be present when multiple monitors are running. You should also check
-monitor status periodically to ensure that they are running.
+If your cluster has multiple monitors, then you need to perform certain
+"monitor status" checks.  After starting the cluster and before reading or
+writing data, you should check quorum status. A quorum must be present when
+multiple monitors are running to ensure proper functioning of your Ceph
+cluster. Check monitor status regularly in order to ensure that all of the
+monitors are running.
 
-To see display the monitor map, execute the following:
+To display the monitor map, run the following command:
 
 .. prompt:: bash $
 
    ceph mon stat
-	
-Or:
+
+Alternatively, you can run the following command:
 
 .. prompt:: bash $
 
    ceph mon dump
-	
-To check the quorum status for the monitor cluster, execute the following:
-	
+
+To check the quorum status for the monitor cluster, run the following command:
+
 .. prompt:: bash $
 
    ceph quorum_status
 
-Ceph will return the quorum status. For example, a Ceph  cluster consisting of
-three monitors may return the following:
+Ceph returns the quorum status. For example, a Ceph cluster that consists of
+three monitors might return the following:
 
 .. code-block:: javascript
 
-	{ "election_epoch": 10,
-	  "quorum": [
-	        0,
-	        1,
-	        2],
-	  "quorum_names": [
-		"a",
-		"b",
-		"c"],
-	  "quorum_leader_name": "a",
-	  "monmap": { "epoch": 1,
-	      "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
-	      "modified": "2011-12-12 13:28:27.505520",
-	      "created": "2011-12-12 13:28:27.505520",
-	      "features": {"persistent": [
-				"kraken",
-				"luminous",
-				"mimic"],
-		"optional": []
-	      },
-	      "mons": [
-	            { "rank": 0,
-	              "name": "a",
-	              "addr": "127.0.0.1:6789/0",
-		      "public_addr": "127.0.0.1:6789/0"},
-	            { "rank": 1,
-	              "name": "b",
-	              "addr": "127.0.0.1:6790/0",
-		      "public_addr": "127.0.0.1:6790/0"},
-	            { "rank": 2,
-	              "name": "c",
-	              "addr": "127.0.0.1:6791/0",
-		      "public_addr": "127.0.0.1:6791/0"}
-	           ]
-	  }
-	}
+    { "election_epoch": 10,
+      "quorum": [
+            0,
+            1,
+            2],
+      "quorum_names": [
+        "a",
+        "b",
+        "c"],
+      "quorum_leader_name": "a",
+      "monmap": { "epoch": 1,
+          "fsid": "444b489c-4f16-4b75-83f0-cb8097468898",
+          "modified": "2011-12-12 13:28:27.505520",
+          "created": "2011-12-12 13:28:27.505520",
+          "features": {"persistent": [
+                "kraken",
+                "luminous",
+                "mimic"],
+        "optional": []
+          },
+          "mons": [
+                { "rank": 0,
+                  "name": "a",
+                  "addr": "127.0.0.1:6789/0",
+              "public_addr": "127.0.0.1:6789/0"},
+                { "rank": 1,
+                  "name": "b",
+                  "addr": "127.0.0.1:6790/0",
+              "public_addr": "127.0.0.1:6790/0"},
+                { "rank": 2,
+                  "name": "c",
+                  "addr": "127.0.0.1:6791/0",
+              "public_addr": "127.0.0.1:6791/0"}
+               ]
+      }
+    }
 
 Checking MDS Status
 ===================
 
-Metadata servers provide metadata services for  CephFS. Metadata servers have
-two sets of states: ``up | down`` and ``active | inactive``. To ensure your
-metadata servers are ``up`` and ``active``,  execute the following:
+Metadata servers provide metadata services for CephFS. Metadata servers have
+two sets of states: ``up | down`` and ``active | inactive``. To check if your
+metadata servers are ``up`` and ``active``, run the following command:
 
 .. prompt:: bash $
 
    ceph mds stat
-	
-To display details of the metadata cluster, execute the following:
+
+To display details of the metadata servers, run the following command:
 
 .. prompt:: bash $
 
@@ -600,9 +604,9 @@ To display details of the metadata cluster, execute the following:
 Checking Placement Group States
 ===============================
 
-Placement groups map objects to OSDs. When you monitor your
-placement groups,  you will want them to be ``active`` and ``clean``. 
-For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
+Placement groups (PGs) map objects to OSDs. PGs are monitored in order to
+ensure that they are ``active`` and ``clean``.  See `Monitoring OSDs and
+Placement Groups`_.
 
 .. _Monitoring OSDs and Placement Groups: ../monitoring-osd-pg
 
@@ -611,36 +615,36 @@ For a detailed discussion, refer to `Monitoring OSDs and Placement Groups`_.
 Using the Admin Socket
 ======================
 
-The Ceph admin socket allows you to query a daemon via a socket interface. 
-By default, Ceph sockets reside under ``/var/run/ceph``. To access a daemon
-via the admin socket, login to the host running the daemon and use the 
-following command:
+The Ceph admin socket allows you to query a daemon via a socket interface.  By
+default, Ceph sockets reside under ``/var/run/ceph``. To access a daemon via
+the admin socket, log in to the host that is running the daemon and run one of
+the two following commands:
 
 .. prompt:: bash $
 
    ceph daemon {daemon-name}
    ceph daemon {path-to-socket-file}
 
-For example, the following are equivalent:
+For example, the following commands are equivalent to each other:
 
 .. prompt:: bash $
 
    ceph daemon osd.0 foo
    ceph daemon /var/run/ceph/ceph-osd.0.asok foo
 
-To view the available admin socket commands, execute the following command:
+To view the available admin-socket commands, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon {daemon-name} help
 
-The admin socket command enables you to show and set your configuration at
-runtime. See `Viewing a Configuration at Runtime`_ for details.
-
-Additionally, you can set configuration values at runtime directly (i.e., the
-admin socket bypasses the monitor, unlike ``ceph tell {daemon-type}.{id}
-config set``, which relies on the monitor but doesn't require you to login
-directly to the host in question ).
+Admin-socket commands enable you to view and set your configuration at runtime.
+For more on viewing your configuration, see `Viewing a Configuration at
+Runtime`_. There are two methods of setting configuration value at runtime: (1)
+using the admin socket, which bypasses the monitor and requires a direct login
+to the host in question, and (2) using the ``ceph tell {daemon-type}.{id}
+config set`` command, which relies on the monitor and does not require a direct
+login.
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity
