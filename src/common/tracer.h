@@ -152,9 +152,20 @@ struct Tracer {
   jspan_ptr add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
 };
 
-inline void encode(const jspan_context& span, bufferlist& bl, uint64_t f=0) {}
-inline void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl) {}
-
+inline void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f = 0) {
+  ENCODE_START(1, 1, bl);
+  // jaeger is missing, set "is_valid" to false.
+  bool is_valid = false;
+  encode(is_valid, bl);
+  ENCODE_FINISH(bl);
 }
+
+inline void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
+  DECODE_START(254, bl);
+  // jaeger is missing, consume the buffer but do not decode it.
+  DECODE_FINISH(bl);
+}
+
+} // namespace tracing
 
 #endif // !HAVE_JAEGER
