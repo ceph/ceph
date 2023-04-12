@@ -2576,6 +2576,7 @@ void BlueStore::Blob::copy_from(
   // they check if it is run in desired context
   ceph_assert(bfrom.is_shared());
   ceph_assert(shared_blob);
+  ceph_assert(shared_blob == from.shared_blob);
 
   // split len to pre_len, main_len, post_len
   uint32_t start_aligned = p2align(start, min_release_size);
@@ -2591,13 +2592,11 @@ void BlueStore::Blob::copy_from(
     bto.adjust_to(from.blob, end_roundup);
     ceph_assert(min_release_size == from.used_in_blob.au_size);
     used_in_blob.init(end_roundup, min_release_size);
-  }
-  if (bto.get_logical_length() < end_roundup) {
+  } else if (bto.get_logical_length() < end_roundup) {
     ceph_assert(!bto.is_compressed());
     bto.add_tail(end_roundup);
     used_in_blob.add_tail(end_roundup, used_in_blob.au_size);
   }
-  ceph_assert(shared_blob == from.shared_blob);
 
   if (end_aligned >= start_roundup) {
     copy_extents(cct, from, start_aligned,
