@@ -10,9 +10,9 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
-from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec
+from ceph.deployment.service_spec import ServiceSpec, RGWSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
-from mgr_util import build_url, merge_dicts
+from mgr_util import build_url
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
 from cephadm import utils
@@ -32,7 +32,7 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
     """
     # despite this mapping entity names to daemons, self.TYPE within
     # the CephService class refers to service types, not daemon types
-    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress', 'ceph-exporter']:
+    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress']:
         return AuthEntity(f'client.{daemon_type}.{daemon_id}')
     elif daemon_type in ['crash', 'agent']:
         if host == "":
@@ -519,6 +519,7 @@ class CephService(CephadmService):
                 'prefix': 'auth get',
                 'entity': entity,
             })
+
         config = self.mgr.get_minimal_ceph_conf()
 
         if extra_ceph_config:
@@ -1049,34 +1050,6 @@ class CrashService(CephService):
 
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
 
-        return daemon_spec
-
-
-class CephExporterService(CephService):
-    TYPE = 'ceph-exporter'
-    DEFAULT_SERVICE_PORT = 9926
-
-    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
-        assert self.TYPE == daemon_spec.daemon_type
-        spec = cast(CephExporterSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_spec.daemon_id),
-                                             ['mon', 'profile ceph-exporter',
-                                              'mon', 'allow r',
-                                              'mgr', 'allow r',
-                                              'osd', 'allow r'])
-        exporter_config = {}
-        if spec.sock_dir:
-            exporter_config.update({'sock-dir': spec.sock_dir})
-        if spec.port:
-            exporter_config.update({'port': f'{spec.port}'})
-        if spec.prio_limit is not None:
-            exporter_config.update({'prio-limit': f'{spec.prio_limit}'})
-        if spec.stats_period:
-            exporter_config.update({'stats-period': f'{spec.stats_period}'})
-
-        daemon_spec.keyring = keyring
-        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        daemon_spec.final_config = merge_dicts(daemon_spec.final_config, exporter_config)
         return daemon_spec
 
 

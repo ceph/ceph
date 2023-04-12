@@ -17,7 +17,7 @@ from cephadm.services.monitoring import GrafanaService, AlertmanagerService, Pro
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import IscsiServiceSpec, MonitoringSpec, AlertManagerSpec, \
     ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec, \
-    PrometheusSpec, CephExporterSpec, NFSServiceSpec
+    PrometheusSpec, NFSServiceSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
 from ceph.utils import datetime_now
@@ -447,7 +447,6 @@ class TestMonitoring:
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, MonitoringSpec('node-exporter')) as _, \
-                    with_service(cephadm_module, CephExporterSpec('ceph-exporter')) as _, \
                     with_service(cephadm_module, PrometheusSpec('prometheus')) as _:
 
                 y = dedent("""
@@ -470,13 +469,6 @@ class TestMonitoring:
                       labels:
                         instance: 'test'
 
-
-                  - job_name: 'ceph-exporter'
-                    honor_labels: true
-                    static_configs:
-                    - targets: ['[1::4]:9926']
-                      labels:
-                        instance: 'test'
                 """).lstrip()
 
                 _run_cephadm.assert_called_with(

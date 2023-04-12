@@ -372,7 +372,7 @@ class UnauthorizedRegistryError(Error):
 
 class Ceph(object):
     daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
-               'crash', 'cephfs-mirror', 'ceph-exporter')
+               'crash', 'cephfs-mirror')
     gateways = ('iscsi', 'nfs')
 
 ##################################
@@ -934,64 +934,6 @@ class CephIscsi(object):
         tcmu_container.container_args = []
         set_pids_limit_unlimited(self.ctx, tcmu_container.container_args)
         return tcmu_container
-
-##################################
-
-
-class CephExporter(object):
-    """Defines a Ceph exporter container"""
-
-    daemon_type = 'ceph-exporter'
-    entrypoint = '/usr/bin/ceph-exporter'
-    DEFAULT_PORT = 9926
-    port_map = {
-        'ceph-exporter': DEFAULT_PORT,
-    }
-
-    def __init__(self,
-                 ctx: CephadmContext,
-                 fsid: str, daemon_id: Union[int, str],
-                 config_json: Dict[str, Any],
-                 image: str = DEFAULT_IMAGE) -> None:
-        self.ctx = ctx
-        self.fsid = fsid
-        self.daemon_id = daemon_id
-        self.image = image
-
-        self.sock_dir = config_json.get('sock-dir', '/var/run/ceph/')
-        self.addrs = config_json.get('addrs', socket.gethostbyname(socket.gethostname()))
-        self.port = config_json.get('port', self.DEFAULT_PORT)
-        self.prio_limit = config_json.get('prio-limit', 5)
-        self.stats_period = config_json.get('stats-period', 5)
-
-        self.validate()
-
-    @classmethod
-    def init(cls, ctx: CephadmContext, fsid: str,
-             daemon_id: Union[int, str]) -> 'CephExporter':
-        return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
-
-    @staticmethod
-    def get_container_mounts() -> Dict[str, str]:
-        mounts = dict()
-        mounts['/var/run/ceph'] = '/var/run/ceph:z'
-        return mounts
-
-    def get_daemon_args(self) -> List[str]:
-        args = [
-            f'--sock-dir={self.sock_dir}',
-            f'--addrs={self.addrs}',
-            f'--port={self.port}',
-            f'--prio-limit={self.prio_limit}',
-            f'--stats-period={self.stats_period}',
-        ]
-        return args
-
-    def validate(self) -> None:
-        if not os.path.isdir(self.sock_dir):
-            raise Error(f'Directory does not exist. Got: {self.sock_dir}')
-
 
 ##################################
 
@@ -2630,7 +2572,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     # type: (CephadmContext, str, str, Union[int, str]) -> List[str]
     r = list()  # type: List[str]
 
-    if daemon_type in Ceph.daemons and daemon_type not in ['crash', 'ceph-exporter']:
+    if daemon_type in Ceph.daemons and daemon_type != 'crash':
         r += [
             '--setuser', 'ceph',
             '--setgroup', 'ceph',
@@ -2704,9 +2646,6 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
         r += nfs_ganesha.get_daemon_args()
-    elif daemon_type == CephExporter.daemon_type:
-        ceph_exporter = CephExporter.init(ctx, fsid, daemon_id)
-        r.extend(ceph_exporter.get_daemon_args())
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, fsid, daemon_id)
         r += haproxy.get_daemon_args()
@@ -2968,7 +2907,7 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[data_dir] = cdata_dir + ':z'
         if not no_config:
             mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
-        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash', 'ceph-exporter']:
+        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash']:
             # these do not search for their keyrings in a data directory
             mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
 
@@ -3155,9 +3094,6 @@ def get_container(ctx: CephadmContext,
         entrypoint = NFSGanesha.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
         envs.extend(NFSGanesha.get_container_envs())
-    elif daemon_type == CephExporter.daemon_type:
-        entrypoint = CephExporter.entrypoint
-        name = 'client.ceph-exporter.%s' % daemon_id
     elif daemon_type == HAproxy.daemon_type:
         name = '%s.%s' % (daemon_type, daemon_id)
         container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
@@ -5317,7 +5253,7 @@ def prepare_ssh(
         cli(['orch', 'apply', 'crash'])
 
     if not ctx.skip_monitoring_stack:
-        for t in ['ceph-exporter', 'prometheus', 'grafana', 'node-exporter', 'alertmanager']:
+        for t in ['prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
             try:
                 cli(['orch', 'apply', t])

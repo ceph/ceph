@@ -498,7 +498,7 @@ class ServiceSpec(object):
     """
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi loki promtail mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ' \
-                          'container ingress cephfs-mirror snmp-gateway ceph-exporter'.split()
+                          'container ingress cephfs-mirror snmp-gateway'.split()
     REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
@@ -519,7 +519,6 @@ class ServiceSpec(object):
             'container': CustomContainerSpec,
             'grafana': GrafanaSpec,
             'node-exporter': MonitoringSpec,
-            'ceph-exporter': CephExporterSpec,
             'prometheus': PrometheusSpec,
             'loki': MonitoringSpec,
             'promtail': MonitoringSpec,
@@ -1560,46 +1559,3 @@ class TunedProfileSpec():
         # for making deep copies so you can edit the settings in one without affecting the other
         # mostly for testing purposes
         return TunedProfileSpec(self.profile_name, self.placement, self.settings.copy())
-
-
-class CephExporterSpec(ServiceSpec):
-    def __init__(self,
-                 service_type: str = 'ceph-exporter',
-                 sock_dir: Optional[str] = None,
-                 addrs: str = '',
-                 port: Optional[int] = None,
-                 prio_limit: Optional[int] = 5,
-                 stats_period: Optional[int] = 5,
-                 placement: Optional[PlacementSpec] = None,
-                 unmanaged: bool = False,
-                 preview_only: bool = False,
-                 extra_container_args: Optional[List[str]] = None,
-                 ):
-        assert service_type == 'ceph-exporter'
-
-        super(CephExporterSpec, self).__init__(
-            service_type,
-            placement=placement,
-            unmanaged=unmanaged,
-            preview_only=preview_only,
-            extra_container_args=extra_container_args)
-
-        self.service_type = service_type
-        self.sock_dir = sock_dir
-        self.addrs = addrs
-        self.port = port
-        self.prio_limit = prio_limit
-        self.stats_period = stats_period
-
-    def validate(self) -> None:
-        super(CephExporterSpec, self).validate()
-
-        if not isinstance(self.prio_limit, int):
-            raise SpecValidationError(
-                    f'prio_limit must be an integer. Got {type(self.prio_limit)}')
-        if not isinstance(self.stats_period, int):
-            raise SpecValidationError(
-                    f'stats_period must be an integer. Got {type(self.stats_period)}')
-
-
-yaml.add_representer(CephExporterSpec, ServiceSpec.yaml_representer)

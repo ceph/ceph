@@ -15,7 +15,7 @@ from orchestrator._interface import daemon_type_to_service
 from ceph.utils import datetime_now
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
-from cephadm.services.cephadmservice import CephadmDaemonDeploySpec, CephExporterService
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.services.ingress import IngressSpec
 
 from datetime import datetime, timedelta
@@ -183,8 +183,6 @@ class Root(object):
             return self.node_exporter_sd_config()
         elif service == 'haproxy':
             return self.haproxy_sd_config()
-        elif service == 'ceph-exporter':
-            return self.ceph_exporter_sd_config()
         else:
             return []
 
@@ -237,19 +235,6 @@ class Root(object):
                         'targets': [f"{build_url(host=addr, port=spec.monitor_port).lstrip('/')}"],
                         'labels': {'instance': dd.service_name()}
                     })
-        return srv_entries
-
-    def ceph_exporter_sd_config(self) -> List[Dict[str, Collection[str]]]:
-        """Return <http_sd_config> compatible prometheus config for ceph-exporter service."""
-        srv_entries = []
-        for dd in self.mgr.cache.get_daemons_by_service('ceph-exporter'):
-            assert dd.hostname is not None
-            addr = dd.ip if dd.ip else self.mgr.inventory.get_addr(dd.hostname)
-            port = dd.ports[0] if dd.ports else CephExporterService.DEFAULT_SERVICE_PORT
-            srv_entries.append({
-                'targets': [build_url(host=addr, port=port).lstrip('/')],
-                'labels': {'instance': dd.hostname}
-            })
         return srv_entries
 
     @cherrypy.expose(alias='prometheus/rules')
