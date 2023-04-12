@@ -852,8 +852,7 @@ class TestNFS(MgrTestCase):
                                                             '--path',
                                                             '/testfile'])
         except CommandFailedError as e:
-            # NotADirectoryError is raised as EINVAL
-            if e.exitstatus != errno.EINVAL:
+            if e.exitstatus != errno.ENOTDIR:
                 raise
         self.ctx.cluster.run(args=['rm', '-rf', '/mnt/testfile'])
         self._delete_cluster_with_fs(self.fs_name, mnt_pt, preserve_mode)
@@ -875,7 +874,7 @@ class TestNFS(MgrTestCase):
                                            '--path',
                                            f'{mnt_pt}/testdir_symlink'])
         except CommandFailedError as e:
-            if e.exitstatus != errno.ENOENT:
+            if e.exitstatus != errno.ENOTDIR:
                 raise
         self.ctx.cluster.run(args=['rm', '-rf', f'{mnt_pt}/*'])
         self._delete_cluster_with_fs(self.fs_name, mnt_pt, preserve_mode)
