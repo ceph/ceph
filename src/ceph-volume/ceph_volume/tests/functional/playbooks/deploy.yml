@@ -87,6 +87,17 @@
       set_fact:
         is_atomic: '{{ stat_ostree.stat.exists }}'
 
+    - name: force rpm pkg upgrade
+      package:
+        name: rpm
+        state: latest
+      when: not is_atomic | bool
+
+    - name: update the system
+      command: dnf update -y
+      changed_when: false
+      when: not is_atomic | bool
+
   tasks:
     - import_role:
         name: ceph-defaults
