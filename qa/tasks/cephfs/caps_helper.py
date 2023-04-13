@@ -3,8 +3,7 @@ Helper methods to test that MON and MDS caps are enforced properly.
 """
 from os.path import join as os_path_join
 from logging import getLogger
-
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from textwrap import dedent
 
 from teuthology.orchestra.run import Raw
 
@@ -113,7 +112,23 @@ def gen_mds_cap_str(caps):
     return mds_cap
 
 
-class CapTester(CephFSTestCase):
+def assert_equal(first, second):
+    msg = f'Variables are not equal.\nfirst = {first}\nsecond = {second}'
+    assert first == second, msg
+
+
+def assert_in(member, container):
+    msg = dedent(f'''
+        First value is absent in second value.
+        First value -
+        {member}
+        Second value -
+        {container}
+        ''')
+    assert member in container, msg
+
+
+class CapTester:
     """
     Test that MON and MDS caps are enforced.
 
@@ -229,14 +244,15 @@ class CapTester(CephFSTestCase):
             fsls_admin = get_cluster_cmd_op(args='fs ls')
             log.info('output of fs ls cmd run by admin -\n{fsls_admin}')
 
-            self.assertEqual(fsls, fsls_admin)
+            assert_equal(fsls, fsls_admin)
             return
 
         log.info('FS names are mentioned in moncap. moncap -\n{moncap}')
         log.info('testing for presence of these FS names in output of '
                  '"fs ls" command run by client.')
         for fsname in self._get_fsnames_from_moncap(moncap):
-            self.assertIn('name: ' + fsname, fsls)
+            fsname_cap_str = f'name: {fsname}'
+            assert_in(fsname_cap_str, fsls)
 
     def run_mds_cap_tests(self, perm, mntpt=None):
         """
@@ -267,7 +283,7 @@ class CapTester(CephFSTestCase):
             log.info(f'test read perm: read file {path} and expect data '
                      f'"{data}"')
             contents = mount.read_file(path)
-            self.assertEqual(data, contents)
+            assert_equal(data, contents)
             log.info(f'read perm was tested successfully: "{data}" was '
                      f'successfully read from path {path}')
 
@@ -277,7 +293,7 @@ class CapTester(CephFSTestCase):
                      f'file {path}.')
             mount.write_file(path=path, data=data)
             contents = mount.read_file(path=path)
-            self.assertEqual(data, contents)
+            assert_equal(data, contents)
             log.info(f'write perm was tested was successfully: data '
                      f'"{data}" was successfully written to file "{path}".')
 
