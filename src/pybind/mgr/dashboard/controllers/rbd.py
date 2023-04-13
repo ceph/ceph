@@ -170,7 +170,7 @@ class Rbd(RESTController):
     @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
     def set(self, image_spec, name=None, size=None, features=None,
             configuration=None, enable_mirror=None, primary=None,
-            resync=False, mirror_mode=None, schedule_interval='',
+            force=False, resync=False, mirror_mode=None, schedule_interval='',
             remove_scheduling=False):
 
         pool_name, namespace, image_name = parse_image_spec(image_spec)
@@ -220,7 +220,7 @@ class Rbd(RESTController):
 
             if primary and not mirror_image_info['primary']:
                 RbdMirroringService.promote_image(
-                    image_name, pool_name, namespace)
+                    image_name, pool_name, namespace, force)
             elif primary is False and mirror_image_info['primary']:
                 RbdMirroringService.demote_image(
                     image_name, pool_name, namespace)
