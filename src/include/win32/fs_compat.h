@@ -42,3 +42,6 @@
 
 #define XATTR_CREATE  1
 #define XATTR_REPLACE 2
+
+typedef unsigned int uid_t;
+typedef unsigned int gid_t;

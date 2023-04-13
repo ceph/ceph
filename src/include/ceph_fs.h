@@ -418,6 +418,7 @@ enum {
 	CEPH_MDS_OP_RMSNAP     = 0x01401,
 	CEPH_MDS_OP_LSSNAP     = 0x00402,
 	CEPH_MDS_OP_RENAMESNAP = 0x01403,
+	CEPH_MDS_OP_READDIR_SNAPDIFF   = 0x01404,
 
 	// internal op
 	CEPH_MDS_OP_FRAGMENTDIR= 0x01500,
@@ -473,12 +474,12 @@ int ceph_flags_sys2wire(int flags);
 #define CEPH_XATTR_REMOVE  (1 << 31)
 
 /*
- * readdir request flags;
+ * readdir/readdir_snapdiff request flags;
  */
 #define CEPH_READDIR_REPLY_BITFLAGS	(1<<0)
 
 /*
- * readdir reply flags.
+ * readdir/readdir_snapdiff reply flags.
  */
 #define CEPH_READDIR_FRAG_END		(1<<0)
 #define CEPH_READDIR_FRAG_COMPLETE	(1<<8)
@@ -622,6 +623,14 @@ union ceph_mds_request_args {
 		__le64 parent;
 		__le32 hash;
 	} __attribute__ ((packed)) lookupino;
+	struct {
+		__le32 frag;                 /* which dir fragment */
+		__le32 max_entries;          /* how many dentries to grab */
+		__le32 max_bytes;
+		__le16 flags;
+                __le32 offset_hash;
+		__le64 snap_other;
+	} __attribute__ ((packed)) snapdiff;
 } __attribute__ ((packed));
 
 #define CEPH_MDS_REQUEST_HEAD_VERSION	2

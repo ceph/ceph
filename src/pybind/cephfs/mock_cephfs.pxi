@@ -39,6 +39,12 @@ cdef nogil:
         size_t nr_snap_metadata
         snap_metadata *snap_metadata
 
+    cdef struct ceph_snapdiff_info:
+        int dummy
+
+    cdef struct ceph_snapdiff_entry_t:
+        int dummy
+
     ctypedef void* rados_t
 
     const char *ceph_version(int *major, int *minor, int *patch):
@@ -174,6 +180,12 @@ cdef nogil:
     int ceph_chdir(ceph_mount_info *cmount, const char *path):
         pass
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp):
+        pass
+    int ceph_open_snapdiff(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, ceph_snapdiff_info *out):
+        pass
+    int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out):
+        pass
+    int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff):
         pass
     int ceph_rmdir(ceph_mount_info *cmount, const char *path):
         pass
