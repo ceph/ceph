@@ -1277,10 +1277,10 @@ int POSIXObject::close()
   return 0;
 }
 
-int POSIXObject::read(int64_t ofs, int64_t end, bufferlist& bl,
+int POSIXObject::read(int64_t ofs, int64_t left, bufferlist& bl,
 		      const DoutPrefixProvider* dpp, optional_yield y)
 {
-  int64_t len = std::min(end - ofs + 1, READ_SIZE);
+  int64_t len = std::min(left + 1, READ_SIZE);
   ssize_t ret;
 
   ret = lseek(obj_fd, ofs, SEEK_SET);
@@ -1486,7 +1486,7 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
     }
 
     /* Read some */
-    int ret = cb->handle_data(bl, cur_ofs, cur_ofs + len);
+    int ret = cb->handle_data(bl, 0, len);
     if (ret < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << dendl;
 	return ret;
