@@ -252,6 +252,7 @@ int POSIXDriver::close()
   }
 
   ::close(root_fd);
+  root_fd = -1;
 
   return 0;
 }
@@ -807,6 +808,7 @@ int POSIXBucket::close()
   }
 
   ::close(dir_fd);
+  dir_fd = -1;
 
   return 0;
 }
@@ -1270,6 +1272,7 @@ int POSIXObject::close()
   if(ret < 0) {
     return ret;
   }
+  obj_fd = -1;
 
   return 0;
 }
