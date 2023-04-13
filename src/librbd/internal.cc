@@ -1699,6 +1699,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       return r;
     }
 
+    watchers.clear();
     for (auto i = obj_watchers.begin(); i != obj_watchers.end(); ++i) {
       librbd::image_watcher_t watcher;
       watcher.addr = i->addr;
