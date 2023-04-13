@@ -73,6 +73,7 @@ if(NOT WIN32)
   add_subdirectory(osd)
   add_subdirectory(osdc)
   add_subdirectory(immutable_object_cache)
+  add_subdirectory(exporter)
 endif(NOT WIN32)
 
 if(WITH_RADOSGW)
