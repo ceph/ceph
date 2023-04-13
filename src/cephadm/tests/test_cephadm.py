@@ -314,6 +314,7 @@ class TestCephAdm(object):
         ctx.allow_ptrace = True
         ctx.config_json = '-'
         ctx.osd_fsid = '0'
+        ctx.tcp_ports = '3300 6789'
         _get_parm.return_value = {
             'crush_location': 'database=a'
         }
