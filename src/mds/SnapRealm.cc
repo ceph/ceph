@@ -255,7 +255,7 @@ snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid
     //if (num && p->second.snapid == num)
     //return p->first;
     if (actual && p->second.name == n)
-	return p->first;
+      return p->first;
     if (!actual && p->second.name == pname && p->second.ino == pino)
       return p->first;
   }
