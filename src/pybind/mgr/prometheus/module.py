@@ -327,6 +327,7 @@ class Metric(object):
 
     def str_expfmt(self) -> str:
 
+        # Must be kept in sync with promethize() in src/exporter/util.cc
         def promethize(path: str) -> str:
             ''' replace illegal metric name characters '''
             result = re.sub(r'[./\s]|::', '_', path).replace('+', '_plus')

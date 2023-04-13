@@ -80,8 +80,6 @@ std::string boost_string_to_std(boost::json::string js) {
 
 std::string quote(std::string value) { return "\"" + value + "\""; }
 
-bool is_hyphen(char ch) { return ch == '-'; }
-
 void DaemonMetricCollector::dump_asok_metrics() {
   BlockTimer timer(__FILE__, __FUNCTION__);
 
@@ -120,12 +118,14 @@ void DaemonMetricCollector::dump_asok_metrics() {
     json_object counter_dump = boost::json::parse(counter_dump_response).as_object();
     json_object counter_schema = boost::json::parse(counter_schema_response).as_object();
 
-    for (auto &labeled_perf : counter_schema) {
-      std::string labeled_perf_group = {labeled_perf.key().begin(), labeled_perf.key().end()};
-      json_object labeled_perf_group_object = labeled_perf.value().as_object();
-      auto counters = labeled_perf_group_object["counters"].as_object();
-      auto counters_labels = labeled_perf_group_object["labels"].as_object();
-      auto labeled_perf_group_counters = counter_dump[labeled_perf_group].as_object()["counters"].as_object();
+    for (auto &perf_group_item : counter_schema) {
+      std::string perf_group = {perf_group_item.key().begin(),
+                                perf_group_item.key().end()};
+      json_object perf_group_object = perf_group_item.value().as_object();
+      auto counters = perf_group_object["counters"].as_object();
+      auto counters_labels = perf_group_object["labels"].as_object();
+      auto counters_values =
+          counter_dump[perf_group].as_object()["counters"].as_object();
       labels_t labels;
 
       for(auto &label: counters_labels) {
@@ -138,8 +138,8 @@ void DaemonMetricCollector::dump_asok_metrics() {
           continue;        
         }
         std::string counter_name_init =  {counter.key().begin(), counter.key().end()};
-        std::string counter_name = "ceph_" + labeled_perf_group + "_" + counter_name_init;
-        std::replace_if(counter_name.begin(), counter_name.end(), is_hyphen, '_');
+        std::string counter_name = perf_group + "_" + counter_name_init;
+        promethize(counter_name);
 
         if (counters_labels.empty()) {
           auto labels_and_name = get_labels_and_metric_name(daemon_name, counter_name);
@@ -153,7 +153,7 @@ void DaemonMetricCollector::dump_asok_metrics() {
           counter_name = multisite_labels_and_name.second;
         }
         labels.insert({"ceph_daemon", quote(daemon_name)});
-        auto perf_values = labeled_perf_group_counters.at(counter_name_init);
+        auto perf_values = counters_values.at(counter_name_init);
         dump_asok_metric(counter_group, perf_values, counter_name, labels);
       }
     }
