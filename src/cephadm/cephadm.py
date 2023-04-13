@@ -7221,6 +7221,9 @@ def command_adopt_prometheus(ctx, daemon_id, fsid):
     # type: (CephadmContext, str, str) -> None
     daemon_type = 'prometheus'
     (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
+    # should try to set the ports we know cephadm defaults
+    # to for these services in the firewall.
+    ports = Monitoring.port_map['prometheus']
 
     _stop_and_disable(ctx, 'prometheus')
 
@@ -7242,7 +7245,7 @@ def command_adopt_prometheus(ctx, daemon_id, fsid):
 
     make_var_run(ctx, fsid, uid, gid)
     c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid)
+    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid, redeploy=True, ports=ports)
     update_firewalld(ctx, daemon_type)
 
 
@@ -7251,6 +7254,9 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
 
     daemon_type = 'grafana'
     (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
+    # should try to set the ports we know cephadm defaults
+    # to for these services in the firewall.
+    ports = Monitoring.port_map['grafana']
 
     _stop_and_disable(ctx, 'grafana-server')
 
@@ -7296,7 +7302,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
 
     make_var_run(ctx, fsid, uid, gid)
     c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid)
+    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid, redeploy=True, ports=ports)
     update_firewalld(ctx, daemon_type)
 
 
@@ -7305,6 +7311,9 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
 
     daemon_type = 'alertmanager'
     (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
+    # should try to set the ports we know cephadm defaults
+    # to for these services in the firewall.
+    ports = Monitoring.port_map['alertmanager']
 
     _stop_and_disable(ctx, 'prometheus-alertmanager')
 
@@ -7326,7 +7335,7 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
 
     make_var_run(ctx, fsid, uid, gid)
     c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid)
+    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid, redeploy=True, ports=ports)
     update_firewalld(ctx, daemon_type)
 
 
