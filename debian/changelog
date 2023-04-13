@@ -2,6 +2,12 @@ ceph (16.2.12-1) stable; urgency=medium
 
   * New upstream release
 
+ -- Ceph Release Team <ceph-maintainers@ceph.io>  Thu, 13 Apr 2023 21:54:05 +0000
+
+ceph (16.2.12-1) stable; urgency=medium
+
+  * New upstream release
+
  -- Ceph Release Team <ceph-maintainers@ceph.io>  Thu, 13 Apr 2023 14:09:23 +0000
 
 ceph (16.2.11-1) stable; urgency=medium
