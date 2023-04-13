@@ -253,6 +253,9 @@
                 Any single machine or server in a Ceph Cluster. See :term:`Ceph
                 Node`.
 
+        Hybrid OSD  
+                Refers to an OSD that has both HDD and SSD drives.
+
 	LVM tags
                 **L**\ogical **V**\olume **M**\anager tags. Extensible metadata
                 for LVM volumes and groups. They are used to store
