@@ -3,7 +3,6 @@
 
 #include <atomic>
 #include <ctime>
-#include <thread>
 #include <vector>
 
 #include <boost/asio/error.hpp>
@@ -401,8 +400,9 @@ class ConnectionList {
 namespace dmc = rgw::dmclock;
 class AsioFrontend {
   RGWProcessEnv& env;
+  boost::intrusive_ptr<CephContext> cct{env.driver->ctx()};
   RGWFrontendConfig* conf;
-  boost::asio::io_context context;
+  boost::asio::io_context& context;
   std::string uri_prefix;
   ceph::timespan request_timeout = std::chrono::milliseconds(REQUEST_TIMEOUT);
   size_t header_limit = 16384;
@@ -432,22 +432,19 @@ class AsioFrontend {
 
   ConnectionList connections;
 
-  // work guard to keep run() threads busy while listeners are paused
-  using Executor = boost::asio::io_context::executor_type;
-  std::optional<boost::asio::executor_work_guard<Executor>> work;
-
-  std::vector<std::thread> threads;
   std::atomic<bool> going_down{false};
 
-  CephContext* ctx() const { return env.driver->ctx(); }
+  CephContext* ctx() const { return cct.get(); }
   std::optional<dmc::ClientCounters> client_counters;
   std::unique_ptr<dmc::ClientConfig> client_config;
   void accept(Listener& listener, boost::system::error_code ec);
 
  public:
   AsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
-	       dmc::SchedulerCtx& sched_ctx)
-    : env(env), conf(conf), pause_mutex(context.get_executor())
+	       dmc::SchedulerCtx& sched_ctx,
+	       boost::asio::io_context& context)
+    : env(env), conf(conf), context(context),
+      pause_mutex(context.get_executor())
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
     switch(sched_t){
@@ -469,7 +466,9 @@ class AsioFrontend {
   }
 
   int init();
-  int run();
+  int run() {
+    return 0;
+  }
   void stop();
   void join();
   void pause();
@@ -487,7 +486,7 @@ unsigned short parse_port(const char *input, boost::system::error_code& ec)
   }
   return port;
 }
-	
+
 tcp::endpoint parse_endpoint(boost::asio::string_view input,
                              unsigned short default_port,
                              boost::system::error_code& ec)
@@ -1067,32 +1066,6 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   }
 }
 
-int AsioFrontend::run()
-{
-  ceph_assert(!is_asio_thread);
-
-  auto cct = ctx();
-  const int thread_count = cct->_conf->rgw_thread_pool_size;
-  threads.reserve(thread_count);
-
-  ldout(cct, 4) << "frontend spawning " << thread_count << " threads" << dendl;
-
-  // the worker threads call io_context::run(), which will return when there's
-  // no work left. hold a work guard to keep these threads going until join()
-  work.emplace(boost::asio::make_work_guard(context));
-
-  for (int i = 0; i < thread_count; i++) {
-    threads.emplace_back([this]() noexcept {
-      // request warnings on synchronous librados calls in this thread
-      is_asio_thread = true;
-      // Have uncaught exceptions kill the process and give a
-      // stacktrace, not be swallowed.
-      context.run();
-    });
-  }
-  return 0;
-}
-
 void AsioFrontend::stop()
 {
   ceph_assert(!is_asio_thread);
@@ -1116,13 +1089,6 @@ void AsioFrontend::join()
   if (!going_down) {
     stop();
   }
-  work.reset();
-
-  ldout(ctx(), 4) << "frontend joining threads..." << dendl;
-  for (auto& thread : threads) {
-    thread.join();
-  }
-  ldout(ctx(), 4) << "frontend done" << dendl;
 }
 
 void AsioFrontend::pause()
@@ -1166,14 +1132,16 @@ void AsioFrontend::unpause()
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
   Impl(RGWProcessEnv& env, RGWFrontendConfig* conf,
-       rgw::dmclock::SchedulerCtx& sched_ctx)
-    : AsioFrontend(env, conf, sched_ctx) {}
+       rgw::dmclock::SchedulerCtx& sched_ctx,
+       boost::asio::io_context& context)
+    : AsioFrontend(env, conf, sched_ctx, context) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(RGWProcessEnv& env,
                                  RGWFrontendConfig* conf,
-				 rgw::dmclock::SchedulerCtx& sched_ctx)
-  : impl(new Impl(env, conf, sched_ctx))
+				 rgw::dmclock::SchedulerCtx& sched_ctx,
+				 boost::asio::io_context& context)
+  : impl(new Impl(env, conf, sched_ctx, context))
 {
 }
 
