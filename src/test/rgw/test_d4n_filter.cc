@@ -12,6 +12,8 @@
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
 
+#include <boost/asio/io_context.hpp>
+
 #define dout_subsys ceph_subsys_rgw
 
 #define METADATA_LENGTH 22
@@ -33,6 +35,7 @@ class StoreObject : public rgw::sal::StoreObject {
 };
 
 class Environment : public ::testing::Environment {
+  boost::asio::io_context ioc;
   public:
     Environment() {}
     
@@ -61,6 +64,7 @@ class Environment : public ::testing::Environment {
       
       driver = DriverManager::get_storage(dpp, dpp->get_cct(),
               cfg,
+              ioc,
               false,
               false,
               false,

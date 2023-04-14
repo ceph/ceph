@@ -17,6 +17,8 @@ extern "C" {
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
+#include "common/async/context_pool.h"
+
 #include "common/armor.h"
 #include "common/ceph_json.h"
 #include "common/config.h"
@@ -3309,6 +3311,7 @@ int main(int argc, const char **argv)
 
   auto cct = rgw_global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
+  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
@@ -4256,13 +4259,13 @@ int main(int argc, const char **argv)
     }
 
     if (raw_storage_op) {
-      driver = DriverManager::get_raw_storage(dpp(),
-					    g_ceph_context,
-					    cfg);
+      driver = DriverManager::get_raw_storage(dpp(), g_ceph_context,
+					      cfg, context_pool);
     } else {
       driver = DriverManager::get_storage(dpp(),
 					g_ceph_context,
 					cfg,
+					context_pool,
 					false,
 					false,
 					false,

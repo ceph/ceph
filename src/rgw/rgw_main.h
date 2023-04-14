@@ -18,6 +18,9 @@
 #include <vector>
 #include <map>
 #include <string>
+
+#include "common/async/context_pool.h"
+
 #include "rgw_common.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
@@ -81,7 +84,8 @@ class AppMain {
   SiteConfig site;
   const DoutPrefixProvider* dpp;
   RGWProcessEnv env;
-
+  ceph::async::io_context_pool context_pool{
+    dpp->get_cct()->_conf->rgw_thread_pool_size};
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
