@@ -257,6 +257,7 @@ target_link_libraries(rgw_common
     cls_user_client
     cls_version_client
     librados
+    libneorados
     rt
     fmt::fmt
     ICU::uc

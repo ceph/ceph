@@ -12,6 +12,8 @@
 
 #include "include/rados/librados.hpp"
 
+#include "common/async/context_pool.h"
+
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/ceph_argparse.h"
@@ -318,12 +320,14 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
 
+  ceph::async::io_context_pool context_pool{cct->_conf->rgw_thread_pool_size};
   DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
 
   store = static_cast<rgw::sal::RadosStore*>(
     DriverManager::get_storage(dpp(),
 			      g_ceph_context,
 			      cfg,
+			      context_pool,
 			      false,
 			      false,
 			      false,
