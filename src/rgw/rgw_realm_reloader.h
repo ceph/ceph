@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <boost/asio/io_context.hpp>
+
 #include "rgw_realm_watcher.h"
 #include "common/Cond.h"
 #include "rgw_sal_fwd.h"
@@ -36,7 +38,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   RGWRealmReloader(RGWProcessEnv& env,
                    const rgw::auth::ImplicitTenants& implicit_tenants,
                    std::map<std::string, std::string>& service_map_meta,
-                   Pauser* frontends);
+                   Pauser* frontends, boost::asio::io_context& io_context);
   ~RGWRealmReloader() override;
 
   /// respond to realm notifications by scheduling a reload()
@@ -52,6 +54,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   const rgw::auth::ImplicitTenants& implicit_tenants;
   std::map<std::string, std::string>& service_map_meta;
   Pauser *const frontends;
+  boost::asio::io_context& io_context;
 
   /// reload() takes a significant amount of time, so we don't want to run
   /// it in the handle_notify() thread. we choose a timer thread instead of a

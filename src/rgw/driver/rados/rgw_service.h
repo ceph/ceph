@@ -11,6 +11,10 @@
 
 #include "rgw_common.h"
 
+namespace rgw::sal {
+class RadosStore;
+}
+
 struct RGWServices_Def;
 
 class RGWServiceInstance
@@ -108,8 +112,8 @@ struct RGWServices_Def
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync,
-	   librados::Rados* rados, optional_yield y,
+  int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
+	   bool raw_storage, bool run_sync, optional_yield y,
 	   const DoutPrefixProvider *dpp);
   void shutdown();
 };
@@ -150,19 +154,19 @@ struct RGWServices
   RGWSI_Role_RADOS *role{nullptr};
   RGWAsyncRadosProcessor* async_processor;
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage,
-	      bool run_sync, librados::Rados* rados, optional_yield y,
+  int do_init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
+	      bool raw_storage, bool run_sync, optional_yield y,
 	      const DoutPrefixProvider *dpp);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync,
-	   librados::Rados* rados, optional_yield y,
-	   const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, false, run_sync, rados, y, dpp);
+  int init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
+	   bool run_sync, optional_yield y, const DoutPrefixProvider *dpp) {
+    return do_init(cct, store, have_cache, false, run_sync, y, dpp);
   }
 
-  int init_raw(CephContext *cct, bool have_cache, librados::Rados* rados,
-	       optional_yield y, const DoutPrefixProvider *dpp) {
-    return do_init(cct, have_cache, true, false, rados, y, dpp);
+  int init_raw(CephContext *cct, rgw::sal::RadosStore* store,
+	       bool have_cache, optional_yield y,
+	       const DoutPrefixProvider *dpp) {
+    return do_init(cct, store, have_cache, true, false, y, dpp);
   }
   void shutdown() {
     _svc.shutdown();
