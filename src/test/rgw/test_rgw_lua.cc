@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include "common/async/context_pool.h"
 #include "common/ceph_context.h"
 #include "rgw_common.h"
 #include "rgw_auth_registry.h"
@@ -159,8 +160,10 @@ CctCleaner cleaner(g_cct);
 
 tracing::Tracer tracer;
 
-#define MAKE_STORE auto store = std::unique_ptr<sal::RadosStore>(new sal::RadosStore); \
-                        store->setRados(new RGWRados);
+#define MAKE_STORE \
+  ceph::async::io_context_pool context_pool(g_cct->_conf->rgw_thread_pool_size); \
+  auto store = std::unique_ptr<sal::RadosStore>(new sal::RadosStore(context_pool)); \
+  store->setRados(new RGWRados);
 
 #define DEFINE_REQ_STATE RGWProcessEnv pe; \
   MAKE_STORE; \

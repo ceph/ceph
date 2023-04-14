@@ -9,6 +9,8 @@
 
 #include "auth/Crypto.h"
 
+#include "common/async/context_pool.h"
+
 #include "common/armor.h"
 #include "common/ceph_json.h"
 #include "common/config.h"
@@ -81,12 +83,13 @@ int main(const int argc, const char **argv)
   }
 
   common_init_finish(g_ceph_context);
+  ceph::async::io_context_pool context_pool{cct->_conf->rgw_thread_pool_size};
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
   DriverManager::Config cfg;
   cfg.store_name = "rados";
   cfg.filter_name = "none";
-  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, false, false, false, false, false, false, null_yield);
+  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, context_pool, false, false, false, false, false, false, null_yield);
   if (!driver) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;
