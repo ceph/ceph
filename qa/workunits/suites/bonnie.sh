@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 bonnie_bin=`which bonnie++`
 [ $? -eq 1 ] && bonnie_bin=/usr/sbin/bonnie++
