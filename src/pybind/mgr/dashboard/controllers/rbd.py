@@ -351,15 +351,14 @@ class RbdSnapshot(RESTController):
     RESOURCE_ID = "snapshot_name"
 
     @RbdTask('snap/create',
-             ['{image_spec}', '{snapshot_name}'], 2.0)
-    def create(self, image_spec, snapshot_name):
+             ['{image_spec}', '{snapshot_name}', '{mirrorImageSnapshot}'], 2.0)
+    def create(self, image_spec, snapshot_name, mirrorImageSnapshot):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
 
         def _create_snapshot(ioctx, img, snapshot_name):
             mirror_info = img.mirror_image_get_info()
             mirror_mode = img.mirror_image_get_mode()
-            if (mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED
-                    and mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT):
+            if (mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED and mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT) and mirrorImageSnapshot:  # noqa E501 #pylint: disable=line-too-long
                 img.mirror_image_create_snapshot()
             else:
                 img.create_snap(snapshot_name)
