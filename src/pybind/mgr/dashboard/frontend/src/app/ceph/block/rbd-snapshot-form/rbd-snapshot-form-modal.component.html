@@ -19,18 +19,34 @@
                    placeholder="Snapshot name..."
                    id="snapshotName"
                    name="snapshotName"
-                   [attr.disabled]="(mirroring === 'snapshot') ? true : null"
+                   [attr.disabled]="((mirroring === 'snapshot') ? true : null) && (snapshotForm.getValue('mirrorImageSnapshot') === true) ? true: null"
                    formControlName="snapshotName"
                    autofocus>
             <span class="invalid-feedback"
                   *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
                   i18n>This field is required.</span><br><br>
-            <span *ngIf="mirroring === 'snapshot'"
+            <span *ngIf="((mirroring === 'snapshot') ? true : null) && (snapshotForm.getValue('mirrorImageSnapshot') === true) ? true: null"
                   i18n>Snapshot mode is enabled on image <b>{{ imageName }}</b>: snapshot names are auto generated</span>
           </div>
         </div>
+        <div *ngIf="(mirroring === 'snapshot') ? true : null">
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input type="checkbox"
+                       class="custom-control-input"
+                       formControlName="mirrorImageSnapshot"
+                       name="mirrorImageSnapshot"
+                       id="mirrorImageSnapshot"
+                       (change)="onMirrorCheckBoxChange()">
+                <label for="mirrorImageSnapshot"
+                       class="custom-control-label"
+                       i18n>Mirror Image Snapshot</label>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-
       <div class="modal-footer">
         <cd-form-button-panel (submitActionEvent)="submit()"
                               [form]="snapshotForm"
