@@ -31,11 +31,13 @@ static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 RGWRealmReloader::RGWRealmReloader(RGWProcessEnv& env,
                                    const rgw::auth::ImplicitTenants& implicit_tenants,
                                    std::map<std::string, std::string>& service_map_meta,
-                                   Pauser* frontends)
+                                   Pauser* frontends,
+				   boost::asio::io_context& io_context)
   : env(env),
     implicit_tenants(implicit_tenants),
     service_map_meta(service_map_meta),
     frontends(frontends),
+    io_context(io_context),
     timer(env.driver->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
@@ -118,7 +120,7 @@ void RGWRealmReloader::reload()
       DriverManager::Config cfg;
       cfg.store_name = "rados";
       cfg.filter_name = "none";
-      env.driver = DriverManager::get_storage(&dp, cct, cfg,
+      env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,
           cct->_conf->rgw_enable_quota_threads,

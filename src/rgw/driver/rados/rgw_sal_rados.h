@@ -15,6 +15,10 @@
 
 #pragma once
 
+#include "include/neorados/RADOS.hpp"
+
+#include <boost/asio/io_context.hpp>
+
 #include "rgw_sal_store.h"
 #include "rgw_rados.h"
 #include "rgw_notify.h"
@@ -112,19 +116,22 @@ class RadosZone : public StoreZone {
 
 class RadosStore : public StoreDriver {
   private:
+    boost::asio::io_context& io_context;
     RGWRados* rados;
     RGWUserCtl* user_ctl;
     std::unique_ptr<RadosZone> zone;
+    std::optional<neorados::RADOS> neorados;
     std::string topics_oid(const std::string& tenant) const;
 
   public:
-    RadosStore()
-      : rados(nullptr) {
+    RadosStore(boost::asio::io_context& io_context)
+      : io_context(io_context), rados(nullptr) {
       }
     ~RadosStore() {
       delete rados;
     }
 
+    int init_neorados(const DoutPrefixProvider* dpp);
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual const std::string get_name() const override {
       return "rados";
@@ -240,6 +247,8 @@ class RadosStore : public StoreDriver {
 
     void setRados(RGWRados * st) { rados = st; }
     RGWRados* getRados(void) { return rados; }
+    boost::asio::io_context& get_io_context() { return io_context; }
+    neorados::RADOS& get_neorados() { return *neorados; }
 
     RGWServices* svc() { return &rados->svc; }
     const RGWServices* svc() const { return &rados->svc; }
