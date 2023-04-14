@@ -237,6 +237,7 @@ int rgw::AppMain::init_storage()
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
+	  context_pool,
           run_gc,
           run_lc,
           run_quota,
@@ -515,7 +516,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       rgw_pauser->add_pauser(env.lua.background);
     }
     reloader = std::make_unique<RGWRealmReloader>(
-        env, *implicit_tenant_context, service_map_meta, rgw_pauser.get());
+      env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), context_pool);
     realm_watcher = std::make_unique<RGWRealmWatcher>(dpp, g_ceph_context,
 				  static_cast<rgw::sal::RadosStore*>(env.driver)->svc()->zone->get_realm());
     realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
