@@ -2998,6 +2998,8 @@ void RGWPutObj_ObjStore_S3::send_response()
 	dump_header(s, "x-amz-checksum-type", "FULL_OBJECT");
 	dump_header(s, cksum->header_name(), cksum->to_armor());
       }
+      for (auto &it : crypt_http_responses)
+        dump_header(s, it.first, it.second);
       end_header(s, this, to_mime_type(s->format));
       dump_start(s);
       struct tm tmp;
@@ -3048,9 +3050,10 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     bufferlist* manifest_bl)
 {
   std::map<std::string, std::string> crypt_http_responses_unused;
+  RGWDecryptContext dctx { s, true };
 
   std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
+  int res = rgw_s3_prepare_decrypt(dctx, s->yield, attrs, &block_crypt,
                                    crypt_http_responses_unused);
   if (res < 0) {
     return res;
@@ -3874,6 +3877,11 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
   auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
   auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  int ret = get_encryption_defaults(s);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    return ret;
+  }
   if (obj_lock_mode_str && obj_lock_date_str) {
     boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
     if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
@@ -3962,6 +3970,9 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     if (op_ret)
     set_req_state_err(s, op_ret);
     dump_errno(s);
+
+    for (auto &it : crypt_http_responses)
+      dump_header(s, it.first, it.second);
 
     // Explicitly use chunked transfer encoding so that we can stream the result
     // to the user without having to wait for the full length of it.
@@ -4759,6 +4770,8 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
+  for (auto &it : crypt_http_responses)
+    dump_header(s, it.first, it.second);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   end_header(s, this, to_mime_type(s->format));
   if (op_ret == 0) {
