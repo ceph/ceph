@@ -22,6 +22,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/process.hpp>
 
+#include "common/async/blocked_completion.h"
+
 #include "common/Clock.h"
 #include "common/errno.h"
 
@@ -1124,12 +1126,25 @@ int RadosStore::get_raw_chunk_size(const DoutPrefixProvider* dpp, const rgw_raw_
   return rados->get_max_chunk_size(obj.pool, chunk_size, dpp);
 }
 
+int RadosStore::init_neorados(const DoutPrefixProvider* dpp) {
+  if (!neorados) try {
+      neorados = neorados::RADOS::make_with_cct(dpp->get_cct(), io_context,
+						ceph::async::use_blocked);
+    } catch (const boost::system::system_error& e) {
+      ldpp_dout(dpp, 0) << "ERROR: creating neorados handle failed: "
+			<< e.what() << dendl;
+      return ceph::from_error_code(e.code());
+    }
+  return 0;
+}
+
 int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   std::unique_ptr<ZoneGroup> zg =
     std::make_unique<RadosZoneGroup>(this, svc()->zone->get_zonegroup());
   zone = make_unique<RadosZone>(this, std::move(zg));
-  return 0;
+
+  return init_neorados(dpp);
 }
 
 int RadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
@@ -3718,9 +3733,10 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
 
 extern "C" {
 
-void* newRadosStore(void)
+void* newRadosStore(void* io_context)
 {
-  rgw::sal::RadosStore* store = new rgw::sal::RadosStore();
+  rgw::sal::RadosStore* store = new rgw::sal::RadosStore(
+    *static_cast<boost::asio::io_context*>(io_context));
   if (store) {
     RGWRados* rados = new RGWRados();
 

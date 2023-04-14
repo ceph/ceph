@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "include/stringify.h"
+#include "common/async/context_pool.h"
 #include "common/code_environment.h"
 #include "common/ceph_context.h"
 #include "global/global_init.h"
@@ -912,7 +913,8 @@ TEST_F(IPPolicyTest, IPEnvironment) {
   RGWProcessEnv penv;
   // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
   RGWEnv rgw_env;
-  rgw::sal::RadosStore store;
+  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size); \
+  rgw::sal::RadosStore store(context_pool);
   std::unique_ptr<rgw::sal::User> user = store.get_user(rgw_user());
   rgw_env.set("REMOTE_ADDR", "192.168.1.1");
   rgw_env.set("HTTP_HOST", "1.2.3.4");
