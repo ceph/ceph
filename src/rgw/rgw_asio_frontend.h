@@ -4,6 +4,9 @@
 #pragma once
 
 #include <memory>
+
+#include <boost/asio/io_context.hpp>
+
 #include "rgw_frontend.h"
 #define REQUEST_TIMEOUT 65000
 
@@ -12,7 +15,8 @@ class RGWAsioFrontend : public RGWFrontend {
   std::unique_ptr<Impl> impl;
 public:
   RGWAsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
-		  rgw::dmclock::SchedulerCtx& sched_ctx);
+		  rgw::dmclock::SchedulerCtx& sched_ctx,
+		  boost::asio::io_context& io_context);
   ~RGWAsioFrontend() override;
 
   int init() override;
