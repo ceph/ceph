@@ -192,6 +192,7 @@ class D4NFilterObject : public FilterObject {
                boost::optional<ceph::real_time> delete_at,
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
+               rgw::sal::ObjectFilter* filter,
                const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual const std::string &get_name() const override { return next->get_name(); }
     virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,

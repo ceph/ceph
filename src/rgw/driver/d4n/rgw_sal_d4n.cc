@@ -135,6 +135,7 @@ int D4NFilterObject::copy_object(User* user,
                               std::string* etag,
                               void (*progress_cb)(off_t, void *),
                               void* progress_data,
+                              rgw::sal::ObjectFilter* ofilt,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
@@ -205,7 +206,7 @@ int D4NFilterObject::copy_object(User* user,
                            mod_ptr, unmod_ptr, high_precision_time, if_match,
                            if_nomatch, attrs_mod, copy_if_newer, attrs,
                            category, olh_epoch, delete_at, version_id, tag,
-                           etag, progress_cb, progress_data, dpp, y);
+                           etag, progress_cb, progress_data, ofilt, dpp, y);
 }
 
 int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,

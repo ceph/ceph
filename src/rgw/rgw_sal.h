@@ -231,6 +231,21 @@ class ObjectProcessor : public DataProcessor {
                        uint32_t flags) = 0;
 };
 
+/**
+ * @brief Read filter when copying data from object to another.
+ */
+class ObjectFilter {
+public:
+  ObjectFilter() { };
+  virtual ~ObjectFilter() = default;
+  virtual int set_compression_attribute() = 0;
+  virtual DataProcessor & get_filter(DataProcessor& next, optional_yield y) = 0;
+  virtual DataProcessor * get_output(DataProcessor& next, RGWObjectCtx& obj_ctx, const rgw_placement_rule&, optional_yield y) = 0;
+  virtual int get_error() = 0;
+  virtual void set_src_attrs(std::map<std::string, ceph::buffer::list> &src_attrs) = 0;
+  virtual bool need_copy_data() = 0;
+};
+
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
@@ -966,6 +981,7 @@ class Object {
 	       boost::optional<ceph::real_time> delete_at,
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
+               rgw::sal::ObjectFilter *read_filter,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Get the ACL for this object */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
