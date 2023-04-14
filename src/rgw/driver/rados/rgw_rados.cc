@@ -4341,7 +4341,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (ret < 0) {
     return ret;
   }
-  if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
+  if (!src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
+#if 0
+  } else if (!(ret = enc_cb.copy_ok(src_obj, src_attrs))) {
+#endif
+  } else {
     // Current implementation does not follow S3 spec and even
     // may result in data corruption silently when copying
     // multipart objects acorss pools. So reject COPY operations

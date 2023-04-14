@@ -1299,79 +1299,78 @@ int rgw_s3_prepare_encrypt(req_state* s,
 }
 
 
-int rgw_s3_prepare_decrypt(req_state* s,
+int rgw_s3_prepare_decrypt(RGWDecryptContext &cb,
                        map<string, bufferlist>& attrs,
                        std::unique_ptr<BlockCrypt>* block_crypt,
                        std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
-  ldpp_dout(s, 15) << "Encryption mode: " << stored_mode << dendl;
+  ldpp_dout(cb.dpp, 15) << "Encryption mode: " << stored_mode << dendl;
 
-  const char *req_sse = s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION", NULL);
-  if (nullptr != req_sse && (s->op == OP_GET || s->op == OP_HEAD)) {
+  const char *req_sse = cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION", NULL);
+  if (nullptr != req_sse && cb.get_or_head) {
     return -ERR_INVALID_REQUEST;
   }
 
   if (stored_mode == "SSE-C-AES256") {
-    if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !rgw_transport_is_secure(s->cct, *s->info.env)) {
-      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
+    if (!cb.secure_channel) {
+      ldpp_dout(cb.dpp, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
     const char *req_cust_alg =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
+        cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
 
     if (nullptr == req_cust_alg)  {
-      ldpp_dout(s, 5) << "ERROR: Request for SSE-C encrypted object missing "
+      ldpp_dout(cb.dpp, 5) << "ERROR: Request for SSE-C encrypted object missing "
                        << "x-amz-server-side-encryption-customer-algorithm"
                        << dendl;
-      s->err.message = "Requests specifying Server Side Encryption with Customer "
+      cb.error_message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide a valid encryption algorithm.";
       return -EINVAL;
     } else if (strcmp(req_cust_alg, "AES256") != 0) {
-      ldpp_dout(s, 5) << "ERROR: The requested encryption algorithm is not valid, must be AES256." << dendl;
-      s->err.message = "The requested encryption algorithm is not valid, must be AES256.";
+      ldpp_dout(cb.dpp, 5) << "ERROR: The requested encryption algorithm is not valid, must be AES256." << dendl;
+      cb.error_message = "The requested encryption algorithm is not valid, must be AES256.";
       return -ERR_INVALID_ENCRYPTION_ALGORITHM;
     }
 
     std::string key_bin;
     try {
-      key_bin = from_base64(s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
+      key_bin = from_base64(cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
     } catch (...) {
-      ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
+      ldpp_dout(cb.dpp, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
                        << "which contains character that is not base64 encoded."
                        << dendl;
-      s->err.message = "Requests specifying Server Side Encryption with Customer "
+      cb.error_message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide an appropriate secret key.";
       return -EINVAL;
     }
 
     if (key_bin.size() != AES_256_CBC::AES_256_KEYSIZE) {
-      ldpp_dout(s, 5) << "ERROR: Invalid encryption key size" << dendl;
-      s->err.message = "Requests specifying Server Side Encryption with Customer "
+      ldpp_dout(cb.dpp, 5) << "ERROR: Invalid encryption key size" << dendl;
+      cb.error_message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide an appropriate secret key.";
       return -EINVAL;
     }
 
     std::string keymd5 =
-        s->info.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
+        cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
     std::string keymd5_bin;
     try {
       keymd5_bin = from_base64(keymd5);
     } catch (...) {
-      ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key md5 "
+      ldpp_dout(cb.dpp, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key md5 "
                        << "which contains character that is not base64 encoded."
                        << dendl;
-      s->err.message = "Requests specifying Server Side Encryption with Customer "
+      cb.error_message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide an appropriate secret key md5.";
       return -EINVAL;
     }
 
 
     if (keymd5_bin.size() != CEPH_CRYPTO_MD5_DIGESTSIZE) {
-      ldpp_dout(s, 5) << "ERROR: Invalid key md5 size " << dendl;
-      s->err.message = "Requests specifying Server Side Encryption with Customer "
+      ldpp_dout(cb.dpp, 5) << "ERROR: Invalid key md5 size " << dendl;
+      cb.error_message = "Requests specifying Server Side Encryption with Customer "
                        "provided keys must provide an appropriate secret key md5.";
       return -EINVAL;
     }
@@ -1385,10 +1384,10 @@ int rgw_s3_prepare_decrypt(req_state* s,
 
     if ((memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) ||
         (get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYMD5) != keymd5_bin)) {
-      s->err.message = "The calculated MD5 hash of the key did not match the hash that was provided.";
+      cb.error_message = "The calculated MD5 hash of the key did not match the hash that was provided.";
       return -EINVAL;
     }
-    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(cb.dpp, cb.cct));
     aes->set_key(reinterpret_cast<const uint8_t*>(key_bin.c_str()), AES_256_CBC::AES_256_KEYSIZE);
     if (block_crypt) *block_crypt = std::move(aes);
 
@@ -1398,28 +1397,28 @@ int rgw_s3_prepare_decrypt(req_state* s,
   }
 
   if (stored_mode == "SSE-KMS") {
-    if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !rgw_transport_is_secure(s->cct, *s->info.env)) {
-      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
+    if (cb.cct->_conf->rgw_crypt_require_ssl &&
+        !rgw_transport_is_secure(cb.cct, *cb.env)) {
+      ldpp_dout(cb.dpp, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_kms(s, s->cct, attrs, actual_key);
+    res = reconstitute_actual_key_from_kms(cb.dpp, cb.cct, attrs, actual_key);
     if (res != 0) {
-      ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
-      s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id;
+      ldpp_dout(cb.dpp, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
+      cb.error_message = "Failed to retrieve the actual key, kms-keyid: " + key_id;
       return res;
     }
     if (actual_key.size() != AES_256_KEYSIZE) {
-      ldpp_dout(s, 0) << "ERROR: key obtained from key_id:" <<
+      ldpp_dout(cb.dpp, 0) << "ERROR: key obtained from key_id:" <<
           key_id << " is not 256 bit size" << dendl;
-      s->err.message = "KMS provided an invalid key for the given kms-keyid.";
+      cb.error_message = "KMS provided an invalid key for the given kms-keyid.";
       return -EINVAL;
     }
 
-    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(cb.dpp, cb.cct));
     aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
     actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
     if (block_crypt) *block_crypt = std::move(aes);
@@ -1432,26 +1431,26 @@ int rgw_s3_prepare_decrypt(req_state* s,
   if (stored_mode == "RGW-AUTO") {
     std::string master_encryption_key;
     try {
-      master_encryption_key = from_base64(std::string(s->cct->_conf->rgw_crypt_default_encryption_key));
+      master_encryption_key = from_base64(std::string(cb.cct->_conf->rgw_crypt_default_encryption_key));
     } catch (...) {
-      ldpp_dout(s, 5) << "ERROR: rgw_s3_prepare_decrypt invalid default encryption key "
+      ldpp_dout(cb.dpp, 5) << "ERROR: rgw_s3_prepare_decrypt invalid default encryption key "
                        << "which contains character that is not base64 encoded."
                        << dendl;
-      s->err.message = "The default encryption key is not valid base64.";
+      cb.error_message = "The default encryption key is not valid base64.";
       return -EINVAL;
     }
 
     if (master_encryption_key.size() != 256 / 8) {
-      ldpp_dout(s, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
+      ldpp_dout(cb.dpp, 0) << "ERROR: failed to decode 'rgw crypt default encryption key' to 256 bit string" << dendl;
       return -EIO;
     }
     std::string attr_key_selector = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYSEL);
     if (attr_key_selector.size() != AES_256_CBC::AES_256_KEYSIZE) {
-      ldpp_dout(s, 0) << "ERROR: missing or invalid " RGW_ATTR_CRYPT_KEYSEL << dendl;
+      ldpp_dout(cb.dpp, 0) << "ERROR: missing or invalid " RGW_ATTR_CRYPT_KEYSEL << dendl;
       return -EIO;
     }
     uint8_t actual_key[AES_256_KEYSIZE];
-    if (AES_256_ECB_encrypt(s, s->cct,
+    if (AES_256_ECB_encrypt(cb.dpp, cb.cct,
                             reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()),
                             AES_256_KEYSIZE,
                             reinterpret_cast<const uint8_t*>(attr_key_selector.c_str()),
@@ -1459,7 +1458,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
       ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return -EIO;
     }
-    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(cb.dpp, cb.cct));
     aes->set_key(actual_key, AES_256_KEYSIZE);
     ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
     if (block_crypt) *block_crypt = std::move(aes);
@@ -1468,28 +1467,28 @@ int rgw_s3_prepare_decrypt(req_state* s,
 
   /* SSE-S3 */
   if (stored_mode == "AES256") {
-    if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !rgw_transport_is_secure(s->cct, *s->info.env)) {
-      ldpp_dout(s, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
+    if (cb.cct->_conf->rgw_crypt_require_ssl &&
+        !rgw_transport_is_secure(cb.cct, *cb.env)) {
+      ldpp_dout(cb.dpp, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_sse_s3(s, s->cct, attrs, actual_key);
+    res = reconstitute_actual_key_from_sse_s3(cb.dpp, cb.cct, attrs, actual_key);
     if (res != 0) {
-      ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key" << dendl;
-      s->err.message = "Failed to retrieve the actual key";
+      ldpp_dout(cb.dpp, 10) << "ERROR: failed to retrieve actual key" << dendl;
+      cb.error_message = "Failed to retrieve the actual key";
       return res;
     }
     if (actual_key.size() != AES_256_KEYSIZE) {
-      ldpp_dout(s, 0) << "ERROR: key obtained " <<
+      ldpp_dout(cb.dpp, 0) << "ERROR: key obtained " <<
           "is not 256 bit size" << dendl;
-      s->err.message = "SSE-S3 provided an invalid key for the given keyid.";
+      cb.error_message = "SSE-S3 provided an invalid key for the given keyid.";
       return -EINVAL;
     }
 
-    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(s, s->cct));
+    auto aes = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(cb.dpp, cb.cct));
     aes->set_key(reinterpret_cast<const uint8_t*>(actual_key.c_str()), AES_256_KEYSIZE);
     actual_key.replace(0, actual_key.length(), actual_key.length(), '\000');
     if (block_crypt) *block_crypt = std::move(aes);
@@ -1501,6 +1500,17 @@ int rgw_s3_prepare_decrypt(req_state* s,
 
   /*no decryption*/
   return 0;
+}
+
+int rgw_s3_prepare_decrypt(req_state* s,
+                       map<string, bufferlist>& attrs,
+                       std::unique_ptr<BlockCrypt>* block_crypt,
+                       std::map<std::string, std::string>& crypt_http_responses)
+{
+  RGWDecryptContext dec_cb(s);
+  int res;
+  res = rgw_s3_prepare_decrypt(dec_cb, attrs, block_crypt, crypt_http_responses);
+  return res;
 }
 
 int rgw_remove_sse_s3_bucket_key(req_state *s)
