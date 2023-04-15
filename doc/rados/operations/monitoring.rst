@@ -374,12 +374,6 @@ Most health mutes disappear if the unhealthy condition that triggered the health
 For example, suppose that there is one OSD down and the health check is muted. In that case, if
 one or more additional OSDs go down, then the health mute disappears. This behavior occurs in any health check with a threshold value.
 
-Detecting Configuration Issues
-==============================
-
-Although Ceph continuously monitors itself, some configuration issues can be 
-detected only with an external tool called ``ceph-medic``.
-
 Checking a Cluster's Usage Stats
 ================================
 
