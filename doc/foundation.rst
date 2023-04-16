@@ -34,7 +34,6 @@ Premier
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
 * `Samsung Electronics <https://samsung.com/>`_
-* `SoftIron <https://www.softiron.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
 * `XSKY <https://www.xsky.com/en/>`_
 * `ZTE <https://www.zte.com.cn/global/>`_
@@ -104,7 +103,6 @@ Members
 * James Page (Canonical)
 * Joachim Kraftmayer (Clyso)
 * Josh Durgin (IBM) - Ceph Council representative
-* Kenneth Van Alstyne (SoftIron)
 * Matias Bjorling (Western Digital)
 * Matthew Leonard (Bloomberg)
 * Mike Perez (IBM) - Ceph community manager
