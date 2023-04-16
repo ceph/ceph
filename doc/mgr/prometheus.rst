@@ -75,7 +75,7 @@ in conjunction with multiple Prometheus instances, overload the manager and lead
 to unresponsive or crashing Ceph manager instances.  Hence, the cache is enabled
 by default.  This means that there is a possibility that the cache becomes
 stale.  The cache is considered stale when the time to fetch the metrics from
-Ceph exceeds the configured :confval:``mgr/prometheus/scrape_interval``.
+Ceph exceeds the configured :confval:`mgr/prometheus/scrape_interval`.
 
 If that is the case, **a warning will be logged** and the module will either
 
