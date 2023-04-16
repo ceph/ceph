@@ -7,18 +7,23 @@
 Overview
 --------
 
-    | The purpose of the **s3 select** engine is to create an efficient pipe between user client and storage nodes (the engine should be close as possible to storage).
-    | It enables selection of a restricted subset of (structured) data stored in an S3 object using an SQL-like syntax.
-    | It also enables for higher level analytic-applications (such as SPARK-SQL) , using that feature to improve their latency and throughput.
+The purpose of the **s3 select** engine is to create an efficient pipe between
+user client and storage nodes (the engine should be close as possible to
+storage). It enables the selection of a restricted subset of (structured) data
+stored in an S3 object using an SQL-like syntax. It also enables for higher
+level analytic-applications (such as SPARK-SQL), using that feature to improve
+their latency and throughput.
 
-    | For example, a s3-object of several GB (CSV file), a user needs to extract a single column which filtered by another column.
-    | As the following query:
-    | ``select customer-id from s3Object where age>30 and age<65;``
+For example, an s3-object of several GB (CSV file), a user needs to extract a
+single column filtered by another column.  As the following query: ``select
+customer-id from s3Object where age>30 and age<65;``
 
-    | Currently the whole s3-object must retrieve from OSD via RGW before filtering and extracting data.
-    | By "pushing down" the query into OSD , it's possible to save a lot of network and CPU(serialization / deserialization).
+Currently the whole s3-object must be retrieved from OSD via RGW before
+filtering and extracting data.  By "pushing down" the query into radosgw, it's
+possible to save a lot of network and CPU(serialization / deserialization).
 
-    | **The bigger the object, and the more accurate the query, the better the performance**.
+    **The bigger the object, and the more accurate the query, the better the
+    performance**.
  
 Basic workflow
 --------------
