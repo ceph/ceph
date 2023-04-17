@@ -28,28 +28,42 @@ possible to save a lot of network and CPU(serialization / deserialization).
 Basic workflow
 --------------
     
-    | S3-select query is sent to RGW via `AWS-CLI <https://docs.aws.amazon.com/cli/latest/reference/s3api/select-object-content.html>`_
+S3-select query is sent to RGW via `AWS-CLI
+<https://docs.aws.amazon.com/cli/latest/reference/s3api/select-object-content.html>`_
 
-    | It passes the authentication and permission process as an incoming message (POST).
-    | **RGWSelectObj_ObjStore_S3::send_response_data** is the “entry point”, it handles each fetched chunk according to input object-key.
-    | **send_response_data** is first handling the input query, it extracts the query and other CLI parameters.
+It passes the authentication and permission process as an incoming message
+(POST).  **RGWSelectObj_ObjStore_S3::send_response_data** is the “entry point”,
+it handles each fetched chunk according to input object-key.
+**send_response_data** is first handling the input query, it extracts the query
+and other CLI parameters.
    
-    | Per each new fetched chunk (~4m), RGW executes an s3-select query on it.    
-    | The current implementation supports CSV objects and since chunks are randomly “cutting” the CSV rows in the middle, those broken-lines (first or last per chunk) are skipped while processing the query.   
-    | Those “broken” lines are stored and later merged with the next broken-line (belong to the next chunk), and finally processed.
+Per each new fetched chunk (~4m), RGW executes an s3-select query on it.    The
+current implementation supports CSV objects and since chunks are randomly
+“cutting” the CSV rows in the middle, those broken-lines (first or last per
+chunk) are skipped while processing the query.   Those “broken” lines are
+stored and later merged with the next broken-line (belong to the next chunk),
+and finally processed.
    
-    | Per each processed chunk an output message is formatted according to `AWS specification <https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTObjectSELECTContent.html#archive-RESTObjectSELECTContent-responses>`_ and sent back to the client.
-    | RGW supports the following response: ``{:event-type,records} {:content-type,application/octet-stream} {:message-type,event}``.
-    | For aggregation queries the last chunk should be identified as the end of input, following that the s3-select-engine initiates end-of-process and produces an aggregated result.  
+Per each processed chunk an output message is formatted according to `AWS
+specification
+<https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTObjectSELECTContent.html#archive-RESTObjectSELECTContent-responses>`_
+and sent back to the client.  RGW supports the following response:
+``{:event-type,records} {:content-type,application/octet-stream}
+{:message-type,event}``.  For aggregation queries the last chunk should be
+identified as the end of input, following that the s3-select-engine initiates
+end-of-process and produces an aggregated result.  
 
         
 Basic functionalities
 ~~~~~~~~~~~~~~~~~~~~~
 
-    | **S3select** has a definite set of functionalities compliant with AWS.
+**S3select** has a definite set of functionalities compliant with AWS.
     
-    | The implemented software architecture supports basic arithmetic expressions, logical and compare expressions, including nested function calls and casting operators, which enables the user great flexibility. 
-    | review the below s3-select-feature-table_.
+The implemented software architecture supports basic arithmetic expressions,
+logical and compare expressions, including nested function calls and casting
+operators, which enables the user great flexibility. 
+
+review the below s3-select-feature-table_.
 
 
 Error Handling
