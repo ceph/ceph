@@ -685,6 +685,65 @@
             </div>
           </div>
         </ng-container>
+        <!-- Grafana -->
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'grafana'">
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="grafana_port">
+              <span i18n>Grafana Port</span>
+              <cd-helper>
+                <span i18n>The default port used by grafana.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="grafana_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="grafana_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="grafana_admin_password">
+              <span>Grafana Password</span>
+              <cd-helper>The password of the default Grafana Admin. Set once on first-run.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input id="grafana_admin_password"
+                       class="form-control"
+                       type="password"
+                       autocomplete="new-password"
+                       [attr.disabled]="editing ? true:null"
+                       formControlName="grafana_admin_password">
+                <span class="input-group-append">
+                  <button type="button"
+                          class="btn btn-light"
+                          cdPasswordButton="grafana_admin_password">
+                  </button>
+                  <cd-copy-2-clipboard-button source="grafana_admin_password">
+                  </cd-copy-2-clipboard-button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
       </div>
 
       <div class="modal-footer">
