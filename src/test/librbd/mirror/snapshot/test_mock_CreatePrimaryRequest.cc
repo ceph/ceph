@@ -167,6 +167,11 @@ public:
                   ));
   }
 
+  void expect_refresh_image(MockTestImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(*mock_image_ctx.state, refresh(_))
+      .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
   void expect_unlink_peer(MockTestImageCtx &mock_image_ctx,
                           MockUnlinkPeerRequest &mock_unlink_peer_request,
                           uint64_t snap_id, const std::string &peer_uuid,
@@ -214,6 +219,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, Success) {
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
                             "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, 0);
+  expect_refresh_image(mock_image_ctx, 0);
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
@@ -314,6 +320,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkIncomplete) {
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
                             "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, 0);
+  expect_refresh_image(mock_image_ctx, 0);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
@@ -350,6 +357,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPeer) {
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
                             "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, 0);
+  expect_refresh_image(mock_image_ctx, 0);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
@@ -384,6 +392,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkNoPeer) {
                           {{"uuid", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
                             "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, 0);
+  expect_refresh_image(mock_image_ctx, 0);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
@@ -424,6 +433,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkMultiplePeers) {
                            {"uuid2", cls::rbd::MIRROR_PEER_DIRECTION_TX, "ceph",
                             "mirror", "mirror uuid"}}, 0);
   expect_create_snapshot(mock_image_ctx, 0);
+  expect_refresh_image(mock_image_ctx, 0);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
