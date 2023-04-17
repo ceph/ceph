@@ -359,6 +359,10 @@ def is_device(dev):
         if not allow_loop_devices():
             return False
 
+    # stat fails to recognize a device through a symlink
+    if os.path.islink(dev):
+        dev = os.path.realpath(dev)
+
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
 
