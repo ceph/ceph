@@ -1247,7 +1247,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
             # For quota to be enforced
             time.sleep(20)
             # create 400 files of 1MB to exceed quota
-            self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=400)
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir2', number_of_files=400)
         except CommandFailedError:
             # remove with snapshot retention
             self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group, "--retain-snapshots")
