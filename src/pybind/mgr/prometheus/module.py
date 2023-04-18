@@ -1613,7 +1613,6 @@ class Module(MgrModule):
 
     def get_all_daemon_health_metrics(self) -> None:
         daemon_metrics = self.get_daemon_health_metrics()
-        self.log.debug('metrics jeje %s' % (daemon_metrics))
         for daemon_name, health_metrics in daemon_metrics.items():
             for health_metric in health_metrics:
                 path = f'daemon_health_metrics{daemon_name}{health_metric["type"]}'
