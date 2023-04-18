@@ -179,7 +179,27 @@ struct cpu_set_t;
 #define MSG_DONTWAIT MSG_NONBLOCK
 #endif
 
-#if defined(HAVE_PTHREAD_SETNAME_NP)
+/* compiler warning free success noop */
+#define pthread_setname_noop_helper(thread, name) ({ \
+  int __i = 0;                                       \
+  __i; })
+
+#define pthread_getname_noop_helper(thread, name, len) ({ \
+  if (name != NULL)                                       \
+    *name = '\0';                                         \
+  0; })
+
+#define pthread_kill_unsupported_helper(thread, signal) ({ \
+  int __i = -ENOTSUP;                                      \
+  __i; })
+
+#if defined(_WIN32) && defined(__clang__) && \
+    !defined(_LIBCPP_HAS_THREAD_API_PTHREAD)
+  // In this case, llvm doesn't use the pthread api for std::thread.
+  // We cannot use native_handle() with the pthread api, nor can we pass
+  // it to Windows API functions.
+  #define ceph_pthread_setname pthread_setname_noop_helper
+#elif defined(HAVE_PTHREAD_SETNAME_NP)
   #if defined(__APPLE__)
     #define ceph_pthread_setname(thread, name) ({ \
       int __result = 0;                         \
@@ -195,24 +215,27 @@ struct cpu_set_t;
     pthread_set_name_np(thread, name);          \
     0; })
 #else
-  /* compiler warning free success noop */
-  #define ceph_pthread_setname(thread, name) ({ \
-    int __i = 0;                              \
-    __i; })
+  #define ceph_pthread_setname pthread_setname_noop_helper
 #endif
 
-#if defined(HAVE_PTHREAD_GETNAME_NP)
+#if defined(_WIN32) && defined(__clang__) && \
+    !defined(_LIBCPP_HAS_THREAD_API_PTHREAD)
+  #define ceph_pthread_getname pthread_getname_noop_helper
+#elif defined(HAVE_PTHREAD_GETNAME_NP)
   #define ceph_pthread_getname pthread_getname_np
 #elif defined(HAVE_PTHREAD_GET_NAME_NP)
   #define ceph_pthread_getname(thread, name, len) ({ \
     pthread_get_name_np(thread, name, len);          \
     0; })
 #else
-  /* compiler warning free success noop */
-  #define ceph_pthread_getname(thread, name, len) ({ \
-    if (name != NULL)                              \
-      *name = '\0';                                \
-    0; })
+  #define ceph_pthread_getname pthread_getname_noop_helper
+#endif
+
+#if defined(_WIN32) && defined(__clang__) && \
+    !defined(_LIBCPP_HAS_THREAD_API_PTHREAD)
+  #define ceph_pthread_kill pthread_kill_unsupported_helper
+#else
+  #define ceph_pthread_kill pthread_kill
 #endif
 
 int ceph_posix_fallocate(int fd, off_t offset, off_t len);
