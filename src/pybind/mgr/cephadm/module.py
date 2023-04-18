@@ -12,13 +12,11 @@ from threading import Event
 
 from cephadm.service_discovery import ServiceDiscovery
 
-import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
     Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, Awaitable
 
 import datetime
 import os
-import random
 import multiprocessing.pool
 import subprocess
 from prettytable import PrettyTable
@@ -789,6 +787,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         if '.' in host:
             host = host.split('.')[0]
+        enumeration: int = 0
         while True:
             if prefix:
                 name = prefix + '.'
@@ -798,8 +797,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 name += f'{rank}.{rank_generation}.'
             name += host
             if suffix:
-                name += '.' + ''.join(random.choice(string.ascii_lowercase)
-                                      for _ in range(6))
+                name += '.' + str(enumeration)
+                enumeration += 1
             if len([d for d in existing if d.daemon_id == name]):
                 if not suffix:
                     raise orchestrator.OrchestratorValidationError(
