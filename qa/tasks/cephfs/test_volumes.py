@@ -1244,8 +1244,10 @@ class TestSubvolumeGroups(TestVolumesHelper):
         try:
             # write two files of 1MB file to exceed the quota
             self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
-            # For quota to be enforced
-            time.sleep(20)
+            # For quota to be enforced. Just wait for 100 seconds because the worst case in kclient the
+            # dirty caps will be held for 60 seconds, and also the MDS may defer updating the dir rstat
+            # for 5 seconds, which is per tick, maybe longer if need to wait for mdlog to flush.
+            time.sleep(100)
             # create 400 files of 1MB to exceed quota
             self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir2', number_of_files=400)
         except CommandFailedError:
