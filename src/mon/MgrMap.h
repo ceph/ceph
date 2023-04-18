@@ -514,13 +514,13 @@ public:
       }
       f->close_section();
     }
+    f->close_section(); // always_on_modules
     f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
     f->open_array_section("active_clients");
     for (const auto &c : clients) {
       f->dump_object("client", c);
     }
-    f->close_section();
-    f->close_section();
+    f->close_section(); // active_clients
   }
 
   static void generate_test_instances(std::list<MgrMap*> &l) {
