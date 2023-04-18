@@ -1289,8 +1289,7 @@ class TestFsAuthorize(CephFSTestCase):
         keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
 
         self._remount(keyring)
-        self.captester.run_mon_cap_tests(self.fs, self.client_id)
-        self.captester.run_mds_cap_tests(PERM)
+        self.captester.run_cap_tests(self.fs, self.client_id, PERM)
 
     def test_single_path_rw(self):
         PERM = 'rw'
@@ -1299,8 +1298,7 @@ class TestFsAuthorize(CephFSTestCase):
         keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
 
         self._remount(keyring)
-        self.captester.run_mon_cap_tests(self.fs, self.client_id)
-        self.captester.run_mds_cap_tests(PERM)
+        self.captester.run_cap_tests(self.fs, self.client_id, PERM)
 
     def test_single_path_rootsquash(self):
         if not isinstance(self.mount_a, FuseMount):
@@ -1400,8 +1398,8 @@ class TestFsAuthorize(CephFSTestCase):
             PERM = c[1]
             self._remount(keyring, PATH)
             # actual tests...
-            self.captesters[i].run_mon_cap_tests(self.fs, self.client_id)
-            self.captesters[i].run_mds_cap_tests(PERM, PATH)
+            self.captesters[i].run_cap_tests(self.fs, self.client_id, PERM,
+                                             PATH)
 
     def tearDown(self):
         self.mount_a.umount_wait()
