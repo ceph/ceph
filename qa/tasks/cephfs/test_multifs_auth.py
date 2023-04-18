@@ -4,8 +4,9 @@ Test for Ceph clusters with multiple FSs.
 import logging
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
-from tasks.cephfs.caps_helper import (CapTester, gen_mon_cap_str,
-                                      gen_osd_cap_str, gen_mds_cap_str)
+from tasks.cephfs.caps_helper import (MonCapTester, MdsCapTester,
+                                      gen_mon_cap_str, gen_osd_cap_str,
+                                      gen_mds_cap_str)
 
 from teuthology.exceptions import CommandFailedError
 
@@ -40,21 +41,21 @@ class TestMultiFS(CephFSTestCase):
 class TestMONCaps(TestMultiFS):
 
     def test_moncap_with_one_fs_names(self):
-        self.captester = CapTester()
+        self.captester = MonCapTester()
         moncap = gen_mon_cap_str((('r', self.fs1.name),))
         self.create_client(self.client_id, moncap)
 
         self.captester.run_mon_cap_tests(self.fs1, self.client_id)
 
     def test_moncap_with_multiple_fs_names(self):
-        self.captester = CapTester()
+        self.captester = MonCapTester()
         moncap = gen_mon_cap_str((('r', self.fs1.name), ('r', self.fs2.name)))
         self.create_client(self.client_id, moncap)
 
         self.captester.run_mon_cap_tests(self.fs1, self.client_id)
 
     def test_moncap_with_blanket_allow(self):
-        self.captester = CapTester()
+        self.captester = MonCapTester()
         moncap = 'allow r'
         self.create_client(self.client_id, moncap)
 
@@ -72,7 +73,8 @@ class TestMDSCaps(TestMultiFS):
     """
     def test_rw_with_fsname_and_no_path_in_cap(self):
         PERM = 'rw'
-        self.captesters = (CapTester(self.mount_a), CapTester(self.mount_b))
+        self.captesters = (MdsCapTester(self.mount_a),
+                           MdsCapTester(self.mount_b))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM, both_fsnames=True)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
@@ -83,7 +85,8 @@ class TestMDSCaps(TestMultiFS):
 
     def test_r_with_fsname_and_no_path_in_cap(self):
         PERM = 'r'
-        self.captesters = (CapTester(self.mount_a), CapTester(self.mount_b))
+        self.captesters = (MdsCapTester(self.mount_a),
+                           MdsCapTester(self.mount_b))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM, both_fsnames=True)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
@@ -96,8 +99,8 @@ class TestMDSCaps(TestMultiFS):
         PERM, CEPHFS_MNTPT = 'rw', 'dir1'
         self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
         self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.captesters = (CapTester(self.mount_a, CEPHFS_MNTPT),
-                           CapTester(self.mount_b, CEPHFS_MNTPT))
+        self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
+                           MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM, True, CEPHFS_MNTPT)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
@@ -110,8 +113,8 @@ class TestMDSCaps(TestMultiFS):
         PERM, CEPHFS_MNTPT = 'r', 'dir1'
         self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
         self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.captesters = (CapTester(self.mount_a, CEPHFS_MNTPT),
-                           CapTester(self.mount_b, CEPHFS_MNTPT))
+        self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
+                           MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM, True, CEPHFS_MNTPT)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
@@ -126,8 +129,8 @@ class TestMDSCaps(TestMultiFS):
         PERM, CEPHFS_MNTPT = 'rw', 'dir1'
         self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
         self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.captesters = (CapTester(self.mount_a, CEPHFS_MNTPT),
-                           CapTester(self.mount_b, CEPHFS_MNTPT))
+        self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
+                           MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM, False, CEPHFS_MNTPT)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
@@ -142,8 +145,8 @@ class TestMDSCaps(TestMultiFS):
         PERM, CEPHFS_MNTPT = 'r', 'dir1'
         self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
         self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.captesters = (CapTester(self.mount_a, CEPHFS_MNTPT),
-                           CapTester(self.mount_b, CEPHFS_MNTPT))
+        self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
+                           MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM, False, CEPHFS_MNTPT)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
@@ -154,7 +157,8 @@ class TestMDSCaps(TestMultiFS):
 
     def test_rw_with_no_fsname_and_no_path(self):
         PERM = 'rw'
-        self.captesters = (CapTester(self.mount_a), CapTester(self.mount_b))
+        self.captesters = (MdsCapTester(self.mount_a),
+                           MdsCapTester(self.mount_b))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
@@ -165,7 +169,8 @@ class TestMDSCaps(TestMultiFS):
 
     def test_r_with_no_fsname_and_no_path(self):
         PERM = 'r'
-        self.captesters = (CapTester(self.mount_a), CapTester(self.mount_b))
+        self.captesters = (MdsCapTester(self.mount_a),
+                           MdsCapTester(self.mount_b))
 
         moncap, osdcap, mdscap = self._gen_caps(PERM)
         keyring = self.create_client(self.client_id, moncap, osdcap, mdscap)
