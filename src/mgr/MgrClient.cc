@@ -14,6 +14,7 @@
 
 #include "MgrClient.h"
 
+#include "common/perf_counters_key.h"
 #include "mgr/MgrContext.h"
 #include "mon/MonMap.h"
 
@@ -331,6 +332,12 @@ void MgrClient::_send_report()
         const PerfCounters::perf_counter_data_any_d &ctr,
         const PerfCounters &perf_counters)
     {
+      // FIXME: We don't send labeled perf counters to the mgr currently.
+      auto labels = ceph::perf_counters::key_labels(perf_counters.get_name());
+      if (labels.begin() != labels.end()) {
+        return false;
+      }
+
       return perf_counters.get_adjusted_priority(ctr.prio) >= (int)stats_threshold;
     };
 
@@ -367,20 +374,20 @@ void MgrClient::_send_report()
       }
 
       if (session->declared.count(path) == 0) {
-	ldout(cct,20) << " declare " << path << dendl;
-	PerfCounterType type;
-	type.path = path;
-	if (data.description) {
-	  type.description = data.description;
-	}
-	if (data.nick) {
-	  type.nick = data.nick;
-	}
-	type.type = data.type;
-       type.priority = perf_counters.get_adjusted_priority(data.prio);
-	type.unit = data.unit;
-	report->declare_types.push_back(std::move(type));
-	session->declared.insert(path);
+        ldout(cct, 20) << " declare " << path << dendl;
+        PerfCounterType type;
+        type.path = path;
+        if (data.description) {
+          type.description = data.description;
+        }
+        if (data.nick) {
+          type.nick = data.nick;
+        }
+        type.type = data.type;
+        type.priority = perf_counters.get_adjusted_priority(data.prio);
+        type.unit = data.unit;
+        report->declare_types.push_back(std::move(type));
+        session->declared.insert(path);
       }
 
       encode(static_cast<uint64_t>(data.u64), report->packed);
