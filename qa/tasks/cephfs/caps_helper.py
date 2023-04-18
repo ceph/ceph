@@ -233,9 +233,8 @@ class CapTester:
             cephfs_mntpt = {self.mount.cephfs_mntpt}
             hostfs_mntpt = {self.mount.hostfs_mntpt}''')
 
-    def run_cap_tests(self, perm, mntpt=None):
-        # TODO
-        #self.run_mon_cap_tests()
+    def run_cap_tests(self, fs, client_id, perm, mntpt=None):
+        self.run_mon_cap_tests(fs, client_id)
         self.run_mds_cap_tests(perm, mntpt=mntpt)
 
     def run_mon_cap_tests(self, fs, client_id):
