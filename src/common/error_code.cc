@@ -15,6 +15,7 @@
 
 #include <exception>
 
+#include <boost/asio/error.hpp>
 #include "common/error_code.h"
 
 #pragma GCC diagnostic push
