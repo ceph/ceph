@@ -276,7 +276,7 @@ class Worker {
 
     // Add labeled perfcounters
     std::string labels = ceph::perf_counters::key_create(
-      name_prefix, {{"id", std::to_string(id)}});
+        name_prefix, {{"id", std::to_string(id)}});
     PerfCountersBuilder plb_labeled(
         cct, labels, l_msgr_labeled_first,
         l_msgr_labeled_last);

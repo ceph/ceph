@@ -72,7 +72,7 @@ class Module(MgrModule):
                 }
 
     def get_daemon_stats(self) -> Iterable[Dict[str, Any]]:
-        for daemon, counters in self.get_all_perf_counters().items():
+        for daemon, counters in self.get_unlabeled_perf_counters().items():
             svc_type, svc_id = daemon.split('.', 1)
             metadata = self.get_metadata(svc_type, svc_id)
             if not metadata:
