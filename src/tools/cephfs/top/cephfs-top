@@ -734,6 +734,7 @@ class FSTop(object):
                                         f'{speed}', curses.A_DIM)
                 else:
                     # display 0th element from metric tuple
+                    metrics_dict[fs_name][client_id][self.items(item)] = m[0]
                     self.fsstats.addstr(y_coord, coord[0], f'{m[0]}', curses.A_DIM)
             else:
                 self.fsstats.addstr(y_coord, coord[0], "N/A", curses.A_DIM)
