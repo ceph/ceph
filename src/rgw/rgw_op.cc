@@ -2214,7 +2214,7 @@ void RGWGetObj::execute(optional_yield y)
     RGWObjManifest m;
     try {
       decode(m, attr_iter->second);
-      if (m.get_tier_type() == "cloud-s3") {
+      if (m.get_tier_type() == "cloud-s3" && !sync_cloudtiered) {
         /* XXX: Instead send presigned redirect or read-through */
         op_ret = -ERR_INVALID_OBJECT_STATE;
         s->err.message = "This object was transitioned to cloud-s3";

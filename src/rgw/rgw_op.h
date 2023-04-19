@@ -354,6 +354,7 @@ protected:
   bool range_parsed;
   bool skip_manifest;
   bool skip_decrypt{false};
+  bool sync_cloudtiered{false};
   utime_t gc_invalidate_time;
   bool is_slo;
   std::string lo_etag;

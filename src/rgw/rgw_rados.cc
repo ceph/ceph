@@ -3844,10 +3844,11 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
   constexpr bool rgwx_stat = true;
   constexpr bool sync_manifest = true;
   constexpr bool skip_decrypt = true;
+  constexpr bool sync_cloudtiered = true;
   int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt,
+                      sync_manifest, skip_decrypt, sync_cloudtiered,
                       true, &cb, &in_stream_req);
   if (ret < 0) {
     return ret;
@@ -4058,10 +4059,11 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   static constexpr bool rgwx_stat = false;
   static constexpr bool sync_manifest = true;
   static constexpr bool skip_decrypt = true;
+  static constexpr bool sync_cloudtiered = true;
   ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt,
+                      sync_manifest, skip_decrypt, sync_cloudtiered,
                       true,
                       &cb, &in_stream_req);
   if (ret < 0) {
