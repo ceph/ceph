@@ -2360,9 +2360,7 @@ void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
   if (storage_classes.empty()) {
     storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
   }
-  if (!tier_targets.empty()) {
-    JSONDecoder::decode_json("tier_targets", tier_targets, obj);
-  }
+  JSONDecoder::decode_json("tier_targets", tier_targets, obj);
 }
 
 void RGWZoneGroup::dump(Formatter *f) const
