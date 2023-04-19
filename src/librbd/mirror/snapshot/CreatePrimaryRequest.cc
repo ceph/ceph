@@ -239,7 +239,8 @@ void CreatePrimaryRequest<I>::unlink_peer() {
   auto ctx = create_context_callback<
     CreatePrimaryRequest<I>,
     &CreatePrimaryRequest<I>::handle_unlink_peer>(this);
-  auto req = UnlinkPeerRequest<I>::create(m_image_ctx, snap_id, peer_uuid, ctx);
+  auto req = UnlinkPeerRequest<I>::create(m_image_ctx, snap_id, peer_uuid, true,
+                                          ctx);
   req->send();
 }
 

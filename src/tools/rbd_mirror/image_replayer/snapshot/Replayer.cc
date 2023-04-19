@@ -1280,7 +1280,7 @@ void Replayer<I>::unlink_peer(uint64_t remote_snap_id) {
     Replayer<I>, &Replayer<I>::handle_unlink_peer>(this);
   auto req = librbd::mirror::snapshot::UnlinkPeerRequest<I>::create(
     m_state_builder->remote_image_ctx, remote_snap_id,
-    m_remote_mirror_peer_uuid, ctx);
+    m_remote_mirror_peer_uuid, false, ctx);
   req->send();
 }
 
