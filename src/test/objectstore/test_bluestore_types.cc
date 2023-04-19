@@ -1284,6 +1284,155 @@ TEST(ExtentMap, compress_extent_map)
   ASSERT_EQ(6u, em.extent_map.size());
 }
 
+TEST(ExtentMap, dup_extent_map)
+{
+  BlueStore store(g_ceph_context, "", 4096);
+  BlueStore::OnodeCacheShard *oc = BlueStore::OnodeCacheShard::create(
+    g_ceph_context, "lru", NULL);
+  BlueStore::BufferCacheShard *bc = BlueStore::BufferCacheShard::create(
+    g_ceph_context, "lru", NULL);
+
+  size_t csum_order = 12; //1^12 = 4096 bytes
+  auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
+
+  ///////////////////////////
+  //constructing onode1
+  BlueStore::Onode onode1(coll.get(), ghobject_t(), "");
+  BlueStore::ExtentMap em1(&onode1,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
+
+  ///////////////////////////
+  // constructing extent/Blob: 0x0~2000 at <0x100000~2000>
+  size_t ext1_offs = 0x0;
+  size_t ext1_len = 0x2000;
+  size_t ext1_boffs = 0x0;
+  BlueStore::BlobRef b1(new BlueStore::Blob);
+  b1->shared_blob = new BlueStore::SharedBlob(coll.get());
+  auto &_b1 = b1->dirty_blob();
+  _b1.init_csum(Checksummer::CSUM_CRC32C, csum_order, ext1_len);
+  for(size_t i = 0; i < _b1.get_csum_count(); i++) {
+    *(_b1.get_csum_item_ptr(i)) = i + 1;
+  }
+  PExtentVector pextents;
+  pextents.emplace_back(0x100000, ext1_len);
+  _b1.allocated(0, ext1_len, pextents);
+
+  auto *ext1 = new BlueStore::Extent(ext1_offs, ext1_boffs, ext1_len, b1);
+  em1.extent_map.insert(*ext1);
+  b1->get_ref(coll.get(), ext1->blob_offset, ext1->length);
+  _b1.mark_used(ext1->blob_offset, ext1->length);
+
+  ///////////////////////////
+  //constructing onode2 which is a full clone from onode1
+  BlueStore::Onode onode2(coll.get(), ghobject_t(), "");
+  BlueStore::ExtentMap em2(&onode2,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
+
+  {
+    BlueStore::TransContext txc(store.cct, coll.get(), nullptr, nullptr);
+
+    em1.dup(&store, &txc, coll, em2, ext1_offs, ext1_len, ext1_offs);
+    em1.dump(nullptr); // see the log if any
+    em2.dump(nullptr);
+
+    ASSERT_TRUE(b1->get_blob().is_shared());
+    ASSERT_EQ(b1->get_referenced_bytes(), ext1_len);
+
+    BlueStore::BlobRef b2 = em2.seek_lextent(ext1_offs)->blob;
+    ASSERT_TRUE(b2->get_blob().is_shared());
+    ASSERT_EQ(b2->get_referenced_bytes(), ext1_len);
+    ASSERT_EQ(b1->shared_blob, b2->shared_blob);
+    auto &_b2 = b2->get_blob();
+    ASSERT_EQ(_b1.get_csum_count(), _b2.get_csum_count());
+    for(size_t i = 0; i < _b2.get_csum_count(); i++) {
+      ASSERT_EQ(*(_b1.get_csum_item_ptr(i)), *(_b2.get_csum_item_ptr(i)));
+    }
+  }
+
+  ///////////////////////////
+  //constructing onode3 which is partial clone (tail part) from onode2
+  BlueStore::Onode onode3(coll.get(), ghobject_t(), "");
+  BlueStore::ExtentMap em3(&onode3,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
+
+  {
+    size_t clone_shift = 0x1000;
+    ceph_assert(ext1_len > clone_shift);
+    size_t clone_offs = ext1_offs + clone_shift;
+    size_t clone_len = ext1_len - clone_shift;
+    BlueStore::TransContext txc(store.cct, coll.get(), nullptr, nullptr);
+
+    em1.dup(&store, &txc, coll, em3, clone_offs, clone_len, clone_offs);
+    em1.dump(nullptr); // see the log if any
+    em3.dump(nullptr);
+
+    // make sure (basically) onode1&2 are unmodified
+    BlueStore::BlobRef b1 = em1.seek_lextent(ext1_offs)->blob;
+    BlueStore::BlobRef b2 = em2.seek_lextent(ext1_offs)->blob;
+    ASSERT_EQ(b1->shared_blob, b2->shared_blob);
+
+    BlueStore::Extent &ext3 = *em3.seek_lextent(clone_offs);
+    ASSERT_EQ(ext3.blob_offset, clone_shift);
+    ASSERT_EQ(ext3.length, clone_len);
+    BlueStore::BlobRef b3 = ext3.blob;
+    ASSERT_TRUE(b3->get_blob().is_shared());
+    ASSERT_EQ(b3->shared_blob, b1->shared_blob);
+    ASSERT_EQ(b3->get_referenced_bytes(), clone_len);
+    auto ll = b3->get_blob().get_logical_length();
+    ASSERT_EQ(ll, ext1_len);
+    auto &_b3 = b3->get_blob();
+    ASSERT_EQ(_b1.get_csum_count(), _b3.get_csum_count());
+    for(size_t i = 0; i < _b3.get_csum_count(); i++) {
+      ASSERT_EQ(*(_b1.get_csum_item_ptr(i)), *(_b3.get_csum_item_ptr(i)));
+    }
+  }
+
+  ///////////////////////////
+  //constructing onode4 which is partial clone (head part) from onode2
+  BlueStore::Onode onode4(coll.get(), ghobject_t(), "");
+  BlueStore::ExtentMap em4(&onode4,
+    g_ceph_context->_conf->bluestore_extent_map_inline_shard_prealloc_size);
+
+  {
+    size_t clone_shift = 0;
+    size_t clone_len = 0x1000;
+    ceph_assert(ext1_len >= clone_shift + clone_len);
+    size_t clone_offs = ext1_offs + clone_shift;
+    BlueStore::TransContext txc(store.cct, coll.get(), nullptr, nullptr);
+
+    em2.dup(&store, &txc, coll, em4, clone_offs, clone_len, clone_offs);
+    em2.dump(nullptr); // see the log if any
+    em4.dump(nullptr);
+
+    // make sure (basically) onode1&2 are unmodified
+    BlueStore::BlobRef b1 = em1.seek_lextent(ext1_offs)->blob;
+    BlueStore::BlobRef b2 = em2.seek_lextent(ext1_offs)->blob;
+    BlueStore::BlobRef b3 = em3.seek_lextent(ext1_offs)->blob;
+    ASSERT_EQ(b1->shared_blob, b2->shared_blob);
+    ASSERT_EQ(b1->shared_blob, b3->shared_blob);
+    auto &_b2 = b2->get_blob();
+
+    BlueStore::Extent &ext4 = *em4.seek_lextent(clone_offs);
+    ASSERT_EQ(ext4.blob_offset, clone_shift);
+    ASSERT_EQ(ext4.length, clone_len);
+    BlueStore::BlobRef b4 = ext4.blob;
+    ASSERT_TRUE(b4->get_blob().is_shared());
+    ASSERT_EQ(b4->shared_blob, b2->shared_blob);
+    ASSERT_EQ(b4->get_referenced_bytes(), clone_len);
+    auto &_b4 = b4->get_blob();
+    auto ll = _b4.get_logical_length();
+    auto csum_entries = ll / (1 << csum_order);
+    ASSERT_EQ(ll, clone_len);
+    ASSERT_EQ(csum_entries, _b4.get_csum_count());
+
+    ASSERT_GT(_b2.get_csum_count(), csum_entries);
+    for(size_t i = 0; i < csum_entries; i++) {
+      ASSERT_EQ(*(_b2.get_csum_item_ptr(i)), *(_b4.get_csum_item_ptr(i)));
+    }
+  }
+}
+
+
 void clear_and_dispose(BlueStore::old_extent_map_t& old_em)
 {
   auto oep = old_em.begin();
