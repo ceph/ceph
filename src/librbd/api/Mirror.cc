@@ -1654,7 +1654,7 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
       for (auto snap_id : snap_ids) {
         C_SaferCond cond;
         auto req = mirror::snapshot::UnlinkPeerRequest<I>::create(
-          img_ctx, snap_id, uuid, &cond);
+          img_ctx, snap_id, uuid, true, &cond);
         req->send();
         r = cond.wait();
         if (r == -ENOENT) {

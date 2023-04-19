@@ -216,15 +216,18 @@ template <>
 struct UnlinkPeerRequest<MockTestImageCtx> {
   uint64_t snap_id;
   std::string mirror_peer_uuid;
+  bool allow_remove;
 
   static UnlinkPeerRequest* s_instance;
   static UnlinkPeerRequest*create (MockTestImageCtx *image_ctx,
                                    uint64_t snap_id,
                                    const std::string &mirror_peer_uuid,
+                                   bool allow_remove,
                                    Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->snap_id = snap_id;
     s_instance->mirror_peer_uuid = mirror_peer_uuid;
+    s_instance->allow_remove = allow_remove;
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -594,12 +597,13 @@ public:
 
   void expect_unlink_peer(MockUnlinkPeerRequest& mock_unlink_peer_request,
                           uint64_t snap_id, const std::string& mirror_peer_uuid,
-                          int r) {
+                          bool allow_remove, int r) {
     EXPECT_CALL(mock_unlink_peer_request, send())
       .WillOnce(Invoke([this, &req=mock_unlink_peer_request, snap_id,
-                        mirror_peer_uuid, r]() {
+                        mirror_peer_uuid, allow_remove, r]() {
         ASSERT_EQ(snap_id, req.snap_id);
         ASSERT_EQ(mirror_peer_uuid, req.mirror_peer_uuid);
+        ASSERT_EQ(allow_remove, req.allow_remove);
         m_threads->work_queue->queue(req.on_finish, r);
       }));
   }
@@ -866,7 +870,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, SyncSnapshot) {
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
-                     0);
+                     false, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // prune non-primary snap1
@@ -1094,7 +1098,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDelta) {
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
-                     0);
+                     false, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // prune non-primary snap1
@@ -1216,7 +1220,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedSyncDeltaDemote) {
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
-                     0);
+                     false, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // idle
@@ -1427,7 +1431,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncDelta) {
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
-                     0);
+                     false, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // prune non-primary snap1
@@ -1568,7 +1572,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, InterruptedPendingSyncDeltaDemote)
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
-                     0);
+                     false, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // idle
@@ -2648,7 +2652,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkPeerError) {
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
-                     -EINVAL);
+                     false, -EINVAL);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // wake-up replayer
@@ -2874,7 +2878,8 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, RemoteFailover) {
     mock_local_image_ctx, 13, true, 0, 0);
   expect_notify_update(mock_local_image_ctx);
   MockUnlinkPeerRequest mock_unlink_peer_request;
-  expect_unlink_peer(mock_unlink_peer_request, 2, "remote mirror peer uuid", 0);
+  expect_unlink_peer(mock_unlink_peer_request, 2, "remote mirror peer uuid",
+                     false, 0);
   expect_notify_sync_complete(mock_instance_watcher, mock_local_image_ctx.id);
 
   // idle
@@ -2974,7 +2979,7 @@ TEST_F(TestMockImageReplayerSnapshotReplayer, UnlinkRemoteSnapshot) {
   expect_is_refresh_required(mock_remote_image_ctx, false);
   MockUnlinkPeerRequest mock_unlink_peer_request;
   expect_unlink_peer(mock_unlink_peer_request, 1, "remote mirror peer uuid",
-                     0);
+                     false, 0);
 
   // idle
   expect_load_image_meta(mock_image_meta, false, 0);

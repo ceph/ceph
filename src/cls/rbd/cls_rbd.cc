@@ -5720,24 +5720,6 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
     return -ENOENT;
   }
 
-  if (mirror_ns->mirror_peer_uuids.size() == 1) {
-    // if this is the last peer to unlink and we have at least one additional
-    // newer mirror snapshot, return a special error to inform the caller it
-    // should remove the snapshot instead.
-    auto search_lambda = [snap_id](const cls_rbd_snap& snap_meta) {
-      if (snap_meta.id > snap_id &&
-          boost::get<cls::rbd::MirrorSnapshotNamespace>(
-                   &snap_meta.snapshot_namespace) != nullptr) {
-        return -EEXIST;
-      }
-      return 0;
-    };
-    r = image::snapshot::iterate(hctx, search_lambda);
-    if (r == -EEXIST) {
-      return -ERESTART;
-    }
-  }
-
   mirror_ns->mirror_peer_uuids.erase(mirror_peer_uuid);
 
   r = image::snapshot::write(hctx, snap_key, std::move(snap));
