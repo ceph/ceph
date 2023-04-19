@@ -3149,6 +3149,8 @@ public:
 
   int dump_onode(CollectionHandle &c, const ghobject_t& oid,
     const std::string& section_name, ceph::Formatter *f) override;
+  int dump_onode_raw(const BlueStore::Onode* o,
+    const std::string& section_name, ceph::Formatter *f);
 
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
 	      ceph::buffer::ptr& value) override;

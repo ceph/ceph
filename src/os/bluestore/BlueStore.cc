@@ -611,7 +611,10 @@ static int get_key_zone_offset_object(
 template <int LogLevelV>
 void _dump_extent_map(CephContext *cct, const BlueStore::ExtentMap &em)
 {
+  if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
+    return;
   uint64_t pos = 0;
+  dout(LogLevelV) << __func__ << " --------- " << dendl;
   for (auto& s : em.shards) {
     dout(LogLevelV) << __func__ << "  shard " << *s.shard_info
 		    << (s.loaded ? " (loaded)" : "")
@@ -671,6 +674,8 @@ void _dump_onode(CephContext *cct, const BlueStore::Onode& o)
 template <int LogLevelV>
 void _dump_transaction(CephContext *cct, ObjectStore::Transaction *t)
 {
+  if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
+    return;
   dout(LogLevelV) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   f.open_object_section("transaction");
@@ -3021,12 +3026,16 @@ BlueStore::ExtentMap::ExtentMap(Onode *o, size_t inline_shard_prealloc_size)
 
 void BlueStore::ExtentMap::dump(Formatter* f) const
 {
-  f->open_array_section("extents");
+  if(f) {
+    f->open_array_section("extents");
 
-  for (auto& e : extent_map) {
-      f->dump_object("extent", e);
+    for (auto& e : extent_map) {
+        f->dump_object("extent", e);
+    }
+    f->close_section();
+  } else {
+    _dump_extent_map<0>(onode->c->store->cct, *this);
   }
-  f->close_section();
 }
 
 void BlueStore::ExtentMap::scan_shared_blobs(
@@ -12385,17 +12394,27 @@ int BlueStore::dump_onode(CollectionHandle &c_,
     // load shared blobs. Leaving as is for now..
     //
     o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-
-    _dump_onode<0>(cct, *o);
-    f->open_object_section(section_name.c_str());
-    o->dump(f);
-    f->close_section();
-    r = 0;
+    r = dump_onode_raw(o.get(), section_name, f);
   }
  out:
   dout(10) << __func__ << " " << c->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
+}
+
+int BlueStore::dump_onode_raw(
+  const BlueStore::Onode* o,
+  const string& section_name,
+  Formatter *f)
+{
+  if (f) {
+    f->open_object_section(section_name.c_str());
+    o->dump(f);
+    f->close_section();
+  } else {
+    _dump_onode<0>(cct, *o);
+  }
+  return 0;
 }
 
 int BlueStore::getattr(
