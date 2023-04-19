@@ -786,7 +786,7 @@ struct RequestMetaTable : public EmptyMetaTable {
       create_metatable<ObjectMetaTable>(L, false, s->object);
     } else if (strcasecmp(index, "CopyFrom") == 0) {
       if (s->op_type == RGW_OP_COPY_OBJ) {
-        create_metatable<CopyFromMetaTable>(L, s);
+        create_metatable<CopyFromMetaTable>(L, false, s);
       } else {
         lua_pushnil(L);
       }
