@@ -1269,7 +1269,7 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
 
   C_SaferCond cond1;
   auto req = librbd::mirror::snapshot::UnlinkPeerRequest<>::create(
-    ictx, snap_id, peer1_uuid, &cond1);
+    ictx, snap_id, peer1_uuid, true, &cond1);
   req->send();
   ASSERT_EQ(0, cond1.wait());
 
@@ -1314,7 +1314,7 @@ TEST_F(TestMirroring, SnapshotUnlinkPeer)
 
   C_SaferCond cond2;
   req = librbd::mirror::snapshot::UnlinkPeerRequest<>::create(
-    ictx, snap_id, peer2_uuid, &cond2);
+    ictx, snap_id, peer2_uuid, true, &cond2);
   req->send();
   ASSERT_EQ(0, cond2.wait());
 
