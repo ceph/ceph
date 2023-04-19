@@ -890,18 +890,19 @@ public:
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
 
-    void scan_shared_blobs(CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
+    void scan_shared_blobs(CollectionRef& c, uint64_t start, uint64_t length,
 			   std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
 
     Blob* find_mergable_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
 				  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
 
-    void make_range_shared_maybe_merge(BlueStore* store, TransContext* txc, CollectionRef& c,
-				       OnodeRef& oldo, uint64_t srcoff, uint64_t length);
+    bool make_range_shared_maybe_merge(BlueStore* store, TransContext* txc, CollectionRef& c,
+				       uint64_t srcoff, uint64_t length);
     void reblob_extents(uint32_t blob_start, uint32_t blob_end,
 			BlobRef from_blob, BlobRef to_blob);
 
-    void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
+    bool dup(BlueStore* b, TransContext*, CollectionRef&,
+      BlueStore::ExtentMap&,
       uint64_t&, uint64_t&, uint64_t&);
 
     bool needs_reshard() const {

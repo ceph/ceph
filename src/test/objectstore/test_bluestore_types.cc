@@ -1284,7 +1284,6 @@ TEST(ExtentMap, compress_extent_map)
   ASSERT_EQ(6u, em.extent_map.size());
 }
 
-
 void clear_and_dispose(BlueStore::old_extent_map_t& old_em)
 {
   auto oep = old_em.begin();
