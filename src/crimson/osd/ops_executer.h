@@ -100,7 +100,6 @@ public:
   // with other message types than just the `MOSDOp`. The type erasure
   // happens in the ctor of `OpsExecuter`.
   struct ExecutableMessage {
-    virtual const crimson::net::ConnectionFRef &get_connection() const = 0;
     virtual osd_reqid_t get_reqid() const = 0;
     virtual utime_t get_mtime() const = 0;
     virtual epoch_t get_map_epoch() const = 0;
@@ -114,9 +113,6 @@ public:
     const ImplT* pimpl;
   public:
     ExecutableMessagePimpl(const ImplT* pimpl) : pimpl(pimpl) {
-    }
-    const crimson::net::ConnectionFRef &get_connection() const final {
-      return pimpl->get_connection();
     }
     osd_reqid_t get_reqid() const final {
       return pimpl->get_reqid();
@@ -177,6 +173,7 @@ private:
     ceph::static_ptr<ExecutableMessage,
                      sizeof(ExecutableMessagePimpl<void>)>;
   abstracted_msg_t msg;
+  crimson::net::ConnectionRef conn;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -364,6 +361,7 @@ private:
               ObjectContextRef obc,
               const OpInfo& op_info,
               abstracted_msg_t&& msg,
+              crimson::net::ConnectionRef conn,
               const SnapContext& snapc);
 
 public:
@@ -372,6 +370,7 @@ public:
               ObjectContextRef obc,
               const OpInfo& op_info,
               const MsgT& msg,
+              crimson::net::ConnectionRef conn,
               const SnapContext& snapc)
     : OpsExecuter(
         std::move(pg),
@@ -380,6 +379,7 @@ public:
         abstracted_msg_t{
           std::in_place_type_t<ExecutableMessagePimpl<MsgT>>{},
           &msg},
+        conn,
         snapc) {
   }
 

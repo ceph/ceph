@@ -148,6 +148,37 @@ public:
       });
   }
 
+  template <typename T, typename F>
+  auto with_remote_shard_state_and_op(
+      core_id_t core,
+      typename T::IRef &&op,
+      F &&f) {
+    ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+    if (seastar::this_shard_id() == core) {
+      auto &target_shard_services = shard_services.local();
+      return std::invoke(
+        std::move(f),
+        target_shard_services.local_state,
+        target_shard_services,
+        std::move(op));
+    }
+    return op->prepare_remote_submission(
+    ).then([op=std::move(op), f=std::move(f), this, core
+           ](auto f_conn) mutable {
+      return shard_services.invoke_on(
+        core,
+        [f=std::move(f), op=std::move(op), f_conn=std::move(f_conn)
+        ](auto &target_shard_services) mutable {
+        op->finish_remote_submission(std::move(f_conn));
+        return std::invoke(
+          std::move(f),
+          target_shard_services.local_state,
+          target_shard_services,
+          std::move(op));
+      });
+    });
+  }
+
   /// Runs opref on the appropriate core, creating the pg as necessary.
   template <typename T>
   seastar::future<> run_with_pg_maybe_create(
@@ -163,11 +194,11 @@ public:
       op->get_pgid());
 
     get_local_state().registry.remove_from_registry(*op);
-    return with_remote_shard_state(
-      core,
-      [op=std::move(op)](
-	PerShardState &per_shard_state,
-	ShardServices &shard_services) mutable {
+    return with_remote_shard_state_and_op<T>(
+      core, std::move(op),
+      [](PerShardState &per_shard_state,
+         ShardServices &shard_services,
+         typename T::IRef op) {
 	per_shard_state.registry.add_to_registry(*op);
 	auto &logger = crimson::get_logger(ceph_subsys_osd);
 	auto &opref = *op;
@@ -207,11 +238,11 @@ public:
       op->get_pgid());
 
     get_local_state().registry.remove_from_registry(*op);
-    return with_remote_shard_state(
-      core,
-      [op=std::move(op)](
-	PerShardState &per_shard_state,
-	ShardServices &shard_services) mutable {
+    return with_remote_shard_state_and_op<T>(
+      core, std::move(op),
+      [](PerShardState &per_shard_state,
+         ShardServices &shard_services,
+         typename T::IRef op) {
 	per_shard_state.registry.add_to_registry(*op);
 	auto &logger = crimson::get_logger(ceph_subsys_osd);
 	auto &opref = *op;
