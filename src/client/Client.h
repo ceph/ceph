@@ -1132,6 +1132,7 @@ protected:
   bool is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
 			       const UserPerm& perms);
   bool is_quota_bytes_approaching(Inode *in, const UserPerm& perms);
+  bool is_root_quota_enabled(Inode *in, quota_max_t type, const UserPerm& perms);
 
   int check_pool_perm(Inode *in, int need);
 

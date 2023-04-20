@@ -16952,6 +16952,14 @@ bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
       });
 }
 
+bool Client::is_root_quota_enabled(Inode *in, quota_max_t type, const UserPerm& perms)
+{
+  return check_quota_condition(in, perms, type,
+      [&type](const Inode &in) {
+        return in.quota.is_enabled(type);
+      });
+}
+
 enum {
   POOL_CHECKED = 1,
   POOL_CHECKING = 2,
