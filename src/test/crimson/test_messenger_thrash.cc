@@ -118,17 +118,15 @@ class SyntheticDispatcher final
     auto p = m->get_data().cbegin();
     decode(pl, p);
     if (pl.who == Payload::PING) {
-      logger().info(" {} conn= {} {}", __func__,
-        *m->get_connection(), pl);
-      return reply_message(m, pl);
+      logger().info(" {} conn= {} {}", __func__, *con, pl);
+      return reply_message(m, con, pl);
     } else {
       ceph_assert(pl.who == Payload::PONG);
       if (sent.count(pl.seq)) {
-        logger().info(" {} conn= {} {}", __func__,
-          m->get_connection(), pl);
-        ceph_assert(conn_sent[&*m->get_connection()].front() == pl.seq);
+        logger().info(" {} conn= {} {}", __func__, *con, pl);
+        ceph_assert(conn_sent[&*con].front() == pl.seq);
         ceph_assert(pl.data.contents_equal(sent[pl.seq]));
-        conn_sent[&*m->get_connection()].pop_front();
+        conn_sent[&*con].pop_front();
         sent.erase(pl.seq);
       }
 
@@ -150,7 +148,10 @@ class SyntheticDispatcher final
     clear_pending(con);
   }
 
-  std::optional<seastar::future<>> reply_message(const MessageRef m, Payload& pl) {
+  std::optional<seastar::future<>> reply_message(
+      const MessageRef m,
+      crimson::net::ConnectionRef con,
+      Payload& pl) {
     pl.who = Payload::PONG;
     bufferlist bl;
     encode(pl, bl);
@@ -158,9 +159,9 @@ class SyntheticDispatcher final
     rm->set_data(bl);
     if (verbose) {
       logger().info("{} conn= {} reply i= {}",
-        __func__, m->get_connection(), pl.seq);
+        __func__, *con, pl.seq);
     }
-    return m->get_connection()->send(std::move(rm));
+    return con->send(std::move(rm));
   }
 
   seastar::future<> send_message_wrap(crimson::net::ConnectionRef con,
@@ -200,8 +201,10 @@ class SyntheticDispatcher final
 };
 
 class SyntheticWorkload {
+  // messengers must be freed after its connections
   std::set<crimson::net::MessengerRef> available_servers;
   std::set<crimson::net::MessengerRef> available_clients;
+
   crimson::net::SocketPolicy server_policy;
   crimson::net::SocketPolicy client_policy;
   std::map<crimson::net::ConnectionRef,
@@ -453,8 +456,6 @@ class SyntheticWorkload {
          return server->shutdown();
        });
      }).then([this] {
-       available_servers.clear();
-     }).then([this] {
        return seastar::do_for_each(available_clients, [] (auto client) {
 	 if (verbose) {
            logger().info("client {} shutdown" , client->get_myaddrs());
@@ -462,8 +463,6 @@ class SyntheticWorkload {
          client->stop();
          return client->shutdown();
        });
-     }).then([this] {
-       available_clients.clear();
      });
    }
 

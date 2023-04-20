@@ -166,6 +166,10 @@ public:
   uint64_t get_features() const {
     if (features)
       return features;
+#ifdef WITH_SEASTAR
+    // In crimson, conn is independently maintained outside Message.
+    ceph_abort();
+#endif
     return get_connection()->get_features();
   }
 

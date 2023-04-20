@@ -22,8 +22,9 @@
 #endif
 
 using std::ostream;
-using namespace crimson::net;
 using crimson::common::local_conf;
+
+namespace crimson::net {
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    ChainedDispatchers& dispatchers)
@@ -137,6 +138,14 @@ seastar::socket_address SocketConnection::get_local_address() const {
   return socket->get_local_address();
 }
 
+ConnectionRef
+SocketConnection::get_local_shared_foreign_from_this()
+{
+  assert(seastar::this_shard_id() == shard_id());
+  return make_local_shared_foreign(
+      seastar::make_foreign(shared_from_this()));
+}
+
 void SocketConnection::print(ostream& out) const {
     out << (void*)this << " ";
     messenger.print(out);
@@ -150,3 +159,5 @@ void SocketConnection::print(ostream& out) const {
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }
+
+} // namespace crimson::net
