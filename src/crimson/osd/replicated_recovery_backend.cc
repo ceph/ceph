@@ -455,17 +455,17 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
   }
   return interruptor::make_interruptible(interruptor::when_all_succeed(
       backend->omap_get_header(coll, ghobject_t(oid)).handle_error_interruptible<false>(
-	crimson::os::FuturizedStore::read_errorator::all_same_way(
+	crimson::os::FuturizedStore::Shard::read_errorator::all_same_way(
 	  [oid] (const std::error_code& e) {
 	  logger().debug("read_metadata_for_push_op, error {} when getting omap header: {}", e, oid);
 	  return seastar::make_ready_future<bufferlist>();
 	})),
       interruptor::make_interruptible(store->get_attrs(coll, ghobject_t(oid)))
       .handle_error_interruptible<false>(
-	crimson::os::FuturizedStore::get_attrs_ertr::all_same_way(
+	crimson::os::FuturizedStore::Shard::get_attrs_ertr::all_same_way(
 	  [oid] (const std::error_code& e) {
 	  logger().debug("read_metadata_for_push_op, error {} when getting attrs: {}", e, oid);
-	  return seastar::make_ready_future<crimson::os::FuturizedStore::attrs_t>();
+	  return seastar::make_ready_future<crimson::os::FuturizedStore::Shard::attrs_t>();
 	}))
   )).then_unpack_interruptible([&new_progress, push_op](auto bl, auto attrs) {
     if (bl.length() == 0) {
@@ -593,7 +593,7 @@ ReplicatedRecoveryBackend::read_omap_for_push_op(
       return seastar::make_ready_future<seastar::stop_iteration>(
         stop ? seastar::stop_iteration::yes : seastar::stop_iteration::no
       );
-    }, crimson::os::FuturizedStore::read_errorator::assert_all{});
+    }, crimson::os::FuturizedStore::Shard::read_errorator::assert_all{});
   });
 }
 

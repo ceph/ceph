@@ -13,16 +13,29 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore {
 
+std::ostream& operator<<(std::ostream& out, const block_shard_info_t& sf)
+{
+  out << "("
+      << "size=" << sf.size
+      << ", segments=" <<sf.segments
+      << ", tracker_offset=" <<sf.tracker_offset
+      << ", first_segment_offset=" <<sf.first_segment_offset
+      <<")";
+  return out;
+}
+
 std::ostream& operator<<(std::ostream& out, const block_sm_superblock_t& sb)
 {
   out << "superblock("
-      << "size=" << sb.size
+      << "shard_num=" << sb.shard_num
       << ", segment_size=" << sb.segment_size
       << ", block_size=" << sb.block_size
-      << ", segments=" << sb.segments
-      << ", tracker_offset=" << sb.tracker_offset
-      << ", first_segment_offset=" << sb.first_segment_offset
-      << ", config=" << sb.config
+      << ", shard_info:";
+  for (auto &sf : sb.shard_infos) {
+    out << sf
+        << ",";
+  }
+  out << "config=" << sb.config
       << ")";
   return out;
 }

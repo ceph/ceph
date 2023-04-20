@@ -40,7 +40,7 @@ PerShardState::PerShardState(
   PerfCounters *recoverystate_perf,
   crimson::os::FuturizedStore &store)
   : whoami(whoami),
-    store(store),
+    store(store.get_sharded_store()),
     perf(perf), recoverystate_perf(recoverystate_perf),
     throttler(crimson::common::local_conf()),
     next_tid(
