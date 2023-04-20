@@ -194,7 +194,6 @@ struct DBOpUserPrepareInfo {
   string user_quota = ":user_quota";
   string type = ":type";
   string mfa_ids = ":mfa_ids";
-  string assumed_role_arn = ":assumed_role_arn";
   string user_attrs = ":user_attrs";
   string user_ver = ":user_vers";
   string user_ver_tag = ":user_ver_tag";
@@ -685,10 +684,10 @@ class InsertUserOp : virtual public DBOp {
                            AccessKeysID, AccessKeysSecret, AccessKeys, SwiftKeys,\
                            SubUsers, Suspended, MaxBuckets, OpMask, UserCaps, Admin, \
                            System, PlacementName, PlacementStorageClass, PlacementTags, \
-                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, AssumedRoleARN, \
+                           BucketQuota, TempURLKeys, UserQuota, Type, MfaIDs, \
                            UserAttrs, UserVersion, UserVersionTag) \
                           VALUES ({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, \
-                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
+                              {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {});";
 
   public:
     virtual ~InsertUserOp() {}
@@ -706,8 +705,8 @@ class InsertUserOp : virtual public DBOp {
           params.op.user.placement_tags, params.op.user.bucket_quota,
           params.op.user.temp_url_keys, params.op.user.user_quota,
           params.op.user.type, params.op.user.mfa_ids,
-          params.op.user.assumed_role_arn, params.op.user.user_attrs,
-          params.op.user.user_ver, params.op.user.user_ver_tag);
+          params.op.user.user_attrs, params.op.user.user_ver,
+          params.op.user.user_ver_tag);
     }
 
 };
