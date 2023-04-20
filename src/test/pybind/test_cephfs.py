@@ -830,6 +830,12 @@ def test_disk_quota_exceeeded_error(testdir):
     fd = cephfs.open(b'/dir-1/file-1', 'w', 0o755)
     cephfs.ftruncate(fd, 4092)
     cephfs.lseek(fd, 4090, os.SEEK_SET)
+
+    # Wait for quota to be enforced. The libcephfs will take at most around 6
+    # seconds to flush the dirty Fx caps back to MDS. While the kclient will
+    # take at most around 61 seconds instead.
+    time.sleep(100)
+
     assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz1234567890qwertyuioddd", -1)
     cephfs.close(fd)
     cephfs.unlink(b"/dir-1/file-1")
