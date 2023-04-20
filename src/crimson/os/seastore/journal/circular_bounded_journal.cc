@@ -171,6 +171,11 @@ Journal::replay_ret CircularBoundedJournal::scan_valid_record_delta(
 	  assert(cursor_addr == get_journal_end());
 	  cursor_addr = get_records_start();
 	  ++expected_seq;
+	  paddr_t addr = convert_abs_addr_to_paddr(
+	    cursor_addr,
+	    get_device_id());
+	  write_result.start_seq.offset = addr;
+	  write_result.start_seq.segment_seq = expected_seq;
 	  is_rolled = true;
 	}
 	paddr_t addr = convert_abs_addr_to_paddr(
