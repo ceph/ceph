@@ -35,7 +35,7 @@
 
 class OSDriver : public MapCacher::StoreDriver<std::string, ceph::buffer::list> {
 #ifdef WITH_SEASTAR
-  using ObjectStoreT = crimson::os::FuturizedStore;
+  using ObjectStoreT = crimson::os::FuturizedStore::Shard;
   using CollectionHandleT = ObjectStoreT::CollectionRef;
 #else
   using ObjectStoreT = ObjectStore;

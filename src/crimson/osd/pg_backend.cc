@@ -1264,7 +1264,7 @@ void PGBackend::clone(
 }
 
 using get_omap_ertr =
-  crimson::os::FuturizedStore::read_errorator::extend<
+  crimson::os::FuturizedStore::Shard::read_errorator::extend<
     crimson::ct_error::enodata>;
 using get_omap_iertr =
   ::crimson::interruptible::interruptible_errorator<
@@ -1272,9 +1272,9 @@ using get_omap_iertr =
     get_omap_ertr>;
 static
 get_omap_iertr::future<
-  crimson::os::FuturizedStore::omap_values_t>
+  crimson::os::FuturizedStore::Shard::omap_values_t>
 maybe_get_omap_vals_by_keys(
-  crimson::os::FuturizedStore* store,
+  crimson::os::FuturizedStore::Shard* store,
   const crimson::os::CollectionRef& coll,
   const object_info_t& oi,
   const std::set<std::string>& keys_to_get)
@@ -1288,9 +1288,9 @@ maybe_get_omap_vals_by_keys(
 
 static
 get_omap_iertr::future<
-  std::tuple<bool, crimson::os::FuturizedStore::omap_values_t>>
+  std::tuple<bool, crimson::os::FuturizedStore::Shard::omap_values_t>>
 maybe_get_omap_vals(
-  crimson::os::FuturizedStore* store,
+  crimson::os::FuturizedStore::Shard* store,
   const crimson::os::CollectionRef& coll,
   const object_info_t& oi,
   const std::string& start_after)
@@ -1541,7 +1541,7 @@ PGBackend::omap_get_vals_by_keys(
   delta_stats.num_rd++;
   return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get)
   .safe_then_interruptible(
-    [&osd_op] (crimson::os::FuturizedStore::omap_values_t&& vals) {
+    [&osd_op] (crimson::os::FuturizedStore::Shard::omap_values_t&& vals) {
       encode(vals, osd_op.outdata);
       return ll_read_errorator::now();
     }).handle_error_interruptible(
