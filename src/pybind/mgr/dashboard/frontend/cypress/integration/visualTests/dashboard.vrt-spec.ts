@@ -16,7 +16,6 @@ describe('Dashboard Landing Page', () => {
   it('should take screenshot of dashboard landing page', () => {
     login.navigateTo();
     login.doLogin();
-    cy.get('[aria-label="Details card"]').should('be.visible');
     cy.get('[aria-label="Status card"]').should('be.visible');
     cy.get('[aria-label="Inventory card"]').should('be.visible');
     cy.get('[aria-label="Cluster utilization card"]').should('be.visible');
