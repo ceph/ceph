@@ -319,23 +319,6 @@ std::tuple<int, rgw::sal::RGWRole*> STSService::getRoleInfo(const DoutPrefixProv
   }
 }
 
-int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y)
-{
-  int ret = 0;
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(user_id);
-  if ((ret = user->load_user(dpp, y)) < 0) {
-    return -ERR_NO_SUCH_ENTITY;
-  }
-
-  user->get_info().assumed_role_arn = arn;
-
-  ret = user->store_user(dpp, y, false, &user->get_info());
-  if (ret < 0) {
-    return -ERR_INTERNAL_ERROR;
-  }
-  return ret;
-}
-
 AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(const DoutPrefixProvider *dpp, AssumeRoleWithWebIdentityRequest& req)
 {
   AssumeRoleWithWebIdentityResponse response;
@@ -443,13 +426,6 @@ AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp,
                                               boost::none,
                                               boost::none,
                                               user_id, nullptr);
-  if (response.retCode < 0) {
-    return response;
-  }
-
-  //Save ARN with the user
-  string arn = response.user.getARN();
-  response.retCode = storeARN(dpp, arn, y);
   if (response.retCode < 0) {
     return response;
   }
