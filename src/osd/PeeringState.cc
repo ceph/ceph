@@ -852,7 +852,7 @@ void PeeringState::init_hb_stamps()
 {
   if (is_primary()) {
     // we care about all other osds in the acting set
-    hb_stamps.resize(acting.size() - 1);
+    hb_stamps.resize(acting.size());
     unsigned i = 0;
     for (auto p : acting) {
       if (p == CRUSH_ITEM_NONE || p == get_primary().osd) {
