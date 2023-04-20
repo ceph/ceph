@@ -1,11 +1,19 @@
 <div class="row">
   <div class="col-sm-12 col-lg-12">
     <div>
-      <cd-table-actions class="btn-group mb-4"
+      <cd-table-actions class="btn-group mb-4 me-2"
                         [permission]="permission"
                         [selection]="selection"
                         [tableActions]="createTableActions">
       </cd-table-actions>
+      <span *ngIf="showMigrateAction">
+        <cd-table-actions class="btn-group mb-4 me-2 secondary"
+                          [permission]="permission"
+                          [btnColor]="'light'"
+                          [selection]="selection"
+                          [tableActions]="migrateTableAction">
+        </cd-table-actions>
+      </span>
     </div>
     <div class="card">
       <div class="card-header"

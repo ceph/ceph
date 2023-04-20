@@ -139,6 +139,7 @@ export class ActionLabelsI18n {
   RESYNC: string;
   EXPORT: string;
   IMPORT: any;
+  MIGRATE: string;
 
   constructor() {
     /* Create a new item */
@@ -147,6 +148,8 @@ export class ActionLabelsI18n {
     this.EXPORT = $localize`Export`;
 
     this.IMPORT = $localize`Import`;
+
+    this.MIGRATE = $localize`Migrate to Multi-Site`;
 
     /* Destroy an existing item */
     this.DELETE = $localize`Delete`;
