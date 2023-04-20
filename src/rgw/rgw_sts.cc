@@ -316,24 +316,6 @@ std::tuple<int, RGWRole> STSService::getRoleInfo(const DoutPrefixProvider *dpp,
   }
 }
 
-int STSService::storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y)
-{
-  int ret = 0;
-  RGWUserInfo info;
-  if (ret = rgw_get_user_info_by_uid(dpp, store->ctl()->user, user_id, info, y); ret < 0) {
-    return -ERR_NO_SUCH_ENTITY;
-  }
-
-  info.assumed_role_arn = arn;
-
-  RGWObjVersionTracker objv_tracker;
-  if (ret = rgw_store_user_info(dpp, store->ctl()->user, info, &info, &objv_tracker, real_time(),
-				false, y); ret < 0) {
-    return -ERR_INTERNAL_ERROR;
-  }
-  return ret;
-}
-
 AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req)
 {
   AssumeRoleWithWebIdentityResponse response;
@@ -441,13 +423,6 @@ AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp,
                                               boost::none,
                                               boost::none,
                                               user_id, nullptr);
-  if (response.retCode < 0) {
-    return response;
-  }
-
-  //Save ARN with the user
-  string arn = response.user.getARN();
-  response.retCode = storeARN(dpp, arn, y);
   if (response.retCode < 0) {
     return response;
   }
