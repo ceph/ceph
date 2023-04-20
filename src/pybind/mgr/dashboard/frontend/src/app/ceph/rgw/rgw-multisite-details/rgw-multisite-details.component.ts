@@ -24,6 +24,7 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TimerService } from '~/app/shared/services/timer.service';
 import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
+import { RgwMultisiteMigrateComponent } from '../rgw-multisite-migrate/rgw-multisite-migrate.component';
 import { RgwMultisiteZoneDeletionFormComponent } from '../models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
 import { RgwMultisiteZonegroupDeletionFormComponent } from '../models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 import { RgwMultisiteRealmFormComponent } from '../rgw-multisite-realm-form/rgw-multisite-realm-form.component';
@@ -42,13 +43,15 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
 
   messages = {
     noDefaultRealm: $localize`Please create a default realm first to enable this feature`,
-    noMasterZone: $localize`Please create a master zone for each zonegroups to enable this feature`
+    noMasterZone: $localize`Please create a master zone for each zonegroup to enable this feature`,
+    disableMigrate: $localize`Deployment is already migrated to multi-site system.`
   };
 
   icons = Icons;
   permission: Permission;
   selection = new CdTableSelection();
   createTableActions: CdTableAction[];
+  migrateTableAction: CdTableAction[];
   loadingIndicator = true;
   nodes: object[] = [];
   treeOptions: ITreeOptions = {
@@ -77,6 +80,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   multisiteInfo: object[] = [];
   defaultsInfo: string[] = [];
   title: string = 'Edit';
+  showMigrateAction: boolean = false;
 
   constructor(
     private modalService: ModalService,
@@ -109,7 +113,14 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       name: this.actionLabels.CREATE + ' Zone',
       click: () => this.openModal('zone')
     };
+    const migrateMultsiteAction: CdTableAction = {
+      permission: 'read',
+      icon: Icons.exchange,
+      name: this.actionLabels.MIGRATE,
+      click: () => this.openMigrateModal()
+    };
     this.createTableActions = [createRealmAction, createZonegroupAction, createZoneAction];
+    this.migrateTableAction = [migrateMultsiteAction];
   }
 
   openModal(entity: any, edit = false) {
@@ -135,6 +146,15 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         size: 'lg'
       });
     }
+  }
+
+  openMigrateModal() {
+    const initialState = {
+      multisiteInfo: this.multisiteInfo
+    };
+    this.bsModalRef = this.modalService.show(RgwMultisiteMigrateComponent, initialState, {
+      size: 'lg'
+    });
   }
 
   ngOnInit() {
@@ -257,6 +277,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     }
     this.realmIds = [];
     this.zoneIds = [];
+    this.getDisableMigrate();
     return allNodes;
   }
 
@@ -310,6 +331,21 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         return false;
       }
     }
+  }
+
+  getDisableMigrate() {
+    if (
+      this.realms.length === 0 &&
+      this.zonegroups.length === 1 &&
+      this.zonegroups[0].name === 'default' &&
+      this.zones.length === 1 &&
+      this.zones[0].name === 'default'
+    ) {
+      this.showMigrateAction = true;
+    } else {
+      this.showMigrateAction = false;
+    }
+    return this.showMigrateAction;
   }
 
   delete(node: TreeNode) {

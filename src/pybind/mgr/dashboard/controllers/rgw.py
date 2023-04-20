@@ -12,6 +12,7 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
+from ..services.orchestrator import OrchClient
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -106,6 +107,23 @@ class RgwStatus(BaseController):
             result = instance.get_multisite_sync_status()
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')  # noqa: E501 pylint: disable=line-too-long
+        return result
+
+    @Endpoint(method='PUT')
+    # pylint: disable=W0102
+    def migrate(self, realm_name=None, zonegroup_name=None, zone_name=None,
+                zonegroup_endpoints: List[str] = [], zone_endpoints: List[str] = [],
+                user=None, daemon_name: Optional[str] = None):
+        try:
+            instance = RgwClient.admin_instance(daemon_name=daemon_name)
+            result = instance.migrate_to_multisite(realm_name, zonegroup_name, zone_name,
+                                                   zonegroup_endpoints, zone_endpoints, user)
+            orch = OrchClient.instance()
+            daemons = orch.services.list_daemons(service_name='rgw')
+            for daemon in daemons:
+                orch.daemons.action(action='reload', daemon_name=daemon.daemon_id)
+        except NoRgwDaemonsException as e:
+            raise DashboardException(e, http_status_code=404, component='rgw')
         return result
 
 
