@@ -37,10 +37,6 @@ Options
 
     Create an erasure pool.
 
-.. option:: -f, --filestore
-
-    Use filestore as the osd objectstore backend.
-
 .. option:: --hitset <pool> <hit_set_type>
 
     Enable hitset tracking.

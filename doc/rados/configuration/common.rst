@@ -103,20 +103,6 @@ Reference`_.
 OSDs
 ====
 
-When Ceph production clusters deploy :term:`Ceph OSD Daemons`, the typical
-arrangement is that one node has one OSD daemon running Filestore on one
-storage device. BlueStore is now the default back end, but when using Filestore
-you must specify a journal size. For example:
-
-.. code-block:: ini
-
-    [osd]
-    osd_journal_size = 10000
-
-    [osd.0]
-    host = {hostname} #manual deployments only.
-
-
 By default, Ceph expects to store a Ceph OSD Daemon's data on the following
 path::
 
