@@ -577,6 +577,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       .subscribe(
         () => {},
         (error) => {
+          error.preventDefault();
           if (primary) {
             this.errorMessage = error.error['detail'].replace(/\[.*?\]\s*/, '');
             request.force = true;
