@@ -831,8 +831,7 @@ Per mapping (block device) `rbd device map` options:
   drop discards that are too small.  For bluestore, the recommended setting is
   bluestore_min_alloc_size (currently set to 4K for all types of drives,
   previously used to be set to 64K for hard disk drives and 16K for
-  solid-state drives).  For filestore with filestore_punch_hole = false, the
-  recommended setting is image object size (typically 4M).
+  solid-state drives).
 
 * crush_location=x - Specify the location of the client in terms of CRUSH
   hierarchy (since 5.8).  This is a set of key-value pairs separated from
