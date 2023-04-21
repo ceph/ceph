@@ -8,12 +8,12 @@
 
 class RGWD4NCache {
   public:
-    CephContext *cct;
+    CephContext* cct;
 
     RGWD4NCache() {}
     RGWD4NCache(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
 
-    void init(CephContext *_cct) {
+    void init(CephContext* _cct) {
       cct = _cct;
       host = cct->_conf->rgw_d4n_host;
       port = cct->_conf->rgw_d4n_port;

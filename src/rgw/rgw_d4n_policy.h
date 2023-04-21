@@ -23,6 +23,7 @@ class RGWD4NPolicy {
     int find_client(cpp_redis::client *client);
     int exist_key(std::string key);
 
+    int update_gw(CacheBlock* block);
     int gwf_get_block(CacheBlock* block);
     int gwf_eviction();
     bool should_cache(int objSize, int minSize); /* In bytes */

@@ -21,7 +21,7 @@ struct CacheBlock {
 class RGWDirectory {
   public:
     RGWDirectory() {}
-    CephContext *cct;
+    CephContext* cct;
 };
 
 class RGWBlockDirectory: RGWDirectory {
@@ -29,7 +29,7 @@ class RGWBlockDirectory: RGWDirectory {
     RGWBlockDirectory() {}
     RGWBlockDirectory(std::string blockHost, int blockPort):host(blockHost), port(blockPort) {}
     
-    void init(CephContext *_cct) {
+    void init(CephContext* _cct) {
       cct = _cct;
       host = cct->_conf->rgw_d4n_host;
       port = cct->_conf->rgw_d4n_port;
