@@ -143,13 +143,8 @@ void CreatePrimaryRequest<I>::handle_create_snapshot(int r) {
 
 template <typename I>
 void CreatePrimaryRequest<I>::refresh_image() {
-  // if snapshot created via remote RPC, refresh is required to retrieve
-  // the snapshot id
-  if (m_snap_id == nullptr) {
-    unlink_peer();
-    return;
-  }
-
+  // refresh is required to retrieve the snapshot id (if snapshot
+  // created via remote RPC) and complete flag (regardless)
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 15) << dendl;
 
@@ -170,7 +165,7 @@ void CreatePrimaryRequest<I>::handle_refresh_image(int r) {
     return;
   }
 
-  {
+  if (m_snap_id != nullptr) {
     std::shared_lock image_locker{m_image_ctx->image_lock};
     *m_snap_id = m_image_ctx->get_snap_id(
       cls::rbd::MirrorSnapshotNamespace{}, m_snap_name);
@@ -209,13 +204,14 @@ void CreatePrimaryRequest<I>::unlink_peer() {
       // or if it's not linked with any peer (happens if mirroring is enabled
       // on a pool with no peers configured or if UnlinkPeerRequest gets
       // interrupted)
-      if (info->mirror_peer_uuids.size() == 0) {
+      if (!info->mirror_peer_uuids.empty() &&
+          info->mirror_peer_uuids.count(peer) == 0) {
+        continue;
+      }
+      if (info->mirror_peer_uuids.empty() || !info->complete) {
         peer_uuid = peer;
         snap_id = snap_it.first;
         break;
-      }
-      if (info->mirror_peer_uuids.count(peer) == 0) {
-        continue;
       }
       count++;
       if (count == max_snapshots) {
