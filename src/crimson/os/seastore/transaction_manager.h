@@ -292,6 +292,125 @@ public:
   }
 
   /**
+   * remap_pin
+   *
+   * Remap original extent to new extents.
+   * Return the pins of new extent.
+   */
+  struct remap_entry {
+    extent_len_t offset;
+    extent_len_t len;
+    remap_entry(extent_len_t _offset, extent_len_t _len) {
+      offset = _offset;
+      len = _len;
+    }
+  };
+  using remap_pin_iertr = base_iertr;
+  template <std::size_t N>
+  using remap_pin_ret = remap_pin_iertr::future<std::array<LBAMappingRef, N>>;
+  template <typename T, std::size_t N>
+  remap_pin_ret<N> remap_pin(
+    Transaction &t,
+    LBAMappingRef &&pin,
+    std::array<remap_entry, N> remaps) {
+
+#ifndef NDEBUG
+    std::sort(remaps.begin(), remaps.end(),
+      [](remap_entry x, remap_entry y) {
+        return x.offset < y.offset;
+    });
+    auto original_len = pin->get_length();
+    extent_len_t total_remap_len = 0;
+    extent_len_t last_offset = 0;
+    extent_len_t last_len = 0;
+
+    for (auto &remap : remaps) {
+      auto remap_offset = remap.offset;
+      auto remap_len = remap.len;
+      total_remap_len += remap.len;
+      ceph_assert(remap_offset >= (last_offset + last_len));
+      last_offset = remap_offset;
+      last_len = remap_len;
+    }
+    ceph_assert(total_remap_len < original_len);
+#endif
+
+    // FIXME: paddr can be absolute and pending
+    ceph_assert(pin->get_val().is_absolute());
+    return cache->get_extent_if_cached(
+      t, pin->get_val(), T::TYPE
+    ).si_then([this, &t, remaps,
+              original_laddr = pin->get_key(),
+              original_paddr = pin->get_val(),
+              original_len = pin->get_length()](auto ext) {
+      std::optional<ceph::bufferptr> original_bptr;
+      LOG_PREFIX(TransactionManager::remap_pin);
+      SUBDEBUGT(seastore_tm,
+        "original laddr: {}, original paddr: {}, original length: {},"
+        " remap to {} extents",
+        t, original_laddr, original_paddr, original_len, remaps.size());
+      if (ext) {
+        // FIXME: cannot and will not remap a dirty extent for now.
+        ceph_assert(!ext->is_dirty());
+        ceph_assert(!ext->is_mutable());
+        ceph_assert(ext->get_length() == original_len);
+        original_bptr = ext->get_bptr();
+      }
+      return seastar::do_with(
+        std::array<LBAMappingRef, N>(),
+        0,
+        std::move(original_bptr),
+        std::vector<remap_entry>(remaps.begin(), remaps.end()),
+        [this, &t, original_laddr, original_paddr, original_len]
+        (auto &ret, auto &count, auto &original_bptr, auto &remaps) {
+        return dec_ref(t, original_laddr
+        ).si_then([this, &t, &original_bptr, &ret, &count, &remaps,
+                   original_laddr, original_paddr, original_len](auto) {
+          return trans_intr::do_for_each(
+            remaps.begin(),
+            remaps.end(),
+            [this, &t, &original_bptr, &ret, &count,
+              original_laddr, original_paddr, original_len](auto &remap) {
+            LOG_PREFIX(TransactionManager::remap_pin);
+            auto remap_offset = remap.offset;
+            auto remap_len = remap.len;
+            auto remap_laddr = original_laddr + remap_offset;
+            auto remap_paddr = original_paddr.add_offset(remap_offset);
+            ceph_assert(remap_len < original_len);
+            ceph_assert(remap_offset + remap_len <= original_len);
+            ceph_assert(remap_len != 0);
+            ceph_assert(remap_offset % cache->get_block_size() == 0);
+            ceph_assert(remap_len % cache->get_block_size() == 0);
+            SUBDEBUGT(seastore_tm,
+              "remap laddr: {}, remap paddr: {}, remap length: {}", t,
+              remap_laddr, remap_paddr, remap_len);
+            return alloc_remapped_extent<T>(
+              t,
+              remap_laddr,
+              remap_paddr,
+              remap_len,
+              original_laddr,
+              std::move(original_bptr)
+            ).si_then([&ret, &count, remap_laddr](auto &&npin) {
+              ceph_assert(npin->get_key() == remap_laddr);
+              ret[count++] = std::move(npin);
+            });
+          });
+        }).handle_error_interruptible(
+           remap_pin_iertr::pass_further{},
+           crimson::ct_error::assert_all{
+              "TransactionManager::remap_pin hit invalid error"
+           }
+        ).si_then([&ret, &count] {
+          ceph_assert(count == N);
+          return remap_pin_iertr::make_ready_future<
+            std::array<LBAMappingRef, N>>(std::move(ret));
+        });
+      });
+    });
+  }
+
+  /**
    * map_existing_extent
    *
    * Allocates a new extent at given existing_paddr that must be absolute and
