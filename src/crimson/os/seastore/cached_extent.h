@@ -748,6 +748,12 @@ protected:
     return new T(std::forward<Args>(args)...);
   }
 
+  template <typename T>
+  static TCachedExtentRef<T> make_placeholder_cached_extent_ref(
+    extent_len_t length) {
+    return new T(length);
+  }
+
   void reset_prior_instance() {
     prior_instance.reset();
   }
