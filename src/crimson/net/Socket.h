@@ -6,7 +6,6 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
-#include <seastar/net/packet.hh>
 
 #include "include/buffer.h"
 
@@ -67,15 +66,13 @@ public:
   /// read the requested number of bytes into a bufferlist
   seastar::future<bufferlist> read(size_t bytes);
 
-  using tmp_buf = seastar::temporary_buffer<char>;
-  using packet = seastar::net::packet;
-  seastar::future<tmp_buf> read_exactly(size_t bytes);
+  seastar::future<bufferptr> read_exactly(size_t bytes);
 
-  seastar::future<> write(packet &&buf);
+  seastar::future<> write(bufferlist);
 
   seastar::future<> flush();
 
-  seastar::future<> write_flush(packet &&buf);
+  seastar::future<> write_flush(bufferlist);
 
   // preemptively disable further reads or writes, can only be shutdown once.
   void shutdown();

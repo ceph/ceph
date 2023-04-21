@@ -366,27 +366,30 @@ ProtocolV2::banner_exchange(bool is_connect)
       // 2. read peer banner
       unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(ceph_le16);
       INTERCEPT_CUSTOM(custom_bp_t::BANNER_READ, bp_type_t::READ);
-      return frame_assembler->read_exactly(banner_len); // or read exactly?
-    }).then([this] (auto bl) {
+      return frame_assembler->read_exactly(banner_len);
+    }).then([this](auto bptr) {
       // 3. process peer banner and read banner_payload
       unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
       logger().debug("{} RECV({}) banner: \"{}\"",
-                     conn, bl.size(),
-                     std::string((const char*)bl.get(), banner_prefix_len));
+                     conn, bptr.length(),
+                     std::string(bptr.c_str(), banner_prefix_len));
 
-      if (memcmp(bl.get(), CEPH_BANNER_V2_PREFIX, banner_prefix_len) != 0) {
-        if (memcmp(bl.get(), CEPH_BANNER, strlen(CEPH_BANNER)) == 0) {
+      if (memcmp(bptr.c_str(), CEPH_BANNER_V2_PREFIX, banner_prefix_len) != 0) {
+        if (memcmp(bptr.c_str(), CEPH_BANNER, strlen(CEPH_BANNER)) == 0) {
           logger().warn("{} peer is using V1 protocol", conn);
         } else {
           logger().warn("{} peer sent bad banner", conn);
         }
         abort_in_fault();
       }
-      bl.trim_front(banner_prefix_len);
+
+      bptr.set_offset(bptr.offset() + banner_prefix_len);
+      bptr.set_length(bptr.length() - banner_prefix_len);
+      assert(bptr.length() == sizeof(ceph_le16));
 
       uint16_t payload_len;
       bufferlist buf;
-      buf.append(buffer::create(std::move(bl)));
+      buf.append(std::move(bptr));
       auto ti = buf.cbegin();
       try {
         decode(payload_len, ti);
@@ -1886,7 +1889,7 @@ void ProtocolV2::execute_server_wait()
   trigger_state(state_t::SERVER_WAIT, io_state_t::none, false);
   gated_execute("execute_server_wait", conn, [this] {
     return frame_assembler->read_exactly(1
-    ).then([this](auto bl) {
+    ).then([this](auto bptr) {
       logger().warn("{} SERVER_WAIT got read, abort", conn);
       abort_in_fault();
     }).handle_exception([this](std::exception_ptr eptr) {
