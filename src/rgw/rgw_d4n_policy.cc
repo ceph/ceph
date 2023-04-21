@@ -42,6 +42,56 @@ int RGWD4NPolicy::exist_key(std::string key) {
   return result;
 }
 
+int RGWD4NPolicy::update_gw(CacheBlock* block) {
+  std::string result;
+  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory"; // should have "build_index" method -Sam
+  int globalWeight;
+
+  if (!client.is_connected()) {
+    find_client(&client);
+  }
+
+  if (exist_key(key)) {
+    try {
+      client.hget(key, "globalWeight", [&globalWeight](cpp_redis::reply &reply) {
+        if (!reply.is_null()) {
+          globalWeight = reply.as_integer();
+        }
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+    } catch(std::exception &e) {
+      return -2;
+    }
+  } else {
+    return -1;
+  }
+
+  try {
+    int age;
+    // get local cache age
+	
+    /* Update global weight */
+    globalWeight += age;
+    
+    client.hset(key, "globalWeight", std::to_string(globalWeight), [&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_string();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != "OK") {
+      return -1;
+    }
+  } catch(std::exception &e) {
+    return -2;
+  }
+
+  return 0;
+}
+
 int RGWD4NPolicy::gwf_get_block(CacheBlock* block) {
   int result = -1;
   std::string response;
@@ -81,7 +131,7 @@ int RGWD4NPolicy::gwf_get_block(CacheBlock* block) {
       }
 
       /* Check local cache */
-      if (location == (host + ":" + port)) {
+      if (location == (host + ":" + std::to_string(port))) {
 	  // get local weight from cache
 	  // add age to local weight
 	  // update in cache
@@ -99,7 +149,7 @@ int RGWD4NPolicy::gwf_get_block(CacheBlock* block) {
 	  try {
 	    client.hget(key, "globalWeight", [&globalWeight](cpp_redis::reply& reply) {
 	      if (!reply.is_null()) {
-		globalWeight = std::stoi(reply.as_string());
+		globalWeight = reply.as_integer();
 	      }
 	    });
 
@@ -111,7 +161,7 @@ int RGWD4NPolicy::gwf_get_block(CacheBlock* block) {
 	  // add age to global weight
 	  
 	  try {
-	    client.hset(key, "globalWeight", globalWeight, [&response](cpp_redis::reply& reply) {
+	    client.hset(key, "globalWeight", std::to_string(globalWeight), [&response](cpp_redis::reply& reply) {
 	      if (!reply.is_null()) {
 	        response = reply.as_string();
 	      }
@@ -185,7 +235,7 @@ int RGWD4NPolicy::gwf_eviction() {
 	try {
 	  client.hget(key, "globalWeight", [&globalWeight](cpp_redis::reply& reply) {
 	    if (!reply.is_null()) {
-	      globalWeight = reply.as_string();
+	      globalWeight = reply.as_integer();
 	    }
 	  });
 
@@ -199,8 +249,9 @@ int RGWD4NPolicy::gwf_eviction() {
 	  // localWeight += globalWeight;
 	  globalWeight = 0;
 
-	  updatedWeights.push_back("globalWeight", globalWeight);
+	  updatedWeights.push_back({"globalWeight", std::to_string(globalWeight)});
 
+	  /*
 	  try {
 	    client.hset(key, [&response](cpp_redis::reply& reply) {
 	      if (!reply.is_null()) {
@@ -216,18 +267,21 @@ int RGWD4NPolicy::gwf_eviction() {
 	  if (response != "OK")
 	    return -2;
 	  }
+	  */
 	}
       }
 
       // get cache node with minimum average weight
-      int avgWeight = 0; //cache node's avg weight
+      //int avgWeight = 0; //cache node's avg weight
 
+      /*
       if (localWeight < avgWeight) {
         // push block to remote cache
       }
+      */
     }
 
-    globalWeight += localWeight;
+    //globalWeight += localWeight;
     // remove victim from local cache
     // update age
     // update in cache
