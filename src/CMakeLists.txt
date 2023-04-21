@@ -570,7 +570,7 @@ endif()
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
   SKIP_RPATH TRUE)
-if(NOT APPLE AND NOT FREEBSD)
+if(NOT APPLE AND NOT FREEBSD AND NOT WIN32)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
   # prefer the local symbol definitions when binding references to global
