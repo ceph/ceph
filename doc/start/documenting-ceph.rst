@@ -1,3 +1,5 @@
+.. _documenting_ceph:
+
 ==================
  Documenting Ceph
 ==================
