@@ -5,6 +5,7 @@
 
 #include <seastar/core/sleep.hh>
 #include <seastar/core/when_all.hh>
+#include <seastar/net/packet.hh>
 
 #include "crimson/common/log.h"
 #include "Errors.h"
@@ -19,8 +20,8 @@ seastar::logger& logger() {
   return crimson::get_logger(ceph_subsys_ms);
 }
 
-using tmp_buf = Socket::tmp_buf;
-using packet = Socket::packet;
+using tmp_buf = seastar::temporary_buffer<char>;
+using packet = seastar::net::packet;
 
 // an input_stream consumer that reads buffer segments into a bufferlist up to
 // the given number of remaining bytes
@@ -141,36 +142,37 @@ Socket::read(size_t bytes)
 #endif
 }
 
-seastar::future<seastar::temporary_buffer<char>>
+seastar::future<bufferptr>
 Socket::read_exactly(size_t bytes) {
 #ifdef UNIT_TESTS_BUILT
   return try_trap_pre(next_trap_read).then([bytes, this] {
 #endif
     if (bytes == 0) {
-      return seastar::make_ready_future<seastar::temporary_buffer<char>>();
+      return seastar::make_ready_future<bufferptr>();
     }
     return in.read_exactly(bytes).then([bytes](auto buf) {
-      if (buf.size() < bytes) {
+      bufferptr ptr(buffer::create(buf.share()));
+      if (ptr.length() < bytes) {
         throw std::system_error(make_error_code(error::read_eof));
       }
       inject_failure();
       return inject_delay(
-      ).then([buf = std::move(buf)]() mutable {
-        return seastar::make_ready_future<tmp_buf>(std::move(buf));
+      ).then([ptr = std::move(ptr)]() mutable {
+        return seastar::make_ready_future<bufferptr>(std::move(ptr));
       });
     });
 #ifdef UNIT_TESTS_BUILT
-  }).then([this](auto buf) {
+  }).then([this](auto ptr) {
     return try_trap_post(next_trap_read
-    ).then([buf = std::move(buf)]() mutable {
-      return std::move(buf);
+    ).then([ptr = std::move(ptr)]() mutable {
+      return std::move(ptr);
     });
   });
 #endif
 }
 
 seastar::future<>
-Socket::write(packet &&buf)
+Socket::write(bufferlist buf)
 {
 #ifdef UNIT_TESTS_BUILT
   return try_trap_pre(next_trap_write
@@ -179,7 +181,8 @@ Socket::write(packet &&buf)
     inject_failure();
     return inject_delay(
     ).then([buf = std::move(buf), this]() mutable {
-      return out.write(std::move(buf));
+      packet p(std::move(buf));
+      return out.write(std::move(p));
     });
 #ifdef UNIT_TESTS_BUILT
   }).then([this] {
@@ -198,7 +201,7 @@ Socket::flush()
 }
 
 seastar::future<>
-Socket::write_flush(packet &&buf)
+Socket::write_flush(bufferlist buf)
 {
 #ifdef UNIT_TESTS_BUILT
   return try_trap_pre(next_trap_write
@@ -207,7 +210,8 @@ Socket::write_flush(packet &&buf)
     inject_failure();
     return inject_delay(
     ).then([buf = std::move(buf), this]() mutable {
-      return out.write(std::move(buf)
+      packet p(std::move(buf));
+      return out.write(std::move(p)
       ).then([this] {
         return out.flush();
       });

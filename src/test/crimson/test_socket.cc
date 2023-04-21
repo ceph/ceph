@@ -291,8 +291,10 @@ class Connection {
         });
       } else {
         data[0] = write_count;
-        return socket->write(seastar::net::packet(
-            reinterpret_cast<const char*>(&data), sizeof(data))
+        bufferlist bl;
+        bl.append(buffer::copy(
+          reinterpret_cast<const char*>(&data), sizeof(data)));
+        return socket->write(bl
         ).then([this] {
           return socket->flush();
         }).then([this] {
@@ -348,9 +350,9 @@ class Connection {
             });
           } else {
             return socket->read_exactly(DATA_SIZE * sizeof(uint64_t)
-            ).then([this](auto buf) {
+            ).then([this](auto bptr) {
               uint64_t read_data[DATA_SIZE];
-              std::memcpy(read_data, buf.get(), DATA_SIZE * sizeof(uint64_t));
+              std::memcpy(read_data, bptr.c_str(), DATA_SIZE * sizeof(uint64_t));
               verify_data_read(read_data);
             });
           }
