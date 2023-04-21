@@ -8,6 +8,9 @@ overrides:
       - slow request
       - MDS_CLIENT_LATE_RELEASE
       - t responding to mclientcaps
+      - Degraded data redundancy
+      - MDS_CLIENTS_LAGGY
+      - Reduced data availability
 tasks:
   - cephfs_test_runner:
       fail_on_skip: false
