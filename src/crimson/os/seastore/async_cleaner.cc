@@ -1462,6 +1462,7 @@ void SegmentCleaner::mark_space_used(
 {
   LOG_PREFIX(SegmentCleaner::mark_space_used);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  assert(len);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
@@ -1492,6 +1493,7 @@ void SegmentCleaner::mark_space_free(
 {
   LOG_PREFIX(SegmentCleaner::mark_space_free);
   assert(background_callback->get_state() >= state_t::SCAN_SPACE);
+  assert(len);
   // TODO: drop
   if (addr.get_addr_type() != paddr_types_t::SEGMENT) {
     return;
