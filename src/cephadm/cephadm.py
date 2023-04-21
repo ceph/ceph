@@ -2243,6 +2243,19 @@ def infer_image(func: FuncT) -> FuncT:
     return cast(FuncT, _infer_image)
 
 
+def require_image(func: FuncT) -> FuncT:
+    """
+    Require the global --image flag to be set
+    """
+    @wraps(func)
+    def _require_image(ctx: CephadmContext) -> Any:
+        if not ctx.image:
+            raise Error('This command requires the global --image option to be set')
+        return func(ctx)
+
+    return cast(FuncT, _require_image)
+
+
 def default_image(func: FuncT) -> FuncT:
     @wraps(func)
     def _default_image(ctx: CephadmContext) -> Any:
@@ -4882,6 +4895,7 @@ def _pull_image(ctx, image, insecure=False):
 ##################################
 
 
+@require_image
 @infer_image
 def command_inspect_image(ctx):
     # type: (CephadmContext) -> int
