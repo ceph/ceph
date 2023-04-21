@@ -896,6 +896,48 @@ public:
   }
 
   /**
+   * alloc_remapped_extent
+   *
+   * Allocates an EXIST_CLEAN extent. Use the buffer to fill the new extent
+   * if buffer exists.
+   */
+  template <typename T>
+  TCachedExtentRef<T> alloc_remapped_extent(
+    Transaction &t,
+    laddr_t remap_laddr,
+    paddr_t remap_paddr,
+    extent_len_t remap_length,
+    laddr_t original_laddr,
+    std::optional<ceph::bufferptr> &&original_bptr) {
+    LOG_PREFIX(Cache::alloc_remapped_extent);
+    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}",
+              t, T::TYPE, remap_length, remap_laddr);
+    assert(remap_laddr >= original_laddr);
+    TCachedExtentRef<T> ext;
+    if (original_bptr.has_value()) {
+      // shallow copy the buffer from original extent
+      auto nbp = ceph::bufferptr(
+        *original_bptr,
+        remap_laddr - original_laddr,
+        remap_length);
+      // ExtentPlacementManager::alloc_new_extent will make a new
+      // (relative/temp) paddr, so make extent directly
+      ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));
+    } else {
+      ext = CachedExtent::make_placeholder_cached_extent_ref<T>(remap_length);
+    }
+
+    ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
+	      remap_paddr,
+	      PLACEMENT_HINT_NULL,
+	      NULL_GENERATION,
+              t.get_trans_id());
+
+    t.add_fresh_extent(ext);
+    return ext;
+  }
+
+  /**
    * alloc_new_extent
    *
    * Allocates a fresh extent.  addr will be relative until commit.
