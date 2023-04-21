@@ -8081,6 +8081,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   size_t auxsize = 0;
   filepath path;
   MetaRequest *req;
+  bool flush_dirty_caps = false;
 
   if (aux)
     auxsize = aux->size();
@@ -8251,6 +8252,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
         stx->stx_size >= in->size) {
       if (stx->stx_size > in->size) {
+        flush_dirty_caps = is_root_quota_enabled(in, QUOTA_MAX_BYTES, perms);
+
         in->size = in->reported_size = stx->stx_size;
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
         mask &= ~(CEPH_SETATTR_SIZE);
@@ -8327,6 +8330,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     } else {
       mask &= ~CEPH_SETATTR_ATIME;
     }
+  }
+
+  if (flush_dirty_caps) {
+    check_caps(in, CHECK_CAPS_NODELAY);
   }
 
   if (!mask) {
@@ -11380,7 +11387,8 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
     in->size = totalwritten + offset;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-    if (is_quota_bytes_approaching(in, f->actor_perms)) {
+    if (is_root_quota_enabled(in, QUOTA_MAX_BYTES, f->actor_perms) ||
+        is_quota_bytes_approaching(in, f->actor_perms)) {
       check_caps(in, CHECK_CAPS_NODELAY);
     } else if (is_max_size_approaching(in)) {
       check_caps(in, 0);
@@ -16303,7 +16311,8 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
-      if (is_quota_bytes_approaching(in, fh->actor_perms)) {
+      if (is_root_quota_enabled(in, QUOTA_MAX_BYTES, fh->actor_perms) ||
+          is_quota_bytes_approaching(in, fh->actor_perms)) {
         check_caps(in, CHECK_CAPS_NODELAY);
       } else if (is_max_size_approaching(in)) {
 	check_caps(in, 0);
