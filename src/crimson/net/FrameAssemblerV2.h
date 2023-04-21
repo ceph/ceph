@@ -80,15 +80,15 @@ public:
    * socket read and write interfaces
    */
 
-  seastar::future<Socket::tmp_buf> read_exactly(std::size_t bytes);
+  seastar::future<ceph::bufferptr> read_exactly(std::size_t bytes);
 
   seastar::future<ceph::bufferlist> read(std::size_t bytes);
 
-  seastar::future<> write(ceph::bufferlist &&);
+  seastar::future<> write(ceph::bufferlist);
 
   seastar::future<> flush();
 
-  seastar::future<> write_flush(ceph::bufferlist &&);
+  seastar::future<> write_flush(ceph::bufferlist);
 
   /*
    * frame read and write interfaces

@@ -167,15 +167,15 @@ seastar::future<> FrameAssemblerV2::close_shutdown_socket()
   return socket->close();
 }
 
-seastar::future<Socket::tmp_buf>
+seastar::future<ceph::bufferptr>
 FrameAssemblerV2::read_exactly(std::size_t bytes)
 {
   assert(has_socket());
   if (unlikely(record_io)) {
     return socket->read_exactly(bytes
-    ).then([this](auto bl) {
-      rxbuf.append(buffer::create(bl.share()));
-      return bl;
+    ).then([this](auto bptr) {
+      rxbuf.append(bptr);
+      return bptr;
     });
   } else {
     return socket->read_exactly(bytes);
@@ -198,7 +198,7 @@ FrameAssemblerV2::read(std::size_t bytes)
 }
 
 seastar::future<>
-FrameAssemblerV2::write(ceph::bufferlist &&buf)
+FrameAssemblerV2::write(ceph::bufferlist buf)
 {
   assert(has_socket());
   if (unlikely(record_io)) {
@@ -215,7 +215,7 @@ FrameAssemblerV2::flush()
 }
 
 seastar::future<>
-FrameAssemblerV2::write_flush(ceph::bufferlist &&buf)
+FrameAssemblerV2::write_flush(ceph::bufferlist buf)
 {
   assert(has_socket());
   if (unlikely(record_io)) {
@@ -229,9 +229,9 @@ FrameAssemblerV2::read_main_preamble()
 {
   rx_preamble.clear();
   return read_exactly(rx_frame_asm.get_preamble_onwire_len()
-  ).then([this](auto bl) {
+  ).then([this](auto bptr) {
     try {
-      rx_preamble.append(buffer::create(std::move(bl)));
+      rx_preamble.append(std::move(bptr));
       const Tag tag = rx_frame_asm.disassemble_preamble(rx_preamble);
 #ifdef UNIT_TESTS_BUILT
       intercept_frame(tag, false);
@@ -263,22 +263,22 @@ FrameAssemblerV2::read_frame_payload()
       uint32_t onwire_len = rx_frame_asm.get_segment_onwire_len(seg_idx);
       // TODO: create aligned and contiguous buffer from socket
       return read_exactly(onwire_len
-      ).then([this](auto tmp_bl) {
+      ).then([this](auto bptr) {
         logger().trace("{} RECV({}) frame segment[{}]",
-                       conn, tmp_bl.size(), rx_segments_data.size());
+                       conn, bptr.length(), rx_segments_data.size());
         bufferlist segment;
-        segment.append(buffer::create(std::move(tmp_bl)));
+        segment.append(std::move(bptr));
         rx_segments_data.emplace_back(std::move(segment));
       });
     }
   ).then([this] {
     return read_exactly(rx_frame_asm.get_epilogue_onwire_len());
-  }).then([this](auto bl) {
-    logger().trace("{} RECV({}) frame epilogue", conn, bl.size());
+  }).then([this](auto bptr) {
+    logger().trace("{} RECV({}) frame epilogue", conn, bptr.length());
     bool ok = false;
     try {
       bufferlist rx_epilogue;
-      rx_epilogue.append(buffer::create(std::move(bl)));
+      rx_epilogue.append(std::move(bptr));
       ok = rx_frame_asm.disassemble_segments(rx_preamble, rx_segments_data.data(), rx_epilogue);
     } catch (FrameError& e) {
       logger().error("read_frame_payload: {} {}", conn, e.what());
