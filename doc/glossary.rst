@@ -311,6 +311,20 @@
                 state of a multi-site configuration. When the period is updated,
                 the "epoch" is said thereby to have been changed.
 
+        Placement Groups (PGs)
+                Placement groups (PGs) are subsets of each logical Ceph pool.
+                Placement groups perform the function of placing objects (as a
+                group) into OSDs. Ceph manages data internally at
+                placement-group granularity: this scales better than would
+                managing individual (and therefore more numerous) RADOS
+                objects. A cluster that has a larger number of placement groups
+                (for example, 100 per OSD) is better balanced than an otherwise
+                identical cluster with a smaller number of placement groups. 
+                
+                Ceph's internal RADOS objects are each mapped to a specific
+                placement group, and each placement group belongs to exactly
+                one Ceph pool. 
+
 	:ref:`Pool<rados_pools>`
 		A pool is a logical partition used to store objects.
 
