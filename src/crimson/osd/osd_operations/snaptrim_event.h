@@ -148,6 +148,7 @@ private:
 
   remove_or_update_iertr::future<> remove_clone(
     ObjectContextRef obc,
+    ObjectContextRef head_obc,
     ceph::os::Transaction& txn,
     std::vector<pg_log_entry_t>& log_entries);
   void remove_head_whiteout(
@@ -157,6 +158,7 @@ private:
     std::vector<pg_log_entry_t>& log_entries);
   interruptible_future<> adjust_snaps(
     ObjectContextRef obc,
+    ObjectContextRef head_obc,
     const std::set<snapid_t>& new_snaps,
     ceph::os::Transaction& txn,
     std::vector<pg_log_entry_t>& log_entries);
