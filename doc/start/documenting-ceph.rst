@@ -3,8 +3,7 @@
 ==================
 
 You can help the Ceph project by contributing to the documentation.  Even
-small contributions help the Ceph project, such as fixing
-spelling errors or rewriting confusing instructions.
+small contributions help the Ceph project. 
 
 The easiest way to suggest a correction to the documentation is to send an
 email to `ceph-users@ceph.io`. Include the string "ATTN: DOCS" or
@@ -46,7 +45,8 @@ Making Contributions
 
 Making a documentation contribution involves the same basic procedure as making
 a code contribution, with one exception: you must build documentation source
-instead of compiling program source. This sequence (the sequence of building the documentation source) includes the following steps:
+instead of compiling program source. This sequence (the sequence of building
+the documentation source) includes the following steps:
 
 #. `Get the Source`_
 #. `Select a Branch`_
@@ -60,32 +60,33 @@ instead of compiling program source. This sequence (the sequence of building the
 Get the Source
 --------------
 
-Ceph documentation lives in the Ceph repository right alongside the Ceph source
-code under the ``ceph/doc`` directory. For details on github and Ceph,
-see :ref:`Get Involved`.
+The source of the Ceph documentation is a collection of ReStructured Text files
+that are in the Ceph repository in the ``ceph/doc`` directory. For details
+on GitHub and Ceph, see :ref:`Get Involved`.
 
-The most common way to make contributions is to use the `Fork and Pull`_
-approach. You must:
+Use the `Fork and Pull`_ approach to make documentation contributions. To do
+this, you must:
 
-#. Install git locally. For Debian/Ubuntu, execute:
+#. Install git locally. In Debian or Ubuntu, run the following command:
 
    .. prompt:: bash $
 
 	sudo apt-get install git
 
-   For Fedora, execute:
+   In Fedora, run the following command:
 
    .. prompt:: bash $
 
 	sudo yum install git
 
-   For CentOS/RHEL, execute:
+   In CentOS/RHEL, run the following command:
 
    .. prompt:: bash $
 
 	sudo yum install git
 
-#. Ensure your ``.gitconfig`` file has your name and email address. :
+#. Make sure that your ``.gitconfig`` file has been configured to include your
+   name and email address:
 
    .. code-block:: ini
 
@@ -105,37 +106,36 @@ approach. You must:
 
 #. Fork the Ceph project. See https://github.com/ceph/ceph.
 
-#. Clone your fork of the Ceph project to your local host.
+#. Clone your fork of the Ceph project to your local host. This creates what is
+   known as a "local working copy".
 
+The Ceph documentation is organized by component:
 
-Ceph organizes documentation into an information architecture primarily by its
-main components.
-
-- **Ceph Storage Cluster:** The Ceph Storage Cluster documentation resides
-  under the ``doc/rados`` directory.
+- **Ceph Storage Cluster:** The Ceph Storage Cluster documentation is 
+  in the ``doc/rados`` directory.
   
-- **Ceph Block Device:** The Ceph Block Device documentation resides under
+- **Ceph Block Device:** The Ceph Block Device documentation is in 
   the ``doc/rbd`` directory.
   
-- **Ceph Object Storage:** The Ceph Object Storage documentation resides under
+- **Ceph Object Storage:** The Ceph Object Storage documentation is in 
   the ``doc/radosgw`` directory.
 
-- **Ceph File System:** The Ceph File System documentation resides under the 
+- **Ceph File System:** The Ceph File System documentation is in the 
   ``doc/cephfs`` directory.
   
-- **Installation (Quick):** Quick start documentation resides under the
+- **Installation (Quick):** Quick start documentation is in the
   ``doc/start`` directory.
   
-- **Installation (Manual):** Manual installation documentation resides under
-  the ``doc/install`` directory.
+- **Installation (Manual):** Documentaton concerning the manual installation of
+  Ceph is in the ``doc/install`` directory.
   
-- **Manpage:** Manpage source resides under the ``doc/man`` directory.
+- **Manpage:** Manpage source is in the ``doc/man`` directory.
 
-- **Developer:** Developer documentation resides under the ``doc/dev`` 
+- **Developer:** Developer documentation is in the ``doc/dev`` 
   directory.
 
-- **Images:** If you include images such as JPEG or PNG files, you should 
-  store them under the ``doc/images`` directory.
+- **Images:** Images including JPEG and PNG files are stored in the
+  ``doc/images`` directory.
 
 
 Select a Branch
