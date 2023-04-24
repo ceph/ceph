@@ -52,8 +52,7 @@ inodeno_t InoTable::project_alloc_id(inodeno_t id)
     id = projected_free.range_start();
     projected_free.erase(id);
   } else {
-    auto it = projected_free.lower_bound(id);
-    if (it != projected_free.end() && it.get_start() == id) {
+    if (!projected_recycle.contains(id)) {
       dout(10) << __func__ << " " << id << " to projected_free " << projected_free << dendl;
       projected_free.erase(id);
     } else {
@@ -163,6 +162,9 @@ void InoTable::replay_alloc_id(inodeno_t id)
   if (free.contains(id)) {
     free.erase(id);
     projected_free.erase(id);
+  } else if (recycle.contains(id)){
+    recycle.erase(id);
+    projected_recycle.erase(id);
   } else {
     mds->clog->error() << "journal replay alloc " << id
       << " not in free " << free;
@@ -276,7 +278,7 @@ void InoTable::generate_test_instances(std::list<InoTable*>& ls)
 
 bool InoTable::is_marked_free(inodeno_t id) const
 {
-  return free.contains(id) || projected_free.contains(id);
+  return free.contains(id) || projected_free.contains(id) || recycle.contains(id) || projected_recycle.contains(id);
 }
 
 bool InoTable::intersects_free(

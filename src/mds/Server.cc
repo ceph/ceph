@@ -2469,6 +2469,28 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
 	req->head.args.getattr.mask = CEPH_STAT_CAP_INODE_ALL;
       }
     }
+
+    if (req->get_op() == CEPH_MDS_OP_CREATE
+        || req->get_op() == CEPH_MDS_OP_MKDIR
+        || req->get_op() == CEPH_MDS_OP_MKNOD
+        || req->get_op() == CEPH_MDS_OP_SYMLINK) {
+      auto created = inodeno_t(req->head.ino);
+      if (!mds->inotable->is_marked_free(created)) {
+        // completed maybe by another session before that be already killed
+        dout(5) << "already completed killed " << req->get_reqid() << dendl;
+        auto reply = make_message<MClientReply>(*req, 0);
+        bufferlist extra;
+        encode(created, extra);
+        reply->set_extra_bl(extra);
+        mds->send_message_client(reply, session);
+
+        if (req->is_queued_for_replay())
+          mds->queue_one_replay();
+
+        return;
+      }
+    }
+    dout(5) << "replay/retry requests not completed " << req->get_reqid() << dendl;
   }
 
   // trim completed_request list
