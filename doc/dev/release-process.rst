@@ -41,11 +41,15 @@ Hotfix Release Process Deviation
 
 A hotfix release has a couple differences.
 
-1. Check out the most recent tag. For example, if we're releasing a hotfix on top of 17.2.3, ``git checkout -f -B quincy-release tags/v17.2.3``
-2. ``git cherry-pick -x`` the necessary hotfix commits (Note: only "cherry-pick" must be used)
-3. ``git push -f origin quincy-release``
-4. Notify the "Build Lead" to start the build.
-5. The "Build Lead" should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
+1. Check out the most recent tag. For example, if we're releasing a hotfix on top of 17.2.3, ``git checkout -f -B quincy-release tags/v17.2.3``.
+2. ``git cherry-pick -x`` the necessary hotfix commits (Note: only "cherry-pick" must be used).
+3. ``git push -f origin quincy-release``.
+4. Verify the commits in the ``$release-release`` branch:
+
+   1. To check against the previous point release (if we are making 17.2.4, this would be 17.2.3), run ``git log --pretty=oneline --no-merges tags/v17.2.3..origin/quincy-release``. Verify that the commits produced are exactly what we want in the next point release.
+   2. To check against the RC in the "ceph-ci" repo (``ceph-ci`` in this example), run ``git log --pretty=oneline --no-merges origin/quincy-release...ceph-ci/quincy-release``. There should be no output produced if the ``$release-release`` branch in the ceph repo is identical to the RC in ``ceph-ci``. Note the use of git `triple dot notation <https://git-scm.com/book/en/v2/Git-Tools-Revision-Selection>`_, which shows any commit discrepencies between both references.
+5. Notify the "Build Lead" to start the build.
+6. The "Build Lead" should set ``RELEASE_TYPE=HOTFIX`` instead of ``STABLE``.
 
 Security Release Process Deviation
 ----------------------------------
