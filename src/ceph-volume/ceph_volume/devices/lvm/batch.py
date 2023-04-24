@@ -126,7 +126,10 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
             if vg_name == 'unused_devices':
                 slots_for_vg = requested_slots
             else:
-                slots_for_vg = len(vg_devices) * requested_slots
+                if len(vg_devices) > 1:
+                    slots_for_vg = len(args.devices)
+                else:
+                    slots_for_vg = len(vg_devices) * requested_slots
             dev_size = dev.vg_size[0]
             # this only looks at the first vg on device, unsure if there is a better
             # way
