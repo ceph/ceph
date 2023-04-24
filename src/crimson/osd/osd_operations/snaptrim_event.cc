@@ -525,9 +525,10 @@ SnapTrimObjSubEvent::with_pg(
           });
         });
       });
-    }).handle_error_interruptible(PG::load_obc_ertr::all_same_way([] {
-      return seastar::now();
-    }));
+    }).handle_error_interruptible(
+      remove_or_update_iertr::pass_further{},
+      crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
+    );
   });
 }
 
