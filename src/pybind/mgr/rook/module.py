@@ -625,7 +625,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         }
         self.set_store("drive_group_map", json.dumps(json_drive_group_map))
 
-    def remove_osds(self, osd_ids: List[str], replace: bool = False, force: bool = False, zap: bool = False) -> OrchResult[str]:
+    def remove_osds(self,
+                    osd_ids: List[str],
+                    replace: bool = False,
+                    force: bool = False,
+                    zap: bool = False,
+                    no_destroy: bool = False) -> OrchResult[str]:
         assert self._rook_cluster is not None
         if zap:
             raise RuntimeError("Rook does not support zapping devices during OSD removal.")
