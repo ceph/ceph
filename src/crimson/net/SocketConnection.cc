@@ -36,7 +36,7 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
 #ifdef UNIT_TESTS_BUILT
   if (messenger.interceptor) {
     interceptor = messenger.interceptor;
-    interceptor->register_conn(*this);
+    interceptor->register_conn(this->get_local_shared_foreign_from_this());
   }
 #endif
 }
