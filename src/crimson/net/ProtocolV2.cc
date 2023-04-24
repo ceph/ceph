@@ -111,7 +111,9 @@ void intercept(Breakpoint bp,
                Interceptor *interceptor,
                Socket *socket) {
   if (interceptor) {
-    auto action = interceptor->intercept(conn, Breakpoint(bp));
+    auto action = interceptor->intercept(
+        conn.get_local_shared_foreign_from_this(),
+        Breakpoint(bp));
     socket->set_trap(type, action, &interceptor->blocker);
   }
 }
@@ -784,7 +786,8 @@ void ProtocolV2::execute_connecting()
           // supports CONTINUE/FAULT/BLOCK
           if (conn.interceptor) {
             auto action = conn.interceptor->intercept(
-                conn, {custom_bp_t::SOCKET_CONNECTING});
+                conn.get_local_shared_foreign_from_this(),
+                {custom_bp_t::SOCKET_CONNECTING});
             switch (action) {
             case bp_action_t::CONTINUE:
               return seastar::now();
@@ -796,6 +799,7 @@ void ProtocolV2::execute_connecting()
               return conn.interceptor->blocker.block();
             default:
               ceph_abort("unexpected action from trap");
+              return seastar::now();
             }
           } else {
             return seastar::now();
@@ -1064,7 +1068,8 @@ ProtocolV2::reuse_connection(
   has_socket = false;
 #ifdef UNIT_TESTS_BUILT
   if (conn.interceptor) {
-    conn.interceptor->register_conn_replaced(conn);
+    conn.interceptor->register_conn_replaced(
+        conn.get_local_shared_foreign_from_this());
   }
 #endif
   // close this connection because all the necessary information is delivered
@@ -1485,7 +1490,8 @@ void ProtocolV2::execute_accepting()
 #ifdef UNIT_TESTS_BUILT
           if (conn.interceptor) {
             auto action = conn.interceptor->intercept(
-                conn, {custom_bp_t::SOCKET_ACCEPTED});
+                conn.get_local_shared_foreign_from_this(),
+                {custom_bp_t::SOCKET_ACCEPTED});
             switch (action) {
             case bp_action_t::CONTINUE:
               break;
@@ -2002,7 +2008,8 @@ void ProtocolV2::do_close(
 #ifdef UNIT_TESTS_BUILT
     closed_clean = true;
     if (conn.interceptor) {
-      conn.interceptor->register_conn_closed(conn);
+      conn.interceptor->register_conn_closed(
+          conn.get_local_shared_foreign_from_this());
     }
 #endif
   }).handle_exception([conn_ref = conn.shared_from_this(), this] (auto eptr) {

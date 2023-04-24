@@ -39,8 +39,6 @@ using ConnectionLRef = seastar::shared_ptr<Connection>;
 using ConnectionFRef = seastar::foreign_ptr<ConnectionLRef>;
 using ConnectionRef = ::crimson::local_shared_foreign_ptr<ConnectionLRef>;
 
-class SocketConnection;
-
 class Dispatcher;
 class ChainedDispatchers;
 constexpr std::size_t NUM_DISPATCHERS = 4u;

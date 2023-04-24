@@ -44,8 +44,10 @@ void FrameAssemblerV2::intercept_frame(Tag tag, bool is_write)
   assert(has_socket());
   if (conn.interceptor) {
     auto type = is_write ? bp_type_t::WRITE : bp_type_t::READ;
+    // FIXME: doesn't support cross-core
     auto action = conn.interceptor->intercept(
-        conn, Breakpoint{tag, type});
+        conn.get_local_shared_foreign_from_this(),
+        Breakpoint{tag, type});
     socket->set_trap(type, action, &conn.interceptor->blocker);
   }
 }
