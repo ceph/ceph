@@ -489,7 +489,10 @@ void PG::on_active_actmap()
         logger().debug("{}: trimmed snap={}", *this, trimmed);
       });
     }).finally([this] {
+      logger().debug("{}: PG::on_active_actmap() finished trimming",
+                     *this);
       peering_state.state_clear(PG_STATE_SNAPTRIM);
+      peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
       publish_stats_to_osd();
     });
 }
