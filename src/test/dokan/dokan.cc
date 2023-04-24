@@ -242,16 +242,9 @@ TEST_F(DokanTests, test_mount_read_only) {
     ASSERT_TRUE(fs::exists(mountpoint + success_file_path));
     ASSERT_EQ(read_file(mountpoint + success_file_path), data);
 
-    std::string exception_msg(
-        "filesystem error: cannot remove: No such device ["
-        + mountpoint + success_file_path + "]");
+    // The actual exception message is runtime dependent.
     EXPECT_THROW({
-        try {
-            fs::remove(mountpoint + success_file_path);
-        } catch(const fs::filesystem_error &e) {
-            EXPECT_STREQ(e.what(), exception_msg.c_str());
-            throw;
-        }
+        fs::remove(mountpoint + success_file_path);
     }, fs::filesystem_error);
     unmap_dokan(mount, mountpoint.c_str());
 
