@@ -25,6 +25,7 @@ namespace crimson::net {
 
 class ProtocolV2;
 class SocketMessenger;
+class SocketConnection;
 using SocketConnectionRef = seastar::shared_ptr<SocketConnection>;
 
 #ifdef UNIT_TESTS_BUILT

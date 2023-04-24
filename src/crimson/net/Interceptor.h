@@ -116,11 +116,11 @@ struct Breakpoint {
 struct Interceptor {
   socket_blocker blocker;
   virtual ~Interceptor() {}
-  virtual void register_conn(SocketConnection& conn) = 0;
-  virtual void register_conn_ready(SocketConnection& conn) = 0;
-  virtual void register_conn_closed(SocketConnection& conn) = 0;
-  virtual void register_conn_replaced(SocketConnection& conn) = 0;
-  virtual bp_action_t intercept(SocketConnection& conn, Breakpoint bp) = 0;
+  virtual void register_conn(ConnectionRef) = 0;
+  virtual void register_conn_ready(ConnectionRef) = 0;
+  virtual void register_conn_closed(ConnectionRef) = 0;
+  virtual void register_conn_replaced(ConnectionRef) = 0;
+  virtual bp_action_t intercept(ConnectionRef, Breakpoint bp) = 0;
 };
 
 } // namespace crimson::net

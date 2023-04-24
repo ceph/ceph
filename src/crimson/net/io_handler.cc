@@ -192,7 +192,9 @@ void IOHandler::set_io_state(
     dispatch_in = true;
 #ifdef UNIT_TESTS_BUILT
     if (conn.interceptor) {
-      conn.interceptor->register_conn_ready(conn);
+      // FIXME: doesn't support cross-core
+      conn.interceptor->register_conn_ready(
+          conn.get_local_shared_foreign_from_this());
     }
 #endif
   } else if (io_state == io_state_t::open) {
