@@ -105,14 +105,15 @@ class PrometheusRESTController(RESTController):
                 component='prometheus')
         balancer_status = self.balancer_status()
         if content['status'] == 'success':  # pylint: disable=R1702
+            alerts_info = []
             if 'data' in content:
                 if balancer_status['active'] and balancer_status['no_optimization_needed'] and path == '/alerts':  # noqa E501  #pylint: disable=line-too-long
                     for alert in content['data']:
                         for k, v in alert.items():
                             if k == 'labels':
-                                for key, value in v.items():
-                                    if key == 'alertname' and value == 'CephPGImbalance':
-                                        content['data'].remove(alert)
+                                alerts_info.append(v)
+                    alerts_info = [i for i in alerts_info if i['alertname'] != 'CephPGImbalance']
+                    return alerts_info
                 return content['data']
             return content
         raise DashboardException(content, http_status_code=400, component='prometheus')
