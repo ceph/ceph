@@ -139,6 +139,7 @@ SnapTrimEvent::with_pg(
       }).then_interruptible([&shard_services, this] (const auto& to_trim) {
         if (to_trim.empty()) {
           // the legit ENOENT -> done
+          logger().debug("{}: to_trim is empty! Stopping iteration", *this);
           return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
@@ -499,12 +500,12 @@ SnapTrimObjSubEvent::with_pg(
     return pg->obc_loader.with_head_and_clone_obc<RWState::RWWRITE>(
       coid,
       [this](auto head_obc, auto clone_obc) {
-      logger().debug("{}: got clone_obc={}", *this, fmt::ptr(clone_obc.get()));
+      logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
       return enter_stage<interruptor>(
         pp().process
       ).then_interruptible(
         [this,clone_obc=std::move(clone_obc), head_obc=std::move(head_obc)]() mutable {
-        logger().debug("{}: processing clone_obc={}", *this, fmt::ptr(clone_obc.get()));
+        logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());
         return remove_or_update(
           clone_obc, head_obc
         ).safe_then_unpack_interruptible([clone_obc, this]
