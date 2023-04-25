@@ -47,7 +47,9 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
   if (realm.srnode.created != realm.srnode.current_parent_since)
     out << " cps " << realm.srnode.current_parent_since;
   out << " snaps=" << realm.srnode.snaps;
-  out << " past_parent_snaps=" << realm.srnode.past_parent_snaps;
+  if (realm.srnode.past_parent_snaps.size() > 0) {
+    out << " past_parent_snaps=" << realm.srnode.past_parent_snaps;
+  }
 
   if (realm.srnode.is_parent_global())
     out << " global ";

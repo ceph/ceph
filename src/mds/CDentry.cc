@@ -17,6 +17,7 @@
 #include "CDentry.h"
 #include "CInode.h"
 #include "CDir.h"
+#include "SnapClient.h"
 
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -644,6 +645,64 @@ std::string CDentry::linkage_t::get_remote_d_type_string() const
     case S_IFIFO: return "fifo";
     default: ceph_abort(); return "";
   }
+}
+
+bool CDentry::scrub(snapid_t next_seq)
+{
+  dout(20) << "scrubbing " << *this << " next_seq = " << next_seq << dendl;
+
+  /* attempt to locate damage in first of CDentry, see:
+   * https://tracker.ceph.com/issues/56140
+   */
+  /* skip projected dentries as first/last may have placeholder values */
+  if (!is_projected()) {
+    CDir* dir = get_dir();
+
+    if (first > next_seq) {
+      derr << __func__ << ": first > next_seq (" << next_seq << ") " << *this << dendl;
+      dir->go_bad_dentry(last, get_name());
+      return true;
+    } else if (first > last) {
+      derr << __func__ << ": first > last " << *this << dendl;
+      dir->go_bad_dentry(last, get_name());
+      return true;
+    }
+
+    auto&& realm = dir->get_inode()->find_snaprealm();
+    if (realm) {
+      auto&& snaps = realm->get_snaps();
+      auto it = snaps.lower_bound(first);
+      bool stale = last != CEPH_NOSNAP && (it == snaps.end() || *it > last);
+      if (stale) {
+        dout(20) << "is stale" << dendl;
+        /* TODO: maybe trim? */
+      }
+    }
+  }
+  return false;
+}
+
+bool CDentry::check_corruption(bool load)
+{
+  auto&& snapclient = dir->mdcache->mds->snapclient;
+  auto next_snap = snapclient->get_last_seq()+1;
+  if (first > last || (snapclient->is_server_ready() && first > next_snap)) {
+    if (load) {
+      dout(1) << "loaded already corrupt dentry: " << *this << dendl;
+      corrupt_first_loaded = true;
+    } else {
+      derr << "newly corrupt dentry to be committed: " << *this << dendl;
+    }
+    if (g_conf().get_val<bool>("mds_go_bad_corrupt_dentry")) {
+      dir->go_bad_dentry(last, get_name());
+    }
+    if (!load && g_conf().get_val<bool>("mds_abort_on_newly_corrupt_dentry")) {
+      dir->mdcache->mds->clog->error() << "MDS abort because newly corrupt dentry to be committed: " << *this;
+      ceph_abort("detected newly corrupt dentry"); /* avoid writing out newly corrupted dn */
+    }
+    return true;
+  }
+  return false;
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CDentry, co_dentry, mds_co);

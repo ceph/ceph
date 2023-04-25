@@ -402,6 +402,7 @@ class TestDataScan(CephFSTestCase):
         self.fs.data_scan(["init"])
         self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()], worker_count=workers)
         self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()], worker_count=workers)
+        self.fs.data_scan(["scan_links"])
 
         # Mark the MDS repaired
         self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
