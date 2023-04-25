@@ -1,0 +1,3 @@
+overrides:
+  ragweed:
+    default-branch: ceph-master # ceph-quincy doesn't have tox, but tests are the same

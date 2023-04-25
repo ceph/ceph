@@ -43,6 +43,8 @@ def get_ragweed_branches(config, client_conf):
         else:
             return [branch]
 
+def get_ragweed_dir(testdir, client):
+    return '{}/ragweed.{}'.format(testdir, client)
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -57,13 +59,14 @@ def download(ctx, config):
     log.info('Downloading ragweed...')
     testdir = teuthology.get_testdir(ctx)
     for (client, cconf) in config.items():
+        ragweed_dir = get_ragweed_dir(testdir, client)
         ragweed_repo = ctx.config.get('ragweed_repo',
                                       teuth_config.ceph_git_base_url + 'ragweed.git')
         for branch in get_ragweed_branches(ctx.config, cconf):
             log.info("Using branch '%s' for ragweed", branch)
             try:
                 ctx.cluster.only(client).sh(
-                    script=f'git clone -b {branch} {ragweed_repo} {testdir}/ragweed')
+                    script=f'git clone -b {branch} {ragweed_repo} {ragweed_dir}')
                 break
             except Exception as e:
                 exc = e
@@ -74,7 +77,7 @@ def download(ctx, config):
         if sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[
-                    'cd', '{tdir}/ragweed'.format(tdir=testdir),
+                    'cd', ragweed_dir,
                     run.Raw('&&'),
                     'git', 'reset', '--hard', sha1,
                     ],
@@ -83,14 +86,10 @@ def download(ctx, config):
         yield
     finally:
         log.info('Removing ragweed...')
-        testdir = teuthology.get_testdir(ctx)
         for client in config:
+            ragweed_dir = get_ragweed_dir(testdir, client)
             ctx.cluster.only(client).run(
-                args=[
-                    'rm',
-                    '-rf',
-                    '{tdir}/ragweed'.format(tdir=testdir),
-                    ],
+                args=['rm', '-rf', ragweed_dir]
                 )
 
 
@@ -218,7 +217,7 @@ def configure(ctx, config, run_stages):
             (remote,) = ctx.cluster.only(client).remotes.keys()
             remote.run(
                 args=[
-                    'rm',
+                    'rm', '-f',
                     '{tdir}/boto.cfg'.format(tdir=testdir),
                     ],
                 )
@@ -242,9 +241,10 @@ def run_tests(ctx, config, run_stages):
     testdir = teuthology.get_testdir(ctx)
     attrs = ["not fails_on_rgw"]
     for client, client_config in config.items():
+        ragweed_dir = get_ragweed_dir(testdir, client)
         stages = ','.join(run_stages[client])
         args = [
-            'cd', '{tdir}/ragweed'.format(tdir=testdir), run.Raw('&&'),
+            'cd', ragweed_dir, run.Raw('&&'),
             'RAGWEED_CONF={tdir}/archive/ragweed.{client}.conf'.format(tdir=testdir, client=client),
             'RAGWEED_STAGES={stages}'.format(stages=stages),
             'BOTO_CONFIG={tdir}/boto.cfg'.format(tdir=testdir),
