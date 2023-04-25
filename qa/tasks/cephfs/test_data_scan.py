@@ -165,6 +165,10 @@ class BacktracelessFile(Workload):
         # We might not have got the name or path, but we should still get the size
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
 
+        # remove the entry from lost+found directory
+        self._mount.run_shell(["sudo", "rm", "-f", f'lost+found/{ino_name}'], omit_sudo=False)
+        self.assert_equal(self._mount.ls("lost+found", sudo=True), [])
+
         return self._errors
 
 
