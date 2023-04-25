@@ -696,6 +696,7 @@ public:
 
   client_t get_nodeid() { return whoami; }
 
+  inodeno_t _get_root_ino(bool fake=true);
   inodeno_t get_root_ino();
   Inode *get_root();
 
