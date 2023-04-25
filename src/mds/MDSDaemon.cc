@@ -286,7 +286,7 @@ void MDSDaemon::set_up_admin_socket()
   ceph_assert(r == 0);
   r = admin_socket->register_command("scrub start "
 				     "name=path,type=CephString "
-				     "name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false "
+				     "name=scrubops,type=CephChoices,strings=force|recursive|repair|scrub_mdsdir,n=N,req=false "
 				     "name=tag,type=CephString,req=false",
 				     asok_hook,
 				     "scrub and inode and output results");
@@ -445,6 +445,12 @@ void MDSDaemon::set_up_admin_socket()
                                      "name=number,type=CephInt,req=true",
 				     asok_hook,
 				     "dump inode by inode number");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("dump dir "
+				     "name=path,type=CephString,req=true "
+				     "name=dentry_dump,type=CephBool,req=false",
+				     asok_hook,
+				     "dump directory by path");
   ceph_assert(r == 0);
   r = admin_socket->register_command("exit",
 				     asok_hook,

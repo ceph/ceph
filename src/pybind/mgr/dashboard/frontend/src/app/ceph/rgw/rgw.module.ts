@@ -7,6 +7,8 @@ import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
+import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { RgwBucketDetailsComponent } from './rgw-bucket-details/rgw-bucket-details.component';
@@ -22,6 +24,18 @@ import { RgwUserListComponent } from './rgw-user-list/rgw-user-list.component';
 import { RgwUserS3KeyModalComponent } from './rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
 import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
+import { RgwUserTabsComponent } from './rgw-user-tabs/rgw-user-tabs.component';
+import { RgwMultisiteDetailsComponent } from './rgw-multisite-details/rgw-multisite-details.component';
+import { TreeModule } from '@circlon/angular-tree-component';
+import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
+import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
+import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
+import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
+import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.component';
+import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
+import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
 
 @NgModule({
   imports: [
@@ -33,7 +47,9 @@ import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-us
     NgbNavModule,
     RouterModule,
     NgbTooltipModule,
-    NgxPipeFunctionModule
+    NgxPipeFunctionModule,
+    TreeModule,
+    DataTableModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -58,7 +74,14 @@ import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-us
     RgwUserS3KeyModalComponent,
     RgwUserCapabilityModalComponent,
     RgwUserSubuserModalComponent,
-    RgwConfigModalComponent
+    RgwConfigModalComponent,
+    RgwUserTabsComponent,
+    RgwMultisiteDetailsComponent,
+    RgwMultisiteRealmFormComponent,
+    RgwMultisiteZonegroupFormComponent,
+    RgwMultisiteZoneFormComponent,
+    RgwMultisiteZoneDeletionFormComponent,
+    RgwMultisiteZonegroupDeletionFormComponent
   ]
 })
 export class RgwModule {}
@@ -82,6 +105,36 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:uid`,
         component: RgwUserFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: 'roles',
+        data: {
+          breadcrumbs: 'Roles',
+          resource: 'api.rgw.user.roles@1.0',
+          tabs: [
+            {
+              name: 'Users',
+              url: '/rgw/user'
+            },
+            {
+              name: 'Roles',
+              url: '/rgw/user/roles'
+            }
+          ]
+        },
+        children: [
+          {
+            path: '',
+            component: CRUDTableComponent
+          },
+          {
+            path: URLVerbs.CREATE,
+            component: CrudFormComponent,
+            data: {
+              breadcrumbs: ActionLabels.CREATE
+            }
+          }
+        ]
       }
     ]
   },
@@ -101,6 +154,26 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
+  },
+  {
+    path: 'multisite',
+    canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'rgw/multisite',
+        redirectTo: 'error',
+        header: 'Multi-site not configured',
+        button_name: 'Add Multi-site Configuration',
+        button_route: '/rgw/multisite/create',
+        button_title: 'Add multi-site configuration (realms/zonegroups/zones)',
+        secondary_button_name: 'Import Multi-site Configuration',
+        secondary_button_route: 'rgw/multisite/import',
+        secondary_button_title:
+          'Import multi-site configuration (import realm token from a secondary cluster)'
+      },
+      breadcrumbs: 'Multisite'
+    },
+    children: [{ path: '', component: RgwMultisiteDetailsComponent }]
   }
 ];
 

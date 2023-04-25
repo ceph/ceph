@@ -130,9 +130,9 @@ Then provide the zone placement info for that target:
           When data is stored inline (default), it may provide an advantage for read/write workloads since the first chunk of
           an object's data can be retrieved/stored in a single librados call along with object metadata. On the other hand, a
           target that does not store data inline can provide a performance benefit for RGW client delete requests when
-          bluestore db is located on faster storage devices (as compared to data devices) since it eliminates the need to access
-          slower devices synchronously while processing the client request. In that case, all data associated with the deleted
-          objects can be removed asynchronously in the background by garbage collection.                                          
+          the BlueStore DB is located on faster storage than bucket data since it eliminates the need to access
+          slower devices synchronously while processing the client request. In that case, data associated with the deleted
+          objects is removed asynchronously in the background by garbage collection.                                          
 
 .. _adding_a_storage_class:
 

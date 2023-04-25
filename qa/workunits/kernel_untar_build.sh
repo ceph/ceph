@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 wget -O linux.tar.gz http://download.ceph.com/qa/linux-5.4.tar.gz
 

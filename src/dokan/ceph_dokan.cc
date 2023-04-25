@@ -35,6 +35,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/version.h"
+#include "common/win32/wstring.h"
 
 #include "global/global_init.h"
 

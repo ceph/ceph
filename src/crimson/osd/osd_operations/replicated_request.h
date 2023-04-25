@@ -7,6 +7,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/pg_map.h"
+#include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDRepOp.h"
 
@@ -23,15 +24,6 @@ class PG;
 
 class RepRequest final : public PhasedOperationT<RepRequest> {
 public:
-  class PGPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name = "RepRequest::PGPipeline::await_map";
-    } await_map;
-    struct Process : OrderedExclusivePhaseT<Process> {
-      static constexpr auto type_name = "RepRequest::PGPipeline::process";
-    } process;
-    friend RepRequest;
-  };
   static constexpr OperationTypeCode type = OperationTypeCode::replicated_request;
   RepRequest(crimson::net::ConnectionRef&&, Ref<MOSDRepOp>&&);
 
@@ -42,25 +34,41 @@ public:
   spg_t get_pgid() const {
     return req->get_spg();
   }
-  ConnectionPipeline &get_connection_pipeline();
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return req->get_min_epoch(); }
+
+  ConnectionPipeline &get_connection_pipeline();
+  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
+    assert(conn);
+    return conn.get_foreign(
+    ).then([this](auto f_conn) {
+      conn.reset();
+      return f_conn;
+    });
+  }
+  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
+    assert(!conn);
+    conn = make_local_shared_foreign(std::move(_conn));
+  }
 
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
   std::tuple<
+    StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,
+    ClientRequest::PGPipeline::AwaitMap::BlockingEvent,
+    PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent
   > tracking_events;
 
 private:
-  PGPipeline &pp(PG &pg);
+  ClientRequest::PGPipeline &pp(PG &pg);
 
-  crimson::net::ConnectionFRef conn;
+  crimson::net::ConnectionRef conn;
   PipelineHandle handle;
   Ref<MOSDRepOp> req;
 };

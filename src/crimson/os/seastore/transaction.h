@@ -158,7 +158,6 @@ public:
       delayed_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
       fresh_block_stats.increment(ref->get_length());
     } else if (ref->get_paddr().is_absolute()) {
-      assert(ref->is_logical());
       pre_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
       fresh_block_stats.increment(ref->get_length());
     } else {

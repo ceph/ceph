@@ -40,7 +40,7 @@ namespace {
   string access_key{""};
   string secret_key{""};
 
-  Formatter* formatter{nullptr};
+  Formatter* token_formatter{nullptr};
 
   bool verbose {false};
   bool do_encode {false};
@@ -122,13 +122,13 @@ int main(int argc, char **argv)
     return -EINVAL;
   }
 
-  formatter = new JSONFormatter(true /* pretty */);
+  token_formatter = new JSONFormatter(true /* pretty */);
 
   RGWToken token(type, access_key, secret_key);
   if (do_encode) {
-    token.encode_json(formatter);
+    token.encode_json(token_formatter);
     std::ostringstream os;
-    formatter->flush(os);
+    token_formatter->flush(os);
     string token_str = os.str();
     if (verbose) {
       std::cout << "expanded token: " << token_str << std::endl;

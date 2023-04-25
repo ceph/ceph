@@ -178,9 +178,9 @@ class CherryPyConfig(object):
             context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             context.load_cert_chain(cert_fname, pkey_fname)
             if sys.version_info >= (3, 7):
-                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context.minimum_version = ssl.TLSVersion.TLSv1_3
             else:
-                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
+                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
 
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname

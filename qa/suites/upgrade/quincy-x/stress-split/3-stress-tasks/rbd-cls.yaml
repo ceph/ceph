@@ -3,7 +3,7 @@ meta:
    run basic cls tests for rbd
 stress-tasks:
 - workunit:
-    branch: octopus
+    branch: quincy
     clients:
       client.0:
         - cls/test_cls_rbd.sh

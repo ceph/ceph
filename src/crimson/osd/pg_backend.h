@@ -40,7 +40,7 @@ protected:
   using CollectionRef = crimson::os::CollectionRef;
   using ec_profile_t = std::map<std::string, std::string>;
   // low-level read errorator
-  using ll_read_errorator = crimson::os::FuturizedStore::read_errorator;
+  using ll_read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
   using ll_read_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -238,7 +238,7 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     object_stat_sum_t& delta_stats);
-  using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
+  using get_attr_errorator = crimson::os::FuturizedStore::Shard::get_attr_errorator;
   using get_attr_ierrorator =
     ::crimson::interruptible::interruptible_errorator<
       ::crimson::osd::IOInterruptCondition,
@@ -322,7 +322,7 @@ public:
     OSDOp& osd_op,
     object_stat_sum_t& delta_stats) const;
   using omap_cmp_ertr =
-    crimson::os::FuturizedStore::read_errorator::extend<
+    crimson::os::FuturizedStore::Shard::read_errorator::extend<
       crimson::ct_error::ecanceled,
       crimson::ct_error::invarg>;
   using omap_cmp_iertr =
@@ -389,7 +389,7 @@ protected:
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
   DoutPrefixProvider &dpp; ///< provides log prefix context
-  crimson::os::FuturizedStore* store;
+  crimson::os::FuturizedStore::Shard* store;
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;

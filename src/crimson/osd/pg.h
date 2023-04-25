@@ -10,13 +10,16 @@
 #include <seastar/core/shared_future.hh>
 
 #include "common/dout.h"
+#include "include/interval_set.h"
 #include "crimson/net/Fwd.h"
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
+#include "osd/osd_types_fmt.h"
 #include "crimson/osd/object_context.h"
 #include "osd/PeeringState.h"
+#include "osd/SnapMapper.h"
 
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
@@ -29,7 +32,6 @@
 #include "crimson/osd/osd_operations/logmissing_request_reply.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
-#include "crimson/osd/osd_operations/background_recovery.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/pg_activation_blocker.h"
@@ -58,6 +60,7 @@ namespace crimson::os {
 
 namespace crimson::osd {
 class OpsExecuter;
+class BackfillRecovery;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -69,9 +72,8 @@ class PG : public boost::intrusive_ref_counter<
   using ec_profile_t = std::map<std::string,std::string>;
   using cached_map_t = OSDMapService::cached_map_t;
 
-  ClientRequest::PGPipeline client_request_pg_pipeline;
+  ClientRequest::PGPipeline request_pg_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
-  RepRequest::PGPipeline replicated_request_pg_pipeline;
 
   ClientRequest::Orderer client_request_orderer;
 
@@ -157,22 +159,10 @@ public:
     bool need_write_epoch,
     ceph::os::Transaction &t) final;
 
-  void on_info_history_change() final {
-    // Not needed yet -- mainly for scrub scheduling
-  }
-
-  /// Notify PG that Primary/Replica status has changed (to update scrub registration)
-  void on_primary_status_change(bool was_primary, bool now_primary) final {
-  }
-
-  /// Need to reschedule next scrub. Assuming no change in role
-  void reschedule_scrub() final {
-  }
-
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
 
   uint64_t get_snap_trimq_size() const final {
-    return 0;
+    return std::size(snap_trimq);
   }
 
   void send_cluster_message(
@@ -333,10 +323,7 @@ public:
   void on_new_interval() final {
     // Not needed yet
   }
-  Context *on_clean() final {
-    // Not needed yet (will be needed for IO unblocking)
-    return nullptr;
-  }
+  Context *on_clean() final;
   void on_activate_committed() final {
     // Not needed yet (will be needed for IO unblocking)
   }
@@ -344,9 +331,8 @@ public:
     // Not needed yet
   }
 
-  void on_removal(ceph::os::Transaction &t) final {
-    // TODO
-  }
+  void on_removal(ceph::os::Transaction &t) final;
+
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
@@ -357,13 +343,10 @@ public:
   void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
   void set_ready_to_merge_source(eversion_t lu) final {}
 
-  void on_active_actmap() final {
-    // Not needed yet
-  }
-  void on_active_advmap(const OSDMapRef &osdmap) final {
-    // Not needed yet
-  }
-  epoch_t oldest_stored_osdmap() final {
+  void on_active_actmap() final;
+  void on_active_advmap(const OSDMapRef &osdmap) final;
+
+  epoch_t cluster_osdmap_trim_lower_bound() final {
     // TODO
     return 0;
   }
@@ -498,7 +481,7 @@ public:
     const PastIntervals& pim,
     ceph::os::Transaction &t);
 
-  seastar::future<> read_state(crimson::os::FuturizedStore* store);
+  seastar::future<> read_state(crimson::os::FuturizedStore::Shard* store);
 
   interruptible_future<> do_peering_event(
     PGPeeringEvent& evt, PeeringCtx &rctx);
@@ -530,8 +513,20 @@ public:
     with_obc_func_t&& f);
 
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
+  void log_operation(
+    std::vector<pg_log_entry_t>&& logv,
+    const eversion_t &trim_to,
+    const eversion_t &roll_forward_to,
+    const eversion_t &min_last_complete_ondisk,
+    bool transaction_applied,
+    ObjectStore::Transaction &txn,
+    bool async = false);
+  void replica_clear_repop_obc(
+    const std::vector<pg_log_entry_t> &logv);
   void handle_rep_op_reply(const MOSDRepOpReply& m);
-  interruptible_future<> do_update_log_missing(Ref<MOSDPGUpdateLogMissing> m);
+  interruptible_future<> do_update_log_missing(
+    Ref<MOSDPGUpdateLogMissing> m,
+    crimson::net::ConnectionRef conn);
   interruptible_future<> do_update_log_missing_reply(
                          Ref<MOSDPGUpdateLogMissingReply> m);
 
@@ -547,9 +542,6 @@ public:
     eversion_t &version);
 
 private:
-  void fill_op_params_bump_pg_version(
-    osd_op_params_t& osd_op_p,
-    const bool user_modify);
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
   using do_osd_ops_iertr =
@@ -562,8 +554,10 @@ private:
                do_osd_ops_iertr::future<Ret>>;
   do_osd_ops_iertr::future<pg_rep_op_fut_t<MURef<MOSDOpReply>>> do_osd_ops(
     Ref<MOSDOp> m,
+    crimson::net::ConnectionRef conn,
     ObjectContextRef obc,
-    const OpInfo &op_info);
+    const OpInfo &op_info,
+    const SnapContext& snapc);
   using do_osd_ops_success_func_t =
     std::function<do_osd_ops_iertr::future<>()>;
   using do_osd_ops_failure_func_t =
@@ -592,6 +586,7 @@ private:
   interruptible_future<> repair_object(
     const hobject_t& oid,
     eversion_t& v);
+  void check_blocklisted_obc_watchers(ObjectContextRef &obc);
 
 private:
   PG_OSDMapGate osdmap_gate;
@@ -618,8 +613,14 @@ private:
   eversion_t projected_last_update;
 
 public:
+  ObjectContextRegistry obc_registry;
   ObjectContextLoader obc_loader;
 
+private:
+  OSDriver osdriver;
+  SnapMapper snap_mapper;
+
+public:
   // PeeringListener
   void publish_stats_to_osd() final;
   void clear_publish_stats() final;
@@ -726,6 +727,8 @@ private:
   friend struct PGFacade;
   friend class InternalClientRequest;
   friend class WatchTimeoutRequest;
+  friend class SnapTrimEvent;
+  friend class SnapTrimObjSubEvent;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
@@ -733,6 +736,7 @@ private:
 
   bool can_discard_replica_op(const Message& m, epoch_t m_map_epoch) const;
   bool can_discard_op(const MOSDOp& m) const;
+  void context_registry_on_change();
   bool is_missing_object(const hobject_t& soid) const {
     return peering_state.get_pg_log().get_missing().get_items().count(soid);
   }
@@ -748,18 +752,19 @@ private:
   }
 
 private:
-  BackfillRecovery::BackfillRecoveryPipeline backfill_pipeline;
-
   friend class IOInterruptCondition;
   struct log_update_t {
     std::set<pg_shard_t> waiting_on;
     seastar::shared_promise<> all_committed;
   };
+
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
+  // snap trimming
+  interval_set<snapid_t> snap_trimq;
 };
 
 struct PG::do_osd_ops_params_t {
-  crimson::net::ConnectionFRef &get_connection() const {
+  crimson::net::ConnectionRef &get_connection() const {
     return conn;
   }
   osd_reqid_t get_reqid() const {
@@ -780,8 +785,9 @@ struct PG::do_osd_ops_params_t {
   // Only used by InternalClientRequest, no op flags
   bool has_flag(uint32_t flag) const {
     return false;
- }
-  crimson::net::ConnectionFRef &conn;
+  }
+
+  crimson::net::ConnectionRef &conn;
   osd_reqid_t reqid;
   utime_t mtime;
   epoch_t map_epoch;

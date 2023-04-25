@@ -1068,6 +1068,20 @@ int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
   return r;
 }
 
+void cls_rgw_mp_upload_part_info_update(librados::ObjectWriteOperation& op,
+                                        const std::string& part_key,
+                                        const RGWUploadPartInfo& info)
+{
+  cls_rgw_mp_upload_part_info_update_op call;
+  call.part_key = part_key;
+  call.info     = info;
+
+  buffer::list in;
+  encode(call, in);
+
+  op.exec(RGW_CLASS, RGW_MP_UPLOAD_PART_INFO_UPDATE, in);
+}
+
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry)
 {
   bufferlist in;

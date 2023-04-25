@@ -108,7 +108,7 @@ DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.23.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:8.3.5'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
-DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.1.5'
+DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
 DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
@@ -442,6 +442,36 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=False,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
+        Option(
+            'prometheus_web_user',
+            type='str',
+            default='admin',
+            desc='Prometheus web user'
+        ),
+        Option(
+            'prometheus_web_password',
+            type='str',
+            default='admin',
+            desc='Prometheus web password'
+        ),
+        Option(
+            'alertmanager_web_user',
+            type='str',
+            default='admin',
+            desc='Alertmanager web user'
+        ),
+        Option(
+            'alertmanager_web_password',
+            type='str',
+            default='admin',
+            desc='Alertmanager web password'
+        ),
+        Option(
+            'secure_monitoring_stack',
+            type='bool',
+            default=False,
+            desc='Enable TLS security for all the monitoring stack daemons'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -514,6 +544,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
             self.service_discovery_port = 0
+            self.secure_monitoring_stack = False
+            self.prometheus_web_password: Optional[str] = None
+            self.prometheus_web_user: Optional[str] = None
+            self.alertmanager_web_password: Optional[str] = None
+            self.alertmanager_web_user: Optional[str] = None
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.device_enhanced_scan = False
@@ -1457,19 +1492,22 @@ Then run the following:
             self.log.debug(
                 f'Received loopback address resolving ip for {host}: {ip_addr}. Falling back to previous address.')
             ip_addr = self.inventory.get_addr(host)
-        out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
-            host, cephadmNoImage, 'check-host',
-            ['--expect-hostname', host],
-            addr=addr,
-            error_ok=True, no_fsid=True))
-        if code:
-            msg = 'check-host failed:\n' + '\n'.join(err)
-            # err will contain stdout and stderr, so we filter on the message text to
-            # only show the errors
-            errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
-            if errors:
-                msg = f'Host {host} ({addr}) failed check(s): {errors}'
-            raise OrchestratorError(msg)
+        try:
+            out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                host, cephadmNoImage, 'check-host',
+                ['--expect-hostname', host],
+                addr=addr,
+                error_ok=True, no_fsid=True))
+            if code:
+                msg = 'check-host failed:\n' + '\n'.join(err)
+                # err will contain stdout and stderr, so we filter on the message text to
+                # only show the errors
+                errors = [_i.replace("ERROR: ", "") for _i in err if _i.startswith('ERROR')]
+                if errors:
+                    msg = f'Host {host} ({addr}) failed check(s): {errors}'
+                raise OrchestratorError(msg)
+        except ssh.HostConnectionError as e:
+            raise OrchestratorError(str(e))
         return ip_addr
 
     def _add_host(self, spec):
@@ -1717,7 +1755,7 @@ Then run the following:
 
     @handle_orch_error
     @host_exists()
-    def enter_host_maintenance(self, hostname: str, force: bool = False) -> str:
+    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> str:
         """ Attempt to place a cluster host in maintenance
 
         Placing a host into maintenance disables the cluster's ceph target in systemd
@@ -1729,11 +1767,14 @@ Then run the following:
 
         :raises OrchestratorError: Hostname is invalid, host is already in maintenance
         """
-        if len(self.cache.get_hosts()) == 1:
+        if yes_i_really_mean_it and not force:
+            raise OrchestratorError("--force must be passed with --yes-i-really-mean-it")
+
+        if len(self.cache.get_hosts()) == 1 and not yes_i_really_mean_it:
             raise OrchestratorError("Maintenance feature is not supported on single node clusters")
 
         # if upgrade is active, deny
-        if self.upgrade.upgrade_state:
+        if self.upgrade.upgrade_state and not yes_i_really_mean_it:
             raise OrchestratorError(
                 f"Unable to place {hostname} in maintenance with upgrade active/paused")
 
@@ -1747,7 +1788,7 @@ Then run the following:
             # daemons on this host, so check the daemons can be stopped
             # and if so, place the host into maintenance by disabling the target
             rc, msg = self._host_ok_to_stop(hostname, force)
-            if rc:
+            if rc and not yes_i_really_mean_it:
                 raise OrchestratorError(
                     msg + '\nNote: Warnings can be bypassed with the --force flag', errno=rc)
 
@@ -1756,7 +1797,7 @@ Then run the following:
                                                                                 ["enter"],
                                                                                 error_ok=True))
             returned_msg = _err[0].split('\n')[-1]
-            if returned_msg.startswith('failed') or returned_msg.startswith('ERROR'):
+            if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')) and not yes_i_really_mean_it:
                 raise OrchestratorError(
                     f"Failed to place {hostname} into maintenance for cluster {self._cluster_fsid}")
 
@@ -1768,12 +1809,12 @@ Then run the following:
                     'who': [crush_node],
                     'format': 'json'
                 })
-                if rc:
+                if rc and not yes_i_really_mean_it:
                     self.log.warning(
                         f"maintenance mode request for {hostname} failed to SET the noout group (rc={rc})")
                     raise OrchestratorError(
                         f"Unable to set the osds on {hostname} to noout (rc={rc})")
-                else:
+                elif not rc:
                     self.log.info(
                         f"maintenance mode request for {hostname} has SET the noout group")
 
@@ -1870,8 +1911,39 @@ Then run the following:
         })
         extra = self.extra_ceph_conf().conf
         if extra:
-            config += '\n\n' + extra.strip() + '\n'
+            try:
+                config = self._combine_confs(config, extra)
+            except Exception as e:
+                self.log.error(f'Failed to add extra ceph conf settings to minimal ceph conf: {e}')
         return config
+
+    def _combine_confs(self, conf1: str, conf2: str) -> str:
+        section_to_option: Dict[str, List[str]] = {}
+        final_conf: str = ''
+        for conf in [conf1, conf2]:
+            if not conf:
+                continue
+            section = ''
+            for line in conf.split('\n'):
+                if line.strip().startswith('#') or not line.strip():
+                    continue
+                if line.strip().startswith('[') and line.strip().endswith(']'):
+                    section = line.strip().replace('[', '').replace(']', '')
+                    if section not in section_to_option:
+                        section_to_option[section] = []
+                else:
+                    section_to_option[section].append(line.strip())
+
+        first_section = True
+        for section, options in section_to_option.items():
+            if not first_section:
+                final_conf += '\n'
+            final_conf += f'[{section}]\n'
+            for option in options:
+                final_conf += f'{option}\n'
+            first_section = False
+
+        return final_conf
 
     def _invalidate_daemons_and_kick_serve(self, filter_host: Optional[str] = None) -> None:
         if filter_host:
@@ -2464,6 +2536,14 @@ Then run the following:
                           spec: Optional[ServiceSpec],
                           daemon_type: str,
                           daemon_id: str) -> List[str]:
+
+        def get_daemon_names(daemons: List[str]) -> List[str]:
+            daemon_names = []
+            for daemon_type in daemons:
+                for dd in self.cache.get_daemons_by_type(daemon_type):
+                    daemon_names.append(dd.name())
+            return daemon_names
+
         deps = []
         if daemon_type == 'haproxy':
             # because cephadm creates new daemon instances whenever
@@ -2516,15 +2596,28 @@ Then run the following:
                 deps.append('ingress')
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
+            if self.secure_monitoring_stack:
+                if self.prometheus_web_user and self.prometheus_web_password:
+                    deps.append(f'{hash(self.prometheus_web_user + self.prometheus_web_password)}')
+                if self.alertmanager_web_user and self.alertmanager_web_password:
+                    deps.append(f'{hash(self.alertmanager_web_user + self.alertmanager_web_password)}')
+        elif daemon_type == 'grafana':
+            deps += get_daemon_names(['prometheus', 'loki'])
+            if self.secure_monitoring_stack and self.prometheus_web_user and self.prometheus_web_password:
+                deps.append(f'{hash(self.prometheus_web_user + self.prometheus_web_password)}')
+        elif daemon_type == 'alertmanager':
+            deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway'])
+            if self.secure_monitoring_stack and self.alertmanager_web_user and self.alertmanager_web_password:
+                deps.append(f'{hash(self.alertmanager_web_user + self.alertmanager_web_password)}')
+        elif daemon_type == 'promtail':
+            deps += get_daemon_names(['loki'])
         else:
-            need = {
-                'grafana': ['prometheus', 'loki'],
-                'alertmanager': ['mgr', 'alertmanager', 'snmp-gateway'],
-                'promtail': ['loki'],
-            }
-            for dep_type in need.get(daemon_type, []):
-                for dd in self.cache.get_daemons_by_type(dep_type):
-                    deps.append(dd.name())
+            # TODO(redo): some error message!
+            pass
+
+        if daemon_type in ['prometheus', 'node-exporter', 'alertmanager', 'grafana']:
+            deps.append(f'secure_monitoring_stack:{self.secure_monitoring_stack}')
+
         return sorted(deps)
 
     @forall_hosts
@@ -2614,6 +2707,18 @@ Then run the following:
         except OrchestratorError as e:
             self.events.from_orch_error(e)
             raise
+
+    @handle_orch_error
+    def get_prometheus_access_info(self) -> Dict[str, str]:
+        return {'user': self.prometheus_web_user or '',
+                'password': self.prometheus_web_password or '',
+                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
+
+    @handle_orch_error
+    def get_alertmanager_access_info(self) -> Dict[str, str]:
+        return {'user': self.alertmanager_web_user or '',
+                'password': self.alertmanager_web_password or '',
+                'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
 
     @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
@@ -2947,6 +3052,10 @@ Then run the following:
         return self._apply(spec)
 
     @handle_orch_error
+    def set_unmanaged(self, service_name: str, value: bool) -> str:
+        return self.spec_store.set_unmanaged(service_name, value)
+
+    @handle_orch_error
     def upgrade_check(self, image: str, version: str) -> str:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("check aborted - you have hosts in maintenance state")
@@ -2980,7 +3089,15 @@ Then run the following:
         }
         for host, dm in self.cache.daemons.items():
             for name, dd in dm.items():
-                if image_info.image_id == dd.container_image_id:
+                # check if the container digest for the digest we're checking upgrades for matches
+                # the container digests for the daemon if "use_repo_digest" setting is true
+                # or that the image name matches the daemon's image name if "use_repo_digest"
+                # is false. The idea is to generally check if the daemon is already using
+                # the image we're checking upgrade to.
+                if (
+                    (self.use_repo_digest and dd.matches_digests(image_info.repo_digests))
+                    or (not self.use_repo_digest and dd.matches_image_name(image))
+                ):
                     r['up_to_date'].append(dd.name())
                 elif dd.daemon_type in CEPH_IMAGE_TYPES:
                     r['needs_update'][dd.name()] = {
@@ -3055,7 +3172,8 @@ Then run the following:
     def remove_osds(self, osd_ids: List[str],
                     replace: bool = False,
                     force: bool = False,
-                    zap: bool = False) -> str:
+                    zap: bool = False,
+                    no_destroy: bool = False) -> str:
         """
         Takes a list of OSDs and schedules them for removal.
         The function that takes care of the actual removal is
@@ -3077,6 +3195,7 @@ Then run the following:
                                                 replace=replace,
                                                 force=force,
                                                 zap=zap,
+                                                no_destroy=no_destroy,
                                                 hostname=daemon.hostname,
                                                 process_started_at=datetime_now(),
                                                 remove_util=self.to_remove_osds.rm_util))

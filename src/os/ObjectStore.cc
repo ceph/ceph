@@ -17,9 +17,6 @@
 #include "common/Formatter.h"
 #include "common/safe_io.h"
 
-#ifndef  WITH_SEASTAR
-#include "filestore/FileStore.h"
-#endif
 #include "memstore/MemStore.h"
 #if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
@@ -54,8 +51,9 @@ std::unique_ptr<ObjectStore> ObjectStore::create(
   const string& journal,
   osflagbits_t flags)
 {
-  if (type == "filestore" || (type == "random" && rand() % 2)) {
-    return std::make_unique<FileStore>(cct, data, journal, flags);
+  if (type == "filestore") {
+    lgeneric_derr(cct) << __func__ << ": FileStore has been deprecated and is no longer supported" << dendl;
+    return nullptr;
   }
   if (type == "kstore" &&
       cct->check_experimental_feature_enabled("kstore")) {
@@ -78,16 +76,6 @@ int ObjectStore::probe_block_device_fsid(
   r = BlueStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
     lgeneric_dout(cct, 0) << __func__ << " " << path << " is bluestore, "
-			  << *fsid << dendl;
-    return r;
-  }
-#endif
-
-#ifndef WITH_SEASTAR
-  // okay, try FileStore (journal).
-  r = FileStore::get_block_device_fsid(cct, path, fsid);
-  if (r == 0) {
-    lgeneric_dout(cct, 0) << __func__ << " " << path << " is filestore, "
 			  << *fsid << dendl;
     return r;
   }

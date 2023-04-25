@@ -52,6 +52,7 @@
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_torrent.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
 
@@ -487,10 +488,9 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   if (!s->src_bucket_name.empty()) {
     std::unique_ptr<rgw::sal::Bucket> src_bucket;
     ret = driver->get_bucket(dpp, nullptr,
-			    rgw_bucket(s->src_tenant_name,
-				       s->src_bucket_name,
-				       s->bucket_instance_id),
-			    &src_bucket, y);
+                             rgw_bucket_key(s->src_tenant_name,
+                                            s->src_bucket_name),
+                             &src_bucket, y);
     if (ret == 0) {
       string& zonegroup = src_bucket->get_info().zonegroup;
       s->local_source = driver->get_zone()->get_zonegroup().equals(zonegroup);
@@ -510,7 +510,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 
     /* This is the only place that s->bucket is created.  It should never be
      * overwritten. */
-    ret = driver->get_bucket(dpp, s->user.get(), rgw_bucket(rgw_bucket_key(s->bucket_tenant, s->bucket_name, s->bucket_instance_id)), &s->bucket, y);
+    ret = driver->get_bucket(dpp, s->user.get(), rgw_bucket(s->bucket_tenant, s->bucket_name, s->bucket_instance_id), &s->bucket, y);
     if (ret < 0) {
       if (ret != -ENOENT) {
 	string bucket_log;
@@ -964,7 +964,7 @@ int RGWGetObj::verify_permission(optional_yield y)
     if (has_s3_existing_tag || has_s3_resource_tag)
       rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
 
-  if (torrent.get_flag()) {
+  if (get_torrent) {
     if (s->object->get_instance().empty()) {
       action = rgw::IAM::s3GetObjectTorrent;
     } else {
@@ -2199,8 +2199,7 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
   }
   /* start gettorrent */
-  if (torrent.get_flag())
-  {
+  if (get_torrent) {
     attr_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
     if (attr_iter != attrs.end() && attr_iter->second.to_str() == "SSE-C-AES256") {
       ldpp_dout(this, 0) << "ERROR: torrents are not supported for objects "
@@ -2208,18 +2207,16 @@ void RGWGetObj::execute(optional_yield y)
       op_ret = -EINVAL;
       goto done_err;
     }
-    torrent.init(s, driver);
-    rgw_obj obj = s->object->get_obj();
-    op_ret = torrent.get_torrent_file(s->object.get(), total_len, bl, obj);
-    if (op_ret < 0)
-    {
+    // read torrent info from attr
+    bufferlist torrentbl;
+    op_ret = rgw_read_torrent_file(this, s->object.get(), torrentbl, y);
+    if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to get_torrent_file ret= " << op_ret
                        << dendl;
       goto done_err;
     }
-    op_ret = send_response_data(bl, 0, total_len);
-    if (op_ret < 0)
-    {
+    op_ret = send_response_data(torrentbl, 0, torrentbl.length());
+    if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to send_response_data ret= " << op_ret << dendl;
       goto done_err;
     }
@@ -2237,10 +2234,14 @@ void RGWGetObj::execute(optional_yield y)
   }
 
 #ifdef WITH_ARROW_FLIGHT
-  if (ofs == 0) {
-    // insert a GetObj_Filter to monitor and create flight
-    flight_filter.emplace(s, filter);
-    filter = &*flight_filter;
+  if (s->penv.flight_store) {
+    if (ofs == 0) {
+      // insert a GetObj_Filter to monitor and create flight
+      flight_filter.emplace(s, filter);
+      filter = &*flight_filter;
+    }
+  } else {
+    ldpp_dout(this, 0) << "ERROR: flight_store not created in " << __func__ << dendl;
   }
 #endif
 
@@ -2259,13 +2260,21 @@ void RGWGetObj::execute(optional_yield y)
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   if (attr_iter != attrs.end() && get_type() == RGW_OP_GET_OBJ && get_data) {
     RGWObjManifest m;
-    decode(m, attr_iter->second);
-    if (m.get_tier_type() == "cloud-s3") {
-      /* XXX: Instead send presigned redirect or read-through */
-      op_ret = -ERR_INVALID_OBJECT_STATE;
-      ldpp_dout(this, 0) << "ERROR: Cannot get cloud tiered object. Failing with "
-		       << op_ret << dendl;
-      goto done_err;
+    try {
+      decode(m, attr_iter->second);
+      if (m.get_tier_type() == "cloud-s3") {
+        /* XXX: Instead send presigned redirect or read-through */
+        op_ret = -ERR_INVALID_OBJECT_STATE;
+        s->err.message = "This object was transitioned to cloud-s3";
+        ldpp_dout(this, 4) << "Cannot get cloud tiered object. Failing with "
+            << op_ret << dendl;
+        goto done_err;
+      }
+    } catch (const buffer::end_of_buffer&) {
+      // ignore empty manifest; it's not cloud-tiered
+    } catch (const std::exception& e) {
+      ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+          << *s->object << ": " << e.what() << dendl;
     }
   }
 
@@ -2396,7 +2405,7 @@ int RGWListBuckets::verify_permission(optional_yield y)
     tenant = s->user->get_tenant();
   }
 
-  if (!verify_user_permission(this, s, ARN(partition, service, "", tenant, "*"), rgw::IAM::s3ListAllMyBuckets)) {
+  if (!verify_user_permission(this, s, ARN(partition, service, "", tenant, "*"), rgw::IAM::s3ListAllMyBuckets, false)) {
     return -EACCES;
   }
 
@@ -3015,7 +3024,7 @@ int RGWCreateBucket::verify_permission(optional_yield y)
   bucket.name = s->bucket_name;
   bucket.tenant = s->bucket_tenant;
   ARN arn = ARN(bucket);
-  if (!verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket)) {
+  if (!verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket, false)) {
     return -EACCES;
   }
 
@@ -3889,6 +3898,24 @@ static CompressorRef get_compressor_plugin(const req_state *s,
   return Compressor::create(s->cct, alg);
 }
 
+auto RGWPutObj::get_torrent_filter(rgw::sal::DataProcessor* cb)
+    -> std::optional<RGWPutObj_Torrent>
+{
+  auto& conf = get_cct()->_conf;
+  if (!conf->rgw_torrent_flag) {
+    return std::nullopt; // torrent generation disabled
+  }
+  const auto max_len = conf->rgw_torrent_max_size;
+  const auto piece_len = conf->rgw_torrent_sha_unit;
+  if (!max_len || !piece_len) {
+    return std::nullopt; // invalid configuration
+  }
+  if (crypt_http_responses.count("x-amz-server-side-encryption-customer-algorithm")) {
+    return std::nullopt; // downloading the torrent would require customer keys
+  }
+  return RGWPutObj_Torrent{cb, max_len, piece_len};
+}
+
 int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, rgw::sal::DataProcessor* cb) {
   std::string script;
   const auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::putData, script);
@@ -3999,6 +4026,8 @@ void RGWPutObj::execute(optional_yield y)
 
   rgw_placement_rule *pdest_placement = &s->dest_placement;
 
+  s->object->set_trace(s->trace->GetContext());
+
   if (multipart) {
     std::unique_ptr<rgw::sal::MultipartUpload> upload;
     upload = s->bucket->get_multipart_upload(s->object->get_name(),
@@ -4020,7 +4049,7 @@ void RGWPutObj::execute(optional_yield y)
     s->dest_placement = *pdest_placement;
     pdest_placement = &s->dest_placement;
     ldpp_dout(this, 20) << "dest_placement for part=" << *pdest_placement << dendl;
-    processor = upload->get_writer(this, s->yield, s->object->clone(),
+    processor = upload->get_writer(this, s->yield, s->object.get(),
 				   s->user->get_id(), pdest_placement,
 				   multipart_part_num, multipart_part_str);
   } else if(append) {
@@ -4028,7 +4057,7 @@ void RGWPutObj::execute(optional_yield y)
       op_ret = -ERR_INVALID_BUCKET_STATE;
       return;
     }
-    processor = driver->get_append_writer(this, s->yield, s->object->clone(),
+    processor = driver->get_append_writer(this, s->yield, s->object.get(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, s->req_id, position,
 					 &cur_accounted_size);
@@ -4041,7 +4070,7 @@ void RGWPutObj::execute(optional_yield y)
         version_id = s->object->get_instance();
       }
     }
-    processor = driver->get_atomic_writer(this, s->yield, s->object->clone(),
+    processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, olh_epoch, s->req_id);
   }
@@ -4071,12 +4100,20 @@ void RGWPutObj::execute(optional_yield y)
     bufferlist bl;
     if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
-      decode(m, bl);
-      if (m.get_tier_type() == "cloud-s3") {
-        op_ret = -ERR_INVALID_OBJECT_STATE;
-        ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
-		       << op_ret << dendl;
-        return;
+      try{
+        decode(m, bl);
+        if (m.get_tier_type() == "cloud-s3") {
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+          s->err.message = "This object was transitioned to cloud-s3";
+          ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
+                         << op_ret << dendl;
+          return;
+        }
+      } catch (const buffer::end_of_buffer&) {
+        // ignore empty manifest; it's not cloud-tiered
+      } catch (const std::exception& e) {
+        ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+            << *s->object << ": " << e.what() << dendl;
       }
     }
 
@@ -4095,7 +4132,8 @@ void RGWPutObj::execute(optional_yield y)
 
   const auto& compression_type = driver->get_compression_type(*pdest_placement);
   CompressorRef plugin;
-  boost::optional<RGWPutObj_Compress> compressor;
+  std::optional<RGWPutObj_Compress> compressor;
+  std::optional<RGWPutObj_Torrent> torrent;
 
   std::unique_ptr<rgw::sal::DataProcessor> encrypt;
   std::unique_ptr<rgw::sal::DataProcessor> run_lua;
@@ -4119,6 +4157,9 @@ void RGWPutObj::execute(optional_yield y)
         // always send incompressible hint when rgw is itself doing compression
         s->object->set_compressed();
       }
+    }
+    if (torrent = get_torrent_filter(filter); torrent) {
+      filter = &*torrent;
     }
     // run lua script before data is compressed and encrypted - last filter runs first
     op_ret = get_lua_filter(&run_lua, filter);
@@ -4156,9 +4197,6 @@ void RGWPutObj::execute(optional_yield y)
     if (need_calc_md5) {
       hash.Update((const unsigned char *)data.c_str(), data.length());
     }
-
-    /* update torrrent */
-    torrent.update(data);
 
     op_ret = filter->process(std::move(data), ofs);
     if (op_ret < 0) {
@@ -4212,6 +4250,14 @@ void RGWPutObj::execute(optional_yield y)
         << " with type=" << cs_info.compression_type
         << ", orig_size=" << cs_info.orig_size
         << ", blocks=" << cs_info.blocks.size() << dendl;
+  }
+  if (torrent) {
+    auto bl = torrent->bencode_torrent(s->object->get_name());
+    if (bl.length()) {
+      ldpp_dout(this, 20) << "storing " << bl.length()
+         << " bytes of torrent info in " << RGW_ATTR_TORRENT << dendl;
+      attrs[RGW_ATTR_TORRENT] = std::move(bl);
+    }
   }
 
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
@@ -4281,19 +4327,6 @@ void RGWPutObj::execute(optional_yield y)
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
                                s->yield);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
-
-  /* produce torrent */
-  if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
-  {
-    torrent.init(s, driver);
-    torrent.set_create_date(mtime);
-    op_ret =  torrent.complete(y);
-    if (0 != op_ret)
-    {
-      ldpp_dout(this, 0) << "ERROR: torrent.handle_data() returned " << op_ret << dendl;
-      return;
-    }
-  }
 
   // send request to notification manager
   int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
@@ -4409,7 +4442,6 @@ void RGWPostObj::execute(optional_yield y)
     // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     ceph::buffer::list bl, aclbl;
-    int len = 0;
 
     op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
     if (op_ret < 0) {
@@ -4438,7 +4470,7 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     std::unique_ptr<rgw::sal::Writer> processor;
-    processor = driver->get_atomic_writer(this, s->yield, std::move(obj),
+    processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 					 s->bucket_owner.get_id(),
 					 &s->dest_placement, 0, s->req_id);
     op_ret = processor->prepare(s->yield);
@@ -4473,7 +4505,7 @@ void RGWPostObj::execute(optional_yield y)
     bool again;
     do {
       ceph::bufferlist data;
-      len = get_data(data, again);
+      int len = get_data(data, again);
 
       if (len < 0) {
         op_ret = len;
@@ -4504,7 +4536,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
-    if (len < min_len) {
+    if (ofs < min_len) {
       op_ret = -ERR_TOO_SMALL;
       return;
     }
@@ -5189,10 +5221,13 @@ bool RGWCopyObj::parse_copy_location(const std::string_view& url_src,
   return true;
 }
 
-int RGWCopyObj::verify_permission(optional_yield y)
+int RGWCopyObj::init_processing(optional_yield y)
 {
-  RGWAccessControlPolicy src_acl(s->cct);
-  boost::optional<Policy> src_policy;
+  op_ret = RGWOp::init_processing(y);
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
   op_ret = get_params(y);
   if (op_ret < 0)
     return op_ret;
@@ -5203,10 +5238,9 @@ int RGWCopyObj::verify_permission(optional_yield y)
   }
 
   op_ret = driver->get_bucket(this, s->user.get(),
-			     rgw_bucket(src_tenant_name,
-					src_bucket_name,
-					s->bucket_instance_id),
-			     &src_bucket, y);
+                              rgw_bucket_key(s->src_tenant_name,
+                                             s->src_bucket_name),
+                              &src_bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_SUCH_BUCKET;
@@ -5216,6 +5250,14 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   /* This is the only place the bucket is set on src_object */
   s->src_object->set_bucket(src_bucket.get());
+  return 0;
+}
+
+int RGWCopyObj::verify_permission(optional_yield y)
+{
+  RGWAccessControlPolicy src_acl(s->cct);
+  boost::optional<Policy> src_policy;
+
   /* get buckets info (source and dest) */
   if (s->local_source &&  source_zone.empty()) {
     s->src_object->set_atomic();
@@ -5314,45 +5356,30 @@ int RGWCopyObj::verify_permission(optional_yield y)
 
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
 
-  if (src_bucket_name.compare(dest_bucket_name) == 0) { /* will only happen if s->local_source
-                                                           or intra region sync */
-    dest_bucket = src_bucket->clone();
-  } else {
-    op_ret = driver->get_bucket(this, s->user.get(), dest_tenant_name, dest_bucket_name, &dest_bucket, y);
-    if (op_ret < 0) {
-      if (op_ret == -ENOENT) {
-        ldpp_dout(this, 0) << "ERROR: Destination Bucket not found for user: " << s->user->get_id().to_str() << dendl;
-	op_ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return op_ret;
-    }
-  }
-
-  dest_object = dest_bucket->get_object(rgw_obj_key(dest_obj_name));
-  dest_object->set_atomic();
+  s->object->set_atomic();
 
   /* check dest bucket permissions */
-  op_ret = read_bucket_policy(this, driver, s, dest_bucket->get_info(),
-			      dest_bucket->get_attrs(),
-                              &dest_bucket_policy, dest_bucket->get_key(), y);
+  op_ret = read_bucket_policy(this, driver, s, s->bucket->get_info(),
+			      s->bucket->get_attrs(),
+                              &dest_bucket_policy, s->bucket->get_key(), y);
   if (op_ret < 0) {
     return op_ret;
   }
-  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, dest_bucket->get_attrs(), dest_bucket->get_tenant());
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket->get_tenant());
   /* admin request overrides permission checks */
   if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
     if (dest_iam_policy != boost::none || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
       //Add destination bucket tags for authorization
       auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, dest_iam_policy, s->iam_user_policies, s->session_policies);
       if (has_s3_resource_tag)
-        rgw_iam_add_buckettags(this, s, dest_bucket.get());
+        rgw_iam_add_buckettags(this, s, s->bucket.get());
 
       rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
       if (md_directive)
 	rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
 				   *md_directive);
 
-      ARN obj_arn(dest_object->get_obj());
+      ARN obj_arn(s->object->get_obj());
       auto identity_policy_res = eval_identity_or_session_policies(this, s->iam_user_policies,
                                                                   s->env,
                                                                   rgw::IAM::s3PutObject,
@@ -5490,13 +5517,13 @@ void RGWCopyObj::execute(optional_yield y)
   }
 
   if ( ! version_id.empty()) {
-    dest_object->set_instance(version_id);
-  } else if (dest_bucket->versioning_enabled()) {
-    dest_object->gen_rand_obj_instance_name();
+    s->object->set_instance(version_id);
+  } else if (s->bucket->versioning_enabled()) {
+    s->object->gen_rand_obj_instance_name();
   }
 
   s->src_object->set_atomic();
-  dest_object->set_atomic();
+  s->object->set_atomic();
 
   encode_delete_at_attr(delete_at, attrs);
 
@@ -5524,12 +5551,20 @@ void RGWCopyObj::execute(optional_yield y)
     bufferlist bl;
     if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
-      decode(m, bl);
-      if (m.get_tier_type() == "cloud-s3") {
-        op_ret = -ERR_INVALID_OBJECT_STATE;
-        ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
-		       << op_ret << dendl;
-        return;
+      try{
+        decode(m, bl);
+        if (m.get_tier_type() == "cloud-s3") {
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+          s->err.message = "This object was transitioned to cloud-s3";
+          ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
+                         << op_ret << dendl;
+          return;
+        }
+      } catch (const buffer::end_of_buffer&) {
+        // ignore empty manifest; it's not cloud-tiered
+      } catch (const std::exception& e) {
+        ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+            << *s->object << ": " << e.what() << dendl;
       }
     }
 
@@ -5541,7 +5576,7 @@ void RGWCopyObj::execute(optional_yield y)
         return;
       }
       // enforce quota against the destination bucket owner
-      op_ret = dest_bucket->check_quota(this, quota, astate->accounted_size, y);
+      op_ret = s->bucket->check_quota(this, quota, astate->accounted_size, y);
       if (op_ret < 0) {
         return;
       }
@@ -5552,7 +5587,7 @@ void RGWCopyObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. In case of copying to remote this
    * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
-  op_ret = dest_object->swift_versioning_copy(this, s->yield);
+  op_ret = s->object->swift_versioning_copy(this, s->yield);
   if (op_ret < 0) {
     return;
   }
@@ -5560,8 +5595,8 @@ void RGWCopyObj::execute(optional_yield y)
   op_ret = s->src_object->copy_object(s->user.get(),
 	   &s->info,
 	   source_zone,
-	   dest_object.get(),
-	   dest_bucket.get(),
+	   s->object.get(),
+	   s->bucket.get(),
 	   src_bucket.get(),
 	   s->dest_placement,
 	   &src_mtime,
@@ -5585,7 +5620,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   s->yield);
 
   // send request to notification manager
-  int ret = res->publish_commit(this, obj_size, mtime, etag, dest_object->get_instance());
+  int ret = res->publish_commit(this, obj_size, mtime, etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
@@ -6242,8 +6277,10 @@ void RGWInitMultipart::execute(optional_yield y)
   bufferlist aclbl, tracebl;
   rgw::sal::Attrs attrs;
 
-  if (get_params(y) < 0)
+  op_ret = get_params(y);
+  if (op_ret < 0) {
     return;
+  }
 
   if (rgw::sal::Object::empty(s->object.get()))
     return;
@@ -7001,7 +7038,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
     op_ret = 0;
   }
 
-  send_partial_response(o, obj->get_delete_marker(), del_op->result.version_id, op_ret, formatter_flush_cond);
+  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret, formatter_flush_cond);
 
   // send request to notification manager
   int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
@@ -7017,7 +7054,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
   uint32_t aio_count = 0;
-  const uint32_t max_aio = s->cct->_conf->rgw_multi_obj_del_max_aio;
+  const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
   char* buf;
   std::optional<boost::asio::deadline_timer> formatter_flush_cond;
   if (y) {
@@ -7084,7 +7121,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         iter != multi_delete->objects.end();
         ++iter) {
     rgw_obj_key obj_key = *iter;
-    if (y && max_aio > 1) {
+    if (y) {
       wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
         return aio_count < max_aio;
       });
@@ -7094,7 +7131,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         aio_count--;
       }); 
     } else {
-      handle_individual_object(obj_key, y, &*formatter_flush_cond);
+      handle_individual_object(obj_key, y, nullptr);
     }
   }
   if (formatter_flush_cond) {
@@ -7556,7 +7593,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   dest_placement.inherit_from(bucket->get_placement_rule());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = driver->get_atomic_writer(this, s->yield, std::move(obj),
+  processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 				       bowner.get_id(),
 				       &s->dest_placement, 0, s->req_id);
   op_ret = processor->prepare(s->yield);

@@ -23,10 +23,14 @@
       <div class="mt-4">
         <div class="text-center"
              *ngIf="(buttonName && buttonRoute) || uiConfig; else dashboardButton">
-          <button class="btn btn-primary"
+          <button class="btn btn-primary ms-1"
                   [routerLink]="buttonRoute"
                   *ngIf="!uiConfig; else configureButtonTpl"
                   i18n>{{ buttonName }}</button>
+          <button class="btn btn-light ms-1"
+                  [routerLink]="secondaryButtonRoute"
+                  *ngIf="secondaryButtonName && secondaryButtonRoute"
+                  i18n>{{ secondaryButtonName }}</button>
         </div>
       </div>
     </div>

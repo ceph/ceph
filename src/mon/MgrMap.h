@@ -238,7 +238,7 @@ public:
   /// features
   uint64_t active_mgr_features = 0;
 
-  std::vector<entity_addrvec_t> clients; // for blocklist
+  std::multimap<std::string, entity_addrvec_t> clients; // for blocklist
 
   std::map<uint64_t, StandbyInfo> standbys;
 
@@ -256,6 +256,13 @@ public:
   // Map of module name to URI, indicating services exposed by
   // running modules on the active mgr daemon.
   std::map<std::string, std::string> services;
+
+  static MgrMap create_null_mgrmap() {
+    MgrMap null_map;
+    /* Use the largest epoch so it's always bigger than whatever the mgr has. */
+    null_map.epoch = std::numeric_limits<decltype(epoch)>::max();
+    return null_map;
+  }
 
   epoch_t get_epoch() const { return epoch; }
   epoch_t get_last_failure_osd_epoch() const { return last_failure_osd_epoch; }
@@ -394,7 +401,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(11, 6, bl);
+    ENCODE_START(12, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -408,14 +415,23 @@ public:
     encode(always_on_modules, bl);
     encode(active_mgr_features, bl);
     encode(last_failure_osd_epoch, bl);
-    encode(clients, bl, features);
+    std::vector<std::string> clients_names;
+    std::vector<entity_addrvec_t> clients_addrs;
+    for (const auto& i : clients) {
+      clients_names.push_back(i.first);
+      clients_addrs.push_back(i.second);
+    }
+    // The address vector needs to be encoded first to produce a
+    // backwards compatible messsage for older monitors.
+    encode(clients_addrs, bl, features);
+    encode(clients_names, bl, features);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(11, p);
+    DECODE_START(12, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -461,7 +477,26 @@ public:
       decode(last_failure_osd_epoch, p);
     }
     if (struct_v >= 11) {
-      decode(clients, p);
+      std::vector<entity_addrvec_t> clients_addrs;
+      decode(clients_addrs, p);
+      clients.clear();
+      if (struct_v >= 12) {
+	std::vector<std::string> clients_names;
+	decode(clients_names, p);
+	if (clients_names.size() != clients_addrs.size()) {
+	  throw ceph::buffer::malformed_input(
+	    "clients_names.size() != clients_addrs.size()");
+	}
+	auto cn = clients_names.begin();
+	auto ca = clients_addrs.begin();
+	for(; cn != clients_names.end(); ++cn, ++ca) {
+	  clients.emplace(*cn, *ca);
+	}
+      } else {
+	for (const auto& i : clients_addrs) {
+	  clients.emplace("", i);
+	}
+      }
     }
     DECODE_FINISH(p);
   }
@@ -514,13 +549,16 @@ public:
       }
       f->close_section();
     }
+    f->close_section(); // always_on_modules
     f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
     f->open_array_section("active_clients");
-    for (const auto &c : clients) {
-      f->dump_object("client", c);
+    for (const auto& i : clients) {
+      f->open_object_section("client");
+      f->dump_string("name", i.first);
+      i.second.dump(f);
+      f->close_section();
     }
-    f->close_section();
-    f->close_section();
+    f->close_section(); // active_clients
   }
 
   static void generate_test_instances(std::list<MgrMap*> &l) {

@@ -1153,6 +1153,9 @@ std::ostream& operator<<(std::ostream& out, const bucket_shard_str& rhs) {
   }
   return out;
 }
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<bucket_shard_str> : fmt::ostream_formatter {};
+#endif
 
 struct all_bucket_info {
   RGWBucketInfo bucket_info;
@@ -3621,8 +3624,8 @@ public:
 	  }
 	  if (!no_zero) {
 	    yield {
-	      const int num_shards0 =
-		source_info.layout.logs.front().layout.in_index.layout.num_shards;
+	      const int num_shards0 = rgw::num_shards(
+		source_info.layout.logs.front().layout.in_index.layout);
 	      call(new CheckAllBucketShardStatusIsIncremental(sc, sync_pair,
 							      num_shards0,
 							      &all_incremental));
@@ -3738,8 +3741,18 @@ int RGWReadRecoveringBucketShardsCoroutine::operate(const DoutPrefixProvider *dp
 
       count += error_entries.size();
       marker = *error_entries.rbegin();
-      recovering_buckets.insert(std::make_move_iterator(error_entries.begin()),
-                                std::make_move_iterator(error_entries.end()));
+      for (const std::string& key : error_entries) {
+        rgw_bucket_shard bs;
+        std::optional<uint64_t> gen;
+        if (int r = rgw::error_repo::decode_key(key, bs, gen); r < 0) {
+          // insert the key as-is
+          recovering_buckets.insert(std::move(key));
+        } else if (gen) {
+          recovering_buckets.insert(fmt::format("{}[{}]", bucket_shard_str{bs}, *gen));
+        } else {
+          recovering_buckets.insert(fmt::format("{}[full]", bucket_shard_str{bs}));
+        }
+      }
     } while (omapkeys->more && count < max_entries);
   
     return set_cr_done();
@@ -5624,7 +5637,7 @@ class RGWSyncBucketCR : public RGWCoroutine {
   rgw_raw_obj error_repo;
   rgw_bucket_shard source_bs;
   rgw_pool pool;
-  uint64_t current_gen;
+  uint64_t current_gen = 0;
 
   RGWSyncTraceNodeRef tn;
 
@@ -5692,6 +5705,12 @@ int RGWSyncBucketCR::operate(const DoutPrefixProvider *dpp)
     yield call(new ReadCR(dpp, env->driver,
                           status_obj, &bucket_status, false, &objv));
     if (retcode == -ENOENT) {
+      // if the full sync status object didn't exist yet, run the backward
+      // compatability logic in InitBucketFullSyncStatusCR below. if it did
+      // exist, a `bucket sync init` probably requested its re-initialization,
+      // and shouldn't try to resume incremental sync
+      init_check_compat = true;
+
       // use exclusive create to set state=Init
       objv.generate_new_write_ver(cct);
       yield call(new WriteCR(dpp, env->driver, status_obj, bucket_status, &objv, true));
@@ -6400,14 +6419,14 @@ string RGWBucketPipeSyncStatusManager::inc_status_oid(const rgw_zone_id& source_
 
 string RGWBucketPipeSyncStatusManager::obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
                                                       const rgw_zone_id& source_zone,
-                                                      const rgw::sal::Object* obj)
+                                                      const rgw_obj& obj)
 {
-  string prefix = object_status_oid_prefix + "." + source_zone.id + ":" + obj->get_bucket()->get_key().get_key();
+  string prefix = object_status_oid_prefix + "." + source_zone.id + ":" + obj.bucket.get_key();
   if (sync_pipe.source_bucket_info.bucket !=
       sync_pipe.dest_bucket_info.bucket) {
     prefix += string("/") + sync_pipe.dest_bucket_info.bucket.get_key();
   }
-  return prefix + ":" + obj->get_name() + ":" + obj->get_instance();
+  return prefix + ":" + obj.key.name + ":" + obj.key.instance;
 }
 
 int rgw_read_remote_bilog_info(const DoutPrefixProvider *dpp,

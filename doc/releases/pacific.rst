@@ -2,6 +2,27 @@
 Pacific
 =======
 
+v16.2.12 Pacific
+================
+
+This is a hotfix release that resolves several performance flaws in ceph-volume, particularly during osd activation (https://tracker.ceph.com/issues/57627)
+
+Notable Changes
+---------------
+
+Changelog
+---------
+
+* ceph-volume: add test case to reproduce bug in get_physical_fast_allocs (`pr#50878 <https://github.com/ceph/ceph/pull/50878>`_, Cory Snyder)
+* ceph-volume: do not raise RuntimeError in util.lsblk (`pr#50145 <https://github.com/ceph/ceph/pull/50145>`_, Guillaume Abrioux)
+* ceph-volume: fix a bug in get_all_devices_vgs() (`pr#49454 <https://github.com/ceph/ceph/pull/49454>`_, Guillaume Abrioux)
+* ceph-volume: fix a bug in lsblk_all() (`pr#49869 <https://github.com/ceph/ceph/pull/49869>`_, Guillaume Abrioux)
+* ceph-volume: fix issue with fast device allocs when there are multiple PVs per VG (`pr#50279 <https://github.com/ceph/ceph/pull/50279>`_, Cory Snyder)
+* ceph-volume: fix regression in activate (`pr#49972 <https://github.com/ceph/ceph/pull/49972>`_, Guillaume Abrioux)
+* ceph-volume: legacy_encrypted() shouldn't call lsblk() when device is 'tmpfs' (`pr#50162 <https://github.com/ceph/ceph/pull/50162>`_, Guillaume Abrioux)
+* ceph-volume: update the OS before deploying Ceph (pacific) (`pr#50996 <https://github.com/ceph/ceph/pull/50996>`_, Guillaume Abrioux)
+
+
 v16.2.11 Pacific
 ================
 

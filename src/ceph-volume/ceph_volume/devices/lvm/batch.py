@@ -114,16 +114,26 @@ def get_physical_fast_allocs(devices, type_, fast_slots_per_device, new_osds, ar
 
     ret = []
     vg_device_map = group_devices_by_vg(devices)
-    for vg_devices in vg_device_map.values():
+    for vg_name, vg_devices in vg_device_map.items():
         for dev in vg_devices:
             if not dev.available_lvm:
                 continue
             # any LV present is considered a taken slot
             occupied_slots = len(dev.lvs)
+            # prior to v15.2.8, db/wal deployments were grouping multiple fast devices into single VGs - we need to
+            # multiply requested_slots (per device) by the number of devices in the VG in order to ensure that
+            # abs_size is calculated correctly from vg_size
+            if vg_name == 'unused_devices':
+                slots_for_vg = requested_slots
+            else:
+                if len(vg_devices) > 1:
+                    slots_for_vg = len(args.devices)
+                else:
+                    slots_for_vg = len(vg_devices) * requested_slots
             dev_size = dev.vg_size[0]
             # this only looks at the first vg on device, unsure if there is a better
             # way
-            abs_size = disk.Size(b=int(dev_size / requested_slots))
+            abs_size = disk.Size(b=int(dev_size / slots_for_vg))
             free_size = dev.vg_free[0]
             relative_size = int(abs_size) / dev_size
             if requested_size:
@@ -149,7 +159,6 @@ def group_devices_by_vg(devices):
     result['unused_devices'] = []
     for dev in devices:
         if len(dev.vgs) > 0:
-            # already using assumption that a PV only belongs to single VG in other places
             vg_name = dev.vgs[0].name
             if vg_name in result:
                 result[vg_name].append(dev)

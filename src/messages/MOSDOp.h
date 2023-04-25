@@ -36,7 +36,7 @@ namespace _mosdop {
 template<typename V>
 class MOSDOp final : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 3;
 
 private:
@@ -166,6 +166,10 @@ public:
   uint64_t get_features() const {
     if (features)
       return features;
+#ifdef WITH_SEASTAR
+    // In crimson, conn is independently maintained outside Message.
+    ceph_abort();
+#endif
     return get_connection()->get_features();
   }
 
@@ -361,8 +365,7 @@ struct ceph_osd_request_head {
       encode(retry_attempt, payload);
       encode(features, payload);
     } else {
-      // latest v8 encoding with hobject_t hash separate from pgid, no
-      // reassert version
+      // latest v9 opentelemetry trace
       header.version = HEAD_VERSION;
 
       encode(pgid, payload);
@@ -371,6 +374,7 @@ struct ceph_osd_request_head {
       encode(flags, payload);
       encode(reqid, payload);
       encode_trace(payload, features);
+      encode_otel_trace(payload, features);
 
       // -- above decoded up front; below decoded post-dispatch thread --
 
@@ -400,6 +404,16 @@ struct ceph_osd_request_head {
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {
+      decode(pgid, p);
+      uint32_t hash;
+      decode(hash, p);
+      hobj.set_hash(hash);
+      decode(osdmap_epoch, p);
+      decode(flags, p);
+      decode(reqid, p);
+      decode_trace(p);
+      decode_otel_trace(p);
+    } else if (header.version == 8) {
       decode(pgid, p);      // actual pgid
       uint32_t hash;
       decode(hash, p); // raw hash value

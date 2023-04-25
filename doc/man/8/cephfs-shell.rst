@@ -57,7 +57,7 @@ Options
 .. code:: bash
 
     [build]$ python3 -m venv venv && source venv/bin/activate && pip3 install cmd2
-    [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/cephfs-shell
+    [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/shell/cephfs-shell
 
 Commands
 ========

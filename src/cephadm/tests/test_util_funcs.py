@@ -2,7 +2,10 @@
 #
 from unittest import mock
 
+import functools
+import io
 import os
+import sys
 
 import pytest
 
@@ -414,3 +417,249 @@ def test_check_unit(enabled_out, active_out, expected):
         )
         enabled, state, installed = _cephadm.check_unit(ctx, "foobar")
     assert (enabled, state, installed) == expected
+
+
+class FakeEnabler:
+    def __init__(self, should_be_called):
+        self._should_be_called = should_be_called
+        self._services = []
+
+    def enable_service(self, service):
+        self._services.append(service)
+
+    def check_expected(self):
+        if not self._should_be_called:
+            assert not self._services
+            return
+        # there are currently seven chron/chrony type services that
+        # cephadm looks for. Make sure it probed for each of them
+        # or more in case someone adds to the list.
+        assert len(self._services) >= 7
+        assert "chrony.service" in self._services
+        assert "ntp.service" in self._services
+
+
+@pytest.mark.parametrize(
+    "call_fn, enabler, expected",
+    [
+        # Test that time sync services are not enabled
+        (
+            _mk_fake_call(
+                enabled=("", "", 1),
+                active=("", "", 1),
+            ),
+            None,
+            False,
+        ),
+        # Test that time sync service is enabled
+        (
+            _mk_fake_call(
+                enabled=("", "", 0),
+                active=("active", "", 0),
+            ),
+            None,
+            True,
+        ),
+        # Test that time sync is not enabled, and try to enable them.
+        # This one needs to be not running, but installed in order to
+        # call the enabler. It should call the enabler with every known
+        # service name.
+        (
+            _mk_fake_call(
+                enabled=("disabled", "", 1),
+                active=("", "", 1),
+            ),
+            FakeEnabler(True),
+            False,
+        ),
+        # Test that time sync is enabled, with an enabler passed which
+        # will check that the enabler was never called.
+        (
+            _mk_fake_call(
+                enabled=("", "", 0),
+                active=("active", "", 0),
+            ),
+            FakeEnabler(False),
+            True,
+        ),
+    ],
+)
+def test_check_time_sync(call_fn, enabler, expected):
+    """The check_time_sync call actually checks if a time synchronization service
+    is enabled. It is also the only consumer of check_units.
+    """
+    with with_cephadm_ctx([]) as ctx:
+        _cephadm.call.side_effect = call_fn
+        result = _cephadm.check_time_sync(ctx, enabler=enabler)
+        assert result == expected
+        if enabler is not None:
+            enabler.check_expected()
+
+
+@pytest.mark.parametrize(
+    "content, expected",
+    [
+        (
+            """#JUNK
+            FOO=1
+            """,
+            (None, None, None),
+        ),
+        (
+            """# A sample from a real centos system
+NAME="CentOS Stream"
+VERSION="8"
+ID="centos"
+ID_LIKE="rhel fedora"
+VERSION_ID="8"
+PLATFORM_ID="platform:el8"
+PRETTY_NAME="CentOS Stream 8"
+ANSI_COLOR="0;31"
+CPE_NAME="cpe:/o:centos:centos:8"
+HOME_URL="https://centos.org/"
+BUG_REPORT_URL="https://bugzilla.redhat.com/"
+REDHAT_SUPPORT_PRODUCT="Red Hat Enterprise Linux 8"
+REDHAT_SUPPORT_PRODUCT_VERSION="CentOS Stream"
+            """,
+            ("centos", "8", None),
+        ),
+        (
+            """# Minimal but complete, made up vals
+ID="hpec"
+VERSION_ID="33"
+VERSION_CODENAME="hpec nimda"
+            """,
+            ("hpec", "33", "hpec nimda"),
+        ),
+        (
+            """# Minimal but complete, no quotes
+ID=hpec
+VERSION_ID=33
+VERSION_CODENAME=hpec nimda
+            """,
+            ("hpec", "33", "hpec nimda"),
+        ),
+    ],
+)
+def test_get_distro(monkeypatch, content, expected):
+    def _fake_open(*args, **kwargs):
+        return io.StringIO(content)
+
+    monkeypatch.setattr("builtins.open", _fake_open)
+    assert _cephadm.get_distro() == expected
+
+
+class FakeContext:
+    """FakeContext is a minimal type for passing as a ctx, when
+    with_cephadm_ctx is not appropriate (it enables too many mocks, etc).
+    """
+
+    timeout = 30
+
+
+def _has_non_zero_exit(clog):
+    assert any("Non-zero exit" in ll for _, _, ll in clog.record_tuples)
+
+
+def _has_values_somewhere(clog, values, non_zero=True):
+    if non_zero:
+        _has_non_zero_exit(clog)
+    for value in values:
+        assert any(value in ll for _, _, ll in clog.record_tuples)
+
+
+@pytest.mark.parametrize(
+    "pyline, expected, call_kwargs, log_check",
+    [
+        pytest.param(
+            "import time; time.sleep(0.1)",
+            ("", "", 0),
+            {},
+            None,
+            id="brief-sleep",
+        ),
+        pytest.param(
+            "import sys; sys.exit(2)",
+            ("", "", 2),
+            {},
+            _has_non_zero_exit,
+            id="exit-non-zero",
+        ),
+        pytest.param(
+            "import sys; sys.exit(0)",
+            ("", "", 0),
+            {"desc": "success"},
+            None,
+            id="success-with-desc",
+        ),
+        pytest.param(
+            "print('foo'); print('bar')",
+            ("foo\nbar\n", "", 0),
+            {"desc": "stdout"},
+            None,
+            id="stdout-print",
+        ),
+        pytest.param(
+            "import sys; sys.stderr.write('la\\nla\\nla\\n')",
+            ("", "la\nla\nla\n", 0),
+            {"desc": "stderr"},
+            None,
+            id="stderr-print",
+        ),
+        pytest.param(
+            "for i in range(501): print(i, flush=True)",
+            lambda r: r[2] == 0 and r[1] == "" and "500" in r[0].splitlines(),
+            {},
+            None,
+            id="stdout-long",
+        ),
+        pytest.param(
+            "for i in range(1000000): print(i, flush=True)",
+            lambda r: r[2] == 0
+            and r[1] == ""
+            and len(r[0].splitlines()) == 1000000,
+            {},
+            None,
+            id="stdout-very-long",
+        ),
+        pytest.param(
+            "import sys; sys.stderr.write('pow\\noof\\nouch\\n'); sys.exit(1)",
+            ("", "pow\noof\nouch\n", 1),
+            {"desc": "stderr"},
+            functools.partial(
+                _has_values_somewhere,
+                values=["pow", "oof", "ouch"],
+                non_zero=True,
+            ),
+            id="stderr-logged-non-zero",
+        ),
+        pytest.param(
+            "import time; time.sleep(4)",
+            ("", "", 124),
+            {"timeout": 1},
+            None,
+            id="long-sleep",
+        ),
+        pytest.param(
+            "import time\nfor i in range(100):\n\tprint(i, flush=True); time.sleep(0.01)",
+            ("", "", 124),
+            {"timeout": 0.5},
+            None,
+            id="slow-print-timeout",
+        ),
+        # Commands that time out collect no logs, return empty std{out,err} strings
+    ],
+)
+def test_call(caplog, monkeypatch, pyline, expected, call_kwargs, log_check):
+    import logging
+
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr("cephadm.logger", logging.getLogger())
+    ctx = FakeContext()
+    result = _cephadm.call(ctx, [sys.executable, "-c", pyline], **call_kwargs)
+    if callable(expected):
+        assert expected(result)
+    else:
+        assert result == expected
+    if callable(log_check):
+        log_check(caplog)

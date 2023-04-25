@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <vector>
+#include "crimson_utils.h"
 #include "gtest/gtest.h"
 #include "include/rados/librados.h"
 #include "test/librados/test.h"
@@ -135,6 +136,7 @@ TEST(LibRadosPools, PoolCreateWithCrushRule) {
 }
 
 TEST(LibRadosPools, PoolGetBaseTier) {
+  SKIP_IF_CRIMSON();
   rados_t cluster;
   std::string pool_name = get_temp_pool_name();
   ASSERT_EQ("", create_one_pool(pool_name, &cluster));

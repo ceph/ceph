@@ -7,7 +7,7 @@
 You can configure Ceph OSD Daemons in the Ceph configuration file (or in recent
 releases, the central config store), but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` (for Filestore), ``host``,  and
+Ceph OSD Daemon configuration sets ``host`` and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -139,6 +139,8 @@ See `Pool & PG Config Reference`_ for details.
 
 
 .. index:: OSD; scrubbing
+
+.. _rados_config_scrubbing:
 
 Scrubbing
 =========

@@ -280,11 +280,16 @@ public:
     return TCachedExtentRef<const T>(static_cast<const T*>(this));
   }
 
-  /// Returns true if extent is part of an open transaction
-  bool is_pending() const {
+  /// Returns true if extent can be mutated in an open transaction
+  bool is_mutable() const {
     return state == extent_state_t::INITIAL_WRITE_PENDING ||
       state == extent_state_t::MUTATION_PENDING ||
       state == extent_state_t::EXIST_MUTATION_PENDING;
+  }
+
+  /// Returns true if extent is part of an open transaction
+  bool is_pending() const {
+    return is_mutable() || state == extent_state_t::EXIST_CLEAN;
   }
 
   /// Returns true if extent has a pending delta
@@ -475,7 +480,7 @@ private:
   /// number of deltas since initial write
   extent_version_t version = 0;
 
-  /// address of original block -- relative iff is_pending() and is_clean()
+  /// address of original block -- record relative iff is_initial_pending()
   paddr_t poffset;
 
   /// relative address before ool write, used to update mapping

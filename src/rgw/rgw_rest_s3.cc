@@ -16,6 +16,7 @@
 #include "auth/Crypto.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/tokenizer.hpp>
 #define BOOST_BIND_GLOBAL_PLACEHOLDERS
 #ifdef HAVE_WARN_IMPLICIT_CONST_INT_FLOAT_CONVERSION
@@ -297,6 +298,8 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   if (s->system_request) {
     skip_decrypt = s->info.args.exists(RGW_SYS_PARAM_PREFIX "skip-decrypt");
   }
+
+  get_torrent = s->info.args.exists("torrent");
 
   return RGWGetObj_ObjStore::get_params(y);
 }
@@ -580,7 +583,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
   if (res == 0) {
     if (block_crypt != nullptr) {
-      auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s, s->cct, cb, std::move(block_crypt));
+      auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s, s->cct, cb, std::move(block_crypt), s->yield);
       if (manifest_bl != nullptr) {
         res = f->read_manifest(this, *manifest_bl);
         if (res == 0) {
@@ -2515,8 +2518,15 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
-  if (!s->length)
-    return -ERR_LENGTH_REQUIRED;
+  if (!s->length) {
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || strcmp(encoding, "chunked") != 0) {
+      ldout(s->cct, 20) << "neither length nor chunked encoding" << dendl;
+      return -ERR_LENGTH_REQUIRED;
+    }
+
+    chunked_upload = true;
+  }
 
   int ret;
 
@@ -2725,8 +2735,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
   res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
   if (res == 0) {
     if (block_crypt != nullptr) {
-      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s, s->cct, cb, std::move(block_crypt)));
-      //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
+      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
       if (f != nullptr) {
         if (manifest_bl != nullptr) {
           res = f->read_manifest(this, *manifest_bl);
@@ -2758,7 +2767,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
        * We use crypto mode that configured as if we were decrypting. */
       res = rgw_s3_prepare_decrypt(s, obj->get_attrs(), &block_crypt, crypt_http_responses);
       if (res == 0 && block_crypt != nullptr)
-        filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
+        filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
     /* it is ok, to not have encryption at all */
   }
@@ -2767,7 +2776,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     std::unique_ptr<BlockCrypt> block_crypt;
     res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt, crypt_http_responses);
     if (res == 0 && block_crypt != nullptr) {
-      filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
+      filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
   }
   return res;
@@ -3315,7 +3324,7 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   int res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt,
                                    crypt_http_responses);
   if (res == 0 && block_crypt != nullptr) {
-    filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
+    filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
   }
   return res;
 }
@@ -3417,12 +3426,6 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_IF_NONE_MATCH");
 
-  src_tenant_name = s->src_tenant_name;
-  src_bucket_name = s->src_bucket_name;
-  dest_tenant_name = s->bucket->get_tenant();
-  dest_bucket_name = s->bucket->get_name();
-  dest_obj_name = s->object->get_name();
-
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
@@ -3446,9 +3449,9 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   }
 
   if (source_zone.empty() &&
-      (dest_tenant_name.compare(src_tenant_name) == 0) &&
-      (dest_bucket_name.compare(src_bucket_name) == 0) &&
-      (dest_obj_name.compare(s->src_object->get_name()) == 0) &&
+      (s->bucket->get_tenant() == s->src_tenant_name) &&
+      (s->bucket->get_name() == s->src_bucket_name) &&
+      (s->object->get_name() == s->src_object->get_name()) &&
       s->src_object->get_instance().empty() &&
       (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
@@ -3885,10 +3888,18 @@ void RGWSetRequestPayment_ObjStore_S3::send_response()
 
 int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
 {
+  int ret;
+
+  ret = get_encryption_defaults(s);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    return ret;
+  }
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
-  op_ret = create_s3_policy(s, driver, s3policy, s->owner);
-  if (op_ret < 0)
-    return op_ret;
+  ret = create_s3_policy(s, driver, s3policy, s->owner);
+  if (ret < 0)
+    return ret;
 
   policy = s3policy;
 
@@ -4484,49 +4495,6 @@ RGWOp *RGWHandler_REST_Service_S3::op_head()
   return new RGWListBuckets_ObjStore_S3;
 }
 
-RGWOp *RGWHandler_REST_Service_S3::op_post()
-{
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
-
-  int ret;
-  bufferlist data;
-  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
-  if (ret < 0) {
-      return nullptr;
-  }
-
-  const auto post_body = data.to_str();
-
-  if (isSTSEnabled) {
-    RGWHandler_REST_STS sts_handler(auth_registry, post_body);
-    sts_handler.init(driver, s, s->cio);
-    auto op = sts_handler.get_op();
-    if (op) {
-      return op;
-    }
-  }
-
-  if (isIAMEnabled) {
-    RGWHandler_REST_IAM iam_handler(auth_registry, data);
-    iam_handler.init(driver, s, s->cio);
-    auto op = iam_handler.get_op();
-    if (op) {
-      return op;
-    }
-  }
-
-  if (isPSEnabled) {
-    RGWHandler_REST_PSTopic_AWS topic_handler(auth_registry, post_body);
-    topic_handler.init(driver, s, s->cio);
-    auto op = topic_handler.get_op();
-    if (op) {
-      return op;
-    }
-  }
-
-  return nullptr;
-}
-
 RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data) const
 {
   // Non-website mode
@@ -5070,6 +5038,117 @@ int RGWHandler_Auth_S3::init(rgw::sal::Driver* driver, req_state *state,
   return RGWHandler_REST::init(driver, state, cio);
 }
 
+namespace {
+// utility classes and functions for handling parameters with the following format:
+// Attributes.entry.{N}.{key|value}={VALUE}
+// N - any unsigned number
+// VALUE - url encoded string
+
+// and Attribute is holding key and value
+// ctor and set are done according to the "type" argument
+// if type is not "key" or "value" its a no-op
+class Attribute {
+  std::string key;
+  std::string value;
+public:
+  Attribute(const std::string& type, const std::string& key_or_value) {
+    set(type, key_or_value);
+  }
+  void set(const std::string& type, const std::string& key_or_value) {
+    if (type == "key") {
+      key = key_or_value;
+    } else if (type == "value") {
+      value = key_or_value;
+    }
+  }
+  const std::string& get_key() const { return key; }
+  const std::string& get_value() const { return value; }
+};
+
+using AttributeMap = std::map<unsigned, Attribute>;
+
+// aggregate the attributes into a map
+// the key and value are associated by the index (N)
+// no assumptions are made on the order in which these parameters are added
+void update_attribute_map(const std::string& input, AttributeMap& map) {
+  const boost::char_separator<char> sep(".");
+  const boost::tokenizer tokens(input, sep);
+  auto token = tokens.begin();
+  if (*token != "Attributes") {
+      return;
+  }
+  ++token;
+
+  if (*token != "entry") {
+      return;
+  }
+  ++token;
+
+  unsigned idx;
+  try {
+    idx = std::stoul(*token);
+  } catch (const std::invalid_argument&) {
+    return;
+  }
+  ++token;
+
+  std::string key_or_value = "";
+  // get the rest of the string regardless of dots
+  // this is to allow dots in the value
+  while (token != tokens.end()) {
+    key_or_value.append(*token+".");
+    ++token;
+  }
+  // remove last separator
+  key_or_value.pop_back();
+
+  auto pos = key_or_value.find("=");
+  if (pos != std::string::npos) {
+    const auto key_or_value_lhs = key_or_value.substr(0, pos);
+    const auto key_or_value_rhs = url_decode(key_or_value.substr(pos + 1, key_or_value.size() - 1));
+    const auto map_it = map.find(idx);
+    if (map_it == map.end()) {
+      // new entry
+      map.emplace(std::make_pair(idx, Attribute(key_or_value_lhs, key_or_value_rhs)));
+    } else {
+      // existing entry
+      map_it->second.set(key_or_value_lhs, key_or_value_rhs);
+    }
+  }
+}
+}
+
+void parse_post_action(const std::string& post_body, req_state* s)
+{
+  if (post_body.size() > 0) {
+    ldpp_dout(s, 10) << "Content of POST: " << post_body << dendl;
+
+    if (post_body.find("Action") != string::npos) {
+      const boost::char_separator<char> sep("&");
+      const boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
+      AttributeMap map;
+      for (const auto& t : tokens) {
+        const auto pos = t.find("=");
+        if (pos != string::npos) {
+          const auto key = t.substr(0, pos);
+          if (boost::starts_with(key, "Attributes.")) {
+            update_attribute_map(t, map);
+          } else {
+            s->info.args.append(t.substr(0, pos),
+                              url_decode(t.substr(pos+1, t.size() -1)));
+          }
+        }
+      }
+      // update the regular args with the content of the attribute map
+      for (const auto& attr : map) {
+          s->info.args.append(attr.second.get_key(), attr.second.get_value());
+      }
+    }
+  }
+  const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
+  s->info.args.append("PayloadHash", payload_hash);
+}
+
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
 					    req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
@@ -5080,34 +5159,55 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
     RGWHandler_REST_S3::init_from_header(driver, s,
 					is_s3website ? RGWFormat::HTML :
 					RGWFormat::XML, true);
-  if (ret < 0)
-    return NULL;
-
-  RGWHandler_REST* handler;
-  // TODO: Make this more readable
-  if (is_s3website) {
-    if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3Website(auth_registry);
-    } else if (rgw::sal::Object::empty(s->object.get())) {
-      handler = new RGWHandler_REST_Bucket_S3Website(auth_registry);
-    } else {
-      handler = new RGWHandler_REST_Obj_S3Website(auth_registry);
-    }
-  } else {
-    if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts, enable_iam, enable_pubsub);
-    } else if (!rgw::sal::Object::empty(s->object.get())) {
-      handler = new RGWHandler_REST_Obj_S3(auth_registry);
-    } else if (s->info.args.exist_obj_excl_sub_resource()) {
-      return NULL;
-    } else {
-      handler = new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
-    }
+  if (ret < 0) {
+    return nullptr;
   }
 
-  ldpp_dout(s, 20) << __func__ << " handler=" << typeid(*handler).name()
-		    << dendl;
-  return handler;
+  if (is_s3website) {
+    if (s->init_state.url_bucket.empty()) {
+      return new RGWHandler_REST_Service_S3Website(auth_registry);
+    }
+    if (rgw::sal::Object::empty(s->object.get())) {
+      return new RGWHandler_REST_Bucket_S3Website(auth_registry);
+    }
+    return new RGWHandler_REST_Obj_S3Website(auth_registry);
+  }
+
+  if (s->init_state.url_bucket.empty()) {
+    // no bucket
+    if (s->op == OP_POST) {
+      // POST will be one of: IAM, STS or topic service
+      const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+      int ret;
+      bufferlist data;
+      std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+      if (ret < 0) {
+        return nullptr;
+      }
+      parse_post_action(data.to_str(), s);
+      if (enable_sts && RGWHandler_REST_STS::action_exists(s)) {
+        return new RGWHandler_REST_STS(auth_registry);
+      }
+      if (enable_iam && RGWHandler_REST_IAM::action_exists(s)) {
+        return new RGWHandler_REST_IAM(auth_registry, data);
+      }
+      if (enable_pubsub && RGWHandler_REST_PSTopic_AWS::action_exists(s)) {
+        return new RGWHandler_REST_PSTopic_AWS(auth_registry); 
+      }
+      return nullptr;
+    }
+    // non-POST S3 service without a bucket
+    return new RGWHandler_REST_Service_S3(auth_registry);
+  }
+  if (!rgw::sal::Object::empty(s->object.get())) {
+    // has object
+    return new RGWHandler_REST_Obj_S3(auth_registry);
+  }
+  if (s->info.args.exist_obj_excl_sub_resource()) {
+    return nullptr;
+  }
+  // has bucket
+  return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
 }
 
 bool RGWHandler_REST_S3Website::web_dir() const {

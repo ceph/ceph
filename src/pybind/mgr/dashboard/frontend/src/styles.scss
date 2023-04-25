@@ -218,16 +218,23 @@ a.btn-light {
   @extend .badge, .bg-dark;
 }
 
-json-schema-form {
-  .help-block {
-    @extend .invalid-feedback;
-  }
-
+formly-form {
   .ng-touched.ng-invalid {
     @extend .is-invalid;
   }
 
   .ng-touched.ng-valid {
     @extend .is-valid;
+  }
+
+  .form-label {
+    @extend .cd-col-form-label;
+    text-align: start;
+    white-space: nowrap;
+    width: fit-content;
+
+    span[aria-hidden='true'] {
+      color: $danger;
+    }
   }
 }

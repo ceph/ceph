@@ -235,7 +235,7 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     cluster_state.with_osdmap([&](const OSDMap &osd_map){
       no_gil.acquire_gil();
       if (what == "osd_map") {
-        osd_map.dump(&f);
+        osd_map.dump(&f, g_ceph_context);
       } else if (what == "osd_map_tree") {
         osd_map.print_tree(&f, nullptr);
       } else if (what == "osd_map_crush") {
@@ -259,10 +259,16 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     }
     f.close_section();
   } else if (what.substr(0, 6) == "config") {
+    // We make a copy of the global config to avoid printing
+    // to py formater (which may drop-take GIL) while holding
+    // the global config lock, which might deadlock with other
+    // thread that is holding the GIL and acquiring the global
+    // config lock.
+    ConfigProxy config{g_conf()};
     if (what == "config_options") {
-      g_conf().config_options(&f);
+      config.config_options(&f);
     } else if (what == "config") {
-      g_conf().show_config(&f);
+      config.show_config(&f);
     }
   } else if (what == "mon_map") {
     without_gil_t no_gil;
@@ -512,8 +518,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     derr << "Python module requested unknown data '" << what << "'" << dendl;
     Py_RETURN_NONE;
   }
-  without_gil_t no_gil;
-  no_gil.acquire_gil();
   if(ttl_seconds) {
     return jf.get();
   } else {
@@ -544,6 +548,9 @@ void ActivePyModules::start_one(PyModuleRef py_module)
 
       dout(4) << "Starting thread for " << name << dendl;
       active_module->thread.create(active_module->get_thread_name());
+      dout(4) << "Starting active module " << name <<" finisher thread "
+        << active_module->get_fin_thread_name() << dendl;
+      active_module->finisher.start();
     }
   }));
 }
@@ -551,6 +558,13 @@ void ActivePyModules::start_one(PyModuleRef py_module)
 void ActivePyModules::shutdown()
 {
   std::lock_guard locker(lock);
+
+  // Stop per active module finisher thread
+  for (auto& [name, module] : modules) {
+      dout(4) << "Stopping active module " << name << " finisher thread" << dendl;
+      module->finisher.wait_for_empty();
+      module->finisher.stop();
+  }
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto& [name, module] : modules) {
@@ -590,8 +604,9 @@ void ActivePyModules::notify_all(const std::string &notify_type,
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "queuing notify (" << notify_type << ") to " << name << dendl;
+    Finisher& mod_finisher = py_module_registry.get_active_module_finisher(name);
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module, notify_type, notify_id]
+    mod_finisher.queue(new LambdaContext([module=module, notify_type, notify_id]
       (int r){
         module->notify(notify_type, notify_id);
     }));
@@ -614,8 +629,9 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
     // log_entry: we take a copy because caller's instance is
     // probably ephemeral.
     dout(15) << "queuing notify (clog) to " << name << dendl;
+    Finisher& mod_finisher = py_module_registry.get_active_module_finisher(name);
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module, log_entry](int r){
+    mod_finisher.queue(new LambdaContext([module=module, log_entry](int r){
       module->notify_clog(log_entry);
     }));
   }
@@ -1308,8 +1324,9 @@ void ActivePyModules::config_notify()
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "notify (config) " << name << dendl;
+    Finisher& mod_finisher = py_module_registry.get_active_module_finisher(name);
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module](int r){
+    mod_finisher.queue(new LambdaContext([module=module](int r){
       module->config_notify();
     }));
   }
@@ -1496,8 +1513,6 @@ void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
 
 void ActivePyModules::register_client(std::string_view name, std::string addrs)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 
@@ -1507,8 +1522,6 @@ void ActivePyModules::register_client(std::string_view name, std::string addrs)
 
 void ActivePyModules::unregister_client(std::string_view name, std::string addrs)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 

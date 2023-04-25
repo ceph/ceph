@@ -262,7 +262,8 @@ void decode_json_obj(BucketLayout& l, JSONObj *obj);
 
 
 inline uint32_t num_shards(const bucket_index_normal_layout& index) {
-  return index.num_shards;
+  // old buckets used num_shards=0 to mean 1
+  return index.num_shards > 0 ? index.num_shards : 1;
 }
 inline uint32_t num_shards(const bucket_index_layout& index) {
   ceph_assert(index.type == BucketIndexType::Normal);

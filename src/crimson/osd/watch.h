@@ -34,7 +34,7 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   struct private_ctag_t{};
 
   std::set<NotifyRef, std::less<>> in_progress_notifies;
-  crimson::net::ConnectionFRef conn;
+  crimson::net::ConnectionRef conn;
   crimson::osd::ObjectContextRef obc;
 
   watch_info_t winfo;
@@ -45,7 +45,6 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   seastar::future<> start_notify(NotifyRef);
   seastar::future<> send_notify_msg(NotifyRef);
   seastar::future<> send_disconnect_msg();
-  void discard_state();
   void do_watch_timeout(Ref<PG> pg);
 
   friend Notify;
@@ -67,7 +66,8 @@ public:
   }
   ~Watch();
 
-  seastar::future<> connect(crimson::net::ConnectionFRef, bool);
+  seastar::future<> connect(crimson::net::ConnectionRef, bool);
+  void disconnect();
   bool is_alive() const {
     return true;
   }
@@ -75,6 +75,8 @@ public:
     return static_cast<bool>(conn);
   }
   void got_ping(utime_t);
+
+  void discard_state();
 
   seastar::future<> remove();
 
@@ -118,7 +120,7 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs);
 class Notify : public seastar::enable_shared_from_this<Notify> {
   std::set<WatchRef> watchers;
   const notify_info_t ninfo;
-  crimson::net::ConnectionFRef conn;
+  crimson::net::ConnectionRef conn;
   const uint64_t client_gid;
   const uint64_t user_version;
   bool complete{false};
@@ -139,14 +141,14 @@ class Notify : public seastar::enable_shared_from_this<Notify> {
   /// Called on Notify timeout
   void do_notify_timeout();
 
-  Notify(crimson::net::ConnectionFRef conn,
+  Notify(crimson::net::ConnectionRef conn,
          const notify_info_t& ninfo,
          const uint64_t client_gid,
          const uint64_t user_version);
   template <class WatchIteratorT>
   Notify(WatchIteratorT begin,
          WatchIteratorT end,
-         crimson::net::ConnectionFRef conn,
+         crimson::net::ConnectionRef conn,
          const notify_info_t& ninfo,
          const uint64_t client_gid,
          const uint64_t user_version);
@@ -192,7 +194,7 @@ public:
 template <class WatchIteratorT>
 Notify::Notify(WatchIteratorT begin,
                WatchIteratorT end,
-               crimson::net::ConnectionFRef conn,
+               crimson::net::ConnectionRef conn,
                const notify_info_t& ninfo,
                const uint64_t client_gid,
                const uint64_t user_version)

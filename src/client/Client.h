@@ -362,6 +362,13 @@ public:
   int readdir_r(dir_result_t *dirp, struct dirent *de);
   int readdirplus_r(dir_result_t *dirp, struct dirent *de, struct ceph_statx *stx, unsigned want, unsigned flags, Inode **out);
 
+  /*
+   * Get the next snapshot delta entry.
+   *
+   */
+  int readdir_snapdiff(dir_result_t* dir1, snapid_t snap2,
+    struct dirent* out_de, snapid_t* out_snap);
+
   int getdir(const char *relpath, std::list<std::string>& names,
 	     const UserPerm& perms);  // get the whole dir at once.
 
@@ -791,7 +798,8 @@ public:
   void update_dir_dist(Inode *in, DirStat *st, mds_rank_t from);
 
   void clear_dir_complete_and_ordered(Inode *diri, bool complete);
-  void insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri);
+  void insert_readdir_results(MetaRequest *request, MetaSession *session,
+                              Inode *diri, Inode *diri_other);
   Inode* insert_trace(MetaRequest *request, MetaSession *session);
   void update_inode_file_size(Inode *in, int issued, uint64_t size,
 			      uint64_t truncate_seq, uint64_t truncate_size);
@@ -956,7 +964,7 @@ protected:
   void connect_mds_targets(mds_rank_t mds);
   void send_request(MetaRequest *request, MetaSession *session,
 		    bool drop_cap_releases=false);
-  MRef<MClientRequest> build_client_request(MetaRequest *request);
+  MRef<MClientRequest> build_client_request(MetaRequest *request, mds_rank_t mds);
   void kick_requests(MetaSession *session);
   void kick_requests_closed(MetaSession *session);
   void handle_client_request_forward(const MConstRef<MClientRequestForward>& reply);
@@ -982,7 +990,7 @@ protected:
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
   void put_snap_realm(SnapRealm *realm);
   bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
-  void update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
+  void update_snap_trace(MetaSession *session, const bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
   void invalidate_snaprealm_and_children(SnapRealm *realm);
 
   void refresh_snapdir_attrs(Inode *in, Inode *diri);
@@ -1271,6 +1279,8 @@ private:
     MAY_READ = 4,
   };
 
+  typedef std::function<void(dir_result_t*, MetaRequest*, InodeRef&, frag_t)> fill_readdir_args_cb_t;
+
   std::unique_ptr<CephContext, std::function<void(CephContext*)>> cct_deleter;
 
   /* Flags for VXattr */
@@ -1291,8 +1301,19 @@ private:
   bool _readdir_have_frag(dir_result_t *dirp);
   void _readdir_next_frag(dir_result_t *dirp);
   void _readdir_rechoose_frag(dir_result_t *dirp);
-  int _readdir_get_frag(dir_result_t *dirp);
+  int _readdir_get_frag(int op, dir_result_t *dirp,
+    fill_readdir_args_cb_t fill_req_cb);
   int _readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p, int caps, bool getref);
+  int _readdir_r_cb(int op,
+    dir_result_t* d,
+    add_dirent_cb_t cb,
+    fill_readdir_args_cb_t fill_cb,
+    void* p,
+    unsigned want,
+    unsigned flags,
+    bool getref,
+    bool bypass_cache);
+
   void _closedir(dir_result_t *dirp);
 
   // other helpers
@@ -1389,6 +1410,7 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
   int _sync_fs();
+  int clear_suid_sgid(Inode *in, const UserPerm& perms, bool defer=false);
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);

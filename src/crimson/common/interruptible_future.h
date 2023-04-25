@@ -96,6 +96,11 @@ struct interrupt_cond_t {
   uint64_t ref_count = 0;
   void set(
     InterruptCondRef<InterruptCond>& ic) {
+    INTR_FUT_DEBUG(
+      "{}: going to set interrupt_cond: {}, ic: {}",
+      __func__,
+      (void*)interrupt_cond.get(),
+      (void*)ic.get());
     if (!interrupt_cond) {
       interrupt_cond = ic;
     }
@@ -110,13 +115,15 @@ struct interrupt_cond_t {
   void reset() {
     if (--ref_count == 0) {
       INTR_FUT_DEBUG(
-	"call_with_interruption_impl clearing interrupt_cond: {},{}",
+	"{}: clearing interrupt_cond: {},{}",
+        __func__,
 	(void*)interrupt_cond.get(),
 	typeid(InterruptCond).name());
       interrupt_cond.release();
     } else {
       INTR_FUT_DEBUG(
-	"call_with_interruption_impl end without clearing interrupt_cond: {},{}, ref_count: {}",
+	"{}: end without clearing interrupt_cond: {},{}, ref_count: {}",
+        __func__,
 	(void*)interrupt_cond.get(),
 	typeid(InterruptCond).name(),
 	ref_count);
@@ -1386,12 +1393,46 @@ public:
   template <typename Func,
 	    typename Result = futurize_t<std::invoke_result_t<Func>>>
   static inline Result async(Func&& func) {
-    return seastar::async([func=std::forward<Func>(func),
-			   interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]
-			  () mutable {
+    auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+    INTR_FUT_DEBUG(
+      "interruptible_future_detail::async() yielding out, "
+      "interrupt_cond {},{} cleared",
+      (void*)interruption_condition.get(),
+      typeid(InterruptCond).name());
+    interrupt_cond<InterruptCond>.reset();
+    auto ret = seastar::async([func=std::forward<Func>(func),
+			       interruption_condition] () mutable {
       return non_futurized_call_with_interruption(
-	  interrupt_condition, std::forward<Func>(func));
+	  interruption_condition, std::forward<Func>(func));
     });
+    interrupt_cond<InterruptCond>.set(interruption_condition);
+    INTR_FUT_DEBUG(
+      "interruptible_future_detail::async() yield back, interrupt_cond: {},{}",
+      (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+      typeid(InterruptCond).name());
+    return ret;
+  }
+
+  template <class FutureT>
+  static decltype(auto) green_get(FutureT&& fut) {
+    if (fut.available()) {
+      return fut.get();
+    } else {
+      // destined to wait!
+      auto interruption_condition = interrupt_cond<InterruptCond>.interrupt_cond;
+      INTR_FUT_DEBUG(
+        "green_get() waiting, interrupt_cond: {},{}",
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      interrupt_cond<InterruptCond>.reset();
+      auto&& value = fut.get();
+      interrupt_cond<InterruptCond>.set(interruption_condition);
+      INTR_FUT_DEBUG(
+        "green_get() got, interrupt_cond: {},{}",
+        (void*)interrupt_cond<InterruptCond>.interrupt_cond.get(),
+        typeid(InterruptCond).name());
+      return std::move(value);
+    }
   }
 
   static void yield() {

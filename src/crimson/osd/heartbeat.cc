@@ -406,7 +406,6 @@ void Heartbeat::Connection::replaced()
   racing_detected = true;
   logger().warn("Heartbeat::Connection::replaced(): {} racing", *this);
   assert(conn != replaced_conn);
-  assert(conn->is_connected());
 }
 
 void Heartbeat::Connection::reset()

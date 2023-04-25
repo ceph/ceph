@@ -1,7 +1,7 @@
 """
 NOTE: For running this tests locally (using vstart_runner.py), export the
-path to src/tools/cephfs/cephfs-shell module to $PATH. Running
-"export PATH=$PATH:$(cd ../src/tools/cephfs && pwd)" from the build dir
+path to src/tools/cephfs/shell/cephfs-shell module to $PATH. Running
+"export PATH=$PATH:$(cd ../src/tools/cephfs/shell && pwd)" from the build dir
 will update the environment without hassles of typing the path correctly.
 """
 from io import StringIO
@@ -864,18 +864,18 @@ class TestQuota(TestCephFSShell):
 
     def test_set(self):
         self.create_dir()
-        set_values = ('6', '2')
+        set_values = ('4096', '2')
         self.assertTupleEqual(self.set_and_get_quota_vals(set_values),
                               set_values)
 
     def test_replace_values(self):
         self.test_set()
-        set_values = ('20', '4')
+        set_values = ('8192', '4')
         self.assertTupleEqual(self.set_and_get_quota_vals(set_values),
                               set_values)
 
     def test_set_invalid_dir(self):
-        set_values = ('5', '5')
+        set_values = ('4096', '5')
         try:
             self.assertTupleEqual(self.set_and_get_quota_vals(
                 set_values, False), set_values)
@@ -920,9 +920,8 @@ class TestQuota(TestCephFSShell):
         filename = 'test_file'
         file_abspath = path.join(dir_abspath, filename)
         try:
-            # Write should fail as bytes quota is set to 6
-            self.mount_a.client_remote.write_file(file_abspath,
-                                                  'Disk raise Exception')
+            # Write should fail as bytes quota is set to 4096
+            self.mount_a.write_n_mb(file_abspath, 1)
             raise Exception("Write should have failed")
         except CommandFailedError:
             # Test should pass only when write command fails

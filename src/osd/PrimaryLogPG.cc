@@ -15697,9 +15697,8 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 	ldout(pg->cct, 10) << "waiting for it to clear"
 			   << dendl;
 	return transit< WaitRWLock >();
-      } else {
-        return transit< NotTrimming >();
       }
+      return transit< NotTrimming >();
     }
 
     in_flight.insert(object);

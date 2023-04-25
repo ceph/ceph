@@ -16,7 +16,9 @@ describe('Dashboard Landing Page', () => {
   it('should take screenshot of dashboard landing page', () => {
     login.navigateTo();
     login.doLogin();
-    cy.get('.card-text').should('be.visible');
-    cy.eyesCheckWindow({ tag: 'Dashboard landing page', ignore: { selector: '.card-text' } });
+    cy.get('[aria-label="Status card"]').should('be.visible');
+    cy.get('[aria-label="Inventory card"]').should('be.visible');
+    cy.get('[aria-label="Cluster utilization card"]').should('be.visible');
+    cy.eyesCheckWindow({ tag: 'Dashboard landing page' });
   });
 });

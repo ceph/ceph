@@ -523,6 +523,10 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
     new_srnode->seq = snapid;
     new_srnode->created = snapid;
     new_srnode->current_parent_since = get_oldest_snap();
+    SnapRealm *sr = find_snaprealm();
+    dout(20) << __func__ << ": inheriting change_attr from " << *sr
+             << dendl;
+    new_srnode->change_attr = sr->srnode.change_attr;
   }
   return new_srnode;
 }
@@ -3053,6 +3057,7 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
 void CInode::pre_cow_old_inode()
 {
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  dout(20) << __func__ << " follows " << follows << " on " << *this << dendl;
   if (first <= follows)
     cow_old_inode(follows, true);
 }

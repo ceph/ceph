@@ -62,7 +62,7 @@ CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
 {
   read_to_local();
   logger().debug("CollectionNode:{}", __func__);
-  if (!is_pending()) {
+  if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
     return mut->create(cc, coll, bits);
   }
@@ -90,7 +90,7 @@ CollectionNode::update(coll_context_t cc, coll_t coll, unsigned bits)
 {
   read_to_local();
   logger().debug("CollectionNode:{}", __func__);
-  if (!is_pending()) {
+  if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
     return mut->update(cc, coll, bits);
   }
@@ -107,7 +107,7 @@ CollectionNode::remove(coll_context_t cc, coll_t coll)
 {
   read_to_local();
   logger().debug("CollectionNode:{}", __func__);
-  if (!is_pending()) {
+  if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
     return mut->remove(cc, coll);
   }

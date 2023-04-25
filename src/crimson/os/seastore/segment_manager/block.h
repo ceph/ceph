@@ -110,16 +110,33 @@ public:
  * state analagous to that of the segments of a zns device.
  */
 class BlockSegmentManager final : public SegmentManager {
+// interfaces used by Device
 public:
+  seastar::future<> start() {
+    return shard_devices.start(device_path, superblock.config.spec.dtype);
+  }
+
+  seastar::future<> stop() {
+    return shard_devices.stop();
+  }
+
+  Device& get_sharded_device() final {
+    return shard_devices.local();
+  }
   mount_ret mount() final;
 
   mkfs_ret mkfs(device_config_t) final;
-
+// interfaces used by each shard device
+public:
   close_ertr::future<> close();
 
   BlockSegmentManager(
-    const std::string &path)
-  : device_path(path) {}
+    const std::string &path,
+    device_type_t dtype)
+  : device_path(path) {
+    ceph_assert(get_device_type() == device_type_t::NONE);
+    superblock.config.spec.dtype = dtype;
+  }
 
   ~BlockSegmentManager();
 
@@ -132,8 +149,11 @@ public:
     size_t len,
     ceph::bufferptr &out) final;
 
+  device_type_t get_device_type() const final {
+    return superblock.config.spec.dtype;
+  }
   size_t get_available_size() const final {
-    return superblock.size;
+    return shard_info.size;
   }
   extent_len_t get_block_size() const {
     return superblock.block_size;
@@ -198,6 +218,7 @@ private:
 
   std::string device_path;
   std::unique_ptr<SegmentStateTracker> tracker;
+  block_shard_info_t shard_info;
   block_sm_superblock_t superblock;
   seastar::file device;
 
@@ -211,7 +232,7 @@ private:
 
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();
-    return superblock.first_segment_offset +
+    return shard_info.first_segment_offset +
       (seg_addr.get_segment_id().device_segment_id() * superblock.segment_size) +
       seg_addr.get_segment_off();
   }
@@ -226,6 +247,16 @@ private:
 
   Segment::close_ertr::future<> segment_close(
       segment_id_t id, segment_off_t write_pointer);
+
+private:
+  // shard 0 mkfs
+  mkfs_ret primary_mkfs(device_config_t);
+  // all shards mkfs
+  mkfs_ret shard_mkfs();
+  // all shards mount
+  mount_ret shard_mount();
+
+  seastar::sharded<BlockSegmentManager> shard_devices;
 };
 
 }

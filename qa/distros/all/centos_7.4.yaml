@@ -1,2 +1,3 @@
 os_type: centos
 os_version: "7.4"
+ktype: distro

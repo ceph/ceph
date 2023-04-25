@@ -52,9 +52,11 @@
 <div [ngbNavOutlet]="nav"></div>
 
 <ng-template #servicesTpl
-             let-value="value">
-  <span *ngFor="let instance of value; last as isLast">
-    <span class="badge badge-background-primary ms-1" >{{ instance }}</span>
+             let-services="value">
+  <span *ngFor="let service of services">
+    <cd-label [key]="service['type']"
+              [value]="service['count']"
+              class="me-1"></cd-label>
   </span>
 </ng-template>
 

@@ -940,4 +940,42 @@ int delete_zone(const DoutPrefixProvider* dpp, optional_yield y,
                 sal::ConfigStore* cfgstore, const RGWZoneParams& info,
                 sal::ZoneWriter& writer);
 
+
+/// Global state about the site configuration. Initialized once during
+/// startup and may be reinitialized by RGWRealmReloader, but is otherwise
+/// immutable at runtime.
+class SiteConfig {
+ public:
+  /// Return the local zone params.
+  const RGWZoneParams& get_zone_params() const { return zone_params; }
+  /// Return the current realm configuration, if a realm is present.
+  const std::optional<RGWRealm>& get_realm() const { return realm; }
+  /// Return the current period configuration, if a period is present.
+  const std::optional<RGWPeriod>& get_period() const { return period; }
+  /// Return the zonegroup configuration.
+  const RGWZoneGroup& get_zonegroup() const { return *zonegroup; }
+  /// Return the public zone configuration.
+  const RGWZone& get_zone() const { return *zone; }
+
+  /// Load or reload the multisite configuration from storage. This is not
+  /// thread-safe, so requires careful coordination with the RGWRealmReloader.
+  int load(const DoutPrefixProvider* dpp, optional_yield y,
+           sal::ConfigStore* cfgstore);
+
+ private:
+  int load_period_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                            sal::ConfigStore* cfgstore, const RGWRealm& realm,
+                            const rgw_zone_id& zone_id);
+  int load_local_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
+                           sal::ConfigStore* cfgstore,
+                           const rgw_zone_id& zone_id);
+
+  RGWZoneParams zone_params;
+  std::optional<RGWRealm> realm;
+  std::optional<RGWPeriod> period;
+  std::optional<RGWZoneGroup> local_zonegroup;
+  const RGWZoneGroup* zonegroup = nullptr;
+  const RGWZone* zone = nullptr;
+};
+
 } // namespace rgw

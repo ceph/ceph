@@ -17,6 +17,7 @@
 
 #include "common/ceph_argparse.h"
 #include "common/config.h"
+#include "common/win32/wstring.h"
 
 #include "global/global_init.h"
 

@@ -515,7 +515,7 @@ protected:
     virtual int get_info(const DoutPrefixProvider *dpp, optional_yield y, rgw_placement_rule** rule, rgw::sal::Attrs* attrs = nullptr) override;
     virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
-			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  rgw::sal::Object* obj,
 			  const rgw_user& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
@@ -584,8 +584,6 @@ protected:
       virtual int delete_object(const DoutPrefixProvider* dpp,
           optional_yield y,
           bool prevent_versioning = false) override;
-      virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
-          bool keep_index_consistent, optional_yield y) override;
       virtual int copy_object(User* user,
           req_info* info, const rgw_zone_id& source_zone,
           rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -636,11 +634,6 @@ protected:
       virtual std::unique_ptr<DeleteOp> get_delete_op() override;
 
       /* OMAP */
-      virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-          std::map<std::string, bufferlist> *m,
-          bool* pmore, optional_yield y) override;
-      virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-          optional_yield y) override;
       virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
           const std::set<std::string>& keys,
           Attrs* vals) override;
@@ -680,7 +673,7 @@ protected:
     public:
     DBAtomicWriter(const DoutPrefixProvider *dpp,
 	    	    optional_yield y,
-		        std::unique_ptr<rgw::sal::Object> _head_obj,
+		        rgw::sal::Object* obj,
 		        DBStore* _store,
     		    const rgw_user& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
@@ -711,7 +704,7 @@ protected:
     const rgw_user& owner;
 	const rgw_placement_rule *ptail_placement_rule;
 	uint64_t olh_epoch;
-    std::unique_ptr<rgw::sal::Object> head_obj;
+    rgw::sal::Object* head_obj;
     std::string upload_id;
     int part_num;
     std::string oid; /* object->name() + "." + "upload_id" + "." + part_num */
@@ -729,7 +722,7 @@ protected:
 public:
     DBMultipartWriter(const DoutPrefixProvider *dpp,
 		       optional_yield y, MultipartUpload* upload,
-		       std::unique_ptr<rgw::sal::Object> _head_obj,
+		       rgw::sal::Object* obj,
 		       DBStore* _store,
 		       const rgw_user& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
@@ -810,7 +803,6 @@ public:
       virtual int list_all_zones(const DoutPrefixProvider* dpp, std::list<std::string>& zone_ids) override;
       virtual int cluster_stat(RGWClusterStat& stats) override;
       virtual std::unique_ptr<Lifecycle> get_lifecycle(void) override;
-      virtual std::unique_ptr<Completions> get_completions(void) override;
 
   virtual std::unique_ptr<Notification> get_notification(
     rgw::sal::Object* obj, rgw::sal::Object* src_obj, req_state* s,
@@ -880,7 +872,7 @@ public:
           std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
@@ -888,7 +880,7 @@ public:
 				  uint64_t *cur_accounted_size) override;
       virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,

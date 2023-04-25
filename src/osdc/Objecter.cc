@@ -1224,7 +1224,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  logger->inc(l_osdc_map_full);
 	}
 	else {
-	  if (e >= m->get_oldest()) {
+	  if (e >= m->cluster_osdmap_trim_lower_bound) {
 	    ldout(cct, 3) << "handle_osd_map requesting missing epoch "
 			  << osdmap->get_epoch()+1 << dendl;
 	    _maybe_request_map();
@@ -1232,8 +1232,9 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	  }
 	  ldout(cct, 3) << "handle_osd_map missing epoch "
 			<< osdmap->get_epoch()+1
-			<< ", jumping to " << m->get_oldest() << dendl;
-	  e = m->get_oldest() - 1;
+			<< ", jumping to "
+			<< m->cluster_osdmap_trim_lower_bound << dendl;
+	  e = m->cluster_osdmap_trim_lower_bound - 1;
 	  skipped_map = true;
 	  continue;
 	}
@@ -3229,6 +3230,10 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 
   if (op->reqid != osd_reqid_t()) {
     m->set_reqid(op->reqid);
+  }
+
+  if (op->otel_trace && op->otel_trace->IsValid()) {
+     m->otel_trace = jspan_context(*op->otel_trace);
   }
 
   logger->inc(l_osdc_op_send);

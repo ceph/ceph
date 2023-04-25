@@ -36,7 +36,7 @@ from .utils import (
     conf_obj_name,
     available_clusters,
     check_fs,
-    restart_nfs_service)
+    restart_nfs_service, check_cephfs_path)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -489,6 +489,8 @@ class ExportMgr:
         export = self._fetch_export(cluster_id, pseudo_path)
         return export.to_dict() if export else None
 
+    # This method is used by the dashboard module (../dashboard/controllers/nfs.py)
+    # Do not change interface without updating the Dashboard code
     def apply_export(self, cluster_id: str, export_config: str) -> AppliedExportResults:
         try:
             exports = self._read_export_config(cluster_id, export_config)
@@ -656,6 +658,9 @@ class ExportMgr:
                              access_type: str,
                              clients: list = [],
                              sectype: Optional[List[str]] = None) -> Dict[str, Any]:
+
+        check_cephfs_path(self.mgr, fs_name, path)
+
         pseudo_path = normalize_path(pseudo_path)
 
         if not self._fetch_export(cluster_id, pseudo_path):

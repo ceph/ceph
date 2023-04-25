@@ -104,8 +104,9 @@ int get_default_crc_flags(const ConfigProxy& conf)
   return r;
 }
 
-int Messenger::bindv(const entity_addrvec_t& addrs)
+int Messenger::bindv(const entity_addrvec_t& bind_addrs,
+                     std::optional<entity_addrvec_t> public_addrs)
 {
-  return bind(addrs.legacy_addr());
+  return bind(bind_addrs.legacy_addr(), std::move(public_addrs));
 }
 

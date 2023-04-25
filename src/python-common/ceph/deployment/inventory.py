@@ -54,6 +54,7 @@ class Device(object):
         'human_readable_type',
         'device_id',
         'lsm_data',
+        'crush_device_class'
     ]
 
     def __init__(self,
@@ -61,12 +62,14 @@ class Device(object):
                  sys_api=None,  # type: Optional[Dict[str, Any]]
                  available=None,  # type: Optional[bool]
                  rejected_reasons=None,  # type: Optional[List[str]]
-                 lvs=None,  # type: Optional[List[str]]
+                 lvs=None,  # type: Optional[List[Dict[str, str]]]
                  device_id=None,  # type: Optional[str]
                  lsm_data=None,  # type: Optional[Dict[str, Dict[str, str]]]
                  created=None,  # type: Optional[datetime.datetime]
-                 ceph_device=None  # type: Optional[bool]
+                 ceph_device=None,  # type: Optional[bool]
+                 crush_device_class=None  # type: Optional[str]
                  ):
+
         self.path = path
         self.sys_api = sys_api if sys_api is not None else {}  # type: Dict[str, Any]
         self.available = available
@@ -76,6 +79,7 @@ class Device(object):
         self.lsm_data = lsm_data if lsm_data is not None else {}  # type: Dict[str, Dict[str, str]]
         self.created = created if created is not None else datetime_now()
         self.ceph_device = ceph_device
+        self.crush_device_class = crush_device_class
 
     def __eq__(self, other):
         # type: (Any) -> bool
@@ -120,11 +124,12 @@ class Device(object):
         return 'hdd' if self.sys_api["rotational"] == "1" else 'ssd'
 
     def __repr__(self) -> str:
-        device_desc: Dict[str, Union[str, List[str]]] = {
+        device_desc: Dict[str, Union[str, List[str], List[Dict[str, str]]]] = {
             'path': self.path if self.path is not None else 'unknown',
             'lvs': self.lvs if self.lvs else 'None',
             'available': str(self.available),
-            'ceph_device': str(self.ceph_device)
+            'ceph_device': str(self.ceph_device),
+            'crush_device_class': str(self.crush_device_class)
         }
         if not self.available and self.rejected_reasons:
             device_desc['rejection reasons'] = self.rejected_reasons

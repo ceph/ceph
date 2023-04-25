@@ -2610,15 +2610,16 @@ public:
     state->info.method = "PUT"; // XXX check
     state->op = OP_PUT;
 
-    src_bucket_name = src_parent->bucket_name();
-    state->src_bucket_name = src_bucket_name;
-    dest_bucket_name = dst_parent->bucket_name();
-    state->bucket_name = dest_bucket_name;
-    dest_obj_name = dst_parent->format_child_name(dst_name, false);
+    state->src_bucket_name = src_parent->bucket_name();
+    state->bucket_name = dst_parent->bucket_name();
+
+    std::string dest_obj_name = dst_parent->format_child_name(dst_name, false);
 
     int rc = valid_s3_object_name(dest_obj_name);
     if (rc != 0)
       return rc;
+
+    state->object = RGWHandler::driver->get_object(rgw_obj_key(dest_obj_name));
 
     /* XXX and fixup key attr (could optimize w/string ref and
      * dest_obj_name) */

@@ -39,6 +39,7 @@ Configuration
 .. confval:: rbd_stats_pools_refresh_interval
 .. confval:: standby_behaviour
 .. confval:: standby_error_status_code
+.. confval:: exclude_perf_counters
 
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
 and IPv6 addresses on the host.  The port and listen address are both
@@ -75,7 +76,7 @@ in conjunction with multiple Prometheus instances, overload the manager and lead
 to unresponsive or crashing Ceph manager instances.  Hence, the cache is enabled
 by default.  This means that there is a possibility that the cache becomes
 stale.  The cache is considered stale when the time to fetch the metrics from
-Ceph exceeds the configured :confval:``mgr/prometheus/scrape_interval``.
+Ceph exceeds the configured :confval:`mgr/prometheus/scrape_interval`.
 
 If that is the case, **a warning will be logged** and the module will either
 
@@ -183,6 +184,15 @@ RBD image.
 Example to turn up the sync interval to 10 minutes::
 
   ceph config set mgr mgr/prometheus/rbd_stats_pools_refresh_interval 600
+
+Ceph daemon performance counters metrics
+-----------------------------------------
+
+With the introduction of ``ceph-exporter`` daemon, the prometheus module will no longer export Ceph daemon
+perf counters as prometheus metrics by default. However, one may re-enable exporting these metrics by setting
+the module option ``exclude_perf_counters`` to ``false``::
+
+    ceph config set mgr mgr/prometheus/exclude_perf_counters false
 
 Statistic names and labels
 ==========================

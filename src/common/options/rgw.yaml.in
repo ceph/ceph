@@ -797,6 +797,13 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_accepted_reader_roles
+  type: str
+  level: advanced
+  desc: List of roles that can only be used for reads (Keystone).
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_token_cache_size
   type: int
   level: advanced
@@ -3129,6 +3136,16 @@ options:
   default: 512_K
   services:
   - rgw
+  with_legacy: true
+- name: rgw_torrent_max_size
+  type: size
+  level: advanced
+  desc: Objects over this size will not store torrent info.
+  default: 5_G
+  services:
+  - rgw
+  see_also:
+  - rgw_torrent_flag
   with_legacy: true
 - name: rgw_dynamic_resharding
   type: bool

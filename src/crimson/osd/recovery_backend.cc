@@ -7,6 +7,7 @@
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
+#include "crimson/osd/osd_operations/background_recovery.h"
 
 #include "messages/MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
@@ -68,7 +69,8 @@ void RecoveryBackend::WaitForObjectRecovery::stop() {
 }
 
 void RecoveryBackend::handle_backfill_finish(
-  MOSDPGBackfill& m)
+  MOSDPGBackfill& m,
+  crimson::net::ConnectionRef conn)
 {
   logger().debug("{}", __func__);
   ceph_assert(!pg.is_primary());
@@ -79,7 +81,7 @@ void RecoveryBackend::handle_backfill_finish(
     m.query_epoch,
     spg_t(pg.get_pgid().pgid, pg.get_primary().shard));
   reply->set_priority(pg.get_recovery_op_priority());
-  std::ignore = m.get_connection()->send(std::move(reply));
+  std::ignore = conn->send(std::move(reply));
   shard_services.start_operation<crimson::osd::LocalPeeringEvent>(
     static_cast<crimson::osd::PG*>(&pg),
     pg.get_pg_whoami(),
@@ -122,7 +124,8 @@ RecoveryBackend::handle_backfill_finish_ack(
 
 RecoveryBackend::interruptible_future<>
 RecoveryBackend::handle_backfill(
-  MOSDPGBackfill& m)
+  MOSDPGBackfill& m,
+  crimson::net::ConnectionRef conn)
 {
   logger().debug("{}", __func__);
   if (pg.old_peering_msg(m.map_epoch, m.query_epoch)) {
@@ -131,7 +134,7 @@ RecoveryBackend::handle_backfill(
   }
   switch (m.op) {
     case MOSDPGBackfill::OP_BACKFILL_FINISH:
-      handle_backfill_finish(m);
+      handle_backfill_finish(m, conn);
       [[fallthrough]];
     case MOSDPGBackfill::OP_BACKFILL_PROGRESS:
       return handle_backfill_progress(m);
@@ -183,7 +186,7 @@ RecoveryBackend::scan_for_backfill(
 	-> interruptible_future<> {
 	crimson::osd::ObjectContextRef obc;
 	if (pg.is_primary()) {
-	  obc = shard_services.maybe_get_cached_obc(object);
+	  obc = pg.obc_registry.maybe_get_cached_obc(object);
 	}
 	if (obc) {
 	  if (obc->obs.exists) {
@@ -223,7 +226,8 @@ RecoveryBackend::scan_for_backfill(
 
 RecoveryBackend::interruptible_future<>
 RecoveryBackend::handle_scan_get_digest(
-  MOSDPGScan& m)
+  MOSDPGScan& m,
+  crimson::net::ConnectionRef conn)
 {
   logger().debug("{}", __func__);
   if (false /* FIXME: check for backfill too full */) {
@@ -242,7 +246,7 @@ RecoveryBackend::handle_scan_get_digest(
     crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_min"),
     crimson::common::local_conf().get_val<std::int64_t>("osd_backfill_scan_max")
   ).then_interruptible(
-    [this, query_epoch=m.query_epoch, &conn=*(m.get_connection())
+    [this, query_epoch=m.query_epoch, conn
     ](auto backfill_interval) {
       auto reply = crimson::make_message<MOSDPGScan>(
 	MOSDPGScan::OP_SCAN_DIGEST,
@@ -253,7 +257,7 @@ RecoveryBackend::handle_scan_get_digest(
 	backfill_interval.begin,
 	backfill_interval.end);
       encode(backfill_interval.objects, reply->get_data());
-      return conn.send(std::move(reply));
+      return conn->send(std::move(reply));
     });
 }
 
@@ -284,7 +288,8 @@ RecoveryBackend::handle_scan_digest(
 
 RecoveryBackend::interruptible_future<>
 RecoveryBackend::handle_scan(
-  MOSDPGScan& m)
+  MOSDPGScan& m,
+  crimson::net::ConnectionRef conn)
 {
   logger().debug("{}", __func__);
   if (pg.old_peering_msg(m.map_epoch, m.query_epoch)) {
@@ -293,7 +298,7 @@ RecoveryBackend::handle_scan(
   }
   switch (m.op) {
     case MOSDPGScan::OP_SCAN_GET_DIGEST:
-      return handle_scan_get_digest(m);
+      return handle_scan_get_digest(m, conn);
     case MOSDPGScan::OP_SCAN_DIGEST:
       return handle_scan_digest(m);
     default:
@@ -305,15 +310,16 @@ RecoveryBackend::handle_scan(
 
 RecoveryBackend::interruptible_future<>
 RecoveryBackend::handle_recovery_op(
-  Ref<MOSDFastDispatchOp> m)
+  Ref<MOSDFastDispatchOp> m,
+  crimson::net::ConnectionRef conn)
 {
   switch (m->get_header().type) {
   case MSG_OSD_PG_BACKFILL:
-    return handle_backfill(*boost::static_pointer_cast<MOSDPGBackfill>(m));
+    return handle_backfill(*boost::static_pointer_cast<MOSDPGBackfill>(m), conn);
   case MSG_OSD_PG_BACKFILL_REMOVE:
     return handle_backfill_remove(*boost::static_pointer_cast<MOSDPGBackfillRemove>(m));
   case MSG_OSD_PG_SCAN:
-    return handle_scan(*boost::static_pointer_cast<MOSDPGScan>(m));
+    return handle_scan(*boost::static_pointer_cast<MOSDPGScan>(m), conn);
   default:
     return seastar::make_exception_future<>(
 	std::invalid_argument(fmt::format("invalid request type: {}",

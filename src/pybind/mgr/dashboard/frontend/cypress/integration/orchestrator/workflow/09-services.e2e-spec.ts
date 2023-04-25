@@ -123,4 +123,11 @@ describe('Services page', () => {
     services.isUnmanaged('ingress.rgw.foo', true);
     services.deleteService('ingress.rgw.foo');
   });
+
+  it('should check if exporter daemons are running', () => {
+    services.clickServiceTab('ceph-exporter', 'Details');
+    cy.get('cd-service-details').within(() => {
+      services.checkServiceStatus('ceph-exporter', 'running');
+    });
+  });
 });

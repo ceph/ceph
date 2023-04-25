@@ -587,6 +587,16 @@ class RbdFioTest(RbdTest):
                             'total_ios': job[op]['short_ios'],
                             'short_ios': job[op]['short_ios'],
                             'dropped_ios': job[op]['short_ios'],
+                            'clat_ns_min': job[op]['clat_ns']['min'],
+                            'clat_ns_max': job[op]['clat_ns']['max'],
+                            'clat_ns_mean': job[op]['clat_ns']['mean'],
+                            'clat_ns_stddev': job[op]['clat_ns']['stddev'],
+                            'clat_ns_10': job[op].get('clat_ns', {})
+                                                 .get('percentile', {})
+                                                 .get('10.000000', 0),
+                            'clat_ns_90': job[op].get('clat_ns', {})
+                                                 .get('percentile', {})
+                                                 .get('90.000000', 0)
                         })
 
     def _get_fio_path(self):
@@ -598,7 +608,7 @@ class RbdFioTest(RbdTest):
         cmd = [
             "fio", "--thread", "--output-format=json",
             "--randrepeat=%d" % self.iterations,
-            "--direct=1", "--gtod_reduce=1", "--name=test",
+            "--direct=1", "--name=test",
             "--bs=%s" % self.bs, "--iodepth=%s" % self.iodepth,
             "--size=%sM" % (fio_size_mb or self.fio_size_mb),
             "--readwrite=%s" % self.op,
@@ -639,7 +649,7 @@ class RbdFioTest(RbdTest):
                            s['median'], s['std_dev'],
                            s['max_90'], s['min_90'], 'N/A'])
 
-            s = array_stats([float(i["runtime"]) / 1000 for i in op_data])
+            s = array_stats([float(i["runtime"]) for i in op_data])
             table.add_row(["duration (s)",
                           s['min'], s['max'], s['mean'],
                           s['median'], s['std_dev'],
@@ -662,6 +672,25 @@ class RbdFioTest(RbdTest):
                            s['min'], s['max'], s['mean'],
                            s['median'], s['std_dev'],
                            s['max_90'], s['min_90'], s['sum']])
+
+            clat_min = array_stats([i["clat_ns_min"] for i in op_data])
+            clat_max = array_stats([i["clat_ns_max"] for i in op_data])
+            clat_mean = array_stats([i["clat_ns_mean"] for i in op_data])
+            clat_stddev = math.sqrt(
+                sum([float(i["clat_ns_stddev"]) ** 2 for i in op_data]) / len(op_data)
+                if len(op_data) else 0)
+            clat_10 = array_stats([i["clat_ns_10"] for i in op_data])
+            clat_90 = array_stats([i["clat_ns_90"] for i in op_data])
+            # For convenience, we'll convert it from ns to seconds.
+            table.add_row(["completion latency (s)",
+                           clat_min['min'] / 1e+9,
+                           clat_max['max'] / 1e+9,
+                           clat_mean['mean'] / 1e+9,
+                           clat_mean['median'] / 1e+9,
+                           clat_stddev / 1e+9,
+                           clat_10['mean'] / 1e+9,
+                           clat_90['mean'] / 1e+9,
+                           clat_mean['sum'] / 1e+9])
             print(table)
 
 

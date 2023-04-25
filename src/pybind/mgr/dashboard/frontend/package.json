@@ -44,8 +44,6 @@
   },
   "private": true,
   "dependencies": {
-    "@ajsf/bootstrap4": "0.7.0",
-    "@ajsf/core": "0.7.0",
     "@angular/animations": "13.3.11",
     "@angular/common": "13.3.11",
     "@angular/compiler": "13.3.11",
@@ -57,6 +55,8 @@
     "@angular/router": "13.3.11",
     "@circlon/angular-tree-component": "10.0.0",
     "@ng-bootstrap/ng-bootstrap": "12.1.2",
+    "@ngx-formly/bootstrap": "6.1.1",
+    "@ngx-formly/core": "6.1.1",
     "@popperjs/core": "2.10.2",
     "@swimlane/ngx-datatable": "18.0.0",
     "@types/file-saver": "2.0.1",
@@ -80,7 +80,7 @@
     "zone.js": "0.11.8"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "13.3.9",
+    "@angular-devkit/build-angular": "13.3.11",
     "@angular-eslint/builder": "13.5.0",
     "@angular-eslint/eslint-plugin": "13.5.0",
     "@angular-eslint/eslint-plugin-template": "13.5.0",
@@ -135,8 +135,5 @@
   },
   "cypress-cucumber-preprocessor": {
     "nonGlobalStepDefinitions": true
-  },
-  "overrides": {
-    "autoprefixer": "10.4.5"
   }
 }

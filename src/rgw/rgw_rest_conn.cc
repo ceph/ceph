@@ -127,7 +127,7 @@ int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const RGWAcc
   return req.forward_request(dpp, key, info, max_response, inbl, outbl, y, service);
 }
 
-int RGWRESTConn::put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
+int RGWRESTConn::put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req)
 {
   string url;
   int ret = get_url(url);
@@ -148,7 +148,7 @@ int RGWRESTConn::put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_p
   return 0;
 }
 
-int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, rgw::sal::Object* obj,
+int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, const rgw_obj& obj,
                                     map<string, bufferlist>& attrs,
                                     RGWRESTStreamS3PutObj **req)
 {
@@ -198,7 +198,7 @@ static void set_header(T val, map<string, string>& headers, const string& header
 }
 
 
-int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw::sal::Object* obj,
+int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
                          const real_time *mod_ptr, const real_time *unmod_ptr,
                          uint32_t mod_zone_id, uint64_t mod_pg_ver,
                          bool prepend_metadata, bool get_op, bool rgwx_stat,
@@ -219,7 +219,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req
   return get_obj(dpp, obj, params, send, req);
 }
 
-int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw::sal::Object* obj, const get_obj_params& in_params, bool send, RGWRESTStreamRWRequest **req)
+int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& in_params, bool send, RGWRESTStreamRWRequest **req)
 {
   string url;
   int ret = get_url(url);
@@ -240,9 +240,8 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw::sal::Object* 
   if (in_params.skip_decrypt) {
     params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "skip-decrypt", ""));
   }
-  if (!obj->get_instance().empty()) {
-    const string& instance = obj->get_instance();
-    params.push_back(param_pair_t("versionId", instance));
+  if (!obj.key.instance.empty()) {
+    params.push_back(param_pair_t("versionId", obj.key.instance));
   }
   if (in_params.get_op) {
     *req = new RGWRESTStreamReadRequest(cct, url, in_params.cb, NULL, &params, api_name, host_style);
@@ -282,7 +281,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw::sal::Object* 
     set_header(buf, extra_headers, "RANGE");
   }
 
-  int r = (*req)->send_prepare(dpp, key, extra_headers, obj->get_obj());
+  int r = (*req)->send_prepare(dpp, key, extra_headers, obj);
   if (r < 0) {
     goto done_err;
   }

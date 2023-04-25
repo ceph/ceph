@@ -136,7 +136,8 @@ def connect_to_redmine(a):
 def releases():
     return ('argonaut', 'bobtail', 'cuttlefish', 'dumpling', 'emperor',
             'firefly', 'giant', 'hammer', 'infernalis', 'jewel', 'kraken',
-            'luminous', 'mimic', 'nautilus', 'octopus', 'pacific', 'quincy')
+            'luminous', 'mimic', 'nautilus', 'octopus', 'pacific', 'quincy',
+            'reef')
 
 def populate_status_dict(r):
     for status in r.issue_status.all():

@@ -68,7 +68,7 @@ if [ -n "$CEPH_BUILD_ROOT" ]; then
     [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
     # make install should install python extensions into PYTHONPATH
 elif [ -n "$CEPH_ROOT" ]; then
-    [ -z "$CEPHFS_SHELL" ] && CEPHFS_SHELL=$CEPH_ROOT/src/tools/cephfs/cephfs-shell
+    [ -z "$CEPHFS_SHELL" ] && CEPHFS_SHELL=$CEPH_ROOT/src/tools/cephfs/shell/cephfs-shell
     [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
     [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
     [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
@@ -150,6 +150,7 @@ nodaemon=0
 redirect=0
 smallmds=0
 short=0
+crimson=0
 ec=0
 cephadm=0
 parallel=true
@@ -185,7 +186,10 @@ with_mgr_restful=false
 filestore_path=
 kstore_path=
 declare -a block_devs
+declare -a bluestore_db_devs
+declare -a bluestore_wal_devs
 declare -a secondary_block_devs
+secondary_block_devs_type="SSD"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -220,8 +224,8 @@ options:
 	-g --gssapi enable Kerberos/GSSApi authentication
 	-G disable Kerberos/GSSApi authentication
 	--hitset <pool> <hit_set_type>: enable hitset tracking
-	-e : create an erasure pool\
-	-o config		 add extra config parameters to all sections
+	-e : create an erasure pool
+	-o config add extra config parameters to all sections
 	--rgw_port specify ceph rgw http listen port
 	--rgw_frontend specify the rgw frontend configuration
 	--rgw_arrow_flight start arrow flight frontend
@@ -246,6 +250,8 @@ options:
 	--crimson-foreground: use crimson-osd, but run it in the foreground
 	--osd-args: specify any extra osd specific options
 	--bluestore-devs: comma-separated list of blockdevs to use for bluestore
+	--bluestore-db-devs: comma-separated list of db-devs to use for bluestore
+	--bluestore-wal-devs: comma-separated list of wal-devs to use for bluestore
 	--bluestore-zoned: blockdevs listed by --bluestore-devs are zoned devices (HM-SMR HDD or ZNS SSD)
 	--bluestore-io-uring: enable io_uring backend
 	--inc-osd: append some more osds into existing vcluster
@@ -254,7 +260,8 @@ options:
 	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
-	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
+	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
 \n
 EOF
@@ -272,6 +279,36 @@ parse_block_devs() {
     local dev
     IFS=',' read -r -a block_devs <<< "$devs"
     for dev in "${block_devs[@]}"; do
+        if [ ! -b $dev ] || [ ! -w $dev ]; then
+            echo "All $opt_name must refer to writable block devices"
+            exit 1
+        fi
+    done
+}
+
+parse_bluestore_db_devs() {
+    local opt_name=$1
+    shift
+    local devs=$1
+    shift
+    local dev
+    IFS=',' read -r -a bluestore_db_devs <<< "$devs"
+    for dev in "${bluestore_db_devs[@]}"; do
+        if [ ! -b $dev ] || [ ! -w $dev ]; then
+            echo "All $opt_name must refer to writable block devices"
+            exit 1
+        fi
+    done
+}
+
+parse_bluestore_wal_devs() {
+    local opt_name=$1
+    shift
+    local devs=$1
+    shift
+    local dev
+    IFS=',' read -r -a bluestore_wal_devs <<< "$devs"
+    for dev in "${bluestore_wal_devs[@]}"; do
         if [ ! -b $dev ] || [ ! -w $dev ]; then
             echo "All $opt_name must refer to writable block devices"
             exit 1
@@ -334,11 +371,13 @@ case $1 in
         short=1
         ;;
     --crimson)
+        crimson=1
         ceph_osd=crimson-osd
         nodaemon=1
         msgr=2
         ;;
     --crimson-foreground)
+        crimson=1
         ceph_osd=crimson-osd
         nodaemon=0
         msgr=2
@@ -513,6 +552,10 @@ case $1 in
         parse_secondary_devs --seastore-devs "$2"
         shift
         ;;
+    --seastore-secondary-devs-type)
+        secondary_block_devs_type="$2"
+        shift
+        ;;
     --crimson-smp)
         crimson_smp=$2
         shift
@@ -531,6 +574,14 @@ case $1 in
         ;;
     --bluestore-devs)
         parse_block_devs --bluestore-devs "$2"
+        shift
+        ;;
+    --bluestore-db-devs)
+        parse_bluestore_db_devs --bluestore-db-devs "$2"
+        shift
+        ;;
+    --bluestore-wal-devs)
+        parse_bluestore_wal_devs --bluestore-wal-devs "$2"
         shift
         ;;
     --bluestore-zoned)
@@ -720,6 +771,11 @@ prepare_conf() {
         $(format_conf "${extra_conf}")
         $AUTOSCALER_OPTS
 EOF
+    if [ "$with_jaeger" -eq 1 ] ; then
+        wconf <<EOF
+        jaeger_agent_port = 6831
+EOF
+    fi
     if [ "$lockdep" -eq 1 ] ; then
         wconf <<EOF
         lockdep = true
@@ -766,6 +822,12 @@ EOF
         bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true"
+            if [ ${#block_devs[@]} -gt 0 ] || \
+               [ ${#bluestore_db_devs[@]} -gt 0 ] || \
+               [ ${#bluestore_wal_devs[@]} -gt 0 ]; then
+                # when use physical disk, not create file for db/wal
+                BLUESTORE_OPTS=""
+            fi
         fi
         if [ "$zoned_enabled" -eq 1 ]; then
             BLUESTORE_OPTS+="
@@ -782,6 +844,7 @@ EOF
     fi
     wconf <<EOF
 [client]
+$CCLIENTDEBUG
         keyring = $keyring_fn
         log file = $CEPH_OUT_CLIENT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
@@ -798,6 +861,7 @@ EOF
 	do_rgw_conf
 	wconf << EOF
 [mds]
+$CMDSDEBUG
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
         mds root ino uid = `id -u`
@@ -847,6 +911,12 @@ $CMONDEBUG
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         auth allow insecure global id reclaim = false
 EOF
+
+    if [ "$crimson" -eq 1 ]; then
+        wconf <<EOF
+        osd pool default crimson = true
+EOF
+    fi
 }
 
 write_logrotate_conf() {
@@ -959,6 +1029,10 @@ EOF
     do
         run 'mon' $f $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
     done
+
+    if [ "$crimson" -eq 1 ]; then
+        $CEPH_BIN/ceph osd set-allow-crimson --yes-i-really-mean-it
+    fi
 }
 
 start_osd() {
@@ -1015,9 +1089,18 @@ EOF
                     dd if=/dev/zero of=${block_devs[$osd]} bs=1M count=1
                     ln -s ${block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block
                 fi
+                if [ -n "${bluestore_db_devs[$osd]}" ]; then
+                    dd if=/dev/zero of=${bluestore_db_devs[$osd]} bs=1M count=1
+                    ln -s ${bluestore_db_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.db
+                fi
+                if [ -n "${bluestore_wal_devs[$osd]}" ]; then
+                    dd if=/dev/zero of=${bluestore_wal_devs[$osd]} bs=1M count=1
+                    ln -s ${bluestore_wal_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.wal
+                fi
                 if [ -n "${secondary_block_devs[$osd]}" ]; then
                     dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.segmented.1
+                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
+                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
                 fi
             fi
             if [ "$objectstore" == "bluestore" ]; then
@@ -1138,6 +1221,11 @@ EOF
         run 'mgr' $name $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
+    while ! ceph_adm mgr stat | jq -e '.available'; do
+        debug echo 'waiting for mgr to become available'
+        sleep 1
+    done
+    
     if [ "$new" -eq 1 ]; then
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
@@ -1338,15 +1426,22 @@ if [ "$debug" -eq 0 ]; then
     CMONDEBUG='
         debug mon = 10
         debug ms = 1'
+    CCLIENTDEBUG=''
+    CMDSDEBUG=''
 else
     debug echo "** going verbose **"
     CMONDEBUG='
         debug osd = 20
         debug mon = 20
+        debug osd = 20
         debug paxos = 20
         debug auth = 20
         debug mgrc = 20
         debug ms = 1'
+    CCLIENTDEBUG='
+        debug client = 20'
+    CMDSDEBUG='
+        debug mds = 20'
 fi
 
 # Crimson doesn't support PG merge/split yet.
@@ -1502,7 +1597,7 @@ EOF
     fi
 fi
 
-if [ "$crimson" -eq 1 ]; then
+if [ "$ceph_osd" == "crimson-osd" ]; then
     $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
 fi
 

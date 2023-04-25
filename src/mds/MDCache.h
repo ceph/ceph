@@ -514,6 +514,7 @@ class MDCache {
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
   bool dump_inode(Formatter *f, uint64_t number);
+  void dump_dir(Formatter *f, CDir *dir, bool dentry_dump=false);
 
   void rejoin_start(MDSContext *rejoin_done_);
   void rejoin_gather_finish();
@@ -953,7 +954,7 @@ class MDCache {
    */
   void enqueue_scrub(std::string_view path, std::string_view tag,
                      bool force, bool recursive, bool repair,
-		     Formatter *f, Context *fin);
+                     bool scrub_mdsdir, Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
   void rdlock_dirfrags_stats(CInode *diri, MDSInternalContext *fin);

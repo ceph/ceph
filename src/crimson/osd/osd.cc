@@ -158,25 +158,25 @@ CompatSet get_osd_initial_compat_set()
 
 seastar::future<> OSD::open_meta_coll()
 {
-  return store.open_collection(
+  return store.get_sharded_store().open_collection(
     coll_t::meta()
   ).then([this](auto ch) {
-    pg_shard_manager.init_meta_coll(ch, store);
+    pg_shard_manager.init_meta_coll(ch, store.get_sharded_store());
     return seastar::now();
   });
 }
 
 seastar::future<OSDMeta> OSD::open_or_create_meta_coll(FuturizedStore &store)
 {
-  return store.open_collection(coll_t::meta()).then([&store](auto ch) {
+  return store.get_sharded_store().open_collection(coll_t::meta()).then([&store](auto ch) {
     if (!ch) {
-      return store.create_new_collection(
+      return store.get_sharded_store().create_new_collection(
 	coll_t::meta()
       ).then([&store](auto ch) {
-	return OSDMeta(ch, store);
+	return OSDMeta(ch, store.get_sharded_store());
       });
     } else {
-      return seastar::make_ready_future<OSDMeta>(ch, store);
+      return seastar::make_ready_future<OSDMeta>(ch, store.get_sharded_store());
     }
   });
 }
@@ -269,7 +269,7 @@ seastar::future<> OSD::_write_superblock(
 	  meta_coll.create(t);
 	  meta_coll.store_superblock(t, superblock);
 	  logger().debug("OSD::_write_superblock: do_transaction...");
-	  return store.do_transaction(
+	  return store.get_sharded_store().do_transaction(
 	    meta_coll.collection(),
 	    std::move(t));
 	}),
@@ -354,15 +354,14 @@ seastar::future<> OSD::start()
 
   startup_time = ceph::mono_clock::now();
 
-  return pg_shard_manager.start(
+  return store.start().then([this] {
+    return pg_shard_manager.start(
     whoami, *cluster_msgr,
-    *public_msgr, *monc, *mgrc, store
-  ).then([this] {
+    *public_msgr, *monc, *mgrc, store);
+  }).then([this] {
     heartbeat.reset(new Heartbeat{
 	whoami, get_shard_services(),
 	*monc, *hb_front_msgr, *hb_back_msgr});
-    return store.start();
-  }).then([this] {
     return store.mount().handle_error(
       crimson::stateful_ec::handle([] (const auto& ec) {
         logger().error("error mounting object store in {}: ({}) {}",
@@ -387,7 +386,7 @@ seastar::future<> OSD::start()
   }).then([this] {
     pg_shard_manager.got_map(osdmap->get_epoch());
     bind_epoch = osdmap->get_epoch();
-    return pg_shard_manager.load_pgs();
+    return pg_shard_manager.load_pgs(store);
   }).then([this] {
 
     uint64_t osd_required =
@@ -531,6 +530,10 @@ seastar::future<> OSD::_send_boot()
                                   cluster_addrs,
                                   CEPH_FEATURES_ALL);
   collect_sys_info(&m->metadata, NULL);
+
+  // See OSDMonitor::preprocess_boot, prevents boot without allow_crimson
+  // OSDMap flag
+  m->metadata["osd_type"] = "crimson";
   return monc->send_message(std::move(m));
 }
 
@@ -667,6 +670,8 @@ void OSD::dump_status(Formatter* f) const
   f->dump_unsigned("whoami", superblock.whoami);
   f->dump_string("state", pg_shard_manager.get_osd_state_string());
   f->dump_unsigned("oldest_map", superblock.oldest_map);
+  f->dump_unsigned("cluster_osdmap_trim_lower_bound",
+                   superblock.cluster_osdmap_trim_lower_bound);
   f->dump_unsigned("newest_map", superblock.newest_map);
   f->dump_unsigned("num_pgs", pg_shard_manager.get_num_pgs());
 }
@@ -675,8 +680,10 @@ void OSD::print(std::ostream& out) const
 {
   out << "{osd." << superblock.whoami << " "
       << superblock.osd_fsid << " [" << superblock.oldest_map
-      << "," << superblock.newest_map << "] " << pg_shard_manager.get_num_pgs()
-      << " pgs}";
+      << "," << superblock.newest_map << "] "
+      << "tlb:" << superblock.cluster_osdmap_trim_lower_bound
+      << " pgs:" << pg_shard_manager.get_num_pgs()
+      << "}";
 }
 
 std::optional<seastar::future<>>
@@ -855,7 +862,8 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
   const auto first = m->get_first();
   const auto last = m->get_last();
   logger().info("handle_osd_map epochs [{}..{}], i have {}, src has [{}..{}]",
-                first, last, superblock.newest_map, m->oldest_map, m->newest_map);
+                first, last, superblock.newest_map,
+                m->cluster_osdmap_trim_lower_bound, m->newest_map);
   // make sure there is something new, here, before we bother flushing
   // the queues and such
   if (last <= superblock.newest_map) {
@@ -867,15 +875,16 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
   if (first > start) {
     logger().info("handle_osd_map message skips epochs {}..{}",
                   start, first - 1);
-    if (m->oldest_map <= start) {
+    if (m->cluster_osdmap_trim_lower_bound <= start) {
       return get_shard_services().osdmap_subscribe(start, false);
     }
     // always try to get the full range of maps--as many as we can.  this
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
-    if (m->oldest_map < first) {
-      return get_shard_services().osdmap_subscribe(m->oldest_map - 1, true);
+    if (m->cluster_osdmap_trim_lower_bound < first) {
+      return get_shard_services().osdmap_subscribe(
+        m->cluster_osdmap_trim_lower_bound - 1, true);
     }
     skip_maps = true;
     start = first;
@@ -900,7 +909,7 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
       pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
       pg_shard_manager.set_superblock(superblock);
       logger().debug("OSD::handle_osd_map: do_transaction...");
-      return store.do_transaction(
+      return store.get_sharded_store().do_transaction(
 	pg_shard_manager.get_meta_coll().collection(),
 	std::move(t));
     });
@@ -982,7 +991,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       logger().info("osd.{}: now preboot", whoami);
 
       if (m->get_source().is_mon()) {
-        return _preboot(m->oldest_map, m->newest_map);
+        return _preboot(
+          m->cluster_osdmap_trim_lower_bound, m->newest_map);
       } else {
         logger().info("osd.{}: start_boot", whoami);
         return start_boot();
@@ -1215,6 +1225,7 @@ seastar::future<> OSD::handle_peering_op(
 {
   const int from = m->get_source().num();
   logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
+  m->set_features(conn->get_features());
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
   (void) pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
     conn,

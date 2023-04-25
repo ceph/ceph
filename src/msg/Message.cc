@@ -314,6 +314,10 @@ Message *decode_message(CephContext *cct,
                         ceph::bufferlist& data,
                         Message::ConnectionRef conn)
 {
+#ifdef WITH_SEASTAR
+  // In crimson, conn is independently maintained outside Message.
+  ceph_assert(conn == nullptr);
+#endif
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
     __u32 front_crc = front.crc32c(0);
@@ -1023,6 +1027,15 @@ void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 #endif
 }
 
+void Message::encode_otel_trace(ceph::bufferlist &bl, uint64_t features) const
+{
+  tracing::encode(otel_trace, bl);
+}
+
+void Message::decode_otel_trace(ceph::bufferlist::const_iterator &p, bool create)
+{
+  tracing::decode(otel_trace, p);
+}
 
 // This routine is not used for ordinary messages, but only when encapsulating a message
 // for forwarding and routing.  It's also used in a backward compatibility test, which only

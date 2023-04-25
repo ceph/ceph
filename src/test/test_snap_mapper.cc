@@ -193,6 +193,19 @@ public:
       return -ENOENT;
     }
   }
+  int get_next_or_current(
+    const string &key,
+    pair<string, bufferlist> *next_or_current) override {
+    std::lock_guard l{lock};
+    map<string, bufferlist>::iterator j = store.lower_bound(key);
+    if (j != store.end()) {
+      if (next_or_current)
+	*next_or_current = *j;
+      return 0;
+    } else {
+      return -ENOENT;
+    }
+  }
   void submit(Transaction *t) {
     doer.submit(t->ops);
     doer.submit(t->callbacks);

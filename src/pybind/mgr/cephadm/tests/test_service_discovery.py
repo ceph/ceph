@@ -66,15 +66,18 @@ class FakeMgr:
         self.cache = FakeCache()
         self.spec_store = FakeSpecStore(self)
 
+    def get_mgr_id(self):
+        return 'mgr-1'
+
     def list_servers(self):
 
         servers = [
             {'hostname': 'node0',
              'ceph_version': '16.2',
-             'services': [{'type': 'mgr'}, {'type': 'mon'}]},
+             'services': [{'type': 'mgr', 'id': 'mgr-1'}, {'type': 'mon'}]},
             {'hostname': 'node1',
              'ceph_version': '16.2',
-             'services': [{'type': 'mgr'}, {'type': 'mon'}]}
+             'services': [{'type': 'mgr', 'id': 'mgr-2'}, {'type': 'mon'}]}
         ]
 
         return servers
@@ -106,7 +109,7 @@ class TestServiceDiscovery:
             assert 'targets' in entry
 
         # check content
-        assert cfg[0]['targets'] == ['node0:9283', 'node1:9283']
+        assert cfg[0]['targets'] == ['node0:9283']
 
     def test_get_sd_config_node_exporter(self):
         mgr = FakeMgr()

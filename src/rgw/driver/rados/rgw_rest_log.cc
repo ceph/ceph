@@ -507,7 +507,7 @@ void RGWOp_BILog_List::send_response_end() {
     if (next_log_layout) {
       s->formatter->open_object_section("next_log");
       encode_json("generation", next_log_layout->gen, s->formatter);
-      encode_json("num_shards", next_log_layout->layout.in_index.layout.num_shards, s->formatter);
+      encode_json("num_shards", rgw::num_shards(next_log_layout->layout.in_index.layout), s->formatter);
       s->formatter->close_section(); // next_log
     }
 
@@ -567,7 +567,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   latest_gen = logs.back().gen;
 
   for (auto& log : logs) {
-      uint32_t num_shards = log.layout.in_index.layout.num_shards;
+      uint32_t num_shards = rgw::num_shards(log.layout.in_index.layout);
       generations.push_back({log.gen, num_shards});
   }
 }

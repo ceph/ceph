@@ -105,6 +105,7 @@ public:
   virtual Device* get_device() = 0;
   virtual paddr_t get_start() = 0;
   virtual rbm_extent_state_t get_extent_state(paddr_t addr, size_t size) = 0;
+  virtual size_t get_journal_size() const = 0;
   virtual ~RandomBlockManager() {}
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
@@ -117,6 +118,14 @@ inline rbm_abs_addr convert_paddr_to_abs_addr(const paddr_t& paddr) {
 inline paddr_t convert_abs_addr_to_paddr(rbm_abs_addr addr, device_id_t d_id) {
   return paddr_t::make_blk_paddr(d_id, addr);
 }
+
+namespace random_block_device {
+  class RBMDevice;
+}
+
+seastar::future<std::unique_ptr<random_block_device::RBMDevice>> 
+  get_rb_device(const std::string &device);
+
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header);
 }
 

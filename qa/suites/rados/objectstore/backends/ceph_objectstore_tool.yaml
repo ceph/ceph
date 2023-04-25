@@ -13,7 +13,7 @@ tasks:
         osd max object name len: 460
         osd max object namespace len: 64
       osd:
-        osd objectstore: filestore
+        osd objectstore: bluestore
         osd op queue: wpq
     log-ignorelist:
       - overall HEALTH_

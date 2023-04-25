@@ -25,6 +25,7 @@ class Features(Enum):
     CEPHFS = 'cephfs'
     RGW = 'rgw'
     NFS = 'nfs'
+    DASHBOARD = 'dashboard'
 
 
 PREDISABLED_FEATURES = set()  # type: Set[str]
@@ -140,7 +141,8 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
             "iscsi": (bool, ''),
             "cephfs": (bool, ''),
             "rgw": (bool, ''),
-            "nfs": (bool, '')
+            "nfs": (bool, ''),
+            "dashboard": (bool, '')
         }
 
         @APIRouter('/feature_toggles')

@@ -252,6 +252,8 @@ class DataScan : public MDSUtility, public MetadataTool
     librados::IoCtx data_io;
     // Remember the data pool ID for use in layouts
     int64_t data_pool_id;
+    // IoCtxs for extra data pools
+    std::vector<librados::IoCtx> extra_data_ios;
 
     uint32_t n;
     uint32_t m;

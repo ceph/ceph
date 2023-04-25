@@ -206,10 +206,18 @@ Place a host in and out of maintenance mode (stops all Ceph daemons on host):
 
 .. prompt:: bash #
 
-   ceph orch host maintenance enter <hostname> [--force]
+   ceph orch host maintenance enter <hostname> [--force] [--yes-i-really-mean-it]
    ceph orch host maintenance exit <hostname>
 
-Where the force flag when entering maintenance allows the user to bypass warnings (but not alerts)
+The ``--force`` flag allows the user to bypass warnings (but not alerts). The ``--yes-i-really-mean-it``
+flag bypasses all safety checks and will attempt to force the host into maintenance mode no
+matter what.
+
+.. warning:: Using the --yes-i-really-mean-it flag to force the host to enter maintenance
+   mode can potentially cause loss of data availability, the mon quorum to break down due
+   to too few running monitors, mgr module commands (such as ``ceph orch . . .`` commands)
+   to be become unresponsive, and a number of other possible issues. Please only use this
+   flag if you're absolutely certain you know what you're doing.
 
 See also :ref:`cephadm-fqdn`
 
@@ -260,9 +268,10 @@ Many hosts can be added at once using
     hostname: node-02
     addr: 192.168.0.12
 
-This can be combined with service specifications (below) to create a cluster spec
-file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
-also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+This can be combined with :ref:`service specifications<orchestrator-cli-service-spec>`
+to create a cluster spec file to deploy a whole cluster in one command.  see
+``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster
+SSH Keys must be copied to hosts prior to adding them.
 
 Setting the initial CRUSH location of host
 ==========================================

@@ -56,15 +56,16 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
                              RGWSI_RADOS::Pool *index_pool,
                              std::string *bucket_oid_base);
 
+  // return the index oid for the given shard id
   void get_bucket_index_object(const std::string& bucket_oid_base,
-                               uint32_t num_shards,
-                               int shard_id,
-                               uint64_t gen_id,
-                               std::string *bucket_obj);
+                               const rgw::bucket_index_normal_layout& normal,
+                               uint64_t gen_id, int shard_id,
+                               std::string* bucket_obj);
+  // return the index oid and shard id for the given object name
   int get_bucket_index_object(const std::string& bucket_oid_base,
-			      const std::string& obj_key,
-                              uint32_t num_shards, rgw::BucketHashType hash_type,
-                              uint64_t gen_id, std::string *bucket_obj, int *shard_id);
+                              const rgw::bucket_index_normal_layout& normal,
+                              uint64_t gen_id, const std::string& obj_key,
+                              std::string* bucket_obj, int* shard_id);
 
   int cls_bucket_head(const DoutPrefixProvider *dpp,
 		      const RGWBucketInfo& bucket_info,
@@ -145,10 +146,8 @@ public:
 
   int open_bucket_index_shard(const DoutPrefixProvider *dpp,
                               const RGWBucketInfo& bucket_info,
-                              int shard_id,
-                              uint32_t num_shards,
-                              uint64_t gen,
-                              RGWSI_RADOS::Obj *bucket_obj);
+                              const rgw::bucket_index_layout_generation& index,
+                              int shard_id, RGWSI_RADOS::Obj *bucket_obj);
 
   int open_bucket_index(const DoutPrefixProvider *dpp,
                         const RGWBucketInfo& bucket_info,

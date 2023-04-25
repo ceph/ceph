@@ -6,7 +6,8 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from . import APIDoc, APIRouter, CRUDCollectionMethod, CRUDEndpoint, EndpointDoc, SecretStr
-from ._crud import ArrayHorizontalContainer, Form, FormField, Icon, TableAction, VerticalContainer
+from ._crud import ArrayHorizontalContainer, CRUDMeta, Form, FormField, \
+    FormTaskInfo, Icon, TableAction, VerticalContainer
 
 logger = logging.getLogger("controllers.ceph_users")
 
@@ -56,23 +57,39 @@ class CephUserEndpoints:
             raise DashboardException(msg, code=500)
         return f"Successfully created user '{user_entity}'"
 
+    @staticmethod
+    def user_delete(_, user_entity: str):
+        """
+        Delete a ceph user and it's defined capabilities.
+        :param user_entity: Entity to dlelete
+        """
+        logger.debug("Sending command 'auth del' of entity '%s'", user_entity)
+        try:
+            CephService.send_command('mon', 'auth del', entity=user_entity)
+        except SendCommandError as ex:
+            msg = f'{ex} in command {ex.prefix}'
+            if ex.errno == -EINVAL:
+                raise DashboardException(msg, code=400)
+            raise DashboardException(msg, code=500)
+        return f"Successfully eleted user '{user_entity}'"
 
-create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities',
-                                                label_html_class='hidden cd-header mt-1', fields=[
-                                                    FormField('Entity', 'entity',
-                                                              field_type=str, html_class='mr-3'),
-                                                    FormField('Entity Capabilities',
-                                                              'cap', field_type=str)
-                                                ])
-create_container = VerticalContainer('Create User', 'create_user',
-                                     html_class='d-none', fields=[
-                                         FormField('User entity', 'user_entity',
-                                                   field_type=str),
-                                         create_cap_container,
-                                     ])
+
+create_cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities', fields=[
+    FormField('Entity', 'entity',
+              field_type=str),
+    FormField('Entity Capabilities',
+              'cap', field_type=str)
+], min_items=1)
+create_container = VerticalContainer('Create User', 'create_user', fields=[
+    FormField('User entity', 'user_entity',
+              field_type=str),
+    create_cap_container,
+])
 
 create_form = Form(path='/cluster/user/create',
-                   root_container=create_container, action='Create User')
+                   root_container=create_container,
+                   task_info=FormTaskInfo("Ceph user '{user_entity}' created successfully",
+                                          ['user_entity']))
 
 
 @CRUDEndpoint(
@@ -81,10 +98,13 @@ create_form = Form(path='/cluster/user/create',
     set_column={"caps": {"cellTemplate": "badgeDict"}},
     actions=[
         TableAction(name='create', permission='create', icon=Icon.add.value,
-                    routerLink='/cluster/user/create')
+                    routerLink='/cluster/user/create'),
+        TableAction(name='Delete', permission='delete', icon=Icon.destroy.value,
+                    click='delete')
     ],
     permissions=[Scope.CONFIG_OPT],
     forms=[create_form],
+    column_key='entity',
     get_all=CRUDCollectionMethod(
         func=CephUserEndpoints.user_list,
         doc=EndpointDoc("Get Ceph Users")
@@ -92,7 +112,12 @@ create_form = Form(path='/cluster/user/create',
     create=CRUDCollectionMethod(
         func=CephUserEndpoints.user_create,
         doc=EndpointDoc("Create Ceph User")
-    )
+    ),
+    delete=CRUDCollectionMethod(
+        func=CephUserEndpoints.user_delete,
+        doc=EndpointDoc("Delete Ceph User")
+    ),
+    meta=CRUDMeta()
 )
 class CephUser(NamedTuple):
     entity: str

@@ -47,7 +47,6 @@
 #include "rgw_log.h"
 
 #include "rgw_lc.h"
-#include "rgw_torrent.h"
 #include "rgw_tag.h"
 #include "rgw_object_lock.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -60,12 +59,11 @@
 
 #include "include/ceph_assert.h"
 
-using ceph::crypto::SHA1;
-
 struct req_state;
 class RGWOp;
 class RGWRados;
 class RGWMultiCompleteUpload;
+class RGWPutObj_Torrent;
 
 
 namespace rgw {
@@ -182,6 +180,7 @@ protected:
   RGWQuota quota;
   int op_ret;
   int do_aws4_auth_completion();
+  bool init_called = false;
 
   virtual int init_quota();
 
@@ -233,7 +232,9 @@ public:
   }
 
   virtual void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *dialect_handler) {
+    if (init_called) return;
     this->driver = driver;
+    init_called = true;
     this->s = s;
     this->dialect_handler = dialect_handler;
   }
@@ -328,7 +329,6 @@ public:
 
 class RGWGetObj : public RGWOp {
 protected:
-  seed torrent; // get torrent
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
@@ -346,6 +346,7 @@ protected:
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
   rgw::sal::Attrs attrs;
+  bool get_torrent = false;
   bool get_data;
   bool partial_content;
   bool ignore_invalid_range;
@@ -1186,7 +1187,6 @@ WRITE_CLASS_ENCODER(RGWSLOInfo)
 
 class RGWPutObj : public RGWOp {
 protected:
-  seed torrent;
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
@@ -1282,6 +1282,9 @@ public:
                                  rgw::sal::DataProcessor *cb) {
     return 0;
   }
+  // if configured, construct a filter to generate torrent metadata
+  auto get_torrent_filter(rgw::sal::DataProcessor *cb)
+      -> std::optional<RGWPutObj_Torrent>;
 
   // get lua script to run as a "put object" filter
   int get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter,
@@ -1507,11 +1510,7 @@ protected:
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
   rgw::sal::Attrs attrs;
-  std::string src_tenant_name, src_bucket_name, src_obj_name;
   std::unique_ptr<rgw::sal::Bucket> src_bucket;
-  std::string dest_tenant_name, dest_bucket_name, dest_obj_name;
-  std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-  std::unique_ptr<rgw::sal::Object> dest_object;
   ceph::real_time src_mtime;
   ceph::real_time mtime;
   rgw::sal::AttrsMod attrs_mod;
@@ -1571,6 +1570,7 @@ public:
     RGWOp::init(driver, s, h);
     dest_policy.set_ctx(s->cct);
   }
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;

@@ -199,17 +199,14 @@ public:
 
 class RGWHandler_REST_STS : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
-  const std::string& post_body;
   RGWOp *op_post() override;
-  void rgw_sts_parse_input();
 public:
 
-  static int init_from_header(req_state *s, RGWFormat default_formatter, bool configurable_format);
+  static bool action_exists(const req_state* s);
 
-  RGWHandler_REST_STS(const rgw::auth::StrategyRegistry& auth_registry, const std::string& post_body="")
+  RGWHandler_REST_STS(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
-      auth_registry(auth_registry),
-      post_body(post_body) {}
+      auth_registry(auth_registry) {}
   ~RGWHandler_REST_STS() override = default;
 
   int init(rgw::sal::Driver* driver,

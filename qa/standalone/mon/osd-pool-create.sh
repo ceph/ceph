@@ -211,30 +211,6 @@ function TEST_utf8_cli() {
     export LANG="$OLDLANG"
 }
 
-function TEST_pool_create_rep_expected_num_objects() {
-    local dir=$1
-    setup $dir || return 1
-
-    export CEPH_ARGS
-    run_mon $dir a || return 1
-    run_mgr $dir x || return 1
-    # disable pg dir merge
-    run_osd_filestore $dir 0 || return 1
-
-    ceph osd pool create rep_expected_num_objects 64 64 replicated  replicated_rule 100000 || return 1
-    # wait for pg dir creating
-    sleep 30
-    ceph pg ls
-    find ${dir}/0/current -ls
-    ret=$(find ${dir}/0/current/1.0_head/ | grep DIR | wc -l)
-    if [ "$ret" -le 2 ];
-    then
-        return 1
-    else
-        echo "TEST_pool_create_rep_expected_num_objects PASS"
-    fi
-}
-
 function check_pool_priority() {
     local dir=$1
     shift

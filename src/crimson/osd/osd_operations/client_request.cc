@@ -35,7 +35,7 @@ void ClientRequest::Orderer::clear_and_cancel()
 {
   for (auto i = list.begin(); i != list.end(); ) {
     logger().debug(
-      "{}: ClientRequest::Orderer::clear_and_cancel {}",
+      "ClientRequest::Orderer::clear_and_cancel: {}",
       *i);
     i->complete_request();
     remove_request(*(i++));
@@ -80,20 +80,9 @@ ConnectionPipeline &ClientRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).client_request_conn_pipeline;
 }
 
-ConnectionPipeline &ClientRequest::cp()
-{
-  return get_osd_priv(conn.get()).client_request_conn_pipeline;
-}
-
 ClientRequest::PGPipeline &ClientRequest::pp(PG &pg)
 {
-  return pg.client_request_pg_pipeline;
-}
-
-bool ClientRequest::same_session_and_pg(const ClientRequest& other_op) const
-{
-  return &get_osd_priv(conn.get()) == &get_osd_priv(other_op.conn.get()) &&
-         m->get_spg() == other_op.m->get_spg();
+  return pg.request_pg_pipeline;
 }
 
 bool ClientRequest::is_pg_op() const
@@ -211,7 +200,13 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
     *this
   ).then_interruptible(
     [this, pg]() mutable {
-    return do_recover_missing(pg, m->get_hobj());
+    if (pg->is_primary()) {
+      return do_recover_missing(pg, m->get_hobj());
+    } else {
+      logger().debug("process_op: Skipping do_recover_missing"
+                     "on non primary pg");
+      return interruptor::now();
+    }
   }).then_interruptible([this, pg, &ihref]() mutable {
     return pg->already_complete(m->get_reqid()).then_interruptible(
       [this, pg, &ihref](auto completed) mutable
@@ -252,16 +247,6 @@ ClientRequest::do_process(
   instance_handle_t &ihref,
   Ref<PG>& pg, crimson::osd::ObjectContextRef obc)
 {
-  if (!pg->is_primary()) {
-    // primary can handle both normal ops and balanced reads
-    if (is_misdirected(*pg)) {
-      logger().trace("do_process: dropping misdirected op");
-      return seastar::now();
-    } else if (const hobject_t& hoid = m->get_hobj();
-               !pg->get_peering_state().can_serve_replica_read(hoid)) {
-      return reply_op_error(pg, -EAGAIN);
-    }
-  }
   if (m->has_flag(CEPH_OSD_FLAG_PARALLELEXEC)) {
     return reply_op_error(pg, -EINVAL);
   }
@@ -293,7 +278,34 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENOENT);
   }
 
-  return pg->do_osd_ops(m, obc, op_info).safe_then_unpack_interruptible(
+  SnapContext snapc = get_snapc(pg,obc);
+
+  if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
+       snapc.seq < obc->ssc->snapset.seq) {
+        logger().debug("{} ORDERSNAP flag set and snapc seq {}",
+                       " < snapset seq {} on {}",
+                       __func__, snapc.seq, obc->ssc->snapset.seq,
+                       obc->obs.oi.soid);
+     return reply_op_error(pg, -EOLDSNAPC);
+  }
+
+  if (!pg->is_primary()) {
+    // primary can handle both normal ops and balanced reads
+    if (is_misdirected(*pg)) {
+      logger().trace("do_process: dropping misdirected op");
+      return seastar::now();
+    } else if (const hobject_t& hoid = m->get_hobj();
+               !pg->get_peering_state().can_serve_replica_read(hoid)) {
+      logger().debug("{}: unstable write on replica, "
+	             "bouncing to primary",
+                     __func__);
+      return reply_op_error(pg, -EAGAIN);
+    } else {
+      logger().debug("{}: serving replica read on oid {}",
+                     __func__, m->get_hobj());
+    }
+  }
+  return pg->do_osd_ops(m, conn, obc, op_info, snapc).safe_then_unpack_interruptible(
     [this, pg, &ihref](auto submitted, auto all_completed) mutable {
       return submitted.then_interruptible([this, pg, &ihref] {
 	return ihref.enter_stage<interruptor>(pp(*pg).wait_repop, *this);
@@ -331,7 +343,7 @@ bool ClientRequest::is_misdirected(const PG& pg) const
       return true;
     }
     // balanced reads; any replica will do
-    return pg.is_nonprimary();
+    return false;
   }
   // neither balanced nor localize reads
   return true;
@@ -341,6 +353,30 @@ void ClientRequest::put_historic() const
 {
   ceph_assert_always(put_historic_shard_services);
   put_historic_shard_services->get_registry().put_historic(*this);
+}
+
+const SnapContext ClientRequest::get_snapc(
+  Ref<PG>& pg,
+  crimson::osd::ObjectContextRef obc) const
+{
+  SnapContext snapc;
+  if (op_info.may_write() || op_info.may_cache()) {
+    // snap
+    if (pg->get_pgpool().info.is_pool_snaps_mode()) {
+      // use pool's snapc
+      snapc = pg->get_pgpool().snapc;
+      logger().debug("{} using pool's snapc snaps={}",
+                     __func__, snapc.snaps);
+
+    } else {
+      // client specified snapc
+      snapc.seq = m->get_snap_seq();
+      snapc.snaps = m->get_snaps();
+      logger().debug("{} client specified snapc seq={} snaps={}",
+                     __func__, snapc.seq, snapc.snaps);
+    }
+  }
+  return snapc;
 }
 
 }

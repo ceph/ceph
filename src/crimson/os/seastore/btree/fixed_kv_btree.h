@@ -525,7 +525,7 @@ public:
             return handle_split(
               c, ret
             ).si_then([c, laddr, val, &ret] {
-              if (!ret.leaf.node->is_pending()) {
+              if (!ret.leaf.node->is_mutable()) {
                 CachedExtentRef mut = c.cache.duplicate_for_write(
                   c.trans, ret.leaf.node
                 );
@@ -581,7 +581,7 @@ public:
       "update element at {}",
       c.trans,
       iter.is_end() ? min_max_t<node_key_t>::max : iter.get_key());
-    if (!iter.leaf.node->is_pending()) {
+    if (!iter.leaf.node->is_mutable()) {
       CachedExtentRef mut = c.cache.duplicate_for_write(
         c.trans, iter.leaf.node
       );
@@ -622,7 +622,7 @@ public:
     return seastar::do_with(
       iter,
       [this, c](auto &ret) {
-        if (!ret.leaf.node->is_pending()) {
+        if (!ret.leaf.node->is_mutable()) {
           CachedExtentRef mut = c.cache.duplicate_for_write(
             c.trans, ret.leaf.node
           );
@@ -806,10 +806,7 @@ public:
     op_context_t<node_key_t> c,
     CachedExtentRef e) {
     LOG_PREFIX(FixedKVBtree::rewrite_extent);
-    assert(e->get_type() == extent_types_t::LADDR_INTERNAL ||
-           e->get_type() == extent_types_t::LADDR_LEAF ||
-           e->get_type() == extent_types_t::BACKREF_INTERNAL ||
-           e->get_type() == extent_types_t::BACKREF_LEAF);
+    assert(is_lba_backref_node(e->get_type()));
     
     auto do_rewrite = [&](auto &fixed_kv_extent) {
       auto n_fixed_kv_extent = c.cache.template alloc_new_extent<
@@ -836,9 +833,13 @@ public:
        * Upon commit, these now block relative addresses will be interpretted
        * against the real final address.
        */
-      n_fixed_kv_extent->resolve_relative_addrs(
-        make_record_relative_paddr(0).block_relative_to(
-          n_fixed_kv_extent->get_paddr()));
+      if (!n_fixed_kv_extent->get_paddr().is_absolute()) {
+	// backend_type_t::SEGMENTED
+	assert(n_fixed_kv_extent->get_paddr().is_record_relative());
+	n_fixed_kv_extent->resolve_relative_addrs(
+	  make_record_relative_paddr(0).block_relative_to(
+	    n_fixed_kv_extent->get_paddr()));
+      } // else: backend_type_t::RANDOM_BLOCK
       
       SUBTRACET(
         seastore_fixedkv_tree,
@@ -1459,7 +1460,7 @@ private:
 
     for (; split_from > 0; --split_from) {
       auto &parent_pos = iter.get_internal(split_from + 1);
-      if (!parent_pos.node->is_pending()) {
+      if (!parent_pos.node->is_mutable()) {
         parent_pos.node = c.cache.duplicate_for_write(
           c.trans, parent_pos.node
         )->template cast<internal_node_t>();
@@ -1631,7 +1632,7 @@ private:
     node_position_t<NodeType> &pos)
   {
     LOG_PREFIX(FixedKVBtree::merge_level);
-    if (!parent_pos.node->is_pending()) {
+    if (!parent_pos.node->is_mutable()) {
       parent_pos.node = c.cache.duplicate_for_write(
         c.trans, parent_pos.node
       )->template cast<internal_node_t>();

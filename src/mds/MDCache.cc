@@ -2653,7 +2653,7 @@ void MDCache::dump_resolve_status(Formatter *f) const
 {
   f->open_object_section("resolve_status");
   f->dump_stream("resolve_gather") << resolve_gather;
-  f->dump_stream("resolve_ack_gather") << resolve_gather;
+  f->dump_stream("resolve_ack_gather") << resolve_ack_gather;
   f->close_section();
 }
 
@@ -5620,7 +5620,7 @@ void MDCache::prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t i
     snap = make_message<MClientSnap>(CEPH_SNAP_OP_SPLIT);
     splits.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple(snap));
     snap->head.split = realm->inode->ino();
-    snap->bl = realm->get_snap_trace();
+    snap->bl = mds->server->get_snap_trace(client, realm);
 
     for (const auto& child : realm->open_children)
       snap->split_realms.push_back(child->inode->ino());
@@ -5651,7 +5651,7 @@ void MDCache::prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm,
       update->head.split = parent_realm->inode->ino();
       update->split_inos = split_inos;
       update->split_realms = split_realms;
-      update->bl = parent_realm->get_snap_trace();
+      update->bl = mds->server->get_snap_trace(p.first, parent_realm);
       em.first->second = std::move(update);
     }
   }
@@ -5848,7 +5848,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 					cap->get_last_seq(), cap->pending(), cap->wanted(),
 					0, cap->get_mseq(), mds->get_osd_epoch_barrier());
   in->encode_cap_message(reap, cap);
-  reap->snapbl = realm->get_snap_trace();
+  reap->snapbl = mds->server->get_snap_trace(session, realm);
   reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
   mds->send_message_client_counted(reap, session);
 }
@@ -6034,7 +6034,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
     dout(10) << "finish_snaprealm_reconnect client." << client << " has old seq " << seq << " < " 
 	     << realm->get_newest_seq() << " on " << *realm << dendl;
     auto snap = make_message<MClientSnap>(CEPH_SNAP_OP_UPDATE);
-    snap->bl = realm->get_snap_trace();
+    snap->bl = mds->server->get_snap_trace(client, realm);
     for (const auto& child : realm->open_children)
       snap->split_realms.push_back(child->inode->ino());
     updates.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple(snap));
@@ -8667,7 +8667,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   // success.
   if (mds->logger) mds->logger->inc(l_mds_traverse_hit);
   dout(10) << "path_traverse finish on snapid " << snapid << dendl;
-  if (mdr) 
+  if (mdr)
     ceph_assert(mdr->snapid == snapid);
 
   if (flags & MDS_TRAVERSE_RDLOCK_SNAP)
@@ -9970,7 +9970,7 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 	  update->head.split = in->ino();
 	  update->split_inos = split_inos;
 	  update->split_realms = split_realms;
-	  update->bl = in->snaprealm->get_snap_trace();
+	  update->bl = mds->server->get_snap_trace(em.first->first, in->snaprealm);
 	  em.first->second = std::move(update);
 	}
       }
@@ -10064,7 +10064,7 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
       continue;
     auto update = make_message<MClientSnap>(snap_op);
     update->head.split = global_snaprealm->inode->ino();
-    update->bl = global_snaprealm->get_snap_trace();
+    update->bl = mds->server->get_snap_trace(session, global_snaprealm);
     mds->send_message_client_counted(update, session);
   }
 }
@@ -12958,19 +12958,24 @@ class C_MDS_EnqueueScrub : public Context
   std::string tag;
   Formatter *formatter;
   Context *on_finish;
+  bool dump_values;
 public:
   ScrubHeaderRef header;
-  C_MDS_EnqueueScrub(std::string_view tag, Formatter *f, Context *fin) :
-    tag(tag), formatter(f), on_finish(fin), header(nullptr) {}
+  C_MDS_EnqueueScrub(std::string_view tag, Formatter *f, Context *fin,
+                     bool dump_values = true) :
+    tag(tag), formatter(f), on_finish(fin), dump_values(dump_values),
+    header(nullptr) {}
 
   void finish(int r) override {
-    formatter->open_object_section("results");
-    formatter->dump_int("return_code", r);
-    if (r == 0) {
-      formatter->dump_string("scrub_tag", tag);
-      formatter->dump_string("mode", "asynchronous");
+    if (dump_values) {
+      formatter->open_object_section("results");
+      formatter->dump_int("return_code", r);
+      if (r == 0) {
+        formatter->dump_string("scrub_tag", tag);
+        formatter->dump_string("mode", "asynchronous");
+      }
+      formatter->close_section();
     }
-    formatter->close_section();
 
     r = 0;
     if (on_finish)
@@ -12982,7 +12987,7 @@ void MDCache::enqueue_scrub(
     std::string_view path,
     std::string_view tag,
     bool force, bool recursive, bool repair,
-    Formatter *f, Context *fin)
+    bool scrub_mdsdir, Formatter *f, Context *fin)
 {
   dout(10) << __func__ << " " << path << dendl;
 
@@ -13008,15 +13013,21 @@ void MDCache::enqueue_scrub(
 
   bool is_internal = false;
   std::string tag_str(tag);
-  if (tag_str.empty()) {
-    uuid_d uuid_gen;
-    uuid_gen.generate_random();
-    tag_str = uuid_gen.to_string();
+  C_MDS_EnqueueScrub *cs;
+  if ((path == "~mdsdir" && scrub_mdsdir)) {
     is_internal = true;
+    cs = new C_MDS_EnqueueScrub(tag_str, f, fin, false);
+  } else {
+    if (tag_str.empty()) {
+      uuid_d uuid_gen;
+      uuid_gen.generate_random();
+      tag_str = uuid_gen.to_string();
+      is_internal = true;
+    }
+    cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
   }
-
-  C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
-  cs->header = std::make_shared<ScrubHeader>(tag_str, is_internal, force, recursive, repair);
+  cs->header = std::make_shared<ScrubHeader>(tag_str, is_internal, force,
+                                             recursive, repair, scrub_mdsdir);
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
@@ -13486,6 +13497,12 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   in->dump(f, CInode::DUMP_DEFAULT | CInode::DUMP_PATH);
   f->close_section();
   return true;
+}
+
+void MDCache::dump_dir(Formatter *f, CDir *dir, bool dentry_dump) {
+  f->open_object_section("dir");
+  dir->dump(f, dentry_dump ? CDir::DUMP_ALL : CDir::DUMP_DEFAULT);
+  f->close_section();
 }
 
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
