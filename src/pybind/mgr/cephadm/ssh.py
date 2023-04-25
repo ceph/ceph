@@ -52,8 +52,19 @@ class EventLoopThread(Thread):
         super().__init__(target=self._loop.run_forever)
         self.start()
 
-    def get_result(self, coro: Awaitable[T]) -> T:
-        return asyncio.run_coroutine_threadsafe(coro, self._loop).result()
+    def get_result(self, coro: Awaitable[T], timeout: Optional[int] = None) -> T:
+        # useful to note: This "run_coroutine_threadsafe" returns a
+        # concurrent.futures.Future, rather than an asyncio.Future. They are
+        # fairly similar but have a few differences, notably in our case
+        # that the result function of a concurrent.futures.Future accepts
+        # a timeout argument
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            return future.result(timeout)
+        except asyncio.TimeoutError:
+            # try to cancel the task before raising the exception further up
+            future.cancel()
+            raise
 
 
 class SSHManager:
@@ -135,7 +146,8 @@ class SSHManager:
                           host: str,
                           addr: Optional[str] = None,
                           ) -> "SSHClientConnection":
-        return self.mgr.wait_async(self._remote_connection(host, addr))
+        with self.mgr.async_timeout_handler(host, f'ssh {host} (addr {addr})'):
+            return self.mgr.wait_async(self._remote_connection(host, addr))
 
     async def _execute_command(self,
                                host: str,
@@ -188,7 +200,8 @@ class SSHManager:
                         addr: Optional[str] = None,
                         log_command: Optional[bool] = True
                         ) -> Tuple[str, str, int]:
-        return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr, log_command))
+        with self.mgr.async_timeout_handler(host, " ".join(cmd)):
+            return self.mgr.wait_async(self._execute_command(host, cmd, stdin, addr, log_command))
 
     async def _check_execute_command(self,
                                      host: str,
@@ -211,7 +224,8 @@ class SSHManager:
                               addr: Optional[str] = None,
                               log_command: Optional[bool] = True,
                               ) -> str:
-        return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr, log_command))
+        with self.mgr.async_timeout_handler(host, " ".join(cmd)):
+            return self.mgr.wait_async(self._check_execute_command(host, cmd, stdin, addr, log_command))
 
     async def _write_remote_file(self,
                                  host: str,
@@ -259,8 +273,9 @@ class SSHManager:
                           gid: Optional[int] = None,
                           addr: Optional[str] = None,
                           ) -> None:
-        self.mgr.wait_async(self._write_remote_file(
-            host, path, content, mode, uid, gid, addr))
+        with self.mgr.async_timeout_handler(host, f'writing file {path}'):
+            self.mgr.wait_async(self._write_remote_file(
+                host, path, content, mode, uid, gid, addr))
 
     async def _reset_con(self, host: str) -> None:
         conn = self.cons.get(host)
@@ -270,7 +285,8 @@ class SSHManager:
             del self.cons[host]
 
     def reset_con(self, host: str) -> None:
-        self.mgr.wait_async(self._reset_con(host))
+        with self.mgr.async_timeout_handler(cmd=f'resetting ssh connection to {host}'):
+            self.mgr.wait_async(self._reset_con(host))
 
     def _reset_cons(self) -> None:
         for host, conn in self.cons.items():
