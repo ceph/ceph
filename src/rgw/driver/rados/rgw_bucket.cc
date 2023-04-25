@@ -1863,7 +1863,7 @@ public:
 
     new_be.bucket.name = new_bucket_name;
 
-    ret = ctl.bucket->store_bucket_instance_info(be.bucket, new_bi, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
+    ret = ctl.bucket->store_bucket_instance_info(new_be.bucket, new_bi, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
                                                                     .set_exclusive(false)
                                                                     .set_mtime(orig_mtime)
                                                                     .set_attrs(&attrs_m)
