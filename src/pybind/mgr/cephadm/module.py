@@ -1,3 +1,4 @@
+import asyncio
 import json
 import errno
 import ipaddress
@@ -6,6 +7,7 @@ import re
 import shlex
 from collections import defaultdict
 from configparser import ConfigParser
+from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
 from threading import Event
@@ -14,7 +16,8 @@ from cephadm.service_discovery import ServiceDiscovery
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
-    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, Awaitable
+    Any, Set, TYPE_CHECKING, cast, NamedTuple, Sequence, Type, \
+    Awaitable, Iterator
 
 import datetime
 import os
@@ -472,6 +475,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default=False,
             desc='Enable TLS security for all the monitoring stack daemons'
         ),
+        Option(
+            'default_cephadm_command_timeout',
+            type='secs',
+            default=15 * 60,
+            desc='Default timeout applied to cephadm commands run directly on '
+            'the host (in seconds)'
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -554,6 +564,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.device_enhanced_scan = False
             self.cgroups_split = True
             self.log_refresh_metadata = False
+            self.default_cephadm_command_timeout = 0
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -686,8 +697,41 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         serve = CephadmServe(self)
         serve.serve()
 
-    def wait_async(self, coro: Awaitable[T]) -> T:
-        return self.event_loop.get_result(coro)
+    def wait_async(self, coro: Awaitable[T], timeout: Optional[int] = None) -> T:
+        if not timeout:
+            timeout = self.default_cephadm_command_timeout
+            # put a lower bound of 60 seconds in case users
+            # accidentally set it to something unreasonable.
+            # For example if they though it was in minutes
+            # rather than seconds
+            if timeout < 60:
+                self.log.info(f'Found default timeout set to {timeout}. Instead trying minimum of 60.')
+                timeout = 60
+        return self.event_loop.get_result(coro, timeout)
+
+    @contextmanager
+    def async_timeout_handler(self, host: Optional[str] = '',
+                              cmd: Optional[str] = '',
+                              timeout: Optional[int] = None) -> Iterator[None]:
+        # this is meant to catch asyncio.TimeoutError and convert it into an
+        # OrchestratorError which much of the cephadm codebase is better equipped to handle.
+        # If the command being run, the host it is run on, or the timeout being used
+        # are provided, that will be included in the OrchestratorError's message
+        try:
+            yield
+        except asyncio.TimeoutError:
+            err_str: str = ''
+            if cmd:
+                err_str = f'Command "{cmd}" timed out '
+            else:
+                err_str = 'Command timed out '
+            if host:
+                err_str += f'on host {host} '
+            if timeout:
+                err_str += f'(non-default {timeout} second timeout)'
+            else:
+                err_str += (f'(default {self.default_cephadm_command_timeout} second timeout)')
+            raise OrchestratorError(err_str)
 
     def set_container_image(self, entity: str, image: str) -> None:
         self.check_mon_command({
@@ -1124,7 +1168,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             break
         if not host:
             raise OrchestratorError('no hosts defined')
-        r = self.wait_async(CephadmServe(self)._registry_login(host, registry_json))
+        with self.async_timeout_handler(host, 'cephadm registry-login'):
+            r = self.wait_async(CephadmServe(self)._registry_login(host, registry_json))
         if r is not None:
             return 1, '', r
         # if logins succeeded, store info
@@ -1138,10 +1183,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
     def check_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
         """Check whether we can access and manage a remote host"""
         try:
-            out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(host, cephadmNoImage, 'check-host',
-                                                                             ['--expect-hostname', host],
-                                                                             addr=addr,
-                                                                             error_ok=True, no_fsid=True))
+            with self.async_timeout_handler(host, f'cephadm check-host --expect-hostname {host}'):
+                out, err, code = self.wait_async(
+                    CephadmServe(self)._run_cephadm(
+                        host, cephadmNoImage, 'check-host', ['--expect-hostname', host],
+                        addr=addr, error_ok=True, no_fsid=True))
             if code:
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
         except ssh.HostConnectionError as e:
@@ -1164,10 +1210,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         'cephadm prepare-host')
     def _prepare_host(self, host: str, addr: Optional[str] = None) -> Tuple[int, str, str]:
         """Prepare a remote host for use with cephadm"""
-        out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(host, cephadmNoImage, 'prepare-host',
-                                                                         ['--expect-hostname', host],
-                                                                         addr=addr,
-                                                                         error_ok=True, no_fsid=True))
+        with self.async_timeout_handler(host, 'cephadm prepare-host'):
+            out, err, code = self.wait_async(
+                CephadmServe(self)._run_cephadm(
+                    host, cephadmNoImage, 'prepare-host', ['--expect-hostname', host],
+                    addr=addr, error_ok=True, no_fsid=True))
         if code:
             return 1, '', ('prepare-host failed:\n' + '\n'.join(err))
         # if we have an outstanding health alert for this host, give the
@@ -1339,7 +1386,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         @forall_hosts
         def run(h: str) -> str:
-            return self.wait_async(self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd'))
+            with self.async_timeout_handler(h, 'cephadm deploy (osd daemon)'):
+                return self.wait_async(self.osd_service.deploy_osd_daemons_for_existing_osds(h, 'osd'))
 
         return HandleCommandResult(stdout='\n'.join(run(host)))
 
@@ -1493,11 +1541,12 @@ Then run the following:
                 f'Received loopback address resolving ip for {host}: {ip_addr}. Falling back to previous address.')
             ip_addr = self.inventory.get_addr(host)
         try:
-            out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
-                host, cephadmNoImage, 'check-host',
-                ['--expect-hostname', host],
-                addr=addr,
-                error_ok=True, no_fsid=True))
+            with self.async_timeout_handler(host, f'cephadm check-host --expect-hostname {host}'):
+                out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                    host, cephadmNoImage, 'check-host',
+                    ['--expect-hostname', host],
+                    addr=addr,
+                    error_ok=True, no_fsid=True))
             if code:
                 msg = 'check-host failed:\n' + '\n'.join(err)
                 # err will contain stdout and stderr, so we filter on the message text to
@@ -1793,9 +1842,12 @@ Then run the following:
                     msg + '\nNote: Warnings can be bypassed with the --force flag', errno=rc)
 
             # call the host-maintenance function
-            _out, _err, _code = self.wait_async(CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, "host-maintenance",
-                                                                                ["enter"],
-                                                                                error_ok=True))
+            with self.async_timeout_handler(hostname, 'cephadm host-maintenance enter'):
+                _out, _err, _code = self.wait_async(
+                    CephadmServe(self)._run_cephadm(
+                        hostname, cephadmNoImage, "host-maintenance",
+                        ["enter"],
+                        error_ok=True))
             returned_msg = _err[0].split('\n')[-1]
             if (returned_msg.startswith('failed') or returned_msg.startswith('ERROR')) and not yes_i_really_mean_it:
                 raise OrchestratorError(
@@ -1844,9 +1896,10 @@ Then run the following:
         if tgt_host['status'] != "maintenance":
             raise OrchestratorError(f"Host {hostname} is not in maintenance mode")
 
-        outs, errs, _code = self.wait_async(CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, 'host-maintenance',
-                                                                            ['exit'],
-                                                                            error_ok=True))
+        with self.async_timeout_handler(hostname, 'cephadm host-maintenance exit'):
+            outs, errs, _code = self.wait_async(
+                CephadmServe(self)._run_cephadm(hostname, cephadmNoImage,
+                                                'host-maintenance', ['exit'], error_ok=True))
         returned_msg = errs[0].split('\n')[-1]
         if returned_msg.startswith('failed') or returned_msg.startswith('ERROR'):
             raise OrchestratorError(
@@ -1889,10 +1942,10 @@ Then run the following:
         :param hostname: (str) host name
         """
         self.log.info(f'disk rescan request sent to host "{hostname}"')
-        _out, _err, _code = self.wait_async(CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, "disk-rescan",
-                                                                            [],
-                                                                            no_fsid=True,
-                                                                            error_ok=True))
+        with self.async_timeout_handler(hostname, 'cephadm disk-rescan'):
+            _out, _err, _code = self.wait_async(
+                CephadmServe(self)._run_cephadm(hostname, cephadmNoImage, "disk-rescan",
+                                                [], no_fsid=True, error_ok=True))
         if not _err:
             raise OrchestratorError('Unexpected response from cephadm disk-rescan call')
 
@@ -2099,7 +2152,8 @@ Then run the following:
         if daemon_spec.daemon_type != 'osd':
             daemon_spec = self.cephadm_services[daemon_type_to_service(
                 daemon_spec.daemon_type)].prepare_create(daemon_spec)
-        self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=True))
+        with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
+            self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=True))
 
         # try to be clever, or fall back to restarting the daemon
         rc = -1
@@ -2155,7 +2209,9 @@ Then run the following:
                 # prepare_create function
                 daemon_spec.final_config, daemon_spec.deps = self.osd_service.generate_config(
                     daemon_spec)
-            return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig')))
+            with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
+                return self.wait_async(
+                    CephadmServe(self)._create_daemon(daemon_spec, reconfig=(action == 'reconfig')))
 
         actions = {
             'start': ['reset-failed', 'start'],
@@ -2165,9 +2221,10 @@ Then run the following:
         name = daemon_spec.name()
         for a in actions[action]:
             try:
-                out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
-                    daemon_spec.host, name, 'unit',
-                    ['--name', name, a]))
+                with self.async_timeout_handler(daemon_spec.host, f'cephadm unit --name {name}'):
+                    out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                        daemon_spec.host, name, 'unit',
+                        ['--name', name, a]))
             except Exception:
                 self.log.exception(f'`{daemon_spec.host}: cephadm unit {name} {a}` failed')
         self.cache.invalidate_host_daemons(daemon_spec.host)
@@ -2384,10 +2441,10 @@ Then run the following:
                     f"OSD{'s' if len(active_osds) > 1 else ''}"
                     f" ({', '.join(active_osds)}). Use 'ceph orch osd rm' first.")
 
-        out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
-            host, 'osd', 'ceph-volume',
-            ['--', 'lvm', 'zap', '--destroy', path],
-            error_ok=True))
+        cv_args = ['--', 'lvm', 'zap', '--destroy', path]
+        with self.async_timeout_handler(host, f'cephadm ceph-volume {" ".join(cv_args)}'):
+            out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                host, 'osd', 'ceph-volume', cv_args, error_ok=True))
 
         self.cache.invalidate_host_devices(host)
         self.cache.invalidate_host_networks(host)
@@ -2424,9 +2481,10 @@ Then run the following:
                                             host=host)
             cmd_args = shlex.split(cmd_line)
 
-            out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
-                host, 'osd', 'shell', ['--'] + cmd_args,
-                error_ok=True))
+            with self.async_timeout_handler(host, f'cephadm shell -- {" ".join(cmd_args)}'):
+                out, err, code = self.wait_async(CephadmServe(self)._run_cephadm(
+                    host, 'osd', 'shell', ['--'] + cmd_args,
+                    error_ok=True))
             if code:
                 raise OrchestratorError(
                     'Unable to affect %s light for %s:%s. Command: %s' % (
@@ -2692,7 +2750,8 @@ Then run the following:
         @ forall_hosts
         def create_func_map(*args: Any) -> str:
             daemon_spec = self.cephadm_services[daemon_type].prepare_create(*args)
-            return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
+            with self.async_timeout_handler(daemon_spec.host, f'cephadm deploy ({daemon_spec.daemon_type} daemon)'):
+                return self.wait_async(CephadmServe(self)._create_daemon(daemon_spec))
 
         return create_func_map(args)
 
@@ -3067,7 +3126,8 @@ Then run the following:
         else:
             raise OrchestratorError('must specify either image or version')
 
-        image_info = self.wait_async(CephadmServe(self)._get_container_image_info(target_name))
+        with self.async_timeout_handler(cmd=f'cephadm inspect-image (image {target_name})'):
+            image_info = self.wait_async(CephadmServe(self)._get_container_image_info(target_name))
 
         ceph_image_version = image_info.ceph_version
         if not ceph_image_version:

@@ -50,7 +50,7 @@ def match_glob(val, pat):
 
 
 class MockEventLoopThread:
-    def get_result(self, coro):
+    def get_result(self, coro, timeout):
         if sys.version_info >= (3, 7):
             return asyncio.run(coro)
 

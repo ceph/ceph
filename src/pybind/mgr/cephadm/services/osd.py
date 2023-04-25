@@ -74,7 +74,8 @@ class OSDService(CephService):
                        for h, ds in self.prepare_drivegroup(drive_group)]
             return await gather(*futures)
 
-        ret = self.mgr.wait_async(all_hosts())
+        with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
+            ret = self.mgr.wait_async(all_hosts())
         return ", ".join(filter(None, ret))
 
     async def create_single_host(self,
@@ -308,7 +309,8 @@ class OSDService(CephService):
 
                 # get preview data from ceph-volume
                 for cmd in cmds:
-                    out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
+                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume -- {cmd}'):
+                        out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
                     if out:
                         try:
                             concat_out: Dict[str, Any] = json.loads(' '.join(out))
@@ -545,10 +547,11 @@ class RemoveUtil(object):
             cmd = ['--', 'lvm', 'zap', '--osd-id', str(osd.osd_id)]
             if not osd.no_destroy:
                 cmd.append('--destroy')
-            out, err, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
-                osd.hostname, 'osd', 'ceph-volume',
-                cmd,
-                error_ok=True))
+            with self.mgr.async_timeout_handler(osd.hostname, f'cephadm ceph-volume {" ".join(cmd)}'):
+                out, err, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
+                    osd.hostname, 'osd', 'ceph-volume',
+                    cmd,
+                    error_ok=True))
             self.mgr.cache.invalidate_host_devices(osd.hostname)
             if code:
                 raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
