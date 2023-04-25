@@ -292,6 +292,57 @@ class TestCephAdm(object):
         assert c.volume_mounts[os.path.join('data', '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'custom_config_files', 'grafana.host1', 'testing.str')] == '/etc/testing.str'
 
     @mock.patch('cephadm.logger')
+    @mock.patch('cephadm.FileLock')
+    @mock.patch('cephadm.deploy_daemon')
+    @mock.patch('cephadm.get_parm')
+    @mock.patch('cephadm.make_var_run')
+    @mock.patch('cephadm.migrate_sysctl_dir')
+    @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
+    @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
+    @mock.patch('cephadm.get_deployment_container')
+    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _get_parm, _deploy_daemon, _file_lock, _logger):
+        """
+        test that crush location for mon is set if it is included in config_json
+        """
+
+        ctx = _cephadm.CephadmContext()
+        ctx.name = 'mon.test'
+        ctx.fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+        ctx.reconfig = False
+        ctx.container_engine = mock_docker()
+        ctx.allow_ptrace = True
+        ctx.config_json = '-'
+        ctx.osd_fsid = '0'
+        _get_parm.return_value = {
+            'crush_location': 'database=a'
+        }
+
+        _get_deployment_container.return_value = _cephadm.CephContainer.for_daemon(
+            ctx,
+            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+            daemon_type='mon',
+            daemon_id='test',
+            entrypoint='',
+            args=[],
+            container_args=[],
+            volume_mounts={},
+            bind_mounts=[],
+            envs=[],
+            privileged=False,
+            ptrace=False,
+            host_network=True,
+        )
+
+        def _crush_location_checker(ctx, fsid, daemon_type, daemon_id, container, uid, gid, **kwargs):
+            print(container.args)
+            raise Exception(' '.join(container.args))
+
+        _deploy_daemon.side_effect = _crush_location_checker
+
+        with pytest.raises(Exception, match='--set-crush-location database=a'):
+            _cephadm.command_deploy(ctx)
+
+    @mock.patch('cephadm.logger')
     @mock.patch('cephadm.get_custom_config_files')
     def test_write_custom_conf_files(self, _get_config, _logger, cephadm_fs):
         """

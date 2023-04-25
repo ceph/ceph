@@ -463,6 +463,39 @@ class TestCephadm(object):
                     image='')
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_mon_crush_location_deployment(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.check_mon_command({
+                'prefix': 'config set',
+                'who': 'mon',
+                'name': 'public_network',
+                'value': '127.0.0.0/8'
+            })
+
+            cephadm_module.cache.update_host_networks(
+                'test',
+                {
+                    "127.0.0.0/8": [
+                        "127.0.0.1"
+                    ],
+                }
+            )
+
+            with with_service(cephadm_module, ServiceSpec(service_type='mon', crush_locations={'test': ['datacenter=a', 'rack=2']}), CephadmOrchestrator.apply_mon, 'test'):
+                _run_cephadm.assert_called_with(
+                    'test', 'mon.test', 'deploy', [
+                        '--name', 'mon.test',
+                        '--meta-json', '{"service_name": "mon", "ports": [], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}',
+                        '--config-json', '-',
+                    ],
+                    stdin=('{"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n", "keyring": "", '
+                           '"files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}, "crush_location": "datacenter=a"}'),
+                    image='',
+                )
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_extra_container_args(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
         _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
         with with_host(cephadm_module, 'test'):
