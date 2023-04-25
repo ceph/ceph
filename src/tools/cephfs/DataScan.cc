@@ -902,7 +902,8 @@ bool DataScan::valid_ino(inodeno_t ino) const
     || (MDS_INO_IS_STRAY(ino))
     || (MDS_INO_IS_MDSDIR(ino))
     || ino == CEPH_INO_ROOT
-    || ino == CEPH_INO_CEPH;
+    || ino == CEPH_INO_CEPH
+    || ino == CEPH_INO_LOST_AND_FOUND;
 }
 
 int DataScan::scan_links()
