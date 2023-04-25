@@ -467,13 +467,18 @@ void Client::tear_down_cache()
   ceph_assert(inode_map.empty());
 }
 
-inodeno_t Client::get_root_ino()
+inodeno_t Client::_get_root_ino(bool fake)
 {
-  std::scoped_lock l(client_lock);
-  if (use_faked_inos())
+  if (fake && use_faked_inos())
     return root->faked_ino;
   else
     return root->ino;
+}
+
+inodeno_t Client::get_root_ino()
+{
+  std::scoped_lock l(client_lock);
+  return _get_root_ino(true);
 }
 
 Inode *Client::get_root()
