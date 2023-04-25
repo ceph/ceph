@@ -127,13 +127,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   uint64_t block_size;
   WritePipeline pipeline;
 
-  cbjournal_test_t() {
-    device = random_block_device::create_test_ephemeral(
-     random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
-    cbj.reset(new CircularBoundedJournal(*this, device.get(), std::string()));
-    block_size = device->get_block_size();
-    cbj->set_write_pipeline(&pipeline);
-  }
+  cbjournal_test_t() = default;
 
   /*
    * JournalTrimmer interfaces
@@ -155,10 +149,6 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   void update_journal_tails(
     journal_seq_t dirty_tail,
     journal_seq_t alloc_tail) final {}
-
-  seastar::future<> set_up_fut() final {
-    return seastar::now();
-  }
 
   bool try_reserve_inline_usage(std::size_t) final { return true; }
 
@@ -182,7 +172,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   }
 
   seastar::future<> tear_down_fut() final {
-    return seastar::now();
+    return close();
   }
 
   extent_t generate_extent(size_t blocks) {
@@ -242,7 +232,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
       }
       assert(found == true);
       return Journal::replay_ertr::make_ready_future<bool>(true);
-    }).unsafe_get0();
+    });
   }
 
   auto mkfs() {
@@ -256,34 +246,42 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
 	  return seastar::now();
 	});
       });
-    }).unsafe_get0();
+    }).safe_then([this] {
+      return cbj->close();
+    });
   }
-  void open() {
+  auto open() {
     return cbj->open_for_mount(
     ).safe_then([](auto q) {
       return seastar::now();
-    }).unsafe_get0();
+    });
+  }
+  seastar::future<> close() {
+    return cbj->close().handle_error(crimson::ct_error::assert_all{});
   }
   auto get_records_available_size() {
-    return cbj->get_records_available_size();
+    return cbj->get_cjs().get_records_available_size();
   }
   auto get_records_total_size() {
-    return cbj->get_records_total_size();
+    return cbj->get_cjs().get_records_total_size();
   }
   auto get_block_size() {
     return device->get_block_size();
   }
   auto get_written_to_rbm_addr() {
-    return cbj->get_rbm_addr(cbj->get_written_to());
+    return cbj->get_rbm_addr(cbj->get_cjs().get_written_to());
   }
   auto get_written_to() {
-    return cbj->get_written_to();
+    return cbj->get_cjs().get_written_to();
   }
   auto get_journal_tail() {
     return cbj->get_dirty_tail();
   }
   auto get_records_used_size() {
-    return cbj->get_records_used_size();
+    return cbj->get_cjs().get_records_used_size();
+  }
+  bool is_available_size(uint64_t size) {
+    return cbj->get_cjs().is_available_size(size);
   }
   void update_journal_tail(rbm_abs_addr addr, uint32_t len) {
     paddr_t paddr =
@@ -299,13 +297,26 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
   void set_written_to(journal_seq_t seq) {
     cbj->set_written_to(seq);
   }
+
+  seastar::future<> set_up_fut() final {
+    device = random_block_device::create_test_ephemeral(
+     random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, 0);
+    cbj.reset(new CircularBoundedJournal(*this, device.get(), std::string()));
+    block_size = device->get_block_size();
+    cbj->set_write_pipeline(&pipeline);
+    return mkfs(
+    ).safe_then([this] {
+      return replay(
+      ).safe_then([this] {
+	return open();
+      });
+    }).handle_error(crimson::ct_error::assert_all{});
+  }
 };
 
 TEST_F(cbjournal_test_t, submit_one_record)
 {
   run_async([this] {
-    mkfs();
-    open();
     submit_record(
      record_t{
       { generate_extent(1), generate_extent(2) },
@@ -318,8 +329,6 @@ TEST_F(cbjournal_test_t, submit_one_record)
 TEST_F(cbjournal_test_t, submit_three_records)
 {
   run_async([this] {
-    mkfs();
-    open();
     submit_record(
      record_t{
       { generate_extent(1), generate_extent(2) },
@@ -342,8 +351,6 @@ TEST_F(cbjournal_test_t, submit_three_records)
 TEST_F(cbjournal_test_t, submit_full_records)
 {
   run_async([this] {
-    mkfs();
-    open();
     record_t rec {
      { generate_extent(1), generate_extent(2) },
      { generate_delta(20), generate_delta(21) }
@@ -352,7 +359,7 @@ TEST_F(cbjournal_test_t, submit_full_records)
     auto record_total_size = r_size.get_encoded_length();
 
     submit_record(std::move(rec));
-    while (cbj->is_available_size(record_total_size)) {
+    while (is_available_size(record_total_size)) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
@@ -371,7 +378,7 @@ TEST_F(cbjournal_test_t, submit_full_records)
       { generate_delta(20), generate_delta(21) }
       });
 
-    while (cbj->is_available_size(record_total_size)) {
+    while (is_available_size(record_total_size)) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
@@ -385,8 +392,6 @@ TEST_F(cbjournal_test_t, submit_full_records)
 TEST_F(cbjournal_test_t, boudary_check_verify)
 {
   run_async([this] {
-    mkfs();
-    open();
     record_t rec {
      { generate_extent(1), generate_extent(2) },
      { generate_delta(20), generate_delta(21) }
@@ -394,7 +399,7 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (cbj->is_available_size(record_total_size)) {
+    while (is_available_size(record_total_size)) {
      submit_record(
        record_t {
 	{ generate_extent(1), generate_extent(2) },
@@ -423,9 +428,7 @@ TEST_F(cbjournal_test_t, boudary_check_verify)
 TEST_F(cbjournal_test_t, update_header)
 {
   run_async([this] {
-    mkfs();
-    open();
-    auto [header, _buf] = *(cbj->read_header().unsafe_get0());
+    auto [header, _buf] = *(cbj->get_cjs().read_header().unsafe_get0());
     record_t rec {
      { generate_extent(1), generate_extent(2) },
      { generate_delta(20), generate_delta(21) }
@@ -435,10 +438,10 @@ TEST_F(cbjournal_test_t, update_header)
     submit_record(std::move(rec));
 
     update_journal_tail(entries.front().addr, record_total_size);
-    cbj->write_header().unsafe_get0();
-    auto [update_header, update_buf2] = *(cbj->read_header().unsafe_get0());
+    cbj->get_cjs().write_header().unsafe_get0();
+    auto [update_header, update_buf2] = *(cbj->get_cjs().read_header().unsafe_get0());
     cbj->close().unsafe_get0();
-    replay();
+    replay().unsafe_get0();
 
     ASSERT_EQ(update_header.dirty_tail.offset, update_header.dirty_tail.offset);
   });
@@ -447,8 +450,6 @@ TEST_F(cbjournal_test_t, update_header)
 TEST_F(cbjournal_test_t, replay)
 {
   run_async([this] {
-    mkfs();
-    open();
     record_t rec {
      { generate_extent(1), generate_extent(2) },
      { generate_delta(20), generate_delta(21) }
@@ -456,7 +457,7 @@ TEST_F(cbjournal_test_t, replay)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (cbj->is_available_size(record_total_size)) {
+    while (is_available_size(record_total_size)) {
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },
@@ -477,15 +478,13 @@ TEST_F(cbjournal_test_t, replay)
        });
     ASSERT_TRUE(avail - record_total_size >= get_records_available_size());
     cbj->close().unsafe_get0();
-    replay();
+    replay().unsafe_get0();
   });
 }
 
 TEST_F(cbjournal_test_t, replay_after_reset)
 {
   run_async([this] {
-    mkfs();
-    open();
     record_t rec {
      { generate_extent(1), generate_extent(2) },
      { generate_delta(20), generate_delta(21) }
@@ -493,7 +492,7 @@ TEST_F(cbjournal_test_t, replay_after_reset)
     auto r_size = record_group_size_t(rec.size, block_size);
     auto record_total_size = r_size.get_encoded_length();
     submit_record(std::move(rec));
-    while (cbj->is_available_size(record_total_size)) {
+    while (is_available_size(record_total_size)) {
     submit_record(
       record_t {
        { generate_extent(1), generate_extent(2) },
@@ -508,7 +507,7 @@ TEST_F(cbjournal_test_t, replay_after_reset)
 	  cbj->get_records_start(),
 	  cbj->get_device_id())});
     cbj->close().unsafe_get0();
-    replay();
+    replay().unsafe_get0();
     ASSERT_EQ(old_written_to, get_written_to());
     ASSERT_EQ(old_used_size,
       get_records_used_size());
