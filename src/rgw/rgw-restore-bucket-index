@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# version 2023-03-07
+# version 2023-03-21
 
 # rgw-restore-bucket-index is an EXPERIMENTAL tool to use in case
 # bucket index entries for objects in the bucket are somehow lost. It
@@ -33,6 +33,18 @@ export bkt_inst_new=/tmp/rgwrbi-bkt-inst-new.$$
 export obj_list=/tmp/rgwrbi-object-list.$$
 export zone_info=/tmp/rgwrbi-zone-info.$$
 export clean_temps=1
+
+# number of seconds for a bucket index pending op to be completed via
+# dir_suggest mechanism
+pending_op_secs=120
+
+#
+if which radosgw-admin > /dev/null ;then
+  :
+else
+  echo 'Error: must have command `radosgw-admin` installed and on $PATH for operation.'
+  exit 1
+fi
 
 # make sure jq is available
 if which jq > /dev/null ;then
@@ -126,6 +138,12 @@ bucket=$1
 radosgw-admin metadata get bucket:$bucket >$bkt_entry 2>/dev/null
 marker=$(strip_quotes $(jq ".data.bucket.marker" $bkt_entry))
 bucket_id=$(strip_quotes $(jq ".data.bucket.bucket_id" $bkt_entry))
+if [ -z "$marker" -o -z "$bucket_id" ] ;then
+    echo "ERROR: unable to read entry-point metadata for bucket \"$bucket\"."
+    clean
+    exit 1
+fi
+
 echo marker is $marker
 echo bucket_id is $bucket_id
 
@@ -134,11 +152,17 @@ radosgw-admin metadata get bucket.instance:${bucket}:$bucket_id >$bkt_inst 2>/de
 
 # handle versioned buckets
 bkt_flags=$(jq ".data.bucket_info.flags" $bkt_inst)
-is_versioned=$(( $bkt_flags & 2)) # mask bit indicating it's a versioned bucket
+if [ -z "$bkt_flags" ] ;then
+    echo "ERROR: unable to read instance metadata for bucket \"$bucket\"."
+    exit 1
+fi
+
+# mask bit indicating it's a versioned bucket
+is_versioned=$(( $bkt_flags & 2))
 if [ "$is_versioned" -ne 0 ] ;then
-   echo "Error: this bucket appears to be versioned, and this tool cannot work with versioned buckets."
-   clean
-   exit 1
+    echo "Error: this bucket appears to be versioned, and this tool cannot work with versioned buckets."
+    clean
+    exit 1
 fi
 
 # examine number of bucket index shards
@@ -156,11 +180,11 @@ echo data pool is $pool
 
 # handle the case where the resulting object list file is empty
 if [ -s $obj_list ] ;then
-  :
+    :
 else
-  echo "NOTICE: No head objects for bucket \"$bucket\" were found in pool \"$pool\", so nothing was recovered."
-  clean
-  exit 0
+    echo "NOTICE: No head objects for bucket \"$bucket\" were found in pool \"$pool\", so nothing was recovered."
+    clean
+    exit 0
 fi
 
 if [ -z "$proceed" ] ;then
@@ -188,6 +212,39 @@ fi
 
 # execute object rewrite on all of the head objects
 radosgw-admin object reindex --bucket=$bucket --objects-file=$obj_list 2>/dev/null
+reindex_done=$(date +%s)
+
+# note: large is 2^30
+export large=1073741824
+
+listcmd="radosgw-admin bucket list --bucket=$bucket --allow-unordered --max-entries=$large"
+
+if [ -n "$proceed" ] ;then
+    sleep $pending_op_secs
+    $listcmd >/dev/null 2>/dev/null
+else
+    echo "NOTICE: Bucket stats are currently incorrect. They can be restored with the following command after 2 minutes:"
+    echo "    $listcmd"
+
+    while true ; do
+	read -p "Would you like to take the time to recalculate bucket stats now? [yes/no] " action
+	if [ "$action" == "no" ] ;then
+	    break
+	elif [ "$action" == "yes" ] ;then
+	    # make sure at least $pending_op_secs since reindex completed
+	    now=$(date +%s)
+	    sleep_time=$(expr $pending_op_secs - $now + $reindex_done)
+	    if [ "$sleep_time" -gt 0 ] ;then
+		sleep $sleep_time
+	    fi
+
+	    $listcmd >/dev/null 2>/dev/null
+	    break
+	else
+	    echo "Error: response \"$action\" is not understood."
+	fi
+    done
+fi
 
 clean
 echo Done
