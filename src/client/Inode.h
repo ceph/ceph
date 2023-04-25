@@ -252,6 +252,7 @@ struct Inode : RefCountedObject {
 
   void make_long_path(filepath& p);
   void make_short_path(filepath& p);
+  bool make_path_string(std::string& s);
   void make_nosnap_relative_path(filepath& p);
 
   // The ref count. 1 for each dentry, fh, inode_map,
