@@ -253,8 +253,10 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
   BucketTrimWatcher(rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
                     TrimCounters::Server *counters)
     : store(store), obj(obj) {
-    handlers.emplace(NotifyTrimCounters, new TrimCounters::Handler(counters));
-    handlers.emplace(NotifyTrimComplete, new TrimComplete::Handler(counters));
+    handlers.emplace(NotifyTrimCounters,
+        std::make_unique<TrimCounters::Handler>(counters));
+    handlers.emplace(NotifyTrimComplete,
+        std::make_unique<TrimComplete::Handler>(counters));
   }
 
   ~BucketTrimWatcher() {
