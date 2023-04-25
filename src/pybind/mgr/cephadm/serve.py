@@ -761,9 +761,6 @@ class CephadmServe:
         if progress_total:
             update_progress()
 
-        # add any?
-        did_config = False
-
         self.log.debug('Hosts that will receive new daemons: %s' % slots_to_add)
         self.log.debug('Daemons that will be removed: %s' % daemons_to_remove)
 
@@ -830,9 +827,6 @@ class CephadmServe:
 
                 # deploy new daemon
                 daemon_id = slot.name
-                if not did_config:
-                    svc.config(spec)
-                    did_config = True
 
                 daemon_spec = svc.make_daemon_spec(
                     slot.hostname, daemon_id, slot.network, spec,
@@ -852,6 +846,7 @@ class CephadmServe:
                     progress_done += 1
                     update_progress()
                     hosts_altered.add(daemon_spec.host)
+                    self.mgr.spec_store.mark_needs_configuration(spec.service_name())
                 except (RuntimeError, OrchestratorError) as e:
                     msg = (f"Failed while placing {slot.daemon_type}.{daemon_id} "
                            f"on {slot.hostname}: {e}")
@@ -908,12 +903,16 @@ class CephadmServe:
                 progress_done += 1
                 update_progress()
                 hosts_altered.add(d.hostname)
+                self.mgr.spec_store.mark_needs_configuration(spec.service_name())
 
             self.mgr.remote('progress', 'complete', progress_id)
         except Exception as e:
             self.mgr.remote('progress', 'fail', progress_id, str(e))
             raise
         finally:
+            if self.mgr.spec_store.needs_configuration(spec.service_name()):
+                svc.config(spec)
+                self.mgr.spec_store.mark_configured(spec.service_name())
             if self.mgr.use_agent:
                 # can only send ack to agents if we know for sure port they bound to
                 hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and h in [
