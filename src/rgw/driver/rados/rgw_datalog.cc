@@ -20,6 +20,7 @@
 #include "rgw_datalog.h"
 #include "rgw_log_backing.h"
 #include "rgw_tools.h"
+#include "rgw_sal_rados.h"
 
 #define dout_context g_ceph_context
 static constexpr auto dout_subsys = ceph_subsys_rgw;
@@ -488,7 +489,7 @@ bs::error_code DataLogBackends::handle_empty_to(uint64_t new_tail) noexcept {
 
 int RGWDataChangesLog::start(const DoutPrefixProvider *dpp, const RGWZone* _zone,
 			     const RGWZoneParams& zoneparams,
-			     librados::Rados* lr)
+			     rgw::sal::RadosStore* store)
 {
   zone = _zone;
   ceph_assert(zone);
@@ -497,7 +498,7 @@ int RGWDataChangesLog::start(const DoutPrefixProvider *dpp, const RGWZone* _zone
   // Should be guaranteed by `set_enum_allowed`
   ceph_assert(defbacking);
   auto log_pool = zoneparams.log_pool;
-  auto r = rgw_init_ioctx(dpp, lr, log_pool, ioctx, true, false);
+  auto r = rgw_init_ioctx(dpp, store->getRados()->get_rados_handle(), log_pool, ioctx, true, false);
   if (r < 0) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__
 	       << ": Failed to initialized ioctx, r=" << r
