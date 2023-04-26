@@ -29,7 +29,6 @@
 
 namespace crimson::net {
 
-template <bool IS_FIXED_CPU>
 class ShardedServerSocket;
 
 class SocketMessenger final : public Messenger {
@@ -169,7 +168,7 @@ private:
   crimson::auth::AuthClient* auth_client = nullptr;
   crimson::auth::AuthServer* auth_server = nullptr;
 
-  ShardedServerSocket<true> *listener = nullptr;
+  ShardedServerSocket *listener = nullptr;
   ChainedDispatchers dispatchers;
   std::map<entity_addr_t, SocketConnectionRef> connections;
   std::set<SocketConnectionRef> accepting_conns;

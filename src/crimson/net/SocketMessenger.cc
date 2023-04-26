@@ -92,7 +92,7 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
   set_myaddrs(addrs);
   return seastar::futurize_invoke([this] {
     if (!listener) {
-      return ShardedServerSocket<true>::create(
+      return ShardedServerSocket::create(true
       ).then([this] (auto _listener) {
         listener = _listener;
       });
@@ -218,6 +218,7 @@ seastar::future<> SocketMessenger::start(
     ceph_assert(get_myaddr().get_port() > 0);
 
     return listener->accept([this](SocketRef socket, entity_addr_t peer_addr) {
+      assert(listener->is_fixed());
       assert(seastar::this_shard_id() == sid);
       assert(get_myaddr().is_msgr2());
       SocketConnectionRef conn =
