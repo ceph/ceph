@@ -25,6 +25,8 @@ export class FormButtonPanelComponent {
   @Input()
   showSubmit = true;
   @Input()
+  showCancel = true;
+  @Input()
   wrappingClass = '';
   @Input()
   btnClass = '';

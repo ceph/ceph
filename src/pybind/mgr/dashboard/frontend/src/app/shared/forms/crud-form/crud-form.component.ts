@@ -33,18 +33,43 @@ export class CrudFormComponent implements OnInit {
     this.formUISchema$ = this.activatedRoute.data.pipe(
       mergeMap((data: any) => {
         this.resource = data.resource;
-        return this.dataGatewayService.form(`ui-${this.resource}`);
+        const url = '/' + this.activatedRoute.snapshot.url.join('/');
+        return this.dataGatewayService.form(`ui-${this.resource}`, url);
       })
     );
   }
 
-  submit(data: any, taskInfo: CrudTaskInfo) {
+  async readFileAsText(file: File): Promise<string> {
+    let fileReader = new FileReader();
+    let text: string = '';
+    await new Promise((resolve) => {
+      fileReader.onload = (_) => {
+        text = fileReader.result.toString();
+        resolve(true);
+      };
+      fileReader.readAsText(file);
+    });
+    return text;
+  }
+
+  async preSubmit(data: { [name: string]: any }) {
+    for (const [key, value] of Object.entries(data)) {
+      if (value instanceof FileList) {
+        let file = value[0];
+        let text = await this.readFileAsText(file);
+        data[key] = text;
+      }
+    }
+  }
+
+  async submit(data: { [name: string]: any }, taskInfo: CrudTaskInfo) {
     if (data) {
       let taskMetadata = {};
       _.forEach(taskInfo.metadataFields, (field) => {
         taskMetadata[field] = data[field];
       });
       taskMetadata['__message'] = taskInfo.message;
+      await this.preSubmit(data);
       this.taskWrapper
         .wrapTaskAroundCall({
           task: new FinishedTask('crud-component', taskMetadata),
