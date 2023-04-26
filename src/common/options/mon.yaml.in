@@ -927,7 +927,7 @@ options:
 - name: mon_osd_destroyed_out_interval
   type: int
   level: advanced
-  desc: mark any OSD 'out' that has been 'destroy'ed for this long (seconds)
+  desc: mark ``out`` any OSD that has been in the ``destroyed`` state for this long (in seconds)
   default: 10_min
   services:
   - mon
