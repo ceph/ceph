@@ -104,3 +104,5 @@ The metrics display can be scrolled using the Arrow Keys, PgUp/PgDn, Home/End an
 Sample screenshot running `cephfs-top` with 2 filesystems:
 
 .. image:: cephfs-top.png
+
+.. note:: Minimum compatible python version for cephfs-top is 3.6.0. cephfs-top is supported on distros RHEL 8, Ubuntu 18.04, CentOS 8 and above.
