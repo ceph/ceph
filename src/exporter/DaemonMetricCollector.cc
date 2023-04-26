@@ -1,5 +1,6 @@
 #include "DaemonMetricCollector.h"
 
+#include <boost/asio/io_context.hpp>
 #include <boost/json/src.hpp>
 #include <chrono>
 #include <filesystem>
@@ -43,7 +44,7 @@ void DaemonMetricCollector::request_loop(boost::asio::steady_timer &timer) {
 void DaemonMetricCollector::main() {
   // time to wait before sending requests again
 
-  boost::asio::io_service io;
+  boost::asio::io_context io;
   boost::asio::steady_timer timer{io, std::chrono::seconds(0)};
   request_loop(timer);
   io.run();
