@@ -107,6 +107,7 @@ Socket::Socket(
 
 Socket::~Socket()
 {
+  assert(seastar::this_shard_id() == sid);
 #ifndef NDEBUG
   assert(closed);
 #endif
@@ -115,6 +116,7 @@ Socket::~Socket()
 seastar::future<bufferlist>
 Socket::read(size_t bytes)
 {
+  assert(seastar::this_shard_id() == sid);
 #ifdef UNIT_TESTS_BUILT
   return try_trap_pre(next_trap_read).then([bytes, this] {
 #endif
@@ -144,6 +146,7 @@ Socket::read(size_t bytes)
 
 seastar::future<bufferptr>
 Socket::read_exactly(size_t bytes) {
+  assert(seastar::this_shard_id() == sid);
 #ifdef UNIT_TESTS_BUILT
   return try_trap_pre(next_trap_read).then([bytes, this] {
 #endif
@@ -174,6 +177,7 @@ Socket::read_exactly(size_t bytes) {
 seastar::future<>
 Socket::write(bufferlist buf)
 {
+  assert(seastar::this_shard_id() == sid);
 #ifdef UNIT_TESTS_BUILT
   return try_trap_pre(next_trap_write
   ).then([buf = std::move(buf), this]() mutable {
@@ -194,6 +198,7 @@ Socket::write(bufferlist buf)
 seastar::future<>
 Socket::flush()
 {
+  assert(seastar::this_shard_id() == sid);
   inject_failure();
   return inject_delay().then([this] {
     return out.flush();
@@ -203,6 +208,7 @@ Socket::flush()
 seastar::future<>
 Socket::write_flush(bufferlist buf)
 {
+  assert(seastar::this_shard_id() == sid);
 #ifdef UNIT_TESTS_BUILT
   return try_trap_pre(next_trap_write
   ).then([buf = std::move(buf), this]() mutable {
@@ -223,7 +229,9 @@ Socket::write_flush(bufferlist buf)
 #endif
 }
 
-void Socket::shutdown() {
+void Socket::shutdown()
+{
+  assert(seastar::this_shard_id() == sid);
   socket_is_shutdown = true;
   socket.shutdown_input();
   socket.shutdown_output();
@@ -243,7 +251,9 @@ close_and_handle_errors(seastar::output_stream<char>& out)
 }
 
 seastar::future<>
-Socket::close() {
+Socket::close()
+{
+  assert(seastar::this_shard_id() == sid);
 #ifndef NDEBUG
   ceph_assert_always(!closed);
   closed = true;
@@ -284,6 +294,7 @@ Socket::connect(const entity_addr_t &peer_addr)
 
 #ifdef UNIT_TESTS_BUILT
 void Socket::set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_) {
+  assert(seastar::this_shard_id() == sid);
   blocker = blocker_;
   if (type == bp_type_t::READ) {
     ceph_assert_always(next_trap_read == bp_action_t::CONTINUE);
