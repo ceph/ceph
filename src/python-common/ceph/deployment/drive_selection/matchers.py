@@ -187,7 +187,7 @@ class SizeMatcher(Matcher):
         # type: (str, str) -> None
 
         # The 'key' value is overwritten here because
-        # the user_defined attribute does not neccessarily
+        # the user_defined attribute does not necessarily
         # correspond to the desired attribute
         # requested from the inventory output
         Matcher.__init__(self, key, value)
@@ -372,7 +372,7 @@ class SizeMatcher(Matcher):
         if not disk:
             return False
         disk_value = self._get_disk_key(disk)
-        # This doesn't neccessarily have to be a float.
+        # This doesn't necessarily have to be a float.
         # The current output from ceph-volume gives a float..
         # This may change in the future..
         # todo: harden this paragraph
@@ -388,7 +388,7 @@ class SizeMatcher(Matcher):
             if disk_size_in_byte <= self.to_byte(
                     self.high) and disk_size_in_byte >= self.to_byte(self.low):
                 return True
-            # is a else: return False neccessary here?
+            # is a else: return False necessary here?
             # (and in all other branches)
             logger.debug("Disk didn't match for 'high/low' filter")
 

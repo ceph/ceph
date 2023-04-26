@@ -288,7 +288,7 @@ def test_explicit_scheduler(host_key, hosts,
 # * where e=[], *=any
 #
 #       + list of known hosts available for scheduling (host_key)
-#       |   + hosts used for explict placement (explicit_key)
+#       |   + hosts used for explicit placement (explicit_key)
 #       |   |   + count
 #       |   |   | + existing daemons
 #       |   |   | |     + section (host, label, pattern)
@@ -614,7 +614,7 @@ class NodeAssignmentTest(NamedTuple):
              'rgw:host1(*:81)', 'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             []
         ),
-        # label + count_per_host + ports (+ xisting)
+        # label + count_per_host + ports (+ existing)
         NodeAssignmentTest(
             'rgw',
             PlacementSpec(count=6, label='foo'),

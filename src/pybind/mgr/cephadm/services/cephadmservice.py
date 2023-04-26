@@ -249,7 +249,7 @@ class CephadmService(metaclass=ABCMeta):
         raise NotImplementedError()
 
     def get_active_daemon(self, daemon_descrs: List[DaemonDescription]) -> DaemonDescription:
-        # if this is called for a service type where it hasn't explcitly been
+        # if this is called for a service type where it hasn't explicitly been
         # defined, return empty Daemon Desc
         return DaemonDescription()
 
