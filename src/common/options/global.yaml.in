@@ -4999,7 +4999,7 @@ options:
     ]. column_def := column_name [ ''('' shard_count [ '','' hash_begin ''-'' [ hash_end
     ] ] '')'' ]. Example: ''I=write_buffer_size=1048576 O(6) m(7,10-)''. Interval
     [hash_begin..hash_end) defines characters to use for hash calculation. Recommended
-    hash ranges: O(0-13) P(0-8) m(0-16). Sharding of S,T,C,M,B prefixes is inadvised'
+    hash ranges: O(0-13) P(0-8) m(0-16). Sharding of S,T,C,M,B prefixes is not advised'
   fmt_desc: Definition of BlueStore's RocksDB sharding.
     The optimal value depends on multiple factors, and modification is invadvisable.
     This setting is used only when OSD is doing ``--mkfs``.
