@@ -152,6 +152,12 @@ SocketConnection::get_messenger() const
   return messenger;
 }
 
+seastar::shard_id
+SocketConnection::get_messenger_shard_id() const
+{
+  return msgr_sid;
+}
+
 void SocketConnection::set_peer_type(entity_type_t peer_type) {
   assert(seastar::this_shard_id() == msgr_sid);
   // it is not allowed to assign an unknown value when the current

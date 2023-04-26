@@ -141,6 +141,8 @@ class SocketConnection : public Connection {
 
   seastar::socket_address get_local_address() const;
 
+  seastar::shard_id get_messenger_shard_id() const;
+
   SocketMessenger &get_messenger() const;
 
   ConnectionRef get_local_shared_foreign_from_this();
