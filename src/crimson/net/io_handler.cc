@@ -203,7 +203,7 @@ void IOHandler::set_io_state(
     protocol_is_connected = false;
     assert(fa == nullptr);
     ceph_assert_always(frame_assembler->is_socket_valid());
-    frame_assembler->shutdown_socket();
+    frame_assembler->shutdown_socket<false>(nullptr);
     if (out_dispatching) {
       ceph_assert_always(!out_exit_dispatching.has_value());
       out_exit_dispatching = seastar::promise<>();
