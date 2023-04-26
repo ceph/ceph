@@ -550,6 +550,16 @@ class TestMonSnapsAndFsPools(CephFSTestCase):
         with self.assertRaises(CommandFailedError):
             self.fs.rados(["mksnap", "snap2"], pool=self.fs.get_metadata_pool_name())
 
+        with self.assertRaises(CommandFailedError):
+            test_pool_name = self.fs.get_data_pool_name()
+            base_cmd = f'osd pool mksnap {test_pool_name} snap3'
+            self.run_cluster_cmd(base_cmd)
+
+        with self.assertRaises(CommandFailedError):
+            test_pool_name = self.fs.get_metadata_pool_name()
+            base_cmd = f'osd pool mksnap {test_pool_name} snap4'
+            self.run_cluster_cmd(base_cmd)
+
     def test_attaching_pools_with_snaps_to_fs_fails(self):
         """
         Test that attempt to attach pool with snapshots to an fs fails
