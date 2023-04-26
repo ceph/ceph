@@ -108,6 +108,7 @@ public:
 
   template <class F>
   ceph::bufferlist get_buffer(F &tx_frame) {
+    assert(seastar::this_shard_id() == sid);
 #ifdef UNIT_TESTS_BUILT
     intercept_frame(F::tag, true);
 #endif
@@ -118,6 +119,7 @@ public:
 
   template <class F>
   seastar::future<> write_flush_frame(F &tx_frame) {
+    assert(seastar::this_shard_id() == sid);
     auto bl = get_buffer(tx_frame);
     return write_flush(std::move(bl));
   }
@@ -138,6 +140,8 @@ private:
   SocketConnection &conn;
 
   SocketFRef socket;
+
+  seastar::shard_id sid;
 
   /*
    * auth signature
