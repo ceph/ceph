@@ -846,14 +846,14 @@ class TestNFS(MgrTestCase):
         preserve_mode = self._sys_cmd(['stat', '-c', '%a', mnt_pt])
         self._create_cluster_with_fs(self.fs_name, mnt_pt)
         self.ctx.cluster.run(args=['mkdir', f'{mnt_pt}/testdir'])
-        self.ctx.cluster.run(args=['ln', '-s', 'testdir', 'testdir_symlink'],
-                             cwd=f'{mnt_pt}')
+        self.ctx.cluster.run(args=['ln', '-s', f'{mnt_pt}/testdir',
+                                   f'{mnt_pt}/testdir_symlink'])
         try:
             self._create_export(export_id='123',
                                 extra_cmd=['--pseudo-path',
                                            self.pseudo_path,
                                            '--path',
-                                           f'{mnt_pt}/testdir_symlink'])
+                                           '/testdir_symlink'])
         except CommandFailedError as e:
             if e.exitstatus != errno.ENOTDIR:
                 raise
