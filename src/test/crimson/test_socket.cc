@@ -70,14 +70,14 @@ future<> test_refused() {
   });
 }
 
-template <bool IS_FIXED_CPU>
-future<> test_bind_same() {
+future<> test_bind_same(bool is_fixed_cpu) {
   logger().info("test_bind_same()...");
-  return ShardedServerSocket<IS_FIXED_CPU>::create().then([](auto pss1) {
+  return ShardedServerSocket::create(is_fixed_cpu
+  ).then([is_fixed_cpu](auto pss1) {
     auto saddr = get_server_addr();
-    return pss1->listen(saddr).safe_then([saddr] {
+    return pss1->listen(saddr).safe_then([saddr, is_fixed_cpu] {
       // try to bind the same address
-      return ShardedServerSocket<IS_FIXED_CPU>::create(
+      return ShardedServerSocket::create(is_fixed_cpu
       ).then([saddr](auto pss2) {
         return pss2->listen(saddr).safe_then([] {
           logger().error("test_bind_same() should raise address_in_use");
@@ -112,10 +112,9 @@ future<> test_bind_same() {
   });
 }
 
-template <bool IS_FIXED_CPU>
-future<> test_accept() {
+future<> test_accept(bool is_fixed_cpu) {
   logger().info("test_accept()");
-  return ShardedServerSocket<IS_FIXED_CPU>::create(
+  return ShardedServerSocket::create(is_fixed_cpu
   ).then([](auto pss) {
     auto saddr = get_server_addr();
     return pss->listen(saddr
@@ -157,27 +156,29 @@ future<> test_accept() {
   });
 }
 
-template <bool IS_FIXED_CPU>
 class SocketFactory {
   static constexpr seastar::shard_id CLIENT_CPU = 0u;
   SocketRef client_socket;
   seastar::promise<> server_connected;
 
   static constexpr seastar::shard_id SERVER_CPU = 1u;
-  ShardedServerSocket<IS_FIXED_CPU> *pss = nullptr;
+  ShardedServerSocket *pss = nullptr;
 
   seastar::shard_id server_socket_CPU;
   SocketRef server_socket;
 
  public:
   template <typename FuncC, typename FuncS>
-  static future<> dispatch_sockets(FuncC&& cb_client, FuncS&& cb_server) {
+  static future<> dispatch_sockets(
+      bool is_fixed_cpu,
+      FuncC&& cb_client,
+      FuncS&& cb_server) {
     ceph_assert_always(seastar::this_shard_id() == CLIENT_CPU);
     auto owner = std::make_unique<SocketFactory>();
     auto psf = owner.get();
     auto saddr = get_server_addr();
-    return seastar::smp::submit_to(SERVER_CPU, [psf, saddr] {
-      return ShardedServerSocket<IS_FIXED_CPU>::create(
+    return seastar::smp::submit_to(SERVER_CPU, [psf, saddr, is_fixed_cpu] {
+      return ShardedServerSocket::create(is_fixed_cpu
       ).then([psf, saddr](auto pss) {
         psf->pss = pss;
         return pss->listen(saddr
@@ -201,7 +202,7 @@ class SocketFactory {
             logger().info("dispatch_sockets(): accepted at shard {}",
                           seastar::this_shard_id());
             psf->server_socket_CPU = seastar::this_shard_id();
-            if constexpr (IS_FIXED_CPU) {
+            if (psf->pss->is_fixed()) {
               ceph_assert_always(SERVER_CPU == seastar::this_shard_id());
             }
             psf->server_socket = std::move(socket);
@@ -426,10 +427,10 @@ class Connection {
   }
 };
 
-template <bool IS_FIXED_CPU>
-future<> test_read_write() {
+future<> test_read_write(bool is_fixed_cpu) {
   logger().info("test_read_write()...");
-  return SocketFactory<IS_FIXED_CPU>::dispatch_sockets(
+  return SocketFactory::dispatch_sockets(
+    is_fixed_cpu,
     [](auto cs) { return Connection::dispatch_rw_bounded(cs, 128); },
     [](auto ss) { return Connection::dispatch_rw_bounded(ss, 128); }
   ).then([] {
@@ -440,10 +441,10 @@ future<> test_read_write() {
   });
 }
 
-template <bool IS_FIXED_CPU>
-future<> test_unexpected_down() {
+future<> test_unexpected_down(bool is_fixed_cpu) {
   logger().info("test_unexpected_down()...");
-  return SocketFactory<IS_FIXED_CPU>::dispatch_sockets(
+  return SocketFactory::dispatch_sockets(
+    is_fixed_cpu,
     [](auto cs) {
       return Connection::dispatch_rw_bounded(cs, 128, true
         ).handle_exception_type([](const std::system_error& e) {
@@ -460,10 +461,10 @@ future<> test_unexpected_down() {
   });
 }
 
-template <bool IS_FIXED_CPU>
-future<> test_shutdown_propagated() {
+future<> test_shutdown_propagated(bool is_fixed_cpu) {
   logger().info("test_shutdown_propagated()...");
-  return SocketFactory<IS_FIXED_CPU>::dispatch_sockets(
+  return SocketFactory::dispatch_sockets(
+    is_fixed_cpu,
     [](auto cs) {
       logger().debug("test_shutdown_propagated() shutdown client socket");
       cs->shutdown();
@@ -478,10 +479,10 @@ future<> test_shutdown_propagated() {
   });
 }
 
-template <bool IS_FIXED_CPU>
-future<> test_preemptive_down() {
+future<> test_preemptive_down(bool is_fixed_cpu) {
   logger().info("test_preemptive_down()...");
-  return SocketFactory<IS_FIXED_CPU>::dispatch_sockets(
+  return SocketFactory::dispatch_sockets(
+    is_fixed_cpu,
     [](auto cs) { return Connection::dispatch_rw_unbounded(cs, true); },
     [](auto ss) { return Connection::dispatch_rw_unbounded(ss); }
   ).then([] {
@@ -492,19 +493,18 @@ future<> test_preemptive_down() {
   });
 }
 
-template <bool IS_FIXED_CPU>
-future<> do_test_with_type() {
-  return test_bind_same<IS_FIXED_CPU>(
-  ).then([] {
-    return test_accept<IS_FIXED_CPU>();
-  }).then([] {
-    return test_read_write<IS_FIXED_CPU>();
-  }).then([] {
-    return test_unexpected_down<IS_FIXED_CPU>();
-  }).then([] {
-    return test_shutdown_propagated<IS_FIXED_CPU>();
-  }).then([] {
-    return test_preemptive_down<IS_FIXED_CPU>();
+future<> do_test_with_type(bool is_fixed_cpu) {
+  return test_bind_same(is_fixed_cpu
+  ).then([is_fixed_cpu] {
+    return test_accept(is_fixed_cpu);
+  }).then([is_fixed_cpu] {
+    return test_read_write(is_fixed_cpu);
+  }).then([is_fixed_cpu] {
+    return test_unexpected_down(is_fixed_cpu);
+  }).then([is_fixed_cpu] {
+    return test_shutdown_propagated(is_fixed_cpu);
+  }).then([is_fixed_cpu] {
+    return test_preemptive_down(is_fixed_cpu);
   });
 }
 
@@ -527,9 +527,9 @@ seastar::future<int> do_test(seastar::app_template& app)
   }).then([] {
     return test_refused();
   }).then([] {
-    return do_test_with_type<true>();
+    return do_test_with_type(true);
   }).then([] {
-    return do_test_with_type<false>();
+    return do_test_with_type(false);
   }).then([] {
     logger().info("All tests succeeded");
     // Seastar has bugs to have events undispatched during shutdown,

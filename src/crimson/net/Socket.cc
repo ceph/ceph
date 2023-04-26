@@ -340,27 +340,23 @@ Socket::try_trap_post(bp_action_t& trap) {
 }
 #endif
 
-#define SERVER_SOCKET ShardedServerSocket<IS_FIXED_CPU>
-
-template <bool IS_FIXED_CPU>
-SERVER_SOCKET::ShardedServerSocket(
+ShardedServerSocket::ShardedServerSocket(
     seastar::shard_id sid,
+    bool is_fixed_cpu,
     construct_tag)
-  : primary_sid{sid}
+  : primary_sid{sid}, is_fixed_cpu{is_fixed_cpu}
 {
 }
 
-template <bool IS_FIXED_CPU>
-SERVER_SOCKET::~ShardedServerSocket()
+ShardedServerSocket::~ShardedServerSocket()
 {
   assert(!listener);
   // detect whether user have called destroy() properly
   ceph_assert_always(!service);
 }
 
-template <bool IS_FIXED_CPU>
 listen_ertr::future<>
-SERVER_SOCKET::listen(entity_addr_t addr)
+ShardedServerSocket::listen(entity_addr_t addr)
 {
   ceph_assert_always(seastar::this_shard_id() == primary_sid);
   logger().debug("ShardedServerSocket({})::listen()...", addr);
@@ -369,7 +365,7 @@ SERVER_SOCKET::listen(entity_addr_t addr)
     seastar::socket_address s_addr(addr.in4_addr());
     seastar::listen_options lo;
     lo.reuse_address = true;
-    if constexpr (IS_FIXED_CPU) {
+    if (ss.is_fixed_cpu) {
       lo.set_fixed_cpu(ss.primary_sid);
     }
     ss.listener = seastar::listen(s_addr, lo);
@@ -391,9 +387,8 @@ SERVER_SOCKET::listen(entity_addr_t addr)
   });
 }
 
-template <bool IS_FIXED_CPU>
 seastar::future<>
-SERVER_SOCKET::accept(accept_func_t &&_fn_accept)
+ShardedServerSocket::accept(accept_func_t &&_fn_accept)
 {
   ceph_assert_always(seastar::this_shard_id() == primary_sid);
   logger().debug("ShardedServerSocket({})::accept()...", listen_addr);
@@ -407,10 +402,12 @@ SERVER_SOCKET::accept(accept_func_t &&_fn_accept)
       return seastar::keep_doing([&ss] {
         return ss.listener->accept(
         ).then([&ss](seastar::accept_result accept_result) {
-          if constexpr (IS_FIXED_CPU) {
+#ifndef NDEBUG
+          if (ss.is_fixed_cpu) {
             // see seastar::listen_options::set_fixed_cpu()
             ceph_assert_always(seastar::this_shard_id() == ss.primary_sid);
           }
+#endif
           auto [socket, paddr] = std::move(accept_result);
           entity_addr_t peer_addr;
           peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
@@ -419,8 +416,8 @@ SERVER_SOCKET::accept(accept_func_t &&_fn_accept)
               std::move(socket), Socket::side_t::acceptor,
               peer_addr.get_port(), Socket::construct_tag{});
           logger().debug("ShardedServerSocket({})::accept(): "
-                         "accepted peer {}, socket {}",
-                         ss.listen_addr, peer_addr, fmt::ptr(_socket));
+                         "accepted peer {}, socket {}, is_fixed = {}",
+                         ss.listen_addr, peer_addr, fmt::ptr(_socket), ss.is_fixed_cpu);
           std::ignore = seastar::with_gate(
               ss.shutdown_gate,
               [socket=std::move(_socket), peer_addr, &ss]() mutable {
@@ -462,9 +459,8 @@ SERVER_SOCKET::accept(accept_func_t &&_fn_accept)
   });
 }
 
-template <bool IS_FIXED_CPU>
 seastar::future<>
-SERVER_SOCKET::shutdown_destroy()
+ShardedServerSocket::shutdown_destroy()
 {
   assert(seastar::this_shard_id() == primary_sid);
   logger().debug("ShardedServerSocket({})::shutdown_destroy()...", listen_addr);
@@ -490,15 +486,14 @@ SERVER_SOCKET::shutdown_destroy()
   });
 }
 
-template <bool IS_FIXED_CPU>
-seastar::future<SERVER_SOCKET*>
-SERVER_SOCKET::create()
+seastar::future<ShardedServerSocket*>
+ShardedServerSocket::create(bool is_fixed_cpu)
 {
   auto primary_sid = seastar::this_shard_id();
   // start the sharded service: we should only construct/stop shards on #0
-  return seastar::smp::submit_to(0, [primary_sid] {
+  return seastar::smp::submit_to(0, [primary_sid, is_fixed_cpu] {
     auto service = std::make_unique<sharded_service_t>();
-    return service->start(primary_sid, construct_tag{}
+    return service->start(primary_sid, is_fixed_cpu, construct_tag{}
     ).then([service = std::move(service)]() mutable {
       auto p_shard = service.get();
       p_shard->local().service = std::move(service);
@@ -508,8 +503,5 @@ SERVER_SOCKET::create()
     return &p_shard->local();
   });
 }
-
-template class ShardedServerSocket<true>;
-template class ShardedServerSocket<false>;
 
 } // namespace crimson::net
