@@ -144,19 +144,21 @@ using listen_ertr = crimson::errorator<
   crimson::ct_error::address_not_available // https://techoverflow.net/2021/08/06/how-i-fixed-python-oserror-errno-99-cannot-assign-requested-address/
   >;
 
-template <bool IS_FIXED_CPU>
 class ShardedServerSocket
-    : public seastar::peering_sharded_service<ShardedServerSocket<IS_FIXED_CPU> > {
+    : public seastar::peering_sharded_service<ShardedServerSocket> {
   struct construct_tag {};
 
 public:
-  ShardedServerSocket(seastar::shard_id sid, construct_tag);
+  ShardedServerSocket(seastar::shard_id sid, bool is_fixed_cpu, construct_tag);
 
   ~ShardedServerSocket();
 
   ShardedServerSocket(ShardedServerSocket&&) = delete;
   ShardedServerSocket(const ShardedServerSocket&) = delete;
+  ShardedServerSocket& operator=(ShardedServerSocket&&) = delete;
   ShardedServerSocket& operator=(const ShardedServerSocket&) = delete;
+
+  bool is_fixed() const { return is_fixed_cpu; }
 
   listen_ertr::future<> listen(entity_addr_t addr);
 
@@ -166,11 +168,12 @@ public:
 
   seastar::future<> shutdown_destroy();
 
-  static seastar::future<ShardedServerSocket*> create();
+  static seastar::future<ShardedServerSocket*> create(bool is_fixed_cpu);
 
 private:
-  // the fixed CPU if IS_FIXED_CPU is true
+  // the fixed CPU if is_fixed_cpu is true
   const seastar::shard_id primary_sid;
+  const bool is_fixed_cpu;
   entity_addr_t listen_addr;
   std::optional<seastar::server_socket> listener;
   seastar::gate shutdown_gate;
