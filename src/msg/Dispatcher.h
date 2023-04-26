@@ -94,8 +94,8 @@ public:
    * other threads, so any locks it takes must be at the very bottom of the hierarchy).
    * Messages are delivered in receipt order within a single Connection, but there are
    * no guarantees across Connections. This makes it useful for some limited
-   * coordination between Messages which can be fast_dispatch'ed and those which must
-   * go through normal dispatch.
+   * coordination between Messages which can go through fast_dispatch and those which
+   * must go through normal dispatch.
    *
    * @param m A message which has been received
    */
