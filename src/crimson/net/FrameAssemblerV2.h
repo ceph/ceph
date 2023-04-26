@@ -83,14 +83,19 @@ public:
    * socket read and write interfaces
    */
 
+  template <bool may_cross_core = true>
   seastar::future<ceph::bufferptr> read_exactly(std::size_t bytes);
 
+  template <bool may_cross_core = true>
   seastar::future<ceph::bufferlist> read(std::size_t bytes);
 
+  template <bool may_cross_core = true>
   seastar::future<> write(ceph::bufferlist);
 
+  template <bool may_cross_core = true>
   seastar::future<> flush();
 
+  template <bool may_cross_core = true>
   seastar::future<> write_flush(ceph::bufferlist);
 
   /*
@@ -102,11 +107,13 @@ public:
     ceph::msgr::v2::Tag tag;
     const ceph::msgr::v2::FrameAssembler *rx_frame_asm;
   };
+  template <bool may_cross_core = true>
   seastar::future<read_main_t> read_main_preamble();
 
   /// may throw negotiation_failure as fault
   using read_payload_t = ceph::msgr::v2::segment_bls_t;
   // FIXME: read_payload_t cannot be no-throw move constructible
+  template <bool may_cross_core = true>
   seastar::future<read_payload_t*> read_frame_payload();
 
   template <class F>
@@ -120,11 +127,11 @@ public:
     return bl;
   }
 
-  template <class F>
+  template <class F, bool may_cross_core = true>
   seastar::future<> write_flush_frame(F &tx_frame) {
     assert(seastar::this_shard_id() == sid);
     auto bl = get_buffer(tx_frame);
-    return write_flush(std::move(bl));
+    return write_flush<may_cross_core>(std::move(bl));
   }
 
   static FrameAssemblerV2Ref create(SocketConnection &conn);
@@ -148,10 +155,14 @@ private:
   // different from the socket sid.
   bool is_socket_shutdown = false;
 
+  // the current working shard, can be messenger or socket shard.
+  // if is messenger shard, should call interfaces with may_cross_core = true.
   seastar::shard_id sid;
 
   /*
    * auth signature
+   *
+   * only in the messenger core
    */
 
   bool record_io = false;
@@ -178,6 +189,10 @@ private:
   ceph::msgr::v2::FrameAssembler rx_frame_asm{
     &session_stream_handlers, is_rev1, common::local_conf()->ms_crc_data,
     &session_comp_handlers};
+
+  // in the messenger core during handshake,
+  // and in the socket core during open,
+  // must be cleaned before switching cores.
 
   ceph::bufferlist rx_preamble;
 

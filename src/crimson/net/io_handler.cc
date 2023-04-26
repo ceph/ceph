@@ -372,7 +372,7 @@ void IOHandler::ack_out_sent(seq_num_t seq)
 
 seastar::future<stop_t> IOHandler::try_exit_out_dispatch() {
   assert(!is_out_queued());
-  return frame_assembler->flush(
+  return frame_assembler->flush<false>(
   ).then([this] {
     if (!is_out_queued()) {
       // still nothing pending to send after flush,
@@ -405,7 +405,7 @@ seastar::future<> IOHandler::do_out_dispatch()
       }
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
-      return frame_assembler->write(
+      return frame_assembler->write<false>(
         sweep_out_pending_msgs_to_sent(
           need_keepalive, next_keepalive_ack, to_ack > 0)
       ).then([this, prv_keepalive_ack=next_keepalive_ack, to_ack] {
@@ -505,7 +505,7 @@ void IOHandler::notify_out_dispatch()
 seastar::future<>
 IOHandler::read_message(utime_t throttle_stamp, std::size_t msg_size)
 {
-  return frame_assembler->read_frame_payload(
+  return frame_assembler->read_frame_payload<false>(
   ).then([this, throttle_stamp, msg_size](auto payload) {
     if (unlikely(io_state != io_state_t::open)) {
       logger().debug("{} triggered {} during read_message()",
@@ -623,7 +623,7 @@ void IOHandler::do_in_dispatch()
   in_exit_dispatching = seastar::promise<>();
   gate.dispatch_in_background("do_in_dispatch", conn, [this] {
     return seastar::keep_doing([this] {
-      return frame_assembler->read_main_preamble(
+      return frame_assembler->read_main_preamble<false>(
       ).then([this](auto ret) {
         switch (ret.tag) {
           case Tag::MESSAGE: {
@@ -656,7 +656,7 @@ void IOHandler::do_in_dispatch()
             });
           }
           case Tag::ACK:
-            return frame_assembler->read_frame_payload(
+            return frame_assembler->read_frame_payload<false>(
             ).then([this](auto payload) {
               // handle_message_ack() logic
               auto ack = AckFrame::Decode(payload->back());
@@ -664,7 +664,7 @@ void IOHandler::do_in_dispatch()
               ack_out_sent(ack.seq());
             });
           case Tag::KEEPALIVE2:
-            return frame_assembler->read_frame_payload(
+            return frame_assembler->read_frame_payload<false>(
             ).then([this](auto payload) {
               // handle_keepalive2() logic
               auto keepalive_frame = KeepAliveFrame::Decode(payload->back());
@@ -677,7 +677,7 @@ void IOHandler::do_in_dispatch()
               last_keepalive = seastar::lowres_system_clock::now();
             });
           case Tag::KEEPALIVE2_ACK:
-            return frame_assembler->read_frame_payload(
+            return frame_assembler->read_frame_payload<false>(
             ).then([this](auto payload) {
               // handle_keepalive2_ack() logic
               auto keepalive_ack_frame = KeepAliveFrameAck::Decode(payload->back());
