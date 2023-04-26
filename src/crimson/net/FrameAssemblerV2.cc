@@ -117,7 +117,7 @@ FrameAssemblerV2::stop_recording()
 bool FrameAssemblerV2::has_socket() const
 {
   assert((socket && conn.socket) || (!socket && !conn.socket));
-  return socket != nullptr;
+  return bool(socket);
 }
 
 bool FrameAssemblerV2::is_socket_valid() const
@@ -125,16 +125,17 @@ bool FrameAssemblerV2::is_socket_valid() const
   return has_socket() && !socket->is_shutdown();
 }
 
-SocketRef FrameAssemblerV2::move_socket()
+SocketFRef FrameAssemblerV2::move_socket()
 {
   assert(has_socket());
   conn.set_socket(nullptr);
   return std::move(socket);
 }
 
-void FrameAssemblerV2::set_socket(SocketRef &&new_socket)
+void FrameAssemblerV2::set_socket(SocketFRef &&new_socket)
 {
   assert(!has_socket());
+  assert(new_socket);
   socket = std::move(new_socket);
   conn.set_socket(socket.get());
   assert(is_socket_valid());
@@ -152,7 +153,7 @@ void FrameAssemblerV2::shutdown_socket()
   socket->shutdown();
 }
 
-seastar::future<> FrameAssemblerV2::replace_shutdown_socket(SocketRef &&new_socket)
+seastar::future<> FrameAssemblerV2::replace_shutdown_socket(SocketFRef &&new_socket)
 {
   assert(has_socket());
   assert(socket->is_shutdown());

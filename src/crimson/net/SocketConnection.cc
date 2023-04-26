@@ -118,7 +118,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
 }
 
 void
-SocketConnection::start_accept(SocketRef&& sock,
+SocketConnection::start_accept(SocketFRef&& sock,
                                const entity_addr_t& _peer_addr)
 {
   assert(seastar::this_shard_id() == msgr_sid);

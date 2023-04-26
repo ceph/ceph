@@ -207,6 +207,16 @@ SocketMessenger::bind(const entity_addrvec_t& addrs)
   });
 }
 
+seastar::future<> SocketMessenger::accept(
+    SocketFRef &&socket, const entity_addr_t &peer_addr)
+{
+  assert(seastar::this_shard_id() == sid);
+  SocketConnectionRef conn =
+    seastar::make_shared<SocketConnection>(*this, dispatchers);
+  conn->start_accept(std::move(socket), peer_addr);
+  return seastar::now();
+}
+
 seastar::future<> SocketMessenger::start(
     const dispatchers_t& _dispatchers) {
   assert(seastar::this_shard_id() == sid);
@@ -217,14 +227,17 @@ seastar::future<> SocketMessenger::start(
     ceph_assert(get_myaddr().is_msgr2());
     ceph_assert(get_myaddr().get_port() > 0);
 
-    return listener->accept([this](SocketRef socket, entity_addr_t peer_addr) {
-      assert(listener->is_fixed());
-      assert(seastar::this_shard_id() == sid);
+    return listener->accept([this](SocketRef _socket, entity_addr_t peer_addr) {
       assert(get_myaddr().is_msgr2());
-      SocketConnectionRef conn =
-        seastar::make_shared<SocketConnection>(*this, dispatchers);
-      conn->start_accept(std::move(socket), peer_addr);
-      return seastar::now();
+      SocketFRef socket = seastar::make_foreign(std::move(_socket));
+      if (listener->is_fixed()) {
+        return accept(std::move(socket), peer_addr);
+      } else {
+        return seastar::smp::submit_to(sid,
+            [this, peer_addr, socket = std::move(socket)]() mutable {
+          return accept(std::move(socket), peer_addr);
+        });
+      }
     });
   }
   return seastar::now();

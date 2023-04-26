@@ -38,7 +38,7 @@ public:
    */
 
   struct mover_t {
-    SocketRef socket;
+    SocketFRef socket;
     ceph::crypto::onwire::rxtx_t session_stream_handlers;
     ceph::compression::onwire::rxtx_t session_comp_handlers;
   };
@@ -66,13 +66,13 @@ public:
   // the socket exists and not shutdown
   bool is_socket_valid() const;
 
-  void set_socket(SocketRef &&);
+  void set_socket(SocketFRef &&);
 
   void learn_socket_ephemeral_port_as_connector(uint16_t port);
 
   void shutdown_socket();
 
-  seastar::future<> replace_shutdown_socket(SocketRef &&);
+  seastar::future<> replace_shutdown_socket(SocketFRef &&);
 
   seastar::future<> close_shutdown_socket();
 
@@ -127,7 +127,7 @@ public:
 private:
   bool has_socket() const;
 
-  SocketRef move_socket();
+  SocketFRef move_socket();
 
   void log_main_preamble(const ceph::bufferlist &bl);
 
@@ -137,7 +137,7 @@ private:
 
   SocketConnection &conn;
 
-  SocketRef socket;
+  SocketFRef socket;
 
   /*
    * auth signature

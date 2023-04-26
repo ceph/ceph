@@ -21,6 +21,7 @@ namespace crimson::net {
 
 class Socket;
 using SocketRef = std::unique_ptr<Socket>;
+using SocketFRef = seastar::foreign_ptr<SocketRef>;
 
 class Socket {
   struct construct_tag {};

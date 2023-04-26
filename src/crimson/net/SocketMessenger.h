@@ -152,6 +152,8 @@ public:
 #endif
 
 private:
+  seastar::future<> accept(SocketFRef &&, const entity_addr_t &);
+
   listen_ertr::future<> do_listen(const entity_addrvec_t& addr);
 
   /// try to bind to the first unused port of given address
