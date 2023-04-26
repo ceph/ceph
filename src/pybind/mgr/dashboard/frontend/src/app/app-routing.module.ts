@@ -134,6 +134,14 @@ const routes: Routes = [
         }
       },
       {
+        path: 'cluster/user/import',
+        component: CrudFormComponent,
+        data: {
+          breadcrumbs: 'Cluster/Users',
+          resource: 'api.cluster.user@1.0'
+        }
+      },
+      {
         path: 'monitor',
         component: MonitorComponent,
         data: { breadcrumbs: 'Cluster/Monitors' }

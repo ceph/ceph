@@ -1,5 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import _ from 'lodash';
 import { Observable } from 'rxjs';
@@ -7,13 +8,14 @@ import { Observable } from 'rxjs';
 import { CrudMetadata } from '~/app/shared/models/crud-table-metadata';
 import { DataGatewayService } from '~/app/shared/services/data-gateway.service';
 import { TimerService } from '~/app/shared/services/timer.service';
+import { CephUserService } from '../../api/ceph-user.service';
+import { ConfirmationModalComponent } from '../../components/confirmation-modal/confirmation-modal.component';
 import { CdTableSelection } from '../../models/cd-table-selection';
 import { FinishedTask } from '../../models/finished-task';
 import { Permission, Permissions } from '../../models/permissions';
 import { AuthStorageService } from '../../services/auth-storage.service';
 import { TaskWrapperService } from '../../services/task-wrapper.service';
 import { ModalService } from '../../services/modal.service';
-import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { CriticalConfirmationModalComponent } from '../../components/critical-confirmation-modal/critical-confirmation-modal.component';
 
 @Component({
@@ -28,6 +30,8 @@ export class CRUDTableComponent implements OnInit {
   public dateTpl: TemplateRef<any>;
   @ViewChild('durationTpl')
   public durationTpl: TemplateRef<any>;
+  @ViewChild('exportDataModalTpl')
+  public authxEportTpl: TemplateRef<any>;
 
   data$: Observable<any>;
   meta$: Observable<CrudMetadata>;
@@ -36,16 +40,18 @@ export class CRUDTableComponent implements OnInit {
   permission: Permission;
   selection = new CdTableSelection();
   expandedRow: any = null;
+  modalRef: NgbModalRef;
   tabs = {};
   resource: string;
-  modalRef: NgbModalRef;
+  modalState = {};
 
   constructor(
     private authStorageService: AuthStorageService,
     private timerService: TimerService,
     private dataGatewayService: DataGatewayService,
-    private activatedRoute: ActivatedRoute,
     private taskWrapper: TaskWrapperService,
+    private cephUserService: CephUserService,
+    private activatedRoute: ActivatedRoute,
     private modalService: ModalService
   ) {
     this.permissions = this.authStorageService.getPermissions();
@@ -97,10 +103,15 @@ export class CRUDTableComponent implements OnInit {
     meta.table.columns = meta.table.columns.filter((col: any) => {
       return !col['isHidden'];
     });
+
     this.meta = meta;
     for (let i = 0; i < this.meta.actions.length; i++) {
-      if (this.meta.actions[i].click.toString() !== '') {
-        this.meta.actions[i].click = this[this.meta.actions[i].click.toString()].bind(this);
+      let action = this.meta.actions[i];
+      if (action.disable) {
+        action.disable = (selection) => !selection.hasSelection;
+      }
+      if (action.click.toString() !== '') {
+        action.click = this[this.meta.actions[i].click.toString()].bind(this);
       }
     }
   }
@@ -131,7 +142,27 @@ export class CRUDTableComponent implements OnInit {
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
   }
+
   setExpandedRow(event: any) {
     this.expandedRow = event;
+  }
+
+  authExport() {
+    let entities: string[] = [];
+    this.selection.selected.forEach((row) => entities.push(row.entity));
+    this.cephUserService.export(entities).subscribe((data: string) => {
+      const modalVariables = {
+        titleText: $localize`Ceph user export data`,
+        buttonText: $localize`Close`,
+        bodyTpl: this.authxEportTpl,
+        showSubmit: true,
+        showCancel: false,
+        onSubmit: () => {
+          this.modalRef.close();
+        }
+      };
+      this.modalState['authExportData'] = data.trim();
+      this.modalRef = this.modalService.show(ConfirmationModalComponent, modalVariables);
+    });
   }
 }
