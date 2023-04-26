@@ -17,6 +17,8 @@
 
 #include <memory>
 
+#include <boost/asio/executor_work_guard.hpp>
+
 #include "bind_handler.h"
 #include "forward_handler.h"
 

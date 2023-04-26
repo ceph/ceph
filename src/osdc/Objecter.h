@@ -27,7 +27,11 @@
 #include <variant>
 
 #include <boost/container/small_vector.hpp>
-#include <boost/asio.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/defer.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/io_context_strand.hpp>
+#include <boost/asio/post.hpp>
 
 #include <fmt/format.h>
 
