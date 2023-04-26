@@ -85,7 +85,7 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
   std::for_each(
       out_pending_msgs.begin(),
       out_pending_msgs.begin()+num_msgs,
-      [this, &bl](const MessageURef& msg) {
+      [this, &bl](const MessageFRef& msg) {
     // set priority
     msg->get_header().src = conn.messenger.get_myname();
 
@@ -122,7 +122,7 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
   return bl;
 }
 
-seastar::future<> IOHandler::send(MessageURef msg)
+seastar::future<> IOHandler::send(MessageFRef msg)
 {
   ceph_assert_always(seastar::this_shard_id() == sid);
   if (io_state != io_state_t::drop) {
@@ -272,7 +272,7 @@ void IOHandler::requeue_out_sent()
   out_seq -= out_sent_msgs.size();
   logger().debug("{} requeue {} items, revert out_seq to {}",
                  conn, out_sent_msgs.size(), out_seq);
-  for (MessageURef& msg : out_sent_msgs) {
+  for (MessageFRef& msg : out_sent_msgs) {
     msg->clear_payload();
     msg->set_seq(0);
   }

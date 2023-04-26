@@ -70,7 +70,7 @@ private:
     return protocol_is_connected;
   }
 
-  seastar::future<> send(MessageURef msg) final;
+  seastar::future<> send(MessageFRef msg) final;
 
   seastar::future<> send_keepalive() final;
 
@@ -227,10 +227,10 @@ private:
   seq_num_t out_seq = 0;
 
   // messages to be resent after connection gets reset
-  std::deque<MessageURef> out_pending_msgs;
+  std::deque<MessageFRef> out_pending_msgs;
 
   // messages sent, but not yet acked by peer
-  std::deque<MessageURef> out_sent_msgs;
+  std::deque<MessageFRef> out_sent_msgs;
 
   bool need_keepalive = false;
 
