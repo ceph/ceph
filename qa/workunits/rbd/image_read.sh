@@ -219,7 +219,7 @@ function parseargs() {
 	echo "    object order is ${OBJECT_ORDER}, so" \
 		"objects are ${OBJECT_SIZE} bytes"
 	echo "    page size is ${PAGE_SIZE} bytes, so" \
-		"there are are ${OBJECT_PAGES} pages in an object"
+		"there are ${OBJECT_PAGES} pages in an object"
 	echo "    derived image size is ${IMAGE_SIZE} MB, so" \
 		"there are ${IMAGE_OBJECTS} objects in an image"
 	if [ "${TEST_CLONES}" = true ]; then

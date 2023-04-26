@@ -705,7 +705,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
     for (auto &name : mirroring_namespaces) {
       auto it = m_namespace_replayers.find(name);
       if (it == m_namespace_replayers.end()) {
-        // acuire leader for this namespace replayer failed
+        // acquire leader for this namespace replayer failed
         continue;
       }
       it->second->handle_instances_added(instance_ids);

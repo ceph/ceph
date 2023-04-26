@@ -1008,7 +1008,7 @@ void ObjectListSnapsRequest<I>::handle_list_from_parent(int r) {
   }
 
   // the write/read snapshot id key is not useful for parent images so
-  // map the the special-case INITIAL_WRITE_READ_SNAP_IDS key
+  // map the special-case INITIAL_WRITE_READ_SNAP_IDS key
   *m_snapshot_delta = {};
   auto& intervals = (*m_snapshot_delta)[INITIAL_WRITE_READ_SNAP_IDS];
   for (auto& [key, image_extents] : m_parent_snapshot_delta) {

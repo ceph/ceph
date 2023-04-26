@@ -162,7 +162,7 @@ protected:
   buffer::ptr cache_bp;
   buffer::list cache_bl;
   std::atomic<int> bl_refs = {0}; /* The refs held on cache_bp by cache_bl */
-  /* Used in WriteLogEntry::get_cache_bl() to syncronize between threads making entries readable */
+  /* Used in WriteLogEntry::get_cache_bl() to synchronize between threads making entries readable */
   mutable ceph::mutex m_entry_bl_lock;
 
   virtual void init_cache_bp() {}

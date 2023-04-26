@@ -29,7 +29,7 @@ template <typename I>
 ImageDispatch<I>::ImageDispatch(I* image_ctx)
   : m_image_ctx(image_ctx),
     m_lock(ceph::make_shared_mutex(
-      util::unique_lock_name("librbd::exclusve_lock::ImageDispatch::m_lock",
+      util::unique_lock_name("librbd::exclusive_lock::ImageDispatch::m_lock",
                              this))) {
 }
 

@@ -274,7 +274,7 @@ TEST_F(TestMockParentCacheObjectDispatch, test_initialization_fail_at_register) 
   delete mock_parent_image_cache;
 }
 
-TEST_F(TestMockParentCacheObjectDispatch, test_disble_interface) {
+TEST_F(TestMockParentCacheObjectDispatch, test_disable_interface) {
   librbd::ImageCtx* ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   MockParentImageCacheImageCtx mock_image_ctx(*ictx);
