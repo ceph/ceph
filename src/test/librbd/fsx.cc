@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:8; indent-tabs-mode:t -*-
 // vim: ts=8 sw=8 smarttab
 /*
- *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserverd.
+ *	Copyright (C) 1991, NeXT Computer, Inc.  All Rights Reserved.
  *
  *	File:	fsx.cc
  *	Author:	Avadis Tevanian, Jr.
@@ -103,7 +103,7 @@ int			logcount = 0;	/* total ops */
  * When mapped read/writes are disabled, they are simply converted to normal
  * reads and writes. When fallocate/fpunch calls are disabled, they are
  * converted to OP_SKIPPED. Hence OP_SKIPPED needs to have a number higher than
- * the operation selction matrix, as does the OP_CLOSEOPEN which is an
+ * the operation selection matrix, as does the OP_CLOSEOPEN which is an
  * operation modifier rather than an operation in itself.
  *
  * Because of the "lite" version, we also need to have different "maximum
@@ -159,7 +159,7 @@ unsigned long	debugstart = 0;		/* -D flag */
 int	flush_enabled = 0;		/* -f flag */
 int	deep_copy = 0;                  /* -g flag */
 int	holebdy = 1;			/* -h flag */
-bool    journal_replay = false;         /* -j flah */
+bool    journal_replay = false;         /* -j flag */
 int	keep_on_success = 0;		/* -k flag */
 int	do_fsync = 0;			/* -y flag */
 unsigned long	maxfilelen = 256 * 1024;	/* -l flag */

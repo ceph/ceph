@@ -540,7 +540,7 @@ void Replayer<I>::handle_close_local_image(int r) {
 
   std::unique_lock locker{m_lock};
   if (r < 0) {
-    derr << "error closing local iamge: " << cpp_strerror(r) << dendl;
+    derr << "error closing local image: " << cpp_strerror(r) << dendl;
     handle_replay_error(r, "failed to close local image");
   }
 

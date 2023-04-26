@@ -402,7 +402,7 @@ void WriteAroundObjectDispatch<I>::handle_in_flight_io_complete(
   }
 
   // complete flushes that were waiting on in-flight IO
-  // (and propogate any IO error to first flush)
+  // (and propagate any IO error to first flush)
   for (auto& it : finished_flushes) {
     ldout(cct, 20) << "completing flush: tid=" << it.first << ", "
                    << "r=" << pending_flush_error << dendl;
@@ -447,7 +447,7 @@ void WriteAroundObjectDispatch<I>::handle_in_flight_flush_complete(
   m_lock.unlock();
 
   // complete flushes that were waiting on in-flight IO
-  // (and propogate any IO errors)
+  // (and propagate any IO errors)
   for (auto& it : finished_flushes) {
     ldout(cct, 20) << "completing flush: tid=" << it.first << dendl;
     it.second->complete(pending_flush_error);

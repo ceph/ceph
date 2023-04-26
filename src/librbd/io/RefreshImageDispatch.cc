@@ -131,7 +131,7 @@ bool RefreshImageDispatch<I>::flush(
   ldout(cct, 20) << "tid=" << tid << dendl;
 
   // The refresh state machine can initiate a flush and it can
-  // enable the exclusive-lock which will also attmept to flush.
+  // enable the exclusive-lock which will also attempt to flush.
   if (flush_source == FLUSH_SOURCE_REFRESH ||
       flush_source == FLUSH_SOURCE_EXCLUSIVE_LOCK_SKIP_REFRESH ||
       flush_source == FLUSH_SOURCE_SHUTDOWN) {

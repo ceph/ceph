@@ -389,7 +389,7 @@ private:
     // receive the response for this request
     m_parser.emplace();
     if (work->header_only()) {
-      // HEAD requests don't trasfer data but the parser still cares about max
+      // HEAD requests don't transfer data but the parser still cares about max
       // content-length
       m_header_parser.emplace();
       m_header_parser->body_limit(std::numeric_limits<uint64_t>::max());
