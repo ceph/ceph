@@ -141,6 +141,8 @@ private:
 
   SocketFRef move_socket();
 
+  void clear();
+
   void log_main_preamble(const ceph::bufferlist &bl);
 
 #ifdef UNIT_TESTS_BUILT
