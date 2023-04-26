@@ -640,7 +640,7 @@ class ServiceSpec(object):
         understanding of what fields are special for a give service type.
 
         Note, we'll need to stay compatible with both versions for the
-        the next two major releases (octoups, pacific).
+        the next two major releases (octopus, pacific).
 
         :param json_spec: A valid dict with ServiceSpec
 

@@ -1,7 +1,7 @@
 # vi: set ft=ruby :
 #
 # In order to reduce the need of recreating all vagrant boxes everytime they
-# get dirty, snaptshot them and revert the snapshot of them instead.
+# get dirty, snapshot them and revert the snapshot of them instead.
 # Two helpful scripts to do this easily can be found here:
 # https://github.com/Devp00l/vagrant-helper-scripts
 

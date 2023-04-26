@@ -295,7 +295,7 @@ $SUDO vgremove -f $OSD_VG_NAME || true
 $SUDO losetup $loop_dev $TMPDIR/$OSD_IMAGE_NAME
 $SUDO pvcreate $loop_dev && $SUDO vgcreate $OSD_VG_NAME $loop_dev
 
-# osd boostrap keyring
+# osd bootstrap keyring
 $CEPHADM shell --fsid $FSID --config $CONFIG --keyring $KEYRING -- \
       ceph auth get client.bootstrap-osd > $TMPDIR/keyring.bootstrap.osd
 
