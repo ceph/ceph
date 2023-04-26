@@ -92,6 +92,9 @@ FrameAssemblerV2::to_replace()
 {
   assert(seastar::this_shard_id() == sid);
   assert(is_socket_valid());
+
+  clear();
+
   return mover_t{
       move_socket(),
       std::move(session_stream_handlers),
@@ -101,9 +104,9 @@ FrameAssemblerV2::to_replace()
 seastar::future<> FrameAssemblerV2::replace_by(FrameAssemblerV2::mover_t &&mover)
 {
   assert(seastar::this_shard_id() == sid);
-  record_io = false;
-  rxbuf.clear();
-  txbuf.clear();
+
+  clear();
+
   session_stream_handlers = std::move(mover.session_stream_handlers);
   session_comp_handlers = std::move(mover.session_comp_handlers);
   if (has_socket()) {
@@ -435,6 +438,15 @@ void FrameAssemblerV2::log_main_preamble(const ceph::bufferlist &bl)
 FrameAssemblerV2Ref FrameAssemblerV2::create(SocketConnection &conn)
 {
   return std::make_unique<FrameAssemblerV2>(conn);
+}
+
+void FrameAssemblerV2::clear()
+{
+  record_io = false;
+  rxbuf.clear();
+  txbuf.clear();
+  rx_preamble.clear();
+  rx_segments_data.clear();
 }
 
 } // namespace crimson::net
