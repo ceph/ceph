@@ -47,4 +47,6 @@ using dispatchers_t = boost::container::small_vector<Dispatcher*, NUM_DISPATCHER
 class Messenger;
 using MessengerRef = seastar::shared_ptr<Messenger>;
 
+using MessageFRef = seastar::foreign_ptr<MessageURef>;
+
 } // namespace crimson::net
