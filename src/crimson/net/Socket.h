@@ -38,6 +38,10 @@ public:
 
   Socket(Socket&& o) = delete;
 
+  seastar::shard_id get_shard_id() const {
+    return sid;
+  }
+
   side_t get_side() const {
     return side;
   }
@@ -51,6 +55,7 @@ public:
   }
 
   bool is_shutdown() const {
+    assert(seastar::this_shard_id() == sid);
     return socket_is_shutdown;
   }
 
@@ -89,17 +94,20 @@ public:
 
   // shutdown for tests
   void force_shutdown() {
+    assert(seastar::this_shard_id() == sid);
     socket.shutdown_input();
     socket.shutdown_output();
   }
 
   // shutdown input_stream only, for tests
   void force_shutdown_in() {
+    assert(seastar::this_shard_id() == sid);
     socket.shutdown_input();
   }
 
   // shutdown output_stream only, for tests
   void force_shutdown_out() {
+    assert(seastar::this_shard_id() == sid);
     socket.shutdown_output();
   }
 
