@@ -1,5 +1,6 @@
 import os
 import stat
+import uuid
 
 import errno
 import logging
@@ -11,10 +12,11 @@ import cephfs
 
 from ..pin_util import pin
 from .subvolume_attrs import SubvolumeTypes
+from .op_sm import SubvolumeOpSm
 from .metadata_manager import MetadataManager
 from ..trash import create_trashcan, open_trashcan
-from ...fs_util import get_ancestor_xattr
-from ...exception import MetadataMgrException, VolumeException
+from ...fs_util import get_ancestor_xattr, listdir
+from ...exception import MetadataMgrException, VolumeException, OpSmException
 from .auth_metadata import AuthMetadataManager
 from .subvolume_attrs import SubvolumeStates
 
@@ -23,8 +25,9 @@ log = logging.getLogger(__name__)
 
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
+    SUBVOL_VERSIONS = [1, 2]
 
-    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False, regenerate=False):
         self.mgr = mgr
         self.fs = fs
         self.auth_mdata_mgr = AuthMetadataManager(fs)
@@ -35,6 +38,7 @@ class SubvolumeBase(object):
         self.group = group
         self.subvolname = subvolname
         self.legacy_mode = legacy
+        self.regenerate = regenerate
         self.load_config()
 
     @property
@@ -347,12 +351,17 @@ class SubvolumeBase(object):
                 self.base_path.decode('utf-8') != str(Path(subvolpath).parent)):
                 raise MetadataMgrException(-errno.ENOENT, 'fabricated .meta')
         except MetadataMgrException as me:
-            if me.errno in (-errno.ENOENT, -errno.EINVAL) and not self.legacy_mode:
-                log.warn("subvolume '{0}', {1}, "
-                          "assuming legacy_mode".format(self.subvolname, me.error_str))
-                self.legacy_mode = True
-                self.load_config()
-                self.discover()
+            if me.errno in (-errno.ENOENT, -errno.EINVAL):
+                if self.regenerate:
+                    self.load_config()
+                    self.regenerate_subvol_metadata(self.subvolname)
+                    self.discover()
+                elif not self.legacy_mode:
+                    log.warn("subvolume '{0}', {1}, "
+                            "assuming legacy_mode".format(self.subvolname, me.error_str))
+                    self.legacy_mode = True
+                    self.load_config()
+                    self.discover()
             else:
                 raise
         except cephfs.Error as e:
@@ -515,3 +524,31 @@ class SubvolumeBase(object):
                       f"subvolume={self.subvol_name} group={self.group_name} "
                       f"reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
             raise VolumeException(-me.args[0], me.args[1])
+        
+    def regenerate_subvol_metadata(self, subvolname):
+        subvolume_type = SubvolumeTypes.TYPE_NORMAL
+        try:
+            initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
+        except OpSmException as oe:
+            raise VolumeException(-errno.EINVAL, "initial state not available: internal error")
+        
+        try:
+            subvol_uuid_list = listdir(self.fs, self.base_path, filter_entries=None, filter_files=False)
+            subvol_path = self.base_path
+            for val in subvol_uuid_list:
+                subvol_path = os.path.join(subvol_path, val)
+            
+            self.metadata_mgr.remove_section(MetadataManager.GLOBAL_SECTION)
+            self.init_config(self.SUBVOL_VERSIONS[-1], subvolume_type, subvol_path.decode('utf-8'), initial_state)
+            ret = self.auth_mdata_mgr.create_subvolume_metadata_file(self.group.groupname, subvolname)
+        except MetadataMgrException as me:
+            if me.errno == -errno.ENOENT:
+                raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
+            raise VolumeException(me.args[0], me.args[1])
+        except cephfs.ObjectNotFound:
+            log.debug("missing subvolume path '{0}' for subvolume '{1}'".format(subvol_path, self.subvolname))
+            raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+        return ret
+

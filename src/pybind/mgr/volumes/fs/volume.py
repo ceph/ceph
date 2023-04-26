@@ -497,6 +497,34 @@ class VolumeClient(CephfsClient["Module"]):
                 ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def regenerate_subvolume_metadata(self, **kwargs):
+        ret        = 0, "", ""
+        volname    = kwargs['vol_name']
+        subvolname = kwargs['sub_name']
+        groupname  = kwargs['group_name']
+        confirm    = kwargs['confirm']
+
+        if not confirm:
+            return (
+                -errno.EPERM, "",
+                "WARNING: This is a potentially disruptive operation and can clutter "
+                "a perfectly accessible subvolume. Add --yes-i-really-mean-it "
+                "if you are sure you wish to continue.")
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_group(fs_handle, self.volspec, groupname) as group:
+                    try:
+                        with open_subvol(self.mgr, fs_handle, self.volspec, group, subvolname, SubvolumeOpType.REGENERATE) as subvolume:
+                            pass
+                    except VolumeException as ve:
+                        if ve.errno == -errno.ENOENT:
+                            ret = 0, "metadata file regenerated", ""
+                        else:
+                            raise
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     def list_subvolumes(self, **kwargs):
         ret        = 0, "", ""
         volname    = kwargs['vol_name']

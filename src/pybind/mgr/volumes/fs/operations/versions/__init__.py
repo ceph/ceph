@@ -89,8 +89,11 @@ class SubvolumeLoader(object):
         # legacy is only upgradable to v1
         subvolume.init_config(SubvolumeV1.version(), subvolume_type, qpath, initial_state)
 
-    def get_subvolume_object(self, mgr, fs, vol_spec, group, subvolname, upgrade=True):
-        subvolume = SubvolumeBase(mgr, fs, vol_spec, group, subvolname)
+    def get_subvolume_object(self, mgr, fs, vol_spec, group, subvolname, upgrade=True, regenerate=False):
+        if regenerate:
+            subvolume = SubvolumeBase(mgr, fs, vol_spec, group, subvolname, regenerate=True)
+        else:
+            subvolume = SubvolumeBase(mgr, fs, vol_spec, group, subvolname)
         try:
             subvolume.discover()
             self.upgrade_to_v2_subvolume(subvolume)

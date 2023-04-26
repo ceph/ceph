@@ -392,3 +392,27 @@ class SubvolumeV2(SubvolumeV1):
             # tickle the volume purge job to purge this entry, using ESTALE
             raise VolumeException(-errno.ESTALE, "subvolume '{0}' has been removed as the last retained snapshot is removed".format(self.subvolname))
         # if not purgeable, subvol is not retained, or has snapshots, or already has purge jobs that will garbage collect this subvol
+
+    # def regenerate_subvol_metadata(self, subvolname):
+    #     subvolume_type = SubvolumeTypes.TYPE_NORMAL
+    #     try:
+    #         initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
+    #     except OpSmException as oe:
+    #         raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
+        
+    #     try:
+    #         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
+            
+    #         self.metadata_mgr.remove_section(MetadataManager.GLOBAL_SECTION)
+    #         self.init_config(SubvolumeV2.VERSION, subvolume_type, subvol_path.decode('utf-8'), initial_state)
+    #         ret = self.auth_mdata_mgr.create_subvolume_metadata_file(self.group.groupname, subvolname)
+    #     except MetadataMgrException as me:
+    #         if me.errno == -errno.ENOENT:
+    #             raise VolumeException(-errno.ENOENT, "subvolume '{0}' does not exist".format(self.subvolname))
+    #         raise VolumeException(me.args[0], me.args[1])
+    #     except cephfs.ObjectNotFound:
+    #         log.debug("missing subvolume path '{0}' for subvolume '{1}'".format(subvol_path, self.subvolname))
+    #         raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
+    #     except cephfs.Error as e:
+    #         raise VolumeException(-e.args[0], e.args[1])
+    #     return ret

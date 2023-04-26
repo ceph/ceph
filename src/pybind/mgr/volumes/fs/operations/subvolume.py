@@ -69,6 +69,9 @@ def open_subvol(mgr, fs, vol_spec, group, subvolname, op_type):
     :param op_type: operation type for which subvolume is being opened
     :return: yields a subvolume object (subclass of SubvolumeTemplate)
     """
-    subvolume = loaded_subvolumes.get_subvolume_object(mgr, fs, vol_spec, group, subvolname)
+    if op_type == SubvolumeOpType.REGENERATE:
+        subvolume = loaded_subvolumes.get_subvolume_object(mgr, fs, vol_spec, group, subvolname, regenerate=True)
+    else:
+        subvolume = loaded_subvolumes.get_subvolume_object(mgr, fs, vol_spec, group, subvolname)
     subvolume.open(op_type)
     yield subvolume

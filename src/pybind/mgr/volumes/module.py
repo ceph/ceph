@@ -273,6 +273,16 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolume metadata regenerate '
+                   'name=vol_name,type=CephString '
+                   'name=sub_name,type=CephString '
+                   'name=group_name,type=CephString,req=false '
+                   'name=yes_i_really_mean_it,type=CephBool,req=false ',
+            'desc': "Regenerate the metadata of a CephFS subvolume in a volume, "
+                    "and optionally, in a specific subvolume group",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolumegroup pin'
                    ' name=vol_name,type=CephString'
                    ' name=group_name,type=CephString,req=true'
@@ -721,6 +731,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                       group_name=cmd.get('group_name', None),
                                       force=cmd.get('force', False))
 
+    @mgr_cmd_wrap
+    def _cmd_fs_subvolume_metadata_regenerate(self, inbuf, cmd):
+        return self.vc.regenerate_subvolume_metadata(vol_name=cmd['vol_name'],
+                                      sub_name=cmd['sub_name'],
+                                      group_name=cmd.get('group_name', None),
+                                      confirm=cmd.get('yes_i_really_mean_it', False))
+    
     @mgr_cmd_wrap
     def _cmd_fs_subvolumegroup_pin(self, inbuf, cmd):
         return self.vc.pin_subvolume_group(vol_name=cmd['vol_name'],
