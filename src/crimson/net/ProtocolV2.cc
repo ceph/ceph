@@ -225,6 +225,7 @@ void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state, bool 
       return io_handler.wait_io_exit_dispatching(
       ).then([this](FrameAssemblerV2Ref fa) {
         frame_assembler = std::move(fa);
+        ceph_assert_always(!frame_assembler->is_socket_valid());
         exit_io->set_value();
         exit_io = std::nullopt;
       });
@@ -283,7 +284,7 @@ void ProtocolV2::fault(
   if (likely(has_socket)) {
     if (likely(is_socket_valid)) {
       ceph_assert_always(state != state_t::READY);
-      frame_assembler->shutdown_socket();
+      frame_assembler->shutdown_socket<true>(&gate);
       is_socket_valid = false;
     } else {
       ceph_assert_always(state != state_t::ESTABLISHING);
@@ -899,7 +900,7 @@ void ProtocolV2::execute_connecting()
            case next_step_t::wait: {
             logger().info("{} execute_connecting(): going to WAIT(max-backoff)", conn);
             ceph_assert_always(is_socket_valid);
-            frame_assembler->shutdown_socket();
+            frame_assembler->shutdown_socket<true>(&gate);
             is_socket_valid = false;
             execute_wait(true);
             break;
@@ -1723,7 +1724,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   ceph_assert_always(!mover.socket->is_shutdown());
   trigger_state(state_t::REPLACING, io_state_t::delay, false);
   if (is_socket_valid) {
-    frame_assembler->shutdown_socket();
+    frame_assembler->shutdown_socket<true>(&gate);
     is_socket_valid = false;
   }
   gate.dispatch_in_background(
@@ -1981,7 +1982,7 @@ void ProtocolV2::do_close(
     (*f_accept_new)();
   }
   if (is_socket_valid) {
-    frame_assembler->shutdown_socket();
+    frame_assembler->shutdown_socket<true>(&gate);
     is_socket_valid = false;
   }
   assert(!gate.is_closed());

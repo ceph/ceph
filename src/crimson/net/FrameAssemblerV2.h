@@ -7,6 +7,7 @@
 #include "msg/async/crypto_onwire.h"
 #include "msg/async/compression_onwire.h"
 
+#include "crimson/common/gated.h"
 #include "crimson/net/Socket.h"
 
 namespace crimson::net {
@@ -70,7 +71,9 @@ public:
 
   void learn_socket_ephemeral_port_as_connector(uint16_t port);
 
-  void shutdown_socket();
+  // if may_cross_core == true, gate is required for cross-core shutdown
+  template <bool may_cross_core>
+  void shutdown_socket(crimson::common::Gated *gate);
 
   seastar::future<> replace_shutdown_socket(SocketFRef &&);
 
@@ -140,6 +143,10 @@ private:
   SocketConnection &conn;
 
   SocketFRef socket;
+
+  // checking Socket::is_shutdown() synchronously is impossible when sid is
+  // different from the socket sid.
+  bool is_socket_shutdown = false;
 
   seastar::shard_id sid;
 

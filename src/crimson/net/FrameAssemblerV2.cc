@@ -135,7 +135,12 @@ bool FrameAssemblerV2::has_socket() const
 bool FrameAssemblerV2::is_socket_valid() const
 {
   assert(seastar::this_shard_id() == sid);
-  return has_socket() && !socket->is_shutdown();
+#ifndef NDEBUG
+  if (has_socket() && socket->get_shard_id() == sid) {
+    assert(socket->is_shutdown() == is_socket_shutdown);
+  }
+#endif
+  return has_socket() && !is_socket_shutdown;
 }
 
 SocketFRef FrameAssemblerV2::move_socket()
@@ -152,6 +157,7 @@ void FrameAssemblerV2::set_socket(SocketFRef &&new_socket)
   assert(new_socket);
   socket = std::move(new_socket);
   conn.set_socket(socket.get());
+  is_socket_shutdown = false;
   assert(is_socket_valid());
 }
 
@@ -162,30 +168,55 @@ void FrameAssemblerV2::learn_socket_ephemeral_port_as_connector(uint16_t port)
   socket->learn_ephemeral_port_as_connector(port);
 }
 
-void FrameAssemblerV2::shutdown_socket()
+template <bool may_cross_core>
+void FrameAssemblerV2::shutdown_socket(crimson::common::Gated *gate)
 {
   assert(seastar::this_shard_id() == sid);
   assert(is_socket_valid());
-  socket->shutdown();
+  is_socket_shutdown = true;
+  if constexpr (may_cross_core) {
+    assert(conn.get_messenger_shard_id() == sid);
+    assert(gate);
+    gate->dispatch_in_background("shutdown_socket", conn, [this] {
+      return seastar::smp::submit_to(
+          socket->get_shard_id(), [this] {
+        socket->shutdown();
+      });
+    });
+  } else {
+    assert(socket->get_shard_id() == sid);
+    assert(!gate);
+    socket->shutdown();
+  }
 }
+template void FrameAssemblerV2::shutdown_socket<true>(crimson::common::Gated *);
+template void FrameAssemblerV2::shutdown_socket<false>(crimson::common::Gated *);
 
 seastar::future<> FrameAssemblerV2::replace_shutdown_socket(SocketFRef &&new_socket)
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  assert(socket->is_shutdown());
+  assert(!is_socket_valid());
   auto old_socket = move_socket();
+  auto old_socket_shard_id = old_socket->get_shard_id();
   set_socket(std::move(new_socket));
-  return old_socket->close(
-  ).then([sock = std::move(old_socket)] {});
+  return seastar::smp::submit_to(
+      old_socket_shard_id,
+      [old_socket = std::move(old_socket)]() mutable {
+    return old_socket->close(
+    ).then([sock = std::move(old_socket)] {});
+  });
 }
 
 seastar::future<> FrameAssemblerV2::close_shutdown_socket()
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  assert(socket->is_shutdown());
-  return socket->close();
+  assert(!is_socket_valid());
+  return seastar::smp::submit_to(
+      socket->get_shard_id(), [this] {
+    return socket->close();
+  });
 }
 
 seastar::future<ceph::bufferptr>
