@@ -46,5 +46,6 @@ jobs:
           cache-dependency-path: src/script/requirements.backport-create-issue.txt
       - run: pip install -r src/script/requirements.backport-create-issue.txt
       - run: python3 src/script/backport-create-issue ${{ inputs.debug && '--debug' || '' }} ${{ inputs.resolveParent && '--resolve-parent' || '' }} ${{ inputs.force && '--force' || '' }} ${{ inputs.dryRun && '--dry-run' || '' }} ${{ inputs.issues }}
+        if: ${{ env.REDMINE_API_KEY != '' }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
