@@ -1909,7 +1909,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   std::string run_name;
   std::string prefix;
-  bool forcefull = false;
+  bool force_full = false;
   unique_ptr<Formatter> formatter = nullptr;
   bool pretty_format = false;
   const char *output = NULL;
@@ -1958,7 +1958,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 
   i = opts.find("force-full");
   if (i != opts.end()) {
-    forcefull = true;
+    force_full = true;
   }
   i = opts.find("prefix");
   if (i != opts.end()) {
@@ -3075,7 +3075,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       oids.push_back(*obj_name);
     }
     for (const auto& oid : oids) {
-      if (forcefull) {
+      if (force_full) {
           ret = detail::remove(io_ctx, oid, (CEPH_OSD_FLAG_FULL_FORCE |
                                CEPH_OSD_FLAG_FULL_TRY), use_striper);
       } else {
