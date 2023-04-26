@@ -16,6 +16,10 @@
 
 #include <optional>
 #include <thread>
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
 #include "include/scope_guard.h"
 
 #include <spawn/spawn.hpp>

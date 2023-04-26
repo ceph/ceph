@@ -6,7 +6,13 @@
 #include <thread>
 #include <vector>
 
-#include <boost/asio.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/v6_only.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 

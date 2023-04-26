@@ -16,7 +16,8 @@
 
 #include "common/async/completion.h"
 
-#include <boost/asio.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/io_context.hpp>
 #include "rgw_dmclock_scheduler.h"
 #include "rgw_dmclock_scheduler_ctx.h"
 
