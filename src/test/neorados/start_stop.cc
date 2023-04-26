@@ -16,6 +16,8 @@
 #include <thread>
 #include <vector>
 
+#include <boost/asio/use_future.hpp>
+
 #include "include/neorados/RADOS.hpp"
 
 #include "common/async/context_pool.h"

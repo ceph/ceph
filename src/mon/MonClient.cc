@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <iterator>
 #include <random>
+
+#include <boost/asio/post.hpp>
 #include <boost/range/adaptor/map.hpp>
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/algorithm/copy.hpp>
