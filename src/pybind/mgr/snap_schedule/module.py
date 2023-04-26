@@ -82,6 +82,8 @@ class Module(MgrModule):
             ret_scheds = self.client.get_snap_schedules(fs, path)
         except CephfsConnectionException as e:
             return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         if format == 'json':
             json_report = ','.join([ret_sched.report_json() for ret_sched in ret_scheds])
             return 0, f'[{json_report}]', ''
@@ -103,6 +105,8 @@ class Module(MgrModule):
             self.log.debug(f'recursive is {recursive}')
         except CephfsConnectionException as e:
             return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         if not scheds:
             if format == 'json':
                 output: Dict[str, str] = {}
@@ -146,6 +150,8 @@ class Module(MgrModule):
             return -errno.ENOENT, '', str(e)
         except CephfsConnectionException as e:
             return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         return 0, suc_msg, ''
 
     @CLIWriteCommand('fs snap-schedule remove')
@@ -167,6 +173,8 @@ class Module(MgrModule):
             return -errno.ENOENT, '', str(e)
         except CephfsConnectionException as e:
             return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         return 0, 'Schedule removed for path {}'.format(path), ''
 
     @CLIWriteCommand('fs snap-schedule retention add')
@@ -190,6 +198,8 @@ class Module(MgrModule):
             return -errno.ENOENT, '', str(e)
         except CephfsConnectionException as e:
             return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         return 0, 'Retention added to path {}'.format(path), ''
 
     @CLIWriteCommand('fs snap-schedule retention remove')
@@ -209,10 +219,12 @@ class Module(MgrModule):
             self.client.rm_retention_spec(fs, abs_path,
                                           retention_spec_or_period,
                                           retention_count)
-        except CephfsConnectionException as e:
-            return e.to_tuple()
         except ValueError as e:
             return -errno.ENOENT, '', str(e)
+        except CephfsConnectionException as e:
+            return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         return 0, 'Retention removed from path {}'.format(path), ''
 
     @CLIWriteCommand('fs snap-schedule activate')
@@ -234,6 +246,8 @@ class Module(MgrModule):
             return -errno.ENOENT, '', str(e)
         except CephfsConnectionException as e:
             return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         return 0, 'Schedule activated for path {}'.format(path), ''
 
     @CLIWriteCommand('fs snap-schedule deactivate')
@@ -255,4 +269,6 @@ class Module(MgrModule):
             return -errno.ENOENT, '', str(e)
         except CephfsConnectionException as e:
             return e.to_tuple()
+        except Exception as e:
+            return -errno.EIO, '', str(e)
         return 0, 'Schedule deactivated for path {}'.format(path), ''
