@@ -295,7 +295,7 @@ public:
   ~RGWDataChangesLog();
 
   int start(const DoutPrefixProvider *dpp, const RGWZone* _zone, const RGWZoneParams& zoneparams,
-	    librados::Rados* lr);
+	    rgw::sal::RadosStore* store);
   int choose_oid(const rgw_bucket_shard& bs);
   int add_entry(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
 		const rgw::bucket_log_layout_generation& gen, int shard_id,
