@@ -61,7 +61,7 @@ def forall_hosts(f: Callable[..., T]) -> Callable[..., List[T]]:
     def forall_hosts_wrapper(*args: Any) -> List[T]:
         from cephadm.module import CephadmOrchestrator
 
-        # Some weired logic to make calling functions with multiple arguments work.
+        # Some weird logic to make calling functions with multiple arguments work.
         if len(args) == 1:
             vals = args[0]
             self = None
