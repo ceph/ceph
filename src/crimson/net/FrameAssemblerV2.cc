@@ -53,7 +53,12 @@ void FrameAssemblerV2::intercept_frame(Tag tag, bool is_write)
     auto action = conn.interceptor->intercept(
         conn.get_local_shared_foreign_from_this(),
         Breakpoint{tag, type});
-    socket->set_trap(type, action, &conn.interceptor->blocker);
+    // tolerate leaking future in tests
+    std::ignore = seastar::smp::submit_to(
+        socket->get_shard_id(),
+        [this, type, action] {
+      socket->set_trap(type, action, &conn.interceptor->blocker);
+    });
   }
 }
 #endif
@@ -165,6 +170,7 @@ void FrameAssemblerV2::learn_socket_ephemeral_port_as_connector(uint16_t port)
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
+  // Note: may not invoke on the socket core
   socket->learn_ephemeral_port_as_connector(port);
 }
 
@@ -219,74 +225,130 @@ seastar::future<> FrameAssemblerV2::close_shutdown_socket()
   });
 }
 
+template <bool may_cross_core>
 seastar::future<ceph::bufferptr>
 FrameAssemblerV2::read_exactly(std::size_t bytes)
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  if (unlikely(record_io)) {
-    return socket->read_exactly(bytes
-    ).then([this](auto bptr) {
-      rxbuf.append(bptr);
+  if constexpr (may_cross_core) {
+    assert(conn.get_messenger_shard_id() == sid);
+    return seastar::smp::submit_to(
+        socket->get_shard_id(), [this, bytes] {
+      return socket->read_exactly(bytes);
+    }).then([this](auto bptr) {
+      if (record_io) {
+        rxbuf.append(bptr);
+      }
       return bptr;
     });
   } else {
+    assert(socket->get_shard_id() == sid);
     return socket->read_exactly(bytes);
-  };
+  }
 }
+template seastar::future<ceph::bufferptr> FrameAssemblerV2::read_exactly<true>(std::size_t);
+template seastar::future<ceph::bufferptr> FrameAssemblerV2::read_exactly<false>(std::size_t);
 
+template <bool may_cross_core>
 seastar::future<ceph::bufferlist>
 FrameAssemblerV2::read(std::size_t bytes)
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  if (unlikely(record_io)) {
-    return socket->read(bytes
-    ).then([this](auto buf) {
-      rxbuf.append(buf);
+  if constexpr (may_cross_core) {
+    assert(conn.get_messenger_shard_id() == sid);
+    return seastar::smp::submit_to(
+        socket->get_shard_id(), [this, bytes] {
+      return socket->read(bytes);
+    }).then([this](auto buf) {
+      if (record_io) {
+        rxbuf.append(buf);
+      }
       return buf;
     });
   } else {
+    assert(socket->get_shard_id() == sid);
     return socket->read(bytes);
   }
 }
+template seastar::future<ceph::bufferlist> FrameAssemblerV2::read<true>(std::size_t);
+template seastar::future<ceph::bufferlist> FrameAssemblerV2::read<false>(std::size_t);
 
+template <bool may_cross_core>
 seastar::future<>
 FrameAssemblerV2::write(ceph::bufferlist buf)
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  if (unlikely(record_io)) {
-    txbuf.append(buf);
+  if constexpr (may_cross_core) {
+    assert(conn.get_messenger_shard_id() == sid);
+    if (record_io) {
+      txbuf.append(buf);
+    }
+    return seastar::smp::submit_to(
+        socket->get_shard_id(), [this, buf = std::move(buf)]() mutable {
+      return socket->write(std::move(buf));
+    });
+  } else {
+    assert(socket->get_shard_id() == sid);
+    return socket->write(std::move(buf));
   }
-  return socket->write(std::move(buf));
 }
+template seastar::future<> FrameAssemblerV2::write<true>(ceph::bufferlist);
+template seastar::future<> FrameAssemblerV2::write<false>(ceph::bufferlist);
 
+template <bool may_cross_core>
 seastar::future<>
 FrameAssemblerV2::flush()
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  return socket->flush();
+  if constexpr (may_cross_core) {
+    assert(conn.get_messenger_shard_id() == sid);
+    return seastar::smp::submit_to(
+        socket->get_shard_id(), [this] {
+      return socket->flush();
+    });
+  } else {
+    assert(socket->get_shard_id() == sid);
+    return socket->flush();
+  }
 }
+template seastar::future<> FrameAssemblerV2::flush<true>();
+template seastar::future<> FrameAssemblerV2::flush<false>();
 
+template <bool may_cross_core>
 seastar::future<>
 FrameAssemblerV2::write_flush(ceph::bufferlist buf)
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  if (unlikely(record_io)) {
-    txbuf.append(buf);
+  if constexpr (may_cross_core) {
+    assert(conn.get_messenger_shard_id() == sid);
+    if (unlikely(record_io)) {
+      txbuf.append(buf);
+    }
+    return seastar::smp::submit_to(
+        socket->get_shard_id(), [this, buf = std::move(buf)]() mutable {
+      return socket->write_flush(std::move(buf));
+    });
+  } else {
+    assert(socket->get_shard_id() == sid);
+    return socket->write_flush(std::move(buf));
   }
-  return socket->write_flush(std::move(buf));
 }
+template seastar::future<> FrameAssemblerV2::write_flush<true>(ceph::bufferlist);
+template seastar::future<> FrameAssemblerV2::write_flush<false>(ceph::bufferlist);
 
+template <bool may_cross_core>
 seastar::future<FrameAssemblerV2::read_main_t>
 FrameAssemblerV2::read_main_preamble()
 {
   assert(seastar::this_shard_id() == sid);
   rx_preamble.clear();
-  return read_exactly(rx_frame_asm.get_preamble_onwire_len()
+  return read_exactly<may_cross_core>(
+    rx_frame_asm.get_preamble_onwire_len()
   ).then([this](auto bptr) {
     try {
       rx_preamble.append(std::move(bptr));
@@ -301,7 +363,10 @@ FrameAssemblerV2::read_main_preamble()
     }
   });
 }
+template seastar::future<FrameAssemblerV2::read_main_t> FrameAssemblerV2::read_main_preamble<true>();
+template seastar::future<FrameAssemblerV2::read_main_t> FrameAssemblerV2::read_main_preamble<false>();
 
+template <bool may_cross_core>
 seastar::future<FrameAssemblerV2::read_payload_t*>
 FrameAssemblerV2::read_frame_payload()
 {
@@ -321,7 +386,7 @@ FrameAssemblerV2::read_frame_payload()
       }
       uint32_t onwire_len = rx_frame_asm.get_segment_onwire_len(seg_idx);
       // TODO: create aligned and contiguous buffer from socket
-      return read_exactly(onwire_len
+      return read_exactly<may_cross_core>(onwire_len
       ).then([this](auto bptr) {
         logger().trace("{} RECV({}) frame segment[{}]",
                        conn, bptr.length(), rx_segments_data.size());
@@ -331,7 +396,7 @@ FrameAssemblerV2::read_frame_payload()
       });
     }
   ).then([this] {
-    return read_exactly(rx_frame_asm.get_epilogue_onwire_len());
+    return read_exactly<may_cross_core>(rx_frame_asm.get_epilogue_onwire_len());
   }).then([this](auto bptr) {
     logger().trace("{} RECV({}) frame epilogue", conn, bptr.length());
     bool ok = false;
@@ -355,6 +420,8 @@ FrameAssemblerV2::read_frame_payload()
     return &rx_segments_data;
   });
 }
+template seastar::future<FrameAssemblerV2::read_payload_t*> FrameAssemblerV2::read_frame_payload<true>();
+template seastar::future<FrameAssemblerV2::read_payload_t*> FrameAssemblerV2::read_frame_payload<false>();
 
 void FrameAssemblerV2::log_main_preamble(const ceph::bufferlist &bl)
 {
