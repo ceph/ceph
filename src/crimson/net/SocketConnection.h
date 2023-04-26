@@ -134,7 +134,7 @@ class SocketConnection : public Connection {
 
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
-  void start_accept(SocketRef&& socket,
+  void start_accept(SocketFRef&& socket,
                     const entity_addr_t& peer_addr);
 
   seastar::future<> close_clean_yielded();

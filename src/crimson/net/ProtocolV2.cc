@@ -172,7 +172,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   execute_connecting();
 }
 
-void ProtocolV2::start_accept(SocketRef&& new_socket,
+void ProtocolV2::start_accept(SocketFRef&& new_socket,
                               const entity_addr_t& _peer_addr)
 {
   ceph_assert(state == state_t::NONE);
@@ -813,15 +813,16 @@ void ProtocolV2::execute_connecting()
             abort_protocol();
           }
           return Socket::connect(conn.peer_addr);
-        }).then([this](SocketRef new_socket) {
+        }).then([this](SocketRef _new_socket) {
           logger().debug("{} socket connected", conn);
           if (unlikely(state != state_t::CONNECTING)) {
             logger().debug("{} triggered {} during Socket::connect()",
                            conn, get_state_name(state));
-            return new_socket->close().then([sock=std::move(new_socket)] {
+            return _new_socket->close().then([sock=std::move(_new_socket)] {
               abort_protocol();
             });
           }
+          SocketFRef new_socket = seastar::make_foreign(std::move(_new_socket));
           if (!has_socket) {
             frame_assembler->set_socket(std::move(new_socket));
             has_socket = true;

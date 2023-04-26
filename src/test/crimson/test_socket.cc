@@ -165,7 +165,7 @@ class SocketFactory {
   ShardedServerSocket *pss = nullptr;
 
   seastar::shard_id server_socket_CPU;
-  SocketRef server_socket;
+  SocketFRef server_socket;
 
  public:
   template <typename FuncC, typename FuncS>
@@ -198,13 +198,14 @@ class SocketFactory {
           });
         }),
         seastar::smp::submit_to(SERVER_CPU, [psf] {
-          return psf->pss->accept([psf](auto socket, auto paddr) {
+          return psf->pss->accept([psf](auto _socket, auto paddr) {
             logger().info("dispatch_sockets(): accepted at shard {}",
                           seastar::this_shard_id());
             psf->server_socket_CPU = seastar::this_shard_id();
             if (psf->pss->is_fixed()) {
               ceph_assert_always(SERVER_CPU == seastar::this_shard_id());
             }
+            SocketFRef socket = seastar::make_foreign(std::move(_socket));
             psf->server_socket = std::move(socket);
             return seastar::smp::submit_to(CLIENT_CPU, [psf] {
               psf->server_connected.set_value();

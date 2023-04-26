@@ -41,7 +41,7 @@ public:
   void start_connect(const entity_addr_t& peer_addr,
                      const entity_name_t& peer_name);
 
-  void start_accept(SocketRef&& socket,
+  void start_accept(SocketFRef&& socket,
                     const entity_addr_t& peer_addr);
 
   seastar::future<> close_clean_yielded();
