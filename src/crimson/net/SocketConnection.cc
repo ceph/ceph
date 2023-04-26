@@ -68,8 +68,9 @@ bool SocketConnection::peer_wins() const
   return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
-seastar::future<> SocketConnection::send(MessageURef msg)
+seastar::future<> SocketConnection::send(MessageURef _msg)
 {
+  MessageFRef msg = seastar::make_foreign(std::move(_msg));
   return seastar::smp::submit_to(
     io_handler->get_shard_id(),
     [this, msg=std::move(msg)]() mutable {
