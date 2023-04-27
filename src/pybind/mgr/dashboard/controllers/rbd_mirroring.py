@@ -614,7 +614,7 @@ class RbdMirroringStatus(BaseController):
         # using dashboard.
         if not orch_status['available']:
             return status
-        if not CephService.get_service_list('rbd-mirror') or not CephService.get_pool_list('rbd'):
+        if not CephService.get_service_list('rbd-mirror') and not CephService.get_pool_list('rbd'):
             status['available'] = False
             status['message'] = 'RBD mirroring is not configured'  # type: ignore
         return status
