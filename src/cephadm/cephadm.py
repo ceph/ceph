@@ -4833,15 +4833,23 @@ def command_agent(ctx: CephadmContext) -> None:
 
 ##################################
 
-
-@infer_image
 def command_version(ctx):
     # type: (CephadmContext) -> int
-    c = CephContainer(ctx, ctx.image, 'ceph', ['--version'])
-    out, err, ret = call(ctx, c.run_cmd(), desc=c.entrypoint)
-    if not ret:
-        print(out.strip())
-    return ret
+    import importlib
+
+    try:
+        vmod = importlib.import_module('_version')
+    except ImportError:
+        print('cephadm version UNKNOWN')
+        return 1
+    _unset = '<UNSET>'
+    print('cephadm version {0} ({1}) {2} ({3})'.format(
+        getattr(vmod, 'CEPH_GIT_NICE_VER', _unset),
+        getattr(vmod, 'CEPH_GIT_VER', _unset),
+        getattr(vmod, 'CEPH_RELEASE_NAME', _unset),
+        getattr(vmod, 'CEPH_RELEASE_TYPE', _unset),
+    ))
+    return 0
 
 ##################################
 
@@ -9387,7 +9395,7 @@ def _get_parser():
     subparsers = parser.add_subparsers(help='sub-command')
 
     parser_version = subparsers.add_parser(
-        'version', help='get ceph version from container')
+        'version', help='get cephadm version')
     parser_version.set_defaults(func=command_version)
 
     parser_pull = subparsers.add_parser(
