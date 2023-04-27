@@ -384,7 +384,7 @@ class Heartbeat::Session {
   // last time we got a ping reply on the back side
   clock::time_point last_rx_back;
   // most recent epoch we wanted this peer
-  epoch_t epoch;
+  epoch_t epoch; // rename me to epoch_added
 
   struct reply_t {
     clock::time_point deadline;
