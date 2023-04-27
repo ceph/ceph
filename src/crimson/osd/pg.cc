@@ -453,9 +453,10 @@ void PG::on_active_actmap()
 {
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+  // loops until snap_trimq is empty or SNAPTRIM_ERROR.
   std::ignore = seastar::do_until(
     [this] { return snap_trimq.empty()
-                    && !peering_state.state_test(PG_STATE_SNAPTRIM_ERROR);
+                    || peering_state.state_test(PG_STATE_SNAPTRIM_ERROR);
     },
     [this] {
       peering_state.state_set(PG_STATE_SNAPTRIM);
@@ -488,7 +489,10 @@ void PG::on_active_actmap()
         logger().debug("{}: trimmed snap={}", *this, trimmed);
       });
     }).finally([this] {
+      logger().debug("{}: PG::on_active_actmap() finished trimming",
+                     *this);
       peering_state.state_clear(PG_STATE_SNAPTRIM);
+      peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
       publish_stats_to_osd();
     });
 }
