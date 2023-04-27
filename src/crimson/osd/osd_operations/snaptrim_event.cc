@@ -431,7 +431,7 @@ SnapTrimObjSubEvent::remove_or_update(
     }
   }
 
-  return seastar::do_with(ceph::os::Transaction{}, [=, this](auto&& txn) {
+  return seastar::do_with(ceph::os::Transaction{}, [=, this](auto &txn) {
   std::vector<pg_log_entry_t> log_entries{};
 
   int64_t num_objects_before_trim = delta_stats.num_objects;
@@ -467,7 +467,7 @@ SnapTrimObjSubEvent::remove_or_update(
       //add_objects_trimmed_count(num_objects_trimmed);
     }
   }).safe_then_interruptible(
-    [txn=std::move(txn), log_entries=std::move(log_entries)] () mutable {
+    [&txn, log_entries=std::move(log_entries)] () mutable {
     return remove_or_update_iertr::make_ready_future<remove_or_update_ret_t>(
       std::make_pair(std::move(txn), std::move(log_entries)));
   });
