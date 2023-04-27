@@ -464,6 +464,8 @@ To save the output of ``ceph auth get`` to a file, use the ``-o {filename}`` opt
 
 The ``auth export`` command is identical to ``auth get``.
 
+.. _rados_ops_adding_a_user:
+
 Adding a User
 -------------
 
@@ -598,38 +600,41 @@ Keyring Management
 ==================
 
 When you access Ceph via a Ceph client, the Ceph client will look for a local
-keyring. Ceph presets the ``keyring`` setting with the following four keyring
-names by default so you don't have to set them in your Ceph configuration file
-unless you want to override the defaults (not recommended):
+keyring. Ceph presets the ``keyring`` setting with four keyring
+names by default. For this reason, you do not have to set the keyring names in your Ceph configuration file
+unless you want to override these defaults (which is not recommended). The four default keyring names are as follows:
 
 - ``/etc/ceph/$cluster.$name.keyring``
 - ``/etc/ceph/$cluster.keyring``
 - ``/etc/ceph/keyring``
 - ``/etc/ceph/keyring.bin``
 
-The ``$cluster`` metavariable is your Ceph cluster name as defined by the
-name of the Ceph configuration file (i.e., ``ceph.conf`` means the cluster name
-is ``ceph``; thus, ``ceph.keyring``). The ``$name`` metavariable is the user
-type and user ID (e.g., ``client.admin``; thus, ``ceph.client.admin.keyring``).
+The ``$cluster`` metavariable found in the first two default keyring names above
+is your Ceph cluster name as defined by the name of the Ceph configuration
+file: for example, if the Ceph configuration file is named ``ceph.conf``,
+then your Ceph cluster name is ``ceph`` and the second name above would be
+``ceph.keyring``. The ``$name`` metavariable is the user type and user ID:
+for example, given the user ``client.admin``, the first name above would be
+``ceph.client.admin.keyring``.
 
-.. note:: When executing commands that read or write to ``/etc/ceph``, you may
-   need to use ``sudo`` to execute the command as ``root``.
+.. note:: When running commands that read or write to ``/etc/ceph``, you might
+   need to use ``sudo`` to run the command as ``root``.
 
-After you create a user (e.g., ``client.ringo``), you must get the key and add
+After you create a user (for example, ``client.ringo``), you must get the key and add
 it to a keyring on a Ceph client so that the user can access the Ceph Storage
 Cluster.
 
-The `User Management`_ section details how to list, get, add, modify and delete
-users directly in the Ceph Storage Cluster. However, Ceph also provides the
+The `User Management`_ section details how to list, get, add, modify, and delete
+users directly in the Ceph Storage Cluster. In addition, Ceph provides the
 ``ceph-authtool`` utility to allow you to manage keyrings from a Ceph client.
 
-Create a Keyring
-----------------
+Creating a Keyring
+------------------
 
 When you use the procedures in the `Managing Users`_ section to create users,
-you need to provide user keys to the Ceph client(s) so that the Ceph client
-can retrieve the key for the specified user and authenticate with the Ceph
-Storage Cluster. Ceph Clients access keyrings to lookup a user name and
+you must provide user keys to the Ceph client(s). This is required so that the Ceph client(s)
+can retrieve the key for the specified user and authenticate that user against the Ceph
+Storage Cluster. Ceph clients access keyrings in order to look up a user name and
 retrieve the user's key.
 
 The ``ceph-authtool`` utility allows you to create a keyring. To create an
@@ -640,45 +645,44 @@ empty keyring, use ``--create-keyring`` or ``-C``. For example:
    ceph-authtool --create-keyring /path/to/keyring
 
 When creating a keyring with multiple users, we recommend using the cluster name
-(e.g., ``$cluster.keyring``) for the keyring filename and saving it in the
-``/etc/ceph`` directory so that the ``keyring`` configuration default setting
-will pick up the filename without requiring you to specify it in the local copy
-of your Ceph configuration file. For example, create ``ceph.keyring`` by
-executing the following:
+(of the form ``$cluster.keyring``) for the keyring filename and saving the keyring in the
+``/etc/ceph`` directory. By doing this, you ensure that the ``keyring`` configuration default setting
+will pick up the filename without requiring you to specify the filename in the local copy
+of your Ceph configuration file. For example, you can create ``ceph.keyring`` by
+running the following command:
 
 .. prompt:: bash $
 
    sudo ceph-authtool -C /etc/ceph/ceph.keyring
 
 When creating a keyring with a single user, we recommend using the cluster name,
-the user type and the user name and saving it in the ``/etc/ceph`` directory.
-For example, ``ceph.client.admin.keyring`` for the ``client.admin`` user.
+the user type, and the user name, and saving the keyring in the ``/etc/ceph`` directory.
+For example, we recommend that the ``client.admin`` user use ``ceph.client.admin.keyring``.
 
 To create a keyring in ``/etc/ceph``, you must do so as ``root``. This means
-the file will have ``rw`` permissions for the ``root`` user only, which is
+that the file will have ``rw`` permissions for the ``root`` user only, which is
 appropriate when the keyring contains administrator keys. However, if you
-intend to use the keyring for a particular user or group of users, ensure
-that you execute ``chown`` or ``chmod`` to establish appropriate keyring
+intend to use the keyring for a particular user or group of users, be sure to use ``chown`` or ``chmod`` to establish appropriate keyring
 ownership and access.
 
-Add a User to a Keyring
------------------------
+Adding a User to a Keyring
+--------------------------
 
-When you add a user to the Ceph Storage Cluster, you can use the Get a
-User procedure to retrieve a user, key and capabilities and save the user to a
-keyring.
+When you :ref:`Add a user<rados_ops_adding_a_user>` to the Ceph Storage
+Cluster, you can use the `Getting a User`_ procedure to retrieve a user, key,
+and capabilities and then save the user to a keyring.
 
-When you only want to use one user per keyring, the Get a User procedure with
+If you want to use only one user per keyring, the `Getting a User`_ procedure with
 the ``-o`` option will save the output in the keyring file format. For example,
-to create a keyring for the ``client.admin`` user, execute the following:
+to create a keyring for the ``client.admin`` user, run the following command:
 
 .. prompt:: bash $
 
    sudo ceph auth get client.admin -o /etc/ceph/ceph.client.admin.keyring
 
-Notice that we use the recommended file format for an individual user.
+Notice that the file format in this command is the file format conventionally used when manipulating the keyrings of individual users.
 
-When you want to import users to a keyring, you can use ``ceph-authtool``
+If you want to import users to a keyring, you can use ``ceph-authtool``
 to specify the destination keyring and the source keyring.
 For example:
 
@@ -686,19 +690,19 @@ For example:
 
    sudo ceph-authtool /etc/ceph/ceph.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
 
-Create a User
--------------
+Creating a User
+---------------
 
-Ceph provides the Add a User function to create a user directly in the Ceph
-Storage Cluster. However, you can also create a user, keys and capabilities
-directly on a Ceph client keyring. Then, you can import the user to the Ceph
+Ceph provides the `Adding a User`_ function to create a user directly in the Ceph
+Storage Cluster. However, you can also create a user, keys, and capabilities
+directly on a Ceph client keyring, and then import the user to the Ceph
 Storage Cluster. For example:
 
 .. prompt:: bash $
 
    sudo ceph-authtool -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx' /etc/ceph/ceph.keyring
 
-See `Authorization (Capabilities)`_ for additional details on capabilities.
+For additional details on capabilities, see `Authorization (Capabilities)`_.
 
 You can also create a keyring and add a new user to the keyring simultaneously.
 For example:
@@ -707,36 +711,37 @@ For example:
 
    sudo ceph-authtool -C /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx' --gen-key
 
-In the foregoing scenarios, the new user ``client.ringo`` is only in the
-keyring. To add the new user to the Ceph Storage Cluster, you must still add
-the new user to the Ceph Storage Cluster:
+In the above examples, the new user ``client.ringo`` has been added only to the
+keyring. The new user has not been added to the Ceph Storage Cluster.
+
+To add the new user ``client.ringo`` to the Ceph Storage Cluster, run the following command:
 
 .. prompt:: bash $
 
    sudo ceph auth add client.ringo -i /etc/ceph/ceph.keyring
 
-Modify a User
--------------
+Modifying a User
+----------------
 
-To modify the capabilities of a user record in a keyring, specify the keyring,
-and the user followed by the capabilities. For example:
+To modify the capabilities of a user record in a keyring, specify the keyring
+and the user, followed by the capabilities. For example:
 
 .. prompt:: bash $
 
    sudo ceph-authtool /etc/ceph/ceph.keyring -n client.ringo --cap osd 'allow rwx' --cap mon 'allow rwx'
 
-To update the user to the Ceph Storage Cluster, you must update the user
-in the keyring to the user entry in the Ceph Storage Cluster:
+To update the user in the Ceph Storage Cluster, you must update the user
+in the keyring to the user entry in the Ceph Storage Cluster. To do so, run the following command:
 
 .. prompt:: bash $
 
    sudo ceph auth import -i /etc/ceph/ceph.keyring
 
-See Import a User(s) for details on updating a Ceph Storage Cluster user
-from a keyring.
+For details on updating a Ceph Storage Cluster user from a
+keyring, see `Importing a User`_
 
-You may also Modify User Capabilities directly in the cluster, store the
-results to a keyring file; then, import the keyring into your main
+You may also :ref:`Modify user capabilities<modify-user-capabilities>` directly in the cluster, store the
+results to a keyring file, and then import the keyring into your main
 ``ceph.keyring`` file.
 
 Command Line Usage
@@ -746,12 +751,12 @@ Ceph supports the following usage for user name and secret:
 
 ``--id`` | ``--user``
 
-:Description: Ceph identifies users with a type and an ID (e.g., ``TYPE.ID`` or
-              ``client.admin``, ``client.user1``). The ``id``, ``name`` and
-              ``-n`` options enable you to specify the ID portion of the user
-              name (e.g., ``admin``, ``user1``, ``foo``, etc.). You can specify
+:Description: Ceph identifies users with a type and an ID: the form of this user identification is ``TYPE.ID``, and examples of the type and ID are
+              ``client.admin`` and ``client.user1``. The ``id``, ``name`` and
+              ``-n`` options allow you to specify the ID portion of the user
+              name (for example, ``admin``, ``user1``, ``foo``). You can specify
               the user with the ``--id`` and omit the type. For example,
-              to specify user ``client.foo`` enter the following:
+              to specify user ``client.foo``, run the following commands:
 
               .. prompt:: bash $
 
@@ -761,10 +766,10 @@ Ceph supports the following usage for user name and secret:
 
 ``--name`` | ``-n``
 
-:Description: Ceph identifies users with a type and an ID (e.g., ``TYPE.ID`` or
-              ``client.admin``, ``client.user1``). The ``--name`` and ``-n``
-              options enables you to specify the fully qualified user name.
-              You must specify the user type (typically ``client``) with the
+:Description: Ceph identifies users with a type and an ID: the form of this user identification is ``TYPE.ID``, and examples of the type and ID are
+              ``client.admin`` and ``client.user1``. The ``--name`` and ``-n``
+              options allow you to specify the fully qualified user name.
+              You are required to specify the user type (typically ``client``) with the
               user ID. For example:
 
               .. prompt:: bash $
@@ -775,8 +780,8 @@ Ceph supports the following usage for user name and secret:
 
 ``--keyring``
 
-:Description: The path to the keyring containing one or more user name and
-              secret. The ``--secret`` option provides the same functionality,
+:Description: The path to the keyring that contains one or more user names and
+              secrets. The ``--secret`` option provides the same functionality,
               but it does not work with Ceph RADOS Gateway, which uses
               ``--secret`` for another purpose. You may retrieve a keyring with
               ``ceph auth get-or-create`` and store it locally. This is a
@@ -793,43 +798,42 @@ Ceph supports the following usage for user name and secret:
 Limitations
 ===========
 
-The ``cephx`` protocol authenticates Ceph clients and servers to each other.  It
+The ``cephx`` protocol authenticates Ceph clients and servers to each other. It
 is not intended to handle authentication of human users or application programs
-run on their behalf.  If that effect is required to handle your access control
-needs, you must have another mechanism, which is likely to be specific to the
-front end used to access the Ceph object store.  This other mechanism has the
-role of ensuring that only acceptable users and programs are able to run on the
-machine that Ceph will permit to access its object store.
+that are run on their behalf. If your access control
+needs require that kind of authentication, you will need to have some other mechanism, which is likely to be specific to the
+front end that is used to access the Ceph object store. This other mechanism would ensure that only acceptable users and programs are able to run on the
+machine that Ceph permits to access its object store.
 
 The keys used to authenticate Ceph clients and servers are typically stored in
-a plain text file with appropriate permissions in a trusted host.
+a plain text file on a trusted host. Appropriate permissions must be set on the plain text file.
 
 .. important:: Storing keys in plaintext files has security shortcomings, but
    they are difficult to avoid, given the basic authentication methods Ceph
-   uses in the background. Those setting up Ceph systems should be aware of
+   uses in the background. Anyone setting up Ceph systems should be aware of
    these shortcomings.
 
-In particular, arbitrary user machines, especially portable machines, should not
+In particular, user machines, especially portable machines, should not
 be configured to interact directly with Ceph, since that mode of use would
 require the storage of a plaintext authentication key on an insecure machine.
-Anyone  who stole that machine or obtained surreptitious access to it could
-obtain the key that will allow them to authenticate their own machines to Ceph.
+Anyone who stole that machine or obtained access to it could
+obtain a key that allows them to authenticate their own machines to Ceph.
 
-Rather than permitting potentially insecure machines to access a Ceph object
-store directly,  users should be required to sign in to a trusted machine in
-your environment using a method  that provides sufficient security for your
-purposes.  That trusted machine will store the plaintext Ceph keys for the
-human users.  A future version of Ceph may address these particular
+Instead of permitting potentially insecure machines to access a Ceph object
+store directly, you should require users to sign in to a trusted machine in
+your environment, using a method that provides sufficient security for your
+purposes. That trusted machine will store the plaintext Ceph keys for the
+human users. A future version of Ceph might address these particular
 authentication issues more fully.
 
-At the moment, none of the Ceph authentication protocols provide secrecy for
-messages in transit. Thus, an eavesdropper on the wire can hear and understand
-all data sent between clients and servers in Ceph, even if it cannot create or
-alter them. Further, Ceph does not include options to encrypt user data in the
-object store. Users can hand-encrypt and store their own data in the Ceph
-object store, of course, but Ceph provides no features to perform object
-encryption itself. Those storing sensitive data in Ceph should consider
-encrypting their data before providing it  to the Ceph system.
+At present, none of the Ceph authentication protocols provide secrecy for
+messages in transit. As a result, an eavesdropper on the wire can hear and understand
+all data sent between clients and servers in Ceph, even if the eavesdropper cannot create or
+alter the data. Similarly, Ceph does not include options to encrypt user data in the
+object store. Users can, of course, hand-encrypt and store their own data in the Ceph
+object store, but Ceph itself provides no features to perform object
+encryption. Anyone storing sensitive data in Ceph should consider
+encrypting their data before providing it to the Ceph system.
 
 
 .. _Architecture - High Availability Authentication: ../../../architecture#high-availability-authentication
