@@ -388,8 +388,8 @@ void SnapTrimObjSubEvent::update_head(
   attrs[SS_ATTR] = std::move(bl);
 
   bl.clear();
-  encode(head_obc->obs.oi, bl,
-         pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+  head_obc->obs.oi.encode_no_oid(bl,
+    pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
   attrs[OI_ATTR] = std::move(bl);
   txn.setattrs(
     pg->get_collection_ref()->get_cid(),
