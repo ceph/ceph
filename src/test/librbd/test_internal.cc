@@ -1304,8 +1304,7 @@ TEST_F(TestInternal, TestCoR)
   std::string config_value;
   ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", config_value));
   if (config_value == "false") {
-    std::cout << "SKIPPING due to disabled rbd_copy_on_read" << std::endl;
-    return;
+    GTEST_SKIP() << "Skipping due to disabled copy-on-read";
   }
 
   m_image_name = get_temp_image_name();

@@ -724,8 +724,7 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, RemoveChildError) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(clone_name, &ictx));
   if (ictx->test_features(RBD_FEATURE_DEEP_FLATTEN)) {
-    std::cout << "SKIPPING" << std::endl;
-    return SUCCEED();
+    GTEST_SKIP() << "Skipping due to enabled deep-flatten";
   }
 
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));

@@ -8114,8 +8114,7 @@ TEST_F(TestLibRBD, LargeCacheRead)
   std::string config_value;
   ASSERT_EQ(0, _rados.conf_get("rbd_cache", config_value));
   if (config_value == "false") {
-    std::cout << "SKIPPING due to disabled cache" << std::endl;
-    return;
+    GTEST_SKIP() << "Skipping due to disabled cache";
   }
 
   rados_ioctx_t ioctx;

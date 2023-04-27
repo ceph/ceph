@@ -30,8 +30,7 @@ bool is_rbd_pwl_enabled(ceph::common::CephContext *ctx);
 
 #define REQUIRE(x) {			  \
   if (!(x)) {				  \
-    std::cout << "SKIPPING" << std::endl; \
-    return SUCCEED(); 			  \
+    GTEST_SKIP() << "Skipping due to unmet REQUIRE"; \
   } 					  \
 }
 
