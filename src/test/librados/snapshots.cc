@@ -131,6 +131,7 @@ TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char buf[bufsize];
   memset(buf, 0xcc, sizeof(buf));
+  // First write
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
 
   my_snaps.push_back(-2);
@@ -141,7 +142,9 @@ TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
   ::std::reverse(my_snaps.begin(), my_snaps.end());
   char buf2[sizeof(buf)];
   memset(buf2, 0xdd, sizeof(buf2));
+  // Second write
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  // Rollback to my_snaps[1] - Object is expeceted to conatin the first write
   rados_ioctx_selfmanaged_snap_rollback(ioctx, "foo", my_snaps[1]);
   char buf3[sizeof(buf)];
   ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
@@ -153,6 +156,51 @@ TEST_F(LibRadosSnapshotsSelfManaged, Rollback) {
   my_snaps.pop_back();
   ASSERT_EQ(0, rados_remove(ioctx, "foo"));
 }
+
+TEST_F(LibRadosSnapshotsSelfManaged, FutureSnapRollback) {
+  std::vector<uint64_t> my_snaps;
+  // Snapshot 1
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_set_write_ctx(ioctx, my_snaps[0],
+					&my_snaps[0], my_snaps.size()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  char buf[bufsize];
+  memset(buf, 0xcc, sizeof(buf));
+  // First write
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf, sizeof(buf), 0));
+
+  // Snapshot 2
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_set_write_ctx(ioctx, my_snaps[0],
+					&my_snaps[0], my_snaps.size()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  char buf2[sizeof(buf)];
+  memset(buf2, 0xdd, sizeof(buf2));
+  // Second write
+  ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
+  // Snapshot 3
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_create(ioctx, &my_snaps.back()));
+
+  // Rollback to the last snap id - Object is expected to conatin
+  // latest write (head object)
+  rados_ioctx_selfmanaged_snap_rollback(ioctx, "foo", my_snaps[2]);
+  char buf3[sizeof(buf)];
+  ASSERT_EQ((int)sizeof(buf3), rados_read(ioctx, "foo", buf3, sizeof(buf3), 0));
+  ASSERT_EQ(0, memcmp(buf3, buf2, sizeof(buf)));
+
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back()));
+  my_snaps.pop_back();
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_remove(ioctx, my_snaps.back()));
+  my_snaps.pop_back();
+  ASSERT_EQ(0, rados_remove(ioctx, "foo"));
+}
+
+
 
 // EC testing
 TEST_F(LibRadosSnapshotsEC, SnapList) {
