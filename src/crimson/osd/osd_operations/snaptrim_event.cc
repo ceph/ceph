@@ -365,7 +365,6 @@ void SnapTrimObjSubEvent::update_head(
   std::vector<pg_log_entry_t>& log_entries
 ) {
   const auto head_oid = coid.get_head();
-  head_obc->ssc->snapset.snaps.clear();
   logger().info("{}: writing updated snapset on {}, snapset is {}",
                 *this, head_oid, head_obc->ssc->snapset);
   log_entries.emplace_back(
