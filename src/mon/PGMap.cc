@@ -905,7 +905,7 @@ void PGMapDigest::dump_object_stat_sum(
   auto stored_omap_normalized = pool_stat.get_user_omap_bytes(
     raw_used_rate, per_pool_omap);
   auto stored_normalized = stored_data_normalized + stored_omap_normalized;
-  // same, amplied by replication or EC
+  // same, amplified by replication or EC
   auto stored_raw = stored_normalized * raw_used_rate;
   if (f) {
     f->dump_int("stored", stored_normalized);
