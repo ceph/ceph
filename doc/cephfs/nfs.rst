@@ -61,7 +61,7 @@ in the sample conf. There are options to do the following:
    Under certain conditions, NFS access using the CephFS FSAL fails. This
    causes an error to be thrown that reads "Input/output error". Under these
    circumstances, the application metadata must be set for the CephFS metadata
-   and CephFS data pools. Do this by running the following command:
+   and data pools. Do this by running the following command:
 
    .. prompt:: bash $
 
