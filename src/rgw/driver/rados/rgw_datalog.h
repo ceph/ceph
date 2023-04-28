@@ -186,9 +186,6 @@ public:
 		   std::string_view marker, optional_yield y);
   void trim_entries(const DoutPrefixProvider *dpp, int shard_id, std::string_view marker,
 		    librados::AioCompletion* c);
-  void set_zero(RGWDataChangesBE* be) {
-    emplace(0, be);
-  }
 
   bs::error_code handle_init(entries_t e) noexcept override;
   bs::error_code handle_new_gens(entries_t e) noexcept override;
