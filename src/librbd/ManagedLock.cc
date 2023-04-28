@@ -122,7 +122,7 @@ bool ManagedLock<I>::is_lock_owner(ceph::mutex &lock) const {
     break;
   }
 
-  ldout(m_cct, 20) << "=" << lock_owner << dendl;
+  ldout(m_cct, 20) << lock_owner << dendl;
   return lock_owner;
 }
 
