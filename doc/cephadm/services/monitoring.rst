@@ -197,12 +197,26 @@ configuration files for monitoring services.
 
 Internally, cephadm already uses `Jinja2
 <https://jinja.palletsprojects.com/en/2.11.x/>`_ templates to generate the
-configuration files for all monitoring components. To be able to customize the
-configuration of Prometheus, Grafana or the Alertmanager it is possible to store
-a Jinja2 template for each service that will be used for configuration
-generation instead. This template will be evaluated every time a service of that
-kind is deployed or reconfigured. That way, the custom configuration is
-preserved and automatically applied on future deployments of these services.
+configuration files for all monitoring components. Starting from version 17.2.3,
+cephadm supports Prometheus http service discovery, and uses this endpoint for the
+definition and management of the embedded Prometheus service. The endpoint listens on
+``https://<mgr-ip>:8765/sd/`` (the port is
+configurable through the variable ``service_discovery_port``) and returns scrape target
+information in `http_sd_config format
+<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config/>`_
+
+Customers with external monitoring stack can use `ceph-mgr` service discovery endpoint
+to get scraping configuration. Root certificate of the server can be obtained by the
+following command:
+
+   .. prompt:: bash #
+
+     ceph orch sd dump cert
+
+The configuration of Prometheus, Grafana, or Alertmanager may be customized by storing
+a Jinja2 template for each service. This template will be evaluated every time a service
+of that kind is deployed or reconfigured. That way, the custom configuration is preserved
+and automatically applied on future deployments of these services.
 
 .. note::
 
@@ -291,6 +305,21 @@ cluster.
 
   By default, ceph-mgr presents prometheus metrics on port 9283 on each host
   running a ceph-mgr daemon.  Configure prometheus to scrape these.
+
+To make this integration easier, cephadm provides a service discovery endpoint at
+``https://<mgr-ip>:8765/sd/``. This endpoint can be used by an external
+Prometheus server to retrieve target information for a specific service. Information returned
+by this endpoint uses the format specified by the Prometheus `http_sd_config option
+<https://prometheus.io/docs/prometheus/latest/configuration/configuration/#http_sd_config/>`_
+
+Here's an example prometheus job definition that uses the cephadm service discovery endpoint
+
+  .. code-block:: bash
+
+     - job_name: 'ceph-exporter'  
+       http_sd_configs:  
+       - url: http://<mgr-ip>:8765/sd/prometheus/sd-config?service=ceph-exporter
+
 
 * To enable the dashboard's prometheus-based alerting, see :ref:`dashboard-alerting`.
 
