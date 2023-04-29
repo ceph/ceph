@@ -60,92 +60,103 @@ to avoid with standard CRUSH rules.
 
 Stretch Mode
 ============
-The new stretch mode is designed to handle the 2-site case. Three sites are
-just as susceptible to netsplit issues, but are much more tolerant of
-component availability outages than 2-site clusters are.
+Stretch mode is designed to handle deployments in which you cannot guarantee the
+replication of data across two data centers. This kind of situation can arise
+when the cluster's CRUSH rule specifies that three copies are to be made, but 
+then a copy is placed in each data center with a ``min_size`` of 2. Under such
+conditions, a placement group can become active with two copies in the first
+data center and no copies in the second data center. 
 
-To enter stretch mode, you must set the location of each monitor, matching
-your CRUSH map. For instance, to place ``mon.a`` in your first data center:
 
-.. prompt:: bash $
+Entering Stretch Mode
+---------------------
 
-   ceph mon set_location a datacenter=site1
+To enable stretch mode, you must set the location of each monitor, matching
+your CRUSH map. This procedure shows how to do this.
 
-Next, generate a CRUSH rule which will place 2 copies in each data center. This
-will require editing the CRUSH map directly:
 
-.. prompt:: bash $
+#. Place ``mon.a`` in your first data center:
 
-   ceph osd getcrushmap > crush.map.bin
-   crushtool -d crush.map.bin -o crush.map.txt
+   .. prompt:: bash $
 
-Now edit the ``crush.map.txt`` file to add a new rule. Here
-there is only one other rule, so this is ID 1, but you may need
-to use a different rule ID. We also have two datacenter buckets
-named ``site1`` and ``site2``::
+      ceph mon set_location a datacenter=site1
 
-  rule stretch_rule {
-          id 1
-          type replicated
-          min_size 1
-          max_size 10
-          step take site1
-          step chooseleaf firstn 2 type host
-          step emit
-          step take site2
-          step chooseleaf firstn 2 type host
-          step emit
-  }
+#. Generate a CRUSH rule that places two copies in each data center.
+   This requires editing the CRUSH map directly:
 
-Finally, inject the CRUSH map to make the rule available to the cluster:
+   .. prompt:: bash $
 
-.. prompt:: bash $
+      ceph osd getcrushmap > crush.map.bin
+      crushtool -d crush.map.bin -o crush.map.txt
 
-   crushtool -c crush.map.txt -o crush2.map.bin
-   ceph osd setcrushmap -i crush2.map.bin
+#. Edit the ``crush.map.txt`` file to add a new rule. Here there is only one
+   other rule (``id 1``), but you might need to use a different rule ID. We
+   have two data-center buckets named ``site1`` and ``site2``:
 
-If you aren't already running your monitors in connectivity mode, do so with
-the instructions in `Changing Monitor Elections`_.
+   ::
+
+      rule stretch_rule {
+             id 1
+             min_size 1
+             max_size 10
+             type replicated
+             step take site1
+             step chooseleaf firstn 2 type host
+             step emit
+             step take site2
+             step chooseleaf firstn 2 type host
+             step emit
+     }
+
+#. Inject the CRUSH map to make the rule available to the cluster:
+
+   .. prompt:: bash $
+
+      crushtool -c crush.map.txt -o crush2.map.bin
+      ceph osd setcrushmap -i crush2.map.bin
+
+#. Run the monitors in connectivity mode. See `Changing Monitor Elections`_.
+
+#. Command the cluster to enter stretch mode. In this example, ``mon.e`` is the
+   tiebreaker monitor and we are splitting across data centers. The tiebreaker
+   monitor must be assigned a data center that is neither ``site1`` nor
+   ``site2``. For this purpose you can create another data-center bucket named
+   ``site3`` in your CRUSH and place ``mon.e`` there:
+
+   .. prompt:: bash $
+
+      ceph mon set_location e datacenter=site3
+      ceph mon enable_stretch_mode e stretch_rule datacenter
+
+When stretch mode is enabled, PGs will become active only when they peer
+across data centers (or across whichever CRUSH bucket type was specified),
+assuming both are alive. Pools will increase in size from the default ``3`` to
+``4``, and two copies will be expected in each site. OSDs will be allowed to
+connect to monitors only if they are in the same data center as the monitors.
+New monitors will not be allowed to join the cluster if they do not specify a
+location.
+
+If all OSDs and monitors in one of the data centers become inaccessible at once,
+the surviving data center enters a "degraded stretch mode". A warning will be
+issued, the ``min_size`` will be reduced to ``1``, and the cluster will be
+allowed to go active with the data in the single remaining site. The pool size
+does not change, so warnings will be generated that report that the pools are
+too small -- but a special stretch mode flag will prevent the OSDs from
+creating extra copies in the remaining data center. This means that the data
+center will keep only two copies, just as before.
+
+When the missing data center comes back, the cluster will enter a "recovery
+stretch mode". This changes the warning and allows peering, but requires OSDs
+only from the data center that was ``up`` throughout the duration of the
+downtime. When all PGs are in a known state, and are neither degraded nor
+incomplete, the cluster transitions back to regular stretch mode, ends the
+warning, restores ``min_size`` to its original value (``2``), requires both
+sites to peer, and no longer requires the site that was up throughout the
+duration of the downtime when peering (which makes failover to the other site
+possible, if needed).
 
 .. _Changing Monitor elections: ../change-mon-elections
 
-And lastly, tell the cluster to enter stretch mode. Here, ``mon.e`` is the
-tiebreaker and we are splitting across data centers. ``mon.e`` should be also
-set a datacenter, that will differ from ``site1`` and ``site2``. For this
-purpose you can create another datacenter bucket named ```site3`` in your
-CRUSH and place ``mon.e`` there:
-
-.. prompt:: bash $
-
-   ceph mon set_location e datacenter=site3
-   ceph mon enable_stretch_mode e stretch_rule datacenter
-
-When stretch mode is enabled, the OSDs wlll only take PGs active when
-they peer across data centers (or whatever other CRUSH bucket type
-you specified), assuming both are alive. Pools will increase in size
-from the default 3 to 4, expecting 2 copies in each site. OSDs will only
-be allowed to connect to monitors in the same data center. New monitors
-will not be allowed to join the cluster if they do not specify a location.
-
-If all the OSDs and monitors from a data center become inaccessible
-at once, the surviving data center will enter a degraded stretch mode. This
-will issue a warning, reduce the min_size to 1, and allow
-the cluster to go active with data in the single remaining site. Note that
-we do not change the pool size, so you will also get warnings that the
-pools are too small -- but a special stretch mode flag will prevent the OSDs
-from creating extra copies in the remaining data center (so it will only keep
-2 copies, as before).
-
-When the missing data center comes back, the cluster will enter
-recovery stretch mode. This changes the warning and allows peering, but
-still only requires OSDs from the data center which was up the whole time.
-When all PGs are in a known state, and are neither degraded nor incomplete,
-the cluster transitions back to regular stretch mode, ends the warning,
-restores min_size to its starting value (2) and requires both sites to peer,
-and stops requiring the always-alive site when peering (so that you can fail
-over to the other site, if necessary).
-
-  
 Stretch Mode Limitations
 ========================
 As implied by the setup, stretch mode only handles 2 sites with OSDs.
