@@ -289,7 +289,7 @@ public:
 
   // otel tracing
   jspan_context otel_trace{false, false};
-  void encode_otel_trace(ceph::buffer::list &bl, uint64_t features) const;
+  void encode_otel_trace(ceph::buffer::list &bl) const;
   void decode_otel_trace(ceph::buffer::list::const_iterator &p, bool create = false);
 
   class CompletionHook : public Context {

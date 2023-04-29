@@ -364,6 +364,36 @@ struct ceph_osd_request_head {
 
       encode(retry_attempt, payload);
       encode(features, payload);
+    } else if (!HAVE_FEATURE(features, SERVER_REEF)){
+      // latest v8 encoding with hobject_t hash separate from pgid, no
+      // reassert version
+      header.version = 8;
+
+      encode(pgid, payload);
+      encode(hobj.get_hash(), payload);
+      encode(osdmap_epoch, payload);
+      encode(flags, payload);
+      encode(reqid, payload);
+      encode_trace(payload, features);
+
+      // -- above decoded up front; below decoded post-dispatch thread --
+
+      encode(client_inc, payload);
+      encode(mtime, payload);
+      encode(get_object_locator(), payload);
+      encode(hobj.oid, payload);
+
+      __u16 num_ops = ops.size();
+      encode(num_ops, payload);
+      for (unsigned i = 0; i < ops.size(); i++)
+	encode(ops[i].op, payload);
+
+      encode(hobj.snap, payload);
+      encode(snap_seq, payload);
+      encode(snaps, payload);
+
+      encode(retry_attempt, payload);
+      encode(features, payload);
     } else {
       // latest v9 opentelemetry trace
       header.version = HEAD_VERSION;
@@ -374,7 +404,7 @@ struct ceph_osd_request_head {
       encode(flags, payload);
       encode(reqid, payload);
       encode_trace(payload, features);
-      encode_otel_trace(payload, features);
+      encode_otel_trace(payload);
 
       // -- above decoded up front; below decoded post-dispatch thread --
 

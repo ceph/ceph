@@ -1027,7 +1027,7 @@ void Message::decode_trace(ceph::bufferlist::const_iterator &p, bool create)
 #endif
 }
 
-void Message::encode_otel_trace(ceph::bufferlist &bl, uint64_t features) const
+void Message::encode_otel_trace(ceph::bufferlist &bl) const
 {
   tracing::encode(otel_trace, bl);
 }
