@@ -53,6 +53,8 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
     using qi::_1;
     using qi::_2;
     using qi::_3;
+    using qi::_4;
+    using qi::_5;
     using qi::eps;
     using qi::lit;
 
@@ -65,25 +67,13 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
     network_str %= +char_("/.:a-fA-F0-9][");
     fs_name_str %= +char_("a-zA-Z0-9_.-");
 
-    // match := [path=<path>] [uid=<uid> [gids=<gid>[,<gid>...]]
-    // TODO: allow fsname, and root_squash to be specified with uid, and gidlist
-    path %= (spaces >> lit("path") >> lit('=') >> (quoted_path | unquoted_path));
-    uid %= (spaces >> lit("uid") >> lit('=') >> uint_);
+    path %= -(spaces >> lit("path") >> lit('=') >> (quoted_path | unquoted_path));
+    uid %= -(spaces >> lit("uid") >> lit('=') >> uint_);
     uintlist %= (uint_ % lit(','));
     gidlist %= -(spaces >> lit("gids") >> lit('=') >> uintlist);
     fs_name %= -(spaces >> lit("fsname") >> lit('=') >> fs_name_str);
-    root_squash %= (spaces >> lit("root_squash") >> attr(true));
-    match = -(
-             (fs_name >> path >> root_squash)[_val = phoenix::construct<MDSCapMatch>(_2, _1, _3)] |
-	     (uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2)] |
-	     (path >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3)] |
-             (fs_name >> path)[_val = phoenix::construct<MDSCapMatch>(_2, _1)] |
-             (fs_name >> root_squash)[_val = phoenix::construct<MDSCapMatch>(std::string(), _1, _2)] |
-             (path >> root_squash)[_val = phoenix::construct<MDSCapMatch>(_1, std::string(), _2)] |
-             (path)[_val = phoenix::construct<MDSCapMatch>(_1)] |
-             (root_squash)[_val = phoenix::construct<MDSCapMatch>(std::string(), std::string(), _1)] |
-             (fs_name)[_val = phoenix::construct<MDSCapMatch>(std::string(),
-							      _1)]);
+    root_squash %= -(spaces >> lit("root_squash") >> attr(true));
+    match = (fs_name >> path >> root_squash >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3, _4, _5)];
 
     // capspec = * | r[w][f][p][s]
     capspec = spaces >> (
