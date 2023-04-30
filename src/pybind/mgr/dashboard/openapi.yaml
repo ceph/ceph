@@ -526,16 +526,38 @@ paths:
       - Rbd
     get:
       parameters:
-      - in: path
+      - description: URL-encoded "pool/rbd_name". e.g. "rbd%2Ffoo"
+        in: path
         name: image_spec
         required: true
         schema:
           type: string
+      - default: false
+        description: When true, usage information is not returned
+        in: query
+        name: omit_usage
+        schema:
+          type: boolean
       responses:
         '200':
           content:
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                items:
+                  properties:
+                    pool_name:
+                      description: pool name
+                      type: string
+                    value:
+                      description: ''
+                      items:
+                        type: string
+                      type: array
+                  type: object
+                required:
+                - value
+                - pool_name
+                type: array
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -548,6 +570,7 @@ paths:
             trace.
       security:
       - jwt: []
+      summary: Get Rbd Image Info
       tags:
       - Rbd
     put:
