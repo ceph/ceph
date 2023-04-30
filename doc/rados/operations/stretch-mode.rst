@@ -168,28 +168,33 @@ possible, if needed).
 
 .. _Changing Monitor elections: ../change-mon-elections
 
-Stretch Mode Limitations
-========================
-As implied by the setup, stretch mode only handles 2 sites with OSDs.
+Limitations of Stretch Mode 
+===========================
+When using stretch mode, OSDs must be located at exactly two sites. 
 
-While it is not enforced, you should run 2 monitors in each site plus
-a tiebreaker, for a total of 5. This is because OSDs can only connect
-to monitors in their own site when in stretch mode.
+Two monitors should be run in each data center, plus a tiebreaker in a third
+(or in the cloud) for a total of five monitors. While in stretch mode, OSDs
+will connect only to monitors within the data center in which they are located.
+OSDs *DO NOT* connect to the tiebreaker monitor.
 
-You cannot use erasure coded pools with stretch mode. If you try, it will
-refuse, and it will not allow you to create EC pools once in stretch mode.
+Erasure-coded pools cannot be used with stretch mode. Attempts to use erasure
+coded pools with stretch mode will fail. Erasure coded pools cannot be created
+while in stretch mode. 
 
-You must create your own CRUSH rule which provides 2 copies in each site, and
-you must use 4 total copies with 2 in each site. If you have existing pools
-with non-default size/min_size, Ceph will object when you attempt to
-enable stretch mode.
+To use stretch mode, you will need to create a CRUSH rule that provides two
+replicas in each data center. Ensure that there are four total replicas: two in
+each data center. If pools exist in the cluster that do not have the default
+``size`` or ``min_size``, Ceph will not enter stretch mode. An example of such
+a CRUSH rule is given above.
 
-Because it runs with ``min_size 1`` when degraded, you should only use stretch
-mode with all-flash OSDs.  This minimizes the time needed to recover once
-connectivity is restored, and thus minimizes the potential for data loss.
+Because stretch mode runs with ``min_size`` set to ``1`` (or, more directly,
+``min_size 1``), we recommend enabling stretch mode only when using OSDs on
+SSDs (including NVMe OSDs). Hybrid HDD+SDD or HDD-only OSDs are not recommended
+due to the long time it takes for them to recover after connectivity between
+data centers has been restored. This reduces the potential for data loss.
 
-Hopefully, future development will extend this feature to support EC pools and
-running with more than 2 full sites.
+In the future, stretch mode might support erasure-coded pools and might support
+deployments that have more than two data centers.
 
 Other commands
 ==============
