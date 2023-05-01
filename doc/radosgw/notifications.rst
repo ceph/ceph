@@ -138,9 +138,6 @@ updating, use the name of an existing topic and different endpoint values).
 .. tip:: Any notification already associated with the topic must be re-created
    in order for the topic to update.
 
-.. note:: For rabbitmq, ``push-endpoint`` (with a hyphen in the middle) must be
-   changed to ``push_endpoint`` (with an underscore in the middle).
-
 ::
 
    POST
