@@ -1782,6 +1782,7 @@ public:
 
   RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                             std::optional<uint64_t> versioned_epoch,
+                            const rgw_zone_set_entry& source_trace_entry,
                             rgw_zone_set *zones_trace) override {
     ldout(sc->cct, 0) << instance.id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     return new RGWAWSHandleRemoteObjCR(sc, sync_pipe, key, instance, versioned_epoch.value_or(0));
