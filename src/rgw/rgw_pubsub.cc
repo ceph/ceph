@@ -359,7 +359,10 @@ void rgw_pubsub_topics::dump(Formatter *f) const
 {
   Formatter::ArraySection s(*f, "topics");
   for (auto& t : topics) {
-    encode_json(t.first.c_str(), t.second, f);
+    auto& topic = t.second;
+    if (topic.name == topic.dest.arn_topic) {
+      encode_json(t.first.c_str(), topic, f);
+    }
   }
 }
 
