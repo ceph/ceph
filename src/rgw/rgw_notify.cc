@@ -630,6 +630,14 @@ rgw::sal::RGWObject* get_object_with_atttributes(const req_state* s, rgw::sal::R
   return src_obj;
 }
 
+static inline void filter_amz_meta(meta_map_t& dest, const meta_map_t& src) {
+  std::copy_if(src.cbegin(), src.cend(),
+               std::inserter(dest, dest.end()),
+               [](const auto& m) {
+                 return (boost::algorithm::starts_with(m.first, RGW_AMZ_META_PREFIX));
+               });
+}
+
 void metadata_from_attributes(const req_state* s, rgw::sal::RGWObject* obj, KeyValueMap& metadata) {
   const auto src_obj = get_object_with_atttributes(s, obj);
   if (!src_obj) {
@@ -726,7 +734,7 @@ bool notification_match(reservation_t& res, const rgw_pubsub_topic_filter& filte
   const auto s = res.s;
   if (!filter.s3_filter.metadata_filter.kv.empty()) {
     // metadata filter exists
-    res.cached_metadata = s->info.x_meta_map;
+    filter_amz_meta(res.cached_metadata, s->info.x_meta_map);
     metadata_from_attributes(s, obj, res.cached_metadata);
     if (!match(filter.s3_filter.metadata_filter, res.cached_metadata)) {
       return false;
@@ -927,6 +935,15 @@ int publish_abort(const DoutPrefixProvider *dpp, reservation_t& res) {
     topic.res_id = cls_2pc_reservation::NO_ID;
   }
   return 0;
+}
+
+reservation_t::reservation_t(const DoutPrefixProvider *_dpp,
+                             rgw::sal::RGWRadosStore* _store,
+                             const req_state* _s,
+                             rgw::sal::RGWObject* _object,
+                             const std::string* _object_name) :
+  dpp(_dpp), store(_store), s(_s), object(_object), object_name(_object_name) {
+  filter_amz_meta(cached_metadata, _s->info.x_meta_map);
 }
 
 reservation_t::~reservation_t() {

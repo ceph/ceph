@@ -62,8 +62,7 @@ struct reservation_t {
   KeyValueMap cached_metadata;
 
   reservation_t(const DoutPrefixProvider *_dpp, rgw::sal::RGWRadosStore* _store, const req_state* _s,
-                rgw::sal::RGWObject* _object, const std::string* _object_name=nullptr) :
-      dpp(_dpp), store(_store), s(_s), object(_object), object_name(_object_name) {}
+                rgw::sal::RGWObject* _object, const std::string* _object_name=nullptr);
 
   // dtor doing resource leak guarding
   // aborting the reservation if not already committed or aborted
