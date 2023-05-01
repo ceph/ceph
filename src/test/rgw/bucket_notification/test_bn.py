@@ -345,6 +345,8 @@ def verify_events_by_elements(events, keys, exact_match=False, deletions=False):
             log.error(events)
             assert False, err
 
+META_PREFIX = 'x-amz-meta-'
+
 def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=False, expected_sizes={}, etags=[]):
     """ verify there is at least one record per element """
     err = ''
@@ -363,6 +365,9 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                         #assert_equal(key.etag[1:-1], record['s3']['object']['eTag'])
                         if etags:
                             assert_in(key.etag[1:-1], etags)
+                        if len(record['s3']['object']['metadata']) > 0:
+                            for meta in record['s3']['object']['metadata']:
+                                assert(meta['key'].startswith(META_PREFIX))
                         if deletions and record['eventName'].startswith('ObjectRemoved'):
                             key_found = True
                             object_size = record['s3']['object']['size']
@@ -379,6 +384,9 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
                     assert_equal(key.etag, record['s3']['object']['eTag'])
                     if etags:
                         assert_in(key.etag[1:-1], etags)
+                    if len(record['s3']['object']['metadata']) > 0:
+                        for meta in record['s3']['object']['metadata']:
+                            assert(meta['key'].startswith(META_PREFIX))
                     if deletions and record['eventName'].startswith('ObjectRemoved'):
                         key_found = True
                         object_size = record['s3']['object']['size']
@@ -2349,8 +2357,6 @@ def test_ps_s3_multipart_on_master():
     # delete the bucket
     conn.delete_bucket(bucket_name)
 
-META_PREFIX = 'x-amz-meta-'
-
 @attr('amqp_test')
 def test_ps_s3_metadata_filter_on_master():
     """ test s3 notification of metadata on master """
@@ -2482,7 +2488,7 @@ def test_ps_s3_metadata_on_master():
     notification_name = bucket_name + NOTIFICATION_SUFFIX
     meta_key = 'meta1'
     meta_value = 'This is my metadata value'
-    meta_prefix = 'x-amz-meta-'
+    meta_prefix = META_PREFIX
     topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
         'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
     }]
