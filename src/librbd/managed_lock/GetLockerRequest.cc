@@ -103,14 +103,14 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
     return;
   }
 
+  if (iter->second.addr.is_blank_ip()) {
+    ldout(m_cct, 5) << "locker has a blank address" << dendl;
+    finish(-EBUSY);
+    return;
+  }
   m_locker->entity = iter->first.locker;
   m_locker->cookie = iter->first.cookie;
   m_locker->address = iter->second.addr.get_legacy_str();
-  if (m_locker->cookie.empty() || m_locker->address.empty()) {
-    ldout(m_cct, 20) << "no valid lockers detected" << dendl;
-    finish(-ENOENT);
-    return;
-  }
 
   ldout(m_cct, 10) << "retrieved exclusive locker: "
                  << m_locker->entity << "@" << m_locker->address << dendl;
