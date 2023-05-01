@@ -7,33 +7,44 @@ Stretch Clusters
 
 Stretch Clusters
 ================
-Ceph generally expects all parts of its network and overall cluster to be
-equally reliable, with failures randomly distributed across the CRUSH map.
-So you may lose a switch that knocks out a number of OSDs, but we expect
-the remaining OSDs and monitors to route around that.
 
-This is usually a good choice, but may not work well in some
-stretched cluster configurations where a significant part of your cluster
-is stuck behind a single network component. For instance, a single
-cluster which is located in multiple data centers, and you want to
-sustain the loss of a full DC.
+A stretch cluster is a cluster that has servers in geographically separated
+data centers, distributed over a WAN. Stretch clusters have LAN-like high-speed
+and low-latency connections, but limited links. Stretch clusters have a higher
+likelihood of (possibly asymmetric) network splits, and a higher likelihood of
+temporary or complete loss of an entire data center (which can represent
+one-third to one-half of the total cluster).
 
-There are two standard configurations we've seen deployed, with either
-two or three data centers (or, in clouds, availability zones). With two
-zones, we expect each site to hold a copy of the data, and for a third
-site to have a tiebreaker monitor (this can be a VM or high-latency compared
-to the main sites) to pick a winner if the network connection fails and both
-DCs remain alive. For three sites, we expect a copy of the data and an equal
-number of monitors in each site.
+Ceph is designed with the expectation that all parts of its network and cluster
+will be reliable and that failures will be distributed randomly across the
+CRUSH map. Even if a switch goes down and causes the loss of many OSDs, Ceph is
+designed so that the remaining OSDs and monitors will route around such a loss. 
 
-Note that the standard Ceph configuration will survive MANY failures of the
-network or data centers and it will never compromise data consistency.  If you
-bring back enough Ceph servers following a failure, it will recover. If you
-lose a data center, but can still form a quorum of monitors and have all the data
-available (with enough copies to satisfy pools' ``min_size``, or CRUSH rules
-that will re-replicate to meet it), Ceph will maintain availability.
+Sometimes this cannot be relied upon. If you have a "stretched-cluster"
+deployment in which much of your cluster is behind a single network component,
+you might need to use **stretch mode** to ensure data integrity.
 
-What can't it handle?
+We will here consider two standard configurations: a configuration with two
+data centers (or, in clouds, two availability zones), and a configuration with
+three data centers (or, in clouds, three availability zones).
+
+In the two-site configuration, Ceph expects each of the sites to hold a copy of
+the data, and Ceph also expects there to be a third site that has a tiebreaker
+monitor. This tiebreaker monitor picks a winner if the network connection fails
+and both data centers remain alive.
+
+The tiebreaker monitor can be a VM. It can also have high latency relative to
+the two main sites.
+
+The standard Ceph configuration is able to survive MANY network failures or
+data-center failures without ever compromising data availability. If enough
+Ceph servers are brought back following a failure, the cluster *will* recover.
+If you lose a data center but are still able to form a quorum of monitors and
+still have all the data available, Ceph will maintain availability. (This
+assumes that the cluster has enough copies to satisfy the pools' ``min_size``
+configuration option, or (failing that) that the cluster has CRUSH rules in
+place that will cause the cluster to re-replicate the data until the
+``min_size`` configuration option has been met.)
 
 Stretch Cluster Issues
 ======================
