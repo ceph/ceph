@@ -210,33 +210,34 @@ SnapTrimObjSubEvent::start()
 SnapTrimObjSubEvent::remove_or_update_iertr::future<>
 SnapTrimObjSubEvent::remove_clone(
   ObjectContextRef obc,
+  ObjectContextRef head_obc,
   ceph::os::Transaction& txn,
   std::vector<pg_log_entry_t>& log_entries
 ) {
   const auto p = std::find(
-    obc->ssc->snapset.clones.begin(),
-    obc->ssc->snapset.clones.end(),
+    head_obc->ssc->snapset.clones.begin(),
+    head_obc->ssc->snapset.clones.end(),
     coid.snap);
-  if (p == obc->ssc->snapset.clones.end()) {
+  if (p == head_obc->ssc->snapset.clones.end()) {
     logger().error("{}: Snap {} not in clones",
                    *this, coid.snap);
     return crimson::ct_error::enoent::make();
   }
-  assert(p != obc->ssc->snapset.clones.end());
+  assert(p != head_obc->ssc->snapset.clones.end());
   snapid_t last = coid.snap;
-  delta_stats.num_bytes -= obc->ssc->snapset.get_clone_bytes(last);
+  delta_stats.num_bytes -= head_obc->ssc->snapset.get_clone_bytes(last);
 
-  if (p != obc->ssc->snapset.clones.begin()) {
+  if (p != head_obc->ssc->snapset.clones.begin()) {
     // not the oldest... merge overlap into next older clone
     std::vector<snapid_t>::iterator n = p - 1;
     hobject_t prev_coid = coid;
     prev_coid.snap = *n;
 
     // does the classical OSD really need is_present_clone(prev_coid)?
-    delta_stats.num_bytes -= obc->ssc->snapset.get_clone_bytes(*n);
-    obc->ssc->snapset.clone_overlap[*n].intersection_of(
-      obc->ssc->snapset.clone_overlap[*p]);
-    delta_stats.num_bytes += obc->ssc->snapset.get_clone_bytes(*n);
+    delta_stats.num_bytes -= head_obc->ssc->snapset.get_clone_bytes(*n);
+    head_obc->ssc->snapset.clone_overlap[*n].intersection_of(
+      head_obc->ssc->snapset.clone_overlap[*p]);
+    delta_stats.num_bytes += head_obc->ssc->snapset.get_clone_bytes(*n);
   }
   delta_stats.num_objects--;
   if (obc->obs.oi.is_dirty()) {
@@ -253,10 +254,10 @@ SnapTrimObjSubEvent::remove_clone(
   delta_stats.num_object_clones--;
 
   obc->obs.exists = false;
-  obc->ssc->snapset.clones.erase(p);
-  obc->ssc->snapset.clone_overlap.erase(last);
-  obc->ssc->snapset.clone_size.erase(last);
-  obc->ssc->snapset.clone_snaps.erase(last);
+  head_obc->ssc->snapset.clones.erase(p);
+  head_obc->ssc->snapset.clone_overlap.erase(last);
+  head_obc->ssc->snapset.clone_size.erase(last);
+  head_obc->ssc->snapset.clone_snaps.erase(last);
 
   log_entries.emplace_back(
     pg_log_entry_t{
@@ -323,12 +324,14 @@ void SnapTrimObjSubEvent::remove_head_whiteout(
 SnapTrimObjSubEvent::interruptible_future<>
 SnapTrimObjSubEvent::adjust_snaps(
   ObjectContextRef obc,
+  ObjectContextRef head_obc,
   const std::set<snapid_t>& new_snaps,
   ceph::os::Transaction& txn,
   std::vector<pg_log_entry_t>& log_entries
 ) {
-  obc->ssc->snapset.clone_snaps[coid.snap] =
+  head_obc->ssc->snapset.clone_snaps[coid.snap] =
     std::vector<snapid_t>(new_snaps.rbegin(), new_snaps.rend());
+
   // we still do a 'modify' event on this object just to trigger a
   // snapmapper.update ... :(
   obc->obs.oi.prior_version = obc->obs.oi.version;
@@ -364,9 +367,8 @@ void SnapTrimObjSubEvent::update_head(
   std::vector<pg_log_entry_t>& log_entries
 ) {
   const auto head_oid = coid.get_head();
-  obc->ssc->snapset.snaps.clear();
   logger().info("{}: writing updated snapset on {}, snapset is {}",
-                *this, head_oid, obc->ssc->snapset);
+                *this, head_oid, head_obc->ssc->snapset);
   log_entries.emplace_back(
     pg_log_entry_t{
       pg_log_entry_t::MODIFY,
@@ -384,12 +386,12 @@ void SnapTrimObjSubEvent::update_head(
 
   std::map<std::string, ceph::bufferlist, std::less<>> attrs;
   ceph::bufferlist bl;
-  encode(obc->ssc->snapset, bl);
+  encode(head_obc->ssc->snapset, bl);
   attrs[SS_ATTR] = std::move(bl);
 
   bl.clear();
-  encode(head_obc->obs.oi, bl,
-         pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+  head_obc->obs.oi.encode_no_oid(bl,
+    pg->get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
   attrs[OI_ATTR] = std::move(bl);
   txn.setattrs(
     pg->get_collection_ref()->get_cid(),
@@ -403,10 +405,10 @@ SnapTrimObjSubEvent::remove_or_update(
   ObjectContextRef obc,
   ObjectContextRef head_obc)
 {
-  auto citer = obc->ssc->snapset.clone_snaps.find(coid.snap);
-  if (citer == obc->ssc->snapset.clone_snaps.end()) {
+  auto citer = head_obc->ssc->snapset.clone_snaps.find(coid.snap);
+  if (citer == head_obc->ssc->snapset.clone_snaps.end()) {
     logger().error("{}: No clone_snaps in snapset {} for object {}",
-                   *this, obc->ssc->snapset, coid);
+                   *this, head_obc->ssc->snapset, coid);
     return crimson::ct_error::enoent::make();
   }
   const auto& old_snaps = citer->second;
@@ -415,7 +417,7 @@ SnapTrimObjSubEvent::remove_or_update(
                    *this, coid);
     return crimson::ct_error::enoent::make();
   }
-  if (obc->ssc->snapset.seq == 0) {
+  if (head_obc->ssc->snapset.seq == 0) {
     logger().error("{}: no snapset.seq for object {}",
                    *this, coid);
     return crimson::ct_error::enoent::make();
@@ -430,7 +432,7 @@ SnapTrimObjSubEvent::remove_or_update(
     }
   }
 
-  return seastar::do_with(ceph::os::Transaction{}, [=, this](auto&& txn) {
+  return seastar::do_with(ceph::os::Transaction{}, [=, this](auto &txn) {
   std::vector<pg_log_entry_t> log_entries{};
 
   int64_t num_objects_before_trim = delta_stats.num_objects;
@@ -440,12 +442,12 @@ SnapTrimObjSubEvent::remove_or_update(
     // remove clone from snapset
     logger().info("{}: {} snaps {} -> {} ... deleting",
                   *this, coid, old_snaps, new_snaps);
-    ret = remove_clone(obc, txn, log_entries);
+    ret = remove_clone(obc, head_obc, txn, log_entries);
   } else {
     // save adjusted snaps for this object
     logger().info("{}: {} snaps {} -> {}",
                   *this, coid, old_snaps, new_snaps);
-    ret = adjust_snaps(obc, new_snaps, txn, log_entries);
+    ret = adjust_snaps(obc, head_obc, new_snaps, txn, log_entries);
   }
   return std::move(ret).safe_then_interruptible(
     [&txn, obc, num_objects_before_trim, log_entries=std::move(log_entries), head_obc=std::move(head_obc), this]() mutable {
@@ -453,8 +455,8 @@ SnapTrimObjSubEvent::remove_or_update(
 
     // save head snapset
     logger().debug("{}: {} new snapset {} on {}",
-                   *this, coid, obc->ssc->snapset, head_obc->obs.oi);
-    if (obc->ssc->snapset.clones.empty() && head_obc->obs.oi.is_whiteout()) {
+                   *this, coid, head_obc->ssc->snapset, head_obc->obs.oi);
+    if (head_obc->ssc->snapset.clones.empty() && head_obc->obs.oi.is_whiteout()) {
       remove_head_whiteout(obc, head_obc, txn, log_entries);
     } else {
       update_head(obc, head_obc, txn, log_entries);
@@ -466,7 +468,7 @@ SnapTrimObjSubEvent::remove_or_update(
       //add_objects_trimmed_count(num_objects_trimmed);
     }
   }).safe_then_interruptible(
-    [txn=std::move(txn), log_entries=std::move(log_entries)] () mutable {
+    [&txn, log_entries=std::move(log_entries)] () mutable {
     return remove_or_update_iertr::make_ready_future<remove_or_update_ret_t>(
       std::make_pair(std::move(txn), std::move(log_entries)));
   });
