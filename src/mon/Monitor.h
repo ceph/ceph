@@ -279,6 +279,7 @@ public:
   bool is_stretch_mode() { return stretch_mode_engaged; }
   bool is_degraded_stretch_mode() { return degraded_stretch_mode; }
   bool is_recovering_stretch_mode() { return recovering_stretch_mode; }
+  bool is_peer_tracker_clean() { return elector.peer_tracker_is_clean(); }
 
   /**
    * This set of functions maintains the in-memory stretch state

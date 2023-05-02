@@ -946,7 +946,7 @@ int Monitor::init()
 
   bootstrap();
 
-  if (!elector.peer_tracker_is_clean()){
+  if (!is_peer_tracker_clean()){
     dout(10) << "peer_tracker looks inconsistent"
       << " previous bad logic, clearing ..." << dendl;
     elector.notify_clear_peer_state();

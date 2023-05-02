@@ -268,7 +268,7 @@ void ConnectionTracker::notify_rank_removed(int rank_removed, int new_rank)
   increase_version();
 }
 
-bool ConnectionTracker::is_clean(int mon_rank, int monmap_size)
+bool ConnectionTracker::is_clean(int mon_rank, unsigned monmap_size, std::set<int> quorum)
 {
   ldout(cct, 30) << __func__ << dendl;
   // check consistency between our rank according
@@ -276,10 +276,32 @@ bool ConnectionTracker::is_clean(int mon_rank, int monmap_size)
   if (rank != mon_rank ||
     my_reports.rank != mon_rank) {
     return false;
-  } else if (!peer_reports.empty()){
-    // if peer_report max rank is greater than monmap max rank
+  } else if (!peer_reports.empty()) {
+    // if peer_reports and monmap have different sizes,
     // then there is a problem.
-    if (peer_reports.rbegin()->first > monmap_size - 1) return false;
+    if (peer_reports.size() != monmap_size) return false;
+    for (const auto& i : my_reports.current) { // loop through all the scores
+      if (!i.second) { // skip if not alive!
+        continue;
+      }
+      auto current_report = peer_reports[i.first].current;
+      auto history_report = peer_reports[i.first].history;
+      // We can afford to have less since if we just joined
+      // a cluster with 1 MON down, then we will miss the dead
+      // monitor's report which is valid, but we can't have more!
+      if (current_report.size() > monmap_size ||
+        history_report.size() > monmap_size) {
+        return false;
+      }
+      std::set<int> peers_alive;
+      for (const auto& j : current_report) {
+        if (j.second) {
+          peers_alive.insert(j.first);
+        }
+      }
+      peers_alive.insert(i.first); // insert the peer's rank to compare with quorum set.
+      if (peers_alive != quorum) return false;
+    }    
   }
   return true;
 }

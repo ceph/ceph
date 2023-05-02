@@ -121,12 +121,16 @@ class ConnectionTracker {
   void get_total_connection_score(int peer_rank, double *rating,
 				  int *live_count) const;
   /**
-  * Check if our ranks are clean and make
-  * sure there are no extra peer_report lingering.
-  * In the future we also want to check the reports
-  * current and history of each peer_report.
+  * By using monmap_size and quorum size as reference,
+  * we expect connection score to hold such conditions:
+  * 1. peer_reports and monmap should have the same size.
+  * 2. Sizes of current_report and history_report should be
+  *  equal or less than monmap_size (in the case where there
+  *  are dead monitors).
+  * 3. Peers that are alive according to current_report should
+  * contain exactly the same ranks as of those in the quorum set.
   */
-  bool is_clean(int mon_rank, int monmap_size);
+  bool is_clean(int mon_rank, unsigned monmap_size, std::set<int> quorum);
   /**
    * Encode this ConnectionTracker. Useful both for storing on disk
    * and for sending off to peers for decoding and import

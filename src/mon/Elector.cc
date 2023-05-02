@@ -719,7 +719,7 @@ void Elector::start_participating()
 
 bool Elector::peer_tracker_is_clean()
 {
-  return peer_tracker.is_clean(mon->rank, paxos_size());
+  return peer_tracker.is_clean(mon->rank, paxos_size(), mon->get_quorum());
 }
 
 void Elector::notify_clear_peer_state()
