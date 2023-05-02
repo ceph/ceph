@@ -20,6 +20,7 @@
 #include "messages/MCommandReply.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Socket.h"
+#include "crimson/net/Connection.h"
 
 using namespace crimson::common;
 using namespace std::literals;
