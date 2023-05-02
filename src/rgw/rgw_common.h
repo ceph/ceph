@@ -560,7 +560,6 @@ struct RGWUserInfo
   RGWQuota quota;
   uint32_t type;
   std::set<std::string> mfa_ids;
-  std::string assumed_role_arn;
 
   RGWUserInfo()
     : suspended(0),
@@ -625,7 +624,10 @@ struct RGWUserInfo
      encode(admin, bl);
      encode(type, bl);
      encode(mfa_ids, bl);
-     encode(assumed_role_arn, bl);
+     {
+       std::string assumed_role_arn; // removed
+       encode(assumed_role_arn, bl);
+     }
      encode(user_id.ns, bl);
      ENCODE_FINISH(bl);
   }
@@ -709,6 +711,7 @@ struct RGWUserInfo
       decode(mfa_ids, bl);
     }
     if (struct_v >= 21) {
+      std::string assumed_role_arn; // removed
       decode(assumed_role_arn, bl);
     }
     if (struct_v >= 22) {
