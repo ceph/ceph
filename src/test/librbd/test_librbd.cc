@@ -21,6 +21,7 @@
 #include "include/err.h"
 #include "common/ceph_mutex.h"
 #include "json_spirit/json_spirit.h"
+#include "test/librados/crimson_utils.h"
 
 #include "gtest/gtest.h"
 
@@ -6924,6 +6925,7 @@ TEST_F(TestLibRBD, ListChildren)
 
 TEST_F(TestLibRBD, ListChildrenTiered)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::RBD rbd;
@@ -8528,6 +8530,7 @@ TEST_F(TestLibRBD, SnapshotLimitPP)
 
 TEST_F(TestLibRBD, RebuildObjectMapViaLockOwner)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_OBJECT_MAP);
 
   librados::IoCtx ioctx;
@@ -8580,6 +8583,7 @@ TEST_F(TestLibRBD, RebuildObjectMapViaLockOwner)
 
 TEST_F(TestLibRBD, RenameViaLockOwner)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -8620,6 +8624,7 @@ TEST_F(TestLibRBD, RenameViaLockOwner)
 
 TEST_F(TestLibRBD, SnapCreateViaLockOwner)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -8664,6 +8669,7 @@ TEST_F(TestLibRBD, SnapCreateViaLockOwner)
 
 TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   librados::IoCtx ioctx;
@@ -8704,7 +8710,7 @@ TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
 }
 
 TEST_F(TestLibRBD, UpdateFeaturesViaLockOwner) {
-
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -8955,6 +8961,7 @@ TEST_F(TestLibRBD, SnapUnprotectViaLockOwner)
 
 TEST_F(TestLibRBD, FlattenViaLockOwner)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -9003,6 +9010,7 @@ TEST_F(TestLibRBD, FlattenViaLockOwner)
 
 TEST_F(TestLibRBD, ResizeViaLockOwner)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -9039,6 +9047,7 @@ TEST_F(TestLibRBD, ResizeViaLockOwner)
 
 TEST_F(TestLibRBD, SparsifyViaLockOwner)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -9743,6 +9752,7 @@ TEST_F(TestLibRBD, BlockingAIO)
 
 TEST_F(TestLibRBD, ExclusiveLockTransition)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -10416,6 +10426,7 @@ TEST_F(TestLibRBD, FlushCacheWithCopyupOnExternalSnapshot) {
 
 TEST_F(TestLibRBD, ExclusiveLock)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   static char buf[10];
@@ -10559,6 +10570,7 @@ TEST_F(TestLibRBD, ExclusiveLock)
 
 TEST_F(TestLibRBD, BreakLock)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
   REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
 
@@ -11950,6 +11962,7 @@ TEST_F(TestLibRBD, SnapRemoveWithChildMissing)
 
 TEST_F(TestLibRBD, QuiesceWatch)
 {
+  SKIP_IF_CRIMSON();
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
 
@@ -12041,6 +12054,7 @@ TEST_F(TestLibRBD, QuiesceWatch)
 
 TEST_F(TestLibRBD, QuiesceWatchPP)
 {
+  SKIP_IF_CRIMSON();
   librbd::RBD rbd;
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
@@ -12120,6 +12134,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
 
 TEST_F(TestLibRBD, QuiesceWatchError)
 {
+  SKIP_IF_CRIMSON();
   librbd::RBD rbd;
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
@@ -12478,6 +12493,7 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
 
 TEST_F(TestLibRBD, ConcurrentOperations)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::RBD rbd;
