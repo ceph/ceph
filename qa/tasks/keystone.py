@@ -143,10 +143,10 @@ def install_packages(ctx, config):
             for dep in packages[client]:
                 remove_package(dep, remote)
 
-def run_mysql_query(ctx, client, query):
+def run_mysql_query(ctx, remote, query):
     query_arg = '--execute="{}"'.format(query)
     args = ['sudo', 'mysql', run.Raw(query_arg)]
-    ctx.cluster.only(client).run(args=args)
+    remote.run(args=args)
 
 @contextlib.contextmanager
 def setup_database(ctx, config):
@@ -157,10 +157,17 @@ def setup_database(ctx, config):
     log.info('Setting up database for keystone...')
 
     for (client, cconf) in config.items():
-        run_mysql_query(ctx, client, "CREATE USER 'keystone'@'localhost' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'SECRET';")
-        run_mysql_query(ctx, client, "CREATE DATABASE keystone;")
-        run_mysql_query(ctx, client, "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost';")
-        run_mysql_query(ctx, client, "FLUSH PRIVILEGES;")
+        remote = ctx.cluster.only(client)
+
+        # MariaDB on RHEL/CentOS needs service started after package install
+        # while Ubuntu starts service by default.
+        if remote.os.name == 'rhel' or remote.os.name == 'centos':
+            remote.run(args=['sudo', 'systemctl', 'restart', 'mariadb'])
+
+        run_mysql_query(ctx, remote, "CREATE USER 'keystone'@'localhost' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'SECRET';")
+        run_mysql_query(ctx, remote, "CREATE DATABASE keystone;")
+        run_mysql_query(ctx, remote, "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost';")
+        run_mysql_query(ctx, remote, "FLUSH PRIVILEGES;")
 
     try:
         yield
