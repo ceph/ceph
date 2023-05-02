@@ -459,8 +459,20 @@ void Elector::begin_peer_ping(int peer)
     return;
   }
 
-  if (!mon->get_quorum_mon_features().contains_all(
-				      ceph::features::mon::FEATURE_PINGING)) {
+  if (mon->get_quorum_mon_features().empty()) {
+    // quorum_mon_features has not been assigned yet.
+    // Sometimes at bootup we haven't finish our first election yet.
+    // Lets check if our feature supports FEATURE_PINGING.
+    mon_feature_t mon_supported = ceph::features::mon::get_supported();
+    if (!mon_supported.contains_all(ceph::features::mon::FEATURE_PINGING)) {
+      dout(10) << "We currently do not support FEATURE_PINGING"
+        << " please upgrade! ... return" << dendl;
+      return;
+    }
+  } else if (!mon->get_quorum_mon_features().contains_all(
+                                      ceph::features::mon::FEATURE_PINGING)) {
+    dout(10) << "Not all monitors support FEATURE_PINGING,"
+      << " please upgrade! ... return" << dendl;
     return;
   }
 
