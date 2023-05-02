@@ -30,7 +30,7 @@ namespace {
 }
 
 Heartbeat::Heartbeat(osd_id_t whoami,
-                     const crimson::osd::ShardServices& service,
+                     crimson::osd::ShardServices& service,
                      crimson::mon::Client& monc,
                      crimson::net::Messenger &front_msgr,
                      crimson::net::Messenger &back_msgr)
@@ -124,7 +124,7 @@ void Heartbeat::add_peer(osd_id_t _peer, epoch_t epoch)
   assert(whoami != _peer);
   auto [iter, added] = peers.try_emplace(_peer, *this, _peer);
   auto& peer = iter->second;
-  peer.set_epoch(epoch);
+  peer.set_epoch_added(epoch);
 }
 
 Heartbeat::osds_t Heartbeat::remove_down_peers()
@@ -136,7 +136,7 @@ Heartbeat::osds_t Heartbeat::remove_down_peers()
     if (!osdmap->is_up(osd)) {
       i = peers.erase(i);
     } else {
-      if (peer.get_epoch() < osdmap->get_epoch()) {
+      if (peer.get_epoch_added() < osdmap->get_epoch()) {
         old_osds.push_back(osd);
       }
       ++i;
@@ -292,7 +292,51 @@ seastar::future<> Heartbeat::handle_ping(crimson::net::ConnectionRef conn,
       service.get_mnow(),
       service.get_up_epoch(),
       min_message);
-  return conn->send(std::move(reply));
+  return conn->send(std::move(reply)
+  ).then([this, m, conn] {
+    return maybe_share_osdmap(conn, m);
+  });
+}
+
+seastar::future<> Heartbeat::maybe_share_osdmap(
+  crimson::net::ConnectionRef conn,
+  Ref<MOSDPing> m)
+{
+  const osd_id_t from = m->get_source().num();
+  const epoch_t osdmap_epoch = service.get_map()->get_epoch();
+  const epoch_t peer_epoch = m->map_epoch;
+  auto found = peers.find(from);
+  if (found == peers.end()) {
+    return seastar::now();
+  }
+  auto& peer = found->second;
+
+  if (peer_epoch > peer.get_last_epoch_sent()) {
+    logger().debug("{} updating session's last epoch sent "
+                   "from {} to peer's (id: {}) map epoch of {}",
+                   __func__, peer.get_last_epoch_sent(),
+                   from, peer_epoch);
+    peer.set_last_epoch_sent(peer_epoch);
+  }
+
+  if (osdmap_epoch <= peer.get_last_epoch_sent()) {
+    logger().info("{} latest epoch sent {} is already later "
+                  "than osdmap epoch of {}",
+                  __func__ , peer.get_last_epoch_sent(),
+                  osdmap_epoch);
+    return seastar::now();
+  }
+
+  logger().info("{} peer id: {} epoch is {} while osdmap is {}",
+                __func__ , from, m->map_epoch, osdmap_epoch);
+  if (osdmap_epoch > m->map_epoch) {
+    logger().debug("{} sharing osdmap epoch of {} with peer id {}",
+                   __func__, osdmap_epoch, from);
+    // Peer's newest map is m->map_epoch. Therfore it misses
+    // the osdmaps in the range of `m->map_epoch` to `osdmap_epoch`.
+    return service.send_incremental_map_to_osd(from, m->map_epoch);
+  }
+  return seastar::now();
 }
 
 seastar::future<> Heartbeat::handle_reply(crimson::net::ConnectionRef conn,
@@ -305,7 +349,10 @@ seastar::future<> Heartbeat::handle_reply(crimson::net::ConnectionRef conn,
     return seastar::now();
   }
   auto& peer = found->second;
-  return peer.handle_reply(conn, m);
+  return peer.handle_reply(conn, m
+  ).then([this, conn, m] {
+    return maybe_share_osdmap(conn, m);
+  });
 }
 
 seastar::future<> Heartbeat::handle_you_died()
