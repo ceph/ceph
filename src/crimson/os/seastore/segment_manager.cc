@@ -6,7 +6,7 @@
 #include "crimson/os/seastore/logging.h"
 
 #ifdef HAVE_ZNS
-#include "crimson/os/seastore/segment_manager/zns.h"
+#include "crimson/os/seastore/segment_manager/zbd.h"
 SET_SUBSYS(seastore_device);
 #endif
 
@@ -79,7 +79,7 @@ LOG_PREFIX(SegmentManager::get_segment_manager);
 	INFO("Found {} zones.", nr_zones);
 	if (nr_zones != 0) {
 	  return std::make_unique<
-	    segment_manager::zns::ZNSSegmentManager
+	    segment_manager::zbd::ZBDSegmentManager
 	    >(device + "/block");
 	} else {
 	  return std::make_unique<
