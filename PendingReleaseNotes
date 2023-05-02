@@ -62,6 +62,69 @@
   namespaces was added to RBD in Nautilus 14.2.0 and it has been possible to
   map and unmap images in namespaces using the `image-spec` syntax since then
   but the corresponding option available in most other commands was missing.
+* RGW: Compression is now supported for objects uploaded with Server-Side Encryption.
+  When both are enabled, compression is applied before encryption.
+* RGW: the "pubsub" functionality for storing bucket notifications inside Ceph
+  is removed. Together with it, the "pubsub" zone should not be used anymore.
+  The REST operations, as well as radosgw-admin commands for manipulating
+  subscriptions, as well as fetching and acking the notifications are removed 
+  as well.
+  In case that the endpoint to which the notifications are sent maybe down or 
+  disconnected, it is recommended to use persistent notifications to guarantee 
+  the delivery of the notifications. In case the system that consumes the 
+  notifications needs to pull them (instead of the notifications be pushed 
+  to it), an external message bus (e.g. rabbitmq, Kafka) should be used for 
+  that purpose.
+* RGW: The serialized format of notification and topics has changed, so that 
+  new/updated topics will be unreadable by old RGWs. We recommend completing 
+  the RGW upgrades before creating or modifying any notification topics.
+* RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
+  `rbd encryption format` command and `--encryption-passphrase-file` option
+  in other commands) is no longer stripped.
+* RBD: Support for layered client-side encryption is added.  Cloned images
+  can now be encrypted each with its own encryption format and passphrase,
+  potentially different from that of the parent image.  The efficient
+  copy-on-write semantics intrinsic to unformatted (regular) cloned images
+  are retained.
+* CEPHFS: Rename the `mds_max_retries_on_remount_failure` option to
+  `client_max_retries_on_remount_failure` and move it from mds.yaml.in to
+  mds-client.yaml.in because this option was only used by MDS client from its
+  birth.
+* The `perf dump` and `perf schema` commands are deprecated in favor of new
+  `counter dump` and `counter schema` commands. These new commands add support
+  for labeled perf counters and also emit existing unlabeled perf counters. Some
+  unlabeled perf counters became labeled in this release, with more to follow in
+  future releases; such converted perf counters are no longer emitted by the
+  `perf dump` and `perf schema` commands.
+* `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
+  `active_clients` fields at the top level.  Previously, these fields were
+  output under `always_on_modules` field.
+* `ceph mgr dump` command now displays the name of the mgr module that
+  registered a RADOS client in the `name` field added to elements of the
+  `active_clients` array. Previously, only the address of a module's RADOS
+  client was shown in the `active_clients` array.
+* RBD: All rbd-mirror daemon perf counters became labeled and as such are now
+  emitted only by the new `counter dump` and `counter schema` commands.  As part
+  of the conversion, many also got renamed to better disambiguate journal-based
+  and snapshot-based mirroring.
+* RBD: list-watchers C++ API (`Image::list_watchers`) now clears the passed
+  `std::list` before potentially appending to it, aligning with the semantics
+  of the corresponding C API (`rbd_watchers_list`).
+* Telemetry: Users who are opted-in to telemetry can also opt-in to
+  participating in a leaderboard in the telemetry public
+  dashboards (https://telemetry-public.ceph.com/). Users can now also add a
+  description of the cluster to publicly appear in the leaderboard.
+  For more details, see:
+  https://docs.ceph.com/en/latest/mgr/telemetry/#leaderboard
+  See a sample report with `ceph telemetry preview`.
+  Opt-in to telemetry with `ceph telemetry on`.
+  Opt-in to the leaderboard with
+  `ceph config set mgr mgr/telemetry/leaderboard true`.
+  Add leaderboard description with:
+  `ceph config set mgr mgr/telemetry/leaderboard_description ‘Cluster description’`.
+* CEPHFS: After recovering a Ceph File System post following the disaster recovery
+  procedure, the recovered files under `lost+found` directory can now be deleted.
+* core: cache-tiering is now deprecated.
 
 >=16.2.8
 --------
