@@ -826,7 +826,9 @@ class TestNFS(MgrTestCase):
         """
         Test that nfs exports can't be created with invalid path
         """
-        self._test_create_cluster()
+        mnt_pt = '/mnt'
+        preserve_mode = self._sys_cmd(['stat', '-c', '%a', mnt_pt])
+        self._create_cluster_with_fs(self.fs_name, mnt_pt)
         try:
             self._create_export(export_id='123',
                                 extra_cmd=['--pseudo-path', self.pseudo_path,
@@ -834,7 +836,7 @@ class TestNFS(MgrTestCase):
         except CommandFailedError as e:
             if e.exitstatus != errno.ENOENT:
                 raise
-        self._test_delete_cluster()
+        self._delete_cluster_with_fs(self.fs_name, mnt_pt, preserve_mode)
 
     def test_nfs_export_creation_at_filepath(self):
         """
@@ -850,8 +852,7 @@ class TestNFS(MgrTestCase):
                                                             '--path',
                                                             '/testfile'])
         except CommandFailedError as e:
-            # NotADirectoryError is raised as EINVAL
-            if e.exitstatus != errno.EINVAL:
+            if e.exitstatus != errno.ENOTDIR:
                 raise
         self.ctx.cluster.run(args=['rm', '-rf', '/mnt/testfile'])
         self._delete_cluster_with_fs(self.fs_name, mnt_pt, preserve_mode)
@@ -864,16 +865,16 @@ class TestNFS(MgrTestCase):
         preserve_mode = self._sys_cmd(['stat', '-c', '%a', mnt_pt])
         self._create_cluster_with_fs(self.fs_name, mnt_pt)
         self.ctx.cluster.run(args=['mkdir', f'{mnt_pt}/testdir'])
-        self.ctx.cluster.run(args=['ln', '-s', 'testdir', 'testdir_symlink'],
-                             cwd=f'{mnt_pt}')
+        self.ctx.cluster.run(args=['ln', '-s', f'{mnt_pt}/testdir',
+                                   f'{mnt_pt}/testdir_symlink'])
         try:
             self._create_export(export_id='123',
                                 extra_cmd=['--pseudo-path',
                                            self.pseudo_path,
                                            '--path',
-                                           f'{mnt_pt}/testdir_symlink'])
+                                           '/testdir_symlink'])
         except CommandFailedError as e:
-            if e.exitstatus != errno.ENOENT:
+            if e.exitstatus != errno.ENOTDIR:
                 raise
         self.ctx.cluster.run(args=['rm', '-rf', f'{mnt_pt}/*'])
         self._delete_cluster_with_fs(self.fs_name, mnt_pt, preserve_mode)
