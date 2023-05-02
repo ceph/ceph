@@ -3829,8 +3829,26 @@ options:
     other form of policies that Amazon does, so if you are mirroring
     policies between RGW and AWS, you may wish to set this to false.
   default: true
+- name: rgw_perf_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: enable rgw labeled perf counters cache
+  long desc: If set to true, rgw creates labeled perf counters and stores them 
+    in an rgw specific labeled perf counters cache.
+  see_also:
+  - rgw_perf_counters_cache_size
   services:
   - rgw
+  with_legacy: true
+- name: rgw_perf_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the rgw perf counters cache can store
+  default: 10000
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_d4n_host
   type: str
   level: advanced
