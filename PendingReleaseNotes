@@ -124,6 +124,18 @@
 * RBD: list-watchers C++ API (`Image::list_watchers`) now clears the passed
   `std::list` before potentially appending to it, aligning with the semantics
   of the corresponding C API (`rbd_watchers_list`).
+* Telemetry: Users who are opted-in to telemetry can also opt-in to
+  participating in a leaderboard in the telemetry public
+  dashboards (https://telemetry-public.ceph.com/). Users can now also add a
+  description of the cluster to publicly appear in the leaderboard.
+  For more details, see:
+  https://docs.ceph.com/en/latest/mgr/telemetry/#leaderboard
+  See a sample report with `ceph telemetry preview`.
+  Opt-in to telemetry with `ceph telemetry on`.
+  Opt-in to the leaderboard with
+  `ceph config set mgr mgr/telemetry/leaderboard true`.
+  Add leaderboard description with:
+  `ceph config set mgr mgr/telemetry/leaderboard_description ‘Cluster description’`.
 
 >=17.2.1
 
