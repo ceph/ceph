@@ -950,7 +950,7 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
   cloning_ctx->log_entry = {
     pg_log_entry_t::CLONE,
     coid,
-    osd_op_params->at_version,
+    snap_oi.version,
     initial_obs.oi.version,
     initial_obs.oi.user_version,
     osd_reqid_t(),
@@ -964,12 +964,10 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
 }
 
 void OpsExecuter::CloningContext::apply_to(
-  const eversion_t& at_version,
   std::vector<pg_log_entry_t>& log_entries,
   ObjectContext& processed_obc) &&
 {
   log_entry.mtime = processed_obc.obs.oi.mtime;
-  log_entry.version = at_version;
   log_entries.emplace_back(std::move(log_entry));
   processed_obc.ssc->snapset = std::move(new_snapset);
 }
@@ -984,11 +982,7 @@ OpsExecuter::flush_clone_metadata(
   assert(!txn.empty());
   auto maybe_snap_mapped = interruptor::now();
   if (cloning_ctx) {
-    osd_op_params->at_version = pg->next_version();
-    std::move(*cloning_ctx).apply_to(
-      osd_op_params->at_version,
-      log_entries,
-      *obc);
+    std::move(*cloning_ctx).apply_to(log_entries, *obc);
     const auto& coid = log_entries.back().soid;
     const auto& cloned_snaps = obc->ssc->snapset.clone_snaps[coid.snap];
     maybe_snap_mapped = snap_map_clone(
@@ -1018,7 +1012,7 @@ std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
   const hobject_t& coid)
 {
   object_info_t static_snap_oi(coid);
-  static_snap_oi.version = osd_op_params->at_version;
+  static_snap_oi.version = pg->next_version();
   static_snap_oi.prior_version = obc->obs.oi.version;
   static_snap_oi.copy_user_bits(obc->obs.oi);
   if (static_snap_oi.is_whiteout()) {
