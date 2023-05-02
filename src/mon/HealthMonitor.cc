@@ -740,6 +740,10 @@ bool HealthMonitor::check_leader_health()
   if (g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled")) {
     check_if_msgr2_enabled(&next);
   }
+  // Connection Score
+  if (mon.monmap->strategy == 3) {
+    check_connection_score(&next);
+  }
 
   if (next != leader_checks) {
     changed = true;
@@ -820,6 +824,16 @@ void HealthMonitor::check_for_mon_down(health_check_map_t *checks)
 	d.detail.push_back(ss.str());
       }
     }
+  }
+}
+
+void HealthMonitor::check_connection_score(health_check_map_t *checks) {
+  if (!mon.is_peer_tracker_clean()) {
+    ostringstream ss;
+    ss << "mon " << mon.name << " has inconsistent connectivity score; this may cause"
+      << " issues during election.";
+    auto& d = checks->add("CONNECTIVITY_SCORE_INCONSISTENT", HEALTH_WARN, ss.str(), 0);
+    d.detail.push_back(ss.str());
   }
 }
 
