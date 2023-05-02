@@ -39,10 +39,6 @@
 #include "msg/MessageRef.h"
 #include "msg_types.h"
 
-#ifdef WITH_SEASTAR
-#  include "crimson/net/SocketConnection.h"
-#endif // WITH_SEASTAR
-
 // monitor internal
 #define MSG_MON_SCRUB              64
 #define MSG_MON_ELECTION           65
@@ -251,10 +247,11 @@
 class Message : public RefCountedObject {
 public:
 #ifdef WITH_SEASTAR
-  using ConnectionRef = crimson::net::ConnectionRef;
+  // In crimson, conn is independently maintained outside Message.
+  using ConnectionRef = void*;
 #else
   using ConnectionRef = ::ConnectionRef;
-#endif // WITH_SEASTAR
+#endif
 
 protected:
   ceph_msg_header  header;      // headerelope
@@ -351,8 +348,7 @@ protected:
 public:
   const ConnectionRef& get_connection() const {
 #ifdef WITH_SEASTAR
-    // In crimson, conn is independently maintained outside Message.
-    ceph_abort();
+    ceph_abort("In crimson, conn is independently maintained outside Message");
 #endif
     return connection;
   }
@@ -497,13 +493,21 @@ public:
     return entity_name_t(header.src);
   }
   entity_addr_t get_source_addr() const {
+#ifdef WITH_SEASTAR
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
     if (connection)
       return connection->get_peer_addr();
+#endif
     return entity_addr_t();
   }
   entity_addrvec_t get_source_addrs() const {
+#ifdef WITH_SEASTAR
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
     if (connection)
       return connection->get_peer_addrs();
+#endif
     return entity_addrvec_t();
   }
 
@@ -561,7 +565,11 @@ class SafeMessage : public Message {
 public:
   using Message::Message;
   bool is_a_client() const {
+#ifdef WITH_SEASTAR
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
     return get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_CLIENT;
+#endif
   }
 
 private:
