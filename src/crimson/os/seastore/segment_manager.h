@@ -153,7 +153,7 @@ public:
    * advance_wp
    *
    * advance the segment write pointer,
-   * needed when writing at wp is strictly implemented. ex: ZNS backed segments
+   * needed when writing at wp is strictly implemented. ex: ZBD backed segments
    * @param offset: advance write pointer till the given offset
    */
   virtual write_ertr::future<> advance_wp(

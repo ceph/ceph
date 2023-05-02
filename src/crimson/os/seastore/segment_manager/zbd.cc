@@ -6,7 +6,7 @@
 #include <linux/blkzoned.h>
 
 #include <fmt/format.h>
-#include "crimson/os/seastore/segment_manager/zns.h"
+#include "crimson/os/seastore/segment_manager/zbd.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
 #include "include/buffer.h"
@@ -18,7 +18,7 @@ SET_SUBSYS(seastore_device);
 // limit the max padding buf size to 1MB
 #define MAX_PADDING_SIZE 1048576
 
-using z_op = crimson::os::seastore::segment_manager::zns::zone_op;
+using z_op = crimson::os::seastore::segment_manager::zbd::zone_op;
 template <> struct fmt::formatter<z_op>: fmt::formatter<std::string_view> {
   template <typename FormatContext>
   auto format(z_op s, FormatContext& ctx) {
@@ -42,15 +42,15 @@ template <> struct fmt::formatter<z_op>: fmt::formatter<std::string_view> {
   }
 };
 
-namespace crimson::os::seastore::segment_manager::zns {
+namespace crimson::os::seastore::segment_manager::zbd {
 
-using open_device_ret = ZNSSegmentManager::access_ertr::future<
+using open_device_ret = ZBDSegmentManager::access_ertr::future<
   std::pair<seastar::file, seastar::stat_data>>;
 static open_device_ret open_device(
   const std::string &path,
   seastar::open_flags mode)
 {
-  LOG_PREFIX(ZNSSegmentManager::open_device);
+  LOG_PREFIX(ZBDSegmentManager::open_device);
   return seastar::file_stat(
     path, seastar::follow_symlink::yes
   ).then([FNAME, mode, &path](auto stat) mutable {
@@ -69,7 +69,7 @@ static open_device_ret open_device(
   );
 }
 
-static zns_sm_metadata_t make_metadata(
+static zbd_sm_metadata_t make_metadata(
   uint64_t total_size,
   seastore_meta_t meta,
   const seastar::stat_data &data,
@@ -77,7 +77,7 @@ static zns_sm_metadata_t make_metadata(
   size_t zone_capacity_sectors,
   size_t num_zones)
 {
-  LOG_PREFIX(ZNSSegmentManager::make_metadata);
+  LOG_PREFIX(ZBDSegmentManager::make_metadata);
 
   // TODO: support Option::size_t seastore_segment_size
   // to allow zones_per_segment > 1 with striping.
@@ -89,7 +89,7 @@ static zns_sm_metadata_t make_metadata(
   size_t per_shard_segments = segments / seastar::smp::count;
   size_t available_size = zone_capacity * segments;
   size_t per_shard_available_size = zone_capacity * per_shard_segments;
-  std::vector<zns_shard_info_t> shard_infos(seastar::smp::count);
+  std::vector<zbd_shard_info_t> shard_infos(seastar::smp::count);
   for (unsigned int i = 0; i < seastar::smp::count; i++) {
     shard_infos[i].size = per_shard_available_size;
     shard_infos[i].segments = per_shard_segments;
@@ -115,7 +115,7 @@ static zns_sm_metadata_t make_metadata(
     zones_per_segment,
     zone_capacity * zones_per_segment);
 
-  zns_sm_metadata_t ret = zns_sm_metadata_t{
+  zbd_sm_metadata_t ret = zbd_sm_metadata_t{
     seastar::smp::count,
     segment_size,
     zone_capacity * zones_per_segment,
@@ -205,7 +205,7 @@ static write_ertr::future<> do_write(
   uint64_t offset,
   bufferptr &bptr)
 {
-  LOG_PREFIX(ZNSSegmentManager::do_write);
+  LOG_PREFIX(ZBDSegmentManager::do_write);
   DEBUG("offset {} len {}",
     offset,
     bptr.length());
@@ -233,7 +233,7 @@ static write_ertr::future<> do_writev(
   bufferlist&& bl,
   size_t block_size)
 {
-  LOG_PREFIX(ZNSSegmentManager::do_writev);
+  LOG_PREFIX(ZBDSegmentManager::do_writev);
   DEBUG("offset {} len {}",
     offset,
     bl.length());
@@ -261,15 +261,15 @@ static write_ertr::future<> do_writev(
   });
 }
 
-static ZNSSegmentManager::access_ertr::future<>
-write_metadata(seastar::file &device, zns_sm_metadata_t sb)
+static ZBDSegmentManager::access_ertr::future<>
+write_metadata(seastar::file &device, zbd_sm_metadata_t sb)
 {
-  assert(ceph::encoded_sizeof_bounded<zns_sm_metadata_t>() <
+  assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
 	 sb.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sb.block_size)),
     [=, &device](auto &bp) {
-      LOG_PREFIX(ZNSSegmentManager::write_metadata);
+      LOG_PREFIX(ZBDSegmentManager::write_metadata);
       DEBUG("block_size {}", sb.block_size);
       bufferlist bl;
       encode(sb, bl);
@@ -288,7 +288,7 @@ static read_ertr::future<> do_read(
   size_t len,
   bufferptr &bptr)
 {
-  LOG_PREFIX(ZNSSegmentManager::do_read);
+  LOG_PREFIX(ZBDSegmentManager::do_read);
   assert(len <= bptr.length());
   DEBUG("offset {} len {}",
     offset,
@@ -312,10 +312,10 @@ static read_ertr::future<> do_read(
 }
 
 static
-ZNSSegmentManager::access_ertr::future<zns_sm_metadata_t>
+ZBDSegmentManager::access_ertr::future<zbd_sm_metadata_t>
 read_metadata(seastar::file &device, seastar::stat_data sd)
 {
-  assert(ceph::encoded_sizeof_bounded<zns_sm_metadata_t>() <
+  assert(ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>() <
 	 sd.block_size);
   return seastar::do_with(
     bufferptr(ceph::buffer::create_page_aligned(sd.block_size)),
@@ -328,29 +328,29 @@ read_metadata(seastar::file &device, seastar::stat_data sd)
       ).safe_then([=, &bp] {
 	bufferlist bl;
 	bl.push_back(bp);
-	zns_sm_metadata_t ret;
+	zbd_sm_metadata_t ret;
 	auto bliter = bl.cbegin();
 	decode(ret, bliter);
         ret.validate();
-	return ZNSSegmentManager::access_ertr::future<zns_sm_metadata_t>(
-	  ZNSSegmentManager::access_ertr::ready_future_marker{},
+	return ZBDSegmentManager::access_ertr::future<zbd_sm_metadata_t>(
+	  ZBDSegmentManager::access_ertr::ready_future_marker{},
 	  ret);
       });
     });
 }
 
-ZNSSegmentManager::mount_ret ZNSSegmentManager::mount()
+ZBDSegmentManager::mount_ret ZBDSegmentManager::mount()
 {
   return shard_devices.invoke_on_all([](auto &local_device) {
     return local_device.shard_mount(
     ).handle_error(
       crimson::ct_error::assert_all{
-        "Invalid error in ZNSSegmentManager::mount"
+        "Invalid error in ZBDSegmentManager::mount"
     });
   });
 }
 
-ZNSSegmentManager::mount_ret ZNSSegmentManager::shard_mount()
+ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
 {
   return open_device(
     device_path, seastar::open_flags::rw
@@ -365,7 +365,7 @@ ZNSSegmentManager::mount_ret ZNSSegmentManager::shard_mount()
   });
 }
 
-ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
+ZBDSegmentManager::mkfs_ret ZBDSegmentManager::mkfs(
   device_config_t config)
 {
   return shard_devices.local().primary_mkfs(config
@@ -374,21 +374,21 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::mkfs(
       return local_device.shard_mkfs(
       ).handle_error(
         crimson::ct_error::assert_all{
-          "Invalid error in ZNSSegmentManager::mkfs"
+          "Invalid error in ZBDSegmentManager::mkfs"
       });
     });
   });
 }
 
-ZNSSegmentManager::mkfs_ret ZNSSegmentManager::primary_mkfs(
+ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
   device_config_t config)
 {
-  LOG_PREFIX(ZNSSegmentManager::primary_mkfs);
+  LOG_PREFIX(ZBDSegmentManager::primary_mkfs);
   INFO("starting, device_path {}", device_path);
   return seastar::do_with(
     seastar::file{},
     seastar::stat_data{},
-    zns_sm_metadata_t{},
+    zbd_sm_metadata_t{},
     size_t(),
     size_t(),
     size_t(),
@@ -429,7 +429,7 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::primary_mkfs(
 	    nr_zones);
 	  metadata = sb;
 	  stats.metadata_write.increment(
-	    ceph::encoded_sizeof_bounded<zns_sm_metadata_t>());
+	    ceph::encoded_sizeof_bounded<zbd_sm_metadata_t>());
 	  DEBUG("Wrote to stats.");
 	  return write_metadata(device, sb);
 	}).finally([&, FNAME] {
@@ -443,9 +443,9 @@ ZNSSegmentManager::mkfs_ret ZNSSegmentManager::primary_mkfs(
     });
 }
 
-ZNSSegmentManager::mkfs_ret ZNSSegmentManager::shard_mkfs()
+ZBDSegmentManager::mkfs_ret ZBDSegmentManager::shard_mkfs()
 {
-  LOG_PREFIX(ZNSSegmentManager::shard_mkfs);
+  LOG_PREFIX(ZBDSegmentManager::shard_mkfs);
   INFO("starting, device_path {}", device_path);
   return open_device(
     device_path, seastar::open_flags::rw
@@ -482,7 +482,7 @@ using blk_zone_op_ret = blk_zone_op_ertr::future<>;
 blk_zone_op_ret blk_zone_op(seastar::file &device,
 		            blk_zone_range &range,
 			    zone_op op) {
-  LOG_PREFIX(ZNSSegmentManager::blk_zone_op);
+  LOG_PREFIX(ZBDSegmentManager::blk_zone_op);
 
   unsigned long ioctl_op = 0;
   switch (op) {
@@ -523,10 +523,10 @@ blk_zone_op_ret blk_zone_op(seastar::file &device,
   });
 }
 
-ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
+ZBDSegmentManager::open_ertr::future<SegmentRef> ZBDSegmentManager::open(
   segment_id_t id)
 {
-  LOG_PREFIX(ZNSSegmentManager::open);
+  LOG_PREFIX(ZBDSegmentManager::open);
   return seastar::do_with(
     blk_zone_range{},
     [=, this](auto &range) {
@@ -544,15 +544,15 @@ ZNSSegmentManager::open_ertr::future<SegmentRef> ZNSSegmentManager::open(
     DEBUG("segment {}, open successful", id);
     return open_ertr::future<SegmentRef>(
       open_ertr::ready_future_marker{},
-      SegmentRef(new ZNSSegment(*this, id))
+      SegmentRef(new ZBDSegment(*this, id))
     );
   });
 }
 
-ZNSSegmentManager::release_ertr::future<> ZNSSegmentManager::release(
+ZBDSegmentManager::release_ertr::future<> ZBDSegmentManager::release(
   segment_id_t id) 
 {
-  LOG_PREFIX(ZNSSegmentManager::release);
+  LOG_PREFIX(ZBDSegmentManager::release);
   DEBUG("Resetting zone/segment {}", id);
   return seastar::do_with(
     blk_zone_range{},
@@ -573,12 +573,12 @@ ZNSSegmentManager::release_ertr::future<> ZNSSegmentManager::release(
   });
 }
 
-SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
+SegmentManager::read_ertr::future<> ZBDSegmentManager::read(
   paddr_t addr,
   size_t len,
   ceph::bufferptr &out)
 {
-  LOG_PREFIX(ZNSSegmentManager::read);
+  LOG_PREFIX(ZBDSegmentManager::read);
   auto& seg_addr = addr.as_seg_paddr();
   if (seg_addr.get_segment_id().device_segment_id() >= get_num_segments()) {
     ERROR("invalid segment {}",
@@ -599,10 +599,10 @@ SegmentManager::read_ertr::future<> ZNSSegmentManager::read(
     out);
 }
 
-Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
+Segment::close_ertr::future<> ZBDSegmentManager::segment_close(
   segment_id_t id, segment_off_t write_pointer)
 {
-  LOG_PREFIX(ZNSSegmentManager::segment_close);
+  LOG_PREFIX(ZBDSegmentManager::segment_close);
   return seastar::do_with(
     blk_zone_range{},
     [=, this](auto &range) {
@@ -622,12 +622,12 @@ Segment::close_ertr::future<> ZNSSegmentManager::segment_close(
   });
 }
 
-Segment::write_ertr::future<> ZNSSegmentManager::segment_write(
+Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
   paddr_t addr,
   ceph::bufferlist bl,
   bool ignore_check)
 {
-  LOG_PREFIX(ZNSSegmentManager::segment_write);
+  LOG_PREFIX(ZBDSegmentManager::segment_write);
   assert(addr.get_device_id() == get_device_id());
   assert((bl.length() % metadata.block_size) == 0);
   auto& seg_addr = addr.as_seg_paddr();
@@ -644,27 +644,27 @@ Segment::write_ertr::future<> ZNSSegmentManager::segment_write(
     metadata.block_size);
 }
 
-device_id_t ZNSSegmentManager::get_device_id() const
+device_id_t ZBDSegmentManager::get_device_id() const
 {
   return metadata.device_id;
 };
 
-secondary_device_set_t& ZNSSegmentManager::get_secondary_devices()
+secondary_device_set_t& ZBDSegmentManager::get_secondary_devices()
 {
   return metadata.secondary_devices;
 };
 
-magic_t ZNSSegmentManager::get_magic() const
+magic_t ZBDSegmentManager::get_magic() const
 {
   return metadata.magic;
 };
 
-segment_off_t ZNSSegment::get_write_capacity() const
+segment_off_t ZBDSegment::get_write_capacity() const
 {
   return manager.get_segment_size();
 }
 
-SegmentManager::close_ertr::future<> ZNSSegmentManager::close()
+SegmentManager::close_ertr::future<> ZBDSegmentManager::close()
 {
   if (device) {
     return device.close();
@@ -672,15 +672,15 @@ SegmentManager::close_ertr::future<> ZNSSegmentManager::close()
   return seastar::now();
 }
 
-Segment::close_ertr::future<> ZNSSegment::close()
+Segment::close_ertr::future<> ZBDSegment::close()
 {
   return manager.segment_close(id, write_pointer);
 }
 
-Segment::write_ertr::future<> ZNSSegment::write(
+Segment::write_ertr::future<> ZBDSegment::write(
   segment_off_t offset, ceph::bufferlist bl)
 {
-  LOG_PREFIX(ZNSSegment::write);
+  LOG_PREFIX(ZBDSegment::write);
   if (offset != write_pointer || offset % manager.metadata.block_size != 0) {
     ERROR("Segment offset and zone write pointer mismatch. "
           "segment {} segment-offset {} write pointer {}",
@@ -695,10 +695,10 @@ Segment::write_ertr::future<> ZNSSegment::write(
   return manager.segment_write(paddr_t::make_seg_paddr(id, offset), bl);
 }
 
-Segment::write_ertr::future<> ZNSSegment::write_padding_bytes(
+Segment::write_ertr::future<> ZBDSegment::write_padding_bytes(
   size_t padding_bytes)
 {
-  LOG_PREFIX(ZNSSegment::write_padding_bytes);
+  LOG_PREFIX(ZBDSegment::write_padding_bytes);
   DEBUG("Writing {} padding bytes to segment {} at wp {}",
         padding_bytes, id, write_pointer);
 
@@ -726,10 +726,10 @@ Segment::write_ertr::future<> ZNSSegment::write_padding_bytes(
 }
 
 // Advance write pointer, to given offset.
-Segment::write_ertr::future<> ZNSSegment::advance_wp(
+Segment::write_ertr::future<> ZBDSegment::advance_wp(
   segment_off_t offset)
 {
-  LOG_PREFIX(ZNSSegment::advance_wp);
+  LOG_PREFIX(ZBDSegment::advance_wp);
 
   DEBUG("Advancing write pointer from {} to {}", write_pointer, offset);
   if (offset < write_pointer) {
