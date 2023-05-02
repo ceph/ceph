@@ -187,7 +187,6 @@ private:
     pg_log_entry_t log_entry;
 
     void apply_to(
-      const eversion_t& at_version,
       std::vector<pg_log_entry_t>& log_entries,
       ObjectContext& processed_obc) &&;
   };
