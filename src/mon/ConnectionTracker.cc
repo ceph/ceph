@@ -62,7 +62,9 @@ void ConnectionTracker::receive_peer_report(const ConnectionTracker& o)
   ldout(cct, 30) << __func__ << dendl;
   for (auto& i : o.peer_reports) {
     const ConnectionReport& report = i.second;
-    if (i.first == rank) continue;
+    if (i.first == rank || i.first < 0) {
+      continue;
+    }
     ConnectionReport& existing = *reports(i.first);
     if (report.epoch > existing.epoch ||
 	(report.epoch == existing.epoch &&
@@ -82,7 +84,9 @@ bool ConnectionTracker::increase_epoch(epoch_t e)
   if (e > epoch) {
     my_reports.epoch_version = version = 0;
     my_reports.epoch = epoch = e;
-    peer_reports[rank] = my_reports;
+    if (rank >= 0) {
+      peer_reports[rank] = my_reports;
+    }
     encoding.clear();
     return true;
   }
@@ -95,7 +99,9 @@ void ConnectionTracker::increase_version()
   encoding.clear();
   ++version;
   my_reports.epoch_version = version;
-  peer_reports[rank] = my_reports;
+  if (rank >= 0) {
+    peer_reports[rank] = my_reports;
+  }
   if ((version % persist_interval) == 0 ) {
     ldout(cct, 30) << version << " % " << persist_interval << " == 0" << dendl;
     owner->persist_connectivity_scores();
@@ -110,6 +116,10 @@ void ConnectionTracker::report_live_connection(int peer_rank, double units_alive
     lderr(cct) << "Got a report from my own rank, hopefully this is startup weirdness, dropping" << dendl;
     return;
   }
+  if (peer_rank < 0) {
+    ldout(cct, 10) << "Got a report from a rank -1, not adding that to our report!" << dendl;
+    return;
+  }  
   // we need to "auto-initialize" to 1, do shenanigans
   auto i = my_reports.history.find(peer_rank);
   if (i == my_reports.history.end()) {
@@ -136,6 +146,10 @@ void ConnectionTracker::report_dead_connection(int peer_rank, double units_dead)
   ldout(cct, 30) << "my_reports before: " << my_reports << dendl;
   if (peer_rank == rank) {
     lderr(cct) << "Got a report from my own rank, hopefully this is startup weirdness, dropping" << dendl;
+    return;
+  }
+  if (peer_rank < 0) {
+    ldout(cct, 10) << "Got a report from a rank -1, not adding that to our report!" << dendl;
     return;
   }
   // we need to "auto-initialize" to 1, do shenanigans
