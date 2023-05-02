@@ -298,9 +298,7 @@ public:
   void check_recovery_sources(const OSDMapRef& newmap) final {
     // Not needed yet
   }
-  void check_blocklisted_watchers() final {
-    // Not needed yet
-  }
+  void check_blocklisted_watchers() final;
   void clear_primary_state() final {
     // Not needed yet
   }
@@ -592,10 +590,9 @@ private:
   PG_OSDMapGate osdmap_gate;
   ShardServices &shard_services;
 
-  cached_map_t osdmap;
 
 public:
-  cached_map_t get_osdmap() { return osdmap; }
+  cached_map_t get_osdmap() { return peering_state.get_osdmap(); }
   eversion_t next_version() {
     return eversion_t(get_osdmap_epoch(),
 		      ++projected_last_update.version);

@@ -188,7 +188,7 @@ void Watch::cancel_notify(const uint64_t notify_id)
   in_progress_notifies.erase(it);
 }
 
-void Watch::do_watch_timeout(Ref<PG> pg)
+void Watch::do_watch_timeout()
 {
   assert(pg);
   auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(

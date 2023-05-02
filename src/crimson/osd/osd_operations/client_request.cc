@@ -272,6 +272,9 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENAMETOOLONG);
   } else if (m->get_hobj().oid.name.empty()) {
     return reply_op_error(pg, -EINVAL);
+  } else if (pg->get_osdmap()->is_blocklisted(m->get_source_addr())) {
+    logger().info("{} is blocklisted", m->get_source_addr());
+    return reply_op_error(pg, -EBLOCKLISTED);
   }
 
   if (!obc->obs.exists && !op_info.may_write()) {
