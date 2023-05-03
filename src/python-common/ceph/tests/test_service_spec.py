@@ -53,6 +53,8 @@ def test_parse_host_placement_specs(test_input, expected, require_network):
         (GrafanaSpec(protocol='-https'), True, '^Invalid protocol'),
         (GrafanaSpec(protocol='http'), False, ''),
         (GrafanaSpec(protocol='https'), False, ''),
+        (GrafanaSpec(anonymous_access=False), True, '^Either initial'),  # we require inital_admin_password if anonymous_access is False
+        (GrafanaSpec(anonymous_access=False, initial_admin_password='test'), False, ''),
     ])
 def test_apply_grafana(spec: GrafanaSpec, raise_exception: bool, msg: str):
     if  raise_exception:
@@ -341,12 +343,14 @@ spec:
 service_type: grafana
 service_name: grafana
 spec:
+  anonymous_access: true
   port: 1234
   protocol: https
 ---
 service_type: grafana
 service_name: grafana
 spec:
+  anonymous_access: true
   initial_admin_password: secure
   port: 1234
   protocol: https

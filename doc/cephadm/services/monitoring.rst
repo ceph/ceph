@@ -467,6 +467,28 @@ Then apply this specification:
 Grafana will now create an admin user called ``admin`` with the
 given password.
 
+Turning off anonymous access
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+By default, cephadm allows anonymous users (users who have not provided any
+login information) limited, viewer only access to the grafana dashboard. In
+order to set up grafana to only allow viewing from logged in users, you can
+set ``anonymous_access: False`` in your grafana spec.
+
+.. code-block:: yaml
+
+  service_type: grafana
+  placement:
+    hosts:
+    - host1
+  spec:
+    anonymous_access: False
+    initial_admin_password: "mypassword"
+
+Since deploying grafana with anonymous access set to false without an initial
+admin password set would make the dashboard inaccessible, cephadm requires
+setting the ``initial_admin_password`` when ``anonymous_access`` is set to false.
+
 
 Setting up Alertmanager
 -----------------------
