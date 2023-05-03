@@ -276,7 +276,7 @@ int cls_cxx_setxattr(cls_method_context_t hctx,
 
 int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
 {
-  OSDOp op{op = CEPH_OSD_OP_ROLLBACK};
+  OSDOp op{CEPH_OSD_OP_ROLLBACK};
   op.op.snap.snapid = snapid;
   return execute_osd_op(hctx, op);
 }
