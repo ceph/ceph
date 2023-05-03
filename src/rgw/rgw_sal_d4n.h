@@ -28,18 +28,18 @@ namespace rgw { namespace sal {
 
 class D4NFilterDriver : public FilterDriver {
   private:
-    RGWBlockDirectory* blockDir;
-    CacheBlock* cacheBlock;
-    RGWD4NCache* d4nCache;
-    RGWD4NPolicy* cachePolicy;
+    rgw::d4n::BlockDirectory* blockDir;
+    rgw::d4n::CacheBlock* cacheBlock;
+    rgw::d4n::D4NDatacache* d4nCache;
+    rgw::d4n::PolicyDriver* cachePolicy;
 
   public:
     D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
     {
-      blockDir = new RGWBlockDirectory(); /* Initialize directory address with cct */
-      cacheBlock = new CacheBlock();
-      d4nCache = new RGWD4NCache();
-      cachePolicy = new RGWD4NPolicy();
+      blockDir = new rgw::d4n::BlockDirectory(); /* Initialize directory address with cct */
+      cacheBlock = new rgw::d4n::CacheBlock();
+      d4nCache = new rgw::d4n::D4NDatacache();
+      cachePolicy = new rgw::d4n::PolicyDriver();
     }
     virtual ~D4NFilterDriver() {
       delete blockDir; 
@@ -59,10 +59,10 @@ class D4NFilterDriver : public FilterDriver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
-    RGWBlockDirectory* get_block_dir() { return blockDir; }
-    CacheBlock* get_cache_block() { return cacheBlock; }
-    RGWD4NCache* get_d4n_cache() { return d4nCache; }
-    RGWD4NPolicy* get_cache_policy() { return cachePolicy; }
+    rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
+    rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
+    rgw::d4n::D4NDatacache* get_d4n_cache() { return d4nCache; }
+    rgw::d4n::PolicyDriver* get_cache_policy() { return cachePolicy; }
 };
 
 class D4NFilterUser : public FilterUser {

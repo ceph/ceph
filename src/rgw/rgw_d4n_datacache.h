@@ -6,12 +6,14 @@
 #include <string>
 #include <iostream>
 
-class RGWD4NCache {
+namespace rgw { namespace d4n {
+
+class D4NDatacache {
   public:
     CephContext* cct;
 
-    RGWD4NCache() {}
-    RGWD4NCache(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
+    D4NDatacache() {}
+    D4NDatacache(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
 
     void init(CephContext* _cct) {
       cct = _cct;
@@ -41,5 +43,7 @@ class RGWD4NCache {
     std::vector< std::pair<std::string, std::string> > build_data(bufferlist&& data);
     std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* binary);
 };
+
+} } // namespace rgw::d4n
 
 #endif

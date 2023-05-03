@@ -6,6 +6,8 @@
 #include <string>
 #include <iostream>
 
+namespace rgw { namespace d4n {
+
 struct CacheObj {
   std::string bucketName; /* s3 bucket name */
   std::string objName; /* s3 obj name */
@@ -18,16 +20,16 @@ struct CacheBlock {
   std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of block locations */
 };
 
-class RGWDirectory {
+class Directory {
   public:
-    RGWDirectory() {}
+    Directory() {}
     CephContext* cct;
 };
 
-class RGWBlockDirectory: RGWDirectory {
+class BlockDirectory: Directory {
   public:
-    RGWBlockDirectory() {}
-    RGWBlockDirectory(std::string blockHost, int blockPort):host(blockHost), port(blockPort) {}
+    BlockDirectory() {}
+    BlockDirectory(std::string blockHost, int blockPort):host(blockHost), port(blockPort) {}
     
     void init(CephContext* _cct) {
       cct = _cct;
@@ -51,5 +53,7 @@ class RGWBlockDirectory: RGWDirectory {
     std::string host = "";
     int port = 0;
 };
+
+} } // namespace rgw::d4n
 
 #endif

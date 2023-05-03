@@ -7,12 +7,14 @@
 #include "rgw_common.h"
 #include "rgw_d4n_directory.h"
 
-class RGWD4NPolicy {
+namespace rgw { namespace d4n {
+
+class PolicyDriver {
   public:
     CephContext *cct;
 
-    RGWD4NPolicy() {}
-    RGWD4NPolicy(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
+    PolicyDriver() {}
+    PolicyDriver(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
 
     void init(CephContext *_cct) {
       cct = _cct;
@@ -24,8 +26,8 @@ class RGWD4NPolicy {
     int exist_key(std::string key);
 
     int update_gw(CacheBlock* block);
-    int gwf_get_block(CacheBlock* block);
-    int gwf_eviction();
+    int get_block(CacheBlock* block);
+    int eviction();
     bool should_cache(int objSize, int minSize); /* In bytes */
     bool should_cache(std::string uploadType); 
     
@@ -34,5 +36,7 @@ class RGWD4NPolicy {
     std::string host = "";
     int port = 0;
 };
+
+} } // namespace rgw::d4n
 
 #endif

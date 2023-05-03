@@ -119,7 +119,7 @@ int D4NFilterObject::copy_object(User* user,
                               optional_yield y)
 {
   /* Build cache block copy */
-  CacheBlock* copyCacheBlock = new CacheBlock();
+  rgw::d4n::CacheBlock* copyCacheBlock = new rgw::d4n::CacheBlock();
 
   copyCacheBlock->hostsList.push_back(driver->get_cache_block()->hostsList[0]); 
   copyCacheBlock->size = driver->get_cache_block()->size;
@@ -494,8 +494,8 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  CacheBlock* tempCacheBlock = driver->get_cache_block();
-  RGWBlockDirectory* tempBlockDir = driver->get_block_dir();
+  rgw::d4n::CacheBlock* tempCacheBlock = driver->get_cache_block();
+  rgw::d4n::BlockDirectory* tempBlockDir = driver->get_block_dir();
 
   tempCacheBlock->hostsList.push_back(tempBlockDir->get_host() + ":" + std::to_string(tempBlockDir->get_port())); 
   tempCacheBlock->size = accounted_size;

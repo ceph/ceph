@@ -3,7 +3,9 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
-int RGWD4NPolicy::find_client(cpp_redis::client *client) {
+namespace rgw { namespace d4n {
+
+int PolicyDriver::find_client(cpp_redis::client *client) {
   if (client->is_connected())
     return 0;
 
@@ -20,7 +22,7 @@ int RGWD4NPolicy::find_client(cpp_redis::client *client) {
   return 0;
 }
 
-int RGWD4NPolicy::exist_key(std::string key) {
+int PolicyDriver::exist_key(std::string key) {
   int result = -1;
   std::vector<std::string> keys;
   keys.push_back(key);
@@ -42,7 +44,7 @@ int RGWD4NPolicy::exist_key(std::string key) {
   return result;
 }
 
-int RGWD4NPolicy::update_gw(CacheBlock* block) {
+int PolicyDriver::update_gw(CacheBlock* block) {
   std::string result;
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory"; // should have "build_index" method -Sam
   int globalWeight;
@@ -92,7 +94,7 @@ int RGWD4NPolicy::update_gw(CacheBlock* block) {
   return 0;
 }
 
-int RGWD4NPolicy::gwf_get_block(CacheBlock* block) {
+int PolicyDriver::get_block(CacheBlock* block) {
   int result = -1;
   std::string response;
   std::string key = "rgw-object:" + block->cacheObj.objName + ":cache";
@@ -139,7 +141,7 @@ int RGWD4NPolicy::gwf_get_block(CacheBlock* block) {
 	int freeSpace = 0; // find free space
 
 	while (freeSpace < block->size) {
-	  freeSpace += gwf_eviction();
+	  freeSpace += eviction();
 	}
 
 	/* Check remote cache */
@@ -188,7 +190,7 @@ int RGWD4NPolicy::gwf_get_block(CacheBlock* block) {
   return 0;
 }
 
-int RGWD4NPolicy::gwf_eviction() {
+int PolicyDriver::eviction() {
   CacheBlock* victim = NULL; // find victim
   int result = -1;
   std::string response;
@@ -291,14 +293,14 @@ int RGWD4NPolicy::gwf_eviction() {
   return 0;
 }
 
-bool RGWD4NPolicy::should_cache(int objSize, int minSize) {
+bool PolicyDriver::should_cache(int objSize, int minSize) {
   if (objSize < minSize)
     return true;
   else
     return false;
 }
 
-bool RGWD4NPolicy::should_cache(std::string uploadType) {
+bool PolicyDriver::should_cache(std::string uploadType) {
   if (uploadType == "PUT")
     return true;
   else if (uploadType == "MULTIPART")
@@ -306,3 +308,5 @@ bool RGWD4NPolicy::should_cache(std::string uploadType) {
   else /* Should not reach here */
     return false;
 }
+
+} } // namespace rgw::d4n
