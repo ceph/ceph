@@ -1371,7 +1371,7 @@ class InventoryFilter(object):
 
     Typical use:
 
-      filter by host when presentig UI workflow for configuring
+      filter by host when presenting UI workflow for configuring
       a particular server.
       filter by label when not all of estate is Ceph servers,
       and we want to only learn about the Ceph servers.
@@ -1571,7 +1571,7 @@ class OrchestratorClientMixin(Orchestrator):
 
     >>> import mgr_module
     >>> #doctest: +SKIP
-    ... class MyImplentation(mgr_module.MgrModule, Orchestrator):
+    ... class MyImplementation(mgr_module.MgrModule, Orchestrator):
     ...     def __init__(self, ...):
     ...         self.orch_client = OrchestratorClientMixin()
     ...         self.orch_client.set_mgr(self.mgr))
@@ -1579,7 +1579,7 @@ class OrchestratorClientMixin(Orchestrator):
 
     def set_mgr(self, mgr: MgrModule) -> None:
         """
-        Useable in the Dashbord that uses a global ``mgr``
+        Useable in the Dashboard that uses a global ``mgr``
         """
 
         self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties

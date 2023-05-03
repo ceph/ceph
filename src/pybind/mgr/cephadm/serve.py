@@ -1528,7 +1528,7 @@ class CephadmServe:
                         out, err, code = await self.mgr.ssh._execute_command(
                             host, cmd, stdin=stdin, addr=addr)
                         # if there is an agent on this host, make sure it is using the most recent
-                        # vesion of cephadm binary
+                        # version of cephadm binary
                         if host in self.mgr.inventory:
                             for agent in self.mgr.cache.get_daemons_by_type('agent', host):
                                 self.mgr._schedule_daemon_action(agent.name(), 'redeploy')

@@ -656,21 +656,21 @@ class TestCephadm(object):
                     CephadmServe(cephadm_module)._apply_all_services()
                     assert len(cephadm_module.cache.get_daemons_by_type('iscsi')) == 2
 
-                    # get a deamons from postaction list (ARRGH sets!!)
+                    # get a daemons from postaction list (ARRGH sets!!)
                     tempset = cephadm_module.requires_post_actions.copy()
-                    tempdeamon1 = tempset.pop()
-                    tempdeamon2 = tempset.pop()
+                    tempdaemon1 = tempset.pop()
+                    tempdaemon2 = tempset.pop()
 
                     # make sure post actions has 2 daemons in it
                     assert len(cephadm_module.requires_post_actions) == 2
 
                     # replicate a host cache that is not in sync when check_daemons is called
-                    tempdd1 = cephadm_module.cache.get_daemon(tempdeamon1)
-                    tempdd2 = cephadm_module.cache.get_daemon(tempdeamon2)
+                    tempdd1 = cephadm_module.cache.get_daemon(tempdaemon1)
+                    tempdd2 = cephadm_module.cache.get_daemon(tempdaemon2)
                     host = 'test1'
-                    if 'test1' not in tempdeamon1:
+                    if 'test1' not in tempdaemon1:
                         host = 'test2'
-                    cephadm_module.cache.rm_daemon(host, tempdeamon1)
+                    cephadm_module.cache.rm_daemon(host, tempdaemon1)
 
                     # Make sure, _check_daemons does a redeploy due to monmap change:
                     cephadm_module.mock_store_set('_ceph_get', 'mon_map', {
@@ -686,11 +686,11 @@ class TestCephadm(object):
                         CephadmServe(cephadm_module)._check_daemons()
                         _cfg_db.assert_called_once_with([tempdd2])
 
-                        # post actions still has the other deamon in it and will run next _check_deamons
+                        # post actions still has the other daemon in it and will run next _check_daemons
                         assert len(cephadm_module.requires_post_actions) == 1
 
                         # post actions was missed for a daemon
-                        assert tempdeamon1 in cephadm_module.requires_post_actions
+                        assert tempdaemon1 in cephadm_module.requires_post_actions
 
                         # put the daemon back in the cache
                         cephadm_module.cache.add_daemon(host, tempdd1)
@@ -976,7 +976,7 @@ class TestCephadm(object):
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
             assert out == "Created no osd(s) on host test; already created?"
-            bad_dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='invalid_hsot'),
+            bad_dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='invalid_host'),
                                     data_devices=DeviceSelection(paths=['']))
             c = cephadm_module.create_osds(bad_dg)
             out = wait(cephadm_module, c)
