@@ -1,6 +1,6 @@
 /**
- * To use a permenant config copy this file to "vagrant.config.json",
- * edit it and remove this comment beacuase comments are not allowed
+ * To use a permanent config copy this file to "vagrant.config.json",
+ * edit it and remove this comment because comments are not allowed
  * in a valid JSON file.
  */
 

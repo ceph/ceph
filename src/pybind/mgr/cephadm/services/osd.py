@@ -895,7 +895,7 @@ class OSDRemovalQueue(object):
     def _ready_to_drain_osds(self) -> List["OSD"]:
         """
         Returns OSDs that are ok to stop and not yet draining. Only returns as many OSDs as can
-        be accomodated by the 'max_osd_draining_count' config value, considering the number of OSDs
+        be accommodated by the 'max_osd_draining_count' config value, considering the number of OSDs
         that are already draining.
         """
         draining_limit = max(1, self.mgr.max_osd_draining_count)

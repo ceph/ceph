@@ -314,7 +314,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             type='int',
             default=None,
             desc='internal - do not modify',
-            # used to track track spec and other data migrations.
+            # used to track spec and other data migrations.
         ),
         Option(
             'config_dashboard',
@@ -626,7 +626,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.migration = Migrations(self)
 
-        _service_clses: Sequence[Type[CephadmService]] = [
+        _service_classes: Sequence[Type[CephadmService]] = [
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
@@ -637,7 +637,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         # https://github.com/python/mypy/issues/8993
         self.cephadm_services: Dict[str, CephadmService] = {
-            cls.TYPE: cls(self) for cls in _service_clses}  # type: ignore
+            cls.TYPE: cls(self) for cls in _service_classes}  # type: ignore
 
         self.mgr_service: MgrService = cast(MgrService, self.cephadm_services['mgr'])
         self.osd_service: OSDService = cast(OSDService, self.cephadm_services['osd'])
@@ -1883,7 +1883,7 @@ Then run the following:
     def exit_host_maintenance(self, hostname: str) -> str:
         """Exit maintenance mode and return a host to an operational state
 
-        Returning from maintnenance will enable the clusters systemd target and
+        Returning from maintenance will enable the clusters systemd target and
         start it, and remove any noout that has been added for the host if the
         host has osd daemons
 
@@ -2551,7 +2551,7 @@ Then run the following:
         """
         Deprecated. Please use `apply()` instead.
 
-        Keeping this around to be compapatible to mgr/dashboard
+        Keeping this around to be compatible to mgr/dashboard
         """
         return [self._apply(spec) for spec in specs]
 
