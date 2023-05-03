@@ -169,13 +169,13 @@ class CephadmService(metaclass=ABCMeta):
         """
         return False
 
-    def primary_daemon_type(self) -> str:
+    def primary_daemon_type(self, spec: Optional[ServiceSpec] = None) -> str:
         """
         This is the type of the primary (usually only) daemon to be deployed.
         """
         return self.TYPE
 
-    def per_host_daemon_type(self) -> Optional[str]:
+    def per_host_daemon_type(self, spec: Optional[ServiceSpec] = None) -> Optional[str]:
         """
         If defined, this type of daemon will be deployed once for each host
         containing one or more daemons of the primary type.

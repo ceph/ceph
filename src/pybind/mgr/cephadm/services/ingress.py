@@ -4,7 +4,7 @@ import random
 import string
 from typing import List, Dict, Any, Tuple, cast, Optional
 
-from ceph.deployment.service_spec import IngressSpec
+from ceph.deployment.service_spec import ServiceSpec, IngressSpec
 from mgr_util import build_url
 from cephadm import utils
 from orchestrator import OrchestratorError, DaemonDescription
@@ -17,10 +17,25 @@ class IngressService(CephService):
     TYPE = 'ingress'
     MAX_KEEPALIVED_PASS_LEN = 8
 
-    def primary_daemon_type(self) -> str:
+    def primary_daemon_type(self, spec: Optional[ServiceSpec] = None) -> str:
+        if spec:
+            ispec = cast(IngressSpec, spec)
+            # in keepalive only setups, we are only deploying keepalived,
+            # so that should be marked as the primary daemon type. Otherwise,
+            # we consider haproxy to be the primary.
+            if hasattr(spec, 'keepalive_only') and ispec.keepalive_only:
+                return 'keepalived'
         return 'haproxy'
 
-    def per_host_daemon_type(self) -> Optional[str]:
+    def per_host_daemon_type(self, spec: Optional[ServiceSpec] = None) -> Optional[str]:
+        if spec:
+            ispec = cast(IngressSpec, spec)
+            # if we are using "keepalive_only" mode on this ingress service
+            # we are only deploying keepalived daemons, so there should
+            # only be a primary daemon type and the per host daemon type
+            # should be empty
+            if hasattr(spec, 'keepalive_only') and ispec.keepalive_only:
+                return None
         return 'keepalived'
 
     def prepare_create(
@@ -218,7 +233,7 @@ class IngressService(CephService):
 
         daemons = self.mgr.cache.get_daemons_by_service(spec.service_name())
 
-        if not daemons:
+        if not daemons and not spec.keepalive_only:
             raise OrchestratorError(
                 f'Failed to generate keepalived.conf: No daemons deployed for {spec.service_name()}')
 
