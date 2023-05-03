@@ -6,6 +6,7 @@ overrides:
         setgroup: ceph
         debug rgw: 20
         rgw crypt require ssl: false
+        rgw config store: dbstore
         rgw backend store: dbstore
   rgw:
     frontend: beast
