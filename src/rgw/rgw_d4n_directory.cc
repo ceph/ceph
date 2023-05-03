@@ -3,7 +3,9 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
-int RGWBlockDirectory::find_client(cpp_redis::client* client) {
+namespace rgw { namespace d4n {
+
+int BlockDirectory::find_client(cpp_redis::client* client) {
   if (client->is_connected())
     return 0;
 
@@ -20,11 +22,11 @@ int RGWBlockDirectory::find_client(cpp_redis::client* client) {
   return 0;
 }
 
-std::string RGWBlockDirectory::build_index(CacheBlock* block) {
+std::string BlockDirectory::build_index(CacheBlock* block) {
   return "rgw-object:" + block->cacheObj.objName + ":directory";
 }
 
-int RGWBlockDirectory::exist_key(std::string key) {
+int BlockDirectory::exist_key(std::string key) {
   int result = 0;
   std::vector<std::string> keys;
   keys.push_back(key);
@@ -46,7 +48,7 @@ int RGWBlockDirectory::exist_key(std::string key) {
   return result;
 }
 
-int RGWBlockDirectory::set_value(CacheBlock* block) {
+int BlockDirectory::set_value(CacheBlock* block) {
   /* Creating the index based on objName */
   std::string key = build_index(block);
   if (!client.is_connected()) { 
@@ -93,7 +95,7 @@ int RGWBlockDirectory::set_value(CacheBlock* block) {
   return 0;
 }
 
-int RGWBlockDirectory::get_value(CacheBlock* block) {
+int BlockDirectory::get_value(CacheBlock* block) {
   int keyExist = -2;
   std::string key = build_index(block);
 
@@ -148,7 +150,7 @@ int RGWBlockDirectory::get_value(CacheBlock* block) {
   return keyExist;
 }
 
-int RGWBlockDirectory::copy_value(CacheBlock* block, CacheBlock* copy_block) {
+int BlockDirectory::copy_value(CacheBlock* block, CacheBlock* copy_block) {
   std::string result;
   std::string key = build_index(block);
   
@@ -189,7 +191,7 @@ int RGWBlockDirectory::copy_value(CacheBlock* block, CacheBlock* copy_block) {
   return 0;
 }
 
-int RGWBlockDirectory::del_value(CacheBlock* block){
+int BlockDirectory::del_value(CacheBlock* block){
   int result = 0;
   std::vector<std::string> keys;
   std::string key = build_index(block);
@@ -216,3 +218,5 @@ int RGWBlockDirectory::del_value(CacheBlock* block){
     return -2;
   }
 }
+
+} } // namespace rgw::d4n
