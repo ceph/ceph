@@ -20,7 +20,6 @@
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
-#include "test/librados/crimson_utils.h"
 
 #include <errno.h>
 #include <string>
@@ -1798,7 +1797,6 @@ TEST_F(TestClsRbd, mirror_image) {
 }
 
 TEST_F(TestClsRbd, mirror_image_status) {
-  SKIP_IF_CRIMSON();
   struct WatchCtx : public librados::WatchCtx2 {
     librados::IoCtx *m_ioctx;
 

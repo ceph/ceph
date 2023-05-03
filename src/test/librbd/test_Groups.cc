@@ -3,7 +3,6 @@
 
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
-#include "test/librados/crimson_utils.h"
 #include "include/rbd/librbd.h"
 #include "include/rbd/librbd.hpp"
 #include "test/librados/test.h"
@@ -220,7 +219,6 @@ TEST_F(TestGroup, add_imagePP)
 
 TEST_F(TestGroup, add_snapshot)
 {
-  SKIP_IF_CRIMSON();
   REQUIRE_FORMAT_V2();
 
   rados_ioctx_t ioctx;
@@ -367,7 +365,6 @@ TEST_F(TestGroup, add_snapshot)
 
 TEST_F(TestGroup, add_snapshotPP)
 {
-  SKIP_IF_CRIMSON();
   REQUIRE_FORMAT_V2();
 
   librados::IoCtx ioctx;
