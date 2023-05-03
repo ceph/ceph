@@ -1807,6 +1807,15 @@ def get_fqdn():
     return socket.getfqdn() or socket.gethostname()
 
 
+def get_ip_addresses(hostname: str) -> Tuple[List[str], List[str]]:
+    items = socket.getaddrinfo(hostname, None,
+                               flags=socket.AI_CANONNAME,
+                               type=socket.SOCK_STREAM)
+    ipv4_addresses = [i[4][0] for i in items if i[0] == socket.AF_INET]
+    ipv6_addresses = [i[4][0] for i in items if i[0] == socket.AF_INET6]
+    return ipv4_addresses, ipv6_addresses
+
+
 def get_arch():
     # type: () -> str
     return platform.uname().machine
@@ -2388,6 +2397,13 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                 r += [f'--storage.tsdb.retention.time={retention_time}']
                 scheme = 'http'
                 host = get_fqdn()
+                # in case host is not an fqdn then we use the IP to
+                # avoid producing a broken web.external-url link
+                if '.' not in host:
+                    ipv4_addrs, ipv6_addrs = get_ip_addresses(get_hostname())
+                    # use the first ipv4 (if any) otherwise use the first ipv6
+                    addr = next(iter(ipv4_addrs or ipv6_addrs), None)
+                    host = wrap_ipv6(addr) if addr else host
                 r += [f'--web.external-url={scheme}://{host}:{port}']
         if daemon_type == 'alertmanager':
             config = get_parm(ctx.config_json)
