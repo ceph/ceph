@@ -875,7 +875,7 @@ enum class device_type_t : uint8_t {
   NONE = 0,
   HDD,
   SSD,
-  ZBD,
+  ZBD,            // ZNS SSD or SMR HDD
   EPHEMERAL_COLD,
   EPHEMERAL_MAIN,
   RANDOM_BLOCK_SSD,

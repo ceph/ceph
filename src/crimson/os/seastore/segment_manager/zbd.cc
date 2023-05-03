@@ -75,35 +75,35 @@ static zbd_sm_metadata_t make_metadata(
   const seastar::stat_data &data,
   size_t zone_size_sectors,
   size_t zone_capacity_sectors,
+  size_t nr_cnv_zones,
   size_t num_zones)
 {
   LOG_PREFIX(ZBDSegmentManager::make_metadata);
 
+  // Using only SWR zones in a SMR drive, for now
+  auto skipped_zones = RESERVED_ZONES + nr_cnv_zones;
+  assert(num_zones > skipped_zones);
+
   // TODO: support Option::size_t seastore_segment_size
   // to allow zones_per_segment > 1 with striping.
   size_t zone_size = zone_size_sectors << SECT_SHIFT;
+  assert(total_size == num_zones * zone_size);
   size_t zone_capacity = zone_capacity_sectors << SECT_SHIFT;
   size_t segment_size = zone_size;
   size_t zones_per_segment = segment_size / zone_size;
-  size_t segments = (num_zones - RESERVED_ZONES) / zones_per_segment;
+  size_t segments = (num_zones - skipped_zones) / zones_per_segment;
   size_t per_shard_segments = segments / seastar::smp::count;
   size_t available_size = zone_capacity * segments;
   size_t per_shard_available_size = zone_capacity * per_shard_segments;
-  std::vector<zbd_shard_info_t> shard_infos(seastar::smp::count);
-  for (unsigned int i = 0; i < seastar::smp::count; i++) {
-    shard_infos[i].size = per_shard_available_size;
-    shard_infos[i].segments = per_shard_segments;
-    shard_infos[i].first_segment_offset = zone_size * RESERVED_ZONES
-      + i * segment_size* per_shard_segments;
-  }
 
-  assert(total_size == num_zones * zone_size);
 
   WARN("Ignoring configuration values for device and segment size");
   INFO(
-    "device size {}, available_size {}, block_size {}, allocated_size {},"
-    " total zones {}, zone_size {}, zone_capacity {},"
-    " total segments {}, zones per segment {}, segment size {}",
+    "device size: {}, available size: {}, block size: {}, allocated size: {},"
+    " total zones {}, zone size: {}, zone capacity: {},"
+    " total segments: {}, zones per segment: {}, segment size: {}"
+    " conv zones: {}, swr zones: {}, per shard segments: {}"
+    " per shard available size: {}",
     total_size,
     available_size,
     data.block_size,
@@ -113,7 +113,21 @@ static zbd_sm_metadata_t make_metadata(
     zone_capacity,
     segments,
     zones_per_segment,
-    zone_capacity * zones_per_segment);
+    zone_capacity * zones_per_segment,
+    nr_cnv_zones,
+    num_zones - nr_cnv_zones,
+    per_shard_segments,
+    per_shard_available_size);
+
+  std::vector<zbd_shard_info_t> shard_infos(seastar::smp::count);
+  for (unsigned int i = 0; i < seastar::smp::count; i++) {
+    shard_infos[i].size = per_shard_available_size;
+    shard_infos[i].segments = per_shard_segments;
+    shard_infos[i].first_segment_offset = zone_size * skipped_zones
+      + i * segment_size * per_shard_segments;
+    INFO("First segment offset for shard {} is: {}",
+		    i, shard_infos[i].first_segment_offset);
+  }
 
   zbd_sm_metadata_t ret = zbd_sm_metadata_t{
     seastar::smp::count,
@@ -199,6 +213,33 @@ static seastar::future<size_t> get_zone_capacity(
     }
   );
 }
+
+// get the number of conventional zones of SMR HDD,
+// they are randomly writable and don't respond to zone operations
+static seastar::future<size_t> get_nr_cnv_zones(
+  seastar::file &device,
+  uint32_t nr_zones)
+{
+  return seastar::do_with(
+    ZoneReport(nr_zones),
+    [&](auto &zr) {
+      zr.hdr->sector = 0;
+      zr.hdr->nr_zones = nr_zones;
+      return device.ioctl(
+	BLKREPORTZONE,
+        zr.hdr
+      ).then([&, nr_zones](int ret) {
+        size_t cnv_zones = 0;
+	for (uint32_t i = 0; i < nr_zones; i++) {
+	  if (zr.hdr->zones[i].type == BLK_ZONE_TYPE_CONVENTIONAL)
+	    cnv_zones++;
+	}
+	return seastar::make_ready_future<size_t>(cnv_zones);
+      });
+    }
+  );
+}
+
 
 static write_ertr::future<> do_write(
   seastar::file &device,
@@ -392,11 +433,19 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
     size_t(),
     size_t(),
     size_t(),
-    [=, this](auto &device, auto &stat, auto &sb, auto &zone_size_sects, auto &nr_zones, auto &size) {
+    size_t(),
+    [=, this]
+    (auto &device,
+     auto &stat,
+     auto &sb,
+     auto &zone_size_sects,
+     auto &nr_zones,
+     auto &size,
+     auto &nr_cnv_zones) {
       return open_device(
 	device_path,
 	seastar::open_flags::rw
-      ).safe_then([=, this, &device, &stat, &sb, &zone_size_sects, &nr_zones, &size](auto p) {
+      ).safe_then([=, this, &device, &stat, &sb, &zone_size_sects, &nr_zones, &size, &nr_cnv_zones](auto p) {
 	device = p.first;
 	stat = p.second;
 	return device.ioctl(
@@ -415,6 +464,10 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
           return get_blk_dev_size(device);
 	}).then([&](auto devsize) {
           size = devsize;
+	  return get_nr_cnv_zones(device, nr_zones);
+	}).then([&](auto cnv_zones) {
+	  DEBUG("Found {} conventional zones", cnv_zones);
+	  nr_cnv_zones = cnv_zones;
 	  return get_zone_capacity(device, nr_zones);
 	}).then([&, FNAME, config](auto zone_capacity_sects) {
           ceph_assert(zone_capacity_sects);
@@ -426,6 +479,7 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
 	    stat,
 	    zone_size_sects,
 	    zone_capacity_sects,
+	    nr_cnv_zones,
 	    nr_zones);
 	  metadata = sb;
 	  stats.metadata_write.increment(
