@@ -32,8 +32,11 @@ except ImportError:
 
 
 def get_command_descriptions(what):
+    print ("get_command_descriptions --" + what)
     CEPH_BIN = os.environ.get('CEPH_BIN', ".")
-    return os.popen(CEPH_BIN + "/get_command_descriptions " + "--" + what).read()
+    with os.popen(CEPH_BIN + "/get_command_descriptions " + "--" + what) as output_file:
+        output_contents = output_file.read()
+    return output_contents
 
 
 class ParseJsonFuncsigs(unittest.TestCase):
@@ -44,7 +47,6 @@ class ParseJsonFuncsigs(unittest.TestCase):
         # syntax error https://github.com/ceph/ceph/pull/585
         commands = get_command_descriptions("pull585")
         self.assertRaises(TypeError, parse_json_funcsigs, commands, 'cli')
-
 
 sigdict = parse_json_funcsigs(get_command_descriptions("all"), 'cli')
 
@@ -910,6 +912,20 @@ class TestOSD(TestArgparse):
                                         '1.2.3.4/567', '600.40'])
             self._assert_valid_command(['osd', 'blocklist', action,
                                         '1.2.3.4', '600.40'])
+            
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v1:1.2.3.4', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v1:1.2.3.4/0', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v2:2001:0db8:85a3:0000:0000:8a2e:0370:7334', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v2:fe80::1/0', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        'v2:[2607:f298:4:2243::5522]:0/0', '600.40'])
+            self._assert_valid_command(['osd', 'blocklist', action,
+                                        '[2001:0db8::85a3:0000:8a2e:0370:7334]:0/0', '600.40'])
+            
             self.assertEqual({}, validate_command(sigdict, ['osd', 'blocklist',
                                                             action,
                                                             'invalid',
@@ -923,6 +939,14 @@ class TestOSD(TestArgparse):
                                                             '1.2.3.4/567',
                                                             '600.40',
                                                             'toomany']))
+            self.assertEqual({}, validate_command(sigdict, ['osd', 'blocklist',
+                                                            action,
+                                                            'v2:1.2.3.4/567',
+                                                            '600.40']))
+            self.assertEqual({}, validate_command(sigdict, ['osd', 'blocklist',
+                                                            action,
+                                                            'v1:1.2.3.4:65536/567',
+                                                            '600.40']))
 
     def test_pool_mksnap(self):
         self._assert_valid_command(['osd', 'pool', 'mksnap',
