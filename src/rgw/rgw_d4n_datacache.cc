@@ -3,6 +3,8 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+namespace rgw { namespace d4n {
+
 /* Base metadata and data fields should remain consistent */
 std::vector<std::string> baseFields{
   "mtime",
@@ -18,7 +20,7 @@ std::vector<std::string> baseFields{
   "max_buckets",
   "data"};
 
-std::vector< std::pair<std::string, std::string> > RGWD4NCache::build_data(bufferlist&& data) {
+std::vector< std::pair<std::string, std::string> > D4NDatacache::build_data(bufferlist&& data) {
   std::vector< std::pair<std::string, std::string> > values;
  
   /* Convert to vector */
@@ -29,7 +31,7 @@ std::vector< std::pair<std::string, std::string> > RGWD4NCache::build_data(buffe
   return values; 
 }
 
-std::vector< std::pair<std::string, std::string> > RGWD4NCache::build_attrs(rgw::sal::Attrs* binary) {
+std::vector< std::pair<std::string, std::string> > D4NDatacache::build_attrs(rgw::sal::Attrs* binary) {
   std::vector< std::pair<std::string, std::string> > values;
   rgw::sal::Attrs::iterator attrs;
  
@@ -43,7 +45,7 @@ std::vector< std::pair<std::string, std::string> > RGWD4NCache::build_attrs(rgw:
   return values; 
 }
 
-int RGWD4NCache::find_client(cpp_redis::client *client) { 
+int D4NDatacache::find_client(cpp_redis::client *client) { 
   if (client->is_connected())
     return 0;
 
@@ -60,7 +62,7 @@ int RGWD4NCache::find_client(cpp_redis::client *client) {
   return 0;
 }
 
-int RGWD4NCache::exist_key(std::string key) { 
+int D4NDatacache::exist_key(std::string key) { 
   int result = -1;
   std::vector<std::string> keys;
   keys.push_back(key);
@@ -82,7 +84,7 @@ int RGWD4NCache::exist_key(std::string key) {
   return result;
 }
 
-int RGWD4NCache::copy_data(std::string originalOid, std::string copyOid) {
+int D4NDatacache::copy_data(std::string originalOid, std::string copyOid) {
   std::string result;
   std::vector< std::pair<std::string, std::string> > redisData;
   std::string key = "rgw-object:" + originalOid + ":cache";
@@ -130,7 +132,7 @@ int RGWD4NCache::copy_data(std::string originalOid, std::string copyOid) {
   return 0;
 }
 
-int RGWD4NCache::append_data(std::string oid, buffer::list& data) {
+int D4NDatacache::append_data(std::string oid, buffer::list& data) {
   std::string result;
   std::string value = "";
   std::string key = "rgw-object:" + oid + ":cache";
@@ -177,7 +179,7 @@ int RGWD4NCache::append_data(std::string oid, buffer::list& data) {
   return 0;
 }
 
-int RGWD4NCache::del_data(std::string oid) {
+int D4NDatacache::del_data(std::string oid) {
   int result = 0;
   std::string key = "rgw-object:" + oid + ":cache";
   std::vector<std::string> deleteField;
@@ -206,7 +208,7 @@ int RGWD4NCache::del_data(std::string oid) {
   return result - 1;
 }
 
-int RGWD4NCache::set_attrs(std::string oid, rgw::sal::Attrs* attrs) {
+int D4NDatacache::set_attrs(std::string oid, rgw::sal::Attrs* attrs) {
   /* Creating the index based on oid */
   std::string key = "rgw-object:" + oid + ":cache";
   std::string result;
@@ -241,7 +243,7 @@ int RGWD4NCache::set_attrs(std::string oid, rgw::sal::Attrs* attrs) {
   return 0;
 }
 
-int RGWD4NCache::get_attrs(std::string oid, 
+int D4NDatacache::get_attrs(std::string oid, 
     rgw::sal::Attrs* newAttrs, 
     std::vector< std::pair<std::string, std::string> >* newMetadata) 
 {
@@ -350,7 +352,7 @@ int RGWD4NCache::get_attrs(std::string oid,
   return keyExist;
 }
 
-int RGWD4NCache::copy_attrs(std::string originalOid, std::string copyOid, rgw::sal::Attrs* attrs) {
+int D4NDatacache::copy_attrs(std::string originalOid, std::string copyOid, rgw::sal::Attrs* attrs) {
   std::string result;
   std::vector< std::pair<std::string, std::string> > redisObject;
   std::string key = "rgw-object:" + originalOid + ":cache";
@@ -421,7 +423,7 @@ int RGWD4NCache::copy_attrs(std::string originalOid, std::string copyOid, rgw::s
   return 0;
 }
 
-int RGWD4NCache::update_attr(std::string oid, rgw::sal::Attrs* attr) {
+int D4NDatacache::update_attr(std::string oid, rgw::sal::Attrs* attr) {
   std::string result;
   std::string key = "rgw-object:" + oid + ":cache";
 
@@ -456,7 +458,7 @@ int RGWD4NCache::update_attr(std::string oid, rgw::sal::Attrs* attr) {
   return 0;
 }
 
-int RGWD4NCache::del_attrs(std::string oid, std::vector<std::string>& baseFields, std::vector<std::string>& deleteFields) {
+int D4NDatacache::del_attrs(std::string oid, std::vector<std::string>& baseFields, std::vector<std::string>& deleteFields) {
   int result = 0;
   std::string key = "rgw-object:" + oid + ":cache";
 
@@ -491,7 +493,7 @@ int RGWD4NCache::del_attrs(std::string oid, std::vector<std::string>& baseFields
   return -2;
 }
 
-int RGWD4NCache::del_object(std::string oid) {
+int D4NDatacache::del_object(std::string oid) {
   int result = 0;
   std::vector<std::string> keys;
   std::string key = "rgw-object:" + oid + ":cache";
@@ -520,3 +522,5 @@ int RGWD4NCache::del_object(std::string oid) {
   dout(20) << "RGW D4N Cache: Object is not in cache." << dendl;
   return -2;
 }
+
+} } // namespace rgw::d4n
