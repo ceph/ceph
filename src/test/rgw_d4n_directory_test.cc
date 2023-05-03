@@ -17,8 +17,8 @@ int blockSize = 123;
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      blockDir = new RGWBlockDirectory(hostStr, stoi(portStr));
-      cacheBlock = new CacheBlock();
+      blockDir = new rgw::d4n::BlockDirectory(hostStr, stoi(portStr));
+      cacheBlock = new rgw::d4n::CacheBlock();
 
       cacheBlock->hostsList.push_back(redisHost);
       cacheBlock->size = blockSize; 
@@ -34,8 +34,8 @@ class DirectoryFixture: public ::testing::Test {
       cacheBlock = nullptr;
     }
 
-    RGWBlockDirectory* blockDir;
-    CacheBlock* cacheBlock;
+    rgw::d4n::BlockDirectory* blockDir;
+    rgw::d4n::CacheBlock* cacheBlock;
 };
 
 /* Successful initialization */
@@ -201,7 +201,7 @@ TEST_F(DirectoryFixture, CopyValueTest) {
   EXPECT_EQ(bucketName, bucketName);
   EXPECT_EQ(objName, oid);
 
-  CacheBlock* copyCacheBlock = new CacheBlock();
+  rgw::d4n::CacheBlock* copyCacheBlock = new rgw::d4n::CacheBlock();
 
   copyCacheBlock->hostsList.push_back(cacheBlock->hostsList[0]);
   copyCacheBlock->size = cacheBlock->size;
