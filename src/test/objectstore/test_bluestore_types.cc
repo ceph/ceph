@@ -1284,6 +1284,380 @@ TEST(ExtentMap, compress_extent_map)
   ASSERT_EQ(6u, em.extent_map.size());
 }
 
+class ExtentMapFixture : virtual public ::testing::Test {
+
+public:
+  BlueStore store;
+  BlueStore::OnodeCacheShard *oc;
+  BlueStore::BufferCacheShard *bc;
+  BlueStore::CollectionRef coll;
+
+  static constexpr uint32_t au_size = 4096;
+  uint32_t blob_size = 65536;
+  size_t csum_order = 12; //1^12 = 4096 bytes
+
+  struct au {
+    uint32_t chksum;
+    uint32_t refs;
+  };
+  std::vector<au> disk;
+
+  // test onode that glues some simplifications in representation
+  // with actual BlueStore's onode
+  struct t_onode {
+    BlueStore::OnodeRef onode; //actual BS onode
+    std::vector<uint32_t> data; //map to AUs
+    static constexpr uint32_t empty = std::numeric_limits<uint32_t>::max();
+  };
+  void print(std::ostream& out, t_onode& onode)
+  {
+    for (size_t i = 0; i < onode.data.size(); ++i) {
+      if (i != 0) out << " ";
+      if (onode.data[i] == t_onode::empty) {
+	out << "-";
+      } else {
+	out << std::hex << onode.data[i]
+	    << "/" << disk[onode.data[i]].chksum
+	    << ":" << std::dec << disk[onode.data[i]].refs;
+      }
+    }
+  }
+  explicit ExtentMapFixture()
+    : store(g_ceph_context, "", au_size)
+  {
+    oc = BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL);
+    bc = BlueStore::BufferCacheShard::create(g_ceph_context, "lru", NULL);
+    coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
+  }
+
+  void SetUp() override {
+  }
+  void TearDown() override {
+  }
+
+  // takes new space from disk, initializes csums
+  // returns index of first au
+  uint32_t allocate(uint32_t num_au) {
+    uint32_t pos = disk.size();
+    disk.resize(pos + num_au);
+    for (uint32_t i = 0; i < num_au; i++) {
+      uint32_t p = pos + i;
+      disk[p].chksum = 2 * p + 1;
+      disk[p].refs = 0;
+    }
+    return pos;
+  }
+  void release(uint32_t& au_idx) {
+    if (au_idx != t_onode::empty) {
+      disk_unref(au_idx);
+    }
+    au_idx = t_onode::empty;
+  }
+  void disk_ref(uint32_t au_idx) {
+    ++disk[au_idx].refs;
+  }
+  void disk_unref(uint32_t au_idx) {
+    ceph_assert(disk[au_idx].refs > 0);
+    --disk[au_idx].refs;
+  }
+
+  t_onode create() {
+    t_onode res;
+    res.onode = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+    return res;
+  }
+
+  void fillup(t_onode& onode, uint32_t end) {
+    if (end > onode.data.size()) {
+      size_t e = onode.data.size();
+      onode.data.resize(end);
+      for (; e < end; ++e) {
+	onode.data[e] = t_onode::empty;
+      }
+    }
+  }
+  void punch_hole(t_onode& onode, uint32_t off, uint32_t len) {
+    ceph_assert((off % au_size) == 0);
+    ceph_assert((len % au_size) == 0);
+    uint32_t i = off / au_size;
+    uint32_t end = (off + len) / au_size;
+    fillup(onode, end);
+    while (i < end && i < onode.data.size()) {
+      if (onode.data[i] != t_onode::empty)
+	release(onode.data[i]);
+      onode.data[i] = t_onode::empty;
+      i++;
+    }
+    store.debug_punch_hole(coll, onode.onode, off, len);
+  }
+
+  void write(t_onode& onode, uint32_t off, uint32_t len) {
+    ceph_assert((off % au_size) == 0);
+    ceph_assert((len % au_size) == 0);
+    punch_hole(onode, off, len);
+
+    uint32_t i = off / au_size;
+    uint32_t end = (off + len) / au_size;
+    fillup(onode, end);
+
+    uint32_t au_idx = allocate(end - i);
+    uint32_t idx = au_idx;
+    while (i < end) {
+      onode.data[i] = idx;
+      disk_ref(idx);
+      ++idx;
+      ++i;
+    }
+
+    // below simulation of write performed by BlueStore::do_write()
+    auto helper_blob_write = [&](
+      uint32_t log_off,   // logical offset of blob to put to onode
+      uint32_t empty_aus, // amount of unreferenced aus in the beginning
+      uint32_t first_au,  // first au that will be referenced
+      uint32_t num_aus     // number of aus, first, first+1.. first+num_au-1
+    ) {
+      uint32_t blob_length = (empty_aus + num_aus) * au_size;
+      BlueStore::BlobRef b(new BlueStore::Blob);
+      b->shared_blob = new BlueStore::SharedBlob(coll.get());
+      bluestore_blob_t& bb = b->dirty_blob();
+      bb.init_csum(Checksummer::CSUM_CRC32C, csum_order, blob_length);
+      for(size_t i = 0; i < num_aus; ++i) {
+	bb.set_csum_item(empty_aus + i, disk[first_au + i].chksum);
+      }
+
+      PExtentVector pextents;
+      pextents.emplace_back(first_au * au_size, num_aus * au_size);
+      bb.allocated(empty_aus * au_size, num_aus * au_size, pextents);
+
+      auto *ext = new BlueStore::Extent(log_off, empty_aus * au_size,
+					 num_aus * au_size, b);
+      onode.onode->extent_map.extent_map.insert(*ext);
+      b->get_ref(coll.get(), empty_aus * au_size, num_aus * au_size);
+      bb.mark_used(empty_aus * au_size, num_aus * au_size);
+    };
+
+    size_t off_blob_aligned = p2align(off, blob_size);
+    size_t off_blob_roundup = p2align(off + blob_size, blob_size);
+    uint32_t skip_aus = (off - off_blob_aligned) / au_size;
+    size_t l = std::min<size_t>(off_blob_roundup - off, len);
+    uint32_t num_aus = l / au_size;
+
+    while (len > 0) {
+      helper_blob_write(off, skip_aus, au_idx, num_aus);
+      skip_aus = 0;
+      au_idx += num_aus;
+      len -= num_aus * au_size;
+      off += (skip_aus + num_aus) * au_size;
+      l = std::min<size_t>(blob_size, len);
+      num_aus = l / au_size;
+    };
+  }
+
+  void dup(t_onode& ofrom, t_onode& oto, uint64_t off, uint64_t len) {
+    ceph_assert((off % au_size) == 0);
+    ceph_assert((len % au_size) == 0);
+    punch_hole(oto, off, len);
+
+    uint32_t i = off / au_size;
+    uint32_t end = (off + len) / au_size;
+    fillup(ofrom, end);
+    ceph_assert(end <= ofrom.data.size());
+    while (i < end) {
+      oto.data[i] = ofrom.data[i];
+      if (oto.data[i] != t_onode::empty) {
+	disk_ref(oto.data[i]);
+      }
+      ++i;
+    }
+    BlueStore::TransContext txc(store.cct, coll.get(), nullptr, nullptr);
+    ofrom.onode->extent_map.dup(&store, &txc, coll, ofrom.onode, oto.onode, off, len, off);
+  }
+
+  int32_t compare(t_onode& onode) {
+    BlueStore::ExtentMap::debug_au_vector_t debug =
+      onode.onode->extent_map.debug_list_disk_layout();
+    size_t pos = 0;
+    for (size_t i = 0; i < debug.size(); ++i) {
+      if (debug[i].disk_offset == -1ULL) {
+	size_t len = debug[i].disk_length;
+	size_t l = len / au_size;
+	if (pos + l > onode.data.size()) {
+	  return pos + l;
+	}
+	while (l > 0) {
+	  if (onode.data[pos] != t_onode::empty) {
+	    return pos;
+	  }
+	  --l;
+	  ++pos;
+	};
+      } else {
+	ceph_assert(pos < onode.data.size());
+	uint32_t au = onode.data[pos];
+	if (debug[i].disk_offset != au * au_size ||
+	    debug[i].disk_length != au_size      ||
+	    debug[i].chksum != disk[au].chksum) {
+	  return pos;
+	}
+	if ((int32_t)debug[i].ref_cnts == -1) {
+	  if (disk[au].refs != 1) {
+	    return pos;
+	  }
+	} else {
+	  if (disk[au].refs != debug[i].ref_cnts) {
+	    return pos;
+	  }
+	}
+	++pos;
+      }
+    }
+    // remaining aus must be empty
+    while (pos < onode.data.size()) {
+      if (onode.data[pos] != t_onode::empty) {
+	return pos;
+      }
+      ++pos;
+    }
+    return -1;
+  }
+
+  bool check(t_onode& onode) {
+    int32_t res = compare(onode);
+    if (res != -1) {
+      cout << "Discrepancy at 0x" << std::hex << res * au_size << std::dec << std::endl;
+      cout << "Simulated: ";
+      print(cout, onode);
+      cout << std::endl;
+      cout << "Onode: " << onode.onode->extent_map.debug_list_disk_layout() << std::endl;
+      return false;
+    }
+    return true;
+  }
+  void print(t_onode& onode) {
+    cout << "Simulated: ";
+    print(cout, onode);
+    cout << std::endl;
+    cout << "Onode: " << onode.onode->extent_map.debug_list_disk_layout() << std::endl;
+  }
+};
+
+TEST_F(ExtentMapFixture, walk)
+{
+  std::vector<t_onode> X;
+  for (size_t i = 0; i < 100; i++) {
+    X.push_back(create());
+  }
+
+  for (size_t i = 0; i < 100 - 1; i++) {
+    write(X[i], (i + 2) * au_size, 4 * au_size);
+    dup(X[i], X[i+1], (i + 1) * au_size, 8 * au_size);
+  }
+  for (size_t i = 0; i < 100; i++) {
+    ASSERT_EQ(check(X[i]), true);
+  }
+}
+
+TEST_F(ExtentMapFixture, pyramid)
+{
+  constexpr size_t H = 100;
+  std::vector<t_onode> X;
+  for (size_t i = 0; i < H; i++) {
+    X.push_back(create());
+  }
+  write(X[0], 0, (H * 2 + 1) * au_size);
+
+  for (size_t i = 0; i < H - 1; i++) {
+    dup(X[i], X[i + 1], i * au_size, (H * 2 + 1 - i) * au_size);
+  }
+  for (size_t i = 0; i < H; i++) {
+    ASSERT_EQ(check(X[i]), true);
+  }
+}
+
+TEST_F(ExtentMapFixture, rain)
+{
+  constexpr size_t H = 100;
+  constexpr size_t W = 100;
+  std::vector<t_onode> X;
+  for (size_t i = 0; i < H; i++) {
+    X.push_back(create());
+  }
+  for (size_t i = 0; i < H - 1; i++) {
+    write(X[i], (rand() % W - 1) * au_size, au_size);
+    dup(X[i], X[i + 1], 0, W * au_size);
+  }
+  for (size_t i = 0; i < H; i++) {
+    ASSERT_EQ(check(X[i]), true);
+  }
+}
+
+TEST_F(ExtentMapFixture, pollock)
+{
+  constexpr size_t H = 100;
+  constexpr size_t W = 100;
+  std::vector<t_onode> X;
+  for (size_t i = 0; i < H; i++) {
+    X.push_back(create());
+  }
+  for (size_t i = 0; i < H - 1; i++) {
+    size_t w = rand() % (W / 3) + 1;
+    size_t l = rand() % (W - w);
+    write(X[i], l * au_size, w * au_size);
+    w = rand() % (W / 3) + 1;
+    l = rand() % (W - w);
+    dup(X[i], X[i + 1], l * au_size, w * au_size);
+  }
+  for (size_t i = 0; i < H; i++) {
+    ASSERT_EQ(check(X[i]), true);
+  }
+}
+
+TEST_F(ExtentMapFixture, carousel)
+{
+  constexpr size_t R = 10;
+  constexpr size_t CNT = 300;
+  constexpr size_t W = 100;
+  std::vector<t_onode> X;
+  for (size_t i = 0; i < R; i++) {
+    X.push_back(create());
+  }
+  for (size_t i = 0; i < CNT; i++) {
+    size_t w = rand() % (W / 3) + 1;
+    size_t l = rand() % (W - w);
+    write(X[i % R], l * au_size, w * au_size);
+    w = rand() % (W / 3) + 1;
+    l = rand() % (W - w);
+    dup(X[i % R], X[(i + 1) % R], l * au_size, w * au_size);
+  }
+  for (size_t i = 0; i < R; i++) {
+    ASSERT_EQ(check(X[i]), true);
+  }
+}
+
+TEST_F(ExtentMapFixture, petri)
+{
+  constexpr size_t R = 10;
+  constexpr size_t CNT = 300;
+  constexpr size_t W = 100;
+  std::vector<t_onode> X;
+  for (size_t i = 0; i < R; i++) {
+    X.push_back(create());
+    write(X[i], 0 * au_size, W * au_size);
+  }
+  for (size_t i = 0; i < CNT; i++) {
+    size_t from = rand() % R;
+    size_t to = from;
+    while (to == from) {
+      to = rand() % R;
+    }
+    size_t w = rand() % (W / 5) + 1;
+    size_t l = rand() % (W - w);
+    dup(X[from], X[to], l * au_size, w * au_size);
+  }
+  for (size_t i = 0; i < R; i++) {
+    ASSERT_EQ(check(X[i]), true);
+  }
+}
 
 TEST(ExtentMap, dup_extent_map)
 {

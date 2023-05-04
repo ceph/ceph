@@ -4390,6 +4390,94 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
   return rb;
 }
 
+BlueStore::ExtentMap::debug_au_vector_t
+BlueStore::ExtentMap::debug_list_disk_layout()
+{
+  BlueStore::ExtentMap::debug_au_vector_t res;
+  uint32_t l_pos = 0;
+  for (auto ep = extent_map.begin(); ep != extent_map.end(); ++ep) {
+    if (l_pos < ep->logical_offset) {
+      // a hole in logical mapping, mark it
+      res.emplace_back(-1ULL, ep->logical_offset - l_pos, 0, 0);
+    }
+    l_pos = ep->logical_offset + ep->length;
+    const bluestore_blob_t& bblob = ep->blob->get_blob();
+    uint32_t chunk_size = bblob.get_chunk_size(onode->c->store->block_size);
+    uint32_t length_left = ep->length;
+
+    bluestore_extent_ref_map_t* ref_map = nullptr;
+    if (bblob.is_shared()) {
+      ceph_assert(ep->blob->shared_blob->is_loaded());
+      bluestore_shared_blob_t* bsblob = ep->blob->shared_blob->persistent;
+      ref_map = &bsblob->ref_map;
+    }
+
+    unsigned csum_i = 0;
+    size_t csum_cnt;
+    uint32_t length;
+    if (bblob.has_csum()) {
+      csum_cnt = bblob.get_csum_count();
+      uint32_t csum_chunk_size = bblob.get_csum_chunk_size();
+      uint64_t csum_offset_align = p2align(ep->blob_offset, csum_chunk_size);
+      csum_i = csum_offset_align / csum_chunk_size;
+      // size of first chunk
+      length = p2align(ep->blob_offset + csum_chunk_size, csum_chunk_size) - ep->blob_offset;
+      length = std::min<uint32_t>(length_left, length);
+      if (csum_chunk_size < chunk_size) {
+	chunk_size = csum_chunk_size;
+      }
+    } else {
+      length = p2align(ep->blob_offset + chunk_size, chunk_size) - ep->blob_offset;
+      length = std::min<uint32_t>(length_left, length);
+    }
+
+    uint32_t bo = ep->blob_offset;
+    while (length_left > 0) {
+      uint64_t csum_val = 0;
+      if (bblob.has_csum()) {
+	ceph_assert(csum_cnt > csum_i);
+	csum_val = bblob.get_csum_item(csum_i);
+	++csum_i;
+      }
+      //extract AU from extents
+      uint64_t disk_extent_left; // length till the end of disk extent
+      uint64_t disk_offset = bblob.calc_offset(bo, &disk_extent_left);
+      bluestore_extent_ref_map_t::debug_len_cnt l_c = {0, std::numeric_limits<uint32_t>::max()};
+      if (bblob.is_shared()) {
+	l_c = ref_map->debug_peek(disk_offset);
+	if (l_c.len < length) {
+	  length = l_c.len;
+	}
+      }
+      res.emplace_back(disk_offset, length, csum_val, l_c.cnt);
+      bo += length;
+      length_left -= length;
+      length = chunk_size;
+    };
+  }
+  return res;
+}
+
+std::ostream& operator<<(std::ostream& out, const BlueStore::ExtentMap::debug_au_vector_t& auv)
+{
+  out << "[";
+  for (size_t i = 0; i < auv.size(); ++i) {
+    if (i != 0) {
+      out << " ";
+    }
+    out << "0x" << std::hex;
+    if (auv[i].disk_offset != -1ULL) {
+      out << auv[i].disk_offset << "~" << auv[i].disk_length
+	  << "(" << std::dec << int32_t(auv[i].ref_cnts)
+	  << "):" << std::hex << auv[i].chksum;
+    } else {
+      out << "~" << auv[i].disk_length << std::dec;
+    }
+  }
+  out << "]" << std::dec;
+  return out;
+}
+
 // Onode
 
 #undef dout_prefix
@@ -16610,7 +16698,8 @@ void BlueStore::_wctx_finish(
   set<SharedBlob*> *maybe_unshared_blobs)
 {
 #ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
+  bool is_smr = bdev && bdev->is_smr();
+  if (is_smr) {
     for (auto& w : wctx->writes) {
       for (auto& e : w.b->get_blob().get_extents()) {
 	if (!e.is_valid()) {
@@ -16658,7 +16747,7 @@ void BlueStore::_wctx_finish(
 	    unshare_ptr);
 #ifdef HAVE_LIBZBD
 	  // we also drop zone ref for shared blob extents
-	  if (bdev->is_smr() && e.is_valid()) {
+	  if (is_smr && e.is_valid()) {
 	    zones_with_releases.insert(e.offset / zone_size);
 	  }
 #endif
@@ -16689,7 +16778,7 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
 #ifdef HAVE_LIBZBD
-      if (bdev->is_smr() && e.is_valid()) {
+      if (is_smr && e.is_valid()) {
 	zones_with_releases.insert(e.offset / zone_size);
       }
 #endif
