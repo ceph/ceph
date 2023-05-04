@@ -5614,6 +5614,7 @@ void RGWCopyObj::execute(optional_yield y)
 	   &s->req_id, /* use req_id as tag */
 	   &etag,
 	   copy_obj_progress_cb, (void *)this,
+           nullptr,	// XXX change me
 	   this,
 	   s->yield);
 

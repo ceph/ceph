@@ -1308,7 +1308,7 @@ int rgw_s3_prepare_decrypt(RGWDecryptContext &cb,
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
   ldpp_dout(cb.dpp, 15) << "Encryption mode: " << stored_mode << dendl;
 
-  const char *req_sse = cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION", NULL);
+  const char *req_sse = cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION");
   if (nullptr != req_sse && cb.get_or_head) {
     return -ERR_INVALID_REQUEST;
   }
@@ -1318,8 +1318,7 @@ int rgw_s3_prepare_decrypt(RGWDecryptContext &cb,
       ldpp_dout(cb.dpp, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
-    const char *req_cust_alg =
-        cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM", NULL);
+    const char *req_cust_alg = cb.get_customer_algorithm();
 
     if (nullptr == req_cust_alg)  {
       ldpp_dout(cb.dpp, 5) << "ERROR: Request for SSE-C encrypted object missing "
@@ -1336,7 +1335,7 @@ int rgw_s3_prepare_decrypt(RGWDecryptContext &cb,
 
     std::string key_bin;
     try {
-      key_bin = from_base64(cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY", ""));
+      key_bin = from_base64(cb.get_customer_key(""));
     } catch (...) {
       ldpp_dout(cb.dpp, 5) << "ERROR: rgw_s3_prepare_decrypt invalid encryption key "
                        << "which contains character that is not base64 encoded."
@@ -1353,8 +1352,7 @@ int rgw_s3_prepare_decrypt(RGWDecryptContext &cb,
       return -EINVAL;
     }
 
-    std::string keymd5 =
-        cb.env->get("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY_MD5", "");
+    std::string keymd5 = cb.get_customer_key_md5("");
     std::string keymd5_bin;
     try {
       keymd5_bin = from_base64(keymd5);
@@ -1397,8 +1395,7 @@ int rgw_s3_prepare_decrypt(RGWDecryptContext &cb,
   }
 
   if (stored_mode == "SSE-KMS") {
-    if (cb.cct->_conf->rgw_crypt_require_ssl &&
-        !rgw_transport_is_secure(cb.cct, *cb.env)) {
+    if (!cb.secure_channel) {
       ldpp_dout(cb.dpp, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
@@ -1467,8 +1464,7 @@ int rgw_s3_prepare_decrypt(RGWDecryptContext &cb,
 
   /* SSE-S3 */
   if (stored_mode == "AES256") {
-    if (cb.cct->_conf->rgw_crypt_require_ssl &&
-        !rgw_transport_is_secure(cb.cct, *cb.env)) {
+    if (!cb.secure_channel) {
       ldpp_dout(cb.dpp, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }

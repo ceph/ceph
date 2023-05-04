@@ -246,6 +246,15 @@ class ObjectProcessor : public DataProcessor {
                        optional_yield y) = 0;
 };
 
+/**
+ * @brief Read filter when copying data from object to another.
+ */
+class ObjectFilter {
+public:
+  virtual ~ObjectFilter() = default;
+  virtual ObjectProcessor & get_filter(ObjectProcessor& next) = 0;
+};
+
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
@@ -962,6 +971,7 @@ class Object {
 	       boost::optional<ceph::real_time> delete_at,
                std::string* version_id, std::string* tag, std::string* etag,
                void (*progress_cb)(off_t, void *), void* progress_data,
+               rgw::sal::ObjectFilter *read_filter,
                const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Get the ACL for this object */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;

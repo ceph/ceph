@@ -2903,6 +2903,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* string *petag */
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
+               nullptr, /* rgw::sal::ObjectFilter *read_filter */
                dpp,
                null_yield);
   if (r == -ECANCELED || r == -ENOENT) {
@@ -2997,6 +2998,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                        nullptr,       /* string *petag */
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
                        nullptr,       /* void *progress_data */
+                       nullptr,       /* rgw::sal::ObjectFilter *read_filter */
                        dpp,
                        null_yield);
     if (ret == -ECANCELED || ret == -ENOENT) {
@@ -3597,7 +3599,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
 
   return copy_obj_data(rctx, dest_bucket_info, dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime,
-                       attrset, 0, real_time(), NULL, dpp, y);
+                       attrset, 0, real_time(), NULL, nullptr, dpp, y);
 }
 
 int RGWRados::reindex_obj(const RGWBucketInfo& bucket_info,
@@ -4288,6 +4290,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               rgw::sal::ObjectFilter *read_filter,
                const DoutPrefixProvider *dpp,
                optional_yield y)
 {
@@ -4456,7 +4459,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(obj_ctx, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at,
+                         petag, read_filter, dpp, y);
   }
 
   /* This has been in for 2 years, so we can safely assume amanifest is not NULL */
@@ -4617,6 +4621,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
+               rgw::sal::ObjectFilter *read_filter,
                const DoutPrefixProvider *dpp,
                optional_yield y)
 {
@@ -4625,9 +4630,11 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
-  AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info,
+  AtomicObjectProcessor aoproc(aio.get(), this, dest_bucket_info,
                                   &dest_placement, dest_bucket_info.owner,
                                   obj_ctx, dest_obj, olh_epoch, tag, dpp, y);
+  rgw::sal::ObjectProcessor &processor { read_filter ? read_filter->get_filter(aoproc)
+    : static_cast< rgw::sal::ObjectProcessor&>(aoproc)};
   int ret = processor.prepare(y);
   if (ret < 0)
     return ret;
@@ -4730,6 +4737,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       olh_epoch,
                       real_time(),
                       nullptr /* petag */,
+                      nullptr,
                       dpp,
                       y);
   if (ret < 0) {
