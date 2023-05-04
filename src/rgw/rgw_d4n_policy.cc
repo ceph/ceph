@@ -5,16 +5,16 @@
 
 namespace rgw { namespace d4n {
 
-int PolicyDriver::find_client(cpp_redis::client *client) {
+int CachePolicy::find_client(cpp_redis::client *client) {
   if (client->is_connected())
     return 0;
 
-  if (host == "" || port == 0) {
+  if (get_addr().host == "" || get_addr().port == 0) {
     dout(10) << "RGW D4N Cache: D4N cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
   }
 
-  client->connect(host, port, nullptr);
+  client->connect(get_addr().host, get_addr().port, nullptr);
 
   if (!client->is_connected())
     return ECONNREFUSED;
@@ -22,7 +22,7 @@ int PolicyDriver::find_client(cpp_redis::client *client) {
   return 0;
 }
 
-int PolicyDriver::exist_key(std::string key) {
+int CachePolicy::exist_key(std::string key) {
   int result = -1;
   std::vector<std::string> keys;
   keys.push_back(key);
@@ -44,59 +44,8 @@ int PolicyDriver::exist_key(std::string key) {
   return result;
 }
 
-int PolicyDriver::update_gw(CacheBlock* block) {
-  std::string result;
-  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory"; // should have "build_index" method -Sam
-  int globalWeight;
-
-  if (!client.is_connected()) {
-    find_client(&client);
-  }
-
-  if (exist_key(key)) {
-    try {
-      client.hget(key, "globalWeight", [&globalWeight](cpp_redis::reply &reply) {
-        if (!reply.is_null()) {
-          globalWeight = reply.as_integer();
-        }
-      });
-
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return -2;
-    }
-  } else {
-    return -1;
-  }
-
-  try {
-    int age;
-    // get local cache age
-	
-    /* Update global weight */
-    globalWeight += age;
-    
-    client.hset(key, "globalWeight", std::to_string(globalWeight), [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_string();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-
-    if (result != "OK") {
-      return -1;
-    }
-  } catch(std::exception &e) {
-    return -2;
-  }
-
-  return 0;
-}
-
-int PolicyDriver::get_block(CacheBlock* block) {
+int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
   int result = -1;
-  std::string response;
   std::string key = "rgw-object:" + block->cacheObj.objName + ":cache";
 
   if (!client.is_connected()) {
@@ -133,12 +82,12 @@ int PolicyDriver::get_block(CacheBlock* block) {
       }
 
       /* Check local cache */
-      if (location == (host + ":" + std::to_string(port))) {
+      if (location == (get_addr().host + ":" + std::to_string(get_addr().port))) {
 	  // get local weight from cache
 	  // add age to local weight
 	  // update in cache
       } else {
-	int freeSpace = 0; // find free space
+	uint64_t freeSpace = 0; // find free space
 
 	while (freeSpace < block->size) {
 	  freeSpace += eviction();
@@ -162,10 +111,11 @@ int PolicyDriver::get_block(CacheBlock* block) {
 
 	  // add age to global weight
 	  
+	  result = 0;
 	  try {
-	    client.hset(key, "globalWeight", std::to_string(globalWeight), [&response](cpp_redis::reply& reply) {
+	    client.hset(key, "globalWeight", std::to_string(globalWeight), [&result](cpp_redis::reply& reply) {
 	      if (!reply.is_null()) {
-	        response = reply.as_string();
+	        result = reply.as_integer();
 	      }
 	    }); 
 
@@ -174,7 +124,7 @@ int PolicyDriver::get_block(CacheBlock* block) {
 	    return -1;
 	  }
 	  
-	  if (response != "OK")
+	  if (result)
 	    return -2;
 	} else { // make less repetitive -Sam
 	  // get local weight from data lake
@@ -190,7 +140,7 @@ int PolicyDriver::get_block(CacheBlock* block) {
   return 0;
 }
 
-int PolicyDriver::eviction() {
+int LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
   CacheBlock* victim = NULL; // find victim
   int result = -1;
   std::string response;
@@ -293,20 +243,17 @@ int PolicyDriver::eviction() {
   return 0;
 }
 
-bool PolicyDriver::should_cache(int objSize, int minSize) {
-  if (objSize < minSize)
-    return true;
-  else
-    return false;
+int PolicyDriver::set_policy() { // Add "none" option? -Sam
+  if (policyName == "lfuda") {
+    cachePolicy = new LFUDAPolicy();
+    return 0;
+  } else
+    return -1;
 }
 
-bool PolicyDriver::should_cache(std::string uploadType) {
-  if (uploadType == "PUT")
-    return true;
-  else if (uploadType == "MULTIPART")
-    return false;
-  else /* Should not reach here */
-    return false;
+int PolicyDriver::delete_policy() {
+  delete cachePolicy;
+  return 0;
 }
 
 } } // namespace rgw::d4n
