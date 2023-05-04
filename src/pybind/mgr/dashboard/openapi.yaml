@@ -566,6 +566,9 @@ paths:
                   type: string
                 features:
                   type: string
+                force:
+                  default: false
+                  type: boolean
                 mirror_mode:
                   type: string
                 name:
