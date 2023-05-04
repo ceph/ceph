@@ -176,6 +176,11 @@ struct bluestore_extent_ref_map_t {
   void get(uint64_t offset, uint32_t len);
   void put(uint64_t offset, uint32_t len, PExtentVector *release,
 	   bool *maybe_unshared);
+  struct debug_len_cnt {
+    uint32_t len; // length for which cnt is valid
+    uint32_t cnt; // reference count for the region
+  };
+  debug_len_cnt debug_peek(uint64_t offset) const;
 
   bool contains(uint64_t offset, uint32_t len) const;
   bool intersects(uint64_t offset, uint32_t len) const;
@@ -841,6 +846,28 @@ public:
       return reinterpret_cast<const ceph_le32*>(p)[i];
     case 8:
       return reinterpret_cast<const ceph_le64*>(p)[i];
+    default:
+      ceph_abort_msg("unrecognized csum word size");
+    }
+  }
+  void set_csum_item(unsigned i, uint64_t val)  {
+    size_t cs = get_csum_value_size();
+    char *p = csum_data.c_str();
+    switch (cs) {
+    case 0:
+      ceph_abort_msg("no csum data, bad index");
+    case 1:
+      reinterpret_cast<uint8_t*>(p)[i] = val;
+      break;
+    case 2:
+      reinterpret_cast<ceph_le16*>(p)[i] = val;
+      break;
+    case 4:
+      reinterpret_cast<ceph_le32*>(p)[i] = val;
+      break;
+    case 8:
+      reinterpret_cast<ceph_le64*>(p)[i] = val;
+      break;
     default:
       ceph_abort_msg("unrecognized csum word size");
     }
