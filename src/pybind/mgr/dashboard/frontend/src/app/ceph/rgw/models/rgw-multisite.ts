@@ -43,4 +43,5 @@ export class RgwZone {
   placement_pools: any[];
   realm_id: string;
   notif_pool: string;
+  endpoints: string[];
 }
