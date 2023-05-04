@@ -1146,7 +1146,7 @@ class CephadmServe:
                             client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]],
                             host: str) -> None:
         updated_files = False
-        if host in self.mgr.offline_hosts:
+        if host in [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]:
             return
         old_files = self.mgr.cache.get_host_client_files(host).copy()
         for path, m in client_files.get(host, {}).items():
