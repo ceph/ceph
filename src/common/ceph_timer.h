@@ -105,8 +105,20 @@ class timer {
       while (!schedule.empty()) {
 	auto p = schedule.begin();
 	// Should we wait for the future?
-	if (p->t > now)
-	  break;
+        #if defined(_WIN32)
+        if (p->t - now > std::chrono::milliseconds(1)) {
+          // std::condition_variable::wait_for uses SleepConditionVariableSRW
+          // on Windows, which has millisecond precision. Deltas <1ms will
+          // lead to busy loops, which should be avoided. This situation is
+          // quite common since "wait_for" often returns ~1ms earlier than
+          // requested.
+          break;
+        }
+        #else // !_WIN32
+        if (p->t > now) {
+          break;
+        }
+        #endif
 
 	auto& e = *p;
 	schedule.erase(e);
