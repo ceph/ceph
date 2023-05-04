@@ -150,16 +150,24 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
     pr2issues = {}
     pr2info = {}
 
-    merges = []
+    merges = {}
     for commit in repo.iter_commits(ref, merges=True):
         merge = merge_re.match(commit.summary)
         if not merge:
             continue
         PR = merge.group(2)
-        merges.append(PR)
+        merges[PR] = "merge_commit"
     if cherry_picks:
         for PR in cherry_picks.split(','):
-            merges.append(PR)
+            merges[PR] = "cherry_pick"
+
+    merge_commits = {}
+    for commit in repo.iter_commits(ref, merges=True):
+        merge = merge_re.match(commit.summary)
+        if not merge:
+            continue
+        number = merge.group(2)
+        merge_commits[number] = commit
 
     for number in merges:
         print ("Considering PR#" + number)
@@ -184,7 +192,11 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
                 else:
                     print(f"Could not fetch PR {number} in {retries} tries.")
                     raise
-        (title, message) = _title_message(commit, pr, strict)
+        if merges[number] == "merge_commit":
+            commit = merge_commits[number]
+            (title, message) = _title_message(commit, pr, strict)
+        else:
+            (title, message) = (pr['title'], pr['body'])
         issues = []
         if pr['body']:
             issues = fixes_re.findall(pr['body']) + tracker_re.findall(
@@ -192,19 +204,28 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
             )
 
         authors = {}
-        for c in repo.iter_commits(
-                     "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
-                 ):
+        if merges[number] == "merge_commit":
+            for c in repo.iter_commits(
+                    "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
+                    ):
+                for author in re.findall(
+                        "Signed-off-by:\s*(.*?)\s*<", c.message
+                        ):
+                    authors[author] = 1
+                    issues.extend(fixes_re.findall(c.message) +
+                            tracker_re.findall(c.message))
+        else:
             for author in re.findall(
-                              "Signed-off-by:\s*(.*?)\s*<", c.message
-                          ):
+                    "Signed-off-by:\s*(.*?)\s*<", message
+                    ):
                 authors[author] = 1
-            issues.extend(fixes_re.findall(c.message) +
-                          tracker_re.findall(c.message))
         if authors:
             author = ", ".join(authors.keys())
         else:
-            author = commit.parents[-1].author.name
+            if merges[number] == "merge_commit":
+                author = commit.parents[-1].author.name
+            else:
+                author = pr['user']['login']
 
         if strict and not issues:
             print ("ERROR: https://github.com/ceph/ceph/pull/" +
