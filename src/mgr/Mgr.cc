@@ -388,7 +388,24 @@ void Mgr::init()
     entity_addrvec_t addrv;
     addrv.parse(ident);
     ident = (char*)realloc(ident, 0);
-    py_module_registry->register_client("libcephsqlite", addrv);
+    std::string_view name{"libcephsqlite"};
+    cluster_state.with_mgrmap([&e](const MgrMap& m) {
+      e = m.get_epoch();
+    });
+    py_module_registry->register_client(name, addrv);
+    while (true) {
+      // Drop lock to receive MgrMap from the monitor in ms_dispatch
+      lock.unlock();
+      // Wait to receive MgrMap from the monitor
+      C_SaferCond c;
+      cluster_state.wait_for_mgrmap(&c, e+1);
+      c.wait();
+      lock.lock();
+      if (cluster_state.is_client_in_mgrmap(name, addrv, &e)) {
+	// Client registered in the updated MgrMap
+	break;
+      }
+    }
   }
 #endif
 

@@ -225,6 +225,18 @@ public:
     return clients;
   }
 
+  bool is_client_in_registry(std::string_view name,
+                             const entity_addrvec_t& client_addr) const {
+    std::lock_guard l(lock);
+    auto itp = clients.equal_range(std::string(name));
+    for (auto it = itp.first; it != itp.second; ++it) {
+      if (it->second == client_addr) {
+	return true;
+      }
+    }
+    return false;
+  }
+
   bool is_module_active(const std::string &name) {
     ceph_assert(active_modules);
     return active_modules->module_exists(name);

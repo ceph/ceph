@@ -17,6 +17,7 @@
 #include "mds/FSMap.h"
 #include "mon/MgrMap.h"
 #include "common/ceph_mutex.h"
+#include "include/Context.h"
 
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
@@ -52,6 +53,8 @@ protected:
 
   class ClusterSocketHook *asok_hook;
 
+  std::vector<Context*> waiting_for_mgrmap;
+
 public:
 
   void load_digest(MMgrDigest *m);
@@ -71,6 +74,29 @@ public:
   bool have_fsmap() const {
     std::lock_guard l(lock);
     return fsmap.get_epoch() > 0;
+  }
+
+  bool is_client_in_mgrmap(std::string_view name,
+                           const entity_addrvec_t& client_addr,
+                           epoch_t* e) const {
+    std::lock_guard l(lock);
+    *e = mgr_map.get_epoch();
+    auto itp = mgr_map.clients.equal_range(std::string(name));
+    for (auto it = itp.first; it != itp.second; ++it) {
+      if (it->second == client_addr) {
+	return true;
+      }
+    }
+    return false;
+  }
+
+  void wait_for_mgrmap(Context* c, epoch_t e) {
+    std::lock_guard l(lock);
+    if (mgr_map.get_epoch() >= e) {
+      c->complete(0);
+    } else {
+      waiting_for_mgrmap.push_back(c);
+    }
   }
 
   template<typename Callback, typename...Args>

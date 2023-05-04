@@ -18,6 +18,7 @@
 #include "mgr/ClusterState.h"
 #include <time.h>
 #include <boost/range/adaptor/reversed.hpp>
+#include "include/Context.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
@@ -57,6 +58,7 @@ void ClusterState::set_mgr_map(MgrMap const &new_mgrmap)
 {
   std::lock_guard l(lock);
   mgr_map = new_mgrmap;
+  finish_contexts(g_ceph_context, waiting_for_mgrmap);
 }
 
 void ClusterState::set_service_map(ServiceMap const &new_service_map)

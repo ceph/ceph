@@ -1392,9 +1392,14 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
   if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
     return nullptr;
   }
-  without_gil([&] {
-    self->py_modules->register_client(self->this_module->get_name(), addrs);
-  });
+  try {
+    without_gil([&] {
+      self->py_modules->register_client(self->this_module->get_name(), addrs);
+    });
+  } catch (std::runtime_error& e) {
+    PyErr_SetString(PyExc_RuntimeError, e.what());
+    return nullptr;
+  }
   Py_RETURN_NONE;
 }
 
