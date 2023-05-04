@@ -32,6 +32,6 @@ describe('RgwMultisiteDetailsComponent', () => {
 
   it('should display right title', () => {
     const span = debugElement.nativeElement.querySelector('.card-header');
-    expect(span.textContent).toBe('Multi-site Topology viewer');
+    expect(span.textContent).toBe('Topology Viewer');
   });
 });

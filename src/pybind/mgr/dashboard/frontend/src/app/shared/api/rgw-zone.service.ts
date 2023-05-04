@@ -19,8 +19,16 @@ export class RgwZoneService {
     defaultZone: boolean,
     master: boolean,
     endpoints: Array<string>,
-    user: string
+    user: string,
+    createSystemUser: boolean,
+    master_zone_of_master_zonegroup: RgwZone
   ) {
+    let master_zone_name = '';
+    if (master_zone_of_master_zonegroup !== undefined) {
+      master_zone_name = master_zone_of_master_zonegroup.name;
+    } else {
+      master_zone_name = '';
+    }
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
         zone_name: zone.name,
@@ -28,7 +36,9 @@ export class RgwZoneService {
         default: defaultZone,
         master: master,
         zone_endpoints: endpoints,
-        user: user
+        user: user,
+        createSystemUser: createSystemUser,
+        master_zone_of_master_zonegroup: master_zone_name
       });
       return this.http.post(`${this.url}`, null, { params: params });
     });
@@ -63,22 +73,96 @@ export class RgwZoneService {
     });
   }
 
+  update(
+    zone: RgwZone,
+    zonegroup: RgwZonegroup,
+    newZoneName: string,
+    defaultZone?: boolean,
+    master?: boolean,
+    endpoints?: Array<string>,
+    user?: string,
+    placementTarget?: string,
+    dataPool?: string,
+    indexPool?: string,
+    dataExtraPool?: string,
+    storageClass?: string,
+    dataPoolClass?: string,
+    compression?: string,
+    master_zone_of_master_zonegroup?: RgwZone
+  ) {
+    let master_zone_name = '';
+    if (master_zone_of_master_zonegroup !== undefined) {
+      master_zone_name = master_zone_of_master_zonegroup.name;
+    } else {
+      master_zone_name = '';
+    }
+    return this.rgwDaemonService.request((requestBody: any) => {
+      requestBody = {
+        zone_name: zone.name,
+        zonegroup_name: zonegroup.name,
+        new_zone_name: newZoneName,
+        default: defaultZone,
+        master: master,
+        zone_endpoints: endpoints,
+        user: user,
+        placement_target: placementTarget,
+        data_pool: dataPool,
+        index_pool: indexPool,
+        data_extra_pool: dataExtraPool,
+        storage_class: storageClass,
+        data_pool_class: dataPoolClass,
+        compression: compression,
+        master_zone_of_master_zonegroup: master_zone_name
+      };
+      return this.http.put(`${this.url}/${zone.name}`, requestBody);
+    });
+  }
+
   getZoneTree(zone: RgwZone, defaultZoneId: string, zonegroup?: RgwZonegroup, realm?: RgwRealm) {
     let nodes = {};
     let zoneIds = [];
     nodes['id'] = zone.id;
     zoneIds.push(zone.id);
     nodes['name'] = zone.name;
+    nodes['type'] = 'zone';
+    nodes['name'] = zone.name;
     nodes['info'] = zone;
     nodes['icon'] = Icons.deploy;
+    nodes['zone_zonegroup'] = zonegroup;
     nodes['parent'] = zonegroup ? zonegroup.name : '';
     nodes['second_parent'] = realm ? realm.name : '';
     nodes['is_default'] = zone.id === defaultZoneId ? true : false;
+    nodes['endpoints'] = zone.endpoints;
     nodes['is_master'] = zonegroup && zonegroup.master_zone === zone.id ? true : false;
     nodes['type'] = 'zone';
     return {
       nodes: nodes,
       zoneIds: zoneIds
     };
+  }
+
+  getPoolNames() {
+    return this.rgwDaemonService.request(() => {
+      return this.http.get(`${this.url}/get_pool_names`);
+    });
+  }
+
+  createSystemUser(userName: string, zone: string) {
+    return this.rgwDaemonService.request((requestBody: any) => {
+      requestBody = {
+        userName: userName,
+        zoneName: zone
+      };
+      return this.http.put(`${this.url}/create_system_user`, requestBody);
+    });
+  }
+
+  getUserList(zoneName: string) {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      params = params.appendAll({
+        zoneName: zoneName
+      });
+      return this.http.get(`${this.url}/get_user_list`, { params: params });
+    });
   }
 }

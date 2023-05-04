@@ -30,12 +30,19 @@
                    id="default_realm"
                    name="default_realm"
                    formControlName="default_realm"
+                   [attr.disabled]="action === 'edit' ? true: null"
                    type="checkbox">
             <label class="form-check-label"
                    for="default_realm"
                    i18n>Default</label>
-            <cd-helper *ngIf="multisiteRealmForm.get('default_realm').disabled">
-              <span i18n>You cannot unset the default flag. Please create another realm and set it as default.</span>
+            <cd-helper *ngIf="action === 'edit' && info.data.is_default">
+              <span i18n>You cannot unset the default flag.</span>
+            </cd-helper>
+            <cd-helper *ngIf="action === 'edit' && !info.data.is_default">
+              <span i18n>Please consult the <a href="{{ docUrl }}">documentation</a> to follow the failover mechanism</span>
+            </cd-helper>
+            <cd-helper *ngIf="defaultRealmDisabled && action === 'create'">
+              <span i18n>Default realm already exists.</span>
             </cd-helper>
           </div>
         </div>
