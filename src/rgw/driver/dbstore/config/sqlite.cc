@@ -945,7 +945,7 @@ class SQLiteZoneGroupWriter : public sal::ZoneGroupWriter {
       }
       auto binding = sqlite::stmt_binding{stmt.get()};
       sqlite::bind_text(dpp, binding, P1, info.id);
-      sqlite::bind_text(dpp, binding, P2, info.realm_id);
+      bind_text_or_null(dpp, binding, P2, info.realm_id);
       sqlite::bind_text(dpp, binding, P3, data);
       sqlite::bind_int(dpp, binding, P4, ver);
       sqlite::bind_text(dpp, binding, P5, tag);
@@ -1084,7 +1084,7 @@ int SQLiteConfigStore::write_default_zonegroup_id(const DoutPrefixProvider* dpp,
       }
     }
     auto binding = sqlite::stmt_binding{stmt->get()};
-    sqlite::bind_text(dpp, binding, P1, realm_id);
+    bind_text_or_null(dpp, binding, P1, realm_id);
     sqlite::bind_text(dpp, binding, P2, zonegroup_id);
 
     auto reset = sqlite::stmt_execution{stmt->get()};
@@ -1114,7 +1114,7 @@ int SQLiteConfigStore::read_default_zonegroup_id(const DoutPrefixProvider* dpp,
       stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
     }
     auto binding = sqlite::stmt_binding{stmt.get()};
-    sqlite::bind_text(dpp, binding, P1, realm_id);
+    bind_text_or_null(dpp, binding, P1, realm_id);
 
     auto reset = sqlite::stmt_execution{stmt.get()};
     sqlite::eval1(dpp, reset);
@@ -1146,7 +1146,7 @@ int SQLiteConfigStore::delete_default_zonegroup_id(const DoutPrefixProvider* dpp
       stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
     }
     auto binding = sqlite::stmt_binding{stmt.get()};
-    sqlite::bind_text(dpp, binding, P1, realm_id);
+    bind_text_or_null(dpp, binding, P1, realm_id);
 
     auto reset = sqlite::stmt_execution{stmt.get()};
     sqlite::eval0(dpp, reset);
@@ -1209,7 +1209,7 @@ int SQLiteConfigStore::create_zonegroup(const DoutPrefixProvider* dpp,
     auto binding = sqlite::stmt_binding{stmt->get()};
     sqlite::bind_text(dpp, binding, P1, info.id);
     sqlite::bind_text(dpp, binding, P2, info.name);
-    sqlite::bind_text(dpp, binding, P3, info.realm_id);
+    bind_text_or_null(dpp, binding, P3, info.realm_id);
     sqlite::bind_text(dpp, binding, P4, data);
     sqlite::bind_int(dpp, binding, P5, ver);
     sqlite::bind_text(dpp, binding, P6, tag);
@@ -1450,7 +1450,7 @@ class SQLiteZoneWriter : public sal::ZoneWriter {
       }
       auto binding = sqlite::stmt_binding{stmt.get()};
       sqlite::bind_text(dpp, binding, P1, info.id);
-      sqlite::bind_text(dpp, binding, P2, info.realm_id);
+      bind_text_or_null(dpp, binding, P2, info.realm_id);
       sqlite::bind_text(dpp, binding, P3, data);
       sqlite::bind_int(dpp, binding, P4, ver);
       sqlite::bind_text(dpp, binding, P5, tag);
@@ -1592,7 +1592,7 @@ int SQLiteConfigStore::write_default_zone_id(const DoutPrefixProvider* dpp,
       }
     }
     auto binding = sqlite::stmt_binding{stmt->get()};
-    sqlite::bind_text(dpp, binding, P1, realm_id);
+    bind_text_or_null(dpp, binding, P1, realm_id);
     sqlite::bind_text(dpp, binding, P2, zone_id);
 
     auto reset = sqlite::stmt_execution{stmt->get()};
@@ -1622,7 +1622,7 @@ int SQLiteConfigStore::read_default_zone_id(const DoutPrefixProvider* dpp,
       stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
     }
     auto binding = sqlite::stmt_binding{stmt.get()};
-    sqlite::bind_text(dpp, binding, P1, realm_id);
+    bind_text_or_null(dpp, binding, P1, realm_id);
 
     auto reset = sqlite::stmt_execution{stmt.get()};
     sqlite::eval1(dpp, reset);
@@ -1654,7 +1654,7 @@ int SQLiteConfigStore::delete_default_zone_id(const DoutPrefixProvider* dpp,
       stmt = sqlite::prepare_statement(dpp, conn->db.get(), sql);
     }
     auto binding = sqlite::stmt_binding{stmt.get()};
-    sqlite::bind_text(dpp, binding, P1, realm_id);
+    bind_text_or_null(dpp, binding, P1, realm_id);
 
     auto reset = sqlite::stmt_execution{stmt.get()};
     sqlite::eval0(dpp, reset);
@@ -1717,7 +1717,7 @@ int SQLiteConfigStore::create_zone(const DoutPrefixProvider* dpp,
     auto binding = sqlite::stmt_binding{stmt->get()};
     sqlite::bind_text(dpp, binding, P1, info.id);
     sqlite::bind_text(dpp, binding, P2, info.name);
-    sqlite::bind_text(dpp, binding, P3, info.realm_id);
+    bind_text_or_null(dpp, binding, P3, info.realm_id);
     sqlite::bind_text(dpp, binding, P4, data);
     sqlite::bind_int(dpp, binding, P5, ver);
     sqlite::bind_text(dpp, binding, P6, tag);
