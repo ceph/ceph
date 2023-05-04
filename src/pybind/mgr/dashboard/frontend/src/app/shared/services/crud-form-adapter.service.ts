@@ -26,6 +26,7 @@ export class CrudFormAdapterService {
       for (let j = 0; j < uiSchema.length; j++) {
         if (controlSchema[i].key == uiSchema[j].key) {
           controlSchema[i].props.templateOptions = uiSchema[j].templateOptions;
+          controlSchema[i].props.readonly = uiSchema[j].readonly;
           setupValidators(controlSchema[i], uiSchema);
         }
       }
@@ -34,6 +35,8 @@ export class CrudFormAdapterService {
       metadataFields: response.forms[form].task_info.metadataFields,
       message: response.forms[form].task_info.message
     };
-    return { title, uiSchema, controlSchema, taskInfo };
+    const methodType = response.forms[form].method_type;
+    const model = response.forms[form].model || {};
+    return { title, uiSchema, controlSchema, taskInfo, methodType, model };
   }
 }
