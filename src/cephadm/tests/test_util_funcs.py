@@ -2,8 +2,10 @@
 #
 from unittest import mock
 
+import functools
 import io
 import os
+import sys
 
 import pytest
 
@@ -545,3 +547,119 @@ def test_get_distro(monkeypatch, content, expected):
 
     monkeypatch.setattr("builtins.open", _fake_open)
     assert _cephadm.get_distro() == expected
+
+
+class FakeContext:
+    """FakeContext is a minimal type for passing as a ctx, when
+    with_cephadm_ctx is not appropriate (it enables too many mocks, etc).
+    """
+
+    timeout = 30
+
+
+def _has_non_zero_exit(clog):
+    assert any("Non-zero exit" in ll for _, _, ll in clog.record_tuples)
+
+
+def _has_values_somewhere(clog, values, non_zero=True):
+    if non_zero:
+        _has_non_zero_exit(clog)
+    for value in values:
+        assert any(value in ll for _, _, ll in clog.record_tuples)
+
+
+@pytest.mark.parametrize(
+    "pyline, expected, call_kwargs, log_check",
+    [
+        pytest.param(
+            "import time; time.sleep(0.1)",
+            ("", "", 0),
+            {},
+            None,
+            id="brief-sleep",
+        ),
+        pytest.param(
+            "import sys; sys.exit(2)",
+            ("", "", 2),
+            {},
+            _has_non_zero_exit,
+            id="exit-non-zero",
+        ),
+        pytest.param(
+            "import sys; sys.exit(0)",
+            ("", "", 0),
+            {"desc": "success"},
+            None,
+            id="success-with-desc",
+        ),
+        pytest.param(
+            "print('foo'); print('bar')",
+            ("foo\nbar\n", "", 0),
+            {"desc": "stdout"},
+            None,
+            id="stdout-print",
+        ),
+        pytest.param(
+            "import sys; sys.stderr.write('la\\nla\\nla\\n')",
+            ("", "la\nla\nla\n", 0),
+            {"desc": "stderr"},
+            None,
+            id="stderr-print",
+        ),
+        pytest.param(
+            "for i in range(501): print(i, flush=True)",
+            lambda r: r[2] == 0 and r[1] == "" and "500" in r[0].splitlines(),
+            {},
+            None,
+            id="stdout-long",
+        ),
+        pytest.param(
+            "for i in range(1000000): print(i, flush=True)",
+            lambda r: r[2] == 0
+            and r[1] == ""
+            and len(r[0].splitlines()) == 1000000,
+            {},
+            None,
+            id="stdout-very-long",
+        ),
+        pytest.param(
+            "import sys; sys.stderr.write('pow\\noof\\nouch\\n'); sys.exit(1)",
+            ("", "pow\noof\nouch\n", 1),
+            {"desc": "stderr"},
+            functools.partial(
+                _has_values_somewhere,
+                values=["pow", "oof", "ouch"],
+                non_zero=True,
+            ),
+            id="stderr-logged-non-zero",
+        ),
+        pytest.param(
+            "import time; time.sleep(4)",
+            ("", "", 124),
+            {"timeout": 1},
+            None,
+            id="long-sleep",
+        ),
+        pytest.param(
+            "import time\nfor i in range(100):\n\tprint(i, flush=True); time.sleep(0.01)",
+            ("", "", 124),
+            {"timeout": 0.5},
+            None,
+            id="slow-print-timeout",
+        ),
+        # Commands that time out collect no logs, return empty std{out,err} strings
+    ],
+)
+def test_call(caplog, monkeypatch, pyline, expected, call_kwargs, log_check):
+    import logging
+
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr("cephadm.logger", logging.getLogger())
+    ctx = FakeContext()
+    result = _cephadm.call(ctx, [sys.executable, "-c", pyline], **call_kwargs)
+    if callable(expected):
+        assert expected(result)
+    else:
+        assert result == expected
+    if callable(log_check):
+        log_check(caplog)

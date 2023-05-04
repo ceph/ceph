@@ -223,21 +223,23 @@ class SSHManager:
                                  addr: Optional[str] = None,
                                  ) -> None:
         try:
+            cephadm_tmp_dir = f"/tmp/cephadm-{self.mgr._cluster_fsid}"
             dirname = os.path.dirname(path)
             await self._check_execute_command(host, ['mkdir', '-p', dirname], addr=addr)
-            await self._check_execute_command(host, ['mkdir', '-p', '/tmp' + dirname], addr=addr)
-            tmp_path = '/tmp' + path + '.new'
+            await self._check_execute_command(host, ['mkdir', '-p', cephadm_tmp_dir + dirname], addr=addr)
+            tmp_path = cephadm_tmp_dir + path + '.new'
             await self._check_execute_command(host, ['touch', tmp_path], addr=addr)
             if self.mgr.ssh_user != 'root':
                 assert self.mgr.ssh_user
-                await self._check_execute_command(host, ['chown', '-R', self.mgr.ssh_user, tmp_path], addr=addr)
+                await self._check_execute_command(host, ['chown', '-R', self.mgr.ssh_user, cephadm_tmp_dir], addr=addr)
                 await self._check_execute_command(host, ['chmod', str(644), tmp_path], addr=addr)
             with NamedTemporaryFile(prefix='cephadm-write-remote-file-') as f:
                 os.fchmod(f.fileno(), 0o600)
                 f.write(content)
                 f.flush()
                 conn = await self._remote_connection(host, addr)
-                await asyncssh.scp(f.name, (conn, tmp_path))
+                async with conn.start_sftp_client() as sftp:
+                    await sftp.put(f.name, tmp_path)
             if uid is not None and gid is not None and mode is not None:
                 # shlex quote takes str or byte object, not int
                 await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)

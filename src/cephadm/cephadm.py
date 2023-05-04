@@ -54,7 +54,7 @@ DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.3.1'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.23.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:8.3.5'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
-DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.1.5'
+DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
 DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
@@ -1700,7 +1700,9 @@ class CallVerbosity(Enum):
         return _verbosity_level_to_log_level[self]  # type: ignore
 
 
-if sys.version_info < (3, 8):
+# disable coverage for the next block. this is copy-n-paste
+# from other code for compatibilty on older python versions
+if sys.version_info < (3, 8):  # pragma: no cover
     import itertools
     import threading
     import warnings
@@ -1805,7 +1807,9 @@ if sys.version_info < (3, 8):
 
 try:
     from asyncio import run as async_run   # type: ignore[attr-defined]
-except ImportError:
+except ImportError:  # pragma: no cover
+    # disable coverage for this block. it should be a copy-n-paste from
+    # from newer libs for compatibilty on older python versions
     def async_run(coro):  # type: ignore
         loop = asyncio.new_event_loop()
         try:
@@ -1840,13 +1844,6 @@ def call(ctx: CephadmContext,
         prefix += ': '
     timeout = timeout or ctx.timeout
 
-    async def tee(reader: asyncio.StreamReader) -> str:
-        collected = StringIO()
-        async for line in reader:
-            message = line.decode('utf-8')
-            collected.write(message)
-        return collected.getvalue()
-
     async def run_with_timeout() -> Tuple[str, str, int]:
         process = await asyncio.create_subprocess_exec(
             *command,
@@ -1856,14 +1853,29 @@ def call(ctx: CephadmContext,
         assert process.stdout
         assert process.stderr
         try:
-            stdout, stderr = await asyncio.gather(tee(process.stdout),
-                                                  tee(process.stderr))
-            returncode = await asyncio.wait_for(process.wait(), timeout)
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout,
+            )
         except asyncio.TimeoutError:
+            # try to terminate the process assuming it is still running.  It's
+            # possible that even after killing the process it will not
+            # complete, particularly if it is D-state.  If that happens the
+            # process.wait call will block, but we're no worse off than before
+            # when the timeout did not work.  Additionally, there are other
+            # corner-cases we could try and handle here but we decided to start
+            # simple.
+            process.kill()
+            await process.wait()
             logger.info(prefix + f'timeout after {timeout} seconds')
             return '', '', 124
         else:
-            return stdout, stderr, returncode
+            assert process.returncode is not None
+            return (
+                stdout.decode('utf-8'),
+                stderr.decode('utf-8'),
+                process.returncode,
+            )
 
     stdout, stderr, returncode = async_run(run_with_timeout())
     log_level = verbosity.success_log_level()
@@ -3127,6 +3139,18 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(cc.get_container_mounts(data_dir))
 
+    # Modifications podman makes to /etc/hosts causes issues with
+    # certain daemons (specifically referencing "host.containers.internal" entry
+    # being added to /etc/hosts in this case). To avoid that, but still
+    # allow users to use /etc/hosts for hostname resolution, we can
+    # mount the host's /etc/hosts file.
+    # https://tracker.ceph.com/issues/58532
+    # https://tracker.ceph.com/issues/57018
+    if isinstance(ctx.container_engine, Podman):
+        if os.path.exists('/etc/hosts'):
+            if '/etc/hosts' not in mounts:
+                mounts['/etc/hosts'] = '/etc/hosts:ro'
+
     return mounts
 
 
@@ -3278,6 +3302,14 @@ def get_container(ctx: CephadmContext,
         ])
         if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION and not ctx.no_cgroups_split:
             container_args.append('--cgroups=split')
+        # if /etc/hosts doesn't exist, we can be confident
+        # users aren't using it for host name resolution
+        # and adding --no-hosts avoids bugs created in certain daemons
+        # by modifications podman makes to /etc/hosts
+        # https://tracker.ceph.com/issues/58532
+        # https://tracker.ceph.com/issues/57018
+        if not os.path.exists('/etc/hosts'):
+            container_args.extend(['--no-hosts'])
 
     return CephContainer.for_daemon(
         ctx,
@@ -3504,13 +3536,13 @@ def deploy_daemon_units(
 ) -> None:
     # cmd
 
-    def add_stop_actions(f: TextIO) -> None:
+    def add_stop_actions(f: TextIO, timeout: Optional[int]) -> None:
         # following generated script basically checks if the container exists
         # before stopping it. Exit code will be success either if it doesn't
         # exist or if it exists and is stopped successfully.
         container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
-        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True))} \n')
-        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd())} \n')
+        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True, timeout=timeout))} \n')
+        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd(timeout=timeout))} \n')
 
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     with open(data_dir + '/unit.run.new', 'w') as f, \
@@ -3596,11 +3628,12 @@ def deploy_daemon_units(
         os.rename(data_dir + '/unit.meta.new',
                   data_dir + '/unit.meta')
 
+    timeout = 30 if daemon_type == 'osd' else None
     # post-stop command(s)
     with open(data_dir + '/unit.poststop.new', 'w') as f:
         # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
         # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
-        add_stop_actions(f)
+        add_stop_actions(f, timeout)
         if daemon_type == 'osd':
             assert osd_fsid
             poststop = get_ceph_volume_container(
@@ -3630,7 +3663,7 @@ def deploy_daemon_units(
 
     # post-stop command(s)
     with open(data_dir + '/unit.stop.new', 'w') as f:
-        add_stop_actions(f)
+        add_stop_actions(f, timeout)
         os.fchmod(f.fileno(), 0o600)
         os.rename(data_dir + '/unit.stop.new',
                   data_dir + '/unit.stop')
@@ -4142,6 +4175,9 @@ class CephContainer:
             if os.path.exists('/etc/ceph/podman-auth.json'):
                 cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
 
+        if isinstance(self.ctx.container_engine, Docker):
+            cmd_args.extend(['--ulimit', 'nofile=1048576'])
+
         envs: List[str] = [
             '-e', 'CONTAINER_IMAGE=%s' % self.image,
             '-e', 'NODE_NAME=%s' % get_hostname(),
@@ -4256,11 +4292,18 @@ class CephContainer:
             ret.append(self.cname)
         return ret
 
-    def stop_cmd(self, old_cname: bool = False) -> List[str]:
-        ret = [
-            str(self.ctx.container_engine.path),
-            'stop', self.old_cname if old_cname else self.cname,
-        ]
+    def stop_cmd(self, old_cname: bool = False, timeout: Optional[int] = None) -> List[str]:
+        if timeout is None:
+            ret = [
+                str(self.ctx.container_engine.path),
+                'stop', self.old_cname if old_cname else self.cname,
+            ]
+        else:
+            ret = [
+                str(self.ctx.container_engine.path),
+                'stop', '-t', f'{timeout}',
+                self.old_cname if old_cname else self.cname,
+            ]
         return ret
 
     def run(self, timeout=DEFAULT_TIMEOUT, verbosity=CallVerbosity.VERBOSE_ON_FAILURE):
@@ -5068,7 +5111,7 @@ def infer_mon_network(ctx: CephadmContext, mon_eps: List[EndPoint]) -> Optional[
     mon_networks = []
     for net, ifaces in list_networks(ctx).items():
         # build local_ips list for the specified network
-        local_ips: List[str] = []
+        local_ips: List[Union[ipaddress.IPv4Address, ipaddress.IPv6Address]] = []
         for _, ls in ifaces.items():
             local_ips.extend([ipaddress.ip_address(ip) for ip in ls])
 
@@ -5407,12 +5450,22 @@ def prepare_ssh(
     if not ctx.skip_monitoring_stack:
         for t in ['ceph-exporter', 'prometheus', 'grafana', 'node-exporter', 'alertmanager']:
             logger.info('Deploying %s service with default placement...' % t)
-            cli(['orch', 'apply', t])
+            try:
+                cli(['orch', 'apply', t])
+            except RuntimeError:
+                ctx.error_code = -errno.EINVAL
+                logger.error(f'Failed to apply service type {t}. '
+                             'Perhaps the ceph version being bootstrapped does not support it')
 
     if ctx.with_centralized_logging:
         for t in ['loki', 'promtail']:
             logger.info('Deploying %s service with default placement...' % t)
-            cli(['orch', 'apply', t])
+            try:
+                cli(['orch', 'apply', t])
+            except RuntimeError:
+                ctx.error_code = -errno.EINVAL
+                logger.error(f'Failed to apply service type {t}. '
+                             'Perhaps the ceph version being bootstrapped does not support it')
 
 
 def enable_cephadm_mgr_module(
@@ -8620,6 +8673,14 @@ class HostFacts():
         # type: () -> str
         """Return the hostname"""
         return platform.node()
+
+    @property
+    def shortname(self) -> str:
+        return platform.node().split('.', 1)[0]
+
+    @property
+    def fqdn(self) -> str:
+        return get_fqdn()
 
     @property
     def subscribed(self):

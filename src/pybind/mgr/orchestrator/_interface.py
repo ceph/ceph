@@ -406,7 +406,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def enter_host_maintenance(self, hostname: str, force: bool = False) -> OrchResult:
+    def enter_host_maintenance(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> OrchResult:
         """
         Place a host in maintenance, stopping daemons and disabling it's systemd target
         """
@@ -501,6 +501,14 @@ class Orchestrator(object):
             l_res.append(r_res)
             return OrchResult(l_res)
         return raise_if_exception(reduce(merge, [fns[spec.service_type](spec) for spec in specs], OrchResult([])))
+
+    def set_unmanaged(self, service_name: str, value: bool) -> OrchResult[str]:
+        """
+        Set unmanaged parameter to True/False for a given service
+
+        :return: None
+        """
+        raise NotImplementedError()
 
     def plan(self, spec: Sequence["GenericSpec"]) -> OrchResult[List]:
         """
@@ -1014,6 +1022,24 @@ class DaemonDescription(object):
         if service_name:
             return (daemon_type_to_service(self.daemon_type) + '.' + self.daemon_id).startswith(service_name + '.')
         return False
+
+    def matches_digests(self, digests: Optional[List[str]]) -> bool:
+        # the DaemonDescription class maintains a list of container digests
+        # for the container image last reported as being used for the daemons.
+        # This function checks if any of those digests match any of the digests
+        # in the list of digests provided as an arg to this function
+        if not digests or not self.container_image_digests:
+            return False
+        return any(d in digests for d in self.container_image_digests)
+
+    def matches_image_name(self, image_name: Optional[str]) -> bool:
+        # the DaemonDescription class has an attribute that tracks the image
+        # name of the container image last reported as being used by the daemon.
+        # This function compares if the image name provided as an arg matches
+        # the image name in said attribute
+        if not image_name or not self.container_image_name:
+            return False
+        return image_name == self.container_image_name
 
     def service_id(self) -> str:
         assert self.daemon_id is not None
