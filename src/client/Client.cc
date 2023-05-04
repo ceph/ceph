@@ -11691,6 +11691,9 @@ int Client::_sync_fs()
   flush_caps_sync();
   ceph_tid_t flush_tid = last_flush_tid;
 
+  // flush the mdlog before waiting for unsafe requests.
+  flush_mdlog_sync();
+
   // wait for unsafe mds requests
   wait_unsafe_requests();
 
