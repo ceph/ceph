@@ -5,9 +5,6 @@
 
 #include "CrushLocation.h"
 #include "CrushWrapper.h"
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-#include "common/SubProcess.h"
-#endif
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
