@@ -341,7 +341,13 @@ export class TaskMessageService {
     'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.service(metadata)
     ),
-    'crud-component': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+    'crud-component/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/import': this.newTaskMessage(this.commonOperations.import, (metadata) =>
       this.crudMessage(metadata)
     ),
     'crud-component/id': this.newTaskMessage(this.commonOperations.delete, (id) =>

@@ -1,5 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import _ from 'lodash';
@@ -52,7 +52,8 @@ export class CRUDTableComponent implements OnInit {
     private taskWrapper: TaskWrapperService,
     private cephUserService: CephUserService,
     private activatedRoute: ActivatedRoute,
-    private modalService: ModalService
+    private modalService: ModalService,
+    private router: Router
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -145,6 +146,14 @@ export class CRUDTableComponent implements OnInit {
 
   setExpandedRow(event: any) {
     this.expandedRow = event;
+  }
+
+  edit() {
+    let key = '';
+    if (this.selection.hasSelection) {
+      key = this.selection.first()[this.meta.columnKey];
+    }
+    this.router.navigate(['/cluster/user/edit'], { queryParams: { key: key } });
   }
 
   authExport() {
