@@ -315,7 +315,7 @@ the hierarchy is visible as a separate column (labeled either
 
 .. prompt:: bash $
 
-   ceph osd tree
+   ceph osd crush tree
 
 When both *compat* and *per-pool* weight sets are in use, data
 placement for a particular pool will use its own per-pool weight set
