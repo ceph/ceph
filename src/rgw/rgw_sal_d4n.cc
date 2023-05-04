@@ -18,8 +18,6 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
-#define MIN_MULITPART_SIZE 10
-
 namespace rgw { namespace sal {
 
 static inline Bucket* nextBucket(Bucket* t)
@@ -41,8 +39,11 @@ static inline Object* nextObject(Object* t)
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   FilterDriver::initialize(cct, dpp);
-  blockDir->init(cct);
+  blockDir->init(cct); // check for successful initialization -Sam
   d4nCache->init(cct);
+
+  cacheDriver->set_policy();
+  cacheDriver->cachePolicy->init(cct);
   
   return 0;
 }
@@ -177,14 +178,12 @@ int D4NFilterObject::copy_object(User* user,
   if (copy_attrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache copy attributes operation failed." << dendl;
   } else {
-    if (driver->get_cache_policy()->should_cache(this->get_obj_size(), MIN_MULITPART_SIZE)) {
-      int copy_dataReturn = driver->get_d4n_cache()->copy_data(this->get_key().get_oid(), dest_object->get_key().get_oid());
- 
-      if (copy_dataReturn < 0) {
-        ldpp_dout(dpp, 20) << "D4N Filter: Cache copy data operation failed." << dendl;
-      } else {
-        ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation succeeded." << dendl;
-      }
+    int copy_dataReturn = driver->get_d4n_cache()->copy_data(this->get_key().get_oid(), dest_object->get_key().get_oid());
+
+    if (copy_dataReturn < 0) {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy data operation failed." << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache copy object operation succeeded." << dendl;
     }
   }
 
@@ -455,17 +454,12 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
 int D4NFilterWriter::prepare(optional_yield y) 
 {
-  /* Set caching policy */
-  shouldCache = driver->get_cache_policy()->should_cache("PUT");
+  int del_dataReturn = driver->get_d4n_cache()->del_data(obj->get_key().get_oid());
 
-  if (shouldCache) {
-    int del_dataReturn = driver->get_d4n_cache()->del_data(obj->get_key().get_oid());
-
-    if (del_dataReturn < 0) {
-      ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation failed." << dendl;
-    } else {
-      ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation succeeded." << dendl;
-    }
+  if (del_dataReturn < 0) {
+  ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation failed." << dendl;
+  } else {
+  ldpp_dout(save_dpp, 20) << "D4N Filter: Cache delete data operation succeeded." << dendl;
   }
 
   return next->prepare(y);
@@ -515,83 +509,81 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
 			canceled, y);
 
-  if (shouldCache) {
-    obj->get_obj_attrs(y, save_dpp, NULL);
+  obj->get_obj_attrs(y, save_dpp, NULL);
 
-    /* Append additional metadata to attributes */ 
-    rgw::sal::Attrs baseAttrs = obj->get_attrs();
-    rgw::sal::Attrs attrs_temp = baseAttrs;
-    buffer::list bl;
-    RGWObjState* astate;
-    obj->get_obj_state(save_dpp, &astate, y);
+  /* Append additional metadata to attributes */ 
+  rgw::sal::Attrs baseAttrs = obj->get_attrs();
+  rgw::sal::Attrs attrs_temp = baseAttrs;
+  buffer::list bl;
+  RGWObjState* astate;
+  obj->get_obj_state(save_dpp, &astate, y);
 
-    bl.append(to_iso_8601(obj->get_mtime()));
-    baseAttrs.insert({"mtime", bl});
+  bl.append(to_iso_8601(obj->get_mtime()));
+  baseAttrs.insert({"mtime", bl});
+  bl.clear();
+
+  bl.append(std::to_string(obj->get_obj_size()));
+  baseAttrs.insert({"object_size", bl});
+  bl.clear();
+
+  bl.append(std::to_string(accounted_size));
+  baseAttrs.insert({"accounted_size", bl});
+  bl.clear();
+ 
+  bl.append(std::to_string(astate->epoch));
+  baseAttrs.insert({"epoch", bl});
+  bl.clear();
+
+  if (obj->have_instance()) {
+    bl.append(obj->get_instance());
+    baseAttrs.insert({"version_id", bl});
     bl.clear();
-
-    bl.append(std::to_string(obj->get_obj_size()));
-    baseAttrs.insert({"object_size", bl});
+  } else {
+    bl.append(""); /* Empty value */
+    baseAttrs.insert({"version_id", bl});
     bl.clear();
+  }
 
-    bl.append(std::to_string(accounted_size));
-    baseAttrs.insert({"accounted_size", bl});
+  auto iter = attrs_temp.find(RGW_ATTR_SOURCE_ZONE);
+  if (iter != attrs_temp.end()) {
+    bl.append(std::to_string(astate->zone_short_id));
+    baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
-   
-    bl.append(std::to_string(astate->epoch));
-    baseAttrs.insert({"epoch", bl});
+  } else {
+    bl.append("0"); /* Initialized to zero */
+    baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
+  }
 
-    if (obj->have_instance()) {
-      bl.append(obj->get_instance());
-      baseAttrs.insert({"version_id", bl});
-      bl.clear();
-    } else {
-      bl.append(""); /* Empty value */
-      baseAttrs.insert({"version_id", bl});
-      bl.clear();
-    }
+  bl.append(std::to_string(obj->get_bucket()->get_count()));
+  baseAttrs.insert({"bucket_count", bl});
+  bl.clear();
 
-    auto iter = attrs_temp.find(RGW_ATTR_SOURCE_ZONE);
-    if (iter != attrs_temp.end()) {
-      bl.append(std::to_string(astate->zone_short_id));
-      baseAttrs.insert({"source_zone_short_id", bl});
-      bl.clear();
-    } else {
-      bl.append("0"); /* Initialized to zero */
-      baseAttrs.insert({"source_zone_short_id", bl});
-      bl.clear();
-    }
+  bl.append(std::to_string(obj->get_bucket()->get_size()));
+  baseAttrs.insert({"bucket_size", bl});
+  bl.clear();
 
-    bl.append(std::to_string(obj->get_bucket()->get_count()));
-    baseAttrs.insert({"bucket_count", bl});
-    bl.clear();
+  RGWUserInfo info = obj->get_bucket()->get_owner()->get_info();
+  bl.append(std::to_string(info.quota.user_quota.max_size));
+  baseAttrs.insert({"user_quota.max_size", bl});
+  bl.clear();
 
-    bl.append(std::to_string(obj->get_bucket()->get_size()));
-    baseAttrs.insert({"bucket_size", bl});
-    bl.clear();
+  bl.append(std::to_string(info.quota.user_quota.max_objects));
+  baseAttrs.insert({"user_quota.max_objects", bl});
+  bl.clear();
 
-    RGWUserInfo info = obj->get_bucket()->get_owner()->get_info();
-    bl.append(std::to_string(info.quota.user_quota.max_size));
-    baseAttrs.insert({"user_quota.max_size", bl});
-    bl.clear();
+  bl.append(std::to_string(obj->get_bucket()->get_owner()->get_max_buckets()));
+  baseAttrs.insert({"max_buckets", bl});
+  bl.clear();
 
-    bl.append(std::to_string(info.quota.user_quota.max_objects));
-    baseAttrs.insert({"user_quota.max_objects", bl});
-    bl.clear();
+  baseAttrs.insert(attrs.begin(), attrs.end());
 
-    bl.append(std::to_string(obj->get_bucket()->get_owner()->get_max_buckets()));
-    baseAttrs.insert({"max_buckets", bl});
-    bl.clear();
+  int set_attrsReturn = driver->get_d4n_cache()->set_attrs(obj->get_key().get_oid(), &baseAttrs);
 
-    baseAttrs.insert(attrs.begin(), attrs.end());
-
-    int set_attrsReturn = driver->get_d4n_cache()->set_attrs(obj->get_key().get_oid(), &baseAttrs);
-
-    if (set_attrsReturn < 0) {
-      ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation failed." << dendl;
-    } else {
-      ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
-    }
+  if (set_attrsReturn < 0) {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation failed." << dendl;
+  } else {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
   }
   
   return ret;
