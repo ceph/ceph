@@ -372,7 +372,7 @@ add_ceph_unittest(unittest_cdc)
 
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
-target_link_libraries(unittest_ceph_timer ceph-common)
+target_link_libraries(unittest_ceph_timer global ceph-common)
 
 add_executable(unittest_option test_option.cc)
 target_link_libraries(unittest_option ceph-common GTest::Main)
