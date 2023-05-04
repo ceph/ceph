@@ -43,6 +43,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_ratelimit.h"
+#include "rgw_rest_zero.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_lib.h"
@@ -348,6 +349,10 @@ void rgw::AppMain::cond_init_apis()
       /* Register driver-specific admin APIs */
       env.driver->register_admin_apis(admin_resource);
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
+    }
+
+    if (apis_map.count("zero")) {
+      rest.register_resource("zero", new rgw::RESTMgr_Zero());
     }
   } /* have_http_frontend */
 } /* init_apis */

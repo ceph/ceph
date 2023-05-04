@@ -288,7 +288,9 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
 static void dump_status(req_state *s, int status,
 			const char *status_name)
 {
-  s->formatter->set_status(status, status_name);
+  if (s->formatter) {
+    s->formatter->set_status(status, status_name);
+  }
   try {
     RESTFUL_IO(s)->send_status(status, status_name);
   } catch (rgw::io::Exception& e) {
@@ -594,8 +596,8 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
 
   /* do not send content type if content length is zero
      and the content type was not set by the user */
-  if (force_content_type ||
-      (!content_type &&  s->formatter->get_len()  != 0) || s->is_err()){
+  if (force_content_type || s->is_err() ||
+      (!content_type && s->formatter && s->formatter->get_len() != 0)) {
     ctype = to_mime_type(s->format);
     if (s->prot_flags & RGW_REST_SWIFT)
       ctype.append("; charset=utf-8");
@@ -604,7 +606,7 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   if (!force_no_error && s->is_err()) {
     dump_start(s);
     dump(s);
-    dump_content_length(s, s->formatter->get_len());
+    dump_content_length(s, s->formatter ? s->formatter->get_len() : 0);
   } else {
     if (proposed_content_length == CHUNKED_TRANSFER_ENCODING) {
       dump_chunked_encoding(s);
@@ -632,7 +634,9 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   }
 
   ACCOUNTING_IO(s)->set_account(true);
-  rgw_flush_formatter_and_reset(s, s->formatter);
+  if (s->formatter) {
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
 }
 
 static void build_redirect_url(req_state *s, const string& redirect_base, string *redirect_url)
