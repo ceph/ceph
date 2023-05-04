@@ -720,7 +720,7 @@ bool RGWSI_Zone::need_to_sync() const
 
 bool RGWSI_Zone::need_to_log_data() const
 {
-  return zone_public_config->log_data;
+  return (zone_public_config->log_data && sync_module_exports_data());
 }
 
 bool RGWSI_Zone::is_meta_master() const
