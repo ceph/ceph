@@ -9,32 +9,51 @@
 
 namespace rgw { namespace d4n {
 
-class PolicyDriver {
+class CachePolicy {
   public:
-    CephContext *cct;
+    CephContext* cct;
 
-    PolicyDriver() {}
-    PolicyDriver(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
+    CachePolicy() : addr() {}
 
     void init(CephContext *_cct) {
       cct = _cct;
-      host = cct->_conf->rgw_d4n_host;
-      port = cct->_conf->rgw_d4n_port;
+      addr.host = cct->_conf->rgw_d4n_host;
+      addr.port = cct->_conf->rgw_d4n_port;
     }
-
     int find_client(cpp_redis::client *client);
     int exist_key(std::string key);
+    Address get_addr() { return addr; }
+    int get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) { return 0; }
+    int eviction(/*CacheDriver* cacheNode*/) { return 0; }
 
-    int update_gw(CacheBlock* block);
-    int get_block(CacheBlock* block);
-    int eviction();
-    bool should_cache(int objSize, int minSize); /* In bytes */
-    bool should_cache(std::string uploadType); 
-    
   private:
     cpp_redis::client client;
-    std::string host = "";
-    int port = 0;
+    Address addr;
+};
+
+class LFUDAPolicy : public CachePolicy {
+  public:
+    LFUDAPolicy() : CachePolicy()/*, addr()*/ {}
+
+    int get_block(CacheBlock* block/*, CacheDriver* cacheNode*/);
+    int eviction(/*CacheDriver* cacheNode*/);
+
+  private:
+    cpp_redis::client client;
+    int localWeight = 0;
+};
+
+class PolicyDriver {
+  public:
+    CachePolicy* cachePolicy;
+
+    PolicyDriver(std::string _policyName) : policyName(_policyName) {}
+
+    int set_policy();
+    int delete_policy();
+
+  private:
+    std::string policyName;
 };
 
 } } // namespace rgw::d4n
