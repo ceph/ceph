@@ -58,6 +58,17 @@ static constexpr const char* P4 = ":4";
 static constexpr const char* P5 = ":5";
 static constexpr const char* P6 = ":6";
 
+// bind as text unless value is empty
+void bind_text_or_null(const DoutPrefixProvider* dpp,
+                       const sqlite::stmt_binding& stmt,
+                       const char* name, std::string_view value)
+{
+  if (value.empty()) {
+    sqlite::bind_null(dpp, stmt, name);
+  } else {
+    sqlite::bind_text(dpp, stmt, name, value);
+  }
+}
 
 void read_text_rows(const DoutPrefixProvider* dpp,
                     const sqlite::stmt_execution& stmt,
