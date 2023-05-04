@@ -279,6 +279,42 @@ out:
   }
 }
 
+/// Inspects reference region at specified offset.
+/// If reference region is located, returns its reference count and
+/// distance from offset to the end of the region.
+/// If reference region is not located, returns 0 reference count and
+/// distance to the next region.
+/// If offset is beyond last region, returns 0 for both
+/// reference count and the distance.
+bluestore_extent_ref_map_t::debug_len_cnt bluestore_extent_ref_map_t::debug_peek(uint64_t offset) const
+{
+  // locate offset
+  auto p = ref_map.lower_bound(offset);
+  if (p != ref_map.end() && p->first == offset) {
+    // direct request for us
+    return {p->second.length, p->second.refs};
+  }
+  if (p != ref_map.begin()) {
+    --p;
+    if (p->first + p->second.length <= offset) {
+      // nah, it ends too soon, we landed in a hole
+      ++p;
+      if (p != ref_map.end()) {
+	// there is a region after
+	return {uint32_t(p->first - offset), 0};
+      } else {
+	// nothing after
+	return {0, 0};
+      }
+    } else {
+      // we're in the range
+      return {uint32_t((p->first + p->second.length) - offset), p->second.refs};
+    }
+  } else {
+    return {uint32_t(p->first - offset), 0};
+  }
+}
+
 bool bluestore_extent_ref_map_t::contains(uint64_t offset, uint32_t length) const
 {
   auto p = ref_map.lower_bound(offset);
