@@ -8,6 +8,11 @@
 
 namespace rgw { namespace d4n {
 
+struct Address {
+  std::string host;
+  int port;
+};
+
 struct CacheObj {
   std::string bucketName; /* s3 bucket name */
   std::string objName; /* s3 obj name */
