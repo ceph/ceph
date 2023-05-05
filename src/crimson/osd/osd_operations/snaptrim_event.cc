@@ -145,7 +145,8 @@ SnapTrimEvent::with_pg(
         }
         for (const auto& object : to_trim) {
           logger().debug("{}: trimming {}", *this, object);
-          auto [op, fut] = shard_services.start_operation<SnapTrimObjSubEvent>(
+          auto [op, fut] = shard_services.start_operation_may_interrupt<
+	    interruptor, SnapTrimObjSubEvent>(
             pg,
             object,
             snapid);
