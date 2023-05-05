@@ -188,6 +188,98 @@ You can enable dynamic debug against the CephFS module.
 
 Please see: https://github.com/ceph/ceph/blob/master/src/script/kcon_all.sh
 
+In-memory Log Dump
+==================
+
+In-memory logs can be dumped by setting ``mds_extraordinary_events_dump_interval``
+during a lower level debugging (log level < 10). ``mds_extraordinary_events_dump_interval``
+is the interval in seconds for dumping the recent in-memory logs when there is an Extra-Ordinary event.
+
+The Extra-Ordinary events are classified as:
+
+* Client Eviction
+* Missed Beacon ACK from the monitors
+* Missed Internal Heartbeats
+
+In-memory Log Dump is disabled by default to prevent log file bloat in a production environment.
+The below commands consecutively enables it::
+
+  $ ceph config set mds debug_mds <log_level>/<gather_level>
+  $ ceph config set mds mds_extraordinary_events_dump_interval <seconds>
+
+The ``log_level`` should be < 10 and ``gather_level`` should be >= 10 to enable in-memory log dump.
+When it is enabled, the MDS checks for the extra-ordinary events every
+``mds_extraordinary_events_dump_interval`` seconds and if any of them occurs, MDS dumps the
+in-memory logs containing the relevant event details in ceph-mds log.
+
+.. note:: For higher log levels (log_level >= 10) there is no reason to dump the In-memory Logs and a
+          lower gather level (gather_level < 10) is insufficient to gather In-memory Logs. Thus a
+          log level >=10 or a gather level < 10 in debug_mds would prevent enabling the In-memory Log Dump.
+          In such cases, when there is a failure it's required to reset the value of
+          mds_extraordinary_events_dump_interval to 0 before enabling using the above commands.
+
+The In-memory Log Dump can be disabled using::
+
+  $ ceph config set mds mds_extraordinary_events_dump_interval 0
+
+Filesystems Become Inaccessible After an Upgrade
+================================================
+
+.. note::
+   You can avoid ``operation not permitted`` errors by running this procedure
+   before an upgrade. As of May 2023, it seems that ``operation not permitted``
+   errors of the kind discussed here occur after upgrades after Nautilus
+   (inclusive).
+
+IF
+
+you have CephFS file systems that have data and metadata pools that were
+created by a ``ceph fs new`` command (meaning that they were not created
+with the defaults)
+
+OR
+
+you have an existing CephFS file system and are upgrading to a new post-Nautilus
+major version of Ceph
+
+THEN
+
+in order for the documented ``ceph fs authorize...`` commands to function as
+documented (and to avoid 'operation not permitted' errors when doing file I/O
+or similar security-related problems for all users except the ``client.admin``
+user), you must first run:
+
+.. prompt:: bash $
+
+   ceph osd pool application set <your metadata pool name> cephfs metadata <your ceph fs filesystem name>
+
+and
+
+.. prompt:: bash $
+
+   ceph osd pool application set <your data pool name> cephfs data <your ceph fs filesystem name>
+
+Otherwise, when the OSDs receive a request to read or write data (not the
+directory info, but file data) they will not know which Ceph file system name
+to look up. This is true also of pool names, because the 'defaults' themselves
+changed in the major releases, from::
+
+   data pool=fsname
+   metadata pool=fsname_metadata
+
+to::
+
+   data pool=fsname.data and
+   metadata pool=fsname.meta
+
+Any setup that used ``client.admin`` for all mounts did not run into this
+problem, because the admin key gave blanket permissions.
+
+A temporary fix involves changing mount requests to the 'client.admin' user and
+its associated key. A less drastic but half-fix is to change the osd cap for
+your user to just ``caps osd = "allow rw"``  and delete ``tag cephfs
+data=....``
+
 Reporting Issues
 ================
 
