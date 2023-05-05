@@ -31,7 +31,7 @@ static const char * const EMPTY_STRING = "";
 #define CEPH_AUTH_NAME_DEFAULT "guest"
 
 /* path to sysfs for ceph */
-#define CEPH_SYS_FS_PATH "/sys/module/ceph/"
+#define CEPH_SYS_FS_PATH "/sys/module/ceph"
 #define CEPH_SYS_FS_PARAM_PATH CEPH_SYS_FS_PATH"/parameters"
 
 /*
@@ -697,6 +697,13 @@ static int parse_arguments(int argc, char *const *const argv,
 static void modprobe(void)
 {
 	int r;
+	struct stat stbuf;
+
+	r = stat(CEPH_SYS_FS_PATH, &stbuf);
+	if (!r) {
+		mount_ceph_debug("mount.ceph: kernel supports present, skipping modprobe\n");
+		return;
+	}
 
 	r = module_load("ceph", NULL);
 	if (r)
