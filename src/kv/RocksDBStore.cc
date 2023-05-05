@@ -24,6 +24,7 @@ namespace fs = std::experimental::filesystem;
 #include "rocksdb/cache.h"
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/utilities/convenience.h"
+#include "rocksdb/utilities/table_properties_collectors.h"
 #include "rocksdb/merge_operator.h"
 
 #include "common/perf_counters.h"
@@ -937,6 +938,14 @@ int RocksDBStore::update_column_family_options(const std::string& base_name,
       // apply_block_cache_options already does all necessary douts
       return r;
     }
+  }
+
+  // Set Compact on Deletion Factory
+  if (cct->_conf->rocksdb_cf_compact_on_deletion) {
+    size_t sliding_window = cct->_conf->rocksdb_cf_compact_on_deletion_sliding_window;
+    size_t trigger = cct->_conf->rocksdb_cf_compact_on_deletion_trigger;
+    cf_opt->table_properties_collector_factories.emplace_back(
+        rocksdb::NewCompactOnDeletionCollectorFactory(sliding_window, trigger));
   }
   return 0;
 }
