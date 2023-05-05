@@ -655,16 +655,6 @@ static int parse_arguments(int argc, char *const *const argv,
 		// There were no arguments. Just show the usage.
 		return 1;
 	}
-	if ((!strcmp(argv[1], "-h")) || (!strcmp(argv[1], "--help"))) {
-		// The user asked for help.
-		return 1;
-	}
-
-	// The first two arguments are positional
-	if (argc < 3)
-		return -EINVAL;
-	*src = argv[1];
-	*node = argv[2];
 
 	// Parse the remaining options
 	*opts = EMPTY_STRING;
@@ -689,6 +679,14 @@ static int parse_arguments(int argc, char *const *const argv,
 				return -EINVAL;
 		}
 	}
+
+	if (optind + 2 != argc) {
+		return -EINVAL;
+	}
+
+	*src = argv[optind];
+	*node = argv[optind + 1];
+
 	return 0;
 }
 
