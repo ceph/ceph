@@ -3167,10 +3167,10 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
 	}
 	// reblob extents might erase e
 	dirty_range_end = std::max<uint32_t>(dirty_range_end, e.blob_start() + b_logical_length);
-	uint32_t logical_offset = e.logical_offset;
+	uint32_t goto_logical_offset = e.logical_offset + e.length;
 	reblob_extents(e.blob_start(), e.blob_start() + blob_width,
 		       e.blob, b);
-	ep = oldo->extent_map.seek_lextent(logical_offset);
+	ep = oldo->extent_map.seek_lextent(goto_logical_offset);
 	dout(20) << __func__ << " merged: " << *b << dendl;
       } else {
 	// no candidate, has to convert to shared
