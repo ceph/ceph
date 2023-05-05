@@ -671,7 +671,7 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
       }
 
     } else if (stray_dn->is_auth()) {
-      migrate_stray(stray_dn, remote_dn->authority().first);
+      migrate_stray(stray_dn, remote_dn->authority().first, remote_dn);
     } else {
       dout(20) << __func__ << ": not reintegrating" << dendl;
     }
@@ -708,7 +708,7 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   mds->send_message_mds(req, rdn->authority().first);
 }
 
-void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
+void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to, CDentry *rdn)
 {
   dout(10) << __func__ << " " << *dn << " to mds." << to << dendl;
 
@@ -728,10 +728,13 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   req->set_filepath2(src);
   req->set_tid(tid);
 
-  MDSMetaRequest *r = new MDSMetaRequest(CEPH_MDS_OP_RENAME);
-  r->set_dentry(dn);
-  r->set_tid(tid);
-  mds->internal_client_requests[tid] = r;
+  if (rdn) {
+    MDSMetaRequest *r = new MDSMetaRequest(CEPH_MDS_OP_RENAME);
+    rdn->state_set(CDentry::STATE_REINTEGRATING);
+    r->set_dentry(rdn);
+    r->set_tid(tid);
+    mds->internal_client_requests[tid] = r;
+  }
 
   mds->send_message_mds(req, to);
 }

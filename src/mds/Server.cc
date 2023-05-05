@@ -6895,6 +6895,7 @@ void Server::wait_for_pending_reintegrate(CDentry *dn, MDRequestRef& mdr)
 {
   dout(20) << __func__ << " dn " << *dn << dendl;
   mds->locker->drop_locks(mdr.get());
+  mdr->drop_local_auth_pins();
   auto fin = new C_MDS_RetryRequest(mdcache, mdr);
   dn->get(CDentry::PIN_PURGING);
   dn->add_waiter(CDentry::WAIT_REINTEGRATE_FINISH, new C_WaitReintegrateToFinish(mdcache, dn, fin));

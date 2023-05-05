@@ -79,7 +79,7 @@ public:
    * on completion of mv (i.e. inode put), resulting in a subsequent
    * reintegration.
    */
-  void migrate_stray(CDentry *dn, mds_rank_t dest);
+  void migrate_stray(CDentry *dn, mds_rank_t dest, CDentry *rdn=nullptr);
 
   /**
    * Update stats to reflect a newly created stray dentry. Needed
