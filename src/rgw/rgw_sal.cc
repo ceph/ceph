@@ -193,7 +193,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
     ((rgw::sal::MotrStore *)driver)->init_metadata_cache(dpp, cct);
 
-    return store;
+    return driver;
   }
 #endif
 

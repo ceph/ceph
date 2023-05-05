@@ -425,6 +425,7 @@ public:
 };
 
 class MotrZoneGroup : public StoreZoneGroup {
+protected:
   MotrStore* store;
   const RGWZoneGroup group;
   std::string empty;
@@ -474,6 +475,7 @@ public:
   virtual std::unique_ptr<ZoneGroup> clone() override {
     return std::make_unique<MotrZoneGroup>(store, group);
   }
+  friend class MotrZone;
 };
 
 class MotrZone : public StoreZone {
@@ -502,8 +504,8 @@ class MotrZone : public StoreZone {
     MotrZone(MotrStore* _store, MotrZoneGroup _zg) : store(_store), zonegroup(_zg) {
       realm = new RGWRealm();
       // TODO: fetch zonegroup params (eg. id) from provisioner config.
-      zonegroup.set_id("0956b174-fe14-4f97-8b50-bb7ec5e1cf62");
-      zonegroup.api_name = "default";
+      //zonegroup.group.set_id("0956b174-fe14-4f97-8b50-bb7ec5e1cf62");
+      //zonegroup.group.api_name = "default";
       zone_public_config = new RGWZone();
       zone_params = new RGWZoneParams();
       current_period = new RGWPeriod();
