@@ -2222,14 +2222,14 @@ BlueStore::Blob::~Blob()
     return;
   }
  again:
-  auto coll_snap = sb->coll;
-  if (coll_snap) {
-    std::lock_guard l(coll_snap->cache->lock);
-    if (coll_snap != sb->coll) {
+  auto coll_cache = sb->get_cache();
+  if (coll_cache) {
+    std::lock_guard l(coll_cache->lock);
+    if (coll_cache != sb->get_cache()) {
       goto again;
     }
-    bc._clear(coll_snap->cache);
-    coll_snap->cache->rm_blob();
+    bc._clear(coll_cache);
+    coll_cache->rm_blob();
   }
 }
 
