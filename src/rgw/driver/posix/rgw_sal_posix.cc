@@ -360,7 +360,7 @@ int POSIXDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::s
 
 std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* _head_obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
@@ -369,7 +369,7 @@ std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider 
 {
   std::unique_ptr<Object> no;
 
-  std::unique_ptr<Writer> writer = next->get_append_writer(dpp, y, std::move(no),
+  std::unique_ptr<Writer> writer = next->get_append_writer(dpp, y, _head_obj,
 							   owner, ptail_placement_rule,
 							   unique_tag, position,
 							   cur_accounted_size);
@@ -379,14 +379,14 @@ std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider 
 
 std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* _head_obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
 
-  return std::make_unique<POSIXAtomicWriter>(dpp, y, std::move(_head_obj), this, owner, ptail_placement_rule, olh_epoch, unique_tag);
+  return std::make_unique<POSIXAtomicWriter>(dpp, y, _head_obj, this, owner, ptail_placement_rule, olh_epoch, unique_tag);
 }
 
 void POSIXDriver::finalize(void)
@@ -1105,14 +1105,6 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int POSIXObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-				Completions* aio, bool keep_index_consistent,
-				optional_yield y)
-{
-  /* Appears to be unused? */
-  return delete_object(dpp, y, false);
-}
-
 int POSIXObject::copy_object(User* user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
@@ -1290,21 +1282,6 @@ int POSIXObject::swift_versioning_restore(bool& restored,
 int POSIXObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
 				    optional_yield y)
 {
-  return 0;
-}
-
-int POSIXObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-				  std::map<std::string, bufferlist> *m,
-				  bool* pmore, optional_yield y)
-{
-  /* TODO Figure out omap */
-  return 0;
-}
-
-int POSIXObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-				 optional_yield y)
-{
-  /* TODO Figure out omap */
   return 0;
 }
 
@@ -2221,7 +2198,7 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
 std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* _head_obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
