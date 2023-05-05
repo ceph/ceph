@@ -33,11 +33,11 @@
 #endif
 
 #ifdef WITH_RADOSGW_MOTR
-#include "rgw_sal_motr.h"
+#include "driver/motr/rgw_sal_motr.h"
 #endif
 
 #ifdef WITH_RADOSGW_DAOS
-#include "rgw_sal_daos.h"
+#include "driver/daos/rgw_sal_daos.h"
 #endif
 
 #define dout_subsys ceph_subsys_rgw
