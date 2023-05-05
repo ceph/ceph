@@ -57,8 +57,7 @@ public:
 				  optional_yield y,
 				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
-				  const rgw_placement_rule
-				  *ptail_placement_rule,
+				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
 				  uint64_t *cur_accounted_size) override;
