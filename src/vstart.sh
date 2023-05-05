@@ -160,11 +160,7 @@ overwrite_conf=0
 cephx=1 #turn cephx on by default
 gssapi_authx=0
 cache=""
-if [ `uname` = FreeBSD ]; then
-    objectstore="filestore"
-else
-    objectstore="bluestore"
-fi
+objectstore="bluestore"
 ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
@@ -183,7 +179,6 @@ if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
 fi
 with_mgr_restful=false
 
-filestore_path=
 kstore_path=
 declare -a block_devs
 declare -a bluestore_db_devs
@@ -232,7 +227,6 @@ options:
 	--rgw_compression specify the rgw compression plugin
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
-	-f, --filestore use filestore as the osd objectstore backend
 	-K, --kstore use kstore as the osd objectstore backend
 	--cyanstore use cyanstore as the osd objectstore backend
 	--memstore use memstore as the osd objectstore backend
@@ -466,10 +460,6 @@ case $1 in
         kstore_path=$2
         shift
         ;;
-    --filestore_path)
-        filestore_path=$2
-        shift
-        ;;
     -m)
         [ -z "$2" ] && usage_exit
         MON_ADDR=$2
@@ -507,9 +497,6 @@ case $1 in
         ;;
     -b | --bluestore)
         objectstore="bluestore"
-        ;;
-    -f | --filestore)
-        objectstore="filestore"
         ;;
     -K | --kstore)
         objectstore="kstore"
@@ -761,7 +748,6 @@ prepare_conf() {
         mon_max_pg_per_osd = ${MON_MAX_PG_PER_OSD:-1000}
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
-        filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         crash dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
@@ -886,12 +872,6 @@ $DAEMONOPTS
         osd class default list = *
         osd fast shutdown = false
 
-        filestore wbthrottle xfs ios start flusher = 10
-        filestore wbthrottle xfs ios hard limit = 20
-        filestore wbthrottle xfs inodes hard limit = 30
-        filestore wbthrottle btrfs ios start flusher = 10
-        filestore wbthrottle btrfs ios hard limit = 20
-        filestore wbthrottle btrfs inodes hard limit = 30
         bluestore fsck on mount = true
         bluestore block create = true
 $BLUESTORE_OPTS
@@ -1079,9 +1059,7 @@ EOF
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
             fi
-            if [ -n "$filestore_path" ]; then
-                ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
-            elif [ -n "$kstore_path" ]; then
+            if [ -n "$kstore_path" ]; then
                 ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
             else
                 mkdir -p $CEPH_DEV_DIR/osd$osd
@@ -1573,7 +1551,6 @@ debug_objecter = 20
 debug_monc = 20
 debug_mgrc = 20
 debug_journal = 20
-debug_filestore = 20
 debug_bluestore = 20
 debug_bluefs = 20
 debug_rocksdb = 20
