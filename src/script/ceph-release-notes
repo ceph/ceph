@@ -218,6 +218,8 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
             for author in re.findall(
                     "Signed-off-by:\s*(.*?)\s*<", message
                     ):
+                if author == "[Your Name]":
+                    continue
                 authors[author] = 1
         if authors:
             author = ", ".join(authors.keys())
