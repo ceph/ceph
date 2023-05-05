@@ -703,15 +703,15 @@ static void modprobe(void)
 
 static void usage(const char *prog_name)
 {
-	printf("usage: %s [src] [mount-point] [-n] [-v] [-o ceph-options]\n",
-		prog_name);
+	printf("usage: %s [options] <source> <directory>\n\n", prog_name);
+	printf("Mount a CephFS filesystem.\n\n");
 	printf("options:\n");
-	printf("\t-h, --help\tPrint this help\n");
-	printf("\t-n, --no-mtab\tDo not update /etc/mtab\n");
-	printf("\t-v, --verbose\tVerbose\n");
-	printf("\t-f, --fake\tFake mount, do not actually mount\n");
-	printf("ceph-options: refer to mount.ceph(8)\n");
-	printf("\n");
+	printf("    -h, --help            Print this help\n");
+	printf("    -n, --no-mtab         Do not update /etc/mtab\n");
+	printf("    -v, --verbose         Verbose output\n");
+	printf("    -f, --fake            Fake mount, do not actually mount\n");
+	printf("    -o, --options <list>  Comma-separated list of mount options\n\n");
+	printf("For more details see mount.ceph(8).\n");
 }
 
 /*
