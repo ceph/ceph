@@ -192,8 +192,15 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
                 else:
                     print(f"Could not fetch PR {number} in {retries} tries.")
                     raise
+        commit = None
+        if merges[number] == "cherry_pick":
+            try:
+                commit = repo.commit(pr['merge_commit_sha'])
+            except:
+                pass
         if merges[number] == "merge_commit":
             commit = merge_commits[number]
+        if commit:
             (title, message) = _title_message(commit, pr, strict)
         else:
             (title, message) = (pr['title'], pr['body'])
@@ -204,7 +211,7 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
             )
 
         authors = {}
-        if merges[number] == "merge_commit":
+        if commit:
             for c in repo.iter_commits(
                     "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
                     ):
@@ -224,7 +231,7 @@ def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, v
         if authors:
             author = ", ".join(authors.keys())
         else:
-            if merges[number] == "merge_commit":
+            if commit:
                 author = commit.parents[-1].author.name
             else:
                 author = pr['user']['login']
