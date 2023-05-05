@@ -1135,9 +1135,6 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
 
 void bluestore_blob_t::dup(const bluestore_blob_t& from)
 {
-  if (!from.is_compressed()) {
-    ceph_assert(from.compressed_length == 0);
-  }
   extents = from.extents;
   logical_length = from.logical_length;
   compressed_length = from.compressed_length;
