@@ -310,6 +310,7 @@ struct RGWDataSyncEnv {
   RGWSyncTraceManager *sync_tracer{nullptr};
   RGWSyncModuleInstanceRef sync_module{nullptr};
   PerfCounters* counters{nullptr};
+  rgw::sync_fairness::BidManager* bid_manager{nullptr};
 
   RGWDataSyncEnv() {}
 
