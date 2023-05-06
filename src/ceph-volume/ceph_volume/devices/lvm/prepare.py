@@ -119,6 +119,33 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
         db=db
     )
 
+def prepare_seastore(block, secrets, tags, osd_id, fsid):
+    """
+    :param block: The name of the logical volume for the seastore data
+    :param secrets: A dict with the secrets needed to create the osd (e.g. cephx)
+    :param id_: The OSD id
+    :param fsid: The OSD fsid, also known as the OSD UUID
+    """
+    cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
+    # encryption-only operations
+    if secrets.get('dmcrypt_key'):
+        key = secrets['dmcrypt_key']
+        block = prepare_dmcrypt(key, block, 'block', tags)
+
+    # create the directory
+    prepare_utils.create_osd_path(osd_id, tmpfs=True)
+    # symlink the block
+    prepare_utils.link_block(block, osd_id)
+    # get the latest monmap
+    prepare_utils.get_monmap(osd_id)
+    # write the OSD keyring if it doesn't exist already
+    prepare_utils.write_keyring(osd_id, cephx_secret)
+    # prepare the osd filesystem
+    prepare_utils.osd_mkfs_seastore(
+        osd_id, fsid,
+        keyring=cephx_secret,
+    )
+
 
 class Prepare(object):
 
@@ -393,6 +420,32 @@ class Prepare(object):
                 self.osd_id,
                 osd_fsid,
             )
+        elif self.args.seastore:
+            try:
+                vg_name, lv_name = self.args.data.split('/')
+                block_lv = api.get_single_lv(filters={'lv_name': lv_name,
+                                                      'vg_name': vg_name})
+            except ValueError:
+                block_lv = None
+
+            if not block_lv:
+                block_lv = self.prepare_data_device('block', osd_fsid)
+
+            tags['ceph.block_device'] = block_lv.lv_path
+            tags['ceph.block_uuid'] = block_lv.lv_uuid
+            tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
+            tags['ceph.encrypted'] = encrypted
+            tags['ceph.vdo'] = api.is_vdo(block_lv.lv_path)
+            tags['ceph.type'] = 'block'
+            block_lv.set_tags(tags)
+
+            prepare_seastore(
+                block_lv.lv_path,
+                secrets,
+                tags,
+                self.osd_id,
+                osd_fsid,
+            )
 
     def main(self):
         sub_command_help = dedent("""
@@ -427,7 +480,7 @@ class Prepare(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
-        exclude_group_options(parser, argv=self.argv, groups=['filestore', 'bluestore'])
+        exclude_group_options(parser, argv=self.argv, groups=['filestore', 'bluestore', 'seastore'])
         self.args = parser.parse_args(self.argv)
         # the unfortunate mix of one superset for both filestore and bluestore
         # makes this validation cumbersome
@@ -436,6 +489,6 @@ class Prepare(object):
                 raise SystemExit('--journal is required when using --filestore')
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if not self.args.bluestore and not self.args.filestore:
+        if not self.args.bluestore and not self.args.filestore and not self.args.seastore:
             self.args.bluestore = True
         self.safe_prepare()
