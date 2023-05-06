@@ -7,10 +7,18 @@
 
 #include "crimson/common/log.h"
 
+#include "crimson/os/seastore/cache.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/seastore_types.h"
 
 namespace crimson::os::seastore {
+
+template <typename node_key_t>
+struct op_context_t {
+  Cache &cache;
+  Transaction &trans;
+  btree_pin_set_t<node_key_t> *pins = nullptr;
+};
 
 constexpr uint16_t MAX_FIXEDKVBTREE_DEPTH = 8;
 
@@ -442,6 +450,7 @@ public:
 template <typename key_t, typename val_t>
 class BtreeNodePin : public PhysicalNodePin<key_t, val_t> {
 
+  op_context_t<key_t> ctx;
   /**
    * parent
    *
@@ -457,16 +466,25 @@ class BtreeNodePin : public PhysicalNodePin<key_t, val_t> {
 
 public:
   using val_type = val_t;
-  BtreeNodePin() = default;
+  BtreeNodePin(op_context_t<key_t> ctx) : ctx(ctx) {}
 
   BtreeNodePin(
+    op_context_t<key_t> ctx,
     CachedExtentRef parent,
     uint16_t pos,
     val_t &value,
     extent_len_t len,
     fixed_kv_node_meta_t<key_t> &&meta)
-    : parent(parent), value(value), len(len), pos(pos) {
+    : ctx(ctx),
+      parent(parent),
+      value(value),
+      len(len),
+      pos(pos)
+  {
     pin.set_range(std::move(meta));
+    if (!parent->is_pending()) {
+      this->child_pos = {parent, pos};
+    }
   }
 
   CachedExtentRef get_parent() const final {
@@ -485,7 +503,14 @@ public:
     parent = pin;
   }
 
-  void link_extent(LogicalCachedExtent *ref) final;
+  void link_extent(LogicalCachedExtent *ref) final {
+    pin.set_extent(ref);
+    pos = std::numeric_limits<uint16_t>::max();
+  }
+
+  uint16_t get_pos() const final {
+    return pos;
+  }
 
   extent_len_t get_length() const final {
     ceph_assert(pin.range.end > pin.range.begin);
@@ -507,11 +532,12 @@ public:
 
   PhysicalNodePinRef<key_t, val_t> duplicate() const final {
     auto ret = std::unique_ptr<BtreeNodePin<key_t, val_t>>(
-      new BtreeNodePin<key_t, val_t>);
+      new BtreeNodePin<key_t, val_t>(ctx));
     ret->pin.set_range(pin.range);
     ret->value = value;
     ret->parent = parent;
     ret->len = len;
+    ret->pos = pos;
     return ret;
   }
 
@@ -522,6 +548,8 @@ public:
   bool has_been_invalidated() const final {
     return parent->has_been_invalidated();
   }
+
+  get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction&) final;
 };
 
 }

@@ -119,6 +119,10 @@ std::ostream &LogicalCachedExtent::_print_detail(std::ostream &out) const
   return print_detail_l(out);
 }
 
+void child_pos_t::link_child(ChildableCachedExtent *c) {
+  get_parent<FixedKVNode<laddr_t>>()->link_child(c, pos);
+}
+
 void CachedExtent::set_invalid(Transaction &t) {
   state = extent_state_t::INVALID;
   if (trans_view_hook.is_linked()) {

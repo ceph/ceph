@@ -27,13 +27,16 @@ namespace crimson::os::seastore::lba_manager::btree {
 
 class BtreeLBAPin : public BtreeNodePin<laddr_t, paddr_t> {
 public:
-  BtreeLBAPin() = default;
+  BtreeLBAPin(op_context_t<laddr_t> ctx)
+    : BtreeNodePin(ctx) {}
   BtreeLBAPin(
+    op_context_t<laddr_t> c,
     CachedExtentRef parent,
     uint16_t pos,
     lba_map_val_t &val,
     lba_node_meta_t &&meta)
     : BtreeNodePin(
+	c,
 	parent,
 	pos,
 	val.paddr,

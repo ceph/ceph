@@ -217,15 +217,6 @@ struct FixedKVNode : ChildableCachedExtent {
     }
   }
 
-  struct child_pos_t {
-    FixedKVNodeRef stable_parent;
-    uint16_t pos = std::numeric_limits<uint16_t>::max();
-    CachedExtentRef child;
-    child_pos_t(CachedExtentRef child) : child(child) {}
-    child_pos_t(FixedKVNodeRef stable_parent, uint16_t pos)
-      : stable_parent(stable_parent), pos(pos) {}
-  };
-
   void link_child(ChildableCachedExtent* child, uint16_t pos) {
     assert(pos < get_node_size());
     assert(child);
@@ -236,20 +227,25 @@ struct FixedKVNode : ChildableCachedExtent {
     set_child_ptracker(child);
   }
 
-  template <typename iter_t>
-  child_pos_t get_child(Transaction &t, iter_t iter) {
+  virtual get_child_ret_t<LogicalCachedExtent>
+  get_logical_child(op_context_t<node_key_t> c, uint16_t pos) = 0;
+
+  template <typename T, typename iter_t>
+  get_child_ret_t<T> get_child(op_context_t<node_key_t> c, iter_t iter) {
     auto pos = iter.get_offset();
     assert(children.capacity());
     auto child = children[pos];
     if (is_valid_child_ptr(child)) {
-      return child_pos_t(child->get_transactional_view(t));
+      ceph_assert(child->get_type() == T::TYPE);
+      return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
     } else if (is_pending()) {
       auto key = iter.get_key();
       auto &sparent = get_stable_for_key(key);
       auto spos = sparent.child_pos_for_key(key);
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
-	return child_pos_t(child->get_transactional_view(t));
+	ceph_assert(child->get_type() == T::TYPE);
+	return c.cache.template get_extent_viewable_by_trans<T>(c.trans, (T*)child);
       } else {
 	return child_pos_t(&sparent, spos);
       }
@@ -590,6 +586,12 @@ struct FixedKVInternalNode
       assert(this->validate_stable_children());
       this->copy_sources.clear();
     }
+  }
+
+  get_child_ret_t<LogicalCachedExtent>
+  get_logical_child(op_context_t<NODE_KEY>, uint16_t pos) final {
+    ceph_abort("impossible");
+    return get_child_ret_t<LogicalCachedExtent>(child_pos_t(nullptr, 0));
   }
 
   bool validate_stable_children() final {
@@ -958,6 +960,30 @@ struct FixedKVLeafNode
 
   uint16_t get_node_split_pivot() final {
     return this->get_split_pivot().get_offset();
+  }
+
+  get_child_ret_t<LogicalCachedExtent>
+  get_logical_child(op_context_t<NODE_KEY> c, uint16_t pos) final {
+    auto child = this->children[pos];
+    if (is_valid_child_ptr(child)) {
+      ceph_assert(child->is_logical());
+      return c.cache.template get_extent_viewable_by_trans<
+	LogicalCachedExtent>(c.trans, (LogicalCachedExtent*)child);
+    } else if (this->is_pending()) {
+      auto key = this->iter_idx(pos).get_key();
+      auto &sparent = this->get_stable_for_key(key);
+      auto spos = sparent.child_pos_for_key(key);
+      auto child = sparent.children[spos];
+      if (is_valid_child_ptr(child)) {
+	ceph_assert(child->is_logical());
+	return c.cache.template get_extent_viewable_by_trans<
+	  LogicalCachedExtent>(c.trans, (LogicalCachedExtent*)child);
+      } else {
+	return child_pos_t(&sparent, spos);
+      }
+    } else {
+      return child_pos_t(this, pos);
+    }
   }
 
   bool validate_stable_children() override {

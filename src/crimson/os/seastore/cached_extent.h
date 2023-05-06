@@ -13,6 +13,7 @@
 
 #include "include/buffer.h"
 #include "crimson/common/errorator.h"
+#include "crimson/common/interruptible_future.h"
 #include "crimson/os/seastore/seastore_types.h"
 
 namespace crimson::os::seastore {
@@ -872,7 +873,50 @@ private:
   uint64_t bytes = 0;
 };
 
+class ChildableCachedExtent;
 class LogicalCachedExtent;
+
+class child_pos_t {
+public:
+  child_pos_t(CachedExtentRef stable_parent, uint16_t pos)
+    : stable_parent(stable_parent), pos(pos) {}
+
+  template <typename parent_t>
+  TCachedExtentRef<parent_t> get_parent() {
+    ceph_assert(stable_parent);
+    return stable_parent->template cast<parent_t>();
+  }
+  uint16_t get_pos() {
+    return pos;
+  }
+  void link_child(ChildableCachedExtent *c);
+private:
+  CachedExtentRef stable_parent;
+  uint16_t pos = std::numeric_limits<uint16_t>::max();
+};
+
+template <typename T>
+struct get_child_ret_t {
+  std::variant<child_pos_t, seastar::future<TCachedExtentRef<T>>> ret;
+  get_child_ret_t(child_pos_t pos)
+    : ret(std::move(pos)) {}
+  get_child_ret_t(seastar::future<TCachedExtentRef<T>> child)
+    : ret(std::move(child)) {}
+
+  bool has_child() const {
+    return ret.index() == 1;
+  }
+
+  child_pos_t &get_child_pos() {
+    ceph_assert(ret.index() == 0);
+    return std::get<0>(ret);
+  }
+
+  seastar::future<TCachedExtentRef<T>> &get_child_fut() {
+    ceph_assert(ret.index() == 1);
+    return std::get<1>(ret);
+  }
+};
 
 template <typename key_t, typename>
 class PhysicalNodePin;
@@ -892,8 +936,19 @@ public:
   virtual PhysicalNodePinRef<key_t, val_t> duplicate() const = 0;
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
+  virtual uint16_t get_pos() const = 0;
+
+  virtual get_child_ret_t<LogicalCachedExtent>
+  get_logical_extent(Transaction &t) = 0;
+
+  void link_child(ChildableCachedExtent *c) {
+    ceph_assert(child_pos);
+    child_pos->link_child(c);
+  }
 
   virtual ~PhysicalNodePin() {}
+protected:
+  std::optional<child_pos_t> child_pos = std::nullopt;
 };
 
 using LBAPin = PhysicalNodePin<laddr_t, paddr_t>;

@@ -593,7 +593,7 @@ TransactionManager::get_extents_if_live(
             // Only extent split can happen during the lookup
             ceph_assert(pin_seg_paddr >= paddr &&
                         pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
-            return pin_to_extent_by_type(t, std::move(pin), type
+            return read_pin_by_type(t, std::move(pin), type
             ).si_then([&list](auto ret) {
               list.emplace_back(std::move(ret));
               return seastar::now();

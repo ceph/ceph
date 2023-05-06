@@ -14,13 +14,16 @@ constexpr size_t BACKREF_BLOCK_SIZE = 4096;
 class BtreeBackrefPin : public BtreeNodePin<paddr_t, laddr_t> {
   extent_types_t type;
 public:
-  BtreeBackrefPin() = default;
+  BtreeBackrefPin(op_context_t<paddr_t> ctx)
+    : BtreeNodePin(ctx) {}
   BtreeBackrefPin(
+    op_context_t<paddr_t> ctx,
     CachedExtentRef parent,
     uint16_t pos,
     backref_map_val_t &val,
     backref_node_meta_t &&meta)
     : BtreeNodePin(
+	ctx,
 	parent,
 	pos,
 	val.laddr,
