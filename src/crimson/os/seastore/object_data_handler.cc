@@ -1353,17 +1353,21 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		      current = end;
 		      return seastar::now();
 		    } else {
+		      auto key = pin->get_key();
+		      bool is_indirect = pin->is_indirect();
 		      return ctx.tm.read_pin<ObjectDataBlock>(
 			ctx.t,
 			std::move(pin)
-		      ).si_then([&ret, &current, end](auto extent) {
+		      ).si_then([&ret, &current, end, key, is_indirect](auto extent) {
 			ceph_assert(
-			  (extent->get_laddr() + extent->get_length()) >= end);
+			  is_indirect
+			    ? (key + extent->get_length()) >= end
+			    : (extent->get_laddr() + extent->get_length()) >= end);
 			ceph_assert(end > current);
 			ret.append(
 			  bufferptr(
 			    extent->get_bptr(),
-			    current - extent->get_laddr(),
+			    current - (is_indirect ? key : extent->get_laddr()),
 			    end - current));
 			current = end;
 			return seastar::now();

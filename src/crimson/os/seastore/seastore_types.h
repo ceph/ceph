@@ -1115,6 +1115,23 @@ struct __attribute((packed)) pladdr_le_t {
   }
 };
 
+template <typename T>
+struct min_max_t {};
+
+template <>
+struct min_max_t<laddr_t> {
+  static constexpr laddr_t max = L_ADDR_MAX;
+  static constexpr laddr_t min = L_ADDR_MIN;
+  static constexpr laddr_t null = L_ADDR_NULL;
+};
+
+template <>
+struct min_max_t<paddr_t> {
+  static constexpr paddr_t max = P_ADDR_MAX;
+  static constexpr paddr_t min = P_ADDR_MIN;
+  static constexpr paddr_t null = P_ADDR_NULL;
+};
+
 // logical offset, see LBAManager, TransactionManager
 using extent_len_t = uint32_t;
 constexpr extent_len_t EXTENT_LEN_MAX =

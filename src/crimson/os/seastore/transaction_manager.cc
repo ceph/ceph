@@ -237,9 +237,11 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
            t, result.refcount, offset, result.length, result.addr);
-    if (result.refcount == 0 && !result.addr.is_zero()) {
+    if (result.refcount == 0 &&
+        (result.addr.is_paddr() &&
+         !result.addr.get_paddr().is_zero())) {
       return cache->retire_extent_addr(
-	t, result.addr, result.length
+	t, result.addr.get_paddr(), result.length
       ).si_then([] {
 	return ref_ret(
 	  interruptible::ready_future_marker{},

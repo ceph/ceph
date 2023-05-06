@@ -21,21 +21,6 @@ struct op_context_t {
 
 constexpr uint16_t MAX_FIXEDKVBTREE_DEPTH = 8;
 
-template <typename T>
-struct min_max_t {};
-
-template <>
-struct min_max_t<laddr_t> {
-  static constexpr laddr_t max = L_ADDR_MAX;
-  static constexpr laddr_t min = L_ADDR_MIN;
-};
-
-template <>
-struct min_max_t<paddr_t> {
-  static constexpr paddr_t max = P_ADDR_MAX;
-  static constexpr paddr_t min = P_ADDR_MIN;
-};
-
 template <typename bound_t>
 struct fixed_kv_node_meta_t {
   bound_t begin = min_max_t<bound_t>::min;
@@ -117,7 +102,7 @@ struct fixed_kv_node_meta_le_t {
 
 template <typename key_t, typename val_t>
 class BtreeNodeMapping : public PhysicalNodeMapping<key_t, val_t> {
-
+protected:
   op_context_t<key_t> ctx;
   /**
    * parent
@@ -128,9 +113,14 @@ class BtreeNodeMapping : public PhysicalNodeMapping<key_t, val_t> {
   CachedExtentRef parent;
 
   pladdr_t value;
-  extent_len_t len;
+  extent_len_t len = 0;
   fixed_kv_node_meta_t<key_t> range;
   uint16_t pos = std::numeric_limits<uint16_t>::max();
+
+  virtual std::unique_ptr<BtreeNodeMapping> _duplicate(op_context_t<key_t>) const = 0;
+  fixed_kv_node_meta_t<key_t> _get_pin_range() const {
+    return range;
+  }
 
 public:
   using val_type = val_t;
@@ -142,12 +132,12 @@ public:
     uint16_t pos,
     pladdr_t value,
     extent_len_t len,
-    fixed_kv_node_meta_t<key_t> &&meta)
+    fixed_kv_node_meta_t<key_t> meta)
     : ctx(ctx),
       parent(parent),
       value(value),
       len(len),
-      range(std::move(meta)),
+      range(meta),
       pos(pos)
   {
     if (!parent->is_pending()) {
@@ -190,13 +180,12 @@ public:
     }
   }
 
-  key_t get_key() const final {
+  key_t get_key() const override {
     return range.begin;
   }
 
   PhysicalNodeMappingRef<key_t, val_t> duplicate() const final {
-    auto ret = std::unique_ptr<BtreeNodeMapping<key_t, val_t>>(
-      new BtreeNodeMapping<key_t, val_t>(ctx));
+    auto ret = _duplicate(ctx);
     ret->range = range;
     ret->value = value;
     ret->parent = parent;
