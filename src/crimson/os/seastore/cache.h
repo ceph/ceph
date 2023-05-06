@@ -350,6 +350,7 @@ public:
       [](T &){}, [](T &) {});
   }
 
+
   /**
    * get_extent_if_cached
    *
