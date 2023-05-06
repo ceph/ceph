@@ -32,6 +32,12 @@
   in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
   the restored file system is expected to have the same ID as before.
 
+>= 16.2.14
+----------
+
+* CEPHFS: After recovering a Ceph File System post following the disaster recovery
+  procedure, the recovered files under `lost+found` directory can now be deleted.
+
 >=16.2.12
 ---------
 
