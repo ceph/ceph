@@ -178,7 +178,15 @@ public:
   {
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
-      return v.get_child_fut().safe_then([](auto extent) {
+      return v.get_child_fut().safe_then([pin=std::move(pin)](auto extent) {
+#ifndef NDEBUG
+        auto lextent = extent->template cast<LogicalCachedExtent>();
+        auto pin_laddr = pin->get_key();
+        if (pin->is_indirect()) {
+          pin_laddr = pin->get_intermediate_key();
+        }
+        assert(lextent->get_laddr() == pin_laddr);
+#endif
 	return extent->template cast<T>();
       });
     } else {
@@ -453,7 +461,8 @@ public:
       hint,
       mapping.get_length(),
       clone_offset,
-      mapping.get_val()
+      mapping.get_val(),
+      clone_offset
     ).si_then([this, &t, clone_offset](auto pin) {
       return inc_ref(t, clone_offset
       ).si_then([pin=std::move(pin)](auto) mutable {
@@ -726,7 +735,7 @@ private:
 	assert(!pin->has_been_invalidated());
 	assert(pin->get_parent());
 	pin->link_child(&extent);
-	extent.set_laddr(pin->get_key());
+	extent.maybe_set_intermediate_laddr(*pin);
       }
     ).si_then([FNAME, &t](auto ref) mutable -> ret {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
@@ -767,7 +776,7 @@ private:
 	assert(pin->get_parent());
 	assert(!pin->get_parent()->is_pending());
 	pin->link_child(&lextent);
-	lextent.set_laddr(pin->get_key());
+	lextent.maybe_set_intermediate_laddr(*pin);
       }
     ).si_then([FNAME, &t](auto ref) {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);

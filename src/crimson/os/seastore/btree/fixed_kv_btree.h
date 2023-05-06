@@ -218,8 +218,7 @@ public:
       return leaf.pos == 0;
     }
 
-    PhysicalNodeMappingRef<node_key_t, typename pin_t::val_type>
-    get_pin(op_context_t<node_key_t> ctx) const {
+    std::unique_ptr<pin_t> get_pin(op_context_t<node_key_t> ctx) const {
       assert(!is_end());
       auto val = get_val();
       auto key = get_key();

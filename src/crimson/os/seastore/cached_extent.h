@@ -1019,6 +1019,15 @@ public:
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
   virtual uint16_t get_pos() const = 0;
+  // An lba pin may be indirect, see comments in lba_manager/btree/btree_lba_manager.h
+  virtual bool is_indirect() const { return false; }
+  virtual key_t get_intermediate_key() const { return min_max_t<key_t>::null; }
+  virtual key_t get_intermediate_base() const { return min_max_t<key_t>::null; }
+  virtual extent_len_t get_intermediate_length() const { return 0; }
+  // The start offset of the pin, must be 0 if the pin is not indirect
+  virtual extent_len_t get_intermediate_offset() const {
+    return std::numeric_limits<extent_len_t>::max();
+  }
 
   virtual get_child_ret_t<LogicalCachedExtent>
   get_logical_extent(Transaction &t) = 0;
@@ -1184,6 +1193,12 @@ public:
 
   void set_laddr(laddr_t nladdr) {
     laddr = nladdr;
+  }
+
+  void maybe_set_intermediate_laddr(LBAMapping* mapping) {
+    laddr = mapping.is_indirect()
+      ? mapping.get_intermediate_key()
+      : mapping.get_key();
   }
 
   void apply_delta_and_adjust_crc(
