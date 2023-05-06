@@ -222,6 +222,64 @@ The In-memory Log Dump can be disabled using::
 
   $ ceph config set mds mds_extraordinary_events_dump_interval 0
 
+Filesystems Become Inaccessible After an Upgrade
+================================================
+
+.. note::
+   You can avoid ``operation not permitted`` errors by running this procedure
+   before an upgrade. As of May 2023, it seems that ``operation not permitted``
+   errors of the kind discussed here occur after upgrades after Nautilus
+   (inclusive).
+
+IF
+
+you have CephFS file systems that have data and metadata pools that were
+created by a ``ceph fs new`` command (meaning that they were not created
+with the defaults)
+
+OR
+
+you have an existing CephFS file system and are upgrading to a new post-Nautilus
+major version of Ceph
+
+THEN
+
+in order for the documented ``ceph fs authorize...`` commands to function as
+documented (and to avoid 'operation not permitted' errors when doing file I/O
+or similar security-related problems for all users except the ``client.admin``
+user), you must first run:
+
+.. prompt:: bash $
+
+   ceph osd pool application set <your metadata pool name> cephfs metadata <your ceph fs filesystem name>
+
+and
+
+.. prompt:: bash $
+
+   ceph osd pool application set <your data pool name> cephfs data <your ceph fs filesystem name>
+
+Otherwise, when the OSDs receive a request to read or write data (not the
+directory info, but file data) they will not know which Ceph file system name
+to look up. This is true also of pool names, because the 'defaults' themselves
+changed in the major releases, from::
+
+   data pool=fsname
+   metadata pool=fsname_metadata
+
+to::
+
+   data pool=fsname.data and
+   metadata pool=fsname.meta
+
+Any setup that used ``client.admin`` for all mounts did not run into this
+problem, because the admin key gave blanket permissions.
+
+A temporary fix involves changing mount requests to the 'client.admin' user and
+its associated key. A less drastic but half-fix is to change the osd cap for
+your user to just ``caps osd = "allow rw"``  and delete ``tag cephfs
+data=....``
+
 Reporting Issues
 ================
 
