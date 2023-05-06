@@ -431,7 +431,7 @@ GateWay (RGW) deployments that host large numbers of small files
 For example, when an RGW client stores a 1KB S3 object, it is written to a
 single RADOS object.  With the default :confval:`min_alloc_size` value, 4KB of
 underlying drive space is allocated.  This means that roughly
-(4KB - 1KB) == 3KB is allocated but never used, which corresponds to 300%
+(4KB - 1KB) == 3KB of that RADOS object's allocated space is never used, which corresponds to 300%
 overhead or 25% efficiency. Similarly, a 5KB user object will be stored
 as one 4KB and one 1KB RADOS object, again stranding 4KB of device capacity,
 though in this case the overhead is a much smaller percentage.  Think of this
@@ -440,8 +440,8 @@ thus decreases rapidly as user object size increases.
 
 An easily missed additional subtlety is that this
 takes place for *each* replica.  So when using the default three copies of
-data (3R), a 1KB S3 object actually consumes roughly 9KB of storage device
-capacity.  If erasure coding (EC) is used instead of replication, the
+data (3R), a 1KB S3 object actually consumes 12KB of storage device
+capacity, with 11KB of overhead.  If erasure coding (EC) is used instead of replication, the
 amplification may be even higher: for a ``k=4,m=2`` pool, our 1KB S3 object
 will allocate (6 * 4KB) = 24KB of device capacity.
 
