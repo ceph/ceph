@@ -48,26 +48,39 @@ place that will cause the cluster to re-replicate the data until the
 
 Stretch Cluster Issues
 ======================
-No matter what happens, Ceph will not compromise on data integrity
-and consistency. If there's a failure in your network or a loss of nodes and
-you can restore service, Ceph will return to normal functionality on its own.
 
-But there are scenarios where you lose data availibility despite having
-enough servers available to satisfy Ceph's consistency and sizing constraints, or
-where you may be surprised to not satisfy Ceph's constraints.
-The first important category of these failures resolve around inconsistent
-networks -- if there's a netsplit, Ceph may be unable to mark OSDs down and kick
-them out of the acting PG sets despite the primary being unable to replicate data.
-If this happens, IO will not be permitted, because Ceph can't satisfy its durability
-guarantees.
+Ceph does not permit the compromise of data integrity and data consistency
+under any circumstances. When service is restored after a network failure or a
+loss of Ceph nodes, Ceph will restore itself to a state of normal functioning
+without operator intervention.  
 
-The second important category of failures is when you think you have data replicated
-across data centers, but the constraints aren't sufficient to guarantee this.
-For instance, you might have data centers A and B, and your CRUSH rule targets 3 copies
-and places a copy in each data center with a ``min_size`` of 2. The PG may go active with
-2 copies in site A and no copies in site B, which means that if you then lose site A you
-have lost data and Ceph can't operate on it. This situation is surprisingly difficult
-to avoid with standard CRUSH rules.
+Ceph does not permit the compromise of data integrity or data consistency, but
+there are situations in which *data availability* is compromised. These
+situations can occur even though there are enough clusters available to satisfy
+Ceph's consistency and sizing constraints. In some situations, you might
+discover that your cluster does not satisfy those constraints.
+
+The first category of these failures that we will discuss involves inconsistent
+networks -- if there is a netsplit (a disconnection between two servers that
+splits the network into two pieces), Ceph might be unable to mark OSDs ``down``
+and remove them from the acting PG sets. This failure to mark ODSs ``down``
+will occur, despite the fact that the primary PG is unable to replicate data (a
+situation that, under normal non-netsplit circumstances, would result in the
+marking of affected OSDs as ``down`` and their removal from the PG). If this
+happens, Ceph will be unable to satisfy its durability guarantees and
+consequently IO will not be permitted.
+
+The second category of failures that we will discuss involves the situation in
+which the constraints are not sufficient to guarantee the replication of data
+across data centers, though it might seem that the data is correctly replicated
+across data centers. For example, in a scenario in which there are two data
+centers named Data Center A and Data Center B, and the CRUSH rule targets three
+replicas and places a replica in each data center with a ``min_size`` of ``2``,
+the PG might go active with two replicas in Data Center A and zero replicas in
+Data Center B. In a situation of this kind, the loss of Data Center A means
+that the data is lost and Ceph will not be able to operate on it. This
+situation is surprisingly difficult to avoid using only standard CRUSH rules.
+
 
 Stretch Mode
 ============
