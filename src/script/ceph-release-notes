@@ -51,7 +51,7 @@ prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
 signed_off_re = re.compile("Signed-off-by: (.+) <")
 tracker_re = re.compile("http://tracker.ceph.com/issues/(\d+)")
 rst_link_re = re.compile(r"([a-zA-Z0-9])_(\W)")
-release_re = re.compile(r"^(nautilus|octopus|pacific|quincy):\s*")
+release_re = re.compile(r"^(nautilus|octopus|pacific|Pacific|quincy|Quincy|reef|Reef):\s*")
 
 tracker_uri = "http://tracker.ceph.com/issues/{0}.json"
 
@@ -144,17 +144,32 @@ def _title_message(commit, pr, strict):
     message = "    " + "\n    ".join(lines)
     return (title, message)
 
-def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict, use_tags, include_pr_messages):
+def make_release_notes(gh, repo, ref, cherry_picks, plaintext, html, markdown, verbose, strict, use_tags, include_pr_messages):
 
     issue2prs = {}
     pr2issues = {}
     pr2info = {}
 
+    merges = {}
+    for commit in repo.iter_commits(ref, merges=True):
+        merge = merge_re.match(commit.summary)
+        if not merge:
+            continue
+        PR = merge.group(2)
+        merges[PR] = "merge_commit"
+    if cherry_picks:
+        for PR in cherry_picks.split(','):
+            merges[PR] = "cherry_pick"
+
+    merge_commits = {}
     for commit in repo.iter_commits(ref, merges=True):
         merge = merge_re.match(commit.summary)
         if not merge:
             continue
         number = merge.group(2)
+        merge_commits[number] = commit
+
+    for number in merges:
         print ("Considering PR#" + number)
         # do not pick up ceph/ceph-qa-suite.git PRs
         if int(number) < 1311:
@@ -177,7 +192,18 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
                 else:
                     print(f"Could not fetch PR {number} in {retries} tries.")
                     raise
-        (title, message) = _title_message(commit, pr, strict)
+        commit = None
+        if merges[number] == "cherry_pick":
+            try:
+                commit = repo.commit(pr['merge_commit_sha'])
+            except:
+                pass
+        if merges[number] == "merge_commit":
+            commit = merge_commits[number]
+        if commit:
+            (title, message) = _title_message(commit, pr, strict)
+        else:
+            (title, message) = (pr['title'], pr['body'])
         issues = []
         if pr['body']:
             issues = fixes_re.findall(pr['body']) + tracker_re.findall(
@@ -185,19 +211,30 @@ def make_release_notes(gh, repo, ref, plaintext, html, markdown, verbose, strict
             )
 
         authors = {}
-        for c in repo.iter_commits(
-                     "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
-                 ):
+        if commit:
+            for c in repo.iter_commits(
+                    "{sha1}^1..{sha1}^2".format(sha1=commit.hexsha)
+                    ):
+                for author in re.findall(
+                        "Signed-off-by:\s*(.*?)\s*<", c.message
+                        ):
+                    authors[author] = 1
+                    issues.extend(fixes_re.findall(c.message) +
+                            tracker_re.findall(c.message))
+        else:
             for author in re.findall(
-                              "Signed-off-by:\s*(.*?)\s*<", c.message
-                          ):
+                    "Signed-off-by:\s*(.*?)\s*<", message
+                    ):
+                if author == "[Your Name]":
+                    continue
                 authors[author] = 1
-            issues.extend(fixes_re.findall(c.message) +
-                          tracker_re.findall(c.message))
         if authors:
             author = ", ".join(authors.keys())
         else:
-            author = commit.parents[-1].author.name
+            if commit:
+                author = commit.parents[-1].author.name
+            else:
+                author = pr['user']['login']
 
         if strict and not issues:
             print ("ERROR: https://github.com/ceph/ceph/pull/" +
@@ -330,6 +367,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--rev", "-r",
                         help="git revision range for creating release notes")
+    parser.add_argument("--cherry_picks", "-c",
+                        help="PRs associated with any last-minute cherry-picks. Provide PR numbers as a string separated by commas, i.e. '50575,50625'")
     parser.add_argument("--text", "-t",
                         action='store_true', default=None,
                         help="output plain text only, no links")
@@ -365,6 +404,7 @@ if __name__ == "__main__":
         gh,
         Repo(args.repo),
         args.rev,
+        args.cherry_picks,
         args.text,
         args.html,
         args.markdown,
