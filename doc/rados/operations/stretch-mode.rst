@@ -211,45 +211,52 @@ deployments that have more than two data centers.
 
 Other commands
 ==============
-If your tiebreaker monitor fails for some reason, you can replace it. Turn on
-a new monitor and run:
+
+Replacing a failed tiebreaker monitor
+-------------------------------------
+
+Turn on a new monitor and run the following command:
 
 .. prompt:: bash $
 
    ceph mon set_new_tiebreaker mon.<new_mon_name>
 
-This command will protest if the new monitor is in the same location as existing
-non-tiebreaker monitors. This command WILL NOT remove the previous tiebreaker
-monitor; you should do so yourself.
+This command protests if the new monitor is in the same location as the
+existing non-tiebreaker monitors. **This command WILL NOT remove the previous
+tiebreaker monitor.** Remove the previous tiebreaker monitor yourself.
 
-If you are writing your own tooling for deploying Ceph, you can use a new
-``--set-crush-location`` option when booting monitors, instead of running
-``ceph mon set_location``. This option accepts only a single "bucket=loc" pair, eg
-``ceph-mon --set-crush-location 'datacenter=a'``, which must match the
-bucket type you specified when running ``enable_stretch_mode``.
+Using "--set-crush-location" and not "ceph mon set_location"
+------------------------------------------------------------
 
+If you write your own tooling for deploying Ceph, use the
+``--set-crush-location`` option when booting monitors instead of running ``ceph
+mon set_location``. This option accepts only a single ``bucket=loc`` pair (for
+example, ``ceph-mon --set-crush-location 'datacenter=a'``), and that pair must
+match the bucket type that was specified when running ``enable_stretch_mode``.
 
-When in stretch degraded mode, the cluster will go into "recovery" mode automatically
-when the disconnected data center comes back. If that doesn't work, or you want to
-enable recovery mode early, you can invoke:
+Forcing recovery stretch mode
+-----------------------------
+
+When in stretch degraded mode, the cluster will go into "recovery" mode
+automatically when the disconnected data center comes back. If that does not
+happen or you want to enable recovery mode early, run the following command:
 
 .. prompt:: bash $
 
    ceph osd force_recovery_stretch_mode --yes-i-really-mean-it
 
-But this command should not be necessary; it is included to deal with
-unanticipated situations.
+Forcing normal stretch mode
+---------------------------
 
-When in recovery mode, the cluster should go back into normal stretch mode
-when the PGs are healthy. If this doesn't happen, or you want to force the
+When in recovery mode, the cluster should go back into normal stretch mode when
+the PGs are healthy. If this fails to happen or if you want to force the
 cross-data-center peering early and are willing to risk data downtime (or have
 verified separately that all the PGs can peer, even if they aren't fully
-recovered), you can invoke:
+recovered), run the following command:
 
 .. prompt:: bash $
 
    ceph osd force_healthy_stretch_mode --yes-i-really-mean-it
 
-This command should not be necessary; it is included to deal with
-unanticipated situations. But you might wish to invoke it to remove
-the ``HEALTH_WARN`` state which recovery mode generates.
+This command can be used to to remove the ``HEALTH_WARN`` state, which recovery
+mode generates.
