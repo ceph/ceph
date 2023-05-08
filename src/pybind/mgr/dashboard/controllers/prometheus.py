@@ -66,11 +66,7 @@ class PrometheusRESTController(RESTController):
             alerts_info = []
             if 'data' in content:
                 if balancer_status['active'] and balancer_status['no_optimization_needed'] and path == '/alerts':  # noqa E501  #pylint: disable=line-too-long
-                    for alert in content['data']:
-                        for k, v in alert.items():
-                            if k == 'labels':
-                                alerts_info.append(v)
-                    alerts_info = [i for i in alerts_info if i['alertname'] != 'CephPGImbalance']
+                    alerts_info = [alert for alert in content['data'] if alert['labels']['alertname'] != 'CephPGImbalance']  # noqa E501  #pylint: disable=line-too-long
                     return alerts_info
                 return content['data']
             return content
