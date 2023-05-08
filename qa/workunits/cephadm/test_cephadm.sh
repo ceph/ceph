@@ -29,9 +29,16 @@ CEPHADM_SAMPLES_DIR=${CEPHADM_SRC_DIR}/samples
 
 [ -z "$SUDO" ] && SUDO=sudo
 
+# If cephadm is already installed on the system, use that one, avoid building
+# # one if we can.
+if [ -z "$CEPHADM" ] && command -v cephadm >/dev/null ; then
+    CEPHADM="$(command -v cephadm)"
+fi
+
 if [ -z "$CEPHADM" ]; then
     CEPHADM=`mktemp -p $TMPDIR tmp.cephadm.XXXXXX`
     ${CEPHADM_SRC_DIR}/build.sh "$CEPHADM"
+    NO_BUILD_INFO=1
 fi
 
 # at this point, we need $CEPHADM set
@@ -162,17 +169,20 @@ $SUDO $CEPHADM check-host
 ## run a gather-facts (output to stdout)
 $SUDO $CEPHADM gather-facts
 
-## version + --image
-$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version
-$SUDO CEPHADM_IMAGE=$IMAGE_PACIFIC $CEPHADM_BIN version \
-    | grep 'ceph version 16'
-#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version
-#$SUDO CEPHADM_IMAGE=$IMAGE_OCTOPUS $CEPHADM_BIN version \
-#    | grep 'ceph version 15'
-$SUDO $CEPHADM_BIN --image $IMAGE_MAIN version | grep 'ceph version'
+## NOTE: cephadm version is, as of around May 2023, no longer basing the
+## output for `cephadm version` on the version of the containers. The version
+## reported is that of the "binary" and is determined during the ceph build.
+## `cephadm version` should NOT require sudo/root.
+$CEPHADM_BIN version
+$CEPHADM_BIN version | grep 'cephadm version'
+# Typically cmake should be running the cephadm build script with CLI arguments
+# that embed version info into the "binary". If not using a cephadm build via
+# cmake you can set `NO_BUILD_INFO` to skip this check.
+if [ -z "$NO_BUILD_INFO" ]; then
+    $CEPHADM_BIN version | grep -v 'UNSET'
+    $CEPHADM_BIN version | grep -v 'UNKNOWN'
+fi
 
-# try force docker; this won't work if docker isn't installed
-systemctl status docker > /dev/null && ( $CEPHADM --docker version | grep 'ceph version' ) || echo "docker not installed"
 
 ## test shell before bootstrap, when crash dir isn't (yet) present on this host
 $CEPHADM shell --fsid $FSID -- ceph -v | grep 'ceph version'
