@@ -654,6 +654,7 @@ function run_osd() {
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
     ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" --osd-mclock-profile=high_recovery_ops"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
@@ -864,6 +865,7 @@ function activate_osd() {
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
     ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" --osd-mclock-profile=high_recovery_ops"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data

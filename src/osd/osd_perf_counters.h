@@ -36,6 +36,9 @@ enum {
   l_osd_op_rw_process_lat,
   l_osd_op_rw_prepare_lat,
 
+  l_osd_op_delayed_unreadable,
+  l_osd_op_delayed_degraded,
+
   l_osd_op_before_queue_op_lat,
   l_osd_op_before_dequeue_op_lat,
 
@@ -57,6 +60,16 @@ enum {
 
   l_osd_rop,
   l_osd_rbytes,
+
+  l_osd_recovery_push_queue_lat,
+  l_osd_recovery_push_reply_queue_lat,
+  l_osd_recovery_pull_queue_lat,
+  l_osd_recovery_backfill_queue_lat,
+  l_osd_recovery_backfill_remove_queue_lat,
+  l_osd_recovery_scan_queue_lat,
+
+  l_osd_recovery_queue_lat,
+  l_osd_recovery_context_queue_lat,
 
   l_osd_loadavg,
   l_osd_cached_crc,

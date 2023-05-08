@@ -6061,6 +6061,11 @@ struct ObjectRecoveryProgress {
       omap_complete;
   }
 
+  uint64_t estimate_remaining_data_to_recover(const ObjectRecoveryInfo& info) const {
+    // Overestimates in case of clones, but avoids traversing copy_subset
+    return info.size - data_recovered_to;
+  }
+
   static void generate_test_instances(std::list<ObjectRecoveryProgress*>& o);
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);

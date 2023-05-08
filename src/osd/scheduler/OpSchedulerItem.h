@@ -40,25 +40,9 @@ std::ostream& operator<<(std::ostream& out, const op_scheduler_class& class_id);
 
 class OpSchedulerItem {
 public:
-  class OrderLocker {
-  public:
-    using Ref = std::unique_ptr<OrderLocker>;
-    virtual void lock() = 0;
-    virtual void unlock() = 0;
-    virtual ~OrderLocker() {}
-  };
-
   // Abstraction for operations queueable in the op queue
   class OpQueueable {
   public:
-    enum class op_type_t {
-      client_op,
-      peering_event,
-      bg_snaptrim,
-      bg_recovery,
-      bg_scrub,
-      bg_pg_delete
-    };
     using Ref = std::unique_ptr<OpQueueable>;
 
     /// Items with the same queue token will end up in the same shard
@@ -67,8 +51,7 @@ public:
     /* Items will be dequeued and locked atomically w.r.t. other items with the
        * same ordering token */
     virtual const spg_t& get_ordering_token() const = 0;
-    virtual OrderLocker::Ref get_order_locker(PGRef pg) = 0;
-    virtual op_type_t get_op_type() const = 0;
+
     virtual std::optional<OpRequestRef> maybe_get_op() const {
       return std::nullopt;
     }
@@ -106,8 +89,20 @@ private:
   utime_t start_time;
   uint64_t owner;  ///< global id (e.g., client.XXX)
   epoch_t map_epoch;    ///< an epoch we expect the PG to exist in
-  int qos_cost;  ///< scaled cost calculated by the mclock scheduler
-  bool qos_item;  ///< set to true if item is scheduled by mclock scheduler
+
+  /**
+   * qos_cost
+   *
+   * Set by mClockScheduler iff queued into mclock proper and not the
+   * high/immediate queues.  Represents mClockScheduler's adjusted
+   * cost value.
+   */
+  uint32_t qos_cost = 0;
+
+  /// True iff queued via mclock proper, not the high/immediate queues
+  bool was_queued_via_mclock() const {
+    return qos_cost > 0;
+  }
 
 public:
   OpSchedulerItem(
@@ -122,25 +117,17 @@ public:
       priority(priority),
       start_time(start_time),
       owner(owner),
-      map_epoch(e)
-  { qos_cost = 0; qos_item = false; }
+      map_epoch(e) {}
   OpSchedulerItem(OpSchedulerItem &&) = default;
   OpSchedulerItem(const OpSchedulerItem &) = delete;
   OpSchedulerItem &operator=(OpSchedulerItem &&) = default;
   OpSchedulerItem &operator=(const OpSchedulerItem &) = delete;
 
-  OrderLocker::Ref get_order_locker(PGRef pg) {
-    return qitem->get_order_locker(pg);
-  }
   uint32_t get_queue_token() const {
     return qitem->get_queue_token();
   }
   const spg_t& get_ordering_token() const {
     return qitem->get_ordering_token();
-  }
-  using op_type_t = OpQueueable::op_type_t;
-  OpQueueable::op_type_t get_op_type() const {
-    return qitem->get_op_type();
   }
   std::optional<OpRequestRef> maybe_get_op() const {
     return qitem->maybe_get_op();
@@ -173,36 +160,20 @@ public:
     return qitem->get_scheduler_class();
   }
 
-  void maybe_set_is_qos_item() {
-    if (get_scheduler_class() != op_scheduler_class::immediate) {
-      qos_item = true ;
-    }
-  }
-
-  bool is_qos_item() const {
-    return qos_item;
-  }
-
-  void set_qos_cost(int scaled_cost) {
+  void set_qos_cost(uint32_t scaled_cost) {
     qos_cost = scaled_cost;
-  }
-
-  int get_qos_cost() const {
-    return qos_cost;
   }
 
   friend std::ostream& operator<<(std::ostream& out, const OpSchedulerItem& item) {
     out << "OpSchedulerItem("
         << item.get_ordering_token() << " " << *item.qitem;
 
-    if (item.is_qos_item()) {
-      out << " class_id " << item.get_scheduler_class();
-    } else {
-      out << " prio " << item.get_priority();
-    }
+    out << " class_id " << item.get_scheduler_class();
 
-    if (item.get_qos_cost()) {
-      out << " qos_cost " << item.get_qos_cost();
+    out << " prio " << item.get_priority();
+
+    if (item.was_queued_via_mclock()) {
+      out << " qos_cost " << item.qos_cost;
     }
 
     out << " cost " << item.get_cost()
@@ -223,6 +194,17 @@ protected:
   const spg_t& get_pgid() const {
     return pgid;
   }
+
+  static op_scheduler_class priority_to_scheduler_class(int priority) {
+    if (priority >= CEPH_MSG_PRIO_HIGH) {
+      return op_scheduler_class::immediate;
+    } else if (priority >= PeeringState::recovery_msg_priority_t::DEGRADED) {
+      return op_scheduler_class::background_recovery;
+    } else {
+      return op_scheduler_class::background_best_effort;
+    }
+  }
+
 public:
   explicit PGOpQueueable(spg_t pg) : pgid(pg) {}
   uint32_t get_queue_token() const final {
@@ -232,42 +214,13 @@ public:
   const spg_t& get_ordering_token() const final {
     return get_pgid();
   }
-
-  OpSchedulerItem::OrderLocker::Ref get_order_locker(PGRef pg) final {
-    class Locker : public OpSchedulerItem::OrderLocker {
-      PGRef pg;
-    public:
-      explicit Locker(PGRef pg) : pg(pg) {}
-      void lock() final {
-	pg->lock();
-      }
-      void unlock() final {
-	pg->unlock();
-      }
-    };
-    return OpSchedulerItem::OrderLocker::Ref(
-      new Locker(pg));
-  }
 };
 
 class PGOpItem : public PGOpQueueable {
   OpRequestRef op;
 
-  const MOSDOp *maybe_get_mosd_op() const {
-    auto req = op->get_req();
-    if (req->get_type() == CEPH_MSG_OSD_OP) {
-      return op->get_req<MOSDOp>();
-    } else {
-      return nullptr;
-    }
-  }
-
 public:
   PGOpItem(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
-  op_type_t get_op_type() const final {
-
-    return op_type_t::client_op;
-  }
 
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGOpItem(op=" << *(op->get_req()) << ")";
@@ -294,9 +247,6 @@ class PGPeeringItem : public PGOpQueueable {
   PGPeeringEventRef evt;
 public:
   PGPeeringItem(spg_t pg, PGPeeringEventRef e) : PGOpQueueable(pg), evt(e) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::peering_event;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
@@ -322,9 +272,6 @@ public:
     spg_t pg,
     epoch_t epoch_queued)
     : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_snaptrim;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGSnapTrim(pgid=" << get_pgid()
 	       << " epoch_queued=" << epoch_queued
@@ -344,9 +291,6 @@ public:
     spg_t pg,
     epoch_t epoch_queued)
     : PGOpQueueable(pg), epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_scrub;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGScrub(pgid=" << get_pgid()
 	       << "epoch_queued=" << epoch_queued
@@ -379,7 +323,6 @@ class PGScrubItem : public PGOpQueueable {
       , activation_index{op_index}
       , message_name{derivative_name}
   {}
-  op_type_t get_op_type() const final { return op_type_t::bg_scrub; }
   std::ostream& print(std::ostream& rhs) const final
   {
     return rhs << message_name << "(pgid=" << get_pgid()
@@ -557,19 +500,21 @@ class PGScrubChunkIsFree : public PGScrubItem {
 };
 
 class PGRecovery : public PGOpQueueable {
+  utime_t time_queued;
   epoch_t epoch_queued;
   uint64_t reserved_pushes;
+  int priority;
 public:
   PGRecovery(
     spg_t pg,
     epoch_t epoch_queued,
-    uint64_t reserved_pushes)
+    uint64_t reserved_pushes,
+    int priority)
     : PGOpQueueable(pg),
+      time_queued(ceph_clock_now()),
       epoch_queued(epoch_queued),
-      reserved_pushes(reserved_pushes) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_recovery;
-  }
+      reserved_pushes(reserved_pushes),
+      priority(priority) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecovery(pgid=" << get_pgid()
 	       << " epoch_queued=" << epoch_queued
@@ -582,21 +527,22 @@ public:
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
   op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_recovery;
+    return priority_to_scheduler_class(priority);
   }
 };
 
 class PGRecoveryContext : public PGOpQueueable {
+  utime_t time_queued;
   std::unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
   epoch_t epoch;
+  int priority;
 public:
   PGRecoveryContext(spg_t pgid,
-		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch)
+		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch,
+		    int priority)
     : PGOpQueueable(pgid),
-      c(c), epoch(epoch) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_recovery;
-  }
+      time_queued(ceph_clock_now()),
+      c(c), epoch(epoch), priority(priority) {}
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGRecoveryContext(pgid=" << get_pgid()
 	       << " c=" << c.get() << " epoch=" << epoch
@@ -605,7 +551,7 @@ public:
   void run(
     OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
   op_scheduler_class get_scheduler_class() const final {
-    return op_scheduler_class::background_recovery;
+    return priority_to_scheduler_class(priority);
   }
 };
 
@@ -617,9 +563,6 @@ public:
     epoch_t epoch_queued)
     : PGOpQueueable(pg),
       epoch_queued(epoch_queued) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_pg_delete;
-  }
   std::ostream &print(std::ostream &rhs) const final {
     return rhs << "PGDelete(" << get_pgid()
 	       << " e" << epoch_queued
@@ -633,12 +576,25 @@ public:
 };
 
 class PGRecoveryMsg : public PGOpQueueable {
+  utime_t time_queued;
   OpRequestRef op;
 
 public:
-  PGRecoveryMsg(spg_t pg, OpRequestRef op) : PGOpQueueable(pg), op(std::move(op)) {}
-  op_type_t get_op_type() const final {
-    return op_type_t::bg_recovery;
+  PGRecoveryMsg(spg_t pg, OpRequestRef op)
+    : PGOpQueueable(pg), time_queued(ceph_clock_now()), op(std::move(op)) {}
+
+  static bool is_recovery_msg(OpRequestRef &op) {
+    switch (op->get_req()->get_type()) {
+    case MSG_OSD_PG_PUSH:
+    case MSG_OSD_PG_PUSH_REPLY:
+    case MSG_OSD_PG_PULL:
+    case MSG_OSD_PG_BACKFILL:
+    case MSG_OSD_PG_BACKFILL_REMOVE:
+    case MSG_OSD_PG_SCAN:
+      return true;
+    default:
+      return false;
+    }
   }
 
   std::ostream &print(std::ostream &rhs) const final {
@@ -650,11 +606,7 @@ public:
   }
 
   op_scheduler_class get_scheduler_class() const final {
-    auto priority = op->get_req()->get_priority();
-    if (priority >= CEPH_MSG_PRIO_HIGH) {
-      return op_scheduler_class::immediate;
-    }
-    return op_scheduler_class::background_recovery;
+    return priority_to_scheduler_class(op->get_req()->get_priority());
   }
 
   void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final;
