@@ -19,7 +19,3 @@ class Cluster(RESTController):
                  parameters={'status': (str, 'Cluster Status')})
     def singleton_set(self, status: str):
         ClusterModel(status).to_db()
-
-    @RESTController.Collection('GET', 'capacity')
-    def get_capacity(self):
-        return ClusterModel.get_capacity()
