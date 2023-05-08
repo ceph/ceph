@@ -60,10 +60,6 @@ public:
     MockDmclockItem()
       : MockDmclockItem(op_scheduler_class::background_best_effort) {}
 
-    op_type_t get_op_type() const final {
-      return op_type_t::client_op; // not used
-    }
-
     ostream &print(ostream &rhs) const final { return rhs; }
 
     std::optional<OpRequestRef> maybe_get_op() const final {

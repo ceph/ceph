@@ -33,8 +33,10 @@
 
 namespace ceph::osd::scheduler {
 
-constexpr uint64_t default_min = 1;
-constexpr uint64_t default_max = 999999;
+constexpr double default_min = 1.0;
+constexpr double default_max = std::numeric_limits<double>::is_iec559 ?
+  std::numeric_limits<double>::infinity() :
+  std::numeric_limits<double>::max();
 
 using client_id_t = uint64_t;
 using profile_id_t = uint64_t;
@@ -76,37 +78,52 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const int whoami;
   const uint32_t num_shards;
   const int shard_id;
-  bool is_rotational;
+  const bool is_rotational;
   MonClient *monc;
-  double max_osd_capacity;
-  double osd_mclock_cost_per_io;
-  double osd_mclock_cost_per_byte;
-  std::string mclock_profile = "high_client_ops";
-  struct ClientAllocs {
-    uint64_t res;
-    uint64_t wgt;
-    uint64_t lim;
 
-    ClientAllocs(uint64_t _res, uint64_t _wgt, uint64_t _lim) {
-      update(_res, _wgt, _lim);
-    }
+  /**
+   * osd_bandwidth_cost_per_io
+   *
+   * mClock expects all queued items to have a uniform expression of
+   * "cost".  However, IO devices generally have quite different capacity
+   * for sequential IO vs small random IO.  This implementation handles this
+   * by expressing all costs as a number of sequential bytes written adding
+   * additional cost for each random IO equal to osd_bandwidth_cost_per_io.
+   *
+   * Thus, an IO operation requiring a total of <size> bytes to be written
+   * accross <iops> different locations will have a cost of
+   * <size> + (osd_bandwidth_cost_per_io * <iops>) bytes.
+   *
+   * Set in set_osd_capacity_params_from_config in the constructor and upon
+   * config change.
+   *
+   * Has units bytes/io.
+   */
+  double osd_bandwidth_cost_per_io;
 
-    inline void update(uint64_t _res, uint64_t _wgt, uint64_t _lim) {
-      res = _res;
-      wgt = _wgt;
-      lim = _lim;
-    }
-  };
-  std::array<
-    ClientAllocs,
-    static_cast<size_t>(op_scheduler_class::client) + 1
-  > client_allocs = {
-    // Placeholder, get replaced with configured values
-    ClientAllocs(1, 1, 1), // background_recovery
-    ClientAllocs(1, 1, 1), // background_best_effort
-    ClientAllocs(1, 1, 1), // immediate (not used)
-    ClientAllocs(1, 1, 1)  // client
-  };
+  /**
+   * osd_bandwidth_capacity_per_shard
+   *
+   * mClock expects reservation and limit paramters to be expressed in units
+   * of cost/second -- which means bytes/second for this implementation.
+   *
+   * Rather than expecting users to compute appropriate limit and reservation
+   * values for each class of OSDs in their cluster, we instead express
+   * reservation and limit paramaters as ratios of the OSD's maxmimum capacity.
+   * osd_bandwidth_capacity_per_shard is that capacity divided by the number
+   * of shards.
+   *
+   * Set in set_osd_capacity_params_from_config in the constructor and upon
+   * config change.
+   *
+   * This value gets passed to ClientRegistry::update_from_config in order
+   * to resolve the full reservaiton and limit parameters for mclock from
+   * the configured ratios.
+   *
+   * Has units bytes/second.
+   */
+  double osd_bandwidth_capacity_per_shard;
+
   class ClientRegistry {
     std::array<
       crimson::dmclock::ClientInfo,
@@ -123,7 +140,16 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
     const crimson::dmclock::ClientInfo *get_external_client(
       const client_profile_id_t &client) const;
   public:
-    void update_from_config(const ConfigProxy &conf);
+    /**
+     * update_from_config
+     *
+     * Sets the mclock paramaters (reservation, weight, and limit)
+     * for each class of IO (background_recovery, background_best_effort,
+     * and client).
+     */
+    void update_from_config(
+      const ConfigProxy &conf,
+      double capacity_per_shard);
     const crimson::dmclock::ClientInfo *get_info(
       const scheduler_id_t &id) const;
   } client_registry;
@@ -171,43 +197,30 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
     }
   }
 
+  /**
+   * set_osd_capacity_params_from_config
+   *
+   * mClockScheduler uses two parameters, osd_bandwidth_cost_per_io
+   * and osd_bandwidth_capacity_per_shard, internally.  These two
+   * parameters are derived from config parameters
+   * osd_mclock_max_capacity_iops_(hdd|ssd) and
+   * osd_mclock_max_sequential_bandwidth_(hdd|ssd) as well as num_shards.
+   * Invoking set_osd_capacity_params_from_config() resets those derived
+   * params based on the current config and should be invoked any time they
+   * are modified as well as in the constructor.  See handle_conf_change().
+   */
+  void set_osd_capacity_params_from_config();
+
+  // Set the mclock related config params based on the profile
+  void set_config_defaults_from_profile();
+
 public:
   mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, MonClient *monc);
   ~mClockScheduler() override;
 
-  // Set the max osd capacity in iops
-  void set_max_osd_capacity();
-
-  // Set the cost per io for the osd
-  void set_osd_mclock_cost_per_io();
-
-  // Set the cost per byte for the osd
-  void set_osd_mclock_cost_per_byte();
-
-  // Set the mclock profile type to enable
-  void set_mclock_profile();
-
-  // Get the active mclock profile
-  std::string get_mclock_profile();
-
-  // Set "balanced" profile allocations
-  void set_balanced_profile_allocations();
-
-  // Set "high_recovery_ops" profile allocations
-  void set_high_recovery_ops_profile_allocations();
-
-  // Set "high_client_ops" profile allocations
-  void set_high_client_ops_profile_allocations();
-
-  // Set the mclock related config params based on the profile
-  void enable_mclock_profile_settings();
-
-  // Set mclock config parameter based on allocations
-  void set_profile_config();
-
-  // Calculate scale cost per item
-  int calc_scaled_cost(int cost);
+  /// Calculate scaled cost per item
+  uint32_t calc_scaled_cost(int cost);
 
   // Helper method to display mclock queues
   std::string display_queues() const;
