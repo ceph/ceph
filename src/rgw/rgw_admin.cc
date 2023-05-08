@@ -318,6 +318,9 @@ void usage()
   cout << "  script-package add         add a lua package to the scripts allowlist\n";
   cout << "  script-package rm          remove a lua package from the scripts allowlist\n";
   cout << "  script-package list        get the lua packages allowlist\n";
+  cout << "  notification list          list bucket notifications configuration\n";
+  cout << "  notification get           get a bucket notifications configuration\n";
+  cout << "  notification rm            remove a bucket notifications configuration\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)\n";
@@ -483,6 +486,7 @@ void usage()
   cout << "   --totp-pin                the valid value of a TOTP token at a certain time\n";
   cout << "\nBucket notifications options:\n";
   cout << "   --topic                   bucket notifications topic name\n";
+  cout << "   --notification-id         bucket notifications id\n";
   cout << "\nScript options:\n";
   cout << "   --context                 context in which the script runs. one of: "+LUA_CONTEXT_LIST+"\n";
   cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
@@ -831,9 +835,12 @@ enum class OPT {
   MFA_RESYNC,
   RESHARD_STALE_INSTANCES_LIST,
   RESHARD_STALE_INSTANCES_DELETE,
-  PUBSUB_TOPICS_LIST,
+  PUBSUB_TOPIC_LIST,
   PUBSUB_TOPIC_GET,
   PUBSUB_TOPIC_RM,
+  PUBSUB_NOTIFICATION_LIST,
+  PUBSUB_NOTIFICATION_GET,
+  PUBSUB_NOTIFICATION_RM,
   SCRIPT_PUT,
   SCRIPT_GET,
   SCRIPT_RM,
@@ -1063,9 +1070,12 @@ static SimpleCmd::Commands all_cmds = {
   { "reshard stale list", OPT::RESHARD_STALE_INSTANCES_LIST },
   { "reshard stale-instances delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
   { "reshard stale delete", OPT::RESHARD_STALE_INSTANCES_DELETE },
-  { "topic list", OPT::PUBSUB_TOPICS_LIST },
+  { "topic list", OPT::PUBSUB_TOPIC_LIST },
   { "topic get", OPT::PUBSUB_TOPIC_GET },
   { "topic rm", OPT::PUBSUB_TOPIC_RM },
+  { "notification list", OPT::PUBSUB_NOTIFICATION_LIST },
+  { "notification get", OPT::PUBSUB_NOTIFICATION_GET },
+  { "notification rm", OPT::PUBSUB_NOTIFICATION_RM },
   { "script put", OPT::SCRIPT_PUT },
   { "script get", OPT::SCRIPT_GET },
   { "script rm", OPT::SCRIPT_RM },
@@ -3490,6 +3500,7 @@ int main(int argc, const char **argv)
   int trim_delay_ms = 0;
 
   string topic_name;
+  string notification_id;
   string sub_name;
   string event_id;
 
@@ -3965,6 +3976,8 @@ int main(int argc, const char **argv)
       trim_delay_ms = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--topic", (char*)NULL)) {
       topic_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--notification-id", (char*)NULL)) {
+      notification_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subscription", (char*)NULL)) {
       sub_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--event-id", (char*)NULL)) {
@@ -4211,8 +4224,10 @@ int main(int argc, const char **argv)
 			 OPT::ROLE_POLICY_GET,
 			 OPT::RESHARD_LIST,
 			 OPT::RESHARD_STATUS,
-			 OPT::PUBSUB_TOPICS_LIST,
+			 OPT::PUBSUB_TOPIC_LIST,
+       OPT::PUBSUB_NOTIFICATION_LIST,
 			 OPT::PUBSUB_TOPIC_GET,
+       OPT::PUBSUB_NOTIFICATION_GET,
 			 OPT::SCRIPT_GET,
     };
 
@@ -4292,9 +4307,12 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
                           && opt_cmd != OPT::RESHARD_STATUS
-                          && opt_cmd != OPT::PUBSUB_TOPICS_LIST
+                          && opt_cmd != OPT::PUBSUB_TOPIC_LIST
+                          && opt_cmd != OPT::PUBSUB_NOTIFICATION_LIST
                           && opt_cmd != OPT::PUBSUB_TOPIC_GET
-                          && opt_cmd != OPT::PUBSUB_TOPIC_RM) {
+                          && opt_cmd != OPT::PUBSUB_NOTIFICATION_GET
+                          && opt_cmd != OPT::PUBSUB_TOPIC_RM
+                          && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -10450,34 +10468,41 @@ next:
    }
  }
 
-  if (opt_cmd == OPT::PUBSUB_TOPICS_LIST) {
+  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_LIST) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
+      return EINVAL;
+    }
 
     RGWPubSub ps(driver, tenant);
 
-    if (!bucket_name.empty()) {
-      rgw_pubsub_bucket_topics result;
-      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
-      if (ret < 0) {
-        cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      const RGWPubSub::Bucket b(ps, bucket.get());
-      ret = b.get_topics(dpp(), result, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      encode_json("result", result, formatter.get());
-    } else {
-      rgw_pubsub_topics result;
-      int ret = ps.get_topics(dpp(), result, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      encode_json("result", result, formatter.get());
+    rgw_pubsub_bucket_topics result;
+    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
     }
+
+    const RGWPubSub::Bucket b(ps, bucket.get());
+    ret = b.get_topics(dpp(), result, null_yield);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    encode_json("result", result, formatter.get());
+    formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
+    RGWPubSub ps(driver, tenant);
+
+    rgw_pubsub_topics result;
+    int ret = ps.get_topics(dpp(), result, null_yield);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    encode_json("result", result, formatter.get());
     formatter->flush(cout);
   }
 
@@ -10499,6 +10524,42 @@ next:
     formatter->flush(cout);
   }
 
+  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_GET) {
+    if (notification_id.empty()) {
+      cerr << "ERROR: notification-id was not provided (via --notification-id)" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
+      return EINVAL;
+    }
+
+    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWPubSub ps(driver, tenant);
+
+    rgw_pubsub_bucket_topics bucket_topics;
+    const RGWPubSub::Bucket b(ps, bucket.get());
+    ret = b.get_topics(dpp(), bucket_topics, null_yield);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw_pubsub_topic_filter bucket_topic;
+    ret = b.get_notification_by_id(dpp(), notification_id, bucket_topic, null_yield);
+    if (ret < 0) {
+      cerr << "ERROR: could not get notification: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    encode_json("notification", bucket_topic, formatter.get());
+    formatter->flush(cout);
+  }
+
   if (opt_cmd == OPT::PUBSUB_TOPIC_RM) {
     if (topic_name.empty()) {
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
@@ -10511,6 +10572,36 @@ next:
     if (ret < 0) {
       cerr << "ERROR: could not remove topic: " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+  }
+
+  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_RM) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
+      return EINVAL;
+    }
+
+    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWPubSub ps(driver, tenant);
+
+    rgw_pubsub_bucket_topics bucket_topics;
+    const RGWPubSub::Bucket b(ps, bucket.get());
+    ret = b.get_topics(dpp(), bucket_topics, null_yield);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    rgw_pubsub_topic_filter bucket_topic;
+    if(notification_id.empty()) {
+      ret = b.remove_notifications(dpp(), null_yield);
+    } else {
+      ret = b.remove_notification_by_id(dpp(), notification_id, null_yield);
     }
   }
 
