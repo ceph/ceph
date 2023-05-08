@@ -333,7 +333,7 @@ bool ObjectCacherObjectDispatch<I>::write(
 
   m_image_ctx->image_lock.lock_shared();
   ObjectCacher::OSDWrite *wr = m_object_cacher->prepare_write(
-    snapc, data, ceph::real_time::min(), op_flags, *journal_tid);
+    snapc, data, ceph::real_clock::zero(), op_flags, *journal_tid);
   m_image_ctx->image_lock.unlock_shared();
 
   ObjectExtent extent(data_object_name(m_image_ctx, object_no),

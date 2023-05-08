@@ -53,7 +53,7 @@ class timer {
   using sh = bi::set_member_hook<bi::link_mode<bi::normal_link>>;
 
   struct event {
-    typename TC::time_point t = typename TC::time_point::min();
+    typename TC::time_point t = typename TC::zero();
     std::uint64_t id = 0;
     fu2::unique_function<void()> f;
 
