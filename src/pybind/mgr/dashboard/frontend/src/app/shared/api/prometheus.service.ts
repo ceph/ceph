@@ -10,7 +10,6 @@ import {
   AlertmanagerNotification,
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
-import { SettingsService } from './settings.service';
 
 @Injectable({
   providedIn: 'root'
@@ -18,30 +17,31 @@ import { SettingsService } from './settings.service';
 export class PrometheusService {
   private baseURL = 'api/prometheus';
   private settingsKey = {
-    alertmanager: 'api/settings/alertmanager-api-host',
-    prometheus: 'api/settings/prometheus-api-host'
+    alertmanager: 'ui-api/prometheus/alertmanager-api-host',
+    prometheus: 'ui-api/prometheus/prometheus-api-host'
   };
+  private settings: { [url: string]: string } = {};
 
-  constructor(private http: HttpClient, private settingsService: SettingsService) {}
+  constructor(private http: HttpClient) {}
 
   getPrometheusData(params: any): any {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
   }
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.settingsService.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
+    this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
   }
 
   disableAlertmanagerConfig(): void {
-    this.settingsService.disableSetting(this.settingsKey.alertmanager);
+    this.disableSetting(this.settingsKey.alertmanager);
   }
 
   ifPrometheusConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
-    this.settingsService.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
+    this.ifSettingConfigured(this.settingsKey.prometheus, fn, elseFn);
   }
 
   disablePrometheusConfig(): void {
-    this.settingsService.disableSetting(this.settingsKey.prometheus);
+    this.disableSetting(this.settingsKey.prometheus);
   }
 
   getAlerts(params = {}): Observable<AlertmanagerAlert[]> {
@@ -82,5 +82,37 @@ export class PrometheusService {
       notification && notification.id ? notification.id : 'last'
     }`;
     return this.http.get<AlertmanagerNotification[]>(url);
+  }
+
+  ifSettingConfigured(url: string, fn: (value?: string) => void, elseFn?: () => void): void {
+    const setting = this.settings[url];
+    if (setting === undefined) {
+      this.http.get(url).subscribe(
+        (data: any) => {
+          this.settings[url] = this.getSettingsValue(data);
+          this.ifSettingConfigured(url, fn, elseFn);
+        },
+        (resp) => {
+          if (resp.status !== 401) {
+            this.settings[url] = '';
+          }
+        }
+      );
+    } else if (setting !== '') {
+      fn(setting);
+    } else {
+      if (elseFn) {
+        elseFn();
+      }
+    }
+  }
+
+  // Easiest way to stop reloading external content that can't be reached
+  disableSetting(url: string) {
+    this.settings[url] = '';
+  }
+
+  private getSettingsValue(data: any): string {
+    return data.value || data.instance || '';
   }
 }
