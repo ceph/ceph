@@ -71,7 +71,7 @@ TMDriver::read_extents_ret TMDriver::read_extents(
 	      "read_extents: get_extent {}~{}",
 	      pin->get_val(),
 	      pin->get_length());
-	    return tm->pin_to_extent<TestBlock>(
+	    return tm->read_pin<TestBlock>(
 	      t,
 	      std::move(pin)
 	    ).si_then([&ret](auto ref) mutable {
