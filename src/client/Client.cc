@@ -4007,15 +4007,13 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
       in->cap_snaps.rbegin()->second.writing) {
     ldout(cct, 10) << __func__ << " already have pending cap_snap on " << *in << dendl;
     return;
-  } else if (in->caps_dirty() ||
-            (used & CEPH_CAP_FILE_WR) ||
-	     (dirty & CEPH_CAP_ANY_WR)) {
+  } else if (dirty || (used & CEPH_CAP_FILE_WR)) {
     const auto &capsnapem = in->cap_snaps.emplace(std::piecewise_construct, std::make_tuple(old_snapc.seq), std::make_tuple(in));
     ceph_assert(capsnapem.second); /* element inserted */
     CapSnap &capsnap = capsnapem.first->second;
     capsnap.context = old_snapc;
     capsnap.issued = in->caps_issued();
-    capsnap.dirty = in->caps_dirty();
+    capsnap.dirty = dirty;
 
     capsnap.dirty_data = (used & CEPH_CAP_FILE_BUFFER);
 
