@@ -3,6 +3,8 @@
 
 #include "include/rados/librados.hpp"
 
+#include <cstdint>
+
 constexpr int to_create = 10'000'000;
 
 int main() {
