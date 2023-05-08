@@ -258,11 +258,6 @@ class HostAssignment(object):
 
         self.validate()
 
-        if self.related_service_daemons:
-            logger.info(f'Service {self.service_name} has related daemons already placed: {self.related_service_daemons}')
-        else:
-            logger.info(f'Service {self.service_name} has no related daemon already placed.')
-
         count = self.spec.placement.count
 
         # get candidate hosts based on [hosts, label, host_pattern]
@@ -362,7 +357,7 @@ class HostAssignment(object):
                     if need <= 0:
                         break
                     if dp.hostname in related_service_hosts and dp.hostname not in [h.hostname for h in self.unreachable_hosts]:
-                        logger.info(f'Preferring {dp.hostname} for service {self.service_name} as related daemons have been placed there')
+                        logger.debug(f'Preferring {dp.hostname} for service {self.service_name} as related daemons have been placed there')
                         to_add.append(dp)
                         need -= 1  # this is last use of need so it can work as a counter
                 # at this point, we've either met our placement quota entirely using hosts with related
