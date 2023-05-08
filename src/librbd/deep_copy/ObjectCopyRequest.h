@@ -87,11 +87,6 @@ private:
    * @endverbatim
    */
 
-  enum WriteOpType {
-    WRITE_OP_TYPE_WRITE,
-    WRITE_OP_TYPE_ZERO
-  };
-
   struct ReadOp {
     interval_set<uint64_t> image_interval;
     io::Extents image_extent_map;
