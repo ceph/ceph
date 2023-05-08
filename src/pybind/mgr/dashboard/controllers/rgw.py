@@ -2,6 +2,7 @@
 
 import json
 import logging
+from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import cherrypy
 
@@ -12,14 +13,12 @@ from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UIRouter, allow_empty_body
+from . import APIDoc, APIRouter, BaseController, CRUDCollectionMethod, \
+    CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, RESTController, \
+    UIRouter, allow_empty_body
+from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, TableAction, \
+    Validator, VerticalContainer
 from ._version import APIVersion
-
-try:
-    from typing import Any, Dict, List, Optional, Union
-except ImportError:  # pragma: no cover
-    pass  # Just for type checking
 
 logger = logging.getLogger("controllers.rgw")
 
@@ -607,3 +606,77 @@ class RgwUser(RgwRESTController):
             'subuser': subuser,
             'purge-keys': purge_keys
         }, json_response=False)
+
+
+class RGWRoleEndpoints:
+    @staticmethod
+    def role_list(_):
+        rgw_client = RgwClient.admin_instance()
+        roles = rgw_client.list_roles()
+        return roles
+
+    @staticmethod
+    def role_create(_, role_name: str = '', role_path: str = '', role_assume_policy_doc: str = ''):
+        assert role_name
+        assert role_path
+        rgw_client = RgwClient.admin_instance()
+        rgw_client.create_role(role_name, role_path, role_assume_policy_doc)
+        return f'Role {role_name} created successfully'
+
+
+# pylint: disable=C0301
+assume_role_policy_help = (
+    'Paste a json assume role policy document, to find more information on how to get this document, <a '  # noqa: E501
+    'href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-assumerolepolicydocument"'  # noqa: E501
+    'target="_blank">click here.</a>'
+)
+
+create_container = VerticalContainer('Create Role', 'create_role', fields=[
+    FormField('Role name', 'role_name', validators=[Validator.RGW_ROLE_NAME]),
+    FormField('Path', 'role_path', validators=[Validator.RGW_ROLE_PATH]),
+    FormField('Assume Role Policy Document',
+              'role_assume_policy_doc',
+              help=assume_role_policy_help,
+              field_type='textarea',
+              validators=[Validator.JSON]),
+])
+create_role_form = Form(path='/rgw/user/roles/create',
+                        root_container=create_container,
+                        task_info=FormTaskInfo("IAM RGW Role '{role_name}' created successfully",
+                                               ['role_name']))
+
+
+@CRUDEndpoint(
+    router=APIRouter('/rgw/user/roles', Scope.RGW),
+    doc=APIDoc("List of RGW roles", "RGW"),
+    actions=[
+        TableAction(name='Create', permission='create', icon=Icon.ADD.value,
+                    routerLink='/rgw/user/roles/create')
+    ],
+    forms=[create_role_form],
+    permissions=[Scope.CONFIG_OPT],
+    get_all=CRUDCollectionMethod(
+        func=RGWRoleEndpoints.role_list,
+        doc=EndpointDoc("List RGW roles")
+    ),
+    create=CRUDCollectionMethod(
+        func=RGWRoleEndpoints.role_create,
+        doc=EndpointDoc("Create Ceph User")
+    ),
+    set_column={
+        "CreateDate": {'cellTemplate': 'date'},
+        "MaxSessionDuration": {'cellTemplate': 'duration'},
+        "RoleId": {'isHidden': True},
+        "AssumeRolePolicyDocument": {'isHidden': True}
+    },
+    detail_columns=['RoleId', 'AssumeRolePolicyDocument'],
+    meta=CRUDMeta()
+)
+class RgwUserRole(NamedTuple):
+    RoleId: int
+    RoleName: str
+    Path: str
+    Arn: str
+    CreateDate: str
+    MaxSessionDuration: int
+    AssumeRolePolicyDocument: str

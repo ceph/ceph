@@ -54,7 +54,7 @@ export class SubmitButtonComponent implements OnInit {
   constructor(private elRef: ElementRef) {}
 
   ngOnInit() {
-    this.form.statusChanges.subscribe(() => {
+    this.form?.statusChanges.subscribe(() => {
       if (_.has(this.form.errors, 'cdSubmitButton')) {
         this.loading = false;
         _.unset(this.form.errors, 'cdSubmitButton');
@@ -74,7 +74,7 @@ export class SubmitButtonComponent implements OnInit {
       (<FormGroupDirective>this.form).onSubmit($event);
     }
 
-    if (this.form.invalid) {
+    if (this.form?.invalid) {
       this.focusInvalid();
       return;
     }

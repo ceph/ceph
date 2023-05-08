@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import _ from 'lodash';
 
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
@@ -339,6 +340,18 @@ export class TaskMessageService {
     ),
     'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.service(metadata)
+    ),
+    'crud-component/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/import': this.newTaskMessage(this.commonOperations.import, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/id': this.newTaskMessage(this.commonOperations.delete, (id) =>
+      this.crudMessageId(id)
     )
   };
 
@@ -382,6 +395,21 @@ export class TaskMessageService {
 
   service(metadata: any) {
     return $localize`Service '${metadata.service_name}'`;
+  }
+
+  crudMessage(metadata: any) {
+    let message = metadata.__message;
+    _.forEach(metadata, (value, key) => {
+      if (key != '__message') {
+        let regex = '{' + key + '}';
+        message = message.replace(regex, value);
+      }
+    });
+    return $localize`${message}`;
+  }
+
+  crudMessageId(id: string) {
+    return $localize`${id}`;
   }
 
   _getTaskTitle(task: Task) {

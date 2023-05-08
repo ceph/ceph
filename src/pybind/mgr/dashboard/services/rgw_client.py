@@ -3,6 +3,7 @@
 import ipaddress
 import json
 import logging
+import os
 import re
 import xml.etree.ElementTree as ET  # noqa: N814
 from distutils.util import strtobool
@@ -806,3 +807,79 @@ class RgwClient(RestClient):
             _ = request(data=data)  # type: ignore
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
+
+    def list_roles(self) -> List[Dict[str, Any]]:
+        rgw_list_roles_command = ['role', 'list']
+        code, roles, err = mgr.send_rgwadmin_command(rgw_list_roles_command)
+        if code < 0:
+            logger.warning('Error listing roles with code %d: %s', code, err)
+            return []
+
+        return roles
+
+    def create_role(self, role_name: str, role_path: str, role_assume_policy_doc: str) -> None:
+        try:
+            json.loads(role_assume_policy_doc)
+        except:  # noqa: E722
+            raise DashboardException('Assume role policy document is not a valid json')
+
+        # valid values:
+        # pylint: disable=C0301
+        # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-path # noqa: E501
+        if len(role_name) > 64:
+            raise DashboardException(
+                f'Role name "{role_name}" is invalid. Should be 64 characters or less')
+
+        role_name_regex = '[0-9a-zA-Z_+=,.@-]+'
+        if not re.fullmatch(role_name_regex, role_name):
+            raise DashboardException(
+                f'Role name "{role_name}" is invalid. Valid characters are "{role_name_regex}"')
+
+        if not os.path.isabs(role_path):
+            raise DashboardException(
+                f'Role path "{role_path}" is invalid. It should be an absolute path')
+        if role_path[-1] != '/':
+            raise DashboardException(
+                f'Role path "{role_path}" is invalid. It should start and end with a slash')
+        path_regex = '(\u002F)|(\u002F[\u0021-\u007E]+\u002F)'
+        if not re.fullmatch(path_regex, role_path):
+            raise DashboardException(
+                (f'Role path "{role_path}" is invalid.'
+                 f'Role path should follow the pattern "{path_regex}"'))
+
+        rgw_create_role_command = ['role', 'create', '--role-name', role_name, '--path', role_path]
+        if role_assume_policy_doc:
+            rgw_create_role_command += ['--assume-role-policy-doc', f"{role_assume_policy_doc}"]
+
+        code, _roles, _err = mgr.send_rgwadmin_command(rgw_create_role_command,
+                                                       stdout_as_json=False)
+        if code != 0:
+            # pylint: disable=C0301
+            link = 'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-path'  # noqa: E501
+            msg = (f'Error creating role with code {code}: '
+                   'Looks like the document has a wrong format.'
+                   f' For more information about the format look at {link}')
+            raise DashboardException(msg=msg, component='rgw')
+
+    def perform_validations(self, retention_period_days, retention_period_years, mode):
+        try:
+            retention_period_days = int(retention_period_days) if retention_period_days else 0
+            retention_period_years = int(retention_period_years) if retention_period_years else 0
+            if retention_period_days < 0 or retention_period_years < 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            msg = "Retention period must be a positive integer."
+            raise DashboardException(msg=msg, component='rgw')
+        if retention_period_days and retention_period_years:
+            # https://docs.aws.amazon.com/AmazonS3/latest/API/archive-RESTBucketPUTObjectLockConfiguration.html
+            msg = "Retention period requires either Days or Years. "\
+                "You can't specify both at the same time."
+            raise DashboardException(msg=msg, component='rgw')
+        if not retention_period_days and not retention_period_years:
+            msg = "Retention period requires either Days or Years. "\
+                "You must specify at least one."
+            raise DashboardException(msg=msg, component='rgw')
+        if not isinstance(mode, str) or mode.upper() not in ['COMPLIANCE', 'GOVERNANCE']:
+            msg = "Retention mode must be either COMPLIANCE or GOVERNANCE."
+            raise DashboardException(msg=msg, component='rgw')
+        return retention_period_days, retention_period_years

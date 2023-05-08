@@ -302,13 +302,14 @@ class CephService(object):
         return mgr.get("pg_summary")['by_pool'][pool['pool'].__str__()]
 
     @staticmethod
-    def send_command(srv_type, prefix, srv_spec='', **kwargs):
-        # type: (str, str, Optional[str], Any) -> Any
+    def send_command(srv_type, prefix, srv_spec='', to_json=True, inbuf='', **kwargs):
+        # type: (str, str, Optional[str], bool, str, Any) -> Any
         """
         :type prefix: str
         :param srv_type: mon |
         :param kwargs: will be added to argdict
         :param srv_spec: typically empty. or something like "<fs_id>:0"
+        :param to_json: if true return as json format
 
         :raises PermissionError: See rados.make_ex
         :raises ObjectNotFound: See rados.make_ex
@@ -323,11 +324,12 @@ class CephService(object):
         """
         argdict = {
             "prefix": prefix,
-            "format": "json",
         }
+        if to_json:
+            argdict["format"] = "json"
         argdict.update({k: v for k, v in kwargs.items() if v is not None})
         result = CommandResult("")
-        mgr.send_command(result, srv_type, srv_spec, json.dumps(argdict), "")
+        mgr.send_command(result, srv_type, srv_spec, json.dumps(argdict), "", inbuf=inbuf)
         r, outb, outs = result.wait()
         if r != 0:
             logger.error("send_command '%s' failed. (r=%s, outs=\"%s\", kwargs=%s)", prefix, r,
