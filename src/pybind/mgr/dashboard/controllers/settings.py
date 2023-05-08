@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
-from contextlib import contextmanager
-
-import cherrypy
-
 from ..security import Scope
+from ..services.settings import SettingsService, _to_native
 from ..settings import Options
 from ..settings import Settings as SettingsModule
 from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter
@@ -22,29 +19,6 @@ class Settings(RESTController):
     """
     Enables to manage the settings of the dashboard (not the Ceph cluster).
     """
-    @contextmanager
-    def _attribute_handler(self, name):
-        """
-        :type name: str|dict[str, str]
-        :rtype: str|dict[str, str]
-        """
-        if isinstance(name, dict):
-            result = {
-                self._to_native(key): value
-                for key, value in name.items()
-            }
-        else:
-            result = self._to_native(name)
-
-        try:
-            yield result
-        except AttributeError:  # pragma: no cover - handling is too obvious
-            raise cherrypy.NotFound(result)  # pragma: no cover - handling is too obvious
-
-    @staticmethod
-    def _to_native(setting):
-        return setting.upper().replace('-', '_')
-
     @EndpointDoc("Display Settings Information",
                  parameters={
                      'names': (str, 'Name of Settings'),
@@ -69,7 +43,7 @@ class Settings(RESTController):
         return [self._get(name) for name in option_names]
 
     def _get(self, name):
-        with self._attribute_handler(name) as sname:
+        with SettingsService.attribute_handler(name) as sname:
             setting = getattr(Options, sname)
         return {
             'name': sname,
@@ -89,17 +63,17 @@ class Settings(RESTController):
         return self._get(name)
 
     def set(self, name, value):
-        with self._attribute_handler(name) as sname:
-            setattr(SettingsModule, self._to_native(sname), value)
+        with SettingsService.attribute_handler(name) as sname:
+            setattr(SettingsModule, _to_native(sname), value)
 
     def delete(self, name):
-        with self._attribute_handler(name) as sname:
-            delattr(SettingsModule, self._to_native(sname))
+        with SettingsService.attribute_handler(name) as sname:
+            delattr(SettingsModule, _to_native(sname))
 
     def bulk_set(self, **kwargs):
-        with self._attribute_handler(kwargs) as data:
+        with SettingsService.attribute_handler(kwargs) as data:
             for name, value in data.items():
-                setattr(SettingsModule, self._to_native(name), value)
+                setattr(SettingsModule, _to_native(name), value)
 
 
 @UIRouter('/standard_settings')
