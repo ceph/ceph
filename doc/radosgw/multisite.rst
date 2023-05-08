@@ -1130,7 +1130,7 @@ To view the configuration of a zonegroup, run this command:
 
 .. prompt:: bash #
    
-   dosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
+   radosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
 
 The zonegroup configuration looks like this:
 
