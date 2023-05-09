@@ -146,4 +146,4 @@ EOF
     teardown $dir || return 1
 
 }
-main mon-stretched-cluster "$@"
+main mon-stretch-fail-recovery "$@"
