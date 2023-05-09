@@ -58,7 +58,7 @@ CMAKE_DEPENDENT_OPTION(WITH_ZNS "enable Linux ZNS support" OFF
 if(WITH_ZNS)
   find_package(LinuxZNS REQUIRED)
   list(APPEND crimson_seastore_srcs
-    segment_manager/zns.cc)
+    segment_manager/zbd.cc)
 endif()
 
 add_library(crimson-seastore STATIC
