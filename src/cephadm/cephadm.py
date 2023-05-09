@@ -3585,13 +3585,8 @@ def deploy_daemon_units(
                         '--no-systemd',
                     ]
                 else:
-                    osd_type = 'bluestore'
-                    if 'objectstore' in ctx and ctx.objectstore:
-                        osd_type = ctx.objectstore
-
                     cmd = [
                         'activate',
-                        '--' + osd_type,
                         '--osd-id', str(daemon_id),
                         '--osd-uuid', osd_fsid,
                         '--no-systemd',
@@ -9856,10 +9851,6 @@ def _get_parser():
     parser_deploy.add_argument(
         '--meta-json',
         help='JSON dict of additional metadata'
-    )
-    parser_deploy.add_argument(
-        '--objectstore',
-        help='Set object store'
     )
     parser_deploy.add_argument(
         '--extra-container-args',

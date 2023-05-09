@@ -247,11 +247,6 @@ class Batch(object):
             help='bluestore objectstore (default)',
         )
         parser.add_argument(
-            '--seastore',
-            action='store_true',
-            help='seastore objectstore (defualt)',
-        )
-        parser.add_argument(
             '--filestore',
             action='store_true',
             help='filestore objectstore',
@@ -425,7 +420,7 @@ class Batch(object):
 
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if not self.args.bluestore and not self.args.filestore and not self.args.seastore:
+        if not self.args.bluestore and not self.args.filestore:
             self.args.bluestore = True
 
         if (self.args.auto and not self.args.db_devices and not
@@ -458,7 +453,6 @@ class Batch(object):
         defaults = common.get_default_args()
         global_args = [
             'bluestore',
-            'seastore',
             'filestore',
             'dmcrypt',
             'crush_device_class',
@@ -479,8 +473,6 @@ class Batch(object):
         if args.bluestore:
             plan = self.get_deployment_layout(args, args.devices, args.db_devices,
                                               args.wal_devices)
-        elif args.seastore:
-            plan = self.get_deployment_layout(args, args.devices)
         elif args.filestore:
             plan = self.get_deployment_layout(args, args.devices, args.journal_devices)
         return plan
