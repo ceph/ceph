@@ -2,6 +2,7 @@
 #define CEPH_RGWD4NCACHE_H
 
 #include "rgw_common.h"
+#include "rgw_d4n_directory.h"
 #include <cpp_redis/cpp_redis>
 #include <string>
 #include <iostream>
@@ -13,12 +14,15 @@ class D4NDatacache {
     CephContext* cct;
 
     D4NDatacache() {}
-    D4NDatacache(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
+    D4NDatacache(std::string host, int port) {
+      addr.host = host;
+      addr.port = port; 
+    }
 
     void init(CephContext* _cct) {
       cct = _cct;
-      host = cct->_conf->rgw_d4n_host;
-      port = cct->_conf->rgw_d4n_port;
+      addr.host = cct->_conf->rgw_d4n_host;
+      addr.port = cct->_conf->rgw_d4n_port;
     }
 
     int find_client(cpp_redis::client *client);
@@ -38,8 +42,7 @@ class D4NDatacache {
 
   private:
     cpp_redis::client client;
-    std::string host = "";
-    int port = 0;
+    Address addr;
     std::vector< std::pair<std::string, std::string> > build_data(bufferlist&& data);
     std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* binary);
 };

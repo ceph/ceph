@@ -9,12 +9,12 @@ int BlockDirectory::find_client(cpp_redis::client* client) {
   if (client->is_connected())
     return 0;
 
-   if (host == "" || port == 0) {
+   if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW D4N Directory: D4N directory endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
   }
 
-  client->connect(host, port, nullptr);
+  client->connect(addr.host, addr.port, nullptr);
 
   if (!client->is_connected())
     return ECONNREFUSED;
@@ -60,12 +60,12 @@ int BlockDirectory::set_value(CacheBlock* block) {
   keys.push_back(key);
 
   /* Every set will be new */
-  if (host == "" || port == 0) {
+  if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW D4N Directory: Directory endpoint not configured correctly" << dendl;
     return -2;
   }
     
-  std::string endpoint = host + ":" + std::to_string(port);
+  std::string endpoint = addr.host + ":" + std::to_string(addr.port);
   std::vector< std::pair<std::string, std::string> > list;
     
   /* Creating a list of the entry's properties */

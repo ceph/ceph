@@ -34,29 +34,30 @@ class Directory {
 class BlockDirectory: Directory {
   public:
     BlockDirectory() {}
-    BlockDirectory(std::string blockHost, int blockPort):host(blockHost), port(blockPort) {}
+    BlockDirectory(std::string host, int port) {
+      addr.host = host;
+      addr.port = port;
+    }
     
     void init(CephContext* _cct) {
       cct = _cct;
-      host = cct->_conf->rgw_d4n_host;
-      port = cct->_conf->rgw_d4n_port;
+      addr.host = cct->_conf->rgw_d4n_host;
+      addr.port = cct->_conf->rgw_d4n_port;
     }
 	
     int find_client(cpp_redis::client* client);
     int exist_key(std::string key);
+    Address get_addr() { return addr; }
     int set_value(CacheBlock* block);
     int get_value(CacheBlock* block);
     int copy_value(CacheBlock* block, CacheBlock* copy_block);
     int del_value(CacheBlock* block);
 
-    std::string get_host() { return host; }
-    int get_port() { return port; }
 
   private:
     cpp_redis::client client;
+    Address addr;
     std::string build_index(CacheBlock* block);
-    std::string host = "";
-    int port = 0;
 };
 
 } } // namespace rgw::d4n
