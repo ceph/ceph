@@ -23,7 +23,14 @@ using namespace std;
 
 entity_addr_t addr;
 
-const char *parse_good[] = {
+string fsnamecap = "fsname=a";
+string pathcap = "path=/dir1";
+string rscap = "root_squash";
+string uidcap = "uid=1000";
+string gidscap = "gids=1000,1001,1002";
+
+
+vector<string> parse_good = {
   "allow rw uid=1 gids=1",
   "allow * path=\"/foo\"",
   "allow * path=/foo",
@@ -34,8 +41,6 @@ const char *parse_good[] = {
   "allow *",
   "allow r",
   "allow rw",
-  "allow rw uid=1 gids=1,2,3",
-  "allow rw path=/foo uid=1 gids=1,2,3",
   "allow r, allow rw path=/foo",
   "allow r, allow * uid=1",
   "allow r ,allow * uid=1",
@@ -45,17 +50,50 @@ const char *parse_good[] = {
   "allow r uid=1 gids=1,2,3, allow * uid=2",
   "allow r network 1.2.3.4/8",
   "allow rw path=/foo uid=1 gids=1,2,3 network 2.3.4.5/16",
-  "allow r root_squash",
-  "allow rw path=/foo root_squash",
-  "allow rw fsname=a root_squash",
-  "allow rw fsname=a path=/foo root_squash",
-  "allow rw fsname=a root_squash, allow rwp fsname=a path=/volumes",
-  0
+
+  // Following are all types of MDS caps, or in other words, all
+  // (mathematical) combinations of fsnamecap, pathcap, rscap, uidcap, and
+  // gidscaps.
+  "allow rw " + fsnamecap,
+  "allow rw " + pathcap,
+  "allow rw " + rscap,
+  "allow rw " + uidcap,
+  "allow rw " + gidscap,
+
+  "allow rw " + fsnamecap + " " + pathcap,
+  "allow rw " + fsnamecap + " " + rscap,
+  "allow rw " + fsnamecap + " " + uidcap,
+  "allow rw " + fsnamecap + " " + gidscap,
+  "allow rw " + pathcap + " " + rscap,
+  "allow rw " + pathcap + " " + uidcap,
+  "allow rw " + pathcap + " " + gidscap,
+  "allow rw " + rscap + " " + uidcap,
+  "allow rw " + rscap + " " + gidscap,
+  "allow rw " + uidcap + " " + gidscap,
+
+  "allow rw " + fsnamecap + " " + pathcap + " " + rscap,
+  "allow rw " + fsnamecap + " " + pathcap + " " + uidcap,
+  "allow rw " + fsnamecap + " " + pathcap + " " + gidscap,
+  "allow rw " + fsnamecap + " " + rscap + " " + uidcap,
+  "allow rw " + fsnamecap + " " + rscap + " " + gidscap,
+  "allow rw " + fsnamecap + " " + uidcap + " " + gidscap,
+  "allow rw " + pathcap + " " + rscap + " " + uidcap,
+  "allow rw " + pathcap + " " + rscap + " " + gidscap,
+  "allow rw " + pathcap + " " + uidcap + " " + gidscap,
+  "allow rw " + rscap + " " + uidcap + " " + gidscap,
+
+  "allow rw " + fsnamecap + " " + pathcap + " " + rscap + " " + uidcap,
+  "allow rw " + fsnamecap + " " + pathcap + " " + rscap + " " + gidscap,
+  "allow rw " + fsnamecap + " " + pathcap + " " + uidcap + " " + gidscap,
+  "allow rw " + fsnamecap + " " + rscap + " " + uidcap + " " + gidscap,
+  "allow rw " + pathcap + " " + rscap + " " + uidcap + " " + gidscap,
+
+  "allow rw " + fsnamecap + " " + pathcap + " " + rscap + " " + uidcap +
+  " " + gidscap
 };
 
 TEST(MDSAuthCaps, ParseGood) {
-  for (int i=0; parse_good[i]; i++) {
-    string str = parse_good[i];
+  for (auto str : parse_good) {
     MDSAuthCaps cap;
     std::cout << "Testing good input: '" << str << "'" << std::endl;
     ASSERT_TRUE(cap.parse(str, &cout));
@@ -85,8 +123,6 @@ const char *parse_bad[] = {
   "allow namespace=foo",
   "allow rwx auid 123 namespace asdf",
   "allow wwx pool ''",
-  "allow rw gids=1",
-  "allow rw gids=1,2,3",
   "allow rw uid=123 gids=asdf",
   "allow rw uid=123 gids=1,2,asdf",
   0
@@ -98,6 +134,8 @@ TEST(MDSAuthCaps, ParseBad) {
     MDSAuthCaps cap;
     std::cout << "Testing bad input: '" << str << "'" << std::endl;
     ASSERT_FALSE(cap.parse(str, &cout));
+    // error message from parse() doesn't have newline char at the end of it
+    std::cout << std::endl;
   }
 }
 
