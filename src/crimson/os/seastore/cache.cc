@@ -98,7 +98,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     ext->init(CachedExtent::extent_state_t::CLEAN,
               addr,
               PLACEMENT_HINT_NULL,
-              NULL_GENERATION);
+              NULL_GENERATION,
+	      TRANS_ID_NULL);
     DEBUGT("retire {}~{} as placeholder, add extent -- {}",
            t, addr, length, *ext);
     const auto t_src = t.get_src();
@@ -145,6 +146,7 @@ void Cache::register_metrics()
     {extent_types_t::ROOT,                sm::label_instance("ext", "ROOT")},
     {extent_types_t::LADDR_INTERNAL,      sm::label_instance("ext", "LADDR_INTERNAL")},
     {extent_types_t::LADDR_LEAF,          sm::label_instance("ext", "LADDR_LEAF")},
+    {extent_types_t::DINK_LADDR_LEAF,     sm::label_instance("ext", "DINK_LADDR_LEAF")},
     {extent_types_t::OMAP_INNER,          sm::label_instance("ext", "OMAP_INNER")},
     {extent_types_t::OMAP_LEAF,           sm::label_instance("ext", "OMAP_LEAF")},
     {extent_types_t::ONODE_BLOCK_STAGED,  sm::label_instance("ext", "ONODE_BLOCK_STAGED")},
@@ -801,6 +803,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next);
   }
 
+  next->on_replace_prior(t);
   invalidate_extent(t, *prev);
 }
 
@@ -810,7 +813,7 @@ void Cache::invalidate_extent(
 {
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
-    extent.state = CachedExtent::extent_state_t::INVALID;
+    extent.set_invalid(t);
     return;
   }
 
@@ -827,7 +830,7 @@ void Cache::invalidate_extent(
       mark_transaction_conflicted(*i.t, extent);
     }
   }
-  extent.state = CachedExtent::extent_state_t::INVALID;
+  extent.set_invalid(t);
 }
 
 void Cache::mark_transaction_conflicted(
@@ -967,7 +970,8 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   case extent_types_t::LADDR_INTERNAL:
     return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, hint, gen);
   case extent_types_t::LADDR_LEAF:
-    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length, hint, gen);
+    return alloc_new_extent<lba_manager::btree::LBALeafNode>(
+      t, length, hint, gen);
   case extent_types_t::ONODE_BLOCK_STAGED:
     return alloc_new_extent<onode::SeastoreNodeExtent>(t, length, hint, gen);
   case extent_types_t::OMAP_INNER:
@@ -1011,10 +1015,13 @@ CachedExtentRef Cache::duplicate_for_write(
     return i;
   }
 
-  auto ret = i->duplicate_for_write();
+  auto ret = i->duplicate_for_write(t);
+  ret->pending_for_transaction = t.get_trans_id();
   ret->prior_instance = i;
   // duplicate_for_write won't occur after ool write finished
   assert(!i->prior_poffset);
+  auto [iter, inserted] = i->mutation_pendings.insert(*ret);
+  ceph_assert(inserted);
   t.add_mutated_extent(ret);
   if (ret->get_type() == extent_types_t::ROOT) {
     t.root = ret->cast<RootBlock>();
@@ -1189,7 +1196,7 @@ record_t Cache::prepare_record(
     fresh_stat.increment(i->get_length());
     get_by_ext(efforts.fresh_inline_by_ext,
                i->get_type()).increment(i->get_length());
-    assert(i->is_inline());
+    assert(i->is_inline() || i->get_paddr().is_fake());
 
     bufferlist bl;
     i->prepare_write();
@@ -1448,6 +1455,7 @@ void Cache::complete_commit(
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
     i->last_committed_crc = i->get_crc32c();
+    i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
@@ -1474,7 +1482,10 @@ void Cache::complete_commit(
 	  i->get_type(),
 	  start_seq));
     } else if (is_backref_node(i->get_type())) {
-      add_backref_extent(i->get_paddr(), i->get_type());
+	add_backref_extent(
+	  i->get_paddr(),
+	  i->cast<backref::BackrefNode>()->get_node_meta().begin,
+	  i->get_type());
     } else {
       ERRORT("{}", t, *i);
       ceph_abort("not possible");
@@ -1489,6 +1500,7 @@ void Cache::complete_commit(
     assert(i->is_exist_mutation_pending() ||
 	   i->prior_instance);
     i->on_delta_write(final_block_start);
+    i->pending_for_transaction = TRANS_ID_NULL;
     i->prior_instance = CachedExtentRef();
     i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
@@ -1593,7 +1605,8 @@ void Cache::init()
   root->init(CachedExtent::extent_state_t::CLEAN,
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
-             NULL_GENERATION);
+             NULL_GENERATION,
+	     TRANS_ID_NULL);
   INFO("init root -- {}", *root);
   extents.insert(*root);
 }

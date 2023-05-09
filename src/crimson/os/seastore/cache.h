@@ -25,6 +25,15 @@ class BtreeBackrefManager;
 
 namespace crimson::os::seastore {
 
+template <
+  typename node_key_t,
+  typename node_val_t,
+  typename internal_node_t,
+  typename leaf_node_t,
+  typename pin_t,
+  size_t node_size,
+  bool leaf_has_children>
+class FixedKVBtree;
 class BackrefManager;
 class SegmentProvider;
 
@@ -205,7 +214,8 @@ public:
       last_commit,
       [this](Transaction& t) {
         return on_transaction_destruct(t);
-      }
+      },
+      ++next_id
     );
     SUBDEBUGT(seastore_t, "created name={}, source={}, is_weak={}",
              *ret, name, src, is_weak);
@@ -284,7 +294,8 @@ public:
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
-                NULL_GENERATION);
+                NULL_GENERATION,
+		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent, add extent and reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -303,7 +314,8 @@ public:
       ret->init(CachedExtent::extent_state_t::CLEAN_PENDING,
                 offset,
                 PLACEMENT_HINT_NULL,
-                NULL_GENERATION);
+                NULL_GENERATION,
+		TRANS_ID_NULL);
       SUBDEBUG(seastore_cache,
           "{} {}~{} is absent(placeholder), reading ... -- {}",
           T::TYPE, offset, length, *ret);
@@ -346,6 +358,7 @@ public:
       offset, length, p_metric_key,
       [](T &){}, [](T &) {});
   }
+
 
   /**
    * get_extent_if_cached
@@ -421,38 +434,120 @@ public:
     auto result = t.get_extent(offset, &ret);
     if (result != Transaction::get_extent_ret::ABSENT) {
       SUBTRACET(seastore_cache, "{} {}~{} is {} on t -- {}",
-          t,
-          T::TYPE,
-          offset,
-          length,
-          result == Transaction::get_extent_ret::PRESENT ? "present" : "retired",
-          *ret);
+	  t,
+	  T::TYPE,
+	  offset,
+	  length,
+	  result == Transaction::get_extent_ret::PRESENT ? "present" : "retired",
+	  *ret);
       assert(result != Transaction::get_extent_ret::RETIRED);
       return ret->wait_io().then([ret] {
 	return seastar::make_ready_future<TCachedExtentRef<T>>(
 	  ret->cast<T>());
       });
-    } else {
-      SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
-                t, T::TYPE, offset, length);
-      auto f = [&t, this](CachedExtent &ext) {
-	t.add_to_read_set(CachedExtentRef(&ext));
-	touch_extent(ext);
-      };
-      auto metric_key = std::make_pair(t.get_src(), T::TYPE);
-      return trans_intr::make_interruptible(
-	get_extent<T>(
-	  offset, length, &metric_key,
-	  std::forward<Func>(extent_init_func), std::move(f))
-      );
     }
+
+    SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
+	      t, T::TYPE, offset, length);
+    auto f = [&t, this](CachedExtent &ext) {
+      t.add_to_read_set(CachedExtentRef(&ext));
+      touch_extent(ext);
+    };
+    auto metric_key = std::make_pair(t.get_src(), T::TYPE);
+    return trans_intr::make_interruptible(
+      get_extent<T>(
+	offset, length, &metric_key,
+	std::forward<Func>(extent_init_func), std::move(f))
+    );
   }
+
+  /*
+   * get_absent_extent
+   *
+   * Mostly the same as Cache::get_extent(), with the only difference
+   * that get_absent_extent won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  template <typename T, typename Func>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length,
+    Func &&extent_init_func) {
+    CachedExtentRef ret;
+    LOG_PREFIX(Cache::get_extent);
+
+#ifndef NDEBUG
+    auto r = t.get_extent(offset, &ret);
+    if (r != Transaction::get_extent_ret::ABSENT) {
+      SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+      ceph_abort();
+    }
+#endif
+
+    SUBTRACET(seastore_cache, "{} {}~{} is absent on t, query cache ...",
+	      t, T::TYPE, offset, length);
+    auto f = [&t, this](CachedExtent &ext) {
+      t.add_to_read_set(CachedExtentRef(&ext));
+      touch_extent(ext);
+    };
+    auto metric_key = std::make_pair(t.get_src(), T::TYPE);
+    return trans_intr::make_interruptible(
+      get_extent<T>(
+	offset, length, &metric_key,
+	std::forward<Func>(extent_init_func), std::move(f))
+    );
+  }
+
   template <typename T>
   get_extent_iertr::future<TCachedExtentRef<T>> get_extent(
     Transaction &t,
     paddr_t offset,
     extent_len_t length) {
     return get_extent<T>(t, offset, length, [](T &){});
+  }
+
+  /*
+   * get_absent_extent
+   *
+   * Mostly the same as Cache::get_extent(), with the only difference
+   * that get_absent_extent won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  template <typename T>
+  get_extent_iertr::future<TCachedExtentRef<T>> get_absent_extent(
+    Transaction &t,
+    paddr_t offset,
+    extent_len_t length) {
+    return get_absent_extent<T>(t, offset, length, [](T &){});
+  }
+
+  seastar::future<CachedExtentRef> get_extent_viewable_by_trans(
+    Transaction &t,
+    CachedExtentRef extent)
+  {
+    auto p_extent = extent->get_transactional_view(t);
+    if (!p_extent->is_pending_in_trans(t.get_trans_id())) {
+      t.add_to_read_set(p_extent);
+      if (!p_extent->is_mutation_pending()) {
+	touch_extent(*p_extent);
+      }
+    }
+    return p_extent->wait_io(
+    ).then([p_extent] {
+      return CachedExtentRef(p_extent);
+    });
+  }
+
+  template <typename T>
+  seastar::future<TCachedExtentRef<T>> get_extent_viewable_by_trans(
+    Transaction &t,
+    TCachedExtentRef<T> extent)
+  {
+    return get_extent_viewable_by_trans(t, CachedExtentRef(extent.get())
+    ).then([](auto p_extent) {
+      return p_extent->template cast<T>();
+    });
   }
 
   extent_len_t get_block_size() const {
@@ -536,6 +631,39 @@ private:
     }
   }
 
+  get_extent_by_type_ret _get_absent_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t offset,
+    laddr_t laddr,
+    extent_len_t length,
+    extent_init_func_t &&extent_init_func
+  ) {
+    LOG_PREFIX(Cache::_get_absent_extent_by_type);
+
+#ifndef NDEBUG
+    CachedExtentRef ret;
+    auto r = t.get_extent(offset, &ret);
+    if (r != Transaction::get_extent_ret::ABSENT) {
+      SUBERRORT(seastore_cache, "unexpected non-absent extent {}", t, *ret);
+      ceph_abort();
+    }
+#endif
+
+    SUBTRACET(seastore_cache, "{} {}~{} {} is absent on t, query cache ...",
+	      t, type, offset, length, laddr);
+    auto f = [&t, this](CachedExtent &ext) {
+      t.add_to_read_set(CachedExtentRef(&ext));
+      touch_extent(ext);
+    };
+    auto src = t.get_src();
+    return trans_intr::make_interruptible(
+      _get_extent_by_type(
+	type, offset, laddr, length, &src,
+	std::move(extent_init_func), std::move(f))
+    );
+  }
+
   backref_entryrefs_by_seq_t backref_entryrefs_by_seq;
   backref_entry_mset_t backref_entry_mset;
 
@@ -600,6 +728,32 @@ public:
       length,
       extent_init_func_t(std::forward<Func>(extent_init_func)));
   }
+
+  /*
+   * get_absent_extent_by_type
+   *
+   * Mostly the same as Cache::get_extent_by_type(), with the only difference
+   * that get_absent_extent_by_type won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  template <typename Func>
+  get_extent_by_type_ret get_absent_extent_by_type(
+    Transaction &t,         ///< [in] transaction
+    extent_types_t type,    ///< [in] type tag
+    paddr_t offset,         ///< [in] starting addr
+    laddr_t laddr,          ///< [in] logical address if logical
+    extent_len_t length,    ///< [in] length
+    Func &&extent_init_func ///< [in] extent init func
+  ) {
+    return _get_absent_extent_by_type(
+      t,
+      type,
+      offset,
+      laddr,
+      length,
+      extent_init_func_t(std::forward<Func>(extent_init_func)));
+  }
+
   get_extent_by_type_ret get_extent_by_type(
     Transaction &t,
     extent_types_t type,
@@ -608,6 +762,25 @@ public:
     extent_len_t length
   ) {
     return get_extent_by_type(
+      t, type, offset, laddr, length, [](CachedExtent &) {});
+  }
+
+
+  /*
+   * get_absent_extent_by_type
+   *
+   * Mostly the same as Cache::get_extent_by_type(), with the only difference
+   * that get_absent_extent_by_type won't search the transaction's context for
+   * the specific CachedExtent
+   */
+  get_extent_by_type_ret get_absent_extent_by_type(
+    Transaction &t,
+    extent_types_t type,
+    paddr_t offset,
+    laddr_t laddr,
+    extent_len_t length
+  ) {
+    return get_absent_extent_by_type(
       t, type, offset, laddr, length, [](CachedExtent &) {});
   }
 
@@ -631,24 +804,35 @@ public:
   /**
    * alloc_new_extent
    *
-   * Allocates a fresh extent. if delayed is true, addr will be alloc'd later
+   * Allocates a fresh extent. if delayed is true, addr will be alloc'd later.
+   * Note that epaddr can only be fed by the btree lba unittest for now
    */
   template <typename T>
   TCachedExtentRef<T> alloc_new_extent(
     Transaction &t,         ///< [in, out] current transaction
     extent_len_t length,    ///< [in] length
     placement_hint_t hint,  ///< [in] user hint
-    rewrite_gen_t gen       ///< [in] rewrite generation
+#ifdef UNIT_TESTS_BUILT
+    rewrite_gen_t gen,      ///< [in] rewrite generation
+    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
+#else
+    rewrite_gen_t gen
+#endif
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
+#ifdef UNIT_TESTS_BUILT
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen, epaddr);
+#else
     auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
+#endif
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
               result.paddr,
               hint,
-              result.gen);
+              result.gen,
+	      t.get_trans_id());
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
@@ -811,6 +995,7 @@ public:
           if (!is_alive) {
             SUBDEBUGT(seastore_cache, "extent is not alive, remove extent -- {}", t, *e);
             remove_extent(e);
+	    e->set_invalid(t);
           } else {
             SUBDEBUGT(seastore_cache, "extent is alive -- {}", t, *e);
           }
@@ -921,12 +1106,22 @@ public:
   /// Dump live extents
   void dump_contents();
 
+  /**
+   * backref_extent_entry_t
+   *
+   * All the backref extent entries have to be indexed by paddr in memory,
+   * so they can be retrived by range during cleaning.
+   *
+   * See BtreeBackrefManager::retrieve_backref_extents_in_range()
+   */
   struct backref_extent_entry_t {
     backref_extent_entry_t(
       paddr_t paddr,
+      paddr_t key,
       extent_types_t type)
-      : paddr(paddr), type(type) {}
+      : paddr(paddr), key(key), type(type) {}
     paddr_t paddr = P_ADDR_NULL;
+    paddr_t key = P_ADDR_NULL;
     extent_types_t type = extent_types_t::ROOT;
     struct cmp_t {
       using is_transparent = paddr_t;
@@ -951,6 +1146,8 @@ public:
   void update_tree_extents_num(extent_types_t type, int64_t delta) {
     switch (type) {
     case extent_types_t::LADDR_INTERNAL:
+      [[fallthrough]];
+    case extent_types_t::DINK_LADDR_LEAF:
       [[fallthrough]];
     case extent_types_t::LADDR_LEAF:
       stats.lba_tree_extents_num += delta;
@@ -980,6 +1177,19 @@ public:
   uint64_t get_omap_tree_depth() {
     return stats.omap_tree_depth;
   }
+
+  /// Update lru for access to ref
+  void touch_extent(
+      CachedExtent &ext,
+      const Transaction::src_t* p_src=nullptr)
+  {
+    if (p_src && is_background_transaction(*p_src))
+      return;
+    if (ext.is_clean() && !ext.is_placeholder()) {
+      lru.move_to_top(ext);
+    }
+  }
+
 private:
   ExtentPlacementManager& epm;
   RootBlockRef root;               ///< ref to current root
@@ -989,6 +1199,8 @@ private:
 
   // FIXME: This is specific to the segmented implementation
   std::vector<SegmentProvider*> segment_providers_by_device_id;
+
+  transaction_id_t next_id = 0;
 
   /**
    * dirty
@@ -1003,9 +1215,12 @@ private:
       backref_extent_entry_t::cmp_t>;
   backref_extent_entry_query_set_t backref_extents;
 
-  void add_backref_extent(paddr_t paddr, extent_types_t type) {
+  void add_backref_extent(
+    paddr_t paddr,
+    paddr_t key,
+    extent_types_t type) {
     assert(!paddr.is_relative());
-    auto [iter, inserted] = backref_extents.emplace(paddr, type);
+    auto [iter, inserted] = backref_extents.emplace(paddr, key, type);
     boost::ignore_unused(inserted);
     assert(inserted);
   }
@@ -1261,18 +1476,6 @@ private:
     return bp;
   }
 
-  /// Update lru for access to ref
-  void touch_extent(
-      CachedExtent &ext,
-      const Transaction::src_t* p_src=nullptr)
-  {
-    if (p_src && is_background_transaction(*p_src))
-      return;
-    if (ext.is_clean() && !ext.is_placeholder()) {
-      lru.move_to_top(ext);
-    }
-  }
-
   void backref_batch_update(
     std::vector<backref_entry_ref> &&,
     const journal_seq_t &);
@@ -1364,6 +1567,15 @@ private:
     }
   }
 
+  template <
+    typename node_key_t,
+    typename node_val_t,
+    typename internal_node_t,
+    typename leaf_node_t,
+    typename pin_t,
+    size_t node_size,
+    bool leaf_has_children>
+  friend class FixedKVBtree;
 };
 using CacheRef = std::unique_ptr<Cache>;
 

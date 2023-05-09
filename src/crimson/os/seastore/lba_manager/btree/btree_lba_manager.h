@@ -25,15 +25,20 @@
 
 namespace crimson::os::seastore::lba_manager::btree {
 
-class BtreeLBAPin : public BtreeNodePin<laddr_t, paddr_t> {
+class BtreeLBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
 public:
-  BtreeLBAPin() = default;
-  BtreeLBAPin(
+  BtreeLBAMapping(op_context_t<laddr_t> ctx)
+    : BtreeNodeMapping(ctx) {}
+  BtreeLBAMapping(
+    op_context_t<laddr_t> c,
     CachedExtentRef parent,
+    uint16_t pos,
     lba_map_val_t &val,
     lba_node_meta_t &&meta)
-    : BtreeNodePin(
+    : BtreeNodeMapping(
+	c,
 	parent,
+	pos,
 	val.paddr,
 	val.len,
 	std::forward<lba_node_meta_t>(meta))
@@ -42,7 +47,7 @@ public:
 
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, BtreeLBAPin, LBA_BLOCK_SIZE>;
+  LBALeafNode, BtreeLBAMapping, LBA_BLOCK_SIZE, true>;
 
 /**
  * BtreeLBAManager
@@ -63,7 +68,11 @@ using LBABtree = FixedKVBtree<
  */
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(Cache &cache);
+  BtreeLBAManager(Cache &cache)
+    : cache(cache)
+  {
+    register_metrics();
+  }
 
   mkfs_ret mkfs(
     Transaction &t) final;
@@ -84,7 +93,8 @@ public:
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
-    paddr_t addr) final;
+    paddr_t addr,
+    LogicalCachedExtent*) final;
 
   ref_ret decref_extent(
     Transaction &t,
@@ -98,11 +108,6 @@ public:
     return update_refcount(t, addr, 1);
   }
 
-  void complete_transaction(
-    Transaction &t,
-    std::vector<CachedExtentRef> &,
-    std::vector<CachedExtentRef> &) final;
-
   /**
    * init_cached_extent
    *
@@ -114,6 +119,8 @@ public:
   init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) final;
+
+  check_child_trackers_ret check_child_trackers(Transaction &t) final;
 
   scan_mappings_ret scan_mappings(
     Transaction &t,
@@ -129,7 +136,8 @@ public:
     Transaction& t,
     laddr_t laddr,
     paddr_t prev_addr,
-    paddr_t paddr) final;
+    paddr_t paddr,
+    LogicalCachedExtent*) final;
 
   get_physical_extent_if_live_ret get_physical_extent_if_live(
     Transaction &t,
@@ -137,18 +145,9 @@ public:
     paddr_t addr,
     laddr_t laddr,
     extent_len_t len) final;
-
-  void add_pin(LBAPin &pin) final {
-    auto *bpin = reinterpret_cast<BtreeLBAPin*>(&pin);
-    pin_set.add_pin(bpin->get_range_pin());
-    bpin->set_parent(nullptr);
-  }
-
-  ~BtreeLBAManager();
 private:
   Cache &cache;
 
-  btree_pin_set_t<laddr_t> pin_set;
 
   struct {
     uint64_t num_alloc_extents = 0;
@@ -156,10 +155,8 @@ private:
   } stats;
 
   op_context_t<laddr_t> get_context(Transaction &t) {
-    return op_context_t<laddr_t>{cache, t, &pin_set};
+    return op_context_t<laddr_t>{cache, t};
   }
-
-  static btree_range_pin_t<laddr_t> &get_pin(CachedExtent &e);
 
   seastar::metrics::metric_group metrics;
   void register_metrics();
@@ -188,7 +185,8 @@ private:
   _update_mapping_ret _update_mapping(
     Transaction &t,
     laddr_t addr,
-    update_func_t &&f);
+    update_func_t &&f,
+    LogicalCachedExtent*);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

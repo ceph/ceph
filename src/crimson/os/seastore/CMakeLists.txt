@@ -7,6 +7,7 @@ set(crimson_seastore_srcs
   transaction_manager.cc
   transaction.cc
   cache.cc
+  root_block.cc
   lba_manager.cc
   async_cleaner.cc
   backref_manager.cc
@@ -17,6 +18,8 @@ set(crimson_seastore_srcs
   omap_manager.cc
   omap_manager/btree/btree_omap_manager.cc
   omap_manager/btree/omap_btree_node_impl.cc
+  btree/btree_range_pin.cc
+  btree/fixed_kv_node.cc
   onode.cc
   onode_manager/staged-fltree/node.cc
   onode_manager/staged-fltree/node_extent_manager.cc

@@ -47,7 +47,7 @@ class TestReplayExtent final: public NodeExtent {
     ceph_abort("impossible path"); }
   DeltaRecorder* get_recorder() const override {
     ceph_abort("impossible path"); }
-  CachedExtentRef duplicate_for_write() override {
+  CachedExtentRef duplicate_for_write(Transaction&) override {
     ceph_abort("impossible path"); }
   extent_types_t get_type() const override {
     return extent_types_t::TEST_BLOCK; }
