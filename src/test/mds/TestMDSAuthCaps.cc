@@ -100,6 +100,32 @@ TEST(MDSAuthCaps, ParseGood) {
   }
 }
 
+TEST(MDSAuthCaps, ParseDumpReparseCaps) {
+  for (auto str : parse_good) {
+    MDSAuthCaps cap1;
+    ASSERT_TRUE(cap1.parse(str, &cout));
+
+    std::cout << "Testing by parsing caps, dumping to string, reparsing "
+		 "string and then redumping and checking strings from "
+		 "first and second dumps: '" << str << "'" << std::endl;
+    // Convert cap object to string, reparse and check if converting again
+    // gives same string as before.
+    MDSAuthCaps cap2;
+    std::ostringstream cap1_ostream;
+    cap1_ostream << cap1;
+    string cap1_str = cap1_ostream.str();
+    // Removing "MDSAuthCaps[" from cap1_str
+    cap1_str.replace(0, 12, "");
+    // Removing "]" from cap1_str
+    cap1_str.replace(cap1_str.length() - 1, 1, "");
+    ASSERT_TRUE(cap2.parse(cap1_str, &cout));
+
+    std::ostringstream cap2_ostream;
+    cap2_ostream << cap2;
+    ASSERT_TRUE(cap1_ostream.str().compare(cap2_ostream.str()) == 0);
+  }
+}
+
 const char *parse_bad[] = {
   "allow r poolfoo",
   "allow r w",
