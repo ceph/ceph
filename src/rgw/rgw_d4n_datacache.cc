@@ -49,12 +49,12 @@ int D4NDatacache::find_client(cpp_redis::client *client) {
   if (client->is_connected())
     return 0;
 
-  if (host == "" || port == 0) { 
+  if (addr.host == "" || addr.port == 0) { 
     dout(10) << "RGW D4N Cache: D4N cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
   }
 
-  client->connect(host, port, nullptr);
+  client->connect(addr.host, addr.port, nullptr);
 
   if (!client->is_connected())
     return ECONNREFUSED;
