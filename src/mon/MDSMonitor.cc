@@ -1978,7 +1978,6 @@ int MDSMonitor::print_nodes(Formatter *f)
  */
 bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid)
 {
-  auto &current_mds_map = get_fsmap().get_filesystem(fscid)->mds_map;
   auto&& fs = fsmap.get_filesystem(fscid);
   auto &mds_map = fs->mds_map;
 
@@ -1991,7 +1990,8 @@ bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid)
    * current batch of changes in pending. This is important if an MDS is
    * becoming active in the next epoch.
    */
-  if (!current_mds_map.is_resizeable() ||
+  if (!get_fsmap().filesystem_exists(fscid) ||
+      !get_fsmap().get_filesystem(fscid)->mds_map.is_resizeable() ||
       !mds_map.is_resizeable()) {
     dout(5) << __func__ << " mds_map is not currently resizeable" << dendl;
     return false;
