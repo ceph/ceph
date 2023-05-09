@@ -161,7 +161,7 @@ def setup_database(ctx, config):
 
         # MariaDB on RHEL/CentOS needs service started after package install
         # while Ubuntu starts service by default.
-        if remote.os.name == 'rhel' or remote.os.name == 'centos':
+        if client.os.name == 'rhel' or client.os.name == 'centos':
             remote.run(args=['sudo', 'systemctl', 'restart', 'mariadb'])
 
         run_mysql_query(ctx, remote, "CREATE USER 'keystone'@'localhost' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'SECRET';")
