@@ -339,10 +339,10 @@ class DriveGroupSpec(ServiceSpec):
                     self.service_id,
                     "`all` is only allowed for data_devices")
 
-        if self.objectstore not in ['bluestore', 'seastore']:
+        if self.objectstore not in ('bluestore'):
             raise DriveGroupValidationError(self.service_id,
                                             f"{self.objectstore} is not supported. Must be "
-                                            f"one of bluestore, seastore")
+                                            f"one of ('bluestore')")
 
         if self.block_wal_size is not None and type(self.block_wal_size) not in [int, str]:
             raise DriveGroupValidationError(
