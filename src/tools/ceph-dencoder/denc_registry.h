@@ -66,7 +66,7 @@ public:
     catch (buffer::error& e) {
       return e.what();
     }
-    if (!stray_okay && !p.end()) {
+    if (stray_okay && !p.end()) {
       std::ostringstream ss;
       ss << "stray data at end of buffer, offset " << p.get_off();
       return ss.str();
