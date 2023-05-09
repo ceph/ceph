@@ -121,7 +121,7 @@ def with_osd_daemon(cephadm_module: CephadmOrchestrator, _run_cephadm, host: str
                   ['--', 'lvm', 'list', '--format', 'json'], no_fsid=False, error_ok=False, image='', log_output=True),
         mock.call(host, f'osd.{osd_id}', 'deploy',
                   ['--name', f'osd.{osd_id}', '--meta-json', mock.ANY,
-                   '--config-json', '-', '--osd-fsid', 'uuid', '--objectstore', 'bluestore'],
+                   '--config-json', '-', '--osd-fsid', 'uuid'],
                   stdin=mock.ANY, image=''),
         mock.call(host, 'osd', 'ceph-volume',
                   ['--', 'raw', 'list', '--format', 'json'], no_fsid=False, error_ok=False, image='', log_output=True),

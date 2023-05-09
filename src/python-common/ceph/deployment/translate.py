@@ -163,11 +163,6 @@ class to_ceph_volume(object):
                     cmd += " --crush-device-class {}".format(d)
                 cmds.append(cmd)
 
-            elif self.spec.objectstore == 'seastore':
-                cmd = "lvm batch --no-auto {}".format(" ".join(data_devices))
-                cmd += " --seastore"
-                cmds.append(cmd)
-
         for i in range(len(cmds)):
             if self.spec.encrypted:
                 cmds[i] += " --dmcrypt"

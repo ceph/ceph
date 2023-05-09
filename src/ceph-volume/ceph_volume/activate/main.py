@@ -30,16 +30,6 @@ class Activate(object):
             help='OSD UUID to activate'
         )
         parser.add_argument(
-            '--bluestore',
-            action='store_true',
-            help='force bluestore objectstore activation',
-        )
-        parser.add_argument(
-            '--seastore',
-            action='store_true',
-            help='force seastore objectstore activation',
-        )
-        parser.add_argument(
             '--no-systemd',
             dest='no_systemd',
             action='store_true',
@@ -71,8 +61,6 @@ class Activate(object):
                 argparse.Namespace(
                     osd_id=self.args.osd_id,
                     osd_fsid=self.args.osd_uuid,
-                    seastore=self.args.seastore,
-                    bluestore=self.args.bluestore,
                     no_tmpfs=self.args.no_tmpfs,
                     no_systemd=self.args.no_systemd,
                 )
