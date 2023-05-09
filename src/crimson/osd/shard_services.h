@@ -132,11 +132,35 @@ class PerShardState {
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
     crimson::get_logger(ceph_subsys_osd).info(
       "PerShardState::{}, {}", __func__, *op);
-    auto fut = op->start().finally([op /* by copy */] {
-      // ensure the op's lifetime is appropriate. It is not enough to
-      // guarantee it's alive at the scheduling stages (i.e. `then()`
-      // calling) but also during the actual execution (i.e. when passed
-      // lambdas are actually run).
+    auto fut = seastar::yield().then([op] {
+      return op->start().finally([op /* by copy */] {
+	// ensure the op's lifetime is appropriate. It is not enough to
+	// guarantee it's alive at the scheduling stages (i.e. `then()`
+	// calling) but also during the actual execution (i.e. when passed
+	// lambdas are actually run).
+      });
+    });
+    return std::make_pair(std::move(op), std::move(fut));
+  }
+
+  template <typename InterruptorT, typename T, typename... Args>
+  auto start_operation_may_interrupt(Args&&... args) {
+    assert_core();
+    if (__builtin_expect(stopping, false)) {
+      throw crimson::common::system_shutdown_exception();
+    }
+    auto op = registry.create_operation<T>(std::forward<Args>(args)...);
+    crimson::get_logger(ceph_subsys_osd).info(
+      "PerShardState::{}, {}", __func__, *op);
+    auto fut = InterruptorT::make_interruptible(
+      seastar::yield()
+    ).then_interruptible([op] {
+      return op->start().finally([op /* by copy */] {
+	// ensure the op's lifetime is appropriate. It is not enough to
+	// guarantee it's alive at the scheduling stages (i.e. `then()`
+	// calling) but also during the actual execution (i.e. when passed
+	// lambdas are actually run).
+      });
     });
     return std::make_pair(std::move(op), std::move(fut));
   }
@@ -369,6 +393,12 @@ public:
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
     return local_state.start_operation<T>(std::forward<Args>(args)...);
+  }
+
+  template <typename InterruptorT, typename T, typename... Args>
+  auto start_operation_may_interrupt(Args&&... args) {
+    return local_state.start_operation_may_interrupt<
+      InterruptorT, T>(std::forward<Args>(args)...);
   }
 
   auto &get_registry() { return local_state.registry; }
