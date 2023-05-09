@@ -396,6 +396,8 @@ void OutputDataSocket::append_output(ceph::buffer::list& bl)
       skipped = 1;
     } else
       ++skipped;
+
+    cond.notify_all();
     return;
   }
 
