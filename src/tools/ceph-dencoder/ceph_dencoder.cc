@@ -263,6 +263,12 @@ int main(int argc, const char **argv)
 	return 0;
       else
 	return 1;
+    } else if (*i == string("stray_okay")) {
+      if (!den) {
+	cerr << "must first select type with 'type <name>'" << std::endl;
+	return 1;
+      }
+      den->set_stray_okay();
     } else {
       cerr << "unknown option '" << *i << "'" << std::endl;
       return 1;
