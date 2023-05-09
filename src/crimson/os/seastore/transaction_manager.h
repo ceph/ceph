@@ -90,7 +90,7 @@ public:
    * Get the logical pin at offset
    */
   using get_pin_iertr = LBAManager::get_mapping_iertr;
-  using get_pin_ret = LBAManager::get_mapping_iertr::future<LBAPinRef>;
+  using get_pin_ret = LBAManager::get_mapping_iertr::future<LBAMappingRef>;
   get_pin_ret get_pin(
     Transaction &t,
     laddr_t offset) {
@@ -117,80 +117,6 @@ public:
   }
 
   /**
-   * pin_to_extent
-   *
-   * Get extent mapped at pin.
-   */
-  using pin_to_extent_iertr = base_iertr;
-  template <typename T>
-  using pin_to_extent_ret = pin_to_extent_iertr::future<
-    TCachedExtentRef<T>>;
-  template <typename T>
-  pin_to_extent_ret<T> pin_to_extent(
-    Transaction &t,
-    LBAPinRef pin) {
-    LOG_PREFIX(TransactionManager::pin_to_extent);
-    SUBTRACET(seastore_tm, "getting extent {}", t, *pin);
-    static_assert(is_logical_type(T::TYPE));
-    using ret = pin_to_extent_ret<T>;
-    auto &pref = *pin;
-    return cache->get_extent<T>(
-      t,
-      pref.get_val(),
-      pref.get_length(),
-      [this, pin=std::move(pin)](T &extent) mutable {
-	assert(!extent.has_pin());
-	assert(!extent.has_been_invalidated());
-	assert(!pin->has_been_invalidated());
-	extent.set_pin(std::move(pin));
-	lba_manager->add_pin(extent.get_pin());
-      }
-    ).si_then([FNAME, &t](auto ref) mutable -> ret {
-      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
-      return pin_to_extent_ret<T>(
-	interruptible::ready_future_marker{},
-	std::move(ref));
-    });
-  }
-
-  /**
-   * pin_to_extent_by_type
-   *
-   * Get extent mapped at pin.
-   */
-  using pin_to_extent_by_type_ret = pin_to_extent_iertr::future<
-    LogicalCachedExtentRef>;
-  pin_to_extent_by_type_ret pin_to_extent_by_type(
-      Transaction &t,
-      LBAPinRef pin,
-      extent_types_t type) {
-    LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
-    SUBTRACET(seastore_tm, "getting extent {} type {}", t, *pin, type);
-    assert(is_logical_type(type));
-    auto &pref = *pin;
-    return cache->get_extent_by_type(
-      t,
-      type,
-      pref.get_val(),
-      pref.get_key(),
-      pref.get_length(),
-      [this, pin=std::move(pin)](CachedExtent &extent) mutable {
-        auto &lextent = static_cast<LogicalCachedExtent&>(extent);
-        assert(!lextent.has_pin());
-        assert(!lextent.has_been_invalidated());
-        assert(!pin->has_been_invalidated());
-        lextent.set_pin(std::move(pin));
-        lba_manager->add_pin(lextent.get_pin());
-      }
-    ).si_then([FNAME, &t](auto ref) {
-      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
-      return pin_to_extent_by_type_ret(
-	interruptible::ready_future_marker{},
-	std::move(ref->template cast<LogicalCachedExtent>()));
-    });
-  }
-
-  /**
    * read_extent
    *
    * Read extent of type T at offset~length
@@ -208,14 +134,15 @@ public:
     SUBTRACET(seastore_tm, "{}~{}", t, offset, length);
     return get_pin(
       t, offset
-    ).si_then([this, FNAME, &t, offset, length] (auto pin) {
+    ).si_then([this, FNAME, &t, offset, length] (auto pin)
+      -> read_extent_ret<T> {
       if (length != pin->get_length() || !pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} len {} got wrong pin {}",
             t, offset, length, *pin);
         ceph_assert(0 == "Should be impossible");
       }
-      return this->pin_to_extent<T>(t, std::move(pin));
+      return this->read_pin<T>(t, std::move(pin));
     });
   }
 
@@ -232,15 +159,44 @@ public:
     SUBTRACET(seastore_tm, "{}", t, offset);
     return get_pin(
       t, offset
-    ).si_then([this, FNAME, &t, offset] (auto pin) {
+    ).si_then([this, FNAME, &t, offset] (auto pin)
+      -> read_extent_ret<T> {
       if (!pin->get_val().is_real()) {
         SUBERRORT(seastore_tm,
             "offset {} got wrong pin {}",
             t, offset, *pin);
         ceph_assert(0 == "Should be impossible");
       }
-      return this->pin_to_extent<T>(t, std::move(pin));
+      return this->read_pin<T>(t, std::move(pin));
     });
+  }
+
+  template <typename T>
+  base_iertr::future<TCachedExtentRef<T>> read_pin(
+    Transaction &t,
+    LBAMappingRef pin)
+  {
+    auto v = pin->get_logical_extent(t);
+    if (v.has_child()) {
+      return v.get_child_fut().then([](auto extent) {
+	return extent->template cast<T>();
+      });
+    } else {
+      return pin_to_extent<T>(t, std::move(pin));
+    }
+  }
+
+  base_iertr::future<LogicalCachedExtentRef> read_pin_by_type(
+    Transaction &t,
+    LBAMappingRef pin,
+    extent_types_t type)
+  {
+    auto v = pin->get_logical_extent(t);
+    if (v.has_child()) {
+      return std::move(v.get_child_fut());
+    } else {
+      return pin_to_extent_by_type(t, std::move(pin), type);
+    }
   }
 
   /// Obtain mutable copy of extent
@@ -249,13 +205,13 @@ public:
     auto ret = cache->duplicate_for_write(
       t,
       ref)->cast<LogicalCachedExtent>();
-    if (!ret->has_pin()) {
+    if (!ret->has_laddr()) {
       SUBDEBUGT(seastore_tm,
 	"duplicating extent for write -- {} -> {}",
 	t,
 	*ref,
 	*ret);
-      ret->set_pin(ref->get_pin().duplicate());
+      ret->set_laddr(ref->get_laddr());
     } else {
       SUBTRACET(seastore_tm,
 	"extent is already duplicated -- {}",
@@ -325,9 +281,10 @@ public:
       t,
       laddr_hint,
       len,
-      ext->get_paddr()
-    ).si_then([ext=std::move(ext), laddr_hint, &t, FNAME](auto &&ref) mutable {
-      ext->set_pin(std::move(ref));
+      ext->get_paddr(),
+      ext.get()
+    ).si_then([ext=std::move(ext), laddr_hint, &t](auto &&) mutable {
+      LOG_PREFIX(TransactionManager::alloc_extent);
       SUBDEBUGT(seastore_tm, "new extent: {}, laddr_hint: {}", t, *ext, laddr_hint);
       return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
@@ -371,7 +328,8 @@ public:
     ext->init(CachedExtent::extent_state_t::EXIST_CLEAN,
 	      existing_paddr,
 	      PLACEMENT_HINT_NULL,
-	      NULL_GENERATION);
+	      NULL_GENERATION,
+	      t.get_trans_id());
 
     t.add_fresh_extent(ext);
 
@@ -379,10 +337,10 @@ public:
       t,
       laddr_hint,
       length,
-      existing_paddr
+      existing_paddr,
+      ext.get()
     ).si_then([ext=std::move(ext), laddr_hint, this](auto &&ref) {
       ceph_assert(laddr_hint == ref->get_key());
-      ext->set_pin(std::move(ref));
       return epm->read(
         ext->get_paddr(),
 	ext->get_length(),
@@ -396,7 +354,7 @@ public:
 
 
   using reserve_extent_iertr = alloc_extent_iertr;
-  using reserve_extent_ret = reserve_extent_iertr::future<LBAPinRef>;
+  using reserve_extent_ret = reserve_extent_iertr::future<LBAMappingRef>;
   reserve_extent_ret reserve_region(
     Transaction &t,
     laddr_t hint,
@@ -408,7 +366,8 @@ public:
       t,
       hint,
       len,
-      P_ADDR_ZERO);
+      P_ADDR_ZERO,
+      nullptr);
   }
 
   /* alloc_extents
@@ -642,6 +601,86 @@ private:
     Transaction &t,
     ExtentPlacementManager::dispatch_result_t dispatch_result,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt);
+
+  /**
+   * pin_to_extent
+   *
+   * Get extent mapped at pin.
+   */
+  using pin_to_extent_iertr = base_iertr;
+  template <typename T>
+  using pin_to_extent_ret = pin_to_extent_iertr::future<
+    TCachedExtentRef<T>>;
+  template <typename T>
+  pin_to_extent_ret<T> pin_to_extent(
+    Transaction &t,
+    LBAMappingRef pin) {
+    LOG_PREFIX(TransactionManager::pin_to_extent);
+    SUBTRACET(seastore_tm, "getting extent {}", t, *pin);
+    static_assert(is_logical_type(T::TYPE));
+    using ret = pin_to_extent_ret<T>;
+    auto &pref = *pin;
+    return cache->get_absent_extent<T>(
+      t,
+      pref.get_val(),
+      pref.get_length(),
+      [pin=std::move(pin)]
+      (T &extent) mutable {
+	assert(!extent.has_laddr());
+	assert(!extent.has_been_invalidated());
+	assert(!pin->has_been_invalidated());
+	assert(pin->get_parent());
+	pin->link_child(&extent);
+	extent.set_laddr(pin->get_key());
+      }
+    ).si_then([FNAME, &t](auto ref) mutable -> ret {
+      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+      return pin_to_extent_ret<T>(
+	interruptible::ready_future_marker{},
+	std::move(ref));
+    });
+  }
+
+  /**
+   * pin_to_extent_by_type
+   *
+   * Get extent mapped at pin.
+   */
+  using pin_to_extent_by_type_ret = pin_to_extent_iertr::future<
+    LogicalCachedExtentRef>;
+  pin_to_extent_by_type_ret pin_to_extent_by_type(
+      Transaction &t,
+      LBAMappingRef pin,
+      extent_types_t type)
+  {
+    LOG_PREFIX(TransactionManager::pin_to_extent_by_type);
+    SUBTRACET(seastore_tm, "getting extent {} type {}", t, *pin, type);
+    assert(is_logical_type(type));
+    auto &pref = *pin;
+    return cache->get_absent_extent_by_type(
+      t,
+      type,
+      pref.get_val(),
+      pref.get_key(),
+      pref.get_length(),
+      [pin=std::move(pin)](CachedExtent &extent) mutable {
+	auto &lextent = static_cast<LogicalCachedExtent&>(extent);
+	assert(!lextent.has_laddr());
+	assert(!lextent.has_been_invalidated());
+	assert(!pin->has_been_invalidated());
+	assert(pin->get_parent());
+	assert(!pin->get_parent()->is_pending());
+	pin->link_child(&lextent);
+	lextent.set_laddr(pin->get_key());
+      }
+    ).si_then([FNAME, &t](auto ref) {
+      SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+      return pin_to_extent_by_type_ret(
+	interruptible::ready_future_marker{},
+	std::move(ref->template cast<LogicalCachedExtent>()));
+    });
+  }
+
 
 public:
   // Testing interfaces
