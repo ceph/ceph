@@ -491,7 +491,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   rgw::d4n::CacheBlock* tempCacheBlock = driver->get_cache_block();
   rgw::d4n::BlockDirectory* tempBlockDir = driver->get_block_dir();
 
-  tempCacheBlock->hostsList.push_back(tempBlockDir->get_host() + ":" + std::to_string(tempBlockDir->get_port())); 
+  tempCacheBlock->hostsList.push_back(tempBlockDir->get_addr().host + ":" + std::to_string(tempBlockDir->get_addr().port)); 
   tempCacheBlock->size = accounted_size;
   tempCacheBlock->cacheObj.bucketName = obj->get_bucket()->get_name();
   tempCacheBlock->cacheObj.objName = obj->get_key().get_oid();
