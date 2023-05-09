@@ -875,7 +875,7 @@ enum class device_type_t : uint8_t {
   NONE = 0,
   HDD,
   SSD,
-  ZNS,
+  ZBD,            // ZNS SSD or SMR HDD
   EPHEMERAL_COLD,
   EPHEMERAL_MAIN,
   RANDOM_BLOCK_SSD,
@@ -889,7 +889,7 @@ bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
 enum class backend_type_t {
-  SEGMENTED,    // SegmentManager: SSD, ZNS, HDD
+  SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
   RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
 

@@ -777,8 +777,8 @@ device_type_t string_to_device_type(std::string type) {
   if (type == "SSD") {
     return device_type_t::SSD;
   }
-  if (type == "ZNS") {
-    return device_type_t::ZNS;
+  if (type == "ZBD") {
+    return device_type_t::ZBD;
   }
   if (type == "RANDOM_BLOCK_SSD") {
     return device_type_t::RANDOM_BLOCK_SSD;
@@ -795,8 +795,8 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "HDD";
   case device_type_t::SSD:
     return out << "SSD";
-  case device_type_t::ZNS:
-    return out << "ZNS";
+  case device_type_t::ZBD:
+    return out << "ZBD";
   case device_type_t::EPHEMERAL_COLD:
     return out << "EPHEMERAL_COLD";
   case device_type_t::EPHEMERAL_MAIN:
