@@ -141,7 +141,7 @@ TEST_F(DirectoryFixture, GetValueTest) {
   /* Check if object name in directory instance matches redis update */
   client.hset("rgw-object:" + oid + ":directory", "objName", "newoid", [](cpp_redis::reply& reply) {
     if (!reply.is_null()) {
-      ASSERT_EQ(reply.as_string(), "OK");
+      ASSERT_EQ(reply.as_integer(), 0);
     }
   });
 
@@ -232,7 +232,7 @@ TEST_F(DirectoryFixture, CopyValueTest) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ((int)arr.size(), 10); /* Five fields */
+      EXPECT_EQ((int)arr.size(), 12); /* Six fields */
 
       for (int i = 0; i < 10; i += 2) {
         if (arr[i].as_string() == "key")
@@ -245,6 +245,8 @@ TEST_F(DirectoryFixture, CopyValueTest) {
           EXPECT_EQ(arr[i + 1].as_string(), "testCopyName");
 	else if (arr[i].as_string() == "hosts") 
           EXPECT_EQ(arr[i + 1].as_string(), currentHost);
+	else if (arr[i].as_string() == "globalWeight") 
+          EXPECT_EQ(arr[i + 1].as_string(), std::to_string(0));
 	else
 	  unexpected = true; /* Unexpected field */
       }
