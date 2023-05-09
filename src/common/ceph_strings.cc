@@ -112,6 +112,8 @@ const char *ceph_release_name(int r)
 		return "quincy";
 	case CEPH_RELEASE_REEF:
 		return "reef";
+	case CEPH_RELEASE_SQUID:
+		return "squid";
 	default:
 		if (r < 0)
 			return "unspecified";
