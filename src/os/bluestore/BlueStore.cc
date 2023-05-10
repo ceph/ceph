@@ -2776,9 +2776,9 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   tmp_extents.reserve(src_extents.size() + dst_extents.size());
 
   uint32_t csum_chunk_order = src_blob.csum_chunk_order;
-  uint32_t csum_value_size;
-  const char* src_csum_ptr;
-  char* dst_csum_ptr;
+  uint32_t csum_value_size = 0;
+  const char* src_csum_ptr = nullptr;
+  char* dst_csum_ptr = nullptr;
   if (src_blob.has_csum()) {
     ceph_assert(src_blob.csum_type == dst_blob.csum_type);
     ceph_assert(src_blob.csum_chunk_order == dst_blob.csum_chunk_order);
@@ -3199,17 +3199,20 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
-  //_dup_writing needs cache lock
-  BufferCacheShard* coll_cache;
-  do {
-    coll_cache = c->cache;
-    coll_cache->lock.lock();
-    if (coll_cache == c->cache) {
-      break;
-    }
-    coll_cache->lock.unlock();
-  } while (true);
+  BufferCacheShard* bcs = c->cache;
+  bcs->lock.lock();
+  while(bcs != c->cache) {
+    bcs->lock.unlock();
+    bcs = c->cache;
+    bcs->lock.lock();
+  }
 
+  dout(25) << __func__ << " start oldo=" << dendl;
+  _dump_onode<25>(onode->c->store->cct, *oldo);
+  dout(25) << __func__ << " start newo=" << dendl;
+  _dump_onode<25>(onode->c->store->cct, *newo);
+
+  make_range_shared_maybe_merge(b, txc, c, oldo, srcoff, length);
   vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
   for (auto& e : oldo->extent_map.extent_map) {
     e.blob->last_encoded_id = -1;
@@ -3233,42 +3236,39 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     if (e.blob->last_encoded_id >= 0) {
       cb = id_to_blob[e.blob->last_encoded_id];
       blob_duped = false;
-    } else { 
+    } else {
       // dup the blob
       const bluestore_blob_t& blob = e.blob->get_blob();
-      // make sure it is shared
-      if (!blob.is_shared()) {
-        c->make_blob_shared(b->_assign_blobid(txc), e.blob);
-	if (!src_dirty) {
-          src_dirty = true;
-          dirty_range_begin = e.logical_offset;
-	}        
-        ceph_assert(e.logical_end() > 0);
-        // -1 to exclude next potential shard
-        dirty_range_end = e.logical_end() - 1;
-      } else {
-        c->load_shared_blob(e.blob->shared_blob);
-      }
+      ceph_assert(blob.is_shared());
+      ceph_assert(e.blob->shared_blob->is_loaded());
+      ceph_assert(!blob.has_unused());
       cb = new Blob();
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
-      e.blob->dup(*cb);
+      ceph_assert(ep->blob_start() < end);
+      // dup entire blob or dup parts only
+      if (blob.is_compressed()) {
+	// copy whole blob, but without used_in_blob
+	cb->dup(*e.blob, false);
+      } else if (e.blob_start() >= srcoff && e.blob_end() <= end) {
+	// copy whole blob, including used_in_blob
+	cb->dup(*e.blob, true);
+      } else {
+	// we must copy source blob diligently region-by-region
+	// initialize shared_blob
+	cb->dirty_blob().set_flag(bluestore_blob_t::FLAG_SHARED);
+	cb->set_shared_blob(e.blob->shared_blob);
+      }
       // By default do not copy buffers to clones, and let them read data by themselves.
       // The exception are 'writing' buffers, which are not yet stable on device.
       bool some_copied = e.blob->bc._dup_writing(cb->shared_blob->get_cache(), &cb->bc);
       if (some_copied) {
 	// Pretend we just wrote those buffers;
 	// we need to get _finish_write called, so we can clear then from writing list.
-	// Otherwise it will be stuck until someone does write-op on clone.
+	// Otherwise it will be stuck until someone does write-op on the clone.
 	txc->blobs_written.insert(cb);
       }
 
-      // bump the extent refs on the copied blob's extents
-      for (auto p : blob.get_extents()) {
-        if (p.is_valid()) {
-          e.blob->shared_blob->get_ref(p.offset, p.length);
-        }
-      }
       txc->write_shared_blob(e.blob->shared_blob);
       dout(20) << __func__ << "    new " << *cb << dendl;
     }
@@ -3288,7 +3288,19 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     Extent* ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
       e.blob_offset + skip_front, e.length - skip_front - skip_back, cb);
     newo->extent_map.extent_map.insert(*ne);
-    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
+    if (e.blob->get_blob().is_compressed()) {
+      // blob itself was copied, but used_in_blob was not
+      cb->get_ref(c.get(), e.blob_offset + skip_front, e.length - skip_front - skip_back);
+    } else
+      if (e.blob_start() >= srcoff && e.blob_end() <= end) {
+      // blob already copied
+    } else {
+      // copy part
+      uint32_t min_release_size = e.blob->get_blob().get_release_size(c->store->min_alloc_size);
+      cb->copy_from(b->cct, *e.blob, min_release_size,
+		    e.blob_offset + skip_front, e.length - skip_front - skip_back);
+    }
+
     // fixme: we may leave parts of new blob unreferenced that could
     // be freed (relative to the shared_blob).
     txc->statfs_delta.stored() += ne->length;
@@ -3307,15 +3319,20 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       dirty_range_end - dirty_range_begin);
     txc->write_onode(oldo);
   }
-  txc->write_onode(newo);
 
   if (dstoff + length > newo->onode.size) {
     newo->onode.size = dstoff + length;
   }
   newo->extent_map.dirty_range(dstoff, length);
-  //_dup_writing needs cache lock
-  coll_cache->lock.unlock();
+  newo->extent_map.maybe_reshard(dstoff, dstoff + length);
+  txc->write_onode(newo);
+  dout(25) << __func__ << " end oldo=" << dendl;
+  _dump_onode<25>(onode->c->store->cct, *oldo);
+  dout(25) << __func__ << " end newo=" << dendl;
+  _dump_onode<25>(onode->c->store->cct, *newo);
+  bcs->lock.unlock();
 }
+
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
 {
@@ -4117,7 +4134,7 @@ void BlueStore::ExtentMap::dirty_range(
   uint32_t offset,
   uint32_t length)
 {
-  dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
   if (shards.empty()) {
     dout(20) << __func__ << " mark inline shard dirty" << dendl;
