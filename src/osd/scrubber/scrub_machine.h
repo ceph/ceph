@@ -112,9 +112,6 @@ MEV(IntLocalMapDone)
 /// scrub_snapshot_metadata()
 MEV(DigestUpdate)
 
-/// maps_compare_n_cleanup() transactions are done
-MEV(MapsCompared)
-
 /// event emitted when the replica grants a reservation to the primary
 MEV(ReplicaGrantReservation)
 
@@ -490,7 +487,6 @@ struct WaitReplicas : sc::state<WaitReplicas, ActiveScrubbing>, NamedSimply {
   using reactions = mpl::list<
     // all replicas are accounted for:
     sc::custom_reaction<GotReplicas>,
-    sc::transition<MapsCompared, WaitDigestUpdate>,
     sc::custom_reaction<DigestUpdate>>;
 
   sc::result react(const GotReplicas&);

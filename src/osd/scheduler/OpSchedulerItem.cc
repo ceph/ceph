@@ -149,15 +149,6 @@ void PGScrubGotReplMaps::run(OSD* osd,
   pg->unlock();
 }
 
-void PGScrubMapsCompared::run(OSD* osd,
-			     OSDShard* sdata,
-			     PGRef& pg,
-			     ThreadPool::TPHandle& handle)
-{
-  pg->scrub_send_maps_compared(epoch_queued, handle);
-  pg->unlock();
-}
-
 void PGRepScrub::run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle)
 {
   pg->replica_scrub(epoch_queued, activation_index, handle);
