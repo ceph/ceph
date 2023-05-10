@@ -501,11 +501,6 @@ public:
 			"ReplicaPushesUpd");
   }
 
-  void scrub_send_maps_compared(epoch_t queued, ThreadPool::TPHandle& handle)
-  {
-    forward_scrub_event(&ScrubPgIF::send_maps_compared, queued, "MapsCompared");
-  }
-
   void scrub_send_get_next_chunk(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::send_get_next_chunk, queued, "NextChunk");
