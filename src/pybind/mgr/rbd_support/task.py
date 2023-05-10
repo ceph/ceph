@@ -165,11 +165,12 @@ class TaskHandler:
         self.module = module
         self.log = module.log
 
-        with self.lock:
-            self.init_task_queue()
-
         self.stop_thread = False
         self.thread = Thread(target=self.run)
+
+    def setup(self) -> None:
+        with self.lock:
+            self.init_task_queue()
         self.thread.start()
 
     @property

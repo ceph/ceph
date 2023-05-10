@@ -83,19 +83,26 @@ class Module(MgrModule):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
         self.client_blocklisted = Event()
+        self.module_ready = False
+        self.init_handlers()
         self.recovery_thread = Thread(target=self.run)
         self.recovery_thread.start()
-        self.setup()
 
-    def setup(self) -> None:
-        self.log.info("starting setup")
-        # new client is created and registed in the MgrMap implicitly
-        # as 'rados' is a property attribute.
-        self.rados.wait_for_latest_osdmap()
+    def init_handlers(self) -> None:
         self.mirror_snapshot_schedule = MirrorSnapshotScheduleHandler(self)
         self.perf = PerfHandler(self)
         self.task = TaskHandler(self)
         self.trash_purge_schedule = TrashPurgeScheduleHandler(self)
+
+    def setup_handlers(self) -> None:
+        self.log.info("starting setup")
+        # new RADOS client is created and registered in the MgrMap
+        # implicitly here as 'rados' is a property attribute.
+        self.rados.wait_for_latest_osdmap()
+        self.mirror_snapshot_schedule.setup()
+        self.perf.setup()
+        self.task.setup()
+        self.trash_purge_schedule.setup()
         self.log.info("setup complete")
         self.module_ready = True
 
@@ -103,13 +110,18 @@ class Module(MgrModule):
         self.log.info("recovery thread starting")
         try:
             while True:
-                # block until rados client is blocklisted
-                self.client_blocklisted.wait()
-                self.log.info("restarting")
+                try:
+                    self.setup_handlers()
+                except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+                    self.log.exception("setup_handlers: client blocklisted")
+                    self.log.info("recovering from double blocklisting")
+                else:
+                    # block until RADOS client is blocklisted
+                    self.client_blocklisted.wait()
+                    self.log.info("recovering from blocklisting")
                 self.shutdown()
                 self.client_blocklisted.clear()
-                self.setup()
-                self.log.info("restarted")
+                self.init_handlers()
         except Exception as ex:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
