@@ -42,7 +42,7 @@ Requirements
 FS Volumes
 ----------
 
-Create a volume using::
+Create a volume using:
 
     $ ceph fs volume create <vol_name> [<placement>]
 
@@ -68,18 +68,18 @@ nodes ``host1`` and ``host2`` (for a total of four MDS daemons in the cluster):
 For more details on placement specification refer to the :ref:`orchestrator-cli-service-spec`,
 but keep in mind that specifying placement via a YAML file is not supported.
 
-To remove a volume, run the following command::
+To remove a volume, run the following command:
 
     $ ceph fs volume rm <vol_name> [--yes-i-really-mean-it]
 
 This removes a file system and its data and metadata pools. It also tries to
 remove MDS daemons using the enabled ceph-mgr orchestrator module.
 
-List volumes using::
+List volumes using:
 
     $ ceph fs volume ls
 
-Rename a volume using::
+Rename a volume using:
 
     $ ceph fs volume rename <vol_name> <new_vol_name> [--yes-i-really-mean-it]
 
@@ -97,7 +97,7 @@ The CephX IDs authorized for <vol_name> need to be reauthorized for <new_vol_nam
 on-going operations of the clients using these IDs may be disrupted. Mirroring is
 expected to be disabled on the volume.
 
-To fetch the information of a CephFS volume, run::
+To fetch the information of a CephFS volume, run:
 
     $ ceph fs volume info vol_name [--human_readable]
 
@@ -173,8 +173,8 @@ List subvolume groups using::
 
     $ ceph fs subvolumegroup ls <vol_name>
 
-.. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
-          snapshots can still be listed and deleted)
+.. note:: Subvolume group snapshot feature is no longer supported in mainline
+   CephFS (existing group snapshots can still be listed and deleted)
 
 Fetch the metadata of a subvolume group using::
 
@@ -199,7 +199,7 @@ Check the presence of any subvolume group using::
 
     $ ceph fs subvolumegroup exist <vol_name>
 
-The 'exist' command outputs:
+The 'exist' command outputs::
 
 * "subvolumegroup exists": if any subvolumegroup is present
 * "no subvolumegroup exists": if no subvolumegroup is present
@@ -384,7 +384,6 @@ Create a snapshot of a subvolume using::
 
     $ ceph fs subvolume snapshot create <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
-
 Remove a snapshot of a subvolume using::
 
     $ ceph fs subvolume snapshot rm <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>] [--force]
@@ -479,9 +478,12 @@ Protecting snapshots prior to cloning was a prerequisite in the Nautilus release
 snapshots were introduced for this purpose. This prerequisite, and hence the commands to protect/unprotect, is being
 deprecated and may be removed from a future release.
 
-The commands being deprecated are::
-  $ ceph fs subvolume snapshot protect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
-  $ ceph fs subvolume snapshot unprotect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+The commands being deprecated are:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot protect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
+   ceph fs subvolume snapshot unprotect <vol_name> <subvol_name> <snap_name> [--group_name <subvol_group_name>]
 
 .. note:: Using the above commands will not result in an error, but they have no useful purpose.
 
@@ -611,7 +613,6 @@ On successful cancellation, the cloned subvolume is moved to the ``canceled`` st
 
 Pinning Subvolumes and Subvolume Groups
 ---------------------------------------
-
 
 Subvolumes and subvolume groups may be automatically pinned to ranks according
 to policies. This can distribute load across MDS ranks in predictable and
