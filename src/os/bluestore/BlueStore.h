@@ -915,6 +915,8 @@ public:
 				  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
     void reblob_extents(uint32_t blob_start, uint32_t blob_end,
 			BlobRef from_blob, BlobRef to_blob);
+    void make_range_shared_maybe_merge(BlueStore* store, TransContext* txc, CollectionRef& c,
+				       OnodeRef& oldo, uint64_t srcoff, uint64_t length);
 
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
