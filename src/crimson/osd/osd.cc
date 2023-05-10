@@ -997,6 +997,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     }
     return check_osdmap_features().then([this] {
       // yay!
+      logger().info("osd.{}: committed_osd_maps: broadcasting osdmaps up"
+                    " to {} epoch to pgs", whoami, osdmap->get_epoch());
       return pg_shard_manager.broadcast_map_to_pgs(osdmap->get_epoch());
     });
   }).then([m, this] {
