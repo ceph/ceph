@@ -72,7 +72,7 @@ std::ostream& operator<<(std::ostream& out, const bluestore_cnode_t& l);
 template <typename OFFS_TYPE, typename LEN_TYPE>
 struct bluestore_interval_t
 {
-  static const uint64_t INVALID_OFFSET = ~0ull;
+  static constexpr uint64_t INVALID_OFFSET = ~0ull;
 
   OFFS_TYPE offset = 0;
   LEN_TYPE length = 0;
@@ -300,6 +300,29 @@ struct bluestore_blob_use_tracker_t {
   }
   bool is_empty() const {
     return !is_not_empty();
+  }
+  // Returns how many allocation units are currently tracked.
+  // Simplifies logic when num_au = 0, but in reality we track just one
+  uint32_t get_num_au() const {
+    return num_au == 0 ? 1 : num_au;
+  }
+  // Returns array of used sizes per au.
+  // It has at least get_num_au() elements.
+  const uint32_t* get_au_array() const {
+    if (num_au > 0) {
+      return bytes_per_au;
+    } else {
+      return &total_bytes;
+    }
+  }
+  // Returns array of used sizes per au.
+  // It has at least get_num_au() elements.
+  uint32_t* dirty_au_array() {
+    if (num_au > 0) {
+      return bytes_per_au;
+    } else {
+      return &total_bytes;
+    }
   }
   void prune_tail(uint32_t new_len) {
     if (num_au) {
