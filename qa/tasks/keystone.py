@@ -157,11 +157,11 @@ def setup_database(ctx, config):
     log.info('Setting up database for keystone...')
 
     for (client, cconf) in config.items():
-        remote = ctx.cluster.only(client)
+        (remote,) = ctx.cluster.only(client).remotes.keys()
 
         # MariaDB on RHEL/CentOS needs service started after package install
         # while Ubuntu starts service by default.
-        if client.os.name == 'rhel' or client.os.name == 'centos':
+        if remote.os.name == 'rhel' or remote.os.name == 'centos':
             remote.run(args=['sudo', 'systemctl', 'restart', 'mariadb'])
 
         run_mysql_query(ctx, remote, "CREATE USER 'keystone'@'localhost' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'SECRET';")
