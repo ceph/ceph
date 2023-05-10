@@ -601,7 +601,7 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, MDPeerUpdate *su=NULL);
+  void replay(MDSRank *mds, LogSegment *ls, int type, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
