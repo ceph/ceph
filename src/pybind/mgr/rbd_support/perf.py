@@ -90,6 +90,8 @@ class PerfHandler:
 
         self.stop_thread = False
         self.thread = Thread(target=self.run)
+
+    def setup(self):
         self.thread.start()
 
     def shutdown(self):
