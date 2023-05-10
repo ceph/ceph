@@ -39,7 +39,7 @@
 /*
  * Notes on deprecation:
  *
- * For feature bits used *only* on the server-side:
+ * 1) For feature bits used *only* on the server-side:
  *
  *  - In the first phase we indicate that a feature is DEPRECATED as of
  *    a particular release.  This is the first major release X (say,
@@ -52,7 +52,7 @@
  *    because 13.2.z (mimic) did not care if its peers advertised this
  *    feature bit.
  *
- *  - In the second phase we stop advertising the the bit and call it
+ *  - In the second phase we stop advertising the bit and call it
  *    RETIRED.  This can normally be done 2 major releases
  *    following the one in which we marked the feature DEPRECATED.  In
  *    the above example, for 15.0.z (octopus) we can say:
@@ -65,6 +65,21 @@
  *
  * This ensures that no two versions who have different meanings for
  * the bit ever speak to each other.
+ *
+ * 2) For feature bits that were *anyhow* exposed to clients (even through
+ * a common part like OSDMap), the requirements are stricter: instead of
+ * the n-2 rule we have for the inter-daemon communication, for clients
+ * we *guarantee* compatibility up n-3 major upstream versions. To exemplify:
+ * 17.2.x (quincy) daemons must work with 14.2.y (nautilus) clients.
+ * Ideally, the compatibility should be preserved even further as we expect
+ * great variability in the field. The rationale is that we have little
+ * control over kernel versions and user-space libraries within third party's
+ * containers (old librbd, ceph-fuse and so on).
+ *
+ * To emphasize the importance of client-daemon compatibility, let me
+ * point out that at the time of writing (around squid kick-off),
+ * the default value of `mon_osd_initial_require_min_compat_client`
+ * is still `luminous`.
  */
 
 /*
