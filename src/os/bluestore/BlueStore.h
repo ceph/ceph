@@ -467,7 +467,7 @@ public:
     }
 
 #ifdef WITH_ESB
-    bool _dup_writing(BufferCacheShard* cache, BufferSpace* bc);
+    bool _dup_writing(BufferCacheShard* cache, BufferSpace* to);
 #endif
     void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
@@ -926,6 +926,12 @@ public:
 
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
+
+    void scan_shared_blobs(CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
+			   std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
+
+    Blob* find_mergable_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
+				  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
 
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
