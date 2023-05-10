@@ -16,7 +16,7 @@
 #include "include/compat.h"
 #include "include/str_list.h"
 
-namespace TOPNSPC::crush {
+namespace ceph::crush {
 
 int CrushLocation::update_from_conf()
 {
