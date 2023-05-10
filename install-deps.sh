@@ -431,6 +431,7 @@ else
 	# Put this before any other invocation of apt so it can clean
 	# up in a broken case.
         clean_boost_on_ubuntu
+        $SUDO apt-get update
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
                 # try again. ported over from run-make.sh (orignally e278295)
