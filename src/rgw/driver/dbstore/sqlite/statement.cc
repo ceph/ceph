@@ -58,6 +58,21 @@ static int bind_index(const DoutPrefixProvider* dpp,
   return index;
 }
 
+void bind_null(const DoutPrefixProvider* dpp, const stmt_binding& stmt,
+               const char* name)
+{
+  const int index = bind_index(dpp, stmt, name);
+
+  int result = ::sqlite3_bind_null(stmt.get(), index);
+  auto ec = std::error_code{result, sqlite::error_category()};
+  if (ec != sqlite::errc::ok) {
+    ldpp_dout(dpp, 1) << "binding failed on parameter name="
+        << name << dendl;
+    sqlite3* db = ::sqlite3_db_handle(stmt.get());
+    throw sqlite::error(db, ec);
+  }
+}
+
 void bind_text(const DoutPrefixProvider* dpp, const stmt_binding& stmt,
                const char* name, std::string_view value)
 {
