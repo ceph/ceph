@@ -626,6 +626,9 @@ public:
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
       return used_in_blob;
     }
+    bluestore_blob_use_tracker_t& dirty_blob_use_tracker() {
+      return used_in_blob;
+    }
     bool is_referenced() const {
       return used_in_blob.is_not_empty();
     }
@@ -644,6 +647,9 @@ public:
              used_in_blob.can_split() &&
              get_blob().can_split();
     }
+
+    bool can_merge_blob(const Blob* other, uint32_t& blob_end) const;
+    uint32_t merge_blob(CephContext* cct, Blob* blob_to_dissolve);
 
     bool can_split_at(uint32_t blob_offset) const {
       return used_in_blob.can_split_at(blob_offset) &&
