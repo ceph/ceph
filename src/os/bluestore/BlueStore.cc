@@ -2882,6 +2882,7 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   // move BufferSpace buffers
   while(!src->bc.buffer_map.empty()) {
     auto buf = src->bc.buffer_map.extract(src->bc.buffer_map.cbegin());
+    buf.mapped()->space = &dst->bc;
     dst->bc.buffer_map.insert(std::move(buf));
   }
   // move BufferSpace writing
@@ -3022,6 +3023,105 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
       f->dump_object("extent", e);
   }
   f->close_section();
+}
+
+void BlueStore::ExtentMap::scan_shared_blobs(
+  CollectionRef& c, uint64_t start, uint64_t length,
+  std::multimap<uint64_t /*blob.logical_offset*/, Blob*>& candidates)
+{
+
+  uint64_t end = start + length;
+  // last_encoded_id will be used to process each blob only once
+  // so reset them first
+  auto ep_start = seek_lextent(start);
+  for (auto ep = ep_start;
+       ep != extent_map.end();
+       ++ep) {
+    // ep->logical_offset and ep->blob_start() are different
+    // ep->blob_start() allows us to include blobs that do have some empty space in the beginning
+    if (ep->blob_start() >= end) {
+      break;
+    }
+    ep->blob->last_encoded_id = -1;
+  }
+
+  for (auto ep = ep_start; // reuse, extent_map could not change
+       ep != extent_map.end();
+       ++ep) {
+    if (ep->blob_start() >= end) {
+      break;
+    }
+    if (ep->blob->last_encoded_id == -1) {
+      const bluestore_blob_t& blob = ep->blob->get_blob();
+      if (blob.is_shared()) {
+	// excellent time to load the blob
+	c->load_shared_blob(ep->blob->shared_blob);
+	if (!blob.is_compressed()) {
+	  // Restrict elastic shared blobs to non-compressed blobs.
+	  // Fsck cannot handle case when one shared blob contains refs to
+	  // both shared and non-shared blobs.
+
+	  // todo consider change to emplace_hint
+	  candidates.emplace(ep->blob_start(), ep->blob.get());
+	}
+      }
+      // mark as processed
+      ep->blob->last_encoded_id = 0;
+    }
+  }
+}
+
+BlueStore::Blob* BlueStore::ExtentMap::find_mergable_companion(
+  Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
+  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates)
+{
+  dout(30) << __func__ << std::hex << " blob_start=0x" << blob_start << std::dec << dendl;
+  Blob* result = nullptr;
+  for (auto it = candidates.find(blob_start);
+       it != candidates.end() && it->first == blob_start;
+       ++it) {
+    dout(30) << __func__ << " trying " << it->second << dendl;
+    if (it->second->can_merge_blob(blob_to_dissolve, blob_width)) {
+      dout(20) << __func__ << " merging " << blob_to_dissolve << " to " << it->second << dendl;
+      result = it->second;
+      break;
+    }
+  }
+  return result;
+}
+
+void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end,
+					  BlobRef from_blob, BlobRef to_blob)
+{
+  if (from_blob->is_spanning()) {
+    // Mark spanning blobs no longer spanning.
+    // If needed will be re-spanned again in reshard().
+    dout(20) << __func__ << " removing spanning blob" << dendl;
+    spanning_blob_map.erase(from_blob->id);
+    from_blob->id = -1;
+  }
+  auto prev = extent_map.end();
+  for (auto ep = seek_lextent(blob_start); ep != extent_map.end();) {
+    Extent* e = &(*ep);
+    if (e->logical_offset > blob_end) break;
+    if (e->blob == from_blob) {
+      e->blob = to_blob;
+    }
+    if (prev != extent_map.end()) {
+      if (prev->blob == e->blob &&
+	  prev->blob_offset + prev->length == e->blob_offset &&
+	  prev->logical_offset + prev->length == e->logical_offset) {
+	prev->length += e->length;
+	ep = extent_map.erase(ep);
+	// we have to manually delete Extent, otherwise memory leak
+	delete e;
+	// prev still the same
+	continue;
+      }
+    }
+    prev = ep;
+    ++ep;
+  }
 }
 
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
