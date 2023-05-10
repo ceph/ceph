@@ -2453,6 +2453,37 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
   return true;
 }
 
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#undef dout_context
+#define dout_context cct
+
+// Cut Buffers that are not covered by extents.
+// It happens when we punch hole in Blob, but not refill with new data.
+// Normally it is not a problem (other then wasted memory),
+// but when 2 Blobs are merged Buffers might collide.
+// Todo: in future cut Buffers when we delete extents from Blobs,
+//       and get rid of this function.
+void BlueStore::Blob::discard_unused_buffers(CephContext* cct, BufferCacheShard* cache)
+{
+  dout(25) << __func__ << " input " << *this << " bc=" << bc << dendl;
+  const PExtentVector& extents = get_blob().get_extents();
+  uint32_t epos = 0;
+  auto e = extents.begin();
+  while(e != extents.end()) {
+    if (!e->is_valid()) {
+      bc._discard(cache, epos, e->length);
+    }
+    epos += e->length;
+    ++e;
+  }
+  ceph_assert(epos <= blob.get_logical_length());
+  // Preferably, we would trim up to blob.get_logical_length(),
+  // but we copied writing buffers (see _dup_writing) before blob logical_length is fixed.
+  bc._discard(cache, epos, OBJECT_MAX_SIZE - epos);
+  dout(25) << __func__ << " output bc=" << bc << dendl;
+}
+
 void BlueStore::Blob::dup(const Blob& from, bool copy_used_in_blob)
 {
   shared_blob = from.shared_blob;
