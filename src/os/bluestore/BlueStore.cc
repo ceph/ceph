@@ -3155,6 +3155,78 @@ void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end
   }
 }
 
+// Convert blobs in selected range to shared blobs.
+void BlueStore::ExtentMap::make_range_shared_maybe_merge(
+  BlueStore* store, TransContext* txc, CollectionRef& c,
+  OnodeRef& oldo, uint64_t srcoff, uint64_t length)
+{
+  uint64_t end = srcoff + length;
+  uint32_t dirty_range_begin = OBJECT_MAX_SIZE;
+  uint32_t dirty_range_end = 0;
+  // load entire object; in most cases we clone entire object anyway
+  oldo->extent_map.fault_range(c->store->db, 0, OBJECT_MAX_SIZE);
+  std::multimap<uint64_t /*blob_start*/, Blob*> candidates;
+  scan_shared_blobs(c, oldo, srcoff, length, candidates);
+
+  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
+    ep != oldo->extent_map.extent_map.end(); ) {
+    auto& e = *ep;
+    if (e.logical_offset >= end) {
+      break;
+    }
+    dout(25) << __func__ << " src " << e
+	     << " bc=" << e.blob->bc << dendl;
+    const bluestore_blob_t& blob = e.blob->get_blob();
+    // make sure it is shared
+    if (!blob.is_shared()) {
+      dirty_range_begin = std::min<uint32_t>(dirty_range_begin, e.blob_start());
+      // first try to find a shared blob nearby
+      // that can accomodate extra extents
+      uint32_t blob_width; //to signal when extents end
+      dout(20) << __func__ << std::hex
+	       << " e.blob_start=" << e.blob_start()
+	       << " e.logical_offset=" << e.logical_offset
+	       << std::dec << dendl;
+      Blob* b = blob.is_compressed() ? nullptr :
+	find_mergable_companion(e.blob.get(), e.blob_start(), blob_width, candidates);
+      if (b) {
+	dout(20) << __func__ << " merging to: " << *b << " bc=" << b->bc << dendl;
+	e.blob->discard_unused_buffers(store->cct, oldo->c->cache);
+	b->discard_unused_buffers(store->cct, oldo->c->cache);
+	uint32_t b_logical_length = b->merge_blob(store->cct, e.blob.get());
+	for (auto p : blob.get_extents()) {
+	  if (p.is_valid()) {
+	    b->shared_blob->get_ref(p.offset, p.length);
+	  }
+	}
+	// reblob extents might erase e
+	dirty_range_end = std::max<uint32_t>(dirty_range_end, e.blob_start() + b_logical_length);
+	uint32_t goto_logical_offset = e.logical_offset + e.length;
+	reblob_extents(e.blob_start(), e.blob_start() + blob_width,
+		       e.blob, b);
+	ep = oldo->extent_map.seek_lextent(goto_logical_offset);
+	dout(20) << __func__ << " merged: " << *b << dendl;
+      } else {
+	// no candidate, has to convert to shared
+	c->make_blob_shared(store->_assign_blobid(txc), e.blob);
+	ceph_assert(e.logical_end() > 0);
+	dirty_range_end = std::max<uint32_t>(dirty_range_end, e.logical_end());
+	++ep;
+      }
+    } else {
+      c->load_shared_blob(e.blob->shared_blob);
+      ++ep;
+    }
+  }
+  if (dirty_range_begin < dirty_range_end) {
+    // source onode got modified in the process
+    oldo->extent_map.dirty_range(dirty_range_begin,
+				 dirty_range_end - dirty_range_begin);
+    oldo->extent_map.maybe_reshard(dirty_range_begin, dirty_range_end);
+    txc->write_onode(oldo);
+  }
+}
+
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
