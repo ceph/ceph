@@ -614,7 +614,9 @@ class PgScrubber : public ScrubPgIF,
     ceph_assert(0 && "expecting a PrimaryLogScrub object");
   }
 
-  void submit_digest_fixes(const digests_fixes_t& fixes) override
+  void submit_digest_fixes(
+      const digests_fixes_t& fixes,
+      Scrub::scrub_prio_t queue_prio) override
   {
     ceph_assert(0 && "expecting a PrimaryLogScrub object");
   }

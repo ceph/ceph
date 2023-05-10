@@ -45,7 +45,9 @@ bool PrimaryLogScrub::get_store_errors(const scrub_ls_arg_t& arg,
 }
 
 /// \todo combine the multiple transactions into a single one
-void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
+void PrimaryLogScrub::submit_digest_fixes(
+    const digests_fixes_t& fixes,
+    Scrub::scrub_prio_t queue_priority)
 {
   // note: the following line was modified from '+=' to '=', as we should not
   // encounter previous-chunk digest updates after starting a new chunk
@@ -92,11 +94,10 @@ void PrimaryLogScrub::submit_digest_fixes(const digests_fixes_t& fixes)
     m_pl_pg->finish_ctx(ctx.get(), pg_log_entry_t::MODIFY);
 
 
-    ctx->register_on_success([this]() {
+    ctx->register_on_success([this, queue_priority]() {
       if ((num_digest_updates_pending >= 1) &&
 	  (--num_digest_updates_pending == 0)) {
-	m_osds->queue_scrub_digest_update(m_pl_pg,
-					  m_pl_pg->is_scrub_blocking_ops());
+	m_osds->queue_scrub_digest_update(m_pl_pg, queue_priority);
       }
     });
 

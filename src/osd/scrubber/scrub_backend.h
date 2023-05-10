@@ -94,7 +94,9 @@ struct ScrubBeListener {
   virtual spg_t get_pgid() const = 0;
   virtual const OSDMapRef& get_osdmap() const = 0;
   virtual void add_to_stats(const object_stat_sum_t& stat) = 0;
-  virtual void submit_digest_fixes(const digests_fixes_t& fixes) = 0;
+  virtual void submit_digest_fixes(
+      const digests_fixes_t& fixes,
+      Scrub::scrub_prio_t queue_prio) = 0;
   virtual ~ScrubBeListener() = default;
 };
 
@@ -335,8 +337,20 @@ class ScrubBackend {
    */
   void decode_received_map(pg_shard_t from, const MOSDRepScrubMap& msg);
 
-  objs_fix_list_t scrub_compare_maps(bool max_reached,
-				     Scrub::SnapMapReaderI& snaps_getter);
+  /**
+   * compare the maps of all replicas, and return a set of "fix orders":
+   * - a list of objects that are inconsistent between replicas;
+   * - a set of snap-mapper fixes.
+   * On the way - we  may also issue digest fix transactions. These are
+   * executed in the background, and the scrubber will only wait for their
+   * termination in the WaitDigestUpdates state.
+   * The digest-update transactions are sent with queue priority 'queue_prio',
+   * as to not race against the maps-compared event.
+   */
+  objs_fix_list_t scrub_compare_maps(
+      bool max_reached,
+      Scrub::SnapMapReaderI& snaps_getter,
+      Scrub::scrub_prio_t queue_prio);
 
   int scrub_process_inconsistent();
 

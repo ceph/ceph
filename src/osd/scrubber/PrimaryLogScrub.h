@@ -38,7 +38,9 @@ class PrimaryLogScrub : public PgScrubber {
 
   void add_to_stats(const object_stat_sum_t& stat) final;
 
-  void submit_digest_fixes(const digests_fixes_t& fixes) final;
+  void submit_digest_fixes(
+      const digests_fixes_t& fixes,
+      Scrub::scrub_prio_t queue_prio) final;
 
  private:
   // we know our PG is actually a PrimaryLogPG. Let's alias the pointer to that

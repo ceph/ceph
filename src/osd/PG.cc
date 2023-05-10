@@ -454,7 +454,7 @@ void PG::queue_scrub_after_repair()
   m_scrubber->set_op_parameters(m_planned_scrub);
   dout(15) << __func__ << ": queueing" << dendl;
 
-  osd->queue_scrub_after_repair(this, Scrub::scrub_prio_t::high_priority);
+  osd->queue_scrub_after_repair(this, Scrub::scrub_prio_t::low_priority);
 }
 
 unsigned PG::get_scrub_priority()

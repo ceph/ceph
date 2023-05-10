@@ -1350,12 +1350,21 @@ void PgScrubber::apply_snap_mapper_fixes(
   }
 }
 
+/*
+ * Implementation note re scrub messages:
+ * maps_compare_n_cleanup() might queue multiple scrub messages to be sent, and
+ * we should guarantee that they are all sent using the same priority (so that
+ * their order is maintained).
+ * But we are also performing calls (requeue_waiting()) that affect the priorities.
+ * Thus - we determine the priority at entry, and use it for all messages.
+ */
 void PgScrubber::maps_compare_n_cleanup()
 {
+  auto queue_prio = m_pg->is_scrub_blocking_ops();
   m_pg->add_objects_scrubbed_count(m_be->get_primary_scrubmap().objects.size());
 
   auto required_fixes =
-    m_be->scrub_compare_maps(m_end.is_max(), get_snap_mapper_accessor());
+    m_be->scrub_compare_maps(m_end.is_max(), get_snap_mapper_accessor(), queue_prio);
   if (!required_fixes.inconsistent_objs.empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results (repairing)" << dendl;
@@ -1375,9 +1384,10 @@ void PgScrubber::maps_compare_n_cleanup()
   m_start = m_end;
   run_callbacks();
 
-  // requeue the writes from the chunk that just finished
+  // requeue the writes from the chunk that just finished.
+  // Note that is_scrub_blocking_ops() is 'false' after that.
   requeue_waiting();
-  m_osds->queue_scrub_maps_compared(m_pg, Scrub::scrub_prio_t::low_priority);
+  m_osds->queue_scrub_maps_compared(m_pg, queue_prio);
 }
 
 Scrub::preemption_t& PgScrubber::get_preemptor()

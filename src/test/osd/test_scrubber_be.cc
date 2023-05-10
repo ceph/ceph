@@ -135,11 +135,13 @@ class TestScrubber : public ScrubBeListener, public Scrub::SnapMapReaderI {
   // submit_digest_fixes() mock can be set to expect a specific set of
   // fixes to perform.
   /// \todo implement the mock.
-  void submit_digest_fixes(const digests_fixes_t& fixes) final
+  void submit_digest_fixes(
+      const digests_fixes_t& fixes,
+      Scrub::scrub_prio_t queue_prio) final
   {
-    std::cout << fmt::format("{} submit_digest_fixes({})",
-			     __func__,
-			     fmt::join(fixes, ","))
+    std::cout << fmt::format(
+		     "{} submit_digest_fixes({})", __func__,
+		     fmt::join(fixes, ","))
 	      << std::endl;
   }
 
@@ -572,9 +574,10 @@ TEST_F(TestTScrubberBe_data_1, smaps_creation_1)
   ASSERT_EQ(sbe->get_omap_stats().omap_bytes, 0);
 
   // for test data 'minimal_snaps_configuration':
-  // scrub_compare_maps() should not emmit any error, nor
+  // scrub_compare_maps() should not emit any error, nor
   // return any snap-mapper fix
-  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(
+      true, *test_scrubber, Scrub::scrub_prio_t::low_priority);
 
   EXPECT_EQ(fix_list.size(), 0);  // snap-mapper fix should be empty
 
@@ -605,7 +608,8 @@ TEST_F(TestTScrubberBe_data_1, snapmapper_1)
   bogus_30[hobj_ms1_snp30_inpool] = {0x333, 0x666};
 
   test_scrubber->set_snaps(bogus_30);
-  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(
+      true, *test_scrubber, Scrub::scrub_prio_t::high_priority);
 
   EXPECT_EQ(fix_list.size(), 1);
 
@@ -657,7 +661,8 @@ TEST_F(TestTScrubberBe_data_2, smaps_clone_size)
   ASSERT_TRUE(sbe);
   EXPECT_EQ(sbe->get_omap_stats().omap_bytes, 0);
   logger.set_expected_err_count(1);
-  auto [incons, fix_list] = sbe->scrub_compare_maps(true, *test_scrubber);
+  auto [incons, fix_list] = sbe->scrub_compare_maps(
+      true, *test_scrubber, Scrub::scrub_prio_t::low_priority);
 
   EXPECT_EQ(fix_list.size(), 0);  // snap-mapper fix should be empty
 

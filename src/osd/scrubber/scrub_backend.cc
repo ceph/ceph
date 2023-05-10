@@ -191,7 +191,8 @@ std::vector<snap_mapper_fix_t> ScrubBackend::replica_clean_meta(
 
 objs_fix_list_t ScrubBackend::scrub_compare_maps(
   bool max_reached,
-  SnapMapReaderI& snaps_getter)
+  SnapMapReaderI& snaps_getter,
+  Scrub::scrub_prio_t queue_prio)
 {
   dout(10) << __func__ << " has maps, analyzing" << dendl;
   ceph_assert(m_scrubber.is_primary());
@@ -210,7 +211,10 @@ objs_fix_list_t ScrubBackend::scrub_compare_maps(
   // ok, do the pg-type specific scrubbing
 
   // (Validates consistency of the object info and snap sets)
+  // Also creates a set of digest fixes (for objects where all replicas
+  // match, but they do not match the object_info).
   scrub_snapshot_metadata(for_meta_scrub);
+  m_scrubber.submit_digest_fixes(this_chunk->missing_digest, queue_prio);
 
   return objs_fix_list_t{std::move(this_chunk->m_inconsistent_objs),
                          scan_snaps(for_meta_scrub, snaps_getter)};
@@ -1693,10 +1697,6 @@ void ScrubBackend::scrub_snapshot_metadata(ScrubMap& map)
   if (head && (head_error.errors || soid_error_count)) {
     this_chunk->m_inconsistent_objs.push_back(std::move(head_error));
   }
-
-  // fix data/omap digests
-  m_scrubber.submit_digest_fixes(this_chunk->missing_digest);
-
   dout(10) << __func__ << " (" << m_mode_desc << ") finish" << dendl;
 }
 
