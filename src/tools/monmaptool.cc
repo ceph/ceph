@@ -358,7 +358,7 @@ int main(int argc, const char **argv)
     monmap.strategy = static_cast<MonMap::election_strategy>(
 		  g_conf().get_val<uint64_t>("mon_election_default_strategy"));
     if (min_mon_release == ceph_release_t::unknown) {
-      min_mon_release = ceph_release_t::pacific;
+      min_mon_release = ceph_release_t::quincy;
     }
     // TODO: why do we not use build_initial in our normal path here!?!?!
     modified = true;
