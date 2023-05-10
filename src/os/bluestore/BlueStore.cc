@@ -2648,6 +2648,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	if (encode_some(p->shard_info->offset, endoff - p->shard_info->offset,
 			bl, &p->extents)) {
 	  if (force) {
+	    _dump_extent_map<-1>(cct, *this);
 	    derr << __func__ << "  encode_some needs reshard" << dendl;
 	    ceph_assert(!force);
 	  }
