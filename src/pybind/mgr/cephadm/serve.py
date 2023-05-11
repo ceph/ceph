@@ -1268,10 +1268,16 @@ class CephadmServe:
                     daemon_spec.name(), daemon_spec.host))
 
                 out, err, code = await self._run_cephadm(
-                    daemon_spec.host, daemon_spec.name(), 'deploy',
-                    [
-                        '--name', daemon_spec.name(),
-                        '--meta-json', json.dumps({
+                    daemon_spec.host,
+                    daemon_spec.name(),
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": self.mgr._cluster_fsid,
+                        "name": daemon_spec.name(),
+                        "image": image,
+                        "deploy_arguments": daemon_spec.extra_args,
+                        "meta": {
                             'service_name': daemon_spec.service_name,
                             'ports': daemon_spec.ports,
                             'ip': daemon_spec.ip,
@@ -1280,11 +1286,9 @@ class CephadmServe:
                             'rank_generation': daemon_spec.rank_generation,
                             'extra_container_args': extra_container_args,
                             'extra_entrypoint_args': extra_entrypoint_args
-                        }),
-                        '--config-json', '-',
-                    ] + daemon_spec.extra_args,
-                    stdin=json.dumps(daemon_spec.final_config),
-                    image=image,
+                        },
+                        "config_blobs": daemon_spec.final_config,
+                    }),
                 )
 
                 if daemon_spec.daemon_type == 'agent':
