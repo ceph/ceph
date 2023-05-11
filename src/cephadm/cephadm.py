@@ -444,9 +444,9 @@ class SNMPGateway:
     @classmethod
     def init(cls, ctx: CephadmContext, fsid: str,
              daemon_id: Union[int, str]) -> 'SNMPGateway':
-        assert ctx.config_json
-        return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+        cfgs = fetch_configs(ctx)
+        assert cfgs  # assert some config data was found
+        return cls(ctx, fsid, daemon_id, cfgs, ctx.image)
 
     @staticmethod
     def get_version(ctx: CephadmContext, fsid: str, daemon_id: str) -> Optional[str]:
@@ -755,7 +755,7 @@ class NFSGanesha(object):
     @classmethod
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> NFSGanesha
-        return cls(ctx, fsid, daemon_id, get_parm(ctx.config_json), ctx.image)
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     def get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
@@ -883,7 +883,7 @@ class CephIscsi(object):
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
         return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     @staticmethod
     def get_container_mounts(data_dir, log_dir):
@@ -1018,7 +1018,7 @@ class CephExporter(object):
     def init(cls, ctx: CephadmContext, fsid: str,
              daemon_id: Union[int, str]) -> 'CephExporter':
         return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     @staticmethod
     def get_container_mounts() -> Dict[str, str]:
@@ -1067,7 +1067,7 @@ class HAproxy(object):
     @classmethod
     def init(cls, ctx: CephadmContext,
              fsid: str, daemon_id: Union[int, str]) -> 'HAproxy':
-        return cls(ctx, fsid, daemon_id, get_parm(ctx.config_json),
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx),
                    ctx.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
@@ -1156,7 +1156,7 @@ class Keepalived(object):
     def init(cls, ctx: CephadmContext, fsid: str,
              daemon_id: Union[int, str]) -> 'Keepalived':
         return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
@@ -1292,7 +1292,7 @@ class CustomContainer(object):
     def init(cls, ctx: CephadmContext,
              fsid: str, daemon_id: Union[int, str]) -> 'CustomContainer':
         return cls(fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """
@@ -2799,7 +2799,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                     port = meta['ports'][0]
             r += [f'--web.listen-address={ip}:{port}']
             if daemon_type == 'prometheus':
-                config = get_parm(ctx.config_json)
+                config = fetch_configs(ctx)
                 retention_time = config.get('retention_time', '15d')
                 retention_size = config.get('retention_size', '0')  # default to disabled
                 r += [f'--storage.tsdb.retention.time={retention_time}']
@@ -2815,7 +2815,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                     host = wrap_ipv6(addr) if addr else host
                 r += [f'--web.external-url={scheme}://{host}:{port}']
         if daemon_type == 'alertmanager':
-            config = get_parm(ctx.config_json)
+            config = fetch_configs(ctx)
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ['--cluster.peer={}'.format(peer)]
@@ -2828,13 +2828,13 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         if daemon_type == 'promtail':
             r += ['--config.expand-env']
         if daemon_type == 'prometheus':
-            config = get_parm(ctx.config_json)
+            config = fetch_configs(ctx)
             try:
                 r += [f'--web.config.file={config["web_config"]}']
             except KeyError:
                 pass
         if daemon_type == 'node-exporter':
-            config = get_parm(ctx.config_json)
+            config = fetch_configs(ctx)
             try:
                 r += [f'--web.config.file={config["web_config"]}']
             except KeyError:
@@ -2882,9 +2882,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
-        config_json: Dict[str, Any] = dict()
-        if 'config_json' in ctx:
-            config_json = get_parm(ctx.config_json)
+        config_json = fetch_configs(ctx)
 
         # Set up directories specific to the monitoring component
         config_dir = ''
@@ -2935,7 +2933,10 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
         # populate the config directory for the component from the config-json
         if 'files' in config_json:
             for fname in config_json['files']:
-                content = dict_get_join(config_json['files'], fname)
+                # work around mypy wierdness where it thinks `str`s aren't Anys
+                # when used for dictionary values! feels like possibly a mypy bug?!
+                cfg = cast(Dict[str, Any], config_json['files'])
+                content = dict_get_join(cfg, fname)
                 if os.path.isabs(fname):
                     fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
                 else:
@@ -3070,8 +3071,8 @@ def get_config_and_keyring(ctx):
     config = None
     keyring = None
 
-    if 'config_json' in ctx and ctx.config_json:
-        d = get_parm(ctx.config_json)
+    d = fetch_configs(ctx)
+    if d:
         config = d.get('config')
         keyring = d.get('keyring')
         if config and keyring:
@@ -3331,7 +3332,7 @@ def get_container(ctx: CephadmContext,
     elif daemon_type in Tracing.components:
         entrypoint = ''
         name = '%s.%s' % (daemon_type, daemon_id)
-        config = get_parm(ctx.config_json)
+        config = fetch_configs(ctx)
         Tracing.set_configuration(config, daemon_type)
         envs.extend(Tracing.components[daemon_type].get('envs', []))
     elif daemon_type == NFSGanesha.daemon_type:
@@ -3526,10 +3527,7 @@ def deploy_daemon(ctx: CephadmContext, fsid: str, daemon_type: str,
     # with systemd if this is not a reconfig
     if deployment_type != DeploymentType.RECONFIG:
         if daemon_type == CephadmAgent.daemon_type:
-            if ctx.config_json == '-':
-                config_js = get_parm('-')
-            else:
-                config_js = get_parm(ctx.config_json)
+            config_js = fetch_configs(ctx)
             assert isinstance(config_js, dict)
 
             cephadm_agent = CephadmAgent(ctx, fsid, daemon_id)
@@ -6272,9 +6270,7 @@ def command_deploy(ctx):
         uid, gid = extract_uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        config_json: Optional[Dict[str, str]] = None
-        if 'config_json' in ctx and ctx.config_json:
-            config_json = get_parm(ctx.config_json)
+        config_json = fetch_configs(ctx)
 
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
                                      ptrace=ctx.allow_ptrace)
@@ -6297,7 +6293,7 @@ def command_deploy(ctx):
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         # Default Checks
         # make sure provided config-json is sufficient
-        config = get_parm(ctx.config_json)  # type: ignore
+        config = fetch_configs(ctx)  # type: ignore
         required_files = Monitoring.components[daemon_type].get('config-json-files', list())
         required_args = Monitoring.components[daemon_type].get('config-json-args', list())
         if required_files:
