@@ -657,6 +657,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(ino()); }
   bool is_base() const { return MDS_INO_IS_BASE(ino()); }
   bool is_system() const { return ino() < MDS_INO_SYSTEM_BASE; }
+  bool is_lost_and_found() const { return ino() == CEPH_INO_LOST_AND_FOUND; }
   bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
   bool is_file() const    { return get_inode()->is_file(); }
   bool is_symlink() const { return get_inode()->is_symlink(); }
