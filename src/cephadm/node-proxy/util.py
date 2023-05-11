@@ -10,3 +10,12 @@ def logger(name, level=logging.INFO):
     logger.addHandler(handler)
 
     return logger
+
+def normalize_dict(test_dict):
+    res = dict()
+    for key in test_dict.keys():
+        if isinstance(test_dict[key], dict):
+            res[key.lower()] = normalize_dict(test_dict[key])
+        else:
+            res[key.lower()] = test_dict[key]
+    return res
