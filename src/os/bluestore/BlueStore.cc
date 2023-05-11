@@ -2458,6 +2458,7 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
 #undef dout_context
 #define dout_context cct
 
+#ifdef WITH_ESB
 // Cut Buffers that are not covered by extents.
 // It happens when we punch hole in Blob, but not refill with new data.
 // Normally it is not a problem (other then wasted memory),
@@ -2483,7 +2484,9 @@ void BlueStore::Blob::discard_unused_buffers(CephContext* cct, BufferCacheShard*
   bc._discard(cache, epos, OBJECT_MAX_SIZE - epos);
   dout(25) << __func__ << " output bc=" << bc << dendl;
 }
+#endif
 
+#ifdef WITH_ESB
 void BlueStore::Blob::dup(const Blob& from, bool copy_used_in_blob)
 {
   shared_blob = from.shared_blob;
@@ -2501,7 +2504,9 @@ void BlueStore::Blob::dup(const Blob& from, bool copy_used_in_blob)
     }
   }
 }
+#endif
 
+#ifdef WITH_ESB
 // copies part of a Blob
 // it is used to create a consistent blob out of parts of other blobs
 void BlueStore::Blob::copy_from(
@@ -2566,7 +2571,9 @@ void BlueStore::Blob::copy_from(
   used_in_blob.get(start, len);
   dout(20) << __func__ << " result=" << *this << dendl;
 }
+#endif
 
+#ifdef WITH_ESB
 void BlueStore::Blob::copy_extents(
   CephContext* cct, const Blob& from, uint32_t start,
   uint32_t pre_len, uint32_t main_len, uint32_t post_len)
@@ -2620,7 +2627,9 @@ void BlueStore::Blob::copy_extents(
     copy_extents_over_empty(cct, from, start, main_len);
   }
 }
+#endif
 
+#ifdef WITH_ESB
 // assumes that target (this->extents) has hole in relevant location
 void BlueStore::Blob::copy_extents_over_empty(
   CephContext* cct, const Blob& from, uint32_t start, uint32_t len)
@@ -2698,7 +2707,9 @@ void BlueStore::Blob::copy_extents_over_empty(
   }
   dout(20) << __func__ << " result=" << *this << dendl;
 }
+#endif
 
+#ifdef WITH_ESB
 // Checks if two Blobs can be joined together.
 // The important (unchecked) condition is that both Blobs belong to the same object.
 // Verifies if 'other' Blob can be deleted but its content moved to 'this' Blob.
@@ -2782,7 +2793,9 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
   }
   return can_merge;
 }
+#endif
 
+#ifdef WITH_ESB
 // Merges 2 blobs together. Move extents, csum, tracker from src to dst.
 uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 {
@@ -2929,6 +2942,7 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   dout(20) << __func__ << " result=" << *dst << dendl;
   return dst_blob.get_logical_length();
 }
+#endif
 
 #undef dout_context
 #define dout_context coll->store->cct
@@ -3058,6 +3072,7 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
   f->close_section();
 }
 
+#ifdef WITH_ESB
 void BlueStore::ExtentMap::scan_shared_blobs(
   CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
   std::multimap<uint64_t /*blob.logical_offset*/, Blob*>& candidates)
@@ -3103,7 +3118,9 @@ void BlueStore::ExtentMap::scan_shared_blobs(
     }
   }
 }
+#endif
 
+#ifdef WITH_ESB
 BlueStore::Blob* BlueStore::ExtentMap::find_mergable_companion(
   Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
   std::multimap<uint64_t /*blob_start*/, Blob*>& candidates)
@@ -3122,7 +3139,9 @@ BlueStore::Blob* BlueStore::ExtentMap::find_mergable_companion(
   }
   return result;
 }
+#endif
 
+#ifdef WITH_ESB
 void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end,
 					  BlobRef from_blob, BlobRef to_blob)
 {
@@ -3156,7 +3175,9 @@ void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end
     ++ep;
   }
 }
+#endif
 
+#ifdef WITH_ESB
 // Convert blobs in selected range to shared blobs.
 void BlueStore::ExtentMap::make_range_shared_maybe_merge(
   BlueStore* store, TransContext* txc, CollectionRef& c,
@@ -3228,8 +3249,108 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
     txc->write_onode(oldo);
   }
 }
+#endif
 
-#ifdef WITH_ESB
+#ifndef WITH_ESB
+void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
+  CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
+  uint64_t& length, uint64_t& dstoff) {
+
+  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
+  for (auto& e : oldo->extent_map.extent_map) {
+    e.blob->last_encoded_id = -1;
+  }
+
+  int n = 0;
+  uint64_t end = srcoff + length;
+  uint32_t dirty_range_begin = 0;
+  uint32_t dirty_range_end = 0;
+  bool src_dirty = false;
+  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
+    ep != oldo->extent_map.extent_map.end();
+    ++ep) {
+    auto& e = *ep;
+    if (e.logical_offset >= end) {
+      break;
+    }
+    dout(20) << __func__ << "  src " << e << dendl;
+    BlobRef cb;
+    bool blob_duped = true;
+    if (e.blob->last_encoded_id >= 0) {
+      cb = id_to_blob[e.blob->last_encoded_id];
+      blob_duped = false;
+    } else {
+      // dup the blob
+      const bluestore_blob_t& blob = e.blob->get_blob();
+      // make sure it is shared
+      if (!blob.is_shared()) {
+        c->make_blob_shared(b->_assign_blobid(txc), e.blob);
+	if (!src_dirty) {
+          src_dirty = true;
+          dirty_range_begin = e.logical_offset;
+	}
+        ceph_assert(e.logical_end() > 0);
+        // -1 to exclude next potential shard
+        dirty_range_end = e.logical_end() - 1;
+      } else {
+        c->load_shared_blob(e.blob->shared_blob);
+      }
+      cb = new Blob();
+      e.blob->last_encoded_id = n;
+      id_to_blob[n] = cb;
+      e.blob->dup(*cb);
+      // bump the extent refs on the copied blob's extents
+      for (auto p : blob.get_extents()) {
+        if (p.is_valid()) {
+          e.blob->shared_blob->get_ref(p.offset, p.length);
+        }
+      }
+      txc->write_shared_blob(e.blob->shared_blob);
+      dout(20) << __func__ << "    new " << *cb << dendl;
+    }
+
+    int skip_front, skip_back;
+    if (e.logical_offset < srcoff) {
+      skip_front = srcoff - e.logical_offset;
+    } else {
+      skip_front = 0;
+    }
+    if (e.logical_end() > end) {
+      skip_back = e.logical_end() - end;
+    } else {
+      skip_back = 0;
+    }
+
+    Extent* ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+      e.blob_offset + skip_front, e.length - skip_front - skip_back, cb);
+    newo->extent_map.extent_map.insert(*ne);
+    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
+    // fixme: we may leave parts of new blob unreferenced that could
+    // be freed (relative to the shared_blob).
+    txc->statfs_delta.stored() += ne->length;
+    if (e.blob->get_blob().is_compressed()) {
+      txc->statfs_delta.compressed_original() += ne->length;
+      if (blob_duped) {
+        txc->statfs_delta.compressed() +=
+          cb->get_blob().get_compressed_payload_length();
+      }
+    }
+    dout(20) << __func__ << "  dst " << *ne << dendl;
+    ++n;
+  }
+  if (src_dirty) {
+    oldo->extent_map.dirty_range(dirty_range_begin,
+      dirty_range_end - dirty_range_begin);
+    txc->write_onode(oldo);
+  }
+  txc->write_onode(newo);
+
+  if (dstoff + length > newo->onode.size) {
+    newo->onode.size = dstoff + length;
+  }
+  newo->extent_map.dirty_range(dstoff, length);
+}
+#else
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {

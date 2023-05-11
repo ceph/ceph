@@ -675,12 +675,14 @@ public:
       o.blob_bl = blob_bl;
 #endif
     }
+#ifdef WITH_ESB
     void dup(const Blob& from, bool copy_used_in_blob);
     void copy_from(CephContext* cct, const Blob& from,
 		   uint32_t min_release_size, uint32_t start, uint32_t len);
     void copy_extents(CephContext* cct, const Blob& from, uint32_t start,
 		      uint32_t pre_len, uint32_t main_len, uint32_t post_len);
     void copy_extents_over_empty(CephContext* cct, const Blob& from, uint32_t start, uint32_t len);
+#endif
 
     inline const bluestore_blob_t& get_blob() const {
       return blob;
@@ -691,8 +693,10 @@ public:
 #endif
       return blob;
     }
+#ifdef WITH_ESB
     /// clear buffers from unused sections
     void discard_unused_buffers(CephContext* cct, BufferCacheShard* cache);
+#endif
 
     inline const BufferSpace& get_bc() const {
 #ifdef WITH_ESB
@@ -927,6 +931,7 @@ public:
     uint32_t needs_reshard_begin = 0;
     uint32_t needs_reshard_end = 0;
 
+#ifdef WITH_ESB
     void scan_shared_blobs(CollectionRef& c, OnodeRef& oldo, uint64_t start, uint64_t length,
 			   std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
     Blob* find_mergable_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
@@ -935,6 +940,7 @@ public:
 			BlobRef from_blob, BlobRef to_blob);
     void make_range_shared_maybe_merge(BlueStore* store, TransContext* txc, CollectionRef& c,
 				       OnodeRef& oldo, uint64_t srcoff, uint64_t length);
+#endif
 
     void dup(BlueStore* b, TransContext*, CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
