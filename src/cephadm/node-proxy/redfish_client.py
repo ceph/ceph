@@ -35,6 +35,7 @@ class RedFishClient:
             return response.dict
         except Exception as e:
             #TODO
+            log.error(f"Error detected.\n{e}")
             pass
 
     def logout(self):
