@@ -23,6 +23,7 @@
 #include "rgw_sync_policy.h"
 
 #include "rgw_bucket_sync.h"
+#include "sync_fairness.h"
 
 // represents an obligation to sync an entry up a given time
 struct rgw_data_sync_obligation {
