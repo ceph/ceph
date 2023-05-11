@@ -3048,6 +3048,23 @@ def fetch_meta(ctx: CephadmContext) -> Dict[str, Any]:
     return {}
 
 
+def fetch_configs(ctx: CephadmContext) -> Dict[str, str]:
+    """Return a dict containing arbitrary configuration parameters.
+    This function filters out the key 'custom_config_files' which
+    must not be part of a deployment's configuration key-value pairs.
+    To access custom configuration file data, use `fetch_custom_config_files`.
+    """
+    cfg_blobs = getattr(ctx, 'config_blobs', None)
+    if cfg_blobs:
+        cfg_blobs = dict(cfg_blobs)
+        cfg_blobs.pop('custom_config_files', None)
+        return cfg_blobs
+    cfg_json = getattr(ctx, 'config_json', None)
+    if cfg_json:
+        return get_parm(cfg_json) or {}
+    return {}
+
+
 def get_config_and_keyring(ctx):
     # type: (CephadmContext) -> Tuple[Optional[str], Optional[str]]
     config = None
