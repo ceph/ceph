@@ -8,3 +8,5 @@ tasks:
     clients:
       client.0:
         - rbd/test_librbd_python.sh --eval-attr 'not (SKIP_IF_CRIMSON)'
+    env:
+      RBD_FEATURES: "61"
