@@ -13,9 +13,9 @@
 
 Each CephFS file system requires at least one MDS. The cluster operator will
 generally use their automated deployment tool to launch required MDS servers as
-needed.  Rook and ansible (via the ceph-ansible playbooks) are recommended
-tools for doing this. For clarity, we also show the systemd commands here which
-may be run by the deployment technology if executed on bare-metal.
+needed.  Rook and cephadm are the recommended tools for doing this. For
+clarity, we also show the systemd commands here which may be run by the
+deployment technology if executed on bare-metal.
 
 See `MDS Config Reference`_ for details on configuring metadata servers.
 
