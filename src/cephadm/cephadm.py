@@ -3035,6 +3035,20 @@ def _get_config_json(option: str) -> Dict[str, Any]:
         return js
 
 
+def fetch_meta(ctx: CephadmContext) -> Dict[str, Any]:
+    """Return a dict containing metadata about a deployment.
+    """
+    meta = getattr(ctx, 'meta_properties', None)
+    if meta is not None:
+        return meta
+    mjson = getattr(ctx, 'meta_json', None)
+    if mjson is not None:
+        meta = json.loads(mjson) or {}
+        ctx.meta_properties = meta
+        return meta
+    return {}
+
+
 def get_config_and_keyring(ctx):
     # type: (CephadmContext) -> Tuple[Optional[str], Optional[str]]
     config = None
