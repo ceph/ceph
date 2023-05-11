@@ -50,7 +50,8 @@ class RedfishSystem(System):
 
     def _update_system(self):
         redfish_system = self.client.get_path(self.system_endpoint)
-        self._system = self._process_redfish_system(redfish_system)
+        _system = self._process_redfish_system(redfish_system)
+        self._system = {**_system, **self._system}
 
     def _update_metadata(self):
         raise NotImplementedError()
