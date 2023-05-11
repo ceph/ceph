@@ -1408,7 +1408,7 @@ def dict_get(d: Dict, key: str, default: Any = None, require: bool = False) -> A
 ##################################
 
 
-def dict_get_join(d: Dict, key: str) -> Any:
+def dict_get_join(d: Dict[str, Any], key: str) -> Any:
     """
     Helper function to get the value of a given key from a dictionary.
     `List` values will be converted to a string by joining them with a
