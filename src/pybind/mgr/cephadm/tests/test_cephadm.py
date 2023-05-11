@@ -1655,7 +1655,7 @@ class TestCephadm(object):
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _write_file.assert_called_with('test', '/etc/ceph/ceph.conf',
-                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0)
+                                           b'[mon]\nk=v\n', 0o644, 0, 0)
 
             # reload
             cephadm_module.cache.last_client_files = {}
