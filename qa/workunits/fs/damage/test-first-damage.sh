@@ -20,6 +20,7 @@ function create {
   DIR_INODE=$(stat -c '%i' dir)
   touch dir/a
   touch dir/"a space"
+  touch -- $(printf 'dir/\xff')
   mkdir dir/.snap/1
   mkdir dir/.snap/2
   # two snaps
