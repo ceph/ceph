@@ -126,8 +126,8 @@ namespace libradosstriper
      * Start iterating over xattrs on a striped object.
      */
     int getxattrs(const std::string& oid,
-                  std::map<std::string, ceph::bufferlist>& attrset); 
-    
+                  std::map<std::string, ceph::bufferlist>& attrset);
+
     /**
      * synchronously write to the striped object at the specified offset.
      * NOTE: this call steals the contents of @param bl.
@@ -170,9 +170,22 @@ namespace libradosstriper
     int read(const std::string& soid, ceph::bufferlist* pbl, size_t len, uint64_t off);
 
     /**
+     * synchronously read from the striped object at the specified offset.
+     * disable shared lock.
+     */
+    int read_without_lock(const std::string& soid, ceph::bufferlist* pbl, size_t len, uint64_t off);
+
+    /**
      * asynchronously read from the striped object at the specified offset.
      */
     int aio_read(const std::string& soid, librados::AioCompletion *c, ceph::bufferlist *pbl, size_t len, uint64_t off);
+
+    /**
+     * asynchronously read from the striped object at the specified offset.
+     * disable shared lock.
+     */
+    int aio_read_without_lock(const std::string& soid, librados::AioCompletion *c, ceph::bufferlist *pbl, size_t len,
+                              uint64_t off);
 
     /**
      * synchronously get striped object stats (size/mtime)

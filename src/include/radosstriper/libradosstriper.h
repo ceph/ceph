@@ -169,6 +169,24 @@ int rados_striper_read(rados_striper_t striper,
                        uint64_t off);
 
 /**
+ * Synchronously read data from a striped object at the specified offset
+ * Disable shared lock
+ *
+ * @param striper the striper in which the read will occur
+ * @param soid the name of the striped object
+ * @param buf where to store the results
+ * @param len the number of bytes to read
+ * @param off the offset to start reading from in the object
+ * @returns number of bytes read on success, negative error code on
+ * failure
+ */
+int rados_striper_read_without_lock(rados_striper_t striper,
+                                    const char *soid,
+                                    char *buf,
+                                    size_t len,
+                                    uint64_t off);
+
+/**
  * Synchronously removes a striped object
  *
  * @note There is no atomicity of the deletion and the striped
@@ -557,6 +575,29 @@ int rados_striper_aio_read(rados_striper_t striper,
                            char *buf,
                            const size_t len,
                            uint64_t off);
+
+/**
+ * Asynchronously read data from a striped object at the specified offset
+ * Disable shared lock
+ *
+ * The return value of the completion will be number of bytes read on
+ * success, negative error code on failure.
+ *
+ * @param striper the striper in which the read will occur
+ * @param soid the name of the striped object
+ * @param completion what to do when the read is safe and complete
+ * @param buf where to store the results
+ * @param len the number of bytes to read
+ * @param off the offset to start reading from in the object
+ * @returns 0 on success, negative error code on
+ * failure
+ */
+int rados_striper_aio_read_without_lock(rados_striper_t striper,
+                                        const char *soid,
+                                        rados_completion_t completion,
+                                        char *buf,
+                                        const size_t len,
+                                        uint64_t off);
 
 /**
  * Asynchronously removes a striped object

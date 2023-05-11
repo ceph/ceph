@@ -216,7 +216,9 @@ ReadCompletionData::ReadCompletionData
   m_unlockCompletion(0) {}
 
 ReadCompletionData::~ReadCompletionData() {
-  m_unlockCompletion->release();
+  if (m_unlockCompletion) {
+    m_unlockCompletion->release();
+  }
   delete m_extents;
   delete m_resultbl;
 }
@@ -573,12 +575,13 @@ int libradosstriper::RadosStriperImpl::write_full(const std::string& soid,
 int libradosstriper::RadosStriperImpl::read(const std::string& soid,
 					    bufferlist* bl,
 					    size_t len,
-					    uint64_t off)
+					    uint64_t off,
+					    bool disable_shared_lock)
 {
   // create a completion object
   librados::AioCompletionImpl c;
   // call asynchronous method
-  int rc = aio_read(soid, &c, bl, len, off);
+  int rc = aio_read(soid, &c, bl, len, off, disable_shared_lock);
   // and wait for completion
   if (!rc) {
     // wait for completion
@@ -637,13 +640,20 @@ static void rados_read_aio_unlock_complete(rados_striper_multi_completion_t c, v
 
 static void striper_read_aio_req_complete(rados_striper_multi_completion_t c, void *arg)
 {
-  auto cdata = static_cast<ReadCompletionData*>(arg);
-  // launch the async unlocking of the object
-  cdata->m_striper->aio_unlockObject(cdata->m_soid, cdata->m_lockCookie, cdata->m_unlockCompletion);
+  // use ceph::ref_t: avoid aio_unlockObject's callback to release resources early.
+  auto cdata = ceph::ref_t<ReadCompletionData>(static_cast<ReadCompletionData*>(arg), true);
+  if (cdata->m_unlockCompletion) {
+    // launch the async unlocking of the object
+    cdata->m_striper->aio_unlockObject(cdata->m_soid, cdata->m_lockCookie, cdata->m_unlockCompletion);
+  }
   // complete the read part in parallel
   libradosstriper::MultiAioCompletionImpl *comp =
     reinterpret_cast<libradosstriper::MultiAioCompletionImpl*>(c);
   cdata->complete_read(comp->rval);
+  if (!cdata->m_unlockCompletion) {
+    cdata->complete_unlock(0);
+    cdata->put();
+  }
 }
 
 static void rados_req_read_complete(rados_completion_t c, void *arg)
@@ -682,14 +692,15 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
 						librados::AioCompletionImpl *c,
 						bufferlist* bl,
 						size_t len,
-						uint64_t off)
+						uint64_t off,
+						bool disable_shared_lock)
 {
   // open the object. This will retrieve its layout and size
   // and take a shared lock on it
   ceph_file_layout layout;
   uint64_t size;
   std::string lockCookie;
-  int rc = openStripedObjectForRead(soid, &layout, &size, &lockCookie);
+  int rc = openStripedObjectForRead(soid, &layout, &size, &lockCookie, disable_shared_lock);
   if (rc) return rc;
   // find out the actual number of bytes we can read
   uint64_t read_len;
@@ -716,10 +727,13 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
   auto cdata = ceph::make_ref<ReadCompletionData>(this, soid, lockCookie, c, bl, extents, resultbl);
   c->is_read = true;
   c->io = m_ioCtxImpl;
-  // create a completion for the unlocking of the striped object at the end of the read
-  librados::AioCompletion *unlock_completion =
-    librados::Rados::aio_create_completion(cdata->get() /* create ref! */, rados_read_aio_unlock_complete);
-  cdata->m_unlockCompletion = unlock_completion;
+  cdata->get(); /* create ref! */
+  if (!disable_shared_lock) {
+    // create a completion for the unlocking of the striped object at the end of the read
+    librados::AioCompletion *unlock_completion =
+      librados::Rados::aio_create_completion(cdata.get(), rados_read_aio_unlock_complete);
+    cdata->m_unlockCompletion = unlock_completion;
+  }
   // create the multiCompletion object handling the reads
   MultiAioCompletionImplPtr nc{new libradosstriper::MultiAioCompletionImpl,
 			       false};
@@ -756,13 +770,14 @@ int libradosstriper::RadosStriperImpl::aio_read(const std::string& soid,
 						librados::AioCompletionImpl *c,
 						char* buf,
 						size_t len,
-						uint64_t off)
+						uint64_t off,
+						bool disable_shared_lock)
 {
   // create a buffer list and store it inside the completion object
   c->bl.clear();
   c->bl.push_back(buffer::create_static(len, buf));
   // call the bufferlist version of this method
-  return aio_read(soid, c, &c->bl, len, off);
+  return aio_read(soid, c, &c->bl, len, off, disable_shared_lock);
 }
 
 int libradosstriper::RadosStriperImpl::aio_flush() 
@@ -1338,24 +1353,30 @@ int libradosstriper::RadosStriperImpl::openStripedObjectForRead(
   const std::string& soid,
   ceph_file_layout *layout,
   uint64_t *size,
-  std::string *lockCookie)
+  std::string *lockCookie,
+  bool disable_shared_lock)
 {
+  int rc = 0;
+  std::string firstObjOid = getObjectId(soid, 0);
   // take a lock the first rados object, if it exists and gets its size
   // check, lock and size reading must be atomic and are thus done within a single operation
-  librados::ObjectWriteOperation op;
-  op.assert_exists();
   *lockCookie = getUUID();
-  utime_t dur = utime_t();
-  rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::SHARED, *lockCookie, "Tag", "", dur, 0);
-  std::string firstObjOid = getObjectId(soid, 0);
-  int rc = m_ioCtx.operate(firstObjOid, &op);
-  if (rc) {
-    // error case (including -ENOENT)
-    return rc;
+  if (!disable_shared_lock) {
+    librados::ObjectWriteOperation op;
+    op.assert_exists();
+    utime_t dur = utime_t();
+    rados::cls::lock::lock(&op, RADOS_LOCK_NAME, ClsLockType::SHARED, *lockCookie, "Tag", "", dur, 0);
+    rc = m_ioCtx.operate(firstObjOid, &op);
+    if (rc) {
+      // error case (including -ENOENT)
+      return rc;
+    }
   }
   rc = internal_get_layout_and_size(firstObjOid, layout, size);
   if (rc) {
-    unlockObject(soid, *lockCookie);
+    if (!disable_shared_lock) {
+      unlockObject(soid, *lockCookie);
+    }
     lderr(cct()) << "RadosStriperImpl::openStripedObjectForRead : "
 		 << "could not load layout and size for "
 		 << soid << " : rc = " << rc << dendl;

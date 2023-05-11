@@ -71,7 +71,7 @@ struct RadosStriperImpl {
   int write(const std::string& soid, const bufferlist& bl, size_t len, uint64_t off);
   int append(const std::string& soid, const bufferlist& bl, size_t len);
   int write_full(const std::string& soid, const bufferlist& bl);
-  int read(const std::string& soid, bufferlist* pbl, size_t len, uint64_t off);
+  int read(const std::string& soid, bufferlist* pbl, size_t len, uint64_t off, bool disable_shared_lock);
 
   // asynchronous io
   int aio_write(const std::string& soid, librados::AioCompletionImpl *c,
@@ -81,9 +81,11 @@ struct RadosStriperImpl {
   int aio_write_full(const std::string& soid, librados::AioCompletionImpl *c,
 		     const bufferlist& bl);
   int aio_read(const std::string& soid, librados::AioCompletionImpl *c,
-	       bufferlist* pbl, size_t len, uint64_t off);
+	       bufferlist* pbl, size_t len, uint64_t off,
+	       bool disable_shared_lock);
   int aio_read(const std::string& soid, librados::AioCompletionImpl *c,
-	       char* buf, size_t len, uint64_t off);
+	       char* buf, size_t len, uint64_t off,
+	       bool disable_shared_lock);
   int aio_flush();
 
   // stat, deletion and truncation
@@ -181,11 +183,13 @@ struct RadosStriperImpl {
    * @return 0 if everything is ok and the lock was taken. -errcode otherwise
    * In particulae, if the striped object does not exists, -ENOENT is returned
    * In case the return code in not 0, no lock is taken
+   * @param disable_shared_lock whether disable shared lock
    */
   int openStripedObjectForRead(const std::string& soid,
 			       ceph_file_layout *layout,
 			       uint64_t *size,
-			       std::string *lockCookie);
+			       std::string *lockCookie,
+			       bool disable_shared_lock);
 
   /**
    * opens an existing striped object, takes a shared lock on it

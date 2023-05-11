@@ -251,7 +251,17 @@ int libradosstriper::RadosStriper::read(const std::string& soid,
 {
   bl->clear();
   bl->push_back(buffer::create(len));
-  return rados_striper_impl->read(soid, bl, len, off);
+  return rados_striper_impl->read(soid, bl, len, off, false);
+}
+
+int libradosstriper::RadosStriper::read_without_lock(const std::string& soid,
+                                                     bufferlist* bl,
+                                                     size_t len,
+                                                     uint64_t off)
+{
+  bl->clear();
+  bl->push_back(buffer::create(len));
+  return rados_striper_impl->read(soid, bl, len, off, true);
 }
 
 int libradosstriper::RadosStriper::aio_read(const std::string& soid,
@@ -262,7 +272,18 @@ int libradosstriper::RadosStriper::aio_read(const std::string& soid,
 {
   bl->clear();
   bl->push_back(buffer::create(len));
-  return rados_striper_impl->aio_read(soid, c->pc, bl, len, off);
+  return rados_striper_impl->aio_read(soid, c->pc, bl, len, off, false);
+}
+
+int libradosstriper::RadosStriper::aio_read_without_lock(const std::string& soid,
+                                                         librados::AioCompletion *c,
+                                                         bufferlist* bl,
+                                                         size_t len,
+                                                         uint64_t off)
+{
+  bl->clear();
+  bl->push_back(buffer::create(len));
+  return rados_striper_impl->aio_read(soid, c->pc, bl, len, off, true);
 }
 
 int libradosstriper::RadosStriper::stat(const std::string& soid, uint64_t *psize, time_t *pmtime)
@@ -417,17 +438,18 @@ extern "C" int rados_striper_append(rados_striper_t striper,
   return impl->append(soid, bl, len);
 }
 
-extern "C" int rados_striper_read(rados_striper_t striper,
-				  const char *soid,
-				  char *buf,
-				  size_t len,
-				  uint64_t off)
+static int _rados_striper_read(rados_striper_t striper,
+                       const char *soid,
+                       char *buf,
+                       size_t len,
+                       uint64_t off,
+                       bool disable_shared_lock)
 {
   libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
   bufferlist bl;
   bufferptr bp = buffer::create_static(len, buf);
   bl.push_back(bp);
-  int ret = impl->read(soid, &bl, len, off);
+  int ret = impl->read(soid, &bl, len, off, disable_shared_lock);
   if (ret >= 0) {
     if (bl.length() > len)
       return -ERANGE;
@@ -436,6 +458,24 @@ extern "C" int rados_striper_read(rados_striper_t striper,
     ret = bl.length();    // hrm :/
   }
   return ret;
+}
+
+extern "C" int rados_striper_read(rados_striper_t striper,
+				  const char *soid,
+				  char *buf,
+				  size_t len,
+				  uint64_t off)
+{
+  return _rados_striper_read(striper, soid, buf, len, off, false);
+}
+
+extern "C" int rados_striper_read_without_lock(rados_striper_t striper,
+                                               const char *soid,
+                                               char *buf,
+                                               size_t len,
+                                               uint64_t off)
+{
+  return _rados_striper_read(striper, soid, buf, len, off, true);
 }
 
 extern "C" int rados_striper_remove(rados_striper_t striper, const char* soid)
@@ -650,7 +690,18 @@ extern "C" int rados_striper_aio_read(rados_striper_t striper,
 				      uint64_t off)
 {
   libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
-  return impl->aio_read(soid, (librados::AioCompletionImpl*)completion, buf, len, off);
+  return impl->aio_read(soid, (librados::AioCompletionImpl*)completion, buf, len, off, false);
+}
+
+extern "C" int rados_striper_aio_read_without_lock(rados_striper_t striper,
+                                                   const char *soid,
+                                                   rados_completion_t completion,
+                                                   char *buf,
+                                                   size_t len,
+                                                   uint64_t off)
+{
+  libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
+  return impl->aio_read(soid, (librados::AioCompletionImpl*)completion, buf, len, off, true);
 }
 
 extern "C" int rados_striper_aio_remove(rados_striper_t striper,
