@@ -1,5 +1,5 @@
 from redfish_system import RedfishSystem
-from util import logger
+from util import logger, normalize_dict
 
 log = logger(__name__)
 
@@ -25,7 +25,7 @@ class RedfishDell(RedfishSystem):
             result[interface_id]['name'] = interface_info['Name']
             result[interface_id]['speed_mbps'] = interface_info['SpeedMbps']
             result[interface_id]['status'] = interface_info['Status']
-        self._system['network'] = result
+        self._system['network'] = normalize_dict(result)
 
     def _update_processors(self):
         cpus_path = self._system['Processors']['@odata.id']
@@ -45,7 +45,7 @@ class RedfishDell(RedfishSystem):
             result[cpu_id]['model'] = cpu_info['Model']
             result[cpu_id]['status'] = cpu_info['Status']
             result[cpu_id]['manufacturer'] = cpu_info['Manufacturer']
-        self._system['processors'] = result
+        self._system['processors'] = normalize_dict(result)
 
     def _update_storage(self):
         storage_path = self._system['Storage']['@odata.id']
@@ -67,7 +67,7 @@ class RedfishDell(RedfishSystem):
                 result[drive_id]['serial_number'] = drive_info['SerialNumber']
                 result[drive_id]['status'] = drive_info['Status']
                 result[drive_id]['location'] = drive_info['PhysicalLocation']
-        self._system['storage'] = result
+        self._system['storage'] = normalize_dict(result)
 
     def _update_metadata(self):
         log.info("Updating metadata")
