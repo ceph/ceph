@@ -9397,6 +9397,68 @@ def command_maintenance(ctx: CephadmContext) -> str:
 ##################################
 
 
+def _add_deploy_parser_args(parser_deploy: argparse.ArgumentParser) -> None:
+    parser_deploy.add_argument(
+        '--config', '-c',
+        help='config file for new daemon')
+    parser_deploy.add_argument(
+        '--config-json',
+        help='Additional configuration information in JSON format')
+    parser_deploy.add_argument(
+        '--keyring',
+        help='keyring for new daemon')
+    parser_deploy.add_argument(
+        '--key',
+        help='key for new daemon')
+    parser_deploy.add_argument(
+        '--osd-fsid',
+        help='OSD uuid, if creating an OSD container')
+    parser_deploy.add_argument(
+        '--skip-firewalld',
+        action='store_true',
+        help='Do not configure firewalld')
+    parser_deploy.add_argument(
+        '--tcp-ports',
+        help='List of tcp ports to open in the host firewall')
+    parser_deploy.add_argument(
+        '--reconfig',
+        action='store_true',
+        help='Reconfigure a previously deployed daemon')
+    parser_deploy.add_argument(
+        '--allow-ptrace',
+        action='store_true',
+        help='Allow SYS_PTRACE on daemon container')
+    parser_deploy.add_argument(
+        '--container-init',
+        action='store_true',
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
+    parser_deploy.add_argument(
+        '--memory-request',
+        help='Container memory request/target'
+    )
+    parser_deploy.add_argument(
+        '--memory-limit',
+        help='Container memory hard limit'
+    )
+    parser_deploy.add_argument(
+        '--meta-json',
+        help='JSON dict of additional metadata'
+    )
+    parser_deploy.add_argument(
+        '--extra-container-args',
+        action='append',
+        default=[],
+        help='Additional container arguments to apply to daemon'
+    )
+    parser_deploy.add_argument(
+        '--extra-entrypoint-args',
+        action='append',
+        default=[],
+        help='Additional entrypoint arguments to apply to deamon'
+    )
+
+
 def _get_parser():
     # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser(
@@ -9899,65 +9961,7 @@ def _get_parser():
         '--fsid',
         required=True,
         help='cluster FSID')
-    parser_deploy.add_argument(
-        '--config', '-c',
-        help='config file for new daemon')
-    parser_deploy.add_argument(
-        '--config-json',
-        help='Additional configuration information in JSON format')
-    parser_deploy.add_argument(
-        '--keyring',
-        help='keyring for new daemon')
-    parser_deploy.add_argument(
-        '--key',
-        help='key for new daemon')
-    parser_deploy.add_argument(
-        '--osd-fsid',
-        help='OSD uuid, if creating an OSD container')
-    parser_deploy.add_argument(
-        '--skip-firewalld',
-        action='store_true',
-        help='Do not configure firewalld')
-    parser_deploy.add_argument(
-        '--tcp-ports',
-        help='List of tcp ports to open in the host firewall')
-    parser_deploy.add_argument(
-        '--reconfig',
-        action='store_true',
-        help='Reconfigure a previously deployed daemon')
-    parser_deploy.add_argument(
-        '--allow-ptrace',
-        action='store_true',
-        help='Allow SYS_PTRACE on daemon container')
-    parser_deploy.add_argument(
-        '--container-init',
-        action='store_true',
-        default=CONTAINER_INIT,
-        help=argparse.SUPPRESS)
-    parser_deploy.add_argument(
-        '--memory-request',
-        help='Container memory request/target'
-    )
-    parser_deploy.add_argument(
-        '--memory-limit',
-        help='Container memory hard limit'
-    )
-    parser_deploy.add_argument(
-        '--meta-json',
-        help='JSON dict of additional metadata'
-    )
-    parser_deploy.add_argument(
-        '--extra-container-args',
-        action='append',
-        default=[],
-        help='Additional container arguments to apply to daemon'
-    )
-    parser_deploy.add_argument(
-        '--extra-entrypoint-args',
-        action='append',
-        default=[],
-        help='Additional entrypoint arguments to apply to deamon'
-    )
+    _add_deploy_parser_args(parser_deploy)
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
