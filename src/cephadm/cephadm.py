@@ -6229,7 +6229,84 @@ def command_deploy(ctx):
 
     if ctx.tcp_ports:
         daemon_ports = list(map(int, ctx.tcp_ports.split()))
+    _common_deploy(ctx, daemon_type, daemon_id, daemon_ports, deployment_type)
 
+
+def command_deploy_from(ctx: CephadmContext) -> None:
+    """The deploy-from command is similar to deploy but sources nearly all
+    configuration parameters from an input JSON configuration file.
+    """
+    source = '-'
+    if 'source' in ctx and ctx.source:
+        source = ctx.source
+    if source == '-':
+        config_data = json.load(sys.stdin)
+    else:
+        with open(source, 'rb') as fh:
+            config_data = json.load(fh)
+    logger.debug('Loaded deploy configuration: %r', config_data)
+
+    # Bind properties taken from the json to our ctx, similar to how
+    # cli options on `deploy` are bound to the context.
+    ctx.name = config_data['name']
+    if 'image' in config_data:
+        ctx.image = config_data['image']
+    if 'fsid' in config_data:
+        ctx.fsid = config_data['fsid']
+    if 'meta' in config_data:
+        ctx.meta_properties = config_data['meta']
+    if 'config_blobs' in config_data:
+        ctx.config_blobs = config_data['config_blobs']
+    # this is quite the hack!  this is a workaround for the fact that
+    # cephadm orch module knows about "args" not what they represent
+    # and so this lets us (try to) smooth the transition. Ideally, these
+    # would be set using key-value pairs in 'params' below.
+    parser = argparse.ArgumentParser(add_help=False)
+    _add_deploy_parser_args(parser)
+    try:
+        parsed_args = parser.parse_args(
+            config_data.get('deploy_arguments', []),
+        )
+    except SystemExit:
+        # exit_on_error arg for ArgumentParser is not present on py 3.6.
+        # we need to catch the exception until we can drop this code
+        raise Error('invalid argument encountered')
+    for key, value in vars(parsed_args).items():
+        setattr(ctx, key, value)
+    # prefer to get the values directly from the params JSON object.
+    for key, value in config_data.get('params', {}).items():
+        setattr(ctx, key, value)
+    update_default_image(ctx)
+    logger.debug('Determined image: %r', ctx.image)
+
+    daemon_type, daemon_id = ctx.name.split('.', 1)
+
+    lock = FileLock(ctx, ctx.fsid)
+    lock.acquire()
+
+    if daemon_type not in get_supported_daemons():
+        raise Error('daemon type %s not recognized' % daemon_type)
+
+    deployment_type = get_deployment_type(ctx, daemon_type, daemon_id)
+
+    # Migrate sysctl conf files from /usr/lib to /etc
+    migrate_sysctl_dir(ctx, ctx.fsid)
+
+    # Get and check ports explicitly required to be opened
+    daemon_ports = []  # type: List[int]
+
+    if ctx.tcp_ports:
+        daemon_ports = list(map(int, ctx.tcp_ports.split()))
+    _common_deploy(ctx, daemon_type, daemon_id, daemon_ports, deployment_type)
+
+
+def _common_deploy(
+    ctx: CephadmContext,
+    daemon_type: str,
+    daemon_id: str,
+    daemon_ports: List[int],
+    deployment_type: DeploymentType,
+) -> None:
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
@@ -9962,6 +10039,29 @@ def _get_parser():
         required=True,
         help='cluster FSID')
     _add_deploy_parser_args(parser_deploy)
+
+    parser_orch = subparsers.add_parser(
+        '_orch',
+    )
+    subparsers_orch = parser_orch.add_subparsers(
+        title='Orchestrator Driven Commands',
+        description='Commands that are typically only run by cephadm mgr module',
+    )
+
+    parser_deploy_from = subparsers_orch.add_parser(
+        'deploy', help='deploy a daemon')
+    parser_deploy_from.set_defaults(func=command_deploy_from)
+    # currently cephadm mgr module passes an fsid option on the CLI too
+    # TODO: remove this and always source fsid from the JSON?
+    parser_deploy_from.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_deploy_from.add_argument(
+        'source',
+        default='-',
+        nargs='?',
+        help='Configuration input source file',
+    )
 
     parser_check_host = subparsers.add_parser(
         'check-host', help='check host configuration')
