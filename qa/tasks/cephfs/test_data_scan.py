@@ -44,6 +44,15 @@ class Workload(object):
                 ValidationError(e, traceback.format_exc(3))
             )
 
+    def assert_not_equal(self, a, b):
+        try:
+            if a == b:
+                raise AssertionError("{0} == {1}".format(a, b))
+        except AssertionError as e:
+            self._errors.append(
+                ValidationError(e, traceback.format_exc(3))
+            )
+
     def assert_true(self, a):
         try:
             if not a:
@@ -81,6 +90,16 @@ class Workload(object):
         """
         self._filesystem.mds_asok(["flush", "journal"])
 
+    def scrub(self):
+        """
+        Called as a final step post recovery before verification. Right now, this
+        doesn't bother if errors are found in scrub - just that the MDS doesn't
+        crash and burn during scrub.
+        """
+        out_json = self._filesystem.run_scrub(["start", "/", "repair,recursive"])
+        self.assert_not_equal(out_json, None)
+        self.assert_equal(out_json["return_code"], 0)
+        self.assert_equal(self._filesystem.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
 class SimpleWorkload(Workload):
     """
@@ -415,6 +434,10 @@ class TestDataScan(CephFSTestCase):
         # Mount a client
         self.mount_a.mount_wait()
 
+        # run scrub as it is recommended post recovery for most
+        # (if not all) recovery mechanisms.
+        workload.scrub()
+
         # See that the files are present and correct
         errors = workload.validate()
         if errors:
@@ -645,6 +668,11 @@ class TestDataScan(CephFSTestCase):
         file1_nlink = self.mount_a.path_to_nlink("testdir1/file1")
         self.assertEqual(file1_nlink, 2)
 
+        out_json = self.fs.run_scrub(["start", "/testdir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
     def test_rebuild_inotable(self):
         """
         The scan_links command repair inotables
@@ -690,6 +718,14 @@ class TestDataScan(CephFSTestCase):
         self.assertGreaterEqual(
             mds1_inotable['1']['data']['inotable']['free'][0]['start'], file_ino)
 
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+        out_json = self.fs.run_scrub(["start", "/dir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
     def test_rebuild_snaptable(self):
         """
         The scan_links command repair snaptable
@@ -724,6 +760,11 @@ class TestDataScan(CephFSTestCase):
             new_snaptable['snapserver']['last_snap'], old_snaptable['snapserver']['last_snap'])
         self.assertEqual(
             new_snaptable['snapserver']['snaps'], old_snaptable['snapserver']['snaps'])
+
+        out_json = self.fs.run_scrub(["start", "/dir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
     def _prepare_extra_data_pool(self, set_root_layout=True):
         extra_data_pool_name = self.fs.get_data_pool_name() + '_extra'
