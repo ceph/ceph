@@ -63,7 +63,7 @@ class BlueStoreRepairer;
 class SimpleBitmap;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
-
+#undef WITH_ESB
 
 
 // constants for Buffer::optimize()
@@ -464,7 +464,9 @@ public:
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
+#ifdef WITH_ESB
     bool _dup_writing(BufferCacheShard* cache, BufferSpace* bc);
+#endif
     void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
@@ -495,6 +497,9 @@ public:
       uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
       bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
     };
+#ifndef WITH_ESB
+    BufferSpace bc;             ///< buffer cache
+#endif
 
     SharedBlob(Collection *_coll) : coll(_coll), sbid_unloaded(0) {
       if (get_cache()) {
@@ -525,7 +530,9 @@ public:
     /// put logical references, and get back any released extents
     void put_ref(uint64_t offset, uint32_t length,
 		 PExtentVector *r, bool *unshare);
-
+#ifndef WITH_ESB
+    void finish_write(uint64_t seq);
+#endif
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
     }
@@ -601,7 +608,10 @@ public:
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
+
+#ifdef WITH_ESB
     BufferSpace bc;
+#endif
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
 #ifdef CACHE_BLOB_BL
@@ -635,7 +645,7 @@ public:
     bool can_split() const {
       std::lock_guard l(shared_blob->get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
-      return bc.writing.empty() &&
+      return get_bc().writing.empty() &&
              used_in_blob.can_split() &&
              get_blob().can_split();
     }
@@ -668,6 +678,21 @@ public:
       return blob;
     }
 
+    inline const BufferSpace& get_bc() const {
+#ifdef WITH_ESB
+      return bc;
+#else
+      return shared_blob->bc;
+#endif
+    }
+    inline BufferSpace& dirty_bc() {
+#ifdef WITH_ESB
+      return bc;
+#else
+      return shared_blob->bc;
+#endif
+    }
+
     /// discard buffers for unallocated regions
     void discard_unallocated(Collection *coll);
 
@@ -676,8 +701,10 @@ public:
     /// put logical references, and get back any released extents
     bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
+#ifdef WITH_ESB
     // update caches to reflect content up to seq
     void finish_write(uint64_t seq);
+#endif
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
 
@@ -688,7 +715,10 @@ public:
       if (--nref == 0)
 	delete this;
     }
+
+#ifdef WITH_ESB
     ~Blob();
+#endif
 
 #ifdef CACHE_BLOB_BL
     void _encode() const {
@@ -1788,8 +1818,11 @@ private:
 #endif
     
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
+#ifdef WITH_ESB
     std::set<BlobRef> blobs_written; ///< update these on io completion
-
+#else
+    std::set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
+#endif
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
     std::list<CollectionRef> removed_collections; ///< colls we removed
@@ -2822,9 +2855,13 @@ private:
     uint64_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    b->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+    b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, offset, bl,
 			     flags);
+#ifdef WITH_ESB
     txc->blobs_written.insert(b);
+#else
+    txc->shared_blobs_written.insert(b->shared_blob);
+#endif
   }
 
   int _collection_list(
