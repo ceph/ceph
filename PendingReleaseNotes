@@ -136,6 +136,8 @@
   `ceph config set mgr mgr/telemetry/leaderboard true`.
   Add leaderboard description with:
   `ceph config set mgr mgr/telemetry/leaderboard_description ‘Cluster description’`.
+* CEPHFS: After recovering a Ceph File System post following the disaster recovery
+  procedure, the recovered files under `lost+found` directory can now be deleted.
 
 >=17.2.1
 
