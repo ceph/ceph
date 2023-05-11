@@ -95,7 +95,7 @@ class RedfishSystem(System):
                 self._update_storage()
                 sleep(3)
         # Catching 'Exception' is probably not a good idea (devel only)
-        except Exception:
-            log.error(f"Error detected, logging out from redfish api")
+        except Exception as e:
+            log.error(f"Error detected, logging out from redfish api.\n{e}")
             self.client.logout()
             raise
