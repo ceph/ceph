@@ -432,24 +432,21 @@ def task(ctx, config):
           client.0:
             force-branch: master
             domains:
-              - name: default
-                description: Default Domain
+              - name: custom
+                description: Custom domain
             projects:
-              - name: admin
-                description:  Admin Tenant
+              - name: custom
+                description: Custom project
             users:
-              - name: admin
-                password: ADMIN
-                project: admin
-            roles: [ name: admin, name: Member ]
+              - name: custom
+                password: SECRET
+                project: custom
+            roles: [ name: custom ]
             role-mappings:
-              - name: admin
-                user: admin
-                project: admin
+              - name: custom
+                user: custom
+                project: custom
             services:
-              - name: keystone
-                type: identity
-                description: Keystone Identity Service
               - name: swift
                 type: object-store
                 description: Swift Service

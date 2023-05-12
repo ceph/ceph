@@ -8,7 +8,7 @@ overrides:
         rgw keystone barbican password: rgwcrypt-pass
         rgw keystone barbican domain: Default
         rgw keystone api version: 3
-        rgw keystone accepted roles: admin,Member,creator
+        rgw keystone accepted roles: admin,member,creator
         rgw keystone implicit tenants: true
         rgw keystone accepted admin roles: admin
         rgw swift enforce content length: true
@@ -51,9 +51,9 @@ tasks:
           password: s3-pass
           project: s3
           domain: default
-      roles: [ name: Member, name: creator ]
+      roles: [ name: creator ]
       role-mappings:
-        - name: Member
+        - name: member
           user: rgwcrypt-user
           project: rgwcrypt
         - name: admin

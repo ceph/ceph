@@ -64,7 +64,7 @@ USERROLES = {
     'deadbeef': [
         {
             'id': '98bd32184f854f393a72b932g5334124',
-            'name': 'Member',
+            'name': 'member',
         }
     ],
 }

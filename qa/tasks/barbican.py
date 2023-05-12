@@ -437,9 +437,9 @@ def task(ctx, config):
               - name: s3-user
                 password: s3-pass
                 project: s3
-            roles: [ name: Member, name: creator ]
+            roles: [ name: creator ]
             role-mappings:
-              - name: Member
+              - name: member
                 user: rgwcrypt-user
                 project: rgwcrypt
               - name: admin
@@ -448,10 +448,6 @@ def task(ctx, config):
               - name: creator
                 user: s3-user
                 project: s3
-            services:
-              - name: keystone
-                type: identity
-                description: Keystone Identity Service
       - barbican:
           client.0:
             force-branch: master
