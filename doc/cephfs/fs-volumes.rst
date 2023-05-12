@@ -38,7 +38,6 @@ Requirements
     mon 'allow r'
     mgr 'allow rw'
 
-
 FS Volumes
 ----------
 
@@ -170,9 +169,8 @@ When creating a subvolume group you can specify its data pool layout (see
 :doc:`/cephfs/file-layouts`), uid, gid, file mode in octal numerals, and
 size in bytes. The size of the subvolume group is specified by setting
 a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
-is created with octal file mode '755', uid '0', gid '0' and the data pool
+is created with octal file mode ``755``, uid ``0``, gid ``0`` and the data pool
 layout of its parent directory.
-
 
 Remove a subvolume group using:
 
@@ -288,7 +286,6 @@ Remove a subvolume using:
 
    ceph fs subvolume rm <vol_name> <subvol_name> [--group_name <subvol_group_name>] [--force] [--retain-snapshots]
 
-
 The command removes the subvolume and its contents. It does this in two steps.
 First, it moves the subvolume to a trash folder, and then asynchronously purges
 its contents.
@@ -321,7 +318,7 @@ Authorize cephx auth IDs, the read/read-write access to fs subvolumes:
 
    ceph fs subvolume authorize <vol_name> <sub_name> <auth_id> [--group_name=<group_name>] [--access_level=<access_level>]
 
-The 'access_level' takes 'r' or 'rw' as value.
+The ``access_level`` takes ``r`` or ``rw`` as value.
 
 Deauthorize cephx auth IDs, the read/read-write access to fs subvolumes:
 
