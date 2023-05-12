@@ -39,6 +39,7 @@
 #include "Fh.h"
 #include "ioctl.h"
 #include "fscrypt_uapi.h"
+#include "FSCrypt.h"
 #include "common/config.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/ceph_ll_client.h"
@@ -982,6 +983,18 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         fuse_reply_err(req, ERANGE);
         break;
       }
+
+      FSCryptKey k;
+
+      int r  = k.init((const char *)arg->raw, arg->raw_size);
+      if (r < 0) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to calc hkdf: r=" << r << dendl;
+        fuse_reply_err(req, -r);
+      }
+
+      const auto& identifier = k.get_identifier();
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": hkdf:\n" << hex_str(identifier.raw, sizeof(identifier.raw)) << dendl;
 
       fuse_reply_ioctl(req, 0, nullptr, 0);
       break;
