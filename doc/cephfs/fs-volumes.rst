@@ -3,14 +3,13 @@
 FS volumes and subvolumes
 =========================
 
-The volumes
-module of the :term:`Ceph Manager` daemon (ceph-mgr) provides a single
-source of truth for CephFS exports. The OpenStack shared
-file system service (manila_) and Ceph Container Storage Interface (CSI_)
-storage administrators among others can use the common CLI provided by the
-ceph-mgr volumes module to manage CephFS exports.
+The volumes module of the :term:`Ceph Manager` daemon (ceph-mgr) provides a
+single source of truth for CephFS exports. The OpenStack shared file system
+service (manila_) and the Ceph Container Storage Interface (CSI_) storage
+administrators use the common CLI provided by the ceph-mgr ``volumes`` module
+to manage CephFS exports.
 
-The ceph-mgr volumes module implements the following file system export
+The ceph-mgr ``volumes`` module implements the following file system export
 abstractions:
 
 * FS volumes, an abstraction for CephFS file systems
@@ -18,8 +17,8 @@ abstractions:
 * FS subvolumes, an abstraction for independent CephFS directory trees
 
 * FS subvolume groups, an abstraction for a directory level higher than FS
-  subvolumes to effect policies (e.g., :doc:`/cephfs/file-layouts`) across a
-  set of subvolumes
+  subvolumes. Used to effect policies (e.g., :doc:`/cephfs/file-layouts`)
+  across a set of subvolumes
 
 Some possible use-cases for the export abstractions:
 
@@ -41,33 +40,32 @@ Requirements
 FS Volumes
 ----------
 
-Create a volume using:
+Create a volume by running the following command:
 
 .. prompt:: bash #
 
    ceph fs volume create <vol_name> [<placement>]
 
 This creates a CephFS file system and its data and metadata pools. It can also
-deploy MDS daemons for the filesystem using a ceph-mgr orchestrator
-module (see :doc:`/mgr/orchestrator`), for example Rook.
+deploy MDS daemons for the filesystem using a ceph-mgr orchestrator module (for
+example Rook). See :doc:`/mgr/orchestrator`.
 
-<vol_name> is the volume name (an arbitrary string), and
-
-<placement> is an optional string that designates the hosts that should have
-an MDS running on them and, optionally, the total number of MDS daemons the cluster
-should have. For example, the
-following placement string means "deploy MDS on nodes ``host1`` and ``host2`` (one
-MDS per host):
+``<vol_name>`` is the volume name (an arbitrary string). ``<placement>`` is an
+optional string that specifies the hosts that should have an MDS running on
+them and, optionally, the total number of MDS daemons that the cluster should
+have. For example, the following placement string means "deploy MDS on nodes
+``host1`` and ``host2`` (one MDS per host)::
 
     "host1,host2"
 
-and this placement specification says to deploy two MDS daemons on each of
-nodes ``host1`` and ``host2`` (for a total of four MDS daemons in the cluster):
+The following placement specification means "deploy two MDS daemons on each of
+nodes ``host1`` and ``host2`` (for a total of four MDS daemons in the
+cluster)"::
 
     "4 host1,host2"
 
-For more details on placement specification refer to the :ref:`orchestrator-cli-service-spec`,
-but keep in mind that specifying placement via a YAML file is not supported.
+See :ref:`orchestrator-cli-service-spec` for more on placement specification.
+Specifying placement via a YAML file is not supported.
 
 To remove a volume, run the following command:
 
@@ -78,13 +76,13 @@ To remove a volume, run the following command:
 This removes a file system and its data and metadata pools. It also tries to
 remove MDS daemons using the enabled ceph-mgr orchestrator module.
 
-List volumes using:
+List volumes by running the following command:
 
 .. prompt:: bash #
 
    ceph fs volume ls
 
-Rename a volume using:
+Rename a volume by running the following command:
 
 .. prompt:: bash #
 
@@ -92,19 +90,19 @@ Rename a volume using:
 
 Renaming a volume can be an expensive operation that requires the following:
 
-- Rename the orchestrator-managed MDS service to match the <new_vol_name>.
-  This involves launching a MDS service with <new_vol_name> and bringing down
-  the MDS service with <vol_name>.
-- Rename the file system matching <vol_name> to <new_vol_name>
-- Change the application tags on the data and metadata pools of the file system
-  to <new_vol_name>
-- Rename the metadata and data pools of the file system.
+- Renaming the orchestrator-managed MDS service to match the <new_vol_name>.
+  This involves launching a MDS service with ``<new_vol_name>`` and bringing
+  down the MDS service with ``<vol_name>``.
+- Renaming the file system matching ``<vol_name>`` to ``<new_vol_name>``.
+- Changing the application tags on the data and metadata pools of the file system
+  to ``<new_vol_name>``.
+- Renaming the metadata and data pools of the file system.
 
-The CephX IDs authorized for <vol_name> need to be reauthorized for <new_vol_name>. Any
-on-going operations of the clients using these IDs may be disrupted. Mirroring is
-expected to be disabled on the volume.
+The CephX IDs that are authorized for ``<vol_name>`` must be reauthorized for
+``<new_vol_name>``. Any ongoing operations of the clients using these IDs may
+be disrupted. Ensure that mirroring is disabled on the volume.
 
-To fetch the information of a CephFS volume, run:
+To fetch the information of a CephFS volume, run the following command:
 
 .. prompt:: bash #
 
@@ -157,7 +155,7 @@ Sample output of the ``volume info`` command:
 FS Subvolume groups
 -------------------
 
-Create a subvolume group using:
+Create a subvolume group by running the following command:
 
 .. prompt:: bash #
 
@@ -172,23 +170,24 @@ a quota on it (see :doc:`/cephfs/quota`). By default, the subvolume group
 is created with octal file mode ``755``, uid ``0``, gid ``0`` and the data pool
 layout of its parent directory.
 
-Remove a subvolume group using:
+Remove a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup rm <vol_name> <group_name> [--force]
 
-The removal of a subvolume group fails if it is not empty or non-existent.
-'--force' flag allows the non-existent subvolume group remove command to succeed.
+The removal of a subvolume group fails if the subvolume group is not empty or
+is non-existent. The ``--force`` flag allows the non-existent "subvolume group remove
+command" to succeed.
 
 
-Fetch the absolute path of a subvolume group using:
+Fetch the absolute path of a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup getpath <vol_name> <group_name>
 
-List subvolume groups using:
+List subvolume groups by running a command of the following form:
 
 .. prompt:: bash #
 
@@ -197,7 +196,7 @@ List subvolume groups using:
 .. note:: Subvolume group snapshot feature is no longer supported in mainline CephFS (existing group
           snapshots can still be listed and deleted)
 
-Fetch the metadata of a subvolume group using:
+Fetch the metadata of a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
@@ -218,42 +217,45 @@ The output format is JSON and contains fields as follows:
 * ``created_at``: creation time of the subvolume group in the format "YYYY-MM-DD HH:MM:SS"
 * ``data_pool``: data pool to which the subvolume group belongs
 
-Check the presence of any subvolume group using:
+Check the presence of any subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup exist <vol_name>
 
-The 'exist' command outputs:
+The ``exist`` command outputs:
 
 * "subvolumegroup exists": if any subvolumegroup is present
 * "no subvolumegroup exists": if no subvolumegroup is present
 
-.. note:: This command checks for the presence of custom groups and not presence of the default one. To validate the emptiness of the volume, a subvolumegroup existence check alone is not sufficient. Subvolume existence also needs to be checked as there might be subvolumes in the default group.
+.. note:: This command checks for the presence of custom groups and not
+   presence of the default one. To validate the emptiness of the volume, a
+   subvolumegroup existence check alone is not sufficient. Subvolume existence
+   also needs to be checked as there might be subvolumes in the default group.
 
-Resize a subvolume group using:
+Resize a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup resize <vol_name> <group_name> <new_size> [--no_shrink]
 
-The command resizes the subvolume group quota using the size specified by ``new_size``.
-The ``--no_shrink`` flag prevents the subvolume group from shrinking below the current used
-size.
+The command resizes the subvolume group quota, using the size specified by
+``new_size``.  The ``--no_shrink`` flag prevents the subvolume group from
+shrinking below the current used size.
 
-The subvolume group may be resized to an infinite size by passing ``inf`` or ``infinite``
-as the ``new_size``.
+The subvolume group may be resized to an infinite size by passing ``inf`` or
+``infinite`` as the ``new_size``.
 
-Remove a snapshot of a subvolume group using:
+Remove a snapshot of a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph fs subvolumegroup snapshot rm <vol_name> <group_name> <snap_name> [--force]
 
 Supplying the ``--force`` flag allows the command to succeed when it would otherwise
-fail due to the snapshot not existing.
+fail due to the nonexistence of the snapshot.
 
-List snapshots of a subvolume group using:
+List snapshots of a subvolume group by running a command of the following form:
 
 .. prompt:: bash #
 
