@@ -381,13 +381,13 @@ def fill_keystone(ctx, config):
                              list(bootstrap_args))
 
         # configure tenants/projects
-        run_section_cmds(ctx, cclient, 'domain create', 'name',
+        run_section_cmds(ctx, cclient, 'domain create --or-show', 'name',
                          cconfig.get('domains', []))
-        run_section_cmds(ctx, cclient, 'project create', 'name',
+        run_section_cmds(ctx, cclient, 'project create --or-show', 'name',
                          cconfig.get('projects', []))
-        run_section_cmds(ctx, cclient, 'user create', 'name',
+        run_section_cmds(ctx, cclient, 'user create --or-show', 'name',
                          cconfig.get('users', []))
-        run_section_cmds(ctx, cclient, 'role create', 'name',
+        run_section_cmds(ctx, cclient, 'role create --or-show', 'name',
                          cconfig.get('roles', []))
         run_section_cmds(ctx, cclient, 'role add', 'name',
                          cconfig.get('role-mappings', []))
