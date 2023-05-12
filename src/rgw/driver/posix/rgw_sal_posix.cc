@@ -52,7 +52,7 @@ static inline User* nextUser(User* t)
   if (!t)
     return nullptr;
 
-  return dynamic_cast<FilterUser*>(t)->get_next();
+  return static_cast<FilterUser*>(t)->get_next();
 }
 
 static inline std::string decode_name(const char* name)
@@ -1083,8 +1083,8 @@ int POSIXBucket::open(const DoutPrefixProvider* dpp)
 // This is for renaming a shadow bucket to a MP object.  It won't work work for a normal bucket
 int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj)
 {
-  POSIXObject *to = dynamic_cast<POSIXObject*>(target_obj);
-  POSIXBucket *tb = dynamic_cast<POSIXBucket*>(target_obj->get_bucket());
+  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
+  POSIXBucket *tb = static_cast<POSIXBucket*>(target_obj->get_bucket());
 
   // swap and delete
   int ret = renameat2(tb->get_dir_fd(dpp), get_fname().c_str(), tb->get_dir_fd(dpp), to->get_fname().c_str(), RENAME_EXCHANGE);
@@ -1139,7 +1139,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				bool prevent_versioning)
 {
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1203,8 +1203,8 @@ int POSIXObject::copy_object(User* user,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  POSIXBucket *db = dynamic_cast<POSIXBucket*>(dest_bucket);
-  POSIXBucket *sb = dynamic_cast<POSIXBucket*>(src_bucket);
+  POSIXBucket *db = static_cast<POSIXBucket*>(dest_bucket);
+  POSIXBucket *sb = static_cast<POSIXBucket*>(src_bucket);
 
   if (!db || !sb) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket to copy " << get_name() << dendl;
@@ -1383,7 +1383,7 @@ int POSIXObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
 
 int POSIXObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
 {
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1409,7 +1409,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
     return 0;
   }
 
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1430,7 +1430,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
   } else if (S_ISDIR(stx.stx_mode)) {
     /* multipart object */
     /* Get the shadow bucket */
-    POSIXBucket* pb = dynamic_cast<POSIXBucket*>(bucket);
+    POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
     ret = pb->get_shadow_bucket(nullptr, null_yield, std::string(),
 				std::string(), get_fname(), false, &shadow);
     if (ret < 0) {
@@ -1500,7 +1500,7 @@ int POSIXObject::open(const DoutPrefixProvider* dpp, bool temp_file)
     return obj_fd;
   }
 
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1539,7 +1539,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp)
   // Only works on Linux - Non-portable
   snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", obj_fd);
 
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
 
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
@@ -2033,7 +2033,7 @@ int POSIXMultipartUpload::load(bool create)
 {
   ldout(driver->ctx(), 0) << "Luke: load shadow " << get_meta() << dendl;
   if (!shadow) {
-    POSIXBucket* pb = dynamic_cast<POSIXBucket*>(bucket);
+    POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
     return pb->get_shadow_bucket(nullptr, null_yield, mp_ns,
 			  std::string(), get_meta(), create, &shadow);
   }
@@ -2101,7 +2101,7 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
   }
   for (rgw_bucket_dir_entry& ent : results.objs) {
     std::unique_ptr<MultipartPart> part = std::make_unique<POSIXMultipartPart>(this);
-    POSIXMultipartPart* ppart = dynamic_cast<POSIXMultipartPart*>(part.get());
+    POSIXMultipartPart* ppart = static_cast<POSIXMultipartPart*>(part.get());
 
     rgw_obj_key key(ent.key);
     ret = ppart->load(dpp, null_yield, driver, key);
@@ -2182,7 +2182,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
 
     for (auto obj_iter = parts.begin(); etags_iter != part_etags.end() && obj_iter != parts.end(); ++etags_iter, ++obj_iter, ++handled_parts) {
-      POSIXMultipartPart* part = dynamic_cast<rgw::sal::POSIXMultipartPart*>(obj_iter->second.get());
+      POSIXMultipartPart* part = static_cast<rgw::sal::POSIXMultipartPart*>(obj_iter->second.get());
       uint64_t part_size = part->get_size();
       if (handled_parts < (int)part_etags.size() - 1 &&
           part_size < min_part_size) {
