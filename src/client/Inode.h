@@ -24,6 +24,12 @@
 #include "UserPerm.h"
 #include "Delegation.h"
 
+#include "FSCrypt.h"
+
+#ifndef S_ENCRYPTED
+#define S_ENCRYPTED (1 << 14)
+#endif
+
 class Client;
 class Dentry;
 class Dir;
@@ -32,6 +38,7 @@ struct Inode;
 class MetaRequest;
 class filepath;
 class Fh;
+class FSCrypt;
 
 class Cap {
 public:
@@ -170,14 +177,25 @@ struct Inode : RefCountedObject {
   decltype(InodeStat::optmetadata) optmetadata;
   using optkind_t = decltype(InodeStat::optmetadata)::optkind_t;
 
+  FSCryptContextRef fscrypt_ctx;
+  FSCryptKeyValidatorRef fscrypt_key_validator;
+
+  uint64_t effective_size() const;
+  void set_effective_size(uint64_t size);
+
   bool is_fscrypt_enabled() {
     return !!fscrypt_auth.size();
   }
+
+  FSCryptContextRef init_fscrypt_ctx(FSCrypt *fscrypt);
+
+  void gen_inherited_fscrypt_auth(std::vector<uint8_t> *ctx);
 
   bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
+  bool is_encrypted() const { return (mode & S_ENCRYPTED) == S_ENCRYPTED; }
 
   bool has_dir_layout() const {
     return layout != file_layout_t();
@@ -240,6 +258,7 @@ struct Inode : RefCountedObject {
   uint64_t  ll_ref = 0;   // separate ref count for ll client
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
   std::string    symlink;  // symlink content, if it's a symlink
+  std::string    symlink_plain;  // decoded symlink (in-memory only)
   std::map<std::string,bufferptr> xattrs;
   std::map<frag_t,int> fragmap;  // known frag -> mds mappings
   std::map<frag_t, std::vector<mds_rank_t>> frag_repmap; // non-auth mds mappings
