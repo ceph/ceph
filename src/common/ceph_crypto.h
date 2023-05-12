@@ -16,6 +16,7 @@
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_HMACSHA512_DIGESTSIZE 64
 #define CEPH_CRYPTO_SHA512_DIGESTSIZE 64
+#define CEPH_CRYPTO_HMACSHA512_DIGESTSIZE 64
 
 #include <openssl/evp.h>
 #include <openssl/ossl_typ.h>
@@ -201,6 +202,7 @@ namespace TOPNSPC::crypto {
   using ssl::SHA1;
   using ssl::SHA512;
 
+  using ssl::HMACSHA512;
   using ssl::HMACSHA256;
   using ssl::HMACSHA1;
   using ssl::HMACSHA512;

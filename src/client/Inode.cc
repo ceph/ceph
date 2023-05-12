@@ -155,7 +155,11 @@ void Inode::make_nosnap_relative_path(filepath& p)
     Dentry *dn = get_first_parent();
     ceph_assert(dn->dir && dn->dir->parent_inode);
     dn->dir->parent_inode->make_nosnap_relative_path(p);
-    p.push_dentry(dn->name);
+    if (dn->enc_name) {
+      p.push_dentry(*dn->enc_name);
+    } else {
+      p.push_dentry(dn->name);
+    }
   } else {
     p = filepath(ino);
   }
@@ -845,4 +849,43 @@ void Inode::mark_caps_clean()
   dirty_cap_item.remove_myself();
 }
 
+FSCryptContextRef Inode::init_fscrypt_ctx(FSCrypt *fscrypt)
+{
+  return fscrypt->init_ctx(fscrypt_auth);
+}
 
+void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
+{
+  if (!fscrypt_ctx) {
+#warning need to make sure that we do not skip entire subtree somehow
+    return;
+  }
+
+  FSCryptContext new_ctx = *fscrypt_ctx;
+
+  new_ctx.generate_new_nonce();
+
+  bufferlist bl;
+  new_ctx.encode(bl);
+
+  fsa->resize(bl.length());
+  memcpy(fsa->data(), bl.c_str(), bl.length());
+}
+
+uint64_t Inode::effective_size() const
+{
+  if (fscrypt_file.size() < sizeof(uint64_t)) {
+    return size;
+  }
+
+  return *(ceph_le64 *)fscrypt_file.data();
+}
+
+void Inode::set_effective_size(uint64_t size)
+{
+  if (fscrypt_file.size() < sizeof(uint64_t)) {
+    fscrypt_file.resize(sizeof(uint64_t));
+  }
+
+  *(ceph_le64 *)fscrypt_file.data() = size;
+}

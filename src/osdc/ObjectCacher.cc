@@ -88,14 +88,16 @@ class ObjectCacher::C_RetryRead : public Context {
   ObjectSet *oset;
   Context *onfinish;
   ZTracer::Trace trace;
+  std::vector<ObjHole> *holes;
 public:
   C_RetryRead(ObjectCacher *_oc, OSDRead *r, ObjectSet *os, Context *c,
-	      const ZTracer::Trace &trace)
-    : oc(_oc), rd(r), oset(os), onfinish(c), trace(trace) {
+	      const ZTracer::Trace &trace,
+              std::vector<ObjHole> *holes)
+    : oc(_oc), rd(r), oset(os), onfinish(c), trace(trace), holes(holes) {
   }
   void finish(int r) override {
     if (r >= 0) {
-      r = oc->_readx(rd, oset, onfinish, false, &trace);
+      r = oc->_readx(rd, oset, onfinish, false, &trace, holes);
     }
 
     if (r == 0) {
@@ -1394,7 +1396,8 @@ bool ObjectCacher::is_cached(ObjectSet *oset, vector<ObjectExtent>& extents,
  * returns 0 if doing async read
  */
 int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-			ZTracer::Trace *parent_trace)
+			ZTracer::Trace *parent_trace,
+                        std::vector<ObjHole> *holes)
 {
   ZTracer::Trace trace;
   if (parent_trace != nullptr) {
@@ -1402,7 +1405,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     trace.event("start");
   }
 
-  int r =_readx(rd, oset, onfinish, true, &trace);
+  int r =_readx(rd, oset, onfinish, true, &trace, holes);
   if (r < 0) {
     trace.event("finish");
   }
@@ -1410,7 +1413,8 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 }
 
 int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
-			 bool external_call, ZTracer::Trace *trace)
+			 bool external_call, ZTracer::Trace *trace,
+                         std::vector<ObjHole> *holes)
 {
   ceph_assert(trace != nullptr);
   ceph_assert(ceph_mutex_is_locked(lock));
@@ -1475,7 +1479,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx  waiting on tid " << o->last_write_tid
 			 << " on " << *o << dendl;
 	  o->waitfor_commit[o->last_write_tid].push_back(
-	    new C_RetryRead(this,rd, oset, onfinish, *trace));
+	    new C_RetryRead(this,rd, oset, onfinish, *trace, holes));
 	  // FIXME: perfcounter!
 	  return 0;
 	}
@@ -1533,7 +1537,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			   << (std::max(rx_bytes, max_size) - max_size)
 			   << " read bytes" << dendl;
 	    waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish,
-						   *trace));
+						   *trace, holes));
 	  }
 
 	  bh_remove(o, bh_it->second);
@@ -1552,7 +1556,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	ldout(cct, 10) << "readx missed, waiting on " << *last->second
 	  << " off " << last->first << dendl;
 	last->second->waitfor_read[last->first].push_back(
-	  new C_RetryRead(this, rd, oset, onfinish, *trace) );
+	  new C_RetryRead(this, rd, oset, onfinish, *trace, holes) );
 
       }
 
@@ -1565,7 +1569,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  ldout(cct, 10) << "readx missed, waiting on " << *bh_it->second
 			 << " off " << bh_it->first << dendl;
 	  bh_it->second->waitfor_read[bh_it->first].push_back(
-	    new C_RetryRead(this, rd, oset, onfinish, *trace) );
+	    new C_RetryRead(this, rd, oset, onfinish, *trace, holes) );
 	}
 	bytes_not_in_cache += bh_it->second->length();
 	success = false;
@@ -1631,6 +1635,9 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  // may get multiple bh's at this stripe_map position
 	  if (bh->is_zero()) {
 	    stripe_map[f_it->first].append_zero(len);
+            if (holes) {
+              holes->push_back(std::make_pair(opos, len));
+            }
 	  } else {
 	    bit.substr_of(bh->bl,
 		opos - bh->start(),
