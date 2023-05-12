@@ -921,14 +921,14 @@ void CInode::put_stickydirs()
 void CInode::first_get()
 {
   // pin my dentry?
-  if (parent) 
+  if (parent)
     parent->get(CDentry::PIN_INODEPIN);
 }
 
 void CInode::last_put() 
 {
   // unpin my dentry?
-  if (parent) 
+  if (parent)
     parent->put(CDentry::PIN_INODEPIN);
 }
 

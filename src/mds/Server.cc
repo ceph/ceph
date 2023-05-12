@@ -9546,7 +9546,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
     /* handle_client_rename checks that alternate_name matches for existing destdn */
     destdn->set_alternate_name(alternate_name);
   }
-  if ((srcdnl->is_remote() || srcdnl->is_referent())) {
+  if ((srcdnl->is_remote())) {
     if (!linkmerge) {
       // destdn
       if (destdn->is_auth())
@@ -9563,6 +9563,32 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
       if (destdn->is_auth()) {
 	auto pi = oldin->project_inode(mdr);
 	pi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldin->get_version());
+        spi = pi.inode.get();
+      }
+    }
+  } else if (srcdnl->is_referent()) { // link referent
+    CInode *srcrefi = srcdnl->get_ref_inode();
+    if (!linkmerge) {
+      // destdn
+      if (destdn->is_auth()) {
+        version_t oldpv;
+        if (srcdn->is_auth())
+          oldpv = srcrefi->get_projected_version();
+        else
+	  // TODO - multimds - need to fix this for referent inode
+	  oldpv = _rename_prepare_import(mdr, srcdn, client_map_bl);
+
+        //srcrefi
+        auto rpi = srcrefi->project_inode(mdr);
+        rpi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
+        rpi.inode->update_backtrace();
+        // rspi = rpi.inode.get(); TODO - update ctime on referent inode ?
+      }
+      destdn->push_projected_linkage(srcrefi, srci->ino());
+      // srci
+      if (srci->is_auth()) {
+	auto pi = srci->project_inode(mdr);
+	pi.inode->version = srci->pre_dirty();
         spi = pi.inode.get();
       }
     }
@@ -9910,15 +9936,22 @@ void Server::_rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *des
 
   // dest
   if (srcdn_was_remote) {
+    CInode *src_refin = srcdnl->get_ref_inode();
     if (!linkmerge) {
       // destdn
       destdnl = destdn->pop_projected_linkage();
       if (mdr->is_peer() && !mdr->more()->peer_update_journaled)
 	ceph_assert(!destdn->is_projected()); // no other projected
 
-      destdn->link_remote(destdnl, in);
-      if (destdn->is_auth())
+      if (srcdnl->is_remote())
+        destdn->link_remote(destdnl, in);
+      else
+        destdn->link_remote(destdnl, in, src_refin);
+
+      if (destdn->is_auth()) {
 	destdn->mark_dirty(mdr->more()->pvmap[destdn], mdr->ls);
+	src_refin->pop_and_dirty_projected_inode(mdr->ls, mdr);
+      }
       // in
       if (in->is_auth()) {
 	in->pop_and_dirty_projected_inode(mdr->ls, mdr);

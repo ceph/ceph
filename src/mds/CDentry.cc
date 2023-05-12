@@ -397,6 +397,7 @@ int CDentry::get_num_dir_auth_pins() const
   ceph_assert(!is_projected());
   if (get_linkage()->is_primary())
     return auth_pins + get_linkage()->get_inode()->get_num_auth_pins();
+  //TODO - Do we need to adjust authpins for a referent inode ?
   return auth_pins;
 }
 
