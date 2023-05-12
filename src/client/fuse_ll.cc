@@ -38,6 +38,7 @@
 #include "Client.h"
 #include "Fh.h"
 #include "ioctl.h"
+#include "fscrypt_uapi.h"
 #include "common/config.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/ceph_ll_client.h"
@@ -889,6 +890,16 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
     fuse_reply_err(req, get_sys_errno(-r));
 }
 
+static string hex_str(const void *p, int len)
+{
+  bufferlist bl;
+  bl.append_hole(len);
+  memcpy(bl.c_str(), p, len);
+  stringstream ss;
+  bl.hexdump(ss);
+  return ss.str();
+}
+
 static void fuse_ll_write(fuse_req_t req, fuse_ino_t ino, const char *buf,
 			   size_t size, off_t off, struct fuse_file_info *fi)
 {
@@ -917,7 +928,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 #else
                           int cmd,
 #endif
-                          void *arg, struct fuse_file_info *fi,
+                          void *_arg, struct fuse_file_info *fi,
 			  unsigned flags, const void *in_buf, size_t in_bufsz, size_t out_bufsz)
 {
   CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
@@ -938,6 +949,54 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       l.object_size = layout.object_size;
       l.data_pool = layout.pool_id;
       fuse_reply_ioctl(req, 0, &l, sizeof(struct ceph_ioctl_layout));
+    }
+    break;
+    case FS_IOC_GET_ENCRYPTION_POLICY_EX: {
+      fuse_reply_err(req, ENODATA);
+    }
+    break;
+    case FS_IOC_ADD_ENCRYPTION_KEY64:
+    case FS_IOC_ADD_ENCRYPTION_KEY: {
+      if (!in_buf
+          || in_bufsz < sizeof(fscrypt_add_key_arg)) {
+        fuse_reply_err(req, EFAULT);
+        break;
+      }
+
+      auto arg = (fscrypt_add_key_arg *)in_buf;
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " ioctl buffer:\n" << hex_str(in_buf, in_bufsz) << dendl;
+
+      if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
+        fuse_reply_err(req, ENOTSUP);
+        break;
+      }
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": key_spec.type=" << arg->key_spec.type << " key_spec buffer:\n" << hex_str(&arg->key_spec, sizeof(arg->key_spec)) << dendl;
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": raw_size=" << arg->raw_size << " key_id=" << arg->key_id << dendl;
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": raw:\n" << hex_str(arg->raw, arg->raw_size) << dendl;
+
+      if (arg->key_id == 0 &&
+          in_bufsz < sizeof(*arg) + arg->raw_size) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " too short, expected=" << sizeof(*arg) + arg->raw_size << dendl;
+        fuse_reply_err(req, ERANGE);
+        break;
+      }
+
+      fuse_reply_ioctl(req, 0, nullptr, 0);
+      break;
+    }
+    break;
+    case FS_IOC_SET_ENCRYPTION_POLICY: {
+      if (!in_buf) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer <none>" << dendl;
+        fuse_reply_err(req, EINVAL);
+        break;
+      }
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer:\n" << hex_str(in_buf, in_bufsz) << dendl;
+      // fuse_reply_ioctl(req, 0, nullptr, 0);
+      fuse_reply_err(req, EINVAL);
+      break;
     }
     break;
     default:
@@ -1279,6 +1338,8 @@ static void do_init(void *data, fuse_conn_info *conn)
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   fuse_apply_conn_info_opts(cfuse->conn_opts, conn);
 #endif
+
+  generic_dout(0) << __FILE__ << ":" << __LINE__ << ": conn proto ver " << conn->proto_major << ":" << conn->proto_minor << dendl;
 
   if(conn->capable & FUSE_CAP_SPLICE_MOVE)
     conn->want |= FUSE_CAP_SPLICE_MOVE;
