@@ -59,8 +59,13 @@
 
 class Allocator;
 class FreelistManager;
-class BlueStoreRepairer;
 class SimpleBitmap;
+
+#ifdef WITH_EXPERIMENTAL
+namespace ceph::experimental {
+#endif
+
+class BlueStoreRepairer;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
@@ -4287,4 +4292,7 @@ public:
   bool compare(BlueFSVolumeSelector* other) override;
 };
 
+#ifdef WITH_EXPERIMENTAL
+} // namespace ceph::experimental
+#endif
 #endif

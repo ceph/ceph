@@ -3747,6 +3747,7 @@ options:
   default: bluestore
   enum_values:
   - bluestore
+  - bluestore-exp
   - filestore
   - memstore
   - kstore
