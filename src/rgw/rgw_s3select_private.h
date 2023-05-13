@@ -169,6 +169,7 @@ private:
 #ifdef _ARROW_EXIST
   s3selectEngine::parquet_object m_s3_parquet_object;
 #endif
+  s3selectEngine::json_object m_s3_json_object;
   std::string m_column_delimiter;
   std::string m_quot;
   std::string m_row_delimiter;
@@ -183,11 +184,20 @@ private:
   std::string output_escape_char;
   std::string output_quote_fields;
   std::string output_row_delimiter;
+  std::string m_start_scan;
+  std::string m_end_scan;
+  bool m_scan_range_ind;
+  int64_t m_start_scan_sz;
+  int64_t m_end_scan_sz;
+  int64_t m_object_size_for_processing;
   aws_response_handler m_aws_response_handler;
   bool enable_progress;
 
   //parquet request
   bool m_parquet_type;
+  //json request
+  std::string m_json_datatype;
+  bool m_json_type;
 #ifdef _ARROW_EXIST
   s3selectEngine::rgw_s3select_api m_rgw_api;
 #endif
@@ -197,6 +207,8 @@ private:
   std::string range_req_str;
   std::function<int(std::string&)> fp_result_header_format;
   std::function<int(std::string&)> fp_s3select_result_format;
+  std::function<void(const char*)> fp_debug_mesg;
+  std::function<void(void)> fp_chunked_transfer_encoding;
   int m_header_size;
 
 public:
@@ -217,9 +229,13 @@ private:
 
   int parquet_processing(bufferlist& bl, off_t ofs, off_t len);
 
-  int run_s3select(const char* query, const char* input, size_t input_length);
+  int json_processing(bufferlist& bl, off_t ofs, off_t len);
+
+  int run_s3select_on_csv(const char* query, const char* input, size_t input_length);
 
   int run_s3select_on_parquet(const char* query);
+
+  int run_s3select_on_json(const char* query, const char* input, size_t input_length);
 
   int extract_by_tag(std::string input, std::string tag_name, std::string& result);
 

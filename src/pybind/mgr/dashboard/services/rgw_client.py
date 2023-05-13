@@ -1,9 +1,14 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=C0302
+# pylint: disable=too-many-branches
+# pylint: disable=too-many-lines
 
 import ipaddress
 import json
 import logging
+import os
 import re
+import subprocess
 import xml.etree.ElementTree as ET  # noqa: N814
 from subprocess import SubprocessError
 
@@ -14,7 +19,7 @@ from ..awsauth import S3Auth
 from ..exceptions import DashboardException
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
-from ..tools import dict_contains_path, dict_get, json_str_to_object
+from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
 
 try:
     from typing import Any, Dict, List, Optional, Tuple, Union
@@ -579,18 +584,681 @@ class RgwClient(RestClient):
         realms_info = self._get_realms_info()
         if 'realms' in realms_info and realms_info['realms']:
             return realms_info['realms']
-
         return []
 
-    def get_default_realm(self) -> str:
+    def get_default_realm(self):
         realms_info = self._get_realms_info()
         if 'default_info' in realms_info and realms_info['default_info']:
             realm_info = self._get_realm_info(realms_info['default_info'])
             if 'name' in realm_info and realm_info['name']:
                 return realm_info['name']
-        raise DashboardException(msg='Default realm not found.',
-                                 http_status_code=404,
-                                 component='rgw')
+        return None
+
+    def create_realm(self, realm_name: str, default: bool):
+        rgw_realm_create_cmd = ['realm', 'create']
+        cmd_create_realm_options = ['--rgw-realm', realm_name]
+        if default != 'false':
+            cmd_create_realm_options.append('--default')
+        rgw_realm_create_cmd += cmd_create_realm_options
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_create_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to create realm',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def list_realms(self):
+        rgw_realm_list = {}
+        rgw_realm_list_cmd = ['realm', 'list']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_realm_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch realm list',
+                                         http_status_code=500, component='rgw')
+            rgw_realm_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_realm_list
+
+    def get_realm(self, realm_name: str):
+        realm_info = {}
+        rgw_realm_info_cmd = ['realm', 'get', '--rgw-realm', realm_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_realm_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get realm info',
+                                         http_status_code=500, component='rgw')
+            realm_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return realm_info
+
+    def get_all_realms_info(self):
+        all_realms_info = {}
+        realms_info = []
+        rgw_realm_list = self.list_realms()
+        if 'realms' in rgw_realm_list:
+            if rgw_realm_list['realms'] != []:
+                for rgw_realm in rgw_realm_list['realms']:
+                    realm_info = self.get_realm(rgw_realm)
+                    realms_info.append(realm_info)
+                    all_realms_info['realms'] = realms_info  # type: ignore
+            else:
+                all_realms_info['realms'] = []  # type: ignore
+        if 'default_info' in rgw_realm_list and rgw_realm_list['default_info'] != '':
+            all_realms_info['default_realm'] = rgw_realm_list['default_info']  # type: ignore
+        else:
+            all_realms_info['default_realm'] = ''  # type: ignore
+        return all_realms_info
+
+    def delete_realm(self, realm_name: str):
+        rgw_delete_realm_cmd = ['realm', 'rm', '--rgw-realm', realm_name]
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_realm_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to delete realm',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def update_period(self):
+        rgw_update_period_cmd = ['period', 'update', '--commit']
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_update_period_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to update period',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def edit_realm(self, realm_name: str, new_realm_name: str, default: str = ''):
+        rgw_realm_edit_cmd = []
+        if new_realm_name != realm_name:
+            rgw_realm_edit_cmd = ['realm', 'rename', '--rgw-realm',
+                                  realm_name, '--realm-new-name', new_realm_name]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to edit realm',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+        if default and str_to_bool(default):
+            rgw_realm_edit_cmd = ['realm', 'default', '--rgw-realm', new_realm_name]
+            try:
+                exit_code, _, _ = mgr.send_rgwadmin_command(rgw_realm_edit_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(msg='Unable to set {} as default realm'.format(new_realm_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def create_zonegroup(self, realm_name: str, zonegroup_name: str,
+                         default: bool, master: bool, endpoints: List[str]):
+        rgw_zonegroup_create_cmd = ['zonegroup', 'create']
+        cmd_create_zonegroup_options = ['--rgw-zonegroup', zonegroup_name]
+        if realm_name != 'null':
+            cmd_create_zonegroup_options.append('--rgw-realm')
+            cmd_create_zonegroup_options.append(realm_name)
+        if default != 'false':
+            cmd_create_zonegroup_options.append('--default')
+        if master != 'false':
+            cmd_create_zonegroup_options.append('--master')
+        if endpoints != 'null':  # type: ignore
+            if isinstance(endpoints, list) and len(endpoints) > 1:
+                endpoint = ','.join(endpoints)
+            else:
+                endpoint = endpoints  # type: ignore
+            cmd_create_zonegroup_options.append('--endpoints')
+            cmd_create_zonegroup_options.append(endpoint)
+        rgw_zonegroup_create_cmd += cmd_create_zonegroup_options
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_zonegroup_create_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to get realm info',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return out
+
+    def modify_zonegroup(self, realm_name: str, zonegroup_name: str, default: str, master: str,
+                         endpoints: List[str]):
+        if realm_name:
+            rgw_zonegroup_modify_cmd = ['zonegroup', 'modify',
+                                        '--rgw-realm', realm_name,
+                                        '--rgw-zonegroup', zonegroup_name]
+        if endpoints:
+            if len(endpoints) > 1:
+                endpoint = ','.join(str(e) for e in endpoints)
+            else:
+                endpoint = endpoints[0]
+            rgw_zonegroup_modify_cmd.append('--endpoints')
+            rgw_zonegroup_modify_cmd.append(endpoint)
+        if master and str_to_bool(master):
+            rgw_zonegroup_modify_cmd.append('--master')
+        if default and str_to_bool(default):
+            rgw_zonegroup_modify_cmd.append('--default')
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zonegroup_modify_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to modify zonegroup {}'.format(zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
+    def add_or_remove_zone(self, zonegroup_name: str, zone_name: str, action: str):
+        if action == 'add':
+            rgw_zonegroup_add_zone_cmd = ['zonegroup', 'add', '--rgw-zonegroup',
+                                          zonegroup_name, '--rgw-zone', zone_name]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zonegroup_add_zone_cmd)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to add zone {} to zonegroup {}'.format(zone_name, zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+        if action == 'remove':
+            rgw_zonegroup_rm_zone_cmd = ['zonegroup', 'remove',
+                                         '--rgw-zonegroup', zonegroup_name, '--rgw-zone', zone_name]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zonegroup_rm_zone_cmd)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to remove zone {} from zonegroup {}'.format(zone_name, zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+
+    def get_placement_targets_by_zonegroup(self, zonegroup_name: str):
+        rgw_get_placement_cmd = ['zonegroup', 'placement',
+                                 'list', '--rgw-zonegroup', zonegroup_name]
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_get_placement_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to get placement targets',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return out
+
+    def add_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
+        rgw_add_placement_cmd = ['zonegroup', 'placement', 'add']
+        for placement_target in placement_targets:
+            cmd_add_placement_options = ['--rgw-zonegroup', zonegroup_name,
+                                         '--placement-id', placement_target['placement_id']]
+            if placement_target['tags']:
+                cmd_add_placement_options += ['--tags', placement_target['tags']]
+            rgw_add_placement_cmd += cmd_add_placement_options
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_add_placement_cmd)
+                if exit_code > 0:
+                    raise DashboardException(e=err,
+                                             msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+            storage_classes = placement_target['storage_class'].split(",") if placement_target['storage_class'] else []  # noqa E501  #pylint: disable=line-too-long
+            if storage_classes:
+                for sc in storage_classes:
+                    cmd_add_placement_options = ['--storage-class', sc]
+                    try:
+                        exit_code, _, err = mgr.send_rgwadmin_command(
+                            rgw_add_placement_cmd + cmd_add_placement_options)
+                        if exit_code > 0:
+                            raise DashboardException(e=err,
+                                                     msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                                     http_status_code=500, component='rgw')
+                    except SubprocessError as error:
+                        raise DashboardException(error, http_status_code=500, component='rgw')
+                    self.update_period()
+
+    def modify_placement_targets(self, zonegroup_name: str, placement_targets: List[Dict]):
+        rgw_add_placement_cmd = ['zonegroup', 'placement', 'modify']
+        for placement_target in placement_targets:
+            cmd_add_placement_options = ['--rgw-zonegroup', zonegroup_name,
+                                         '--placement-id', placement_target['placement_id']]
+            if placement_target['tags']:
+                cmd_add_placement_options += ['--tags', placement_target['tags']]
+            rgw_add_placement_cmd += cmd_add_placement_options
+            storage_classes = placement_target['storage_class'].split(",") if placement_target['storage_class'] else []  # noqa E501  #pylint: disable=line-too-long
+            if storage_classes:
+                for sc in storage_classes:
+                    cmd_add_placement_options = []
+                    cmd_add_placement_options = ['--storage-class', sc]
+                    try:
+                        exit_code, _, err = mgr.send_rgwadmin_command(
+                            rgw_add_placement_cmd + cmd_add_placement_options)
+                        if exit_code > 0:
+                            raise DashboardException(e=err,
+                                                     msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                                     http_status_code=500, component='rgw')
+                    except SubprocessError as error:
+                        raise DashboardException(error, http_status_code=500, component='rgw')
+                    self.update_period()
+            else:
+                try:
+                    exit_code, _, err = mgr.send_rgwadmin_command(rgw_add_placement_cmd)
+                    if exit_code > 0:
+                        raise DashboardException(e=err,
+                                                 msg='Unable to add placement target {} to zonegroup {}'.format(placement_target['placement_id'], zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                                 http_status_code=500, component='rgw')
+                except SubprocessError as error:
+                    raise DashboardException(error, http_status_code=500, component='rgw')
+                self.update_period()
+
+    # pylint: disable=W0102
+    def edit_zonegroup(self, realm_name: str, zonegroup_name: str, new_zonegroup_name: str,
+                       default: str = '', master: str = '', endpoints: List[str] = [],
+                       add_zones: List[str] = [], remove_zones: List[str] = [],
+                       placement_targets: List[Dict[str, str]] = []):
+        rgw_zonegroup_edit_cmd = []
+        if new_zonegroup_name != zonegroup_name:
+            rgw_zonegroup_edit_cmd = ['zonegroup', 'rename', '--rgw-zonegroup', zonegroup_name,
+                                      '--zonegroup-new-name', new_zonegroup_name]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zonegroup_edit_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to rename zonegroup to {}'.format(new_zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+        self.modify_zonegroup(realm_name, new_zonegroup_name, default, master, endpoints)
+        if add_zones:
+            for zone_name in add_zones:
+                self.add_or_remove_zone(new_zonegroup_name, zone_name, 'add')
+        if remove_zones:
+            for zone_name in remove_zones:
+                self.add_or_remove_zone(new_zonegroup_name, zone_name, 'remove')
+        existing_placement_targets = self.get_placement_targets_by_zonegroup(new_zonegroup_name)
+        existing_placement_targets_ids = [pt['key'] for pt in existing_placement_targets]
+        if placement_targets:
+            for pt in placement_targets:
+                if pt['placement_id'] in existing_placement_targets_ids:
+                    self.modify_placement_targets(new_zonegroup_name, placement_targets)
+                else:
+                    self.add_placement_targets(new_zonegroup_name, placement_targets)
+
+    def list_zonegroups(self):
+        rgw_zonegroup_list = {}
+        rgw_zonegroup_list_cmd = ['zonegroup', 'list']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch zonegroup list',
+                                         http_status_code=500, component='rgw')
+            rgw_zonegroup_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_zonegroup_list
+
+    def get_zonegroup(self, zonegroup_name: str):
+        zonegroup_info = {}
+        rgw_zonegroup_info_cmd = ['zonegroup', 'get', '--rgw-zonegroup', zonegroup_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zonegroup_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get zonegroup info',
+                                         http_status_code=500, component='rgw')
+            zonegroup_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return zonegroup_info
+
+    def get_all_zonegroups_info(self):
+        all_zonegroups_info = {}
+        zonegroups_info = []
+        rgw_zonegroup_list = self.list_zonegroups()
+        if 'zonegroups' in rgw_zonegroup_list:
+            if rgw_zonegroup_list['zonegroups'] != []:
+                for rgw_zonegroup in rgw_zonegroup_list['zonegroups']:
+                    zonegroup_info = self.get_zonegroup(rgw_zonegroup)
+                    zonegroups_info.append(zonegroup_info)
+                all_zonegroups_info['zonegroups'] = zonegroups_info  # type: ignore
+            else:
+                all_zonegroups_info['zonegroups'] = []  # type: ignore
+        if 'default_info' in rgw_zonegroup_list and rgw_zonegroup_list['default_info'] != '':
+            all_zonegroups_info['default_zonegroup'] = rgw_zonegroup_list['default_info']
+        else:
+            all_zonegroups_info['default_zonegroup'] = ''  # type: ignore
+        return all_zonegroups_info
+
+    def delete_zonegroup(self, zonegroup_name: str, delete_pools: str):
+        if delete_pools == 'true':
+            zonegroup_info = self.get_zonegroup(zonegroup_name)
+        rgw_delete_zonegroup_cmd = ['zonegroup', 'delete', '--rgw-zonegroup', zonegroup_name]
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_zonegroup_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to delete zonegroup',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+        if delete_pools == 'true':
+            for zone in zonegroup_info['zones']:
+                zone_info = self.get_zone(zone['name'])
+                self.delete_zone_pools(zone['name'], zone_info)
+
+    def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, user,
+                    createSystemUser, master_zone_of_master_zonegroup):
+        if user != 'null':
+            access_key, secret_key = self.get_rgw_user_keys(user, master_zone_of_master_zonegroup)
+        else:
+            access_key = None  # type: ignore
+            secret_key = None  # type: ignore
+        rgw_zone_create_cmd = ['zone', 'create']
+        cmd_create_zone_options = ['--rgw-zone', zone_name]
+        if zonegroup_name != 'null':
+            cmd_create_zone_options.append('--rgw-zonegroup')
+            cmd_create_zone_options.append(zonegroup_name)
+        if default != 'false':
+            cmd_create_zone_options.append('--default')
+        if master != 'false':
+            cmd_create_zone_options.append('--master')
+        if endpoints != 'null':
+            cmd_create_zone_options.append('--endpoints')
+            cmd_create_zone_options.append(endpoints)
+        if access_key is not None:
+            cmd_create_zone_options.append('--access-key')
+            cmd_create_zone_options.append(access_key)
+        if secret_key is not None:
+            cmd_create_zone_options.append('--secret')
+            cmd_create_zone_options.append(secret_key)
+        rgw_zone_create_cmd += cmd_create_zone_options
+        try:
+            exit_code, out, err = mgr.send_rgwadmin_command(rgw_zone_create_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to create zone',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        self.update_period()
+
+        if createSystemUser == 'true':
+            self.create_system_user(user, zone_name)
+            access_key, secret_key = self.get_rgw_user_keys(user, zone_name)
+            rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zone', zone_name,
+                                   '--access-key', access_key, '--secret', secret_key]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to modify zone',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+
+        return out
+
+    def get_rgw_user_keys(self, user, zone_name):
+        access_key = ''
+        secret_key = ''
+        rgw_user_info_cmd = ['user', 'info', '--uid', user, '--rgw-zone', zone_name]
+        try:
+            _, out, _ = mgr.send_rgwadmin_command(rgw_user_info_cmd)
+            if out:
+                access_key, secret_key = self.parse_secrets(user, out)
+        except SubprocessError as error:
+            logger.exception(error)
+
+        return access_key, secret_key
+
+    def parse_secrets(self, user, data):
+        for key in data.get('keys', []):
+            if key.get('user') == user:
+                access_key = key.get('access_key')
+                secret_key = key.get('secret_key')
+                return access_key, secret_key
+        return '', ''
+
+    def modify_zone(self, zone_name: str, zonegroup_name: str, default: str, master: str,
+                    endpoints: List[str], user: str, master_zone_of_master_zonegroup):
+        if user:
+            access_key, secret_key = self.get_rgw_user_keys(user, master_zone_of_master_zonegroup)
+        else:
+            access_key = None
+            secret_key = None
+        rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zonegroup',
+                               zonegroup_name, '--rgw-zone', zone_name]
+        if endpoints:
+            if len(endpoints) > 1:
+                endpoint = ','.join(str(e) for e in endpoints)
+            else:
+                endpoint = endpoints[0]
+            rgw_zone_modify_cmd.append('--endpoints')
+            rgw_zone_modify_cmd.append(endpoint)
+        if default and str_to_bool(default):
+            rgw_zone_modify_cmd.append('--default')
+        if master and str_to_bool(master):
+            rgw_zone_modify_cmd.append('--master')
+        if access_key is not None:
+            rgw_zone_modify_cmd.append('--access-key')
+            rgw_zone_modify_cmd.append(access_key)
+        if secret_key is not None:
+            rgw_zone_modify_cmd.append('--secret')
+            rgw_zone_modify_cmd.append(secret_key)
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to modify zone',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
+    def add_placement_targets_zone(self, zone_name: str, placement_target: str, data_pool: str,
+                                   index_pool: str, data_extra_pool: str):
+        rgw_zone_add_placement_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
+                                      '--placement-id', placement_target, '--data-pool', data_pool,
+                                      '--index-pool', index_pool,
+                                      '--data-extra-pool', data_extra_pool]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_placement_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to add placement target {} to zone {}'.format(placement_target, zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
+    def add_storage_class_zone(self, zone_name: str, placement_target: str, storage_class: str,
+                               data_pool: str, compression: str):
+        rgw_zone_add_storage_class_cmd = ['zone', 'placement', 'add', '--rgw-zone', zone_name,
+                                          '--placement-id', placement_target,
+                                          '--storage-class', storage_class,
+                                          '--data-pool', data_pool,
+                                          '--compression', compression]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_add_storage_class_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to add storage class {} to zone {}'.format(storage_class, zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
+    def edit_zone(self, zone_name: str, new_zone_name: str, zonegroup_name: str, default: str = '',
+                  master: str = '', endpoints: List[str] = [], user: str = '',
+                  placement_target: str = '', data_pool: str = '', index_pool: str = '',
+                  data_extra_pool: str = '', storage_class: str = '', data_pool_class: str = '',
+                  compression: str = '', master_zone_of_master_zonegroup=None):
+        if new_zone_name != zone_name:
+            rgw_zone_rename_cmd = ['zone', 'rename', '--rgw-zone',
+                                   zone_name, '--zone-new-name', new_zone_name]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_rename_cmd, False)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to rename zone to {}'.format(new_zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+        self.modify_zone(new_zone_name, zonegroup_name, default, master, endpoints, user,
+                         master_zone_of_master_zonegroup)
+        self.add_placement_targets_zone(new_zone_name, placement_target,
+                                        data_pool, index_pool, data_extra_pool)
+        self.add_storage_class_zone(new_zone_name, placement_target, storage_class,
+                                    data_pool_class, compression)
+
+    def list_zones(self):
+        rgw_zone_list = {}
+        rgw_zone_list_cmd = ['zone', 'list']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_list_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to fetch zone list',
+                                         http_status_code=500, component='rgw')
+            rgw_zone_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return rgw_zone_list
+
+    def get_zone(self, zone_name: str):
+        zone_info = {}
+        rgw_zone_info_cmd = ['zone', 'get', '--rgw-zone', zone_name]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_zone_info_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get zone info',
+                                         http_status_code=500, component='rgw')
+            zone_info = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return zone_info
+
+    def get_all_zones_info(self):
+        all_zones_info = {}
+        zones_info = []
+        rgw_zone_list = self.list_zones()
+        if 'zones' in rgw_zone_list:
+            if rgw_zone_list['zones'] != []:
+                for rgw_zone in rgw_zone_list['zones']:
+                    zone_info = self.get_zone(rgw_zone)
+                    zones_info.append(zone_info)
+                    all_zones_info['zones'] = zones_info  # type: ignore
+            else:
+                all_zones_info['zones'] = []
+        if 'default_info' in rgw_zone_list and rgw_zone_list['default_info'] != '':
+            all_zones_info['default_zone'] = rgw_zone_list['default_info']  # type: ignore
+        else:
+            all_zones_info['default_zone'] = ''  # type: ignore
+        return all_zones_info
+
+    def delete_zone(self, zonegroup_name: str, zone_name: str, delete_pools: str):
+        rgw_remove_zone_from_zonegroup_cmd = ['zonegroup', 'remove', '--rgw-zonegroup',
+                                              zonegroup_name, '--rgw-zone', zone_name]
+        rgw_delete_zone_cmd = ['zone', 'delete', '--rgw-zone', zone_name]
+        zone_info = self.get_zone(zone_name)
+        if zonegroup_name:
+            try:
+                exit_code, _, _ = mgr.send_rgwadmin_command(rgw_remove_zone_from_zonegroup_cmd)
+                if exit_code > 0:
+                    raise DashboardException(msg='Unable to remove zone from zonegroup',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+            self.update_period()
+        try:
+            exit_code, _, _ = mgr.send_rgwadmin_command(rgw_delete_zone_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to delete zone',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+        if delete_pools == 'true':
+            self.delete_zone_pools(zone_name, zone_info)
+
+    def delete_zone_pools(self, zone_name, zone_info):
+        # pylint: disable=unused-variable
+        for key, value in zone_info.items():
+            if zone_name in value:
+                if mgr.rados.pool_exists(value):
+                    mgr.rados.delete_pool(value)
+        self.search_and_delete_pools(zone_info['placement_pools'], zone_name)
+
+    def search_and_delete_pools(self, obj, pool_name):
+        if isinstance(obj, dict):
+            # pylint: disable=unused-variable
+            for key, value in obj.items():
+                if isinstance(value, str) and pool_name in value:
+                    if mgr.rados.pool_exists(value):
+                        mgr.rados.delete_pool(value)
+                self.search_and_delete_pools(value, pool_name)
+        elif isinstance(obj, list):
+            for item in obj:
+                self.search_and_delete_pools(item, pool_name)
+        else:
+            if isinstance(obj, str) and pool_name in obj:
+                if mgr.rados.pool_exists(obj):
+                    mgr.rados.delete_pool(obj)
+
+    def get_multisite_status(self):
+        is_multisite_configured = True
+        rgw_realm_list = self.list_realms()
+        rgw_zonegroup_list = self.list_zonegroups()
+        rgw_zone_list = self.list_zones()
+        if len(rgw_realm_list['realms']) < 1 and len(rgw_zonegroup_list['zonegroups']) < 1 \
+                and len(rgw_zone_list['zones']) < 1:
+            is_multisite_configured = False
+        return is_multisite_configured
+
+    def get_multisite_sync_status(self):
+        sync_status = ''
+        rgw_sync_status_cmd = ['sync', 'status']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_sync_status_cmd, False)
+            if exit_code > 0:
+                raise DashboardException('Unable to get sync status',
+                                         http_status_code=500, component='rgw')
+            sync_status = out
+        except subprocess.TimeoutExpired:
+            sync_status = 'Timeout Expired'
+        return sync_status
+
+    def create_system_user(self, userName: str, zoneName: str):
+        rgw_user_create_cmd = ['user', 'create', '--uid', userName,
+                               '--display-name', userName, '--rgw-zone', zoneName, '--system']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_create_cmd)
+            if exit_code > 0:
+                raise DashboardException(msg='Unable to create system user',
+                                         http_status_code=500, component='rgw')
+            return out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+    def get_user_list(self, zoneName: str):
+        all_users_info = []
+        user_list = []
+        rgw_user_list_cmd = ['user', 'list', '--rgw-zone', zoneName]
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_list_cmd)
+            if exit_code > 0:
+                raise DashboardException('Unable to get user list',
+                                         http_status_code=500, component='rgw')
+            user_list = out
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        if len(user_list) > 0:
+            for user_name in user_list:
+                rgw_user_info_cmd = ['user', 'info', '--uid', user_name, '--rgw-zone', zoneName]
+                try:
+                    exit_code, out, _ = mgr.send_rgwadmin_command(rgw_user_info_cmd)
+                    if exit_code > 0:
+                        raise DashboardException('Unable to get user info',
+                                                 http_status_code=500, component='rgw')
+                    all_users_info.append(out)
+                except SubprocessError as error:
+                    raise DashboardException(error, http_status_code=500, component='rgw')
+        return all_users_info
 
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):
@@ -786,6 +1454,59 @@ class RgwClient(RestClient):
             _ = request(data=data)  # type: ignore
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
+
+    def list_roles(self) -> List[Dict[str, Any]]:
+        rgw_list_roles_command = ['role', 'list']
+        code, roles, err = mgr.send_rgwadmin_command(rgw_list_roles_command)
+        if code < 0:
+            logger.warning('Error listing roles with code %d: %s', code, err)
+            return []
+
+        return roles
+
+    def create_role(self, role_name: str, role_path: str, role_assume_policy_doc: str) -> None:
+        try:
+            json.loads(role_assume_policy_doc)
+        except:  # noqa: E722
+            raise DashboardException('Assume role policy document is not a valid json')
+
+        # valid values:
+        # pylint: disable=C0301
+        # https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-path # noqa: E501
+        if len(role_name) > 64:
+            raise DashboardException(
+                f'Role name "{role_name}" is invalid. Should be 64 characters or less')
+
+        role_name_regex = '[0-9a-zA-Z_+=,.@-]+'
+        if not re.fullmatch(role_name_regex, role_name):
+            raise DashboardException(
+                f'Role name "{role_name}" is invalid. Valid characters are "{role_name_regex}"')
+
+        if not os.path.isabs(role_path):
+            raise DashboardException(
+                f'Role path "{role_path}" is invalid. It should be an absolute path')
+        if role_path[-1] != '/':
+            raise DashboardException(
+                f'Role path "{role_path}" is invalid. It should start and end with a slash')
+        path_regex = '(\u002F)|(\u002F[\u0021-\u007E]+\u002F)'
+        if not re.fullmatch(path_regex, role_path):
+            raise DashboardException(
+                (f'Role path "{role_path}" is invalid.'
+                 f'Role path should follow the pattern "{path_regex}"'))
+
+        rgw_create_role_command = ['role', 'create', '--role-name', role_name, '--path', role_path]
+        if role_assume_policy_doc:
+            rgw_create_role_command += ['--assume-role-policy-doc', f"{role_assume_policy_doc}"]
+
+        code, _roles, _err = mgr.send_rgwadmin_command(rgw_create_role_command,
+                                                       stdout_as_json=False)
+        if code != 0:
+            # pylint: disable=C0301
+            link = 'https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-path'  # noqa: E501
+            msg = (f'Error creating role with code {code}: '
+                   'Looks like the document has a wrong format.'
+                   f' For more information about the format look at {link}')
+            raise DashboardException(msg=msg, component='rgw')
 
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:

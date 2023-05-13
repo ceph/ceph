@@ -418,6 +418,8 @@ class Schedules:
                 with self.handler.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                     self.load_from_pool(ioctx, namespace_validator,
                                         image_validator)
+            except rados.ConnectionShutdown:
+                raise
             except rados.Error as e:
                 self.handler.log.error(
                     "Failed to load schedules for pool {}: {}".format(

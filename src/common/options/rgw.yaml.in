@@ -3,41 +3,41 @@
 
 options:
 # According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/acl-overview.html),
-# An ACL can have up to 100 grants.
+# An ACL may have up to 100 grants.
 - name: rgw_acl_grants_max_num
   type: int
   level: advanced
-  desc: Max number of ACL grants in a single request
+  desc: The maximum number of ACL grants in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# An user can have up to 100 IAM user policies.
+# A user may have up to 100 IAM user policies.
 - name: rgw_user_policies_max_num
   type: int
   level: advanced
-  desc: Max number of IAM user policies on a single user
+  desc: The maximum number of IAM user policies for a single user.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
-# An cors can have up to 100 rules.
+# According to AWS S3 (http://docs.aws.amazon.com/AmazonS3/latest/dev/cors.html),
+# A CORS request may have up to 100 rules.
 - name: rgw_cors_rules_max_num
   type: int
   level: advanced
-  desc: Max number of cors rules in a single request
+  desc: The maximum number of CORS rules in a single request.
   default: 100
   services:
   - rgw
   with_legacy: true
-# According to AWS S3(https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
+# According to AWS S3 (https://docs.aws.amazon.com/AmazonS3/latest/dev/DeletingObjects.html),
 # Amazon S3 also provides the Multi-Object Delete API that you can use to delete up to 1000
 # objects in a single HTTP request.
 - name: rgw_delete_multi_obj_max_num
   type: int
   level: advanced
-  desc: Max number of objects in a single multi-object delete request
+  desc: The maximum number of objects in a single multi-object delete request.
   default: 1000
   services:
   - rgw
@@ -46,7 +46,7 @@ options:
 - name: rgw_website_routing_rules_max_num
   type: int
   level: advanced
-  desc: Max number of website routing rules in a single request
+  desc: The maximum number of website routing rules in a single request.
   default: 50
   services:
   - rgw
@@ -54,21 +54,21 @@ options:
 - name: rgw_rados_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_op_tracing
   type: bool
   level: advanced
-  desc: true if LTTng-UST tracepoints should be enabled
+  desc: Enables LTTng-UST operator tracepoints.
   default: false
   services:
   - rgw
 - name: rgw_max_chunk_size
   type: size
   level: advanced
-  desc: Set RGW max chunk size
+  desc: The maximum RGW chunk size.
   long_desc: The chunk size is the size of RADOS I/O requests that RGW sends when
     accessing data objects. RGW read and write operations will never request more than
     this amount in a single request. This also defines the RGW head object size, as
@@ -111,7 +111,7 @@ options:
 - name: rgw_max_put_size
   type: size
   level: advanced
-  desc: Max size (in bytes) of regular (non multi-part) object upload.
+  desc: The maximum size (in bytes) of regular (non multi-part) object upload.
   long_desc: Plain object upload is capped at this amount of data. In order to upload
     larger objects, a special upload mechanism is required. The S3 API provides the
     multi-part upload, and Swift provides DLO and SLO.
@@ -794,6 +794,13 @@ options:
   type: str
   level: advanced
   desc: List of roles allowing user to gain admin privileges (Keystone).
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_accepted_reader_roles
+  type: str
+  level: advanced
+  desc: List of roles that can only be used for reads (Keystone).
   services:
   - rgw
   with_legacy: true
@@ -1948,6 +1955,17 @@ options:
     be below the rgw_curl_low_speed_limit for the library to consider it too slow
     and abort. Set it zero to disable this.
   default: 5_min
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_curl_tcp_keepalive
+  type: int
+  level: advanced
+  long_desc: Enable TCP keepalive on the HTTP client sockets managed by libcurl. This does not apply to connections received by the HTTP frontend, but only to HTTP requests sent by radosgw. Examples include requests to Keystone for authentication, sync requests from multisite, and requests to key management servers for SSE.
+  enum_values:
+  - 0
+  - 1
+  default: 0
   services:
   - rgw
   with_legacy: true
@@ -3119,6 +3137,16 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_torrent_max_size
+  type: size
+  level: advanced
+  desc: Objects over this size will not store torrent info.
+  default: 5_G
+  services:
+  - rgw
+  see_also:
+  - rgw_torrent_flag
+  with_legacy: true
 - name: rgw_dynamic_resharding
   type: bool
   level: basic
@@ -3616,6 +3644,22 @@ options:
   desc: experimental Option to set my Motr fid
   long_desc: example value 0x7200000000000001:0x29
   default: 0x7200000000000001:0x0
+  services:
+  - rgw
+- name: motr_admin_fid
+  type: str
+  level: advanced
+  desc: Admin Tool Motr FID for admin-level access.
+  long_desc: example value 0x7200000000000001:0x2c
+  default: 0x7200000000000001:0x0
+  services:
+  - rgw
+- name: motr_admin_endpoint
+  type: str
+  level: advanced
+  desc:  experimental Option to set Admin Motr endpoint address
+  long_desc: example value 192.168.180.182@tcp:12345:4:1
+  default: 192.168.180.182@tcp:12345:4:1
   services:
   - rgw
 - name: motr_my_endpoint

@@ -39,6 +39,6 @@ public:
 
   virtual int handle_overwrite(const DoutPrefixProvider *dpp,
                                const RGWBucketInfo& info,
-                               const RGWBucketInfo& orig_info) = 0;
+                               const RGWBucketInfo& orig_info,
+                               optional_yield y) = 0;
 };
-

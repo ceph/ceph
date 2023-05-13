@@ -65,15 +65,6 @@ options:
   - mds
   flags:
   - runtime
-# max xattr kv pairs size for each dir/file
-- name: mds_max_xattr_pairs_size
-  type: size
-  level: advanced
-  desc: maximum aggregate size of extended attributes on a file
-  default: 64_K
-  services:
-  - mds
-  with_legacy: true
 - name: mds_cache_trim_interval
   type: secs
   level: advanced
@@ -961,6 +952,40 @@ options:
   - mds
   fmt_desc: The debug subtree invariants (for developers only).
   with_legacy: true
+- name: mds_abort_on_newly_corrupt_dentry
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will abort if dentry is detected newly corrupted.
+- name: mds_go_bad_corrupt_dentry
+  type: bool
+  level: advanced
+  default: true
+  services:
+  - mds
+  fmt_desc: MDS will mark a corrupt dentry as bad and isolate
+  flags:
+  - runtime
+- name: mds_inject_rename_corrupt_dentry_first
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  fmt_desc: probabilistically inject corrupt CDentry::first at rename
+  flags:
+  - runtime
+- name: mds_inject_journal_corrupt_dentry_first
+  type: float
+  level: dev
+  default: 0.0
+  services:
+  - mds
+  fmt_desc: probabilistically inject corrupt CDentry::first at journal load
+  flags:
+  - runtime
 - name: mds_kill_mdstable_at
   type: int
   level: dev
@@ -1060,6 +1085,26 @@ options:
   default: false
   services:
   - mds
+- name: mds_kill_skip_replaying_inotable
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
+    the premary MDS will crash, while the replacing MDS won't.
+    (for testing only).
+  with_legacy: true
+- name: mds_inject_skip_replaying_inotable
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+  fmt_desc: Ceph will skip replaying the inotable when replaying the journal, and
+    the premary MDS will crash, while the replacing MDS won't.
+    (for testing only).
+  with_legacy: true
 #  percentage of MDS modify replies to skip sending the client a trace on [0-1]
 - name: mds_inject_traceless_reply_probability
   type: float
@@ -1341,14 +1386,6 @@ options:
   desc: number of seconds after which clients which have not responded to cap revoke
     messages by the MDS are evicted.
   default: 0
-  services:
-  - mds
-- name: mds_max_retries_on_remount_failure
-  type: uint
-  level: advanced
-  desc: number of consecutive failed remount attempts for invalidating kernel dcache
-    after which client would abort.
-  default: 5
   services:
   - mds
 - name: mds_dump_cache_threshold_formatter

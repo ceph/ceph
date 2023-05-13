@@ -84,6 +84,7 @@ set(common_srcs
   page.cc
   perf_counters.cc
   perf_counters_collection.cc
+  perf_counters_key.cc
   perf_histogram.cc
   pick_address.cc
   random_string.cc
@@ -172,6 +173,7 @@ elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
 elseif(WIN32)
   list(APPEND common_srcs win32/errno.cc)
+  list(APPEND common_srcs win32/wstring.cc)
 endif()
 
 if(WITH_EVENTTRACE)

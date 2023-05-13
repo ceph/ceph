@@ -3,6 +3,12 @@
 Java S3 Examples
 ================
 
+Pre-requisites
+--------------
+
+All examples are written against AWS Java SDK 2.17.42. You may need
+to change some code when using another client.
+
 Setup
 -----
 
@@ -11,61 +17,54 @@ classes to be imported:
 
 .. code-block:: java
 
-	import java.io.ByteArrayInputStream;
-	import java.io.File;
+	import java.net.URI;
+	import java.net.URISyntaxException;
+	import java.nio.ByteBuffer;
+	import java.nio.file.Paths;
 	import java.util.List;
-	import com.amazonaws.auth.AWSCredentials;
-	import com.amazonaws.auth.BasicAWSCredentials;
-	import com.amazonaws.util.StringUtils;
-	import com.amazonaws.services.s3.AmazonS3;
-	import com.amazonaws.services.s3.AmazonS3Client;
-	import com.amazonaws.services.s3.model.Bucket;
-	import com.amazonaws.services.s3.model.CannedAccessControlList;
-	import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
-	import com.amazonaws.services.s3.model.GetObjectRequest;
-	import com.amazonaws.services.s3.model.ObjectListing;
-	import com.amazonaws.services.s3.model.ObjectMetadata;
-	import com.amazonaws.services.s3.model.S3ObjectSummary;
+	import java.util.ListIterator;
+	import java.time.Duration;
+
+	import software.amazon.awssdk.auth.credentials.AwsCredentials;
+	import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+	import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+	import software.amazon.awssdk.core.sync.RequestBody;
+	import software.amazon.awssdk.regions.Region;
+	import software.amazon.awssdk.services.s3.S3Client;
+	import software.amazon.awssdk.services.s3.model.Bucket;
+	import software.amazon.awssdk.services.s3.model.ListBucketsResponse;
+	import software.amazon.awssdk.services.s3.model.ListObjectsResponse;
+	import software.amazon.awssdk.services.s3.model.ObjectCannedACL;
+	import software.amazon.awssdk.services.s3.model.S3Exception;
+	import software.amazon.awssdk.services.s3.model.S3Object;
+	import software.amazon.awssdk.services.s3.presigner.S3Presigner;
+	import software.amazon.awssdk.services.s3.presigner.model.PresignedGetObjectRequest;
 
 
 If you are just testing the Ceph Object Storage services, consider
 using HTTP protocol instead of HTTPS protocol. 
 
-First, import the ``ClientConfiguration`` and ``Protocol`` classes. 
+First, import the ``AwsBasicCredentials`` and ``S3Client`` classes.
 
 .. code-block:: java
 
-	import com.amazonaws.ClientConfiguration;
-	import com.amazonaws.Protocol;
+	import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+	import software.amazon.awssdk.services.s3.S3Client;
 
-
-Then, define the client configuration, and add the client configuration
-as an argument for the S3 client.
+Then, use the client builder to create an S3 client:
 
 .. code-block:: java
 
-	AWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);
-			 	
-	ClientConfiguration clientConfig = new ClientConfiguration();
-	clientConfig.setProtocol(Protocol.HTTP);
-			
-	AmazonS3 conn = new AmazonS3Client(credentials, clientConfig);
-	conn.setEndpoint("endpoint.com");
+	AwsBasicCredentials credentials = AwsBasicCredentials.create(accessKey, secretKey);
 
-
-Creating a Connection
----------------------
-
-This creates a connection so that you can interact with the server.
-
-.. code-block:: java
-
-	String accessKey = "insert your access key here!";
-	String secretKey = "insert your secret key here!";
-
-	AWSCredentials credentials = new BasicAWSCredentials(accessKey, secretKey);
-	AmazonS3 conn = new AmazonS3Client(credentials);
-	conn.setEndpoint("objects.dreamhost.com");
+	S3Client client = S3Client.builder()
+		.endpointOverride(new URI("https://endpoint.com"))
+		.credentialsProvider(StaticCredentialsProvider.create(credentials))
+		.serviceConfiguration(srvcConf -> {
+			srvcConf.pathStyleAccessEnabled();
+		})
+		.region(Region.US_EAST_1) // this is not used, but the AWS SDK requires it
+		.build();
 
 
 Listing Owned Buckets
@@ -76,17 +75,16 @@ This also prints out the bucket name and creation date of each bucket.
 
 .. code-block:: java
 
-	List<Bucket> buckets = conn.listBuckets();
-	for (Bucket bucket : buckets) {
-		System.out.println(bucket.getName() + "\t" +
-			StringUtils.fromDate(bucket.getCreationDate()));
+	ListBucketsResponse lbResponse = client.listBuckets();
+	for (Bucket bucket : lbResponse.buckets()) {
+		System.out.println(bucket.name() + "\t" + bucket.creationDate());
 	}
 
 The output will look something like this::
 
-   mahbuckat1	2011-04-21T18:05:39.000Z
-   mahbuckat2	2011-04-21T18:05:48.000Z
-   mahbuckat3	2011-04-21T18:07:18.000Z
+   mahbuckat1    2021-09-20T14:12:57.231Z
+   mahbuckat2    2021-09-20T14:12:59.402Z
+   mahbuckat3    2021-09-20T14:13:02.288Z
 
 
 Creating a Bucket
@@ -96,7 +94,9 @@ This creates a new bucket called ``my-new-bucket``
 
 .. code-block:: java
 
-	Bucket bucket = conn.createBucket("my-new-bucket");
+	client.createBucket(req -> {
+		req.bucket("my-new-bucket");
+	});
 
 
 Listing a Bucket's Content
@@ -107,20 +107,22 @@ modified date.
 
 .. code-block:: java
 
-	ObjectListing objects = conn.listObjects(bucket.getName());
-	do {
-		for (S3ObjectSummary objectSummary : objects.getObjectSummaries()) {
-			System.out.println(objectSummary.getKey() + "\t" +
-				objectSummary.getSize() + "\t" +
-				StringUtils.fromDate(objectSummary.getLastModified()));
-		}
-		objects = conn.listNextBatchOfObjects(objects);
-	} while (objects.isTruncated());
+	ListObjectsResponse loResponse = client.listObjects(req -> {
+		req.bucket("my-bucket");
+	});
+
+	for (S3Object object : loResponse.contents()) {
+		System.out.println(
+			object.key() + "\t" +
+			object.size() + "\t" +
+			object.lastModified()
+		);
+	}
 
 The output will look something like this::
 
-   myphoto1.jpg	251262	2011-08-08T21:35:48.000Z
-   myphoto2.jpg	262518	2011-08-08T21:38:01.000Z
+   myphoto1.jpg	251262	2021-09-20T17:47:07.317Z
+   myphoto2.jpg	262518	2021-09-20T17:49:46.872Z
 
 
 Deleting a Bucket
@@ -131,7 +133,9 @@ Deleting a Bucket
 
 .. code-block:: java
 
-	conn.deleteBucket(bucket.getName());
+	client.deleteBucket(req -> {
+		req.bucket("my-new-bucket");
+	});
 
 
 Forced Delete for Non-empty Buckets
@@ -147,8 +151,13 @@ This creates a file ``hello.txt`` with the string ``"Hello World!"``
 
 .. code-block:: java
 
-	ByteArrayInputStream input = new ByteArrayInputStream("Hello World!".getBytes());
-	conn.putObject(bucket.getName(), "hello.txt", input, new ObjectMetadata());
+	ByteBuffer input = ByteBuffer.wrap("Hello World!".getBytes());
+	client.putObject(
+		req -> {
+			req.bucket("my-bucket").key("hello.txt");
+		},
+		RequestBody.fromByteBuffer(input)
+	);
 
 
 Change an Object's ACL
@@ -159,8 +168,12 @@ This makes the object ``hello.txt`` to be publicly readable, and
 
 .. code-block:: java
 
-	conn.setObjectAcl(bucket.getName(), "hello.txt", CannedAccessControlList.PublicRead);
-	conn.setObjectAcl(bucket.getName(), "secret_plans.txt", CannedAccessControlList.Private);
+	client.putObjectAcl(req -> {
+		req.bucket("my-bucket").key("hello.txt").acl(ObjectCannedACL.PUBLIC_READ);
+	});
+	client.putObjectAcl(req -> {
+		req.bucket("my-bucket").key("secret_plans.txt").acl(ObjectCannedACL.PRIVATE);
+	});
 
 
 Download an Object (to a file)
@@ -171,9 +184,11 @@ This downloads the object ``perl_poetry.pdf`` and saves it in
 
 .. code-block:: java
 
-	conn.getObject(
-		new GetObjectRequest(bucket.getName(), "perl_poetry.pdf"),
-		new File("/home/larry/documents/perl_poetry.pdf")
+	client.getObject(
+		req -> {
+			req.bucket("my-bucket").key("perl_poetry.pdf");
+		},
+		Paths.get("/home/larry/documents/perl_poetry.pdf")
 	);
 
 
@@ -184,7 +199,9 @@ This deletes the object ``goodbye.txt``
 
 .. code-block:: java
 
-	conn.deleteObject(bucket.getName(), "goodbye.txt");
+	client.deleteObject(req -> {
+		req.bucket("my-bucket").key("goodbye.txt");
+	});
 
 
 Generate Object Download URLs (signed and unsigned)
@@ -203,10 +220,22 @@ URL will stop working).
 
 .. code-block:: java
 
-	GeneratePresignedUrlRequest request = new GeneratePresignedUrlRequest(bucket.getName(), "secret_plans.txt");
-	System.out.println(conn.generatePresignedUrl(request));
+	S3Presigner presigner = S3Presigner.builder()
+		.endpointOverride(new URI("https://endpoint.com"))
+		.credentialsProvider(StaticCredentialsProvider.create(credentials))
+		.region(Region.US_EAST_1) // this is not used, but the AWS SDK requires it
+		.build();
+
+	PresignedGetObjectRequest presignedRequest = presigner.presignGetObject(preReq -> {
+		preReq.getObjectRequest(req -> {
+			req.bucket("my-bucket").key("secret_plans.txt");
+		}).signatureDuration(
+			Duration.ofMinutes(20)
+		);
+	});
+	System.out.println(presignedRequest.url());
 
 The output will look something like this::
 
-   https://my-bucket-name.objects.dreamhost.com/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
+   https://endpoint.com/my-bucket/secret_plans.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Date=20210921T151408Z&X-Amz-SignedHeaders=host&X-Amz-Expires=1200&X-Amz-Credential=XXXXXXXXXXXX%2F20210921%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Signature=yyyyyyyyyyyyyyyyyyyyyy
 

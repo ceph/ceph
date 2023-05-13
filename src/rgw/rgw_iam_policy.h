@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_IAM_POLICY_H
-#define CEPH_RGW_IAM_POLICY_H
+#pragma once
 
 #include <bitset>
 #include <chrono>
@@ -18,8 +17,6 @@
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/variant.hpp>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "common/ceph_time.h"
@@ -580,5 +577,3 @@ bool is_public(const Policy& p);
 
 }
 }
-
-#endif

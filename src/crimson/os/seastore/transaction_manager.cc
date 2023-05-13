@@ -125,18 +125,22 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
           t,
           [this](
             paddr_t paddr,
+	    paddr_t backref_key,
             extent_len_t len,
             extent_types_t type,
             laddr_t laddr) {
           if (is_backref_node(type)) {
             assert(laddr == L_ADDR_NULL);
-            backref_manager->cache_new_backref_extent(paddr, type);
+	    assert(backref_key != P_ADDR_NULL);
+            backref_manager->cache_new_backref_extent(paddr, backref_key, type);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           } else if (laddr == L_ADDR_NULL) {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, -1);
             epm->mark_space_free(paddr, len);
           } else {
+	    assert(backref_key == P_ADDR_NULL);
             cache->update_tree_extents_num(type, 1);
             epm->mark_space_used(paddr, len);
           }
@@ -373,30 +377,6 @@ TransactionManager::do_submit_transaction(
 	  backref_to_clear.push_back(e);
       }
 
-      // ...but add_pin from parent->leaf
-      std::vector<CachedExtentRef> lba_to_link;
-      std::vector<CachedExtentRef> backref_to_link;
-      lba_to_link.reserve(tref.get_fresh_block_stats().num +
-			  tref.get_existing_block_stats().valid_num);
-      backref_to_link.reserve(tref.get_fresh_block_stats().num);
-      tref.for_each_fresh_block([&](auto &e) {
-	if (e->is_valid()) {
-	  if (is_lba_node(e->get_type()) || e->is_logical())
-	    lba_to_link.push_back(e);
-	  else if (is_backref_node(e->get_type()))
-	    backref_to_link.push_back(e);
-	}
-      });
-
-      for (auto &e: tref.get_existing_block_list()) {
-	if (e->is_valid()) {
-	  lba_to_link.push_back(e);
-	}
-      }
-
-      lba_manager->complete_transaction(tref, lba_to_clear, lba_to_link);
-      backref_manager->complete_transaction(tref, backref_to_clear, backref_to_link);
-
       journal->get_trimmer().update_journal_tails(
 	cache->get_oldest_dirty_from().value_or(start_seq),
 	cache->get_oldest_backref_dirty_from().value_or(start_seq));
@@ -469,7 +449,6 @@ TransactionManager::rewrite_logical_extent(
     lextent->get_length(),
     nlextent->get_bptr().c_str());
   nlextent->set_laddr(lextent->get_laddr());
-  nlextent->set_pin(lextent->get_pin().duplicate());
   nlextent->set_modify_time(lextent->get_modify_time());
 
   DEBUGT("rewriting logical extent -- {} to {}", t, *lextent, *nlextent);
@@ -482,7 +461,8 @@ TransactionManager::rewrite_logical_extent(
     t,
     lextent->get_laddr(),
     lextent->get_paddr(),
-    nlextent->get_paddr());
+    nlextent->get_paddr(),
+    nlextent.get());
 }
 
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
@@ -576,7 +556,7 @@ TransactionManager::get_extents_if_live(
           return trans_intr::parallel_for_each(
             pin_list,
             [=, this, &list, &t](
-              LBAPinRef &pin) -> Cache::get_extent_iertr::future<>
+              LBAMappingRef &pin) -> Cache::get_extent_iertr::future<>
           {
             auto pin_paddr = pin->get_val();
             auto &pin_seg_paddr = pin_paddr.as_seg_paddr();
@@ -588,7 +568,7 @@ TransactionManager::get_extents_if_live(
             // Only extent split can happen during the lookup
             ceph_assert(pin_seg_paddr >= paddr &&
                         pin_seg_paddr.add_offset(pin_len) <= paddr.add_offset(len));
-            return pin_to_extent_by_type(t, std::move(pin), type
+            return read_pin_by_type(t, std::move(pin), type
             ).si_then([&list](auto ret) {
               list.emplace_back(std::move(ret));
               return seastar::now();
@@ -642,10 +622,15 @@ TransactionManagerRef make_transaction_manager(
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
+  SegmentManagerGroupRef cold_sms = nullptr;
+  std::vector<SegmentProvider*> segment_providers_by_id{DEVICE_ID_MAX, nullptr};
 
   auto p_backend_type = primary_device->get_backend_type();
 
   if (p_backend_type == backend_type_t::SEGMENTED) {
+    auto dtype = primary_device->get_device_type();
+    ceph_assert(dtype != device_type_t::HDD &&
+		dtype != device_type_t::EPHEMERAL_COLD);
     sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
   } else {
     auto rbm = std::make_unique<BlockRBManager>(
@@ -655,7 +640,14 @@ TransactionManagerRef make_transaction_manager(
 
   for (auto &p_dev : secondary_devices) {
     if (p_dev->get_backend_type() == backend_type_t::SEGMENTED) {
-      sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+      if (p_dev->get_device_type() == primary_device->get_device_type()) {
+        sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+      } else {
+        if (!cold_sms) {
+          cold_sms = std::make_unique<SegmentManagerGroup>();
+        }
+        cold_sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+      }
     } else {
       auto rbm = std::make_unique<BlockRBManager>(
 	static_cast<RBMDevice*>(p_dev), "", is_test);
@@ -704,14 +696,36 @@ TransactionManagerRef make_transaction_manager(
   AsyncCleanerRef cleaner;
   JournalRef journal;
 
+  SegmentCleanerRef cold_segment_cleaner = nullptr;
+
+  if (cold_sms) {
+    cold_segment_cleaner = SegmentCleaner::create(
+      cleaner_config,
+      std::move(cold_sms),
+      *backref_manager,
+      epm->get_ool_segment_seq_allocator(),
+      cleaner_is_detailed,
+      /* is_cold = */ true);
+    if (journal_type == journal_type_t::SEGMENTED) {
+      for (auto id : cold_segment_cleaner->get_device_ids()) {
+        segment_providers_by_id[id] =
+          static_cast<SegmentProvider*>(cold_segment_cleaner.get());
+      }
+    }
+  }
+
   if (journal_type == journal_type_t::SEGMENTED) {
     cleaner = SegmentCleaner::create(
       cleaner_config,
       std::move(sms),
       *backref_manager,
+      epm->get_ool_segment_seq_allocator(),
       cleaner_is_detailed);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
-    cache->set_segment_provider(*segment_cleaner);
+    for (auto id : segment_cleaner->get_device_ids()) {
+      segment_providers_by_id[id] =
+        static_cast<SegmentProvider*>(segment_cleaner);
+    }
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
     journal = journal::make_segmented(
       *segment_cleaner,
@@ -727,7 +741,11 @@ TransactionManagerRef make_transaction_manager(
       "");
   }
 
-  epm->init(std::move(journal_trimmer), std::move(cleaner));
+  cache->set_segment_providers(std::move(segment_providers_by_id));
+
+  epm->init(std::move(journal_trimmer),
+	    std::move(cleaner),
+	    std::move(cold_segment_cleaner));
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(

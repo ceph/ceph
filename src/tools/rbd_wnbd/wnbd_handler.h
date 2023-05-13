@@ -98,6 +98,7 @@ public:
     reply_tpool = new boost::asio::thread_pool(_io_reply_workers);
   }
 
+  int resize(uint64_t new_size);
   int start();
   // Wait for the handler to stop, which normally happens when the driver
   // passes the "Disconnect" request.

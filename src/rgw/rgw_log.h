@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_LOG_H
-#define CEPH_RGW_LOG_H
+#pragma once
 
 #include <boost/container/flat_map.hpp>
 #include "rgw_common.h"
@@ -288,6 +287,3 @@ void rgw_log_usage_init(CephContext* cct, rgw::sal::Driver* driver);
 void rgw_log_usage_finalize();
 void rgw_format_ops_log_entry(struct rgw_log_entry& entry,
 			      ceph::Formatter *formatter);
-
-#endif /* CEPH_RGW_LOG_H */
-

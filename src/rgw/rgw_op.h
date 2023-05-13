@@ -10,8 +10,7 @@
  * to provide additional virtual methods such as send_response or get_params.
  */
 
-#ifndef CEPH_RGW_OP_H
-#define CEPH_RGW_OP_H
+#pragma once
 
 #include <limits.h>
 
@@ -48,7 +47,6 @@
 #include "rgw_log.h"
 
 #include "rgw_lc.h"
-#include "rgw_torrent.h"
 #include "rgw_tag.h"
 #include "rgw_object_lock.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -61,12 +59,11 @@
 
 #include "include/ceph_assert.h"
 
-using ceph::crypto::SHA1;
-
 struct req_state;
 class RGWOp;
 class RGWRados;
 class RGWMultiCompleteUpload;
+class RGWPutObj_Torrent;
 
 
 namespace rgw {
@@ -79,7 +76,7 @@ class StrategyRegistry;
 }
 }
 
-int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
+int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        CephContext *cct,
 				       rgw::sal::Driver* driver,
                                        RGWBucketInfo& bucket_info,
@@ -183,6 +180,7 @@ protected:
   RGWQuota quota;
   int op_ret;
   int do_aws4_auth_completion();
+  bool init_called = false;
 
   virtual int init_quota();
 
@@ -234,7 +232,9 @@ public:
   }
 
   virtual void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *dialect_handler) {
+    if (init_called) return;
     this->driver = driver;
+    init_called = true;
     this->s = s;
     this->dialect_handler = dialect_handler;
   }
@@ -329,7 +329,6 @@ public:
 
 class RGWGetObj : public RGWOp {
 protected:
-  seed torrent; // get torrent
   const char *range_str;
   const char *if_mod;
   const char *if_unmod;
@@ -347,12 +346,14 @@ protected:
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
   rgw::sal::Attrs attrs;
+  bool get_torrent = false;
   bool get_data;
   bool partial_content;
   bool ignore_invalid_range;
   bool range_parsed;
   bool skip_manifest;
   bool skip_decrypt{false};
+  bool sync_cloudtiered{false};
   utime_t gc_invalidate_time;
   bool is_slo;
   std::string lo_etag;
@@ -441,8 +442,8 @@ public:
     return 0;
   }
 
-  // get lua script to run as a "get object" filter 
-  int get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter, 
+  // get lua script to run as a "get object" filter
+  int get_lua_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
       RGWGetObj_Filter* cb);
 
   dmc::client_id dmclock_client() override { return dmc::client_id::data; }
@@ -696,7 +697,7 @@ protected:
 
   boost::optional<std::pair<std::string, rgw_obj_key>>
   parse_path(const std::string_view& path);
-  
+
   std::pair<std::string, std::string>
   handle_upload_path(req_state *s);
 
@@ -902,8 +903,8 @@ public:
 class RGWListBucket : public RGWOp {
 protected:
   std::string prefix;
-  rgw_obj_key marker; 
-  rgw_obj_key next_marker; 
+  rgw_obj_key marker;
+  rgw_obj_key next_marker;
   rgw_obj_key end_marker;
   std::string max_keys;
   std::string delimiter;
@@ -1187,7 +1188,6 @@ WRITE_CLASS_ENCODER(RGWSLOInfo)
 
 class RGWPutObj : public RGWOp {
 protected:
-  seed torrent;
   off_t ofs;
   const char *supplied_md5_b64;
   const char *supplied_etag;
@@ -1283,9 +1283,12 @@ public:
                                  rgw::sal::DataProcessor *cb) {
     return 0;
   }
+  // if configured, construct a filter to generate torrent metadata
+  auto get_torrent_filter(rgw::sal::DataProcessor *cb)
+      -> std::optional<RGWPutObj_Torrent>;
 
-  // get lua script to run as a "put object" filter 
-  int get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
+  // get lua script to run as a "put object" filter
+  int get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter,
       rgw::sal::DataProcessor* cb);
 
   int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
@@ -1508,11 +1511,7 @@ protected:
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
   rgw::sal::Attrs attrs;
-  std::string src_tenant_name, src_bucket_name, src_obj_name;
   std::unique_ptr<rgw::sal::Bucket> src_bucket;
-  std::string dest_tenant_name, dest_bucket_name, dest_obj_name;
-  std::unique_ptr<rgw::sal::Bucket> dest_bucket;
-  std::unique_ptr<rgw::sal::Object> dest_object;
   ceph::real_time src_mtime;
   ceph::real_time mtime;
   rgw::sal::AttrsMod attrs_mod;
@@ -1572,6 +1571,7 @@ public:
     RGWOp::init(driver, s, h);
     dest_policy.set_ctx(s->cct);
   }
+  int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1631,7 +1631,7 @@ public:
 
 class RGWGetLC : public RGWOp {
 protected:
-    
+
 public:
   RGWGetLC() { }
   ~RGWGetLC() override { }
@@ -1659,7 +1659,7 @@ public:
   ~RGWPutLC() override {}
 
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *dialect_handler) override {
-#define COOKIE_LEN 16
+    static constexpr std::size_t COOKIE_LEN = 16;
     char buf[COOKIE_LEN + 1];
 
     RGWOp::init(driver, s, dialect_handler);
@@ -2032,18 +2032,18 @@ public:
 class RGWDeleteMultiObj : public RGWOp {
   /**
    * Handles the deletion of an individual object and uses
-   * set_partial_response to record the outcome. 
+   * set_partial_response to record the outcome.
    */
   void handle_individual_object(const rgw_obj_key& o,
 				optional_yield y,
                                 boost::asio::deadline_timer *formatter_flush_cond);
-  
+
   /**
    * When the request is being executed in a coroutine, performs
    * the actual formatter flushing and is responsible for the
    * termination condition (when when all partial object responses
    * have been sent). Note that the formatter flushing must be handled
-   * on the coroutine that invokes the execute method vs. the 
+   * on the coroutine that invokes the execute method vs. the
    * coroutines that are spawned to handle individual objects because
    * the flush logic uses a yield context that was captured
    * and saved on the req_state vs. one that is passed on the stack.
@@ -2237,7 +2237,7 @@ inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
 {
   if (delete_at == boost::none) {
     return;
-  } 
+  }
 
   bufferlist delatbl;
   encode(*delete_at, delatbl);
@@ -2669,5 +2669,3 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp,
                             CephContext *cct,
                             std::map<std::string, bufferlist>& attrset,
                             RGWAccessControlPolicy *policy);
-
-#endif /* CEPH_RGW_OP_H */

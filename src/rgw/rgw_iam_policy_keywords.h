@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_POLICY_S3V2_KEYWORDS_H
-#define CEPH_RGW_POLICY_S3V2_KEYWORDS_H
+#pragma once
 
 namespace rgw {
 namespace IAM {
@@ -138,5 +137,3 @@ enum class Type {
 };
 }
 }
-
-#endif // CEPH_RGW_POLICY_S3V2_KEYWORDS_H

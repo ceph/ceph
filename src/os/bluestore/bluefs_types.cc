@@ -167,7 +167,6 @@ bluefs_fnode_delta_t* bluefs_fnode_t::make_delta(bluefs_fnode_delta_t* delta) {
       delta->extents.push_back(*p);
       ++p;
     }
-    reset_delta();
   }
   return delta;
 }

@@ -58,7 +58,9 @@ using ::ceph::decode;
 static std::string motr_global_indices[] = {
   RGW_MOTR_USERS_IDX_NAME,
   RGW_MOTR_BUCKET_INST_IDX_NAME,
-  RGW_MOTR_BUCKET_HD_IDX_NAME
+  RGW_MOTR_BUCKET_HD_IDX_NAME,
+  RGW_IAM_MOTR_ACCESS_KEY,
+  RGW_IAM_MOTR_EMAIL_KEY
 };
 
 void MotrMetaCache::invalid(const DoutPrefixProvider *dpp,
@@ -170,7 +172,7 @@ int MotrUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
 
   // Retrieve all `max` number of pairs.
   buckets.clear();
-  string user_info_iname = "motr.rgw.user.info." + info.user_id.id;
+  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
   keys[0] = marker;
   rc = store->next_query_by_name(user_info_iname, keys, vals);
   if (rc < 0) {
@@ -232,10 +234,10 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
 
   if (ret != -ENOENT) {
     *existed = true;
-    if (swift_ver_location.empty()) {
-      swift_ver_location = bucket->get_info().swift_ver_location;
-    }
-    placement_rule.inherit_from(bucket->get_info().placement_rule);
+    // if (swift_ver_location.empty()) {
+    //   swift_ver_location = bucket->get_info().swift_ver_location;
+    // }
+    // placement_rule.inherit_from(bucket->get_info().placement_rule);
 
     // TODO: ACL policy
     // // don't allow changes to the acl policy
@@ -247,17 +249,16 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
     //    return -EEXIST;
     //}
   } else {
+
     placement_rule.name = "default";
     placement_rule.storage_class = "STANDARD";
     bucket = std::make_unique<MotrBucket>(store, b, this);
     bucket->set_attrs(attrs);
-
     *existed = false;
   }
 
-  // TODO: how to handle zone and multi-site.
-
-  if (!*existed) {
+  if (!*existed){
+    // TODO: how to handle zone and multi-site.
     info.placement_rule = placement_rule;
     info.bucket = b;
     info.owner = this->get_info().user_id;
@@ -281,8 +282,9 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
      if (ret < 0)
        ldpp_dout(dpp, 0) << "ERROR: failed to add bucket entry! " << ret << dendl;
   } else {
-    bucket->set_version(ep_objv);
-    bucket->get_info() = info;
+    return -EEXIST;
+    // bucket->set_version(ep_objv);
+    // bucket->get_info() = info;
   }
 
   bucket_out->swap(bucket);
@@ -326,18 +328,18 @@ int MotrUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, ui
   return 0;
 }
 
-static int load_user_from_idx(const DoutPrefixProvider *dpp,
+int MotrUser::load_user_from_idx(const DoutPrefixProvider *dpp,
                               MotrStore *store,
                               RGWUserInfo& info, map<string, bufferlist> *attrs,
-                              RGWObjVersionTracker *objv_tracker)
+                              RGWObjVersionTracker *objv_tr)
 {
   struct MotrUserInfo muinfo;
   bufferlist bl;
+  ldpp_dout(dpp, 20) << "info.user_id.id = "  << info.user_id.id << dendl;
   if (store->get_user_cache()->get(dpp, info.user_id.id, bl)) {
     // Cache misses
-    ldpp_dout(dpp, 20) << "info.user_id.id = "  << info.user_id.id << dendl;
     int rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
-                                      M0_IC_GET, info.user_id.id, bl);
+                                      M0_IC_GET, info.user_id.to_str(), bl);
     ldpp_dout(dpp, 20) << "do_idx_op_by_name() = "  << rc << dendl;
     if (rc < 0)
         return rc;
@@ -352,8 +354,17 @@ static int load_user_from_idx(const DoutPrefixProvider *dpp,
   info = muinfo.info;
   if (attrs)
     *attrs = muinfo.attrs;
-  if (objv_tracker)
-    objv_tracker->read_version = muinfo.user_version;
+  if (objv_tr)
+  {
+    objv_tr->read_version = muinfo.user_version;
+    objv_tracker.read_version = objv_tr->read_version;
+  }
+
+  if (!info.access_keys.empty()) {
+    for(auto key : info.access_keys) {
+      access_key_tracker.insert(key.first);
+    }
+  }
 
   return 0;
 }
@@ -367,7 +378,7 @@ int MotrUser::load_user(const DoutPrefixProvider *dpp,
 
 int MotrUser::create_user_info_idx()
 {
-  string user_info_iname = "motr.rgw.user.info." + info.user_id.id;
+  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
   return store->create_motr_idx_by_name(user_info_iname);
 }
 
@@ -388,8 +399,8 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   RGWObjVersionTracker objv_tr = {};
   obj_version& obj_ver = objv_tr.read_version;
 
-  ldpp_dout(dpp, 10) << "Store_user(): User = " << info.user_id.id << dendl;
-  orig_info.user_id.id = info.user_id.id;
+  ldpp_dout(dpp, 20) << "Store_user(): User = " << info.user_id.id << dendl;
+  orig_info.user_id = info.user_id;
   // XXX: we open and close motr idx 2 times in this method:
   // 1) on load_user_from_idx() here and 2) on do_idx_op_by_name(PUT) below.
   // Maybe this can be optimised later somewhow.
@@ -422,11 +433,47 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   muinfo.user_version = obj_ver;
   muinfo.encode(bl);
   rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
-                                M0_IC_PUT, info.user_id.id, bl);
+                                M0_IC_PUT, info.user_id.to_str(), bl);
   ldpp_dout(dpp, 10) << "Store user to motr index: rc = " << rc << dendl;
   if (rc == 0) {
     objv_tracker.read_version = obj_ver;
     objv_tracker.write_version = obj_ver;
+  }
+  
+  // Store access key in access key index
+  if (!info.access_keys.empty()) {
+    std::string access_key;
+    std::string secret_key;
+    std::map<std::string, RGWAccessKey>::const_iterator iter = info.access_keys.begin();
+    const RGWAccessKey& k = iter->second;
+    access_key = k.id;
+    secret_key = k.key;
+    MotrAccessKey MGWUserKeys(access_key, secret_key, info.user_id.to_str());
+    store->store_access_key(dpp, y, MGWUserKeys);
+    access_key_tracker.insert(access_key);
+  }
+
+  // Check if any key need to be deleted
+  if (access_key_tracker.size() != info.access_keys.size()) {
+    std::string key_for_deletion;
+    for (auto key : access_key_tracker) {
+      if (!info.get_key(key)) {
+        key_for_deletion = key;
+        ldpp_dout(dpp, 0) << "Deleting access key: " << key_for_deletion << dendl;
+        store->delete_access_key(dpp, y, key_for_deletion);
+        if (rc < 0) {
+          ldpp_dout(dpp, 0) << "Unable to delete access key" << rc << dendl;
+        }
+      }
+    }
+    if(rc >= 0){
+      access_key_tracker.erase(key_for_deletion);
+    }
+  }
+
+  if (!info.user_email.empty()) {
+     MotrEmailInfo MGWEmailInfo(info.user_id.to_str(), info.user_email);
+     store->store_email_info(dpp, y, MGWEmailInfo);
   }
 
   // Create user info index to store all buckets that are belong
@@ -438,7 +485,7 @@ int MotrUser::store_user(const DoutPrefixProvider* dpp,
   }
 
   // Put the user info into cache.
-  store->get_user_cache()->put(dpp, info.user_id.id, bl);
+  rc = store->get_user_cache()->put(dpp, info.user_id.id, bl);
 
 out:
   return rc;
@@ -446,6 +493,60 @@ out:
 
 int MotrUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  // Remove user info from cache
+  // Delete access keys for user
+  // Delete user info
+  // Delete user from user index
+  // Delete email for user - TODO
+  bufferlist bl;
+  int rc;
+  // Remove the user info from cache.
+  store->get_user_cache()->remove(dpp, info.user_id.id);
+
+  // Delete all access key of user
+  if (!info.access_keys.empty()) {
+    for(auto acc_key = info.access_keys.begin(); acc_key != info.access_keys.end(); acc_key++) {
+      auto access_key = acc_key->first;
+      rc = store->delete_access_key(dpp, y, access_key);
+      // TODO 
+      // Check error code for access_key does not exist
+      // Continue to next step only if delete failed because key doesn't exists
+      if (rc < 0){
+        ldpp_dout(dpp, 0) << "Unable to delete access key" << rc << dendl;
+      }
+    }
+  }
+
+  //Delete email id 
+  if (!info.user_email.empty()) {
+    rc = store->do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+		             M0_IC_DEL, info.user_email, bl);
+    if (rc < 0 && rc != -ENOENT) {
+       ldpp_dout(dpp, 0) << "Unable to delete email id " << rc << dendl;
+    }
+  }
+  
+  // Delete user info index
+  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
+  store->delete_motr_idx_by_name(user_info_iname);
+  ldpp_dout(dpp, 10) << "Deleted user info index - " << user_info_iname << dendl;
+
+  // Delete user from user index
+  rc = store->do_idx_op_by_name(RGW_MOTR_USERS_IDX_NAME,
+                           M0_IC_DEL, info.user_id.to_str(), bl);
+  if (rc < 0){
+    ldpp_dout(dpp, 0) << "Unable to delete user from user index " << rc << dendl;
+    return rc;
+  }
+
+  // TODO 
+  // Delete email for user
+  // rc = store->do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+  //                          M0_IC_DEL, info.user_email, bl);
+  // if (rc < 0){
+  //   ldpp_dout(dpp, 0) << "Unable to delete email for user" << rc << dendl;
+  //   return rc;
+  // }
   return 0;
 }
 
@@ -459,8 +560,123 @@ int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_childre
 {
   int ret;
 
+  ldpp_dout(dpp, 20) << "remove_bucket Entry=" << info.bucket.name << dendl;
+
+  // Refresh info
   ret = load_bucket(dpp, y);
-  // TODO: implement bucket removal
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket load_bucket failed rc=" << ret << dendl;
+    return ret;
+  }
+
+  ListParams params;
+  params.list_versions = true;
+  params.allow_unordered = true;
+
+  ListResults results;
+
+  // 1. Check if Bucket has objects.
+  // If bucket contains objects and delete_children is true, delete all objects.
+  // Else throw error that bucket is not empty.
+  do {
+    results.objs.clear();
+
+    // Check if bucket has objects.
+    ret = list(dpp, params, 1000, results, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    // If result contains entries, bucket is not empty.
+    if (!results.objs.empty() && !delete_children) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove non-empty bucket " << info.bucket.name << dendl;
+      return -ENOTEMPTY;
+    }
+
+    for (const auto& obj : results.objs) {
+      rgw_obj_key key(obj.key);
+      /* xxx dang */
+      ret = rgw_remove_object(dpp, store, this, key);
+      if (ret < 0 && ret != -ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: remove_bucket rgw_remove_object failed rc=" << ret << dendl;
+	      return ret;
+      }
+    }
+  } while(results.is_truncated);
+
+  // 2. Abort Mp uploads on the bucket.
+  ret = abort_multiparts(dpp, store->ctx());
+  if (ret < 0) {
+    return ret;
+  }
+
+  // 3. Remove mp index??
+  string bucket_multipart_iname = "motr.rgw.bucket." + info.bucket.name + ".multiparts";
+  ret = store->delete_motr_idx_by_name(bucket_multipart_iname);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket failed to remove multipart index rc=" << ret << dendl;
+    return ret;
+  }
+
+  // 4. Sync user stats.
+  ret = this->sync_user_stats(dpp, y);
+  if (ret < 0) {
+     ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
+  }
+
+  // 5. Remove the bucket from user info index. (unlink user)
+  ret = this->unlink_user(dpp, owner, y);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket unlink_user failed rc=" << ret << dendl;
+    return ret;
+  }
+
+  // 6. Remove bucket index.
+  string bucket_index_iname = "motr.rgw.bucket.index." + info.bucket.name;
+  ret = store->delete_motr_idx_by_name(bucket_index_iname);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket unlink_user failed rc=" << ret << dendl;
+    return ret;
+  }
+
+  // 7. Remove bucket instance info.
+  bufferlist bl;
+  ret = store->get_bucket_inst_cache()->remove(dpp, info.bucket.name);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket failed to remove bucket instance from cache rc="
+      << ret << dendl;
+    return ret;
+  }
+
+  ret = store->do_idx_op_by_name(RGW_MOTR_BUCKET_INST_IDX_NAME,
+                                  M0_IC_DEL, info.bucket.name, bl);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: remove_bucket failed to remove bucket instance rc=" 
+      << ret << dendl;
+    return ret;
+  }
+
+  // TODO :
+  // 8. Remove Notifications
+  // if bucket has notification definitions associated with it
+  // they should be removed (note that any pending notifications on the bucket are still going to be sent)
+
+  // 9. Forward request to master.
+  if (forward_to_master) {
+    bufferlist in_data;
+    ret = store->forward_request_to_master(dpp, owner, &bucket_version, in_data, nullptr, *req_info, y);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        /* adjust error, we want to return with NoSuchBucket and not
+        * NoSuchKey */
+        ret = -ERR_NO_SUCH_BUCKET;
+      }
+      ldpp_dout(dpp, 0) << "ERROR: Forward to master failed. ret=" << ret << dendl;
+      return ret;
+    }
+  }
+
+  ldpp_dout(dpp, 20) << "remove_bucket Exit=" << info.bucket.name << dendl;
 
   return ret;
 }
@@ -544,7 +760,7 @@ int MotrBucket::link_user(const DoutPrefixProvider* dpp, User* new_user, optiona
   ldpp_dout(dpp, 20) << "got creation time: << " << std::put_time(std::localtime(&ctime), "%F %T") << dendl;
 
   // Insert the user into the user info index.
-  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.id;
+  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.to_str();
   return store->do_idx_op_by_name(user_info_idx_name,
                                   M0_IC_PUT, info.bucket.name, bl);
 
@@ -554,7 +770,7 @@ int MotrBucket::unlink_user(const DoutPrefixProvider* dpp, User* new_user, optio
 {
   // Remove the user into the user info index.
   bufferlist bl;
-  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.id;
+  string user_info_idx_name = "motr.rgw.user.info." + new_user->get_info().user_id.to_str();
   return store->do_idx_op_by_name(user_info_idx_name,
                                   M0_IC_DEL, info.bucket.name, bl);
 }
@@ -842,6 +1058,8 @@ int MotrBucket::abort_multiparts(const DoutPrefixProvider *dpp, CephContext *cct
 
 void MotrStore::finalize(void)
 {
+  // close connection with motr
+  m0_client_fini(this->instance, true);
 }
 
 const std::string& MotrZoneGroup::get_endpoint() const
@@ -925,7 +1143,7 @@ bool MotrZone::get_redirect_endpoint(std::string* endpoint)
 
 bool MotrZone::has_zonegroup_api(const std::string& api) const
 {
-  return false;
+  return (zonegroup->api_name == api);
 }
 
 const std::string& MotrZone::get_current_period_id()
@@ -1078,19 +1296,6 @@ void MotrObject::gen_rand_obj_instance_name()
   state.obj.key.set_instance(buf);
 }
 
-int MotrObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-    std::map<std::string, bufferlist> *m,
-    bool* pmore, optional_yield y)
-{
-  return 0;
-}
-
-int MotrObject::omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist> *m,
-    optional_yield y)
-{
-  return 0;
-}
-
 int MotrObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
     const std::set<std::string>& keys,
     Attrs* vals)
@@ -1166,6 +1371,59 @@ int MotrObject::MotrReadOp::prepare(optional_yield y, const DoutPrefixProvider* 
   source->set_key(ent.key);
   source->set_obj_size(ent.meta.size);
   source->category = ent.meta.category;
+  *params.lastmod = ent.meta.mtime;
+
+  if (params.mod_ptr || params.unmod_ptr) {
+    // Convert all times go GMT to make them compatible
+    obj_time_weight src_weight;
+    src_weight.init(*params.lastmod, params.mod_zone_id, params.mod_pg_ver);
+    src_weight.high_precision = params.high_precision_time;
+
+    obj_time_weight dest_weight;
+    dest_weight.high_precision = params.high_precision_time;
+
+    // Check if-modified-since condition
+    if (params.mod_ptr && !params.if_nomatch) {
+      dest_weight.init(*params.mod_ptr, params.mod_zone_id, params.mod_pg_ver);
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " & "
+                         << "Last-Modified: " << src_weight << dendl;
+      if (!(dest_weight < src_weight)) {
+        return -ERR_NOT_MODIFIED;
+      }
+    }
+
+    // Check if-unmodified-since condition
+    if (params.unmod_ptr && !params.if_match) {
+      dest_weight.init(*params.unmod_ptr, params.mod_zone_id, params.mod_pg_ver);
+      ldpp_dout(dpp, 10) << "If-UnModified-Since: " << dest_weight << " & " 
+                         << "Last-Modified: " << src_weight << dendl;
+      if (dest_weight < src_weight) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+  // Check if-match condition
+  if (params.if_match) {
+    string if_match_str = rgw_string_unquote(params.if_match);
+    ldpp_dout(dpp, 10) << "ETag: " << etag << " & "
+                       << "If-Match: " << if_match_str << dendl;     
+    if (if_match_str.compare(etag) != 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  // Check if-none-match condition
+  if (params.if_nomatch) {
+    string if_nomatch_str = rgw_string_unquote(params.if_nomatch);
+    ldpp_dout(dpp, 10) << "ETag: " << etag << " & "
+                       << "If-NoMatch: " << if_nomatch_str << dendl;
+    if (if_nomatch_str.compare(etag) == 0) {
+      return -ERR_NOT_MODIFIED;
+    }
+  }
+
+  // Skip opening an empty object.
+  if(source->get_obj_size() == 0)
+    return 0;
 
   // Open the object here.
   if (source->category == RGWObjCategory::MultiMeta) {
@@ -1233,19 +1491,31 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
 {
   ldpp_dout(dpp, 20) << "delete " << source->get_key().get_oid() << " from " << source->get_bucket()->get_name() << dendl;
 
+  rgw_bucket_dir_entry ent;
+  int rc = source->get_bucket_dir_ent(dpp, ent);
+  if (rc < 0) {
+    return rc;
+  }
+
+  //TODO: When integrating with background GC for object deletion,
+  // we should consider adding object entry to GC before deleting the metadata.
   // Delete from the cache first.
   source->store->get_obj_meta_cache()->remove(dpp, source->get_key().get_oid());
 
   // Delete the object's entry from the bucket index.
   bufferlist bl;
   string bucket_index_iname = "motr.rgw.bucket.index." + source->get_bucket()->get_name();
-  int rc = source->store->do_idx_op_by_name(bucket_index_iname,
-                                            M0_IC_DEL, source->get_key().get_oid(), bl);
+  rc = source->store->do_idx_op_by_name(bucket_index_iname,
+                                        M0_IC_DEL, source->get_key().get_oid(), bl);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << "Failed to del object's entry from bucket index. " << dendl;
     return rc;
   }
 
+  if (ent.meta.size == 0) {
+    ldpp_dout(dpp, 0) << __func__ << ": Object size is 0, not deleting motr object." << dendl;
+    return 0;
+  }
   // Remove the motr objects.
   if (source->category == RGWObjCategory::MultiMeta)
     rc = source->delete_part_objs(dpp);
@@ -1268,14 +1538,6 @@ int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, b
   del_op.params.versioning_status = bucket->get_info().versioning_status();
 
   return del_op.delete_obj(dpp, y);
-}
-
-int MotrObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-    Completions* aio, bool keep_index_consistent,
-    optional_yield y)
-{
-  /* XXX: Make it async */
-  return 0;
 }
 
 int MotrObject::copy_object(User* user,
@@ -1323,7 +1585,7 @@ int MotrObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
 
 MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
           optional_yield y,
-          std::unique_ptr<rgw::sal::Object> _head_obj,
+          rgw::sal::Object* obj,
           MotrStore* _store,
           const rgw_user& _owner,
           const rgw_placement_rule *_ptail_placement_rule,
@@ -1335,7 +1597,8 @@ MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
               ptail_placement_rule(_ptail_placement_rule),
               olh_epoch(_olh_epoch),
               unique_tag(_unique_tag),
-              obj(_store, _head_obj->get_key(), _head_obj->get_bucket()) {}
+              obj(_store, obj->get_key(), obj->get_bucket()),
+              old_obj(_store, obj->get_key(), obj->get_bucket()) {}
 
 static const unsigned MAX_BUFVEC_NR = 256;
 
@@ -1346,7 +1609,13 @@ int MotrAtomicWriter::prepare(optional_yield y)
   if (obj.is_opened())
     return 0;
 
-  int rc = m0_bufvec_empty_alloc(&buf, MAX_BUFVEC_NR) ?:
+  rgw_bucket_dir_entry ent;
+  int rc = old_obj.get_bucket_dir_ent(dpp, ent);
+  if (rc == 0) {
+    ldpp_dout(dpp, 20) << __func__ << ": object exists." << dendl;
+  }
+
+  rc = m0_bufvec_empty_alloc(&buf, MAX_BUFVEC_NR) ?:
            m0_bufvec_alloc(&attr, MAX_BUFVEC_NR, 1) ?:
            m0_indexvec_alloc(&ext, MAX_BUFVEC_NR);
   if (rc != 0)
@@ -1421,8 +1690,10 @@ int MotrObject::open_mobj(const DoutPrefixProvider *dpp)
   if (meta.layout_id == 0) {
     rgw_bucket_dir_entry ent;
     rc = this->get_bucket_dir_ent(dpp, ent);
-    if (rc < 0)
+    if (rc < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: open_mobj() failed: rc=" << rc << dendl;
       return rc;
+    }
   }
 
   if (meta.layout_id == 0)
@@ -1463,6 +1734,13 @@ int MotrObject::open_mobj(const DoutPrefixProvider *dpp)
 int MotrObject::delete_mobj(const DoutPrefixProvider *dpp)
 {
   int rc;
+  char fid_str[M0_FID_STR_LEN];
+  snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&meta.oid));
+  if (!meta.oid.u_hi || !meta.oid.u_lo) {
+    ldpp_dout(dpp, 20) << __func__ << ": invalid motr object oid=" << fid_str << dendl;
+    return -EINVAL;
+  }
+  ldpp_dout(dpp, 20) << __func__ << ": deleting motr object oid=" << fid_str << dendl;
 
   // Open the object.
   if (mobj == nullptr) {
@@ -1565,7 +1843,7 @@ out:
 int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t end, RGWGetDataCB* cb)
 {
   int rc;
-  unsigned bs, actual;
+  unsigned bs, actual, left;
   struct m0_op *op;
   struct m0_bufvec buf;
   struct m0_bufvec attr;
@@ -1595,10 +1873,13 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
   if (rc < 0)
     goto out;
 
-  actual = bs;
-  for (; off < end; off += actual) {
-    if (end - off < bs)
-        actual = end - off;
+  left = end - off;
+  for (; left > 0; off += actual) {
+    if (left < bs)
+      bs = this->get_optimal_bs(left);
+    actual = bs;
+    if (left < bs)
+      actual = left;
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): off=" << off <<
                                             " actual=" << actual << dendl;
     bufferlist bl;
@@ -1608,23 +1889,27 @@ int MotrObject::read_mobj(const DoutPrefixProvider* dpp, int64_t off, int64_t en
     ext.iv_vec.v_count[0] = bs;
     attr.ov_vec.v_count[0] = 0;
 
+    left -= actual;
     // Read from Motr.
     op = nullptr;
     rc = m0_obj_op(this->mobj, M0_OC_READ, &ext, &buf, &attr, 0, 0, &op);
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): init read op rc=" << rc << dendl;
-    if (rc != 0)
+    if (rc != 0) {
+      ldpp_dout(dpp, 0) << __func__ << ": read failed during m0_obj_op, rc=" << rc << dendl;
       goto out;
+    }
     m0_op_launch(&op, 1);
     rc = m0_op_wait(op, M0_BITS(M0_OS_FAILED, M0_OS_STABLE), M0_TIME_NEVER) ?:
          m0_rc(op);
     m0_op_fini(op);
     m0_op_free(op);
-    if (rc != 0)
+    if (rc != 0) {
+      ldpp_dout(dpp, 0) << __func__ << ": read failed, m0_op_wait rc=" << rc << dendl;
       goto out;
-
+    }
     // Call `cb` to process returned data.
     ldpp_dout(dpp, 20) << "MotrObject::read_mobj(): call cb to process data" << dendl;
-    cb->handle_data(bl, off, actual);
+    cb->handle_data(bl, 0, actual);
   }
 
 out:
@@ -1665,7 +1950,7 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
     keys[0] = this->get_name();
     rc = store->next_query_by_name(bucket_index_iname, keys, vals);
     if (rc < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: NEXT query failed. " << rc << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "ERROR: NEXT query failed. " << rc << dendl;
       return rc;
     }
 
@@ -1692,7 +1977,7 @@ int MotrObject::get_bucket_dir_ent(const DoutPrefixProvider *dpp, rgw_bucket_dir
       rc = this->store->do_idx_op_by_name(bucket_index_iname,
                                           M0_IC_GET, this->get_key().get_oid(), bl);
       if (rc < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: failed to get object's entry from bucket index: rc="
+        ldpp_dout(dpp, 0) << __func__ << "ERROR: failed to get object's entry from bucket index: rc="
                           << rc << dendl;
         return rc;
       }
@@ -1710,6 +1995,9 @@ out:
     decode(dummy, iter);
     meta.decode(iter);
     ldpp_dout(dpp, 20) <<__func__<< ": lid=0x" << std::hex << meta.layout_id << dendl;
+    char fid_str[M0_FID_STR_LEN];
+    snprintf(fid_str, ARRAY_SIZE(fid_str), U128X_F, U128_P(&meta.oid));
+    ldpp_dout(dpp, 70) << __func__ << ": oid=" << fid_str << dendl;
   } else
     ldpp_dout(dpp, 0) <<__func__<< ": rc=" << rc << dendl;
 
@@ -1942,6 +2230,7 @@ void MotrAtomicWriter::cleanup()
   m0_bufvec_free2(&buf);
   acc_data.clear();
   obj.close_mobj();
+  old_obj.close_mobj();
 }
 
 unsigned MotrAtomicWriter::populate_bvec(unsigned len, bufferlist::iterator &bi)
@@ -2146,6 +2435,13 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (rc == 0)
     store->get_obj_meta_cache()->put(dpp, obj.get_key().get_oid(), bl);
 
+  if (old_obj.get_bucket()->get_info().versioning_status() != BUCKET_VERSIONED) {
+    // Delete old object data if exists.
+    old_obj.delete_mobj(dpp);
+  }
+
+  // TODO: We need to handle the object leak caused by parallel object upload by
+  // making use of background gc, which is currently not enabled for motr.
   return rc;
 }
 
@@ -2160,7 +2456,8 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp)
   do {
     rc = this->list_parts(dpp, store->ctx(), max_parts, marker, &marker, &truncated);
     if (rc == -ENOENT) {
-      rc = -ERR_NO_SUCH_UPLOAD;
+      truncated = false;
+      rc = 0;
     }
     if (rc < 0)
       return rc;
@@ -2182,9 +2479,10 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp)
       std::unique_ptr<rgw::sal::Object> obj;
       obj = this->bucket->get_object(rgw_obj_key(part_obj_name));
       std::unique_ptr<rgw::sal::MotrObject> mobj(static_cast<rgw::sal::MotrObject *>(obj.release()));
+      mobj->meta = mmpart->meta;
       rc = mobj->delete_mobj(dpp);
       if (rc < 0) {
-        ldpp_dout(dpp, 0) << "Failed to delete the object from Motr. " << dendl;
+        ldpp_dout(dpp, 0) << __func__ << ": Failed to delete object from Motr. rc=" << rc << dendl;
         return rc;
       }
     }
@@ -2199,21 +2497,29 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp)
 int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   int rc;
+  // Check if multipart upload exists
+  bufferlist bl;
+  std::unique_ptr<rgw::sal::Object> meta_obj;
+  meta_obj = get_meta_obj();
+  string bucket_multipart_iname =
+      "motr.rgw.bucket." + meta_obj->get_bucket()->get_name() + ".multiparts";
+  rc = store->do_idx_op_by_name(bucket_multipart_iname,
+                                  M0_IC_GET, meta_obj->get_key().to_str(), bl);
+  if (rc < 0) {
+    ldpp_dout(dpp, 0) << __func__ << ": Failed to get multipart upload. rc=" << rc << dendl;
+    return rc == -ENOENT ? -ERR_NO_SUCH_UPLOAD : rc;
+  }
 
   // Scan all parts and delete the corresponding motr objects.
   rc = this->delete_parts(dpp);
   if (rc < 0)
     return rc;
 
+  bl.clear();
   // Remove the upload from bucket multipart index.
-  bufferlist bl;
-  std::unique_ptr<rgw::sal::Object> meta_obj;
-  meta_obj = get_meta_obj();
-  string bucket_multipart_iname =
-      "motr.rgw.bucket." + meta_obj->get_bucket()->get_name() + ".multiparts";
-  return store->do_idx_op_by_name(bucket_multipart_iname,
-                                  M0_IC_DEL, meta_obj->get_key().get_oid(), bl);
-  return 0;
+  rc = store->do_idx_op_by_name(bucket_multipart_iname,
+                                M0_IC_DEL, meta_obj->get_key().get_oid(), bl);
+  return rc;
 }
 
 std::unique_ptr<rgw::sal::Object> MotrMultipartUpload::get_meta_obj()
@@ -2321,7 +2627,7 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 
   std::string oid = mp_obj.get_key();
   string obj_part_iname = "motr.rgw.object." + bucket->get_name() + "." + oid + ".parts";
-  ldpp_dout(dpp, 20) << "MotrMultipartUpload::list_parts(): object part index = " << obj_part_iname << dendl;
+  ldpp_dout(dpp, 20) << __func__ << ": object part index = " << obj_part_iname << dendl;
   key_vec[0].clear();
   key_vec[0] = "part.";
   char buf[32];
@@ -2335,13 +2641,12 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
 
   int last_num = 0;
   int part_cnt = 0;
-  uint32_t expected_next = marker + 1;
-  ldpp_dout(dpp, 20) << "MotrMultipartUpload::list_parts(): marker = " << marker << dendl;
+  uint32_t expected_next = 0;
+  ldpp_dout(dpp, 20) << __func__ << ": marker = " << marker << dendl;
   for (const auto& bl: val_vec) {
     if (bl.length() == 0)
       break;
 
-    ldpp_dout(dpp, 20) << "MotrMultipartUpload::list_parts(): get part_info "  << dendl;
     RGWUploadPartInfo info;
     auto iter = bl.cbegin();
     info.decode(iter);
@@ -2350,10 +2655,17 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
     MotrObject::Meta meta;
     meta.decode(iter);
 
-    ldpp_dout(dpp, 20) << "MotrMultipartUpload::list_parts(): part_num=" << info.num
+    ldpp_dout(dpp, 20) << __func__ << ": part_num=" << info.num
                                              << " part_size=" << info.size << dendl;
-    if (info.num != expected_next)
+    ldpp_dout(dpp, 20) << __func__ << ": meta:oid=[" << meta.oid.u_hi << "," << meta.oid.u_lo
+                                              << "], meta:pvid=[" << meta.pver.f_container << "," << meta.pver.f_key
+                                              << "], meta:layout id=" << meta.layout_id << dendl;
+
+    if (!expected_next)
+      expected_next = info.num + 1;
+    else if (expected_next && info.num != expected_next)
       return -EINVAL;
+    else expected_next = info.num + 1;
 
     if ((int)info.num > marker) {
       last_num = info.num;
@@ -2361,13 +2673,12 @@ int MotrMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *
     }
 
     part_cnt++;
-    expected_next++;
   }
 
   // Does it have more parts?
   if (truncated)
     *truncated = part_cnt < num_parts? false : true;
-  ldpp_dout(dpp, 20) << "MotrMultipartUpload::list_parts(): truncated=" << *truncated << dendl;
+  ldpp_dout(dpp, 20) << __func__ << ": truncated=" << *truncated << dendl;
 
   if (next_marker)
     *next_marker = last_num;
@@ -2616,8 +2927,8 @@ int MotrMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
   int rc = this->store->do_idx_op_by_name(bucket_multipart_iname,
                                           M0_IC_GET, meta_obj->get_key().get_oid(), bl);
   if (rc < 0) {
-    ldpp_dout(dpp, 0) << "Failed to get object's entry from bucket index. " << dendl;
-    return rc;
+    ldpp_dout(dpp, 0) << __func__ << ": Failed to get multipart info. rc=" << rc << dendl;
+    return rc == -ENOENT ? -ERR_NO_SUCH_UPLOAD : rc;
   }
 
   rgw_bucket_dir_entry ent;
@@ -2652,14 +2963,14 @@ int MotrMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield 
 std::unique_ptr<Writer> MotrMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
 {
   return std::make_unique<MotrMultipartWriter>(dpp, y, this,
-				 std::move(_head_obj), store, owner,
+				 obj, store, owner,
 				 ptail_placement_rule, part_num, part_num_str);
 }
 
@@ -2796,7 +3107,7 @@ std::unique_ptr<MultipartUpload> MotrBucket::get_multipart_upload(const std::str
 
 std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
-        std::unique_ptr<rgw::sal::Object> _head_obj,
+        rgw::sal::Object* obj,
         const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         const std::string& unique_tag,
@@ -2807,13 +3118,13 @@ std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *d
 
 std::unique_ptr<Writer> MotrStore::get_atomic_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
-        std::unique_ptr<rgw::sal::Object> _head_obj,
+        rgw::sal::Object* obj,
         const rgw_user& owner,
         const rgw_placement_rule *ptail_placement_rule,
         uint64_t olh_epoch,
         const std::string& unique_tag) {
   return std::make_unique<MotrAtomicWriter>(dpp, y,
-                  std::move(_head_obj), this, owner,
+                  obj, this, owner,
                   ptail_placement_rule, olh_epoch, unique_tag);
 }
 
@@ -2833,32 +3144,67 @@ std::unique_ptr<User> MotrStore::get_user(const rgw_user &u)
   return std::make_unique<MotrUser>(this, u);
 }
 
-int MotrStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
+int MotrStore::get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string &key, optional_yield y, std::unique_ptr<User> *user)
 {
-  RGWUserInfo uinfo;
+  int rc;
   User *u;
-  RGWObjVersionTracker objv_tracker;
+  bufferlist bl;
+  RGWUserInfo uinfo;
+  MotrAccessKey access_key;
 
-  /* Hard code user info for test. */
-  rgw_user testid_user("tenant", "tester", "ns");
-  uinfo.user_id = testid_user;
-  uinfo.display_name = "Motr Explorer";
-  uinfo.user_email = "tester@seagate.com";
-  RGWAccessKey k1("0555b35654ad1656d804", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
-  uinfo.access_keys["0555b35654ad1656d804"] = k1;
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_ACCESS_KEY,
+                           M0_IC_GET, key, bl);
+  if (rc < 0){
+    ldout(cctx, 0) << "Access key not found: rc = " << rc << dendl;
+    return rc;
+  }
 
+  bufferlist& blr = bl;
+  auto iter = blr.cbegin();
+  access_key.decode(iter);
+
+  uinfo.user_id.from_str(access_key.user_id);
+  ldout(cctx, 0) << "Loading user: " << uinfo.user_id.id << dendl;
+  rc = MotrUser().load_user_from_idx(dpp, this, uinfo, nullptr, nullptr);
+  if (rc < 0){
+    ldout(cctx, 0) << "Failed to load user: rc = " << rc << dendl;
+    return rc;
+  }
   u = new MotrUser(this, uinfo);
   if (!u)
     return -ENOMEM;
 
-  u->get_version_tracker() = objv_tracker;
   user->reset(u);
-
   return 0;
 }
 
 int MotrStore::get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
 {
+  int rc;
+  User *u;
+  bufferlist bl;
+  RGWUserInfo uinfo;
+  MotrEmailInfo email_info; 
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+                           M0_IC_GET, email, bl);
+  if (rc < 0){
+    ldout(cctx, 0) << "Email Id not found: rc = " << rc << dendl;
+    return rc;
+  }
+  auto iter = bl.cbegin();
+  email_info.decode(iter);
+  ldout(cctx, 0) << "Loading user: " << email_info.user_id << dendl;
+  uinfo.user_id.from_str(email_info.user_id);
+  rc = MotrUser().load_user_from_idx(dpp, this, uinfo, nullptr, nullptr);
+  if (rc < 0){
+    ldout(cctx, 0) << "Failed to load user: rc = " << rc << dendl;
+    return rc;
+  }
+  u = new MotrUser(this, uinfo);
+  if (!u)
+    return -ENOMEM;
+
+  user->reset(u);  
   return 0;
 }
 
@@ -2866,6 +3212,45 @@ int MotrStore::get_user_by_swift(const DoutPrefixProvider *dpp, const std::strin
 {
   /* Swift keys and subusers are not supported for now */
   return 0;
+}
+
+int MotrStore::store_access_key(const DoutPrefixProvider *dpp, optional_yield y, MotrAccessKey access_key)
+{
+  int rc;
+  bufferlist bl;
+  access_key.encode(bl);
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_ACCESS_KEY,
+                                M0_IC_PUT, access_key.id, bl);
+  if (rc < 0){
+    ldout(cctx, 0) << "Failed to store key: rc = " << rc << dendl;
+    return rc;
+  }
+  return rc;
+}
+
+int MotrStore::delete_access_key(const DoutPrefixProvider *dpp, optional_yield y, std::string access_key)
+{
+  int rc;
+  bufferlist bl;
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_ACCESS_KEY,
+                                M0_IC_DEL, access_key, bl);
+  if (rc < 0){
+    ldout(cctx, 0) << "Failed to delete key: rc = " << rc << dendl;
+  }
+  return rc;
+}
+
+int MotrStore::store_email_info(const DoutPrefixProvider *dpp, optional_yield y, MotrEmailInfo& email_info )
+{
+  int rc;
+  bufferlist bl;
+  email_info.encode(bl);
+  rc = do_idx_op_by_name(RGW_IAM_MOTR_EMAIL_KEY,
+                                M0_IC_PUT, email_info.email_id, bl);
+  if (rc < 0) {
+    ldout(cctx, 0) << "Failed to store the user by email as key: rc = " << rc << dendl;
+  } 
+  return rc;
 }
 
 std::unique_ptr<Object> MotrStore::get_object(const rgw_obj_key& k)
@@ -2965,11 +3350,6 @@ int MotrStore::cluster_stat(RGWClusterStat& stats)
 }
 
 std::unique_ptr<Lifecycle> MotrStore::get_lifecycle(void)
-{
-  return 0;
-}
-
-std::unique_ptr<Completions> MotrStore::get_completions(void)
 {
   return 0;
 }
@@ -3322,6 +3702,8 @@ int MotrStore::delete_motr_idx_by_name(string iname)
   struct m0_uint128 idx_id;
   struct m0_op *op = nullptr;
 
+  ldout(cctx, 20) << "delete_motr_idx_by_name=" << iname << dendl;
+
   index_name_to_motr_fid(iname, &idx_id);
   m0_idx_init(&idx, &container.co_realm, &idx_id);
   m0_entity_open(&idx.in_entity, &op);
@@ -3330,6 +3712,9 @@ int MotrStore::delete_motr_idx_by_name(string iname)
     goto out;
 
   m0_op_launch(&op, 1);
+
+  ldout(cctx, 70) << "waiting for op completion" << dendl;
+
   rc = m0_op_wait(op, M0_BITS(M0_OS_FAILED, M0_OS_STABLE), M0_TIME_NEVER) ?:
        m0_rc(op);
   m0_op_fini(op);
@@ -3339,6 +3724,8 @@ int MotrStore::delete_motr_idx_by_name(string iname)
     rc = 0;
   else if (rc < 0)
     ldout(cctx, 0) << "ERROR: index create failed: " << rc << dendl;
+
+  ldout(cctx, 20) << "delete_motr_idx_by_name rc=" << rc << dendl;
 
 out:
   m0_idx_fini(&idx);
@@ -3532,14 +3919,36 @@ void *newMotrStore(CephContext *cct)
     const auto& ha_ep    = g_conf().get_val<std::string>("motr_ha_endpoint");
     const auto& proc_fid = g_conf().get_val<std::string>("motr_my_fid");
     const auto& profile  = g_conf().get_val<std::string>("motr_profile_fid");
+    const auto& admin_proc_ep  = g_conf().get_val<std::string>("motr_admin_endpoint");
+    const auto& admin_proc_fid = g_conf().get_val<std::string>("motr_admin_fid");
+    const int init_flags = cct->get_init_flags();
     ldout(cct, 0) << "INFO: motr my endpoint: " << proc_ep << dendl;
     ldout(cct, 0) << "INFO: motr ha endpoint: " << ha_ep << dendl;
     ldout(cct, 0) << "INFO: motr my fid:      " << proc_fid << dendl;
     ldout(cct, 0) << "INFO: motr profile fid: " << profile << dendl;
     store->conf.mc_local_addr  = proc_ep.c_str();
     store->conf.mc_process_fid = proc_fid.c_str();
+
+    ldout(cct, 0) << "INFO: init flags:       " << init_flags << dendl;
+    ldout(cct, 0) << "INFO: motr admin endpoint: " << admin_proc_ep << dendl;
+    ldout(cct, 0) << "INFO: motr admin fid:   " << admin_proc_fid << dendl;
+
+    // HACK this is so that radosge-admin uses a different client
+    if (init_flags == 0) {
+      store->conf.mc_process_fid = admin_proc_fid.c_str();
+      store->conf.mc_local_addr  = admin_proc_ep.c_str();
+    } else {
+      store->conf.mc_process_fid = proc_fid.c_str();
+      store->conf.mc_local_addr  = proc_ep.c_str();
+    }
     store->conf.mc_ha_addr     = ha_ep.c_str();
     store->conf.mc_profile     = profile.c_str();
+
+    ldout(cct, 50) << "INFO: motr profile fid:  " << store->conf.mc_profile << dendl;
+    ldout(cct, 50) << "INFO: ha addr:  " << store->conf.mc_ha_addr << dendl;
+    ldout(cct, 50) << "INFO: process fid:  " << store->conf.mc_process_fid << dendl;
+    ldout(cct, 50) << "INFO: motr endpoint:  " << store->conf.mc_local_addr << dendl;
+
     store->conf.mc_tm_recv_queue_min_len =     64;
     store->conf.mc_max_rpc_msg_size      = 524288;
     store->conf.mc_idx_service_id  = M0_IDX_DIX;

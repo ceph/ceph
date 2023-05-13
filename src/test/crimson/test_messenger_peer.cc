@@ -14,14 +14,13 @@
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
-#include "test_cmds.h"
+#include "test_messenger.h"
 
 namespace {
 
 #define dout_subsys ceph_subsys_test
 
-using ceph::net::test::cmd_t;
-using ceph::net::test::policy_t;
+using namespace ceph::net::test;
 using SocketPolicy = Messenger::Policy;
 
 constexpr int CEPH_OSD_PROTOCOL = 10;
@@ -105,7 +104,11 @@ class FailoverSuitePeer : public Dispatcher {
 
  private:
   void init(entity_addr_t test_peer_addr, SocketPolicy policy) {
-    peer_msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(4), "TestPeer", 4));
+    peer_msgr.reset(Messenger::create(
+      cct, "async",
+      entity_name_t::OSD(TEST_PEER_OSD),
+      "TestPeer",
+      TEST_PEER_NONCE));
     dummy_auth.auth_registry.refresh_config();
     peer_msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     peer_msgr->set_default_policy(policy);
@@ -361,7 +364,11 @@ class FailoverTestPeer : public Dispatcher {
   }
 
   void init(entity_addr_t cmd_peer_addr) {
-    cmd_msgr.reset(Messenger::create(cct, "async", entity_name_t::OSD(3), "CmdSrv", 3));
+    cmd_msgr.reset(Messenger::create(
+      cct, "async",
+      entity_name_t::OSD(CMD_SRV_OSD),
+      "CmdSrv",
+      CMD_SRV_NONCE));
     dummy_auth.auth_registry.refresh_config();
     cmd_msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     cmd_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
@@ -384,11 +391,12 @@ class FailoverTestPeer : public Dispatcher {
   void wait() { cmd_msgr->wait(); }
 
   static std::unique_ptr<FailoverTestPeer>
-  create(CephContext* cct, entity_addr_t cmd_peer_addr, bool nonstop) {
-    // suite bind to cmd_peer_addr, with port + 1
-    entity_addr_t test_peer_addr = cmd_peer_addr;
-    test_peer_addr.set_port(cmd_peer_addr.get_port() + 1);
-    auto test_peer = std::make_unique<FailoverTestPeer>(cct, test_peer_addr, nonstop);
+  create(CephContext* cct,
+         entity_addr_t cmd_peer_addr,
+         entity_addr_t test_peer_addr,
+         bool nonstop) {
+    auto test_peer = std::make_unique<FailoverTestPeer>(
+        cct, test_peer_addr, nonstop);
     test_peer->init(cmd_peer_addr);
     ldout(cct, 0) << "[CmdSrv] ready" << dendl;
     return test_peer;
@@ -403,8 +411,8 @@ int main(int argc, char** argv)
   po::options_description desc{"Allowed options"};
   desc.add_options()
     ("help,h", "show help message")
-    ("addr", po::value<std::string>()->default_value("v2:127.0.0.1:9013"),
-     "CmdSrv address, and TestPeer address with port+=1")
+    ("addr", po::value<std::string>()->default_value("v2:127.0.0.1:9012"),
+     "This is CmdSrv address, and TestPeer address is at port+=1")
     ("nonstop", po::value<bool>()->default_value(false),
      "Do not shutdown TestPeer when all tests are successful");
   po::variables_map vm;
@@ -426,12 +434,6 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  auto addr = vm["addr"].as<std::string>();
-  entity_addr_t cmd_peer_addr;
-  cmd_peer_addr.parse(addr.c_str(), nullptr);
-  ceph_assert_always(cmd_peer_addr.is_msgr2());
-  auto nonstop = vm["nonstop"].as<bool>();
-
   std::vector<const char*> args(argv, argv + argc);
   auto cct = global_init(nullptr, args,
                          CEPH_ENTITY_TYPE_CLIENT,
@@ -439,6 +441,22 @@ int main(int argc, char** argv)
                          CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(cct.get());
 
-  auto test_peer = FailoverTestPeer::create(cct.get(), cmd_peer_addr, nonstop);
+  auto addr = vm["addr"].as<std::string>();
+  entity_addr_t cmd_peer_addr;
+  cmd_peer_addr.parse(addr.c_str(), nullptr);
+  cmd_peer_addr.set_nonce(CMD_SRV_NONCE);
+  ceph_assert_always(cmd_peer_addr.is_msgr2());
+  auto test_peer_addr = get_test_peer_addr(cmd_peer_addr);
+  auto nonstop = vm["nonstop"].as<bool>();
+  ldout(cct, 0) << "test configuration: cmd_peer_addr=" << cmd_peer_addr
+                << ", test_peer_addr=" << test_peer_addr
+                << ", nonstop=" << nonstop
+                << dendl;
+
+  auto test_peer = FailoverTestPeer::create(
+      cct.get(),
+      cmd_peer_addr,
+      test_peer_addr,
+      nonstop);
   test_peer->wait();
 }

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_MULTI_H
-#define CEPH_RGW_MULTI_H
+#pragma once
 
 #include <map>
 #include "rgw_xml.h"
@@ -61,5 +60,3 @@ public:
 };
 
 extern bool is_v2_upload_id(const std::string& upload_id);
-
-#endif

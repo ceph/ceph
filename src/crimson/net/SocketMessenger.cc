@@ -43,7 +43,7 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
 
 SocketMessenger::~SocketMessenger()
 {
-  logger().debug("{}: {}", __func__, logic_name);
+  logger().debug("~SocketMessenger: {}", logic_name);
   ceph_assert(!listener);
 }
 
@@ -239,12 +239,12 @@ SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_name_t& pe
 
   if (auto found = lookup_conn(peer_addr); found) {
     logger().debug("{} connect to existing", *found);
-    return found->shared_from_this();
+    return found->get_local_shared_foreign_from_this();
   }
   SocketConnectionRef conn =
     seastar::make_shared<SocketConnection>(*this, dispatchers);
   conn->start_connect(peer_addr, peer_name);
-  return conn->shared_from_this();
+  return conn->get_local_shared_foreign_from_this();
 }
 
 seastar::future<> SocketMessenger::shutdown()
@@ -262,16 +262,16 @@ seastar::future<> SocketMessenger::shutdown()
   // close all connections
   }).then([this] {
     return seastar::parallel_for_each(accepting_conns, [] (auto conn) {
-      return conn->close_clean(false);
+      return conn->close_clean_yielded();
     });
   }).then([this] {
     ceph_assert(accepting_conns.empty());
     return seastar::parallel_for_each(connections, [] (auto conn) {
-      return conn.second->close_clean(false);
+      return conn.second->close_clean_yielded();
     });
   }).then([this] {
     return seastar::parallel_for_each(closing_conns, [] (auto conn) {
-      return conn->close_clean(false);
+      return conn->close_clean_yielded();
     });
   }).then([this] {
     ceph_assert(connections.empty());

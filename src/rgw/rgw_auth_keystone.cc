@@ -115,16 +115,15 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
 }
 
 TokenEngine::auth_info_t
-TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token,
-                            const std::vector<std::string>& admin_roles
+TokenEngine::get_creds_info(const TokenEngine::token_envelope_t& token
                            ) const noexcept
 {
   using acct_privilege_t = rgw::auth::RemoteApplier::AuthInfo::acct_privilege_t;
 
   /* Check whether the user has an admin status. */
   acct_privilege_t level = acct_privilege_t::IS_PLAIN_ACCT;
-  for (const auto& admin_role : admin_roles) {
-    if (token.has_role(admin_role)) {
+  for (const auto& role : token.roles) {
+    if (role.is_admin && !role.is_reader) {
       level = acct_privilege_t::IS_ADMIN_ACCT;
       break;
     }
@@ -175,7 +174,7 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
   };
 
   /* Lambda will obtain a copy of (not a reference to!) allowed_items. */
-  return [allowed_items](const rgw::auth::Identity::aclspec_t& aclspec) {
+  return [allowed_items, token_roles=token.roles](const rgw::auth::Identity::aclspec_t& aclspec) {
     uint32_t perm = 0;
 
     for (const auto& allowed_item : allowed_items) {
@@ -183,6 +182,18 @@ TokenEngine::get_acl_strategy(const TokenEngine::token_envelope_t& token) const
 
       if (std::end(aclspec) != iter) {
         perm |= iter->second;
+      }
+    }
+
+    for (const auto& r : token_roles) {
+      if (r.is_reader) {
+        if (r.is_admin) {    /* system scope reader persona */
+          /*
+           * Because system reader defeats permissions,
+           * we don't even look at the aclspec.
+           */
+          perm |= RGW_OP_TYPE_READ;
+        }
       }
     }
 
@@ -205,6 +216,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     explicit RolesCacher(CephContext* const cct) {
       get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
       get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      get_str_vec(cct->_conf->rgw_keystone_accepted_reader_roles, reader);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
@@ -212,6 +224,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
     std::vector<std::string> plain;
     std::vector<std::string> admin;
+    std::vector<std::string> reader;
   } roles(cct);
 
   static const struct ServiceTokenRolesCacher {
@@ -239,7 +252,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, 20) << "cached token.project.id=" << t->get_project_id()
                    << dendl;
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t, roles.admin));
+                                              get_creds_info(*t));
     return result_t::grant(std::move(apl));
   }
 
@@ -314,6 +327,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
   if (! t) {
     return result_t::deny(-EACCES);
   }
+  t->update_roles(roles.admin, roles.reader);
 
   /* Verify expiration. */
   if (t->expired()) {
@@ -350,7 +364,7 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
                     << " expires: " << t->get_expires() << dendl;
       token_cache.add(token_id, *t);
       auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                            get_creds_info(*t, roles.admin));
+                                                get_creds_info(*t));
       return result_t::grant(std::move(apl));
     }
   }
@@ -542,15 +556,16 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
 /*
  * Try to get a token for S3 authentication, using a secret cache if available
  */
-std::pair<boost::optional<rgw::keystone::TokenEnvelope>, int>
-EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
-			    const std::string_view& access_key_id,
-                            const std::string& string_to_sign,
-                            const std::string_view& signature,
-			    const signature_factory_t& signature_factory) const
+auto EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
+                                 const std::string_view& access_key_id,
+                                 const std::string& string_to_sign,
+                                 const std::string_view& signature,
+                                 const signature_factory_t& signature_factory) const
+    -> access_token_result
 {
   using server_signature_t = VersionAbstractor::server_signature_t;
   boost::optional<rgw::keystone::TokenEnvelope> token;
+  boost::optional<std::string> secret;
   int failure_reason;
 
   /* Get a token from the cache if one has already been stored */
@@ -562,7 +577,7 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
     std::string sig(signature);
     server_signature_t server_signature = signature_factory(cct, t->get<1>(), string_to_sign);
     if (sig.compare(server_signature) == 0) {
-      return std::make_pair(t->get<0>(), 0);
+      return {t->get<0>(), t->get<1>(), 0};
     } else {
       ldpp_dout(dpp, 0) << "Secret string does not correctly sign payload, cache miss" << dendl;
     }
@@ -575,8 +590,8 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 
   if (token) {
     /* Fetch secret from keystone for the access_key_id */
-    boost::optional<std::string> secret;
-    std::tie(secret, failure_reason) = get_secret_from_keystone(dpp, token->get_user_id(), access_key_id);
+    std::tie(secret, failure_reason) =
+        get_secret_from_keystone(dpp, token->get_user_id(), access_key_id);
 
     if (secret) {
       /* Add token, secret pair to cache, and set timeout */
@@ -584,7 +599,7 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
     }
   }
 
-  return std::make_pair(token, failure_reason);
+  return {token, secret, failure_reason};
 }
 
 EC2Engine::acl_strategy_t
@@ -655,9 +670,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     std::vector<std::string> admin;
   } accepted_roles(cct);
 
-  boost::optional<token_envelope_t> t;
-  int failure_reason;
-  std::tie(t, failure_reason) = \
+  auto [t, secret_key, failure_reason] =
     get_access_token(dpp, access_key_id, string_to_sign, signature, signature_factory);
   if (! t) {
     return result_t::deny(failure_reason);
@@ -693,7 +706,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
 
     auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
                                               get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
-    return result_t::grant(std::move(apl), completer_factory(boost::none));
+    return result_t::grant(std::move(apl), completer_factory(secret_key));
   }
 }
 

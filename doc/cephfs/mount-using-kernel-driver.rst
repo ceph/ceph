@@ -103,6 +103,28 @@ To mount a subtree of the CephFS root, append the path to the device string::
 
   mount -t ceph cephuser@.cephfs=/subvolume/dir1/dir2 /mnt/mycephfs -o secretfile=/etc/ceph/cephuser.secret
 
+Backward Compatibility
+======================
+The old syntax is supported for backward compatibility.
+
+To mount CephFS with the kernel driver::
+
+    mkdir /mnt/mycephfs
+    mount -t ceph :/ /mnt/mycephfs -o name=admin
+
+The key-value argument right after option ``-o`` is CephX credential;
+``name`` is the username of the CephX user we are using to mount CephFS.
+
+To mount a non-default FS ``cephfs2``, in case the cluster has multiple FSs::
+
+    mount -t ceph :/ /mnt/mycephfs -o name=admin,fs=cephfs2
+
+    or
+
+    mount -t ceph :/ /mnt/mycephfs -o name=admin,mds_namespace=cephfs2
+
+.. note:: The option ``mds_namespace`` is deprecated. Use ``fs=`` instead when using the old syntax for mounting.
+
 Unmounting CephFS
 =================
 To unmount the Ceph file system, use the ``umount`` command as usual::

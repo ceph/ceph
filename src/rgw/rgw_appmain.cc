@@ -27,7 +27,8 @@
 #include "include/stringify.h"
 #include "rgw_main.h"
 #include "rgw_common.h"
-#include "rgw_sal_rados.h"
+#include "rgw_sal.h"
+#include "rgw_sal_config.h"
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
@@ -42,6 +43,7 @@
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_ratelimit.h"
+#include "rgw_rest_zero.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_lib.h"
@@ -61,6 +63,9 @@
 #endif
 #ifdef WITH_RADOSGW_KAFKA_ENDPOINT
 #include "rgw_kafka.h"
+#endif
+#ifdef WITH_ARROW_FLIGHT
+#include "rgw_flight_frontend.h"
 #endif
 #include "rgw_asio_frontend.h"
 #include "rgw_dmclock_scheduler_ctx.h"
@@ -87,6 +92,11 @@ namespace {
 }
 
 OpsLogFile* rgw::AppMain::ops_log_file;
+
+rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp)
+{
+}
+rgw::AppMain::~AppMain() = default;
 
 void rgw::AppMain::init_frontends1(bool nfs) 
 {
@@ -193,9 +203,22 @@ void rgw::AppMain::init_numa()
   }
 } /* init_numa */
 
-void rgw::AppMain::init_storage()
+int rgw::AppMain::init_storage()
 {
-    auto run_gc =
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  cfgstore = DriverManager::create_config_store(dpp, config_store_type);
+  if (!cfgstore) {
+    return -EIO;
+  }
+  env.cfgstore = cfgstore.get();
+
+  int r = site.load(dpp, null_yield, cfgstore.get());
+  if (r < 0) {
+    return r;
+  }
+  env.site = &site;
+
+  auto run_gc =
     (g_conf()->rgw_enable_gc_threads &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_gc_threads)));
 
@@ -219,8 +242,12 @@ void rgw::AppMain::init_storage()
           run_quota,
           run_sync,
           g_conf().get_val<bool>("rgw_dynamic_resharding"),
+          true, // run notification thread
           g_conf()->rgw_cache_enabled);
-
+  if (!env.driver) {
+    return -EIO;
+  }
+  return 0;
 } /* init_storage */
 
 void rgw::AppMain::init_perfcounters()
@@ -322,6 +349,10 @@ void rgw::AppMain::cond_init_apis()
       /* Register driver-specific admin APIs */
       env.driver->register_admin_apis(admin_resource);
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);
+    }
+
+    if (apis_map.count("zero")) {
+      rest.register_resource("zero", new rgw::RESTMgr_Zero());
     }
   } /* have_http_frontend */
 } /* init_apis */
@@ -432,6 +463,16 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       if (rgwlib) {
         rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe));
       }
+    }
+    else if (framework == "arrow_flight") {
+#ifdef WITH_ARROW_FLIGHT
+      int port;
+      config->get_val("port", 8077, &port);
+      fe = new rgw::flight::FlightFrontend(env, config, port);
+#else
+      derr << "WARNING: arrow_flight frontend requested, but not included in build; skipping" << dendl;
+      continue;
+#endif
     }
 
     service_map_meta["frontend_type#" + stringify(fe_count)] = framework;
@@ -572,6 +613,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     lua_background->shutdown();
   }
 
+  cfgstore.reset(); // deletes
   DriverManager::close_storage(env.driver);
 
   rgw_tools_cleanup();

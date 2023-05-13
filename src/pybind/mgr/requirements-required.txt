@@ -12,5 +12,7 @@ pytest-cov==2.7.1
 pyyaml
 requests-mock
 scipy
+setuptools
 werkzeug
 natsort
+bcrypt

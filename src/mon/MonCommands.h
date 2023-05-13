@@ -377,7 +377,8 @@ COMMAND("fs set "
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer"
         "|standby_count_wanted|session_timeout|session_autoclose"
-        "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask "
+        "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask"
+	"|refuse_client_session|max_xattr_size "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=yes_i_really_really_mean_it,type=CephBool,req=false",
@@ -993,7 +994,11 @@ COMMAND("osd rm-pg-upmap-primary "
 COMMAND("osd primary-temp "
 	"name=pgid,type=CephPgid "
 	"name=id,type=CephOsdName",
-        "set primary_temp mapping pgid:<id>|-1 (developers only)",
+        "set primary_temp mapping pgid:<id> (developers only)",
+        "osd", "rw")
+COMMAND("osd rm-primary-temp "
+	"name=pgid,type=CephPgid ",
+        "clear primary_temp mapping pgid (developers only)",
         "osd", "rw")
 COMMAND("osd primary-affinity "
 	"name=id,type=CephOsdName "
@@ -1084,7 +1089,8 @@ COMMAND("osd pool create "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
-	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"name=yes_i_really_mean_it,type=CephBool,req=false"
+	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "
 	"name=pool,type=CephPoolname "
@@ -1172,6 +1178,13 @@ COMMAND("osd force_recovery_stretch_mode " \
 	"try and force a recovery stretch mode, increasing the "
 	"pool size to its non-failure value if currently degraded and "
 	"all monitor buckets are up",
+	"osd", "rw")
+COMMAND("osd set-allow-crimson " \
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"Allow crimson-osds to boot and join the cluster.  Note, crimson-osd is "
+	"not yet considered stable and may crash or cause data loss -- should "
+	"be avoided outside of testing and development.  This setting is "
+	"irrevocable",
 	"osd", "rw")
 
 
@@ -1398,6 +1411,10 @@ COMMAND_WITH_FLAG("sessions",
             "mon", "r",
             FLAG(TELL))
 COMMAND_WITH_FLAG("dump_historic_ops",
-            "dump_historic_ops",
+            "show recent ops",
+            "mon", "r",
+            FLAG(TELL))
+COMMAND_WITH_FLAG("dump_historic_slow_ops",
+            "show recent slow ops",
             "mon", "r",
             FLAG(TELL))

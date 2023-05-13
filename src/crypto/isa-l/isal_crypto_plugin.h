@@ -31,7 +31,9 @@ public:
   ~ISALCryptoPlugin()
   {}
   virtual int factory(CryptoAccelRef *cs,
-                      std::ostream *ss)
+                      std::ostream *ss,
+                      const size_t chunk_size,
+                      const size_t max_requests)
   {
     if (cryptoaccel == nullptr)
     {

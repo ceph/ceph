@@ -12,6 +12,7 @@ import sys
 
 from datetime import datetime, timedelta
 from nose import with_setup, SkipTest
+from nose.plugins.attrib import attr
 from nose.tools import eq_ as eq, assert_raises, assert_not_equal
 from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
@@ -777,6 +778,7 @@ class TestImage(object):
         self._test_copy(features, self.image.stat()['order'],
                         self.image.stripe_unit(), self.image.stripe_count())
 
+    @attr('SKIP_IF_CRIMSON')
     def test_deep_copy(self):
         global ioctx
         global features
@@ -2029,6 +2031,7 @@ class TestExclusiveLock(object):
             image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE)
             image.lock_release()
 
+    @attr('SKIP_IF_CRIMSON')
     def test_break_lock(self):
         blocklist_rados = Rados(conffile='')
         blocklist_rados.connect()

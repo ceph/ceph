@@ -6,8 +6,16 @@ h2 {
     scroll-margin-top: 4em; 
 }
 
+h3 {
+    scroll-margin-top: 4em; 
+}
+
 section {
     scroll-margin-top: 4em; 
+}
+
+span {
+    scroll-margin-top: 2em; 
 }
 
 ul.simple > li > ul > li:last-child {

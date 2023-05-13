@@ -398,7 +398,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const uint64_t WAIT_FROZEN      = (1<<1);
   static const uint64_t WAIT_TRUNC       = (1<<2);
   static const uint64_t WAIT_FLOCK       = (1<<3);
-  
+  static const uint64_t WAIT_UNLINK      = (1<<4);
+
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
   // misc
@@ -656,6 +657,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   bool is_mdsdir() const { return MDS_INO_IS_MDSDIR(ino()); }
   bool is_base() const { return MDS_INO_IS_BASE(ino()); }
   bool is_system() const { return ino() < MDS_INO_SYSTEM_BASE; }
+  bool is_lost_and_found() const { return ino() == CEPH_INO_LOST_AND_FOUND; }
   bool is_normal() const { return !(is_base() || is_system() || is_stray()); }
   bool is_file() const    { return get_inode()->is_file(); }
   bool is_symlink() const { return get_inode()->is_symlink(); }

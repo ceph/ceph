@@ -456,6 +456,28 @@ class TestSnapSchedules(TestSnapSchedulesHelper):
         self.remove_snapshots(testdir[1:])
         self.mount_a.run_shell(['rmdir', testdir[1:]])    
 
+    def test_schedule_auto_deactivation_for_non_existent_path(self):
+        """
+        Test that a non-existent path leads to schedule deactivation after a few retries.
+        """
+        self.fs_snap_schedule_cmd('add', path="/bad-path", snap_schedule='1M')
+        start_time = time.time()
+
+        while time.time() - start_time < 60.0:
+            s = self.fs_snap_schedule_cmd('status', path="/bad-path", format='json')
+            json_status = json.loads(s)[0]
+
+            self.assertTrue(int(json_status['active']) == 1)
+            time.sleep(60)
+
+        s = self.fs_snap_schedule_cmd('status', path="/bad-path", format='json')
+        json_status = json.loads(s)[0]
+        self.assertTrue(int(json_status['active']) == 0)
+
+        # remove snapshot schedule
+        self.fs_snap_schedule_cmd('remove', path="/bad-path")
+
+
 class TestSnapSchedulesSnapdir(TestSnapSchedulesHelper):
     def remove_snapshots(self, dir_path, sdn):
         snap_path = f'{dir_path}/{sdn}'

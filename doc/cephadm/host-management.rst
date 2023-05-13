@@ -11,9 +11,9 @@ Run a command of this form to list hosts associated with the cluster:
 
 .. prompt:: bash #
 
-   ceph orch host ls [--format yaml] [--host-pattern <name>] [--label <label>] [--host-status <status>]
+   ceph orch host ls [--format yaml] [--host-pattern <name>] [--label <label>] [--host-status <status>] [--detail]
 
-In commands of this form, the arguments "host-pattern", "label" and
+In commands of this form, the arguments "host-pattern", "label", and
 "host-status" are optional and are used for filtering. 
 
 - "host-pattern" is a regex that matches against hostnames and returns only
@@ -24,6 +24,19 @@ In commands of this form, the arguments "host-pattern", "label" and
 - Any combination of these filtering flags is valid. It is possible to filter
   against name, label and status simultaneously, or to filter against any
   proper subset of name, label and status.
+
+The "detail" parameter provides more host related information for cephadm based
+clusters. For example:
+
+.. prompt:: bash #
+
+   ceph orch host ls --detail
+
+::
+
+    HOSTNAME     ADDRESS         LABELS  STATUS  VENDOR/MODEL                           CPU    HDD      SSD  NIC
+    ceph-master  192.168.122.73  _admin          QEMU (Standard PC (Q35 + ICH9, 2009))  4C/4T  4/1.6TB  -    1
+    1 hosts in cluster
 
 .. _cephadm-adding-hosts:    
     
@@ -58,8 +71,8 @@ To add each new host to the cluster, perform two steps:
 
    .. prompt:: bash #
 
-     ceph orch host add host2 10.10.0.102
-     ceph orch host add host3 10.10.0.103
+      ceph orch host add host2 10.10.0.102
+      ceph orch host add host3 10.10.0.103
 
    It is best to explicitly provide the host IP address.  If an IP is
    not provided, then the host name will be immediately resolved via
@@ -79,7 +92,7 @@ To add each new host to the cluster, perform two steps:
 Removing Hosts
 ==============
 
-A host can safely be removed from a the cluster after all daemons are removed
+A host can safely be removed from the cluster after all daemons are removed
 from it.
 
 To drain all daemons from a host, run a command of the following form:
@@ -88,23 +101,26 @@ To drain all daemons from a host, run a command of the following form:
 
    ceph orch host drain *<host>*
 
-The '_no_schedule' label will be applied to the host. See :ref:`cephadm-special-host-labels`
+The ``_no_schedule`` label will be applied to the host. See
+:ref:`cephadm-special-host-labels`.
 
-All osds on the host will be scheduled to be removed. You can check osd removal progress with the following:
+All OSDs on the host will be scheduled to be removed. You can check the progress of the OSD removal operation with the following command:
 
 .. prompt:: bash #
 
    ceph orch osd rm status
 
-see :ref:`cephadm-osd-removal` for more details about osd removal
+See :ref:`cephadm-osd-removal` for more details about OSD removal.
 
-You can check if there are no daemons left on the host with the following:
+Use the following command to determine whether any daemons are still on the
+host:
 
 .. prompt:: bash #
 
    ceph orch ps <host> 
 
-Once all daemons are removed you can remove the host with the following:
+After all daemons have been removed from the host, remove the host from the
+cluster by running the following command: 
 
 .. prompt:: bash #
 
@@ -113,14 +129,16 @@ Once all daemons are removed you can remove the host with the following:
 Offline host removal
 --------------------
 
-If a host is offline and can not be recovered it can still be removed from the cluster with the following:
+Even if a host is offline and can not be recovered, it can be removed from the
+cluster by running a command of the following form:
 
 .. prompt:: bash #
 
    ceph orch host rm <host> --offline --force
 
-This can potentially cause data loss as osds will be forcefully purged from the cluster by calling ``osd purge-actual`` for each osd.
-Service specs that still contain this host should be manually updated.
+.. warning:: This can potentially cause data loss. This command forcefully
+   purges OSDs from the cluster by calling ``osd purge-actual`` for each OSD.
+   Any service specs that still contain this host should be manually updated.
 
 .. _orchestrator-host-labels:
 
@@ -188,10 +206,18 @@ Place a host in and out of maintenance mode (stops all Ceph daemons on host):
 
 .. prompt:: bash #
 
-   ceph orch host maintenance enter <hostname> [--force]
+   ceph orch host maintenance enter <hostname> [--force] [--yes-i-really-mean-it]
    ceph orch host maintenance exit <hostname>
 
-Where the force flag when entering maintenance allows the user to bypass warnings (but not alerts)
+The ``--force`` flag allows the user to bypass warnings (but not alerts). The ``--yes-i-really-mean-it``
+flag bypasses all safety checks and will attempt to force the host into maintenance mode no
+matter what.
+
+.. warning:: Using the --yes-i-really-mean-it flag to force the host to enter maintenance
+   mode can potentially cause loss of data availability, the mon quorum to break down due
+   to too few running monitors, mgr module commands (such as ``ceph orch . . .`` commands)
+   to be become unresponsive, and a number of other possible issues. Please only use this
+   flag if you're absolutely certain you know what you're doing.
 
 See also :ref:`cephadm-fqdn`
 
@@ -242,9 +268,10 @@ Many hosts can be added at once using
     hostname: node-02
     addr: 192.168.0.12
 
-This can be combined with service specifications (below) to create a cluster spec
-file to deploy a whole cluster in one command.  see ``cephadm bootstrap --apply-spec``
-also to do this during bootstrap. Cluster SSH Keys must be copied to hosts prior to adding them.
+This can be combined with :ref:`service specifications<orchestrator-cli-service-spec>`
+to create a cluster spec file to deploy a whole cluster in one command.  see
+``cephadm bootstrap --apply-spec`` also to do this during bootstrap. Cluster
+SSH Keys must be copied to hosts prior to adding them.
 
 Setting the initial CRUSH location of host
 ==========================================

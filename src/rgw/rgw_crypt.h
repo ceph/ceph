@@ -5,8 +5,7 @@
  * Crypto filters for Put/Post/Get operations.
  */
 
-#ifndef CEPH_RGW_CRYPT_H
-#define CEPH_RGW_CRYPT_H
+#pragma once
 
 #include <string_view>
 
@@ -14,6 +13,7 @@
 #include <rgw/rgw_rest.h>
 #include <rgw/rgw_rest_s3.h>
 #include "rgw_putobj.h"
+#include "common/async/yield_context.h"
 
 /**
  * \brief Interface for block encryption methods
@@ -56,7 +56,8 @@ public:
                        off_t in_ofs,
                        size_t size,
                        bufferlist& output,
-                       off_t stream_offset) = 0;
+                       off_t stream_offset,
+                       optional_yield y) = 0;
 
   /**
    * Decrypts data.
@@ -76,7 +77,8 @@ public:
                        off_t in_ofs,
                        size_t size,
                        bufferlist& output,
-                       off_t stream_offset) = 0;
+                       off_t stream_offset,
+                       optional_yield y) = 0;
 };
 
 static const size_t AES_256_KEYSIZE = 256 / 8;
@@ -98,6 +100,7 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   off_t end; /**< stream offset of last byte that is requested */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
+  optional_yield y;
 
   int process(bufferlist& cipher, size_t part_ofs, size_t size);
 
@@ -107,7 +110,8 @@ public:
   RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                          CephContext* cct,
                          RGWGetObj_Filter* next,
-                         std::unique_ptr<BlockCrypt> crypt);
+                         std::unique_ptr<BlockCrypt> crypt,
+                         optional_yield y);
   virtual ~RGWGetObj_BlockDecrypt();
 
   virtual int fixup_range(off_t& bl_ofs,
@@ -129,11 +133,13 @@ class RGWPutObj_BlockEncrypt : public rgw::putobj::Pipe
                                           for operations when enough data is accumulated */
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   const size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
+  optional_yield y;
 public:
   RGWPutObj_BlockEncrypt(const DoutPrefixProvider *dpp,
                          CephContext* cct,
                          rgw::sal::DataProcessor *next,
-                         std::unique_ptr<BlockCrypt> crypt);
+                         std::unique_ptr<BlockCrypt> crypt,
+                         optional_yield y);
 
   int process(bufferlist&& data, uint64_t logical_offset) override;
 }; /* RGWPutObj_BlockEncrypt */
@@ -171,5 +177,3 @@ static inline std::string get_str_attribute(std::map<std::string, bufferlist>& a
 }
 
 int rgw_remove_sse_s3_bucket_key(req_state *s);
-
-#endif

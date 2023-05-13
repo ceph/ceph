@@ -238,9 +238,16 @@ def _udevadm_info(device):
 
 
 def lsblk(device, columns=None, abspath=False):
-    return lsblk_all(device=device,
-                     columns=columns,
-                     abspath=abspath)
+    result = []
+    if not os.path.isdir(device):
+        result = lsblk_all(device=device,
+                           columns=columns,
+                           abspath=abspath)
+    if not result:
+        logger.debug(f"{device} not found is lsblk report")
+        return {}
+
+    return result[0]
 
 def lsblk_all(device='', columns=None, abspath=False):
     """
@@ -320,6 +327,9 @@ def lsblk_all(device='', columns=None, abspath=False):
         base_command.append('-p')
     base_command.append('-o')
     base_command.append(','.join(columns))
+    if device:
+        base_command.append('--nodeps')
+        base_command.append(device)
 
     out, err, rc = process.call(base_command)
 
@@ -331,14 +341,8 @@ def lsblk_all(device='', columns=None, abspath=False):
     for line in out:
         result.append(_lsblk_parser(line))
 
-    if not device:
-        return result
+    return result
 
-    for dev in result:
-        if dev['NAME'] == os.path.basename(device):
-            return dev
-
-    return {}
 
 def is_device(dev):
     """

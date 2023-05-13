@@ -534,27 +534,6 @@ class OSDThrasher(Thrasher):
             if imp_remote != exp_remote:
                 imp_remote.run(args=cmd)
 
-            # apply low split settings to each pool
-            if not self.ceph_manager.cephadm:
-                for pool in self.ceph_manager.list_pools():
-                    cmd = ("CEPH_ARGS='--filestore-merge-threshold 1 "
-                           "--filestore-split-multiple 1' sudo -E "
-                           + 'ceph-objectstore-tool '
-                           + ' '.join(prefix + [
-                               '--data-path', FSPATH.format(id=imp_osd),
-                               '--journal-path', JPATH.format(id=imp_osd),
-                           ])
-                           + " --op apply-layout-settings --pool " + pool).format(id=osd)
-                    proc = imp_remote.run(args=cmd,
-                                          wait=True, check_status=False,
-                                          stderr=StringIO())
-                    if 'Couldn\'t find pool' in proc.stderr.getvalue():
-                        continue
-                    if proc.exitstatus:
-                        raise Exception("ceph-objectstore-tool apply-layout-settings"
-                                        " failed with {status}".format(status=proc.exitstatus))
-
-
     def blackhole_kill_osd(self, osd=None):
         """
         If all else fails, kill the osd.
@@ -1585,19 +1564,28 @@ class CephManager:
         elif isinstance(kwargs['args'], tuple):
             kwargs['args'] = list(kwargs['args'])
 
+        prefixcmd = []
+        timeoutcmd = kwargs.pop('timeoutcmd', None)
+        if timeoutcmd is not None:
+            prefixcmd += ['timeout', str(timeoutcmd)]
+
         if self.cephadm:
+            prefixcmd += ['ceph']
+            cmd = prefixcmd + list(kwargs['args'])
             return shell(self.ctx, self.cluster, self.controller,
-                         args=['ceph'] + list(kwargs['args']),
+                         args=cmd,
                          stdout=StringIO(),
                          check_status=kwargs.get('check_status', True))
-        if self.rook:
+        elif self.rook:
+            prefixcmd += ['ceph']
+            cmd = prefixcmd + list(kwargs['args'])
             return toolbox(self.ctx, self.cluster,
-                           args=['ceph'] + list(kwargs['args']),
+                           args=cmd,
                            stdout=StringIO(),
                            check_status=kwargs.get('check_status', True))
-
-        kwargs['args'] = self.CEPH_CMD + kwargs['args']
-        return self.controller.run(**kwargs)
+        else:
+            kwargs['args'] = prefixcmd + self.CEPH_CMD + kwargs['args']
+            return self.controller.run(**kwargs)
 
     def raw_cluster_cmd(self, *args, **kwargs) -> str:
         """
@@ -3164,11 +3152,14 @@ class CephManager:
                         raise
         self.log("quorum is size %d" % size)
 
-    def get_mon_health(self, debug=False):
+    def get_mon_health(self, debug=False, detail=False):
         """
         Extract all the monitor health information.
         """
-        out = self.raw_cluster_cmd('health', '--format=json')
+        if detail:
+            out = self.raw_cluster_cmd('health', 'detail', '--format=json')
+        else:
+            out = self.raw_cluster_cmd('health', '--format=json')
         if debug:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)

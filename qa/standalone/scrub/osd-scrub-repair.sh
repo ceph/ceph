@@ -277,11 +277,7 @@ function auto_repair_erasure_coded() {
             --osd-scrub-min-interval=5 \
             --osd-scrub-interval-randomize-ratio=0"
     for id in $(seq 0 2) ; do
-        if [ "$allow_overwrites" = "true" ]; then
-            run_osd $dir $id $ceph_osd_args || return 1
-        else
-            run_osd_filestore $dir $id $ceph_osd_args || return 1
-        fi
+        run_osd $dir $id $ceph_osd_args || return 1
     done
     create_rbd_pool || return 1
     wait_for_clean || return 1
@@ -803,11 +799,7 @@ function corrupt_and_repair_jerasure() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 3) ; do
-	if [ "$allow_overwrites" = "true" ]; then
-            run_osd $dir $id || return 1
-	else
-            run_osd_filestore $dir $id || return 1
-	fi
+	run_osd $dir $id || return 1
     done
     create_rbd_pool || return 1
     wait_for_clean || return 1
@@ -834,11 +826,7 @@ function corrupt_and_repair_lrc() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 9) ; do
-	if [ "$allow_overwrites" = "true" ]; then
-            run_osd $dir $id || return 1
-	else
-            run_osd_filestore $dir $id || return 1
-	fi
+        run_osd $dir $id || return 1
     done
     create_rbd_pool || return 1
     wait_for_clean || return 1
@@ -866,11 +854,7 @@ function unfound_erasure_coded() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 3) ; do
-	if [ "$allow_overwrites" = "true" ]; then
-            run_osd $dir $id || return 1
-	else
-            run_osd_filestore $dir $id || return 1
-	fi
+        run_osd $dir $id || return 1
     done
 
     create_ec_pool $poolname $allow_overwrites k=2 m=2 || return 1
@@ -933,11 +917,7 @@ function list_missing_erasure_coded() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
-	if [ "$allow_overwrites" = "true" ]; then
-            run_osd $dir $id || return 1
-	else
-            run_osd_filestore $dir $id || return 1
-	fi
+        run_osd $dir $id || return 1
     done
     create_rbd_pool || return 1
     wait_for_clean || return 1
@@ -3618,11 +3598,7 @@ function corrupt_scrub_erasure() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     for id in $(seq 0 2) ; do
-	if [ "$allow_overwrites" = "true" ]; then
-            run_osd $dir $id || return 1
-	else
-            run_osd_filestore $dir $id || return 1
-	fi
+        run_osd $dir $id || return 1
     done
     create_rbd_pool || return 1
     create_pool foo 1

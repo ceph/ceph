@@ -6,7 +6,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
-#include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
@@ -24,15 +24,6 @@ class PG;
 
 class LogMissingRequestReply final : public PhasedOperationT<LogMissingRequestReply> {
 public:
-  class PGPipeline {
-    struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
-      static constexpr auto type_name = "LogMissingRequestReply::PGPipeline::await_map";
-    } await_map;
-    struct Process : OrderedExclusivePhaseT<Process> {
-      static constexpr auto type_name = "LogMissingRequestReply::PGPipeline::process";
-    } process;
-    friend LogMissingRequestReply;
-  };
   static constexpr OperationTypeCode type = OperationTypeCode::logmissing_request_reply;
   LogMissingRequestReply(crimson::net::ConnectionRef&&, Ref<MOSDPGUpdateLogMissingReply>&&);
 
@@ -43,14 +34,28 @@ public:
   spg_t get_pgid() const {
     return req->get_spg();
   }
-  ConnectionPipeline &get_connection_pipeline();
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return req->get_min_epoch(); }
+
+  ConnectionPipeline &get_connection_pipeline();
+  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
+    assert(conn);
+    return conn.get_foreign(
+    ).then([this](auto f_conn) {
+      conn.reset();
+      return f_conn;
+    });
+  }
+  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
+    assert(!conn);
+    conn = make_local_shared_foreign(std::move(_conn));
+  }
 
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
   std::tuple<
+    StartEvent,
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     ConnectionPipeline::GetPG::BlockingEvent,
@@ -59,9 +64,9 @@ public:
   > tracking_events;
 
 private:
-  RepRequest::PGPipeline &pp(PG &pg);
+  ClientRequest::PGPipeline &pp(PG &pg);
 
-  crimson::net::ConnectionFRef conn;
+  crimson::net::ConnectionRef conn;
   // must be after `conn` to ensure the ConnectionPipeline's is alive
   PipelineHandle handle;
   Ref<MOSDPGUpdateLogMissingReply> req;

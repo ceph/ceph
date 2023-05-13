@@ -4,6 +4,7 @@
 #include "cls/journal/cls_journal_client.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
+#include "test/librados/test_cxx.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "include/rbd/librbd.h"
@@ -28,6 +29,7 @@
 #include <boost/assign/list_of.hpp>
 #include <utility>
 #include <vector>
+#include "test/librados/crimson_utils.h"
 
 using namespace std;
 
@@ -376,6 +378,79 @@ TEST_F(TestInternal, FlattenFailsToLockImage) {
   ASSERT_EQ(-EROFS, ictx2->operations->flatten(no_op));
 }
 
+TEST_F(TestInternal, WriteFailsToLockImageBlocklisted) {
+  SKIP_IF_CRIMSON();
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::Rados blocklist_rados;
+  ASSERT_EQ("", connect_cluster_pp(blocklist_rados));
+
+  librados::IoCtx blocklist_ioctx;
+  ASSERT_EQ(0, blocklist_rados.ioctx_create(_pool_name.c_str(),
+                                            blocklist_ioctx));
+
+  auto ictx = new librbd::ImageCtx(m_image_name, "", nullptr, blocklist_ioctx,
+                                   false);
+  ASSERT_EQ(0, ictx->state->open(0));
+
+  std::list<librbd::image_watcher_t> watchers;
+  ASSERT_EQ(0, librbd::list_watchers(ictx, watchers));
+  ASSERT_EQ(1U, watchers.size());
+
+  bool lock_owner;
+  ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, blocklist_rados.blocklist_add(watchers.front().addr, 0));
+
+  ceph::bufferlist bl;
+  bl.append(std::string(256, '1'));
+  ASSERT_EQ(-EBLOCKLISTED, api::Io<>::write(*ictx, 0, bl.length(),
+                                            std::move(bl), 0));
+  ASSERT_EQ(-EBLOCKLISTED, librbd::is_exclusive_lock_owner(ictx, &lock_owner));
+
+  close_image(ictx);
+}
+
+TEST_F(TestInternal, WriteFailsToLockImageBlocklistedWatch) {
+  SKIP_IF_CRIMSON();
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::Rados blocklist_rados;
+  ASSERT_EQ("", connect_cluster_pp(blocklist_rados));
+
+  librados::IoCtx blocklist_ioctx;
+  ASSERT_EQ(0, blocklist_rados.ioctx_create(_pool_name.c_str(),
+                                            blocklist_ioctx));
+
+  auto ictx = new librbd::ImageCtx(m_image_name, "", nullptr, blocklist_ioctx,
+                                   false);
+  ASSERT_EQ(0, ictx->state->open(0));
+
+  std::list<librbd::image_watcher_t> watchers;
+  ASSERT_EQ(0, librbd::list_watchers(ictx, watchers));
+  ASSERT_EQ(1U, watchers.size());
+
+  bool lock_owner;
+  ASSERT_EQ(0, librbd::is_exclusive_lock_owner(ictx, &lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, blocklist_rados.blocklist_add(watchers.front().addr, 0));
+  // let ImageWatcher discover that the watch can't be re-registered to
+  // eliminate the (intended) race in WriteFailsToLockImageBlocklisted
+  while (!ictx->image_watcher->is_blocklisted()) {
+    sleep(1);
+  }
+
+  ceph::bufferlist bl;
+  bl.append(std::string(256, '1'));
+  ASSERT_EQ(-EBLOCKLISTED, api::Io<>::write(*ictx, 0, bl.length(),
+                                            std::move(bl), 0));
+  ASSERT_EQ(-EBLOCKLISTED, librbd::is_exclusive_lock_owner(ictx, &lock_owner));
+
+  close_image(ictx);
+}
+
 TEST_F(TestInternal, AioWriteRequestsLock) {
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
@@ -582,6 +657,9 @@ TEST_F(TestInternal, MetadataConfApply) {
 
 TEST_F(TestInternal, SnapshotCopyup)
 {
+  //https://tracker.ceph.com/issues/58263
+  // Clone overlap is WIP
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::ImageCtx *ictx;
@@ -1232,8 +1310,7 @@ TEST_F(TestInternal, TestCoR)
   std::string config_value;
   ASSERT_EQ(0, _rados.conf_get("rbd_clone_copy_on_read", config_value));
   if (config_value == "false") {
-    std::cout << "SKIPPING due to disabled rbd_copy_on_read" << std::endl;
-    return;
+    GTEST_SKIP() << "Skipping due to disabled copy-on-read";
   }
 
   m_image_name = get_temp_image_name();

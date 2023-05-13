@@ -110,6 +110,144 @@ namespace mdlog {
 
 using Cursor = RGWPeriodHistory::Cursor;
 
+namespace {
+template <class T>
+class SysObjReadCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWSI_SysObj *svc;
+
+  rgw_raw_obj obj;
+  T *result;
+  /// on ENOENT, call handle_data() with an empty object instead of failing
+  const bool empty_on_enoent;
+  RGWObjVersionTracker *objv_tracker;
+  RGWAsyncGetSystemObj *req{nullptr};
+
+public:
+  SysObjReadCR(const DoutPrefixProvider *_dpp, 
+	       RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
+	       const rgw_raw_obj& _obj,
+	       T *_result, bool empty_on_enoent = true,
+	       RGWObjVersionTracker *objv_tracker = nullptr)
+    : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados), svc(_svc),
+      obj(_obj), result(_result),
+      empty_on_enoent(empty_on_enoent), objv_tracker(objv_tracker) {}
+
+  ~SysObjReadCR() override {
+    try {
+      request_cleanup();
+    } catch (const boost::container::length_error_t& e) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	": reference counted object mismatched, \"" << e.what() <<
+	"\"" << dendl;
+    }
+  }
+
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request(const DoutPrefixProvider *dpp) {
+    req = new RGWAsyncGetSystemObj(dpp, this, stack->create_completion_notifier(), svc,
+				   objv_tracker, obj, false, false);
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() {
+    int ret = req->get_ret_status();
+    retcode = ret;
+    if (ret == -ENOENT && empty_on_enoent) {
+      *result = T();
+    } else {
+      if (ret < 0) {
+	return ret;
+      }
+      if (objv_tracker) { // copy the updated version
+	*objv_tracker = req->objv_tracker;
+      }
+      try {
+	auto iter = req->bl.cbegin();
+	if (iter.end()) {
+	  // allow successful reads with empty buffers. ReadSyncStatus
+	  // coroutines depend on this to be able to read without
+	  // locking, because the cls lock from InitSyncStatus will
+	  // create an empty object if it didn't exist
+	  *result = T();
+	} else {
+	  decode(*result, iter);
+	}
+      } catch (buffer::error& err) {
+	return -EIO;
+      }
+    }
+    return handle_data(*result);
+  }
+
+  virtual int handle_data(T& data) {
+    return 0;
+  }
+};
+
+template <class T>
+class SysObjWriteCR : public RGWSimpleCoroutine {
+  const DoutPrefixProvider *dpp;
+  RGWAsyncRadosProcessor *async_rados;
+  RGWSI_SysObj *svc;
+  bufferlist bl;
+  rgw_raw_obj obj;
+  RGWObjVersionTracker *objv_tracker;
+  bool exclusive;
+  RGWAsyncPutSystemObj *req{nullptr};
+
+public:
+  SysObjWriteCR(const DoutPrefixProvider *_dpp, 
+		RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
+		const rgw_raw_obj& _obj, const T& _data,
+		RGWObjVersionTracker *objv_tracker = nullptr,
+		bool exclusive = false)
+    : RGWSimpleCoroutine(_svc->ctx()), dpp(_dpp), async_rados(_async_rados),
+      svc(_svc), obj(_obj), objv_tracker(objv_tracker), exclusive(exclusive) {
+    encode(_data, bl);
+  }
+
+  ~SysObjWriteCR() override {
+    try {
+      request_cleanup();
+    } catch (const boost::container::length_error_t& e) {
+      ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+	": reference counted object mismatched, \"" << e.what() <<
+	"\"" << dendl;
+    }
+  }
+
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request(const DoutPrefixProvider *dpp) override {
+    req = new RGWAsyncPutSystemObj(dpp, this, stack->create_completion_notifier(),
+			           svc, objv_tracker, obj, exclusive, std::move(bl));
+    async_rados->queue(req);
+    return 0;
+  }
+
+  int request_complete() override {
+    if (objv_tracker) { // copy the updated version
+      *objv_tracker = req->objv_tracker;
+    }
+    return req->get_ret_status();
+  }
+};
+}
+
 /// read the mdlog history and use it to initialize the given cursor
 class ReadHistoryCR : public RGWCoroutine {
   const DoutPrefixProvider *dpp;
@@ -137,7 +275,7 @@ class ReadHistoryCR : public RGWCoroutine {
                         RGWMetadataLogHistory::oid};
         constexpr bool empty_on_enoent = false;
 
-        using ReadCR = RGWSimpleRadosReadCR<RGWMetadataLogHistory>;
+        using ReadCR = SysObjReadCR<RGWMetadataLogHistory>;
         call(new ReadCR(dpp, async_processor, svc.sysobj, obj,
                         &state, empty_on_enoent, objv_tracker));
       }
@@ -188,7 +326,7 @@ class WriteHistoryCR : public RGWCoroutine {
         rgw_raw_obj obj{svc.zone->get_zone_params().log_pool,
                         RGWMetadataLogHistory::oid};
 
-        using WriteCR = RGWSimpleRadosWriteCR<RGWMetadataLogHistory>;
+        using WriteCR = SysObjWriteCR<RGWMetadataLogHistory>;
         call(new WriteCR(dpp, async_processor, svc.sysobj, obj, state, objv));
       }
       if (retcode < 0) {

@@ -178,19 +178,22 @@ def install_block_rbd_driver(ctx, config):
     """
     Make sure qemu rbd block driver (block-rbd.so) is installed
     """
-    for client, client_config in config.items():
+    packages = {}
+    for client, _ in config.items():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         if remote.os.package_type == 'rpm':
-            block_rbd_pkg = 'qemu-kvm-block-rbd'
+            packages[client] = ['qemu-kvm-block-rbd']
         else:
-            block_rbd_pkg = 'qemu-block-extra'
-        install_package(block_rbd_pkg, remote)
+            packages[client] = ['qemu-block-extra', 'qemu-utils']
+        for pkg in packages[client]:
+            install_package(pkg, remote)
     try:
         yield
     finally:
-        for client, client_config in config.items():
+        for client, _ in config.items():
             (remote,) = ctx.cluster.only(client).remotes.keys()
-            remove_package(block_rbd_pkg, remote)
+            for pkg in packages[client]:
+                remove_package(pkg, remote)
 
 @contextlib.contextmanager
 def generate_iso(ctx, config):
@@ -651,7 +654,7 @@ def task(ctx, config):
                         action: create / clone / none (optional, defaults to create)
                         image_name: <image name> (optional)
                         parent_name: <parent_name> (if action == clone),
-                        type: filesystem / block (optional, defaults to fileystem)
+                        type: filesystem / block (optional, defaults to filesystem)
                         image_url: <URL> (optional),
                         image_size: <MiB> (optional)
                         encryption_format: luks1 / luks2 / none (optional, defaults to none)

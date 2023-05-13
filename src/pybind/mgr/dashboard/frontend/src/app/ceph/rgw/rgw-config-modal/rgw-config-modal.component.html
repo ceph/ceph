@@ -174,24 +174,6 @@
         </div>
       </div>
 
-      <div *ngIf="configForm.getValue('auth_method') === 'agent'">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
-                 for="role"
-                 i18n>Role
-          </label>
-          <div class="cd-col-form-input">
-            <input id="role"
-                   name="role"
-                   class="form-control"
-                   formControlName="role">
-            <span class="invalid-feedback"
-                  *ngIf="configForm.showError('role', frm, 'required')"
-                  i18n>This field is required.</span>
-          </div>
-        </div>
-      </div>
-
       <div *ngIf="configForm.getValue('encryptionType') === 'aws:kms' || configForm.getValue('encryptionType') === 'AES256'">
         <div class="form-group row">
           <label class="cd-col-form-label"

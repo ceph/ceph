@@ -201,6 +201,19 @@ class MDCache {
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
 
+  void insert_taken_inos(inodeno_t ino) {
+    replay_taken_inos.insert(ino);
+  }
+  void clear_taken_inos(inodeno_t ino) {
+    replay_taken_inos.erase(ino);
+  }
+  bool test_and_clear_taken_inos(inodeno_t ino) {
+    return replay_taken_inos.erase(ino) != 0;
+  }
+  bool is_taken_inos_empty(void) {
+    return replay_taken_inos.empty();
+  }
+
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
   }
@@ -514,6 +527,7 @@ class MDCache {
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
   bool dump_inode(Formatter *f, uint64_t number);
+  void dump_dir(Formatter *f, CDir *dir, bool dentry_dump=false);
 
   void rejoin_start(MDSContext *rejoin_done_);
   void rejoin_gather_finish();
@@ -953,7 +967,7 @@ class MDCache {
    */
   void enqueue_scrub(std::string_view path, std::string_view tag,
                      bool force, bool recursive, bool repair,
-		     Formatter *f, Context *fin);
+                     bool scrub_mdsdir, Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
   void rdlock_dirfrags_stats(CInode *diri, MDSInternalContext *fin);
@@ -1236,6 +1250,8 @@ class MDCache {
   StrayManager stray_manager;
 
  private:
+  std::set<inodeno_t> replay_taken_inos; // the inos have been taken when replaying
+
   // -- fragmenting --
   struct ufragment {
     ufragment() {}

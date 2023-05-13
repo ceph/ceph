@@ -253,8 +253,10 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
   BucketTrimWatcher(rgw::sal::RadosStore* store, const rgw_raw_obj& obj,
                     TrimCounters::Server *counters)
     : store(store), obj(obj) {
-    handlers.emplace(NotifyTrimCounters, new TrimCounters::Handler(counters));
-    handlers.emplace(NotifyTrimComplete, new TrimComplete::Handler(counters));
+    handlers.emplace(NotifyTrimCounters,
+        std::make_unique<TrimCounters::Handler>(counters));
+    handlers.emplace(NotifyTrimComplete,
+        std::make_unique<TrimComplete::Handler>(counters));
   }
 
   ~BucketTrimWatcher() {
@@ -1096,8 +1098,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
-                                &status, true, &objv));
+      yield call(new ReadStatus(dpp, store, obj, &status, true, &objv));
       if (retcode < 0) {
         ldpp_dout(dpp, 10) << "failed to read bilog trim status: "
             << cpp_strerror(retcode) << dendl;
@@ -1155,8 +1156,7 @@ int BucketTrimCR::operate(const DoutPrefixProvider *dpp)
       status.marker = std::move(last_cold_marker);
       ldpp_dout(dpp, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(dpp, store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
-                                 status, &objv));
+      yield call(new WriteStatus(dpp, store, obj, status, &objv));
       if (retcode < 0) {
         ldpp_dout(dpp, 4) << "failed to write updated trim status: "
             << cpp_strerror(retcode) << dendl;

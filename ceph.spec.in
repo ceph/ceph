@@ -46,7 +46,6 @@
 %endif
 %endif
 %bcond_without selinux
-%bcond_without cephfs_java
 %bcond_without amqp_endpoint
 %bcond_without kafka_endpoint
 %bcond_without lttng
@@ -106,8 +105,13 @@
 # distros that do _not_ ship cmd2/colorama
 %bcond_with cephfs_shell
 %endif
+%if 0%{?fedora} || 0%{?rhel} >= 9
+%bcond_without system_arrow
+%else
+# for centos 8, utf8proc-devel comes from the subversion-devel module which isn't available in EPEL8
+# this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
-%bcond_with system_utf8proc
+%endif
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8
 %global weak_deps 1
 %endif
@@ -323,10 +327,8 @@ BuildRequires:  libpmem-devel
 BuildRequires:  libpmemobj-devel >= 1.8
 %endif
 %if 0%{with system_arrow}
-BuildRequires:  arrow-devel
-BuildRequires:  parquet-devel
-%endif
-%if 0%{with system_utf8proc}
+BuildRequires:  libarrow-devel
+BuildRequires:  parquet-libs-devel
 BuildRequires:  utf8proc-devel
 %endif
 %if 0%{with seastar}
@@ -662,6 +664,7 @@ Requires:       python%{python3_pkgversion}-pecan
 Requires:       python%{python3_pkgversion}-pyOpenSSL
 Requires:       python%{python3_pkgversion}-requests
 Requires:       python%{python3_pkgversion}-dateutil
+Requires:       python%{python3_pkgversion}-setuptools
 %if 0%{?fedora} || 0%{?rhel} >= 8
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-pyyaml
@@ -1420,8 +1423,6 @@ cmake .. \
 %endif
 %if 0%{with system_arrow}
     -DWITH_SYSTEM_ARROW:BOOL=ON \
-%endif
-%if 0%{with system_utf8proc}
     -DWITH_SYSTEM_UTF8PROC:BOOL=ON \
 %endif
 %if 0%{with seastar}
@@ -1489,7 +1490,7 @@ touch %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 chmod 0600 %{buildroot}%{_sharedstatedir}/cephadm/.ssh/authorized_keys
 
 # firewall templates and /sbin/mount.ceph symlink
-%if 0%{?suse_version} && !0%{?usrmerged}
+%if 0%{?suse_version} && 0%{?suse_version} < 1550
 mkdir -p %{buildroot}/sbin
 ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
@@ -1669,8 +1670,12 @@ exit 0
 %{_bindir}/rbd-replay
 %{_bindir}/rbd-replay-many
 %{_bindir}/rbdmap
+%{_bindir}/rgw-gap-list
+%{_bindir}/rgw-gap-list-comparator
+%{_bindir}/rgw-orphan-list
+%{_bindir}/rgw-restore-bucket-index
 %{_sbindir}/mount.ceph
-%if 0%{?suse_version} && !0%{?usrmerged}
+%if 0%{?suse_version} && 0%{?suse_version} < 1550
 /sbin/mount.ceph
 %endif
 %if %{with lttng}
@@ -1884,6 +1889,7 @@ fi
 %{_datadir}/ceph/mgr/prometheus
 %{_datadir}/ceph/mgr/rbd_support
 %{_datadir}/ceph/mgr/restful
+%{_datadir}/ceph/mgr/rgw
 %{_datadir}/ceph/mgr/selftest
 %{_datadir}/ceph/mgr/snap_schedule
 %{_datadir}/ceph/mgr/stats
@@ -2126,9 +2132,6 @@ fi
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
-%{_bindir}/rgw-gap-list
-%{_bindir}/rgw-gap-list-comparator
-%{_bindir}/rgw-orphan-list
 %{_bindir}/rgw-policy-check
 %{_mandir}/man8/radosgw.8*
 %{_mandir}/man8/rgw-policy-check.8*

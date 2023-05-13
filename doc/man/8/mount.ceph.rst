@@ -116,6 +116,12 @@ Basic
       them. If an inode contains any stale file locks, read/write on the inode
       is not allowed until applications release all stale file locks.
 
+:command: `fs=<fs-name>`
+    Specify the non-default file system to be mounted, when using the old syntax.
+
+:command: `mds_namespace=<fs-name>`
+    A synonym of "fs=" (Deprecated).
+
 Advanced
 --------
 :command:`cap_release_safety`
@@ -228,6 +234,10 @@ history::
 If authentication is disabled on Ceph cluster, omit the credential related option::
 
     mount.ceph fs_user@.mycephfs2=/ /mnt/mycephfs
+
+To mount using the old syntax::
+
+    mount -t ceph 192.168.0.1:/ /mnt/mycephfs
 
 Availability
 ============

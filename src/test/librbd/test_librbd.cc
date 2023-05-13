@@ -21,6 +21,7 @@
 #include "include/err.h"
 #include "common/ceph_mutex.h"
 #include "json_spirit/json_spirit.h"
+#include "test/librados/crimson_utils.h"
 
 #include "gtest/gtest.h"
 
@@ -6924,6 +6925,7 @@ TEST_F(TestLibRBD, ListChildren)
 
 TEST_F(TestLibRBD, ListChildrenTiered)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::RBD rbd;
@@ -8114,8 +8116,7 @@ TEST_F(TestLibRBD, LargeCacheRead)
   std::string config_value;
   ASSERT_EQ(0, _rados.conf_get("rbd_cache", config_value));
   if (config_value == "false") {
-    std::cout << "SKIPPING due to disabled cache" << std::endl;
-    return;
+    GTEST_SKIP() << "Skipping due to disabled cache";
   }
 
   rados_ioctx_t ioctx;
@@ -8704,7 +8705,6 @@ TEST_F(TestLibRBD, SnapRemoveViaLockOwner)
 }
 
 TEST_F(TestLibRBD, UpdateFeaturesViaLockOwner) {
-
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librados::IoCtx ioctx;
@@ -10559,6 +10559,7 @@ TEST_F(TestLibRBD, ExclusiveLock)
 
 TEST_F(TestLibRBD, BreakLock)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
   REQUIRE(!is_rbd_pwl_enabled((CephContext *)_rados.cct()));
 
@@ -10885,7 +10886,18 @@ TEST_F(TestLibRBD, TestListWatchers) {
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
   ASSERT_EQ(0, image.list_watchers(watchers));
   ASSERT_EQ(1U, watchers.size());
+  auto watcher1 = watchers.front();
   ASSERT_EQ(0, image.close());
+
+  // (Still) one watcher
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+  ASSERT_EQ(0, image.list_watchers(watchers));
+  ASSERT_EQ(1U, watchers.size());
+  auto watcher2 = watchers.front();
+  ASSERT_EQ(0, image.close());
+
+  EXPECT_EQ(watcher1.addr, watcher2.addr);
+  EXPECT_EQ(watcher1.id, watcher2.id);
 }
 
 TEST_F(TestLibRBD, TestSetSnapById) {
@@ -12109,6 +12121,7 @@ TEST_F(TestLibRBD, QuiesceWatchPP)
 
 TEST_F(TestLibRBD, QuiesceWatchError)
 {
+  SKIP_IF_CRIMSON();
   librbd::RBD rbd;
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
@@ -12465,8 +12478,9 @@ TEST_F(TestLibRBD, WriteZeroesThickProvision) {
   ASSERT_EQ(0, image.close());
 }
 
-TEST_F(TestLibRBD, ConcurentOperations)
+TEST_F(TestLibRBD, ConcurrentOperations)
 {
+  SKIP_IF_CRIMSON();
   REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
 
   librbd::RBD rbd;

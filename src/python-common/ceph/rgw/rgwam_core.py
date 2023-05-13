@@ -780,13 +780,13 @@ class RGWAM:
 
         zone = self.create_zone(realm, zonegroup, rgw_spec.rgw_zone,
                                 False,  # secondary zone
-                                access_key, secret, endpoints=rgw_spec.endpoints)
+                                access_key, secret, endpoints=rgw_spec.zone_endpoints)
         self.update_period(realm, zonegroup, zone)
 
         period = RGWPeriod(period_info)
         logging.debug(period.to_json())
 
-        if start_radosgw and rgw_spec.endpoints is None:
+        if start_radosgw and rgw_spec.zone_endpoints is None:
             secondary_realm_token = RealmToken(realm_name,
                                                realm_id,
                                                None,   # no endpoint

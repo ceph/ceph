@@ -898,7 +898,7 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
 
   RGWUserInfo info;
   real_time mtime;
-  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, null_yield, dpp);
+  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, y, dpp);
   if (ret < 0)
   {
     return ret;

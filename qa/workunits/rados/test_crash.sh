@@ -24,6 +24,11 @@ for f in $(find $TESTDIR/archive/coredump -type f); do
 	fi
 done
 
+# ceph-crash runs as the unprivileged "ceph" user, but when under test
+# the ceph osd daemons are running as root, so their crash files aren't
+# readable.  let's chown them so they behave as they would in real life.
+sudo chown -R ceph:ceph /var/lib/ceph/crash
+
 # let daemon find crashdumps on startup
 sudo systemctl restart ceph-crash
 sleep 30

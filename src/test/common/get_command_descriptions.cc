@@ -46,10 +46,9 @@ static void usage(ostream &out)
 static void json_print(const std::vector<MonCommand> &mon_commands)
 {
   bufferlist rdata;
-  Formatter *f = Formatter::create("json");
-  Monitor::format_command_descriptions(mon_commands, f,
+  auto f = Formatter::create_unique("json");
+  Monitor::format_command_descriptions(mon_commands, f.get(),
                                        CEPH_FEATURES_ALL, &rdata);
-  delete f;
   string data(rdata.c_str(), rdata.length());
   cout << data << std::endl;
 }

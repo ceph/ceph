@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_RGW_CRYPT_SANITIZE_H_
-#define RGW_RGW_CRYPT_SANITIZE_H_
+#pragma once
 
 #include <string_view>
 #include "rgw_common.h"
@@ -67,4 +66,3 @@ std::ostream& operator<<(std::ostream& out, const auth& x);
 std::ostream& operator<<(std::ostream& out, const log_content& x);
 }
 }
-#endif /* RGW_RGW_CRYPT_SANITIZE_H_ */

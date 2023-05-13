@@ -156,14 +156,14 @@ public:
   // normal fields
   void set_tid(ceph_tid_t t) { tid = t; }
   void set_oldest_client_tid(ceph_tid_t t) { head.oldest_client_tid = t; }
-  void inc_num_fwd() { head.num_fwd = head.num_fwd + 1; }
-  void set_retry_attempt(int a) { head.num_retry = a; }
+  void inc_num_fwd() { head.ext_num_fwd = head.ext_num_fwd + 1; }
+  void set_retry_attempt(int a) { head.ext_num_retry = a; }
   void set_filepath(const filepath& fp) { path = fp; }
   void set_filepath2(const filepath& fp) { path2 = fp; }
   void set_alternate_name(std::string an) { alternate_name = an; }
   void set_string2(const char *s) { path2.set_path(std::string_view(s), 0); }
   void set_caller_perms(const UserPerm& _perms) {
-    perms.shallow_copy(_perms);
+    perms = _perms;
     head.caller_uid = perms.uid();
     head.caller_gid = perms.gid();
   }

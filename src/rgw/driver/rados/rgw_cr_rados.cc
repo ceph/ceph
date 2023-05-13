@@ -131,21 +131,39 @@ RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(const DoutPrefixProvider *_dpp, RGWCo
 
 int RGWSimpleRadosReadAttrsCR::send_request(const DoutPrefixProvider *dpp)
 {
-  req = new RGWAsyncGetSystemObj(dpp, this, stack->create_completion_notifier(),
-			         svc, objv_tracker, obj, true, raw_attrs);
-  async_rados->queue(req);
-  return 0;
+  int r = store->getRados()->get_raw_obj_ref(dpp, obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: failed to get ref for (" << obj << ") ret="
+			 << r << dendl;
+    return r;
+  }
+
+  set_status() << "sending request";
+
+  librados::ObjectReadOperation op;
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_read(&op);
+  }
+
+  if (raw_attrs && pattrs) {
+    op.getxattrs(pattrs, nullptr);
+  } else {
+    op.getxattrs(&unfiltered_attrs, nullptr);
+  }
+
+  cn = stack->create_completion_notifier();
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op,
+				      nullptr);
 }
 
 int RGWSimpleRadosReadAttrsCR::request_complete()
 {
-  if (pattrs) {
-    *pattrs = std::move(req->attrs);
+  int ret = cn->completion()->get_return_value();
+  set_status() << "request complete; ret=" << ret;
+  if (!raw_attrs && pattrs) {
+    rgw_filter_attrset(unfiltered_attrs, RGW_ATTR_PREFIX, pattrs);
   }
-  if (objv_tracker) {
-    *objv_tracker = req->objv_tracker;
-  }
-  return req->get_ret_status();
+  return ret;
 }
 
 int RGWAsyncPutSystemObj::_send_request(const DoutPrefixProvider *dpp)
@@ -657,7 +675,7 @@ int RGWAsyncGetBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
 int RGWAsyncPutBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
 {
   auto r = store->getRados()->put_bucket_instance_info(bucket_info, exclusive,
-						       mtime, attrs, dpp);
+						       mtime, attrs, dpp, null_yield);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to put bucket instance info for "
 		      << bucket_info.bucket << dendl;
@@ -718,8 +736,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
   rgw::sal::Attrs attrs;
 
-  rgw::sal::RadosBucket bucket(store, src_bucket);
-  rgw::sal::RadosObject src_obj(store, key, &bucket);
+  rgw_obj src_obj(src_bucket, key);
+
   rgw::sal::RadosBucket dest_bucket(store, dest_bucket_info);
   rgw::sal::RadosObject dest_obj(store, dest_key.value_or(key), &dest_bucket);
     
@@ -730,9 +748,9 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        user_id.value_or(rgw_user()),
                        NULL, /* req_info */
                        source_zone,
-                       &dest_obj,
-                       &src_obj,
-                       &dest_bucket, /* dest */
+                       dest_obj.get_obj(),
+                       src_obj,
+                       dest_bucket_info, /* dest */
                        nullptr, /* source */
                        dest_placement_rule,
                        nullptr, /* real_time* src_mtime, */
@@ -795,7 +813,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
           ldpp_dout(dpp, 1) << "ERROR: reserving notification failed, with error: " << ret << dendl;
           // no need to return, the sync already happened
         } else {
-          ret = rgw::notify::publish_commit(&dest_obj, dest_obj.get_obj_size(), ceph::real_clock::now(), etag, dest_obj.get_instance(), rgw::notify::ObjectSyncedCreate, notify_res, dpp);
+          ret = rgw::notify::publish_commit(&dest_obj, *bytes_transferred, ceph::real_clock::now(), etag, dest_obj.get_instance(), rgw::notify::ObjectSyncedCreate, notify_res, dpp);
           if (ret < 0) {
             ldpp_dout(dpp, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
           }
@@ -821,15 +839,15 @@ int RGWAsyncStatRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
-  rgw::sal::RadosBucket bucket(store, src_bucket);
-  rgw::sal::RadosObject src_obj(store, key, &bucket);
+
+  rgw_obj src_obj(src_bucket, key);
 
   int r = store->getRados()->stat_remote_obj(dpp,
                        obj_ctx,
                        rgw_user(user_id),
                        nullptr, /* req_info */
                        source_zone,
-                       &src_obj,
+                       src_obj,
                        nullptr, /* source */
                        pmtime, /* real_time* src_mtime, */
                        psize, /* uint64_t * */
@@ -919,7 +937,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
   reenter(this) {
     last_renew_try_time = ceph::coarse_mono_clock::now();
     while (!going_down) {
+      current_time = ceph::coarse_mono_clock::now();
       yield call(new RGWSimpleRadosLockCR(async_rados, store, obj, lock_name, cookie, interval));
+      if (latency) {
+	latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+      }
       current_time = ceph::coarse_mono_clock::now();
       if (current_time - last_renew_try_time > interval_tolerance) {
         // renewal should happen between 50%-90% of interval
@@ -939,7 +961,11 @@ int RGWContinuousLeaseCR::operate(const DoutPrefixProvider *dpp)
       yield wait(utime_t(interval / 2, 0));
     }
     set_locked(false); /* moot at this point anyway */
+    current_time = ceph::coarse_mono_clock::now();
     yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name, cookie));
+    if (latency) {
+      latency->add_latency(ceph::coarse_mono_clock::now() - current_time);
+    }
     return set_state(RGWCoroutine_Done);
   }
   return 0;

@@ -755,9 +755,7 @@ void RGWZoneGroupPlacementTarget::decode_json(JSONObj *obj)
   if (storage_classes.empty()) {
     storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
   }
-  if (!tier_targets.empty()) {
-    JSONDecoder::decode_json("tier_targets", tier_targets, obj);
-  }
+  JSONDecoder::decode_json("tier_targets", tier_targets, obj);
 }
 
 void RGWZonePlacementInfo::dump(Formatter *f) const
@@ -1282,8 +1280,8 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
     }
   }
 
+  rgw_zone_id& master_zone = zonegroup.master_zone;
   if (pis_master) {
-    rgw_zone_id& master_zone = zonegroup.master_zone;
     if (*pis_master) {
       if (!master_zone.empty() && master_zone != zone_id) {
         ldpp_dout(dpp, 0) << "NOTICE: overriding master zone: "
@@ -1293,6 +1291,10 @@ int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
     } else if (master_zone == zone_id) {
       master_zone.clear();
     }
+  } else if (master_zone.empty() && zonegroup.zones.empty()) {
+    ldpp_dout(dpp, 0) << "NOTICE: promoted " << zone_name
+        << " as new master_zone of zonegroup " << zonegroup.name << dendl;
+    master_zone = zone_id;
   }
 
   // make sure the zone's placement targets are named in the zonegroup

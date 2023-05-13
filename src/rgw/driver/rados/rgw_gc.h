@@ -1,9 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_GC_H
-#define CEPH_RGW_GC_H
-
+#pragma once
 
 #include "include/types.h"
 #include "include/rados/librados.hpp"
@@ -82,6 +80,3 @@ public:
   std::ostream& gen_prefix(std::ostream& out) const;
 
 };
-
-
-#endif

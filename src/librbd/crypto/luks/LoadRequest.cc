@@ -238,7 +238,7 @@ void LoadRequest<I>::read_volume_key() {
   if (r != 0) {
     auto keyslots_end_offset = m_header.get_data_offset();
     if (m_offset < keyslots_end_offset) {
-      // perhaps we did not feed the the necessary keyslot, retry
+      // perhaps we did not feed the necessary keyslot, retry
       auto ctx = create_context_callback<
               LoadRequest<I>, &LoadRequest<I>::handle_read_keyslots>(this);
       read(keyslots_end_offset, ctx);

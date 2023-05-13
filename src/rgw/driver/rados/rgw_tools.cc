@@ -10,6 +10,7 @@
 #include "rgw_acl_s3.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
+#include "common/BackTrace.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -182,6 +183,9 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
   // work on asio threads should be asynchronous, so warn when they block
   if (is_asio_thread) {
     ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
+#ifdef _BACKTRACE_LOGGING
+    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
+#endif
   }
   return ioctx.operate(oid, op, nullptr, flags);
 }
@@ -199,6 +203,9 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
   }
   if (is_asio_thread) {
     ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
+#ifdef _BACKTRACE_LOGGING
+    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
+#endif
   }
   return ioctx.operate(oid, op, flags);
 }
@@ -220,6 +227,9 @@ int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, cons
   }
   if (is_asio_thread) {
     ldpp_dout(dpp, 20) << "WARNING: blocking librados call" << dendl;
+#ifdef _BACKTRACE_LOGGING
+    ldpp_dout(dpp, 20) << "BACKTRACE: " << __func__ << ": " << ClibBackTrace(0) << dendl;
+#endif
   }
   return ioctx.notify2(oid, bl, timeout_ms, pbl);
 }
@@ -313,7 +323,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   string req_id = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = driver->get_atomic_writer(dpp, y, std::move(obj),
+  processor = driver->get_atomic_writer(dpp, y, obj.get(),
 				       owner.get_id(),
 				       nullptr, olh_epoch, req_id);
 

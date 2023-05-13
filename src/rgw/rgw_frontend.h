@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_FRONTEND_H
-#define RGW_FRONTEND_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -132,7 +131,7 @@ public:
   RGWLoadGenFrontend(RGWProcessEnv& pe, RGWFrontendConfig *_conf)
     : RGWProcessFrontend(pe, _conf) {}
 
-  CephContext *get_cct() const { 
+  CephContext *get_cct() const {
     return env.driver->ctx();
   }
 
@@ -210,5 +209,3 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
       pauser->resume(driver);
   }
 };
-
-#endif /* RGW_FRONTEND_H */

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_USER_H
-#define CEPH_RGW_USER_H
+#pragma once
 
 #include <string>
 #include <boost/algorithm/string.hpp>
@@ -126,6 +125,8 @@ struct RGWUserAdminOpState {
   // key_attributes
   std::string id; // access key
   std::string key; // secret key
+  // access keys fetched for a user in the middle of an op
+  std::map<std::string, RGWAccessKey> op_access_keys;
   int32_t key_type{-1};
   bool access_key_exist = false;
 
@@ -882,6 +883,3 @@ class RGWUserMetaHandlerAllocator {
 public:
   static RGWMetadataHandler *alloc(RGWSI_User *user_svc);
 };
-
-
-#endif

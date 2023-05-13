@@ -137,10 +137,16 @@ export class ActionLabelsI18n {
   REDEPLOY: string;
   RESTART: string;
   RESYNC: string;
+  EXPORT: string;
+  IMPORT: any;
 
   constructor() {
     /* Create a new item */
     this.CREATE = $localize`Create`;
+
+    this.EXPORT = $localize`Export`;
+
+    this.IMPORT = $localize`Import`;
 
     /* Destroy an existing item */
     this.DELETE = $localize`Delete`;
@@ -224,6 +230,8 @@ export class SucceededActionLabelsI18n {
   CANCELED: string;
   PREVIEWED: string;
   MOVED: string;
+  EXPORT: string;
+  IMPORT: string;
   COPIED: string;
   CLONED: string;
   DEEP_SCRUBBED: string;
@@ -301,5 +309,16 @@ export class SucceededActionLabelsI18n {
     this.STOP = $localize`Stop`;
     this.REDEPLOY = $localize`Redeploy`;
     this.RESTART = $localize`Restart`;
+  }
+}
+
+@Injectable({
+  providedIn: 'root'
+})
+export class TimerServiceInterval {
+  TIMER_SERVICE_PERIOD: number;
+
+  constructor() {
+    this.TIMER_SERVICE_PERIOD = 5000;
   }
 }

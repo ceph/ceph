@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_SYNC_MODULE_H
-#define CEPH_RGW_SYNC_MODULE_H
+#pragma once
 
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
@@ -198,5 +197,3 @@ public:
 };
 
 void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager);
-
-#endif

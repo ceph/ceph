@@ -9,8 +9,6 @@
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "rgw/rgw_basic_types.h"

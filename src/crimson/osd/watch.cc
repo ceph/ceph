@@ -78,7 +78,7 @@ Watch::~Watch()
   logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
 }
 
-seastar::future<> Watch::connect(crimson::net::ConnectionFRef conn, bool)
+seastar::future<> Watch::connect(crimson::net::ConnectionRef conn, bool)
 {
   if (this->conn == conn) {
     logger().debug("conn={} already connected", conn);
@@ -88,6 +88,13 @@ seastar::future<> Watch::connect(crimson::net::ConnectionFRef conn, bool)
   timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
   this->conn = std::move(conn);
   return seastar::now();
+}
+
+void Watch::disconnect()
+{
+  ceph_assert(!conn);
+  timeout_timer.cancel();
+  timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
 }
 
 seastar::future<> Watch::send_notify_msg(NotifyRef notify)
@@ -181,7 +188,7 @@ void Watch::cancel_notify(const uint64_t notify_id)
   in_progress_notifies.erase(it);
 }
 
-void Watch::do_watch_timeout(Ref<PG> pg)
+void Watch::do_watch_timeout()
 {
   assert(pg);
   auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(
@@ -211,7 +218,7 @@ std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs)
   return out;
 }
 
-Notify::Notify(crimson::net::ConnectionFRef conn,
+Notify::Notify(crimson::net::ConnectionRef conn,
                const notify_info_t& ninfo,
                const uint64_t client_gid,
                const uint64_t user_version)

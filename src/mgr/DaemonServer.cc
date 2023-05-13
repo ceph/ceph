@@ -121,7 +121,7 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
   msgr = Messenger::create(g_ceph_context, public_msgr_type,
 			   entity_name_t::MGR(gid),
 			   "mgr",
-			   Messenger::get_pid_nonce());
+			   Messenger::get_random_nonce());
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
 
   msgr->set_auth_client(monc);
@@ -2434,9 +2434,21 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // Validate that the module is active
+  auto& mod_name = py_command.module_name;
+  if (!py_modules.is_module_active(mod_name)) {
+    ss << "Module '" << mod_name << "' is not enabled/loaded (required by "
+          "command '" << prefix << "'): use `ceph mgr module enable "
+          << mod_name << "` to enable it";
+    dout(4) << ss.str() << dendl;
+    cmdctx->reply(-EOPNOTSUPP, ss);
+    return true;
+  }
+
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
-  finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix]
-                                   (int r_) mutable {
+  Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
+  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix]
+                                       (int r_) mutable {
     std::stringstream ss;
 
     dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;

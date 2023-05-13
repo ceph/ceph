@@ -24,6 +24,9 @@ namespace crimson::os::seastore {
 /* using a special xattr key "omap_header" to store omap header */
   const std::string OMAP_HEADER_XATTR_KEY = "omap_header";
 
+using transaction_id_t = uint64_t;
+constexpr transaction_id_t TRANS_ID_NULL = 0;
+
 /*
  * Note: NULL value is usually the default and max value.
  */
@@ -622,6 +625,10 @@ public:
     return get_addr_type() != paddr_types_t::RESERVED;
   }
 
+  bool is_fake() const {
+    return get_device_id() == DEVICE_ID_FAKE;
+  }
+
   auto operator<=>(const paddr_t &) const = default;
 
   DENC(paddr_t, v, p) {
@@ -875,8 +882,9 @@ enum class device_type_t : uint8_t {
   NONE = 0,
   HDD,
   SSD,
-  ZNS,
-  SEGMENTED_EPHEMERAL,
+  ZBD,            // ZNS SSD or SMR HDD
+  EPHEMERAL_COLD,
+  EPHEMERAL_MAIN,
   RANDOM_BLOCK_SSD,
   RANDOM_BLOCK_EPHEMERAL,
   NUM_TYPES
@@ -888,7 +896,7 @@ bool can_delay_allocation(device_type_t type);
 device_type_t string_to_device_type(std::string type);
 
 enum class backend_type_t {
-  SEGMENTED,    // SegmentManager: SSD, ZNS, HDD
+  SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
   RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
 };
 
@@ -899,7 +907,7 @@ constexpr backend_type_t get_default_backend_of_device(device_type_t dtype) {
   assert(dtype != device_type_t::NONE &&
 	 dtype != device_type_t::NUM_TYPES);
   if (dtype >= device_type_t::HDD &&
-      dtype <= device_type_t::SEGMENTED_EPHEMERAL) {
+      dtype <= device_type_t::EPHEMERAL_MAIN) {
     return backend_type_t::SEGMENTED;
   } else {
     return backend_type_t::RANDOM_BLOCK;
@@ -1058,23 +1066,24 @@ enum class extent_types_t : uint8_t {
   ROOT = 0,
   LADDR_INTERNAL = 1,
   LADDR_LEAF = 2,
-  OMAP_INNER = 3,
-  OMAP_LEAF = 4,
-  ONODE_BLOCK_STAGED = 5,
-  COLL_BLOCK = 6,
-  OBJECT_DATA_BLOCK = 7,
-  RETIRED_PLACEHOLDER = 8,
+  DINK_LADDR_LEAF = 3, // should only be used for unitttests
+  OMAP_INNER = 4,
+  OMAP_LEAF = 5,
+  ONODE_BLOCK_STAGED = 6,
+  COLL_BLOCK = 7,
+  OBJECT_DATA_BLOCK = 8,
+  RETIRED_PLACEHOLDER = 9,
   // the following two types are not extent types,
   // they are just used to indicates paddr allocation deltas
-  ALLOC_INFO = 9,
-  JOURNAL_TAIL = 10,
+  ALLOC_INFO = 10,
+  JOURNAL_TAIL = 11,
   // Test Block Types
-  TEST_BLOCK = 11,
-  TEST_BLOCK_PHYSICAL = 12,
-  BACKREF_INTERNAL = 13,
-  BACKREF_LEAF = 14,
+  TEST_BLOCK = 12,
+  TEST_BLOCK_PHYSICAL = 13,
+  BACKREF_INTERNAL = 14,
+  BACKREF_LEAF = 15,
   // None and the number of valid extent_types_t
-  NONE = 15,
+  NONE = 16,
 };
 using extent_types_le_t = uint8_t;
 constexpr auto EXTENT_TYPES_MAX = static_cast<uint8_t>(extent_types_t::NONE);
@@ -1104,13 +1113,19 @@ constexpr bool is_retired_placeholder(extent_types_t type)
 constexpr bool is_lba_node(extent_types_t type)
 {
   return type == extent_types_t::LADDR_INTERNAL ||
-    type == extent_types_t::LADDR_LEAF;
+    type == extent_types_t::LADDR_LEAF ||
+    type == extent_types_t::DINK_LADDR_LEAF;
 }
 
 constexpr bool is_backref_node(extent_types_t type)
 {
   return type == extent_types_t::BACKREF_INTERNAL ||
     type == extent_types_t::BACKREF_LEAF;
+}
+
+constexpr bool is_lba_backref_node(extent_types_t type)
+{
+  return is_lba_node(type) || is_backref_node(type);
 }
 
 std::ostream &operator<<(std::ostream &out, extent_types_t t);
@@ -1144,14 +1159,9 @@ constexpr rewrite_gen_t OOL_GENERATION = 2;
 
 // All the rewritten extents start with MIN_REWRITE_GENERATION
 constexpr rewrite_gen_t MIN_REWRITE_GENERATION = 3;
-constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 4;
-
-/**
- * TODO:
- * For tiering, might introduce 5 and 6 for the cold tier, and 1 ~ 4 for the
- * hot tier.
- */
-
+// without cold tier, the largest generation is less than MIN_COLD_GENERATION
+constexpr rewrite_gen_t MIN_COLD_GENERATION = 5;
+constexpr rewrite_gen_t MAX_REWRITE_GENERATION = 7;
 constexpr rewrite_gen_t REWRITE_GENERATIONS = MAX_REWRITE_GENERATION + 1;
 constexpr rewrite_gen_t NULL_GENERATION =
   std::numeric_limits<rewrite_gen_t>::max();
@@ -1190,7 +1200,7 @@ std::ostream &operator<<(std::ostream &out, data_category_t c);
 
 constexpr data_category_t get_extent_category(extent_types_t type) {
   if (type == extent_types_t::OBJECT_DATA_BLOCK ||
-      type == extent_types_t::COLL_BLOCK) {
+      type == extent_types_t::TEST_BLOCK) {
     return data_category_t::DATA;
   } else {
     return data_category_t::METADATA;
@@ -1746,7 +1756,8 @@ enum class transaction_type_t : uint8_t {
   READ, // including weak and non-weak read transactions
   TRIM_DIRTY,
   TRIM_ALLOC,
-  CLEANER,
+  CLEANER_MAIN,
+  CLEANER_COLD,
   MAX
 };
 
@@ -2119,6 +2130,7 @@ template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ost
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_size_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_header_t> : fmt::ostream_formatter {};

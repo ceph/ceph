@@ -3,6 +3,7 @@
 import copy
 import os
 import time
+from collections import Counter
 from typing import Dict, List, Optional
 
 import cherrypy
@@ -28,6 +29,10 @@ LIST_HOST_SCHEMA = {
         "type": (str, "type of service"),
         "id": (str, "Service Id"),
     }], "Services related to the host"),
+    "service_instances": ([{
+        "type": (str, "type of service"),
+        "count": (int, "Number of instances of the service"),
+    }], "Service instances related to the host"),
     "ceph_version": (str, "Ceph version"),
     "addr": (str, "Host address"),
     "labels": ([str], "Labels related to the host"),
@@ -151,7 +156,21 @@ def merge_hosts_by_hostname(ceph_hosts, orch_hosts):
             }, orch_hosts_map[hostname]) for hostname in orch_hosts_map
     ]
     hosts.extend(orch_hosts_only)
+    for host in hosts:
+        host['service_instances'] = populate_service_instances(
+            host['hostname'], host['services'])
     return hosts
+
+
+def populate_service_instances(hostname, services):
+    orch = OrchClient.instance()
+    if orch.available():
+        services = (daemon['daemon_type']
+                    for daemon in (d.to_dict()
+                                   for d in orch.services.list_daemons(hostname=hostname)))
+    else:
+        services = (daemon['type'] for daemon in services)
+    return [{'type': k, 'count': v} for k, v in Counter(services).items()]
 
 
 def get_hosts(sources=None):
@@ -183,6 +202,8 @@ def get_hosts(sources=None):
         orch = OrchClient.instance()
         if orch.available():
             return merge_hosts_by_hostname(ceph_hosts, orch.hosts.list())
+    for host in ceph_hosts:
+        host['service_instances'] = populate_service_instances(host['hostname'], host['services'])
     return ceph_hosts
 
 
@@ -282,7 +303,7 @@ class Host(RESTController):
                      'facts': (bool, 'Host Facts')
                  },
                  responses={200: LIST_HOST_SCHEMA})
-    @RESTController.MethodMap(version=APIVersion(1, 1))
+    @RESTController.MethodMap(version=APIVersion(1, 2))
     def list(self, sources=None, facts=False):
         hosts = get_hosts(sources)
         orch = OrchClient.instance()

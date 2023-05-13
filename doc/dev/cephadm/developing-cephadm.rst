@@ -286,11 +286,12 @@ of the cluster.
    create loopback devices capable of holding OSDs.
 .. note::  Each osd will require 5GiB of space.
 
-After bootstraping the cluster you can go inside the seed box in which you'll be
+After bootstrapping the cluster you can go inside the seed box in which you'll be
 able to run Cephadm commands::
 
-  ./box.py -v cluster sh
+  ./box.py -v cluster bash
   [root@8d52a7860245] cephadm --help
+  [root@8d52a7860245] cephadm shell
   ...
 
 

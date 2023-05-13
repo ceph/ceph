@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_LIB_H
-#define RGW_LIB_H
+#pragma once
 
 #include <mutex>
 #include "rgw_common.h"
@@ -208,5 +207,3 @@ namespace rgw {
   }; /* RGWLibContinuedReq */
 
 } /* namespace rgw */
-
-#endif /* RGW_LIB_H */

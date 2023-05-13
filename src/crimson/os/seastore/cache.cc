@@ -46,6 +46,7 @@ Cache::Cache(
   LOG_PREFIX(Cache::Cache);
   INFO("created, lru_size={}", lru.get_capacity());
   register_metrics();
+  segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
 
 Cache::~Cache()
@@ -97,7 +98,8 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     ext->init(CachedExtent::extent_state_t::CLEAN,
               addr,
               PLACEMENT_HINT_NULL,
-              NULL_GENERATION);
+              NULL_GENERATION,
+	      TRANS_ID_NULL);
     DEBUGT("retire {}~{} as placeholder, add extent -- {}",
            t, addr, length, *ext);
     const auto t_src = t.get_src();
@@ -135,7 +137,8 @@ void Cache::register_metrics()
     {src_t::READ, sm::label_instance("src", "READ")},
     {src_t::TRIM_DIRTY, sm::label_instance("src", "TRIM_DIRTY")},
     {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
-    {src_t::CLEANER, sm::label_instance("src", "CLEANER")},
+    {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
+    {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -143,6 +146,7 @@ void Cache::register_metrics()
     {extent_types_t::ROOT,                sm::label_instance("ext", "ROOT")},
     {extent_types_t::LADDR_INTERNAL,      sm::label_instance("ext", "LADDR_INTERNAL")},
     {extent_types_t::LADDR_LEAF,          sm::label_instance("ext", "LADDR_LEAF")},
+    {extent_types_t::DINK_LADDR_LEAF,     sm::label_instance("ext", "DINK_LADDR_LEAF")},
     {extent_types_t::OMAP_INNER,          sm::label_instance("ext", "OMAP_INNER")},
     {extent_types_t::OMAP_LEAF,           sm::label_instance("ext", "OMAP_LEAF")},
     {extent_types_t::ONODE_BLOCK_STAGED,  sm::label_instance("ext", "ONODE_BLOCK_STAGED")},
@@ -624,8 +628,10 @@ void Cache::register_metrics()
            src2 == Transaction::src_t::READ) ||
           (src1 == Transaction::src_t::TRIM_DIRTY &&
            src2 == Transaction::src_t::TRIM_DIRTY) ||
-          (src1 == Transaction::src_t::CLEANER &&
-           src2 == Transaction::src_t::CLEANER) ||
+          (src1 == Transaction::src_t::CLEANER_MAIN &&
+           src2 == Transaction::src_t::CLEANER_MAIN) ||
+          (src1 == Transaction::src_t::CLEANER_COLD &&
+           src2 == Transaction::src_t::CLEANER_COLD) ||
           (src1 == Transaction::src_t::TRIM_ALLOC &&
            src2 == Transaction::src_t::TRIM_ALLOC)) {
         continue;
@@ -797,6 +803,7 @@ void Cache::commit_replace_extent(
     add_to_dirty(next);
   }
 
+  next->on_replace_prior(t);
   invalidate_extent(t, *prev);
 }
 
@@ -806,7 +813,7 @@ void Cache::invalidate_extent(
 {
   if (!extent.may_conflict()) {
     assert(extent.transactions.empty());
-    extent.state = CachedExtent::extent_state_t::INVALID;
+    extent.set_invalid(t);
     return;
   }
 
@@ -823,7 +830,7 @@ void Cache::invalidate_extent(
       mark_transaction_conflicted(*i.t, extent);
     }
   }
-  extent.state = CachedExtent::extent_state_t::INVALID;
+  extent.set_invalid(t);
 }
 
 void Cache::mark_transaction_conflicted(
@@ -963,7 +970,8 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   case extent_types_t::LADDR_INTERNAL:
     return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, hint, gen);
   case extent_types_t::LADDR_LEAF:
-    return alloc_new_extent<lba_manager::btree::LBALeafNode>(t, length, hint, gen);
+    return alloc_new_extent<lba_manager::btree::LBALeafNode>(
+      t, length, hint, gen);
   case extent_types_t::ONODE_BLOCK_STAGED:
     return alloc_new_extent<onode::SeastoreNodeExtent>(t, length, hint, gen);
   case extent_types_t::OMAP_INNER:
@@ -995,7 +1003,7 @@ CachedExtentRef Cache::duplicate_for_write(
   Transaction &t,
   CachedExtentRef i) {
   LOG_PREFIX(Cache::duplicate_for_write);
-  if (i->is_pending())
+  if (i->is_mutable())
     return i;
 
   if (i->is_exist_clean()) {
@@ -1007,10 +1015,13 @@ CachedExtentRef Cache::duplicate_for_write(
     return i;
   }
 
-  auto ret = i->duplicate_for_write();
+  auto ret = i->duplicate_for_write(t);
+  ret->pending_for_transaction = t.get_trans_id();
   ret->prior_instance = i;
   // duplicate_for_write won't occur after ool write finished
   assert(!i->prior_poffset);
+  auto [iter, inserted] = i->mutation_pendings.insert(*ret);
+  ceph_assert(inserted);
   t.add_mutated_extent(ret);
   if (ret->get_type() == extent_types_t::ROOT) {
     t.root = ret->cast<RootBlock>();
@@ -1113,12 +1124,13 @@ record_t Cache::prepare_record(
       auto stype = segment_type_t::NULL_SEG;
 
       // FIXME: This is specific to the segmented implementation
-      if (segment_provider != nullptr &&
-          i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
+      if (i->get_paddr().get_addr_type() == paddr_types_t::SEGMENT) {
         auto sid = i->get_paddr().as_seg_paddr().get_segment_id();
-        auto &sinfo = segment_provider->get_seg_info(sid);
-        sseq = sinfo.seq;
-        stype = sinfo.type;
+        auto sinfo = get_segment_info(sid);
+        if (sinfo) {
+          sseq = sinfo->seq;
+          stype = sinfo->type;
+        }
       }
 
       record.push_back(
@@ -1184,7 +1196,7 @@ record_t Cache::prepare_record(
     fresh_stat.increment(i->get_length());
     get_by_ext(efforts.fresh_inline_by_ext,
                i->get_type()).increment(i->get_length());
-    assert(i->is_inline());
+    assert(i->is_inline() || i->get_paddr().is_fake());
 
     bufferlist bl;
     i->prepare_write();
@@ -1389,7 +1401,8 @@ record_t Cache::prepare_record(
   auto &rewrite_version_stats = t.get_rewrite_version_stats();
   if (trans_src == Transaction::src_t::TRIM_DIRTY) {
     stats.committed_dirty_version.increment_stat(rewrite_version_stats);
-  } else if (trans_src == Transaction::src_t::CLEANER) {
+  } else if (trans_src == Transaction::src_t::CLEANER_MAIN ||
+             trans_src == Transaction::src_t::CLEANER_COLD) {
     stats.committed_reclaim_version.increment_stat(rewrite_version_stats);
   } else {
     assert(rewrite_version_stats.is_clear());
@@ -1442,6 +1455,7 @@ void Cache::complete_commit(
       i->set_paddr(final_block_start.add_relative(i->get_paddr()));
     }
     i->last_committed_crc = i->get_crc32c();
+    i->pending_for_transaction = TRANS_ID_NULL;
     i->on_initial_write();
 
     i->state = CachedExtent::extent_state_t::CLEAN;
@@ -1468,7 +1482,10 @@ void Cache::complete_commit(
 	  i->get_type(),
 	  start_seq));
     } else if (is_backref_node(i->get_type())) {
-      add_backref_extent(i->get_paddr(), i->get_type());
+	add_backref_extent(
+	  i->get_paddr(),
+	  i->cast<backref::BackrefNode>()->get_node_meta().begin,
+	  i->get_type());
     } else {
       ERRORT("{}", t, *i);
       ceph_abort("not possible");
@@ -1483,6 +1500,7 @@ void Cache::complete_commit(
     assert(i->is_exist_mutation_pending() ||
 	   i->prior_instance);
     i->on_delta_write(final_block_start);
+    i->pending_for_transaction = TRANS_ID_NULL;
     i->prior_instance = CachedExtentRef();
     i->state = CachedExtent::extent_state_t::DIRTY;
     assert(i->version > 0);
@@ -1587,7 +1605,8 @@ void Cache::init()
   root->init(CachedExtent::extent_state_t::CLEAN,
              P_ADDR_ROOT,
              PLACEMENT_HINT_NULL,
-             NULL_GENERATION);
+             NULL_GENERATION,
+	     TRANS_ID_NULL);
   INFO("init root -- {}", *root);
   extents.insert(*root);
 }
@@ -1656,21 +1675,22 @@ Cache::replay_delta(
    * safetly skip these deltas because the extent must already
    * have been rewritten.
    */
-  if (segment_provider != nullptr &&
-      delta.paddr != P_ADDR_NULL &&
+  if (delta.paddr != P_ADDR_NULL &&
       delta.paddr.get_addr_type() == paddr_types_t::SEGMENT) {
     auto& seg_addr = delta.paddr.as_seg_paddr();
-    auto& seg_info = segment_provider->get_seg_info(seg_addr.get_segment_id());
-    auto delta_paddr_segment_seq = seg_info.seq;
-    auto delta_paddr_segment_type = seg_info.type;
-    if (delta_paddr_segment_seq != delta.ext_seq ||
-        delta_paddr_segment_type != delta.seg_type) {
-      DEBUG("delta is obsolete, delta_paddr_segment_seq={},"
-            " delta_paddr_segment_type={} -- {}",
-            segment_seq_printer_t{delta_paddr_segment_seq},
-            delta_paddr_segment_type,
-            delta);
-      return replay_delta_ertr::make_ready_future<bool>(false);
+    auto seg_info = get_segment_info(seg_addr.get_segment_id());
+    if (seg_info) {
+      auto delta_paddr_segment_seq = seg_info->seq;
+      auto delta_paddr_segment_type = seg_info->type;
+      if (delta_paddr_segment_seq != delta.ext_seq ||
+          delta_paddr_segment_type != delta.seg_type) {
+        DEBUG("delta is obsolete, delta_paddr_segment_seq={},"
+              " delta_paddr_segment_type={} -- {}",
+              segment_seq_printer_t{delta_paddr_segment_seq},
+              delta_paddr_segment_type,
+              delta);
+        return replay_delta_ertr::make_ready_future<bool>(false);
+      }
     }
   }
 
@@ -1891,7 +1911,7 @@ Cache::get_root_ret Cache::get_root(Transaction &t)
     DEBUGT("root not on t -- {}", t, *root);
     t.root = root;
     t.add_to_read_set(root);
-    return root->wait_io().then([this] {
+    return root->wait_io().then([root=root] {
       return get_root_iertr::make_ready_future<RootBlockRef>(
 	root);
     });

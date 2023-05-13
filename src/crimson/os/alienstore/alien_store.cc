@@ -268,7 +268,7 @@ seastar::future<CollectionRef> AlienStore::open_collection(const coll_t& cid)
   });
 }
 
-seastar::future<std::vector<coll_t>> AlienStore::list_collections()
+seastar::future<std::vector<coll_core_t>> AlienStore::list_collections()
 {
   logger().debug("{}", __func__);
   assert(tp);
@@ -276,9 +276,14 @@ seastar::future<std::vector<coll_t>> AlienStore::list_collections()
   return do_with_op_gate(std::vector<coll_t>{}, [this] (auto &ls) {
     return tp->submit([this, &ls] {
       return store->list_collections(ls);
-    }).then([&ls] (int r) {
+    }).then([&ls] (int r) -> seastar::future<std::vector<coll_core_t>> {
       assert(r == 0);
-      return seastar::make_ready_future<std::vector<coll_t>>(std::move(ls));
+      std::vector<coll_core_t> ret;
+      ret.resize(ls.size());
+      std::transform(
+        ls.begin(), ls.end(), ret.begin(),
+        [](auto p) { return std::make_pair(p, NULL_CORE); });
+      return seastar::make_ready_future<std::vector<coll_core_t>>(std::move(ret));
     });
   });
 }

@@ -5,6 +5,8 @@ set -x
 export PATH=/root/bin:$PATH
 mkdir /root/bin
 
+export CEPHADM_IMAGE='quay.ceph.io/ceph-ci/ceph:main'
+
 CEPHADM="/root/bin/cephadm"
 
 /mnt/{{ ceph_dev_folder }}/src/cephadm/build.sh $CEPHADM

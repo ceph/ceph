@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef CEPH_RGW_CORS_SWIFT3_H
-#define CEPH_RGW_CORS_SWIFT3_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -82,4 +81,3 @@ class RGWCORSConfiguration_SWIFT : public RGWCORSConfiguration
       return 0;
     }
 };
-#endif /*CEPH_RGW_CORS_SWIFT3_H*/

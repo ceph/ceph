@@ -148,8 +148,6 @@ public:
   }
 
   int get_nodeid() const final { return whoami; }
-
-  std::atomic<epoch_t> max_oldest_map;
 private:
   OSDMapRef osdmap;
 
@@ -197,40 +195,11 @@ public:
   std::map<epoch_t, unsigned> map_reservations;
 
   /// gets ref to next_osdmap and registers the epoch as reserved
-  OSDMapRef get_nextmap_reserved() {
-    std::lock_guard l(pre_publish_lock);
-    epoch_t e = next_osdmap->get_epoch();
-    std::map<epoch_t, unsigned>::iterator i =
-      map_reservations.insert(std::make_pair(e, 0)).first;
-    i->second++;
-    return next_osdmap;
-  }
+  OSDMapRef get_nextmap_reserved();
   /// releases reservation on map
-  void release_map(OSDMapRef osdmap) {
-    std::lock_guard l(pre_publish_lock);
-    std::map<epoch_t, unsigned>::iterator i =
-      map_reservations.find(osdmap->get_epoch());
-    ceph_assert(i != map_reservations.end());
-    ceph_assert(i->second > 0);
-    if (--(i->second) == 0) {
-      map_reservations.erase(i);
-    }
-    if (pre_publish_waiter) {
-      pre_publish_cond.notify_all();
-    }
-  }
+  void release_map(OSDMapRef osdmap);
   /// blocks until there are no reserved maps prior to next_osdmap
-  void await_reserved_maps() {
-    std::unique_lock l{pre_publish_lock};
-    ceph_assert(next_osdmap);
-    pre_publish_waiter++;
-    pre_publish_cond.wait(l, [this] {
-      auto i = map_reservations.cbegin();
-      return (i == map_reservations.cend() ||
-	      i->first >= next_osdmap->get_epoch());
-    });
-    pre_publish_waiter--;
-  }
+  void await_reserved_maps() ;
   OSDMapRef get_next_osdmap() {
     std::lock_guard l(pre_publish_lock);
     return next_osdmap;
@@ -538,7 +507,10 @@ public:
   void send_pg_created();
 
   AsyncReserver<spg_t, Finisher> snap_reserver;
-  void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
+  void queue_recovery_context(PG *pg,
+                              GenContext<ThreadPool::TPHandle&> *c,
+                              uint64_t cost,
+			      int priority);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority);
 
@@ -613,7 +585,14 @@ public:
 private:
   // -- pg recovery and associated throttling --
   ceph::mutex recovery_lock = ceph::make_mutex("OSDService::recovery_lock");
-  std::list<std::pair<epoch_t, PGRef> > awaiting_throttle;
+
+  struct pg_awaiting_throttle_t {
+    const epoch_t epoch_queued;
+    PGRef pg;
+    const uint64_t cost_per_object;
+    const int priority;
+  };
+  std::list<pg_awaiting_throttle_t> awaiting_throttle;
 
   /// queue a scrub-related message for a PG
   template <class MSG_TYPE>
@@ -636,8 +615,7 @@ private:
 #endif
   bool _recover_now(uint64_t *available_pushes);
   void _maybe_queue_recovery();
-  void _queue_for_recovery(
-    std::pair<epoch_t, PGRef> p, uint64_t reserved_pushes);
+  void _queue_for_recovery(pg_awaiting_throttle_t p, uint64_t reserved_pushes);
 public:
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
@@ -668,26 +646,38 @@ public:
     std::lock_guard l(recovery_lock);
     awaiting_throttle.remove_if(
       [pg](decltype(awaiting_throttle)::const_reference awaiting ) {
-	return awaiting.second.get() == pg;
+        return awaiting.pg.get() == pg;
       });
   }
 
   unsigned get_target_pg_log_entries() const;
 
   // delayed pg activation
-  void queue_for_recovery(PG *pg) {
+  void queue_for_recovery(
+    PG *pg, uint64_t cost_per_object,
+    int priority) {
     std::lock_guard l(recovery_lock);
 
     if (pg->is_forced_recovery_or_backfill()) {
-      awaiting_throttle.push_front(std::make_pair(pg->get_osdmap()->get_epoch(), pg));
+      awaiting_throttle.emplace_front(
+        pg_awaiting_throttle_t{
+          pg->get_osdmap()->get_epoch(), pg, cost_per_object, priority});
     } else {
-      awaiting_throttle.push_back(std::make_pair(pg->get_osdmap()->get_epoch(), pg));
+      awaiting_throttle.emplace_back(
+        pg_awaiting_throttle_t{
+          pg->get_osdmap()->get_epoch(), pg, cost_per_object, priority});
     }
     _maybe_queue_recovery();
   }
-  void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
+  void queue_recovery_after_sleep(
+    PG *pg, epoch_t queued, uint64_t reserved_pushes,
+    int priority) {
     std::lock_guard l(recovery_lock);
-    _queue_for_recovery(std::make_pair(queued, pg), reserved_pushes);
+    // Send cost as 1 in pg_awaiting_throttle_t below. The cost is ignored
+    // as this path is only applicable for WeightedPriorityQueue scheduler.
+    _queue_for_recovery(
+      pg_awaiting_throttle_t{queued, pg, 1, priority},
+      reserved_pushes);
   }
 
   void queue_check_readable(spg_t spgid,
@@ -1577,6 +1567,7 @@ protected:
   friend class ceph::osd::scheduler::PGOpItem;
   friend class ceph::osd::scheduler::PGPeeringItem;
   friend class ceph::osd::scheduler::PGRecovery;
+  friend class ceph::osd::scheduler::PGRecoveryContext;
   friend class ceph::osd::scheduler::PGRecoveryMsg;
   friend class ceph::osd::scheduler::PGDelete;
 
@@ -1893,6 +1884,7 @@ protected:
 
   // -- pg recovery --
   void do_recovery(PG *pg, epoch_t epoch_queued, uint64_t pushes_reserved,
+		   int priority,
 		   ThreadPool::TPHandle &handle);
 
 
@@ -2024,6 +2016,7 @@ private:
   void maybe_override_sleep_options_for_qos();
   bool maybe_override_options_for_qos(
     const std::set<std::string> *changed = nullptr);
+  void maybe_override_cost_for_qos();
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,

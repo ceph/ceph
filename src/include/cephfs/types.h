@@ -45,6 +45,13 @@
 #define CEPH_FS_ONDISK_MAGIC "ceph fs volume v011"
 #define MAX_MDS                   0x100
 
+#define CEPH_4M_BLOCK_SHIFT 22
+#define CEPH_4M_BLOCK_SIZE (1 << CEPH_4M_BLOCK_SHIFT) // 4MB
+#define CEPH_4K_BLOCK_SHIFT 12
+#define CEPH_4K_BLOCK_SIZE (1 << CEPH_4K_BLOCK_SHIFT) // 4KB
+
+#define IS_ALIGNED(x, a) (((x) & (int64_t(a) - 1)) == 0)
+
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
 

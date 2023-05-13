@@ -1,9 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-
-#ifndef CEPH_RGW_AUTH_REGISTRY_H
-#define CEPH_RGW_AUTH_REGISTRY_H
+#pragma once
 
 #include <functional>
 #include <memory>
@@ -97,5 +95,3 @@ public:
 
 using rgw_auth_registry_t = rgw::auth::StrategyRegistry;
 using rgw_auth_registry_ptr_t = std::unique_ptr<rgw_auth_registry_t>;
-
-#endif /* CEPH_RGW_AUTH_REGISTRY_H */

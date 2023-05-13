@@ -292,6 +292,57 @@ class TestCephAdm(object):
         assert c.volume_mounts[os.path.join('data', '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'custom_config_files', 'grafana.host1', 'testing.str')] == '/etc/testing.str'
 
     @mock.patch('cephadm.logger')
+    @mock.patch('cephadm.FileLock')
+    @mock.patch('cephadm.deploy_daemon')
+    @mock.patch('cephadm.get_parm')
+    @mock.patch('cephadm.make_var_run')
+    @mock.patch('cephadm.migrate_sysctl_dir')
+    @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
+    @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
+    @mock.patch('cephadm.get_deployment_container')
+    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _get_parm, _deploy_daemon, _file_lock, _logger):
+        """
+        test that crush location for mon is set if it is included in config_json
+        """
+
+        ctx = _cephadm.CephadmContext()
+        ctx.name = 'mon.test'
+        ctx.fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+        ctx.reconfig = False
+        ctx.container_engine = mock_docker()
+        ctx.allow_ptrace = True
+        ctx.config_json = '-'
+        ctx.osd_fsid = '0'
+        _get_parm.return_value = {
+            'crush_location': 'database=a'
+        }
+
+        _get_deployment_container.return_value = _cephadm.CephContainer.for_daemon(
+            ctx,
+            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+            daemon_type='mon',
+            daemon_id='test',
+            entrypoint='',
+            args=[],
+            container_args=[],
+            volume_mounts={},
+            bind_mounts=[],
+            envs=[],
+            privileged=False,
+            ptrace=False,
+            host_network=True,
+        )
+
+        def _crush_location_checker(ctx, fsid, daemon_type, daemon_id, container, uid, gid, **kwargs):
+            print(container.args)
+            raise Exception(' '.join(container.args))
+
+        _deploy_daemon.side_effect = _crush_location_checker
+
+        with pytest.raises(Exception, match='--set-crush-location database=a'):
+            _cephadm.command_deploy(ctx)
+
+    @mock.patch('cephadm.logger')
     @mock.patch('cephadm.get_custom_config_files')
     def test_write_custom_conf_files(self, _get_config, _logger, cephadm_fs):
         """
@@ -1387,7 +1438,7 @@ class TestBootstrap(object):
             (
                 '192.168.1.1',
                 {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
-                r'must use square backets',
+                r'must use square brackets',
             ),
             (
                 '[192.168.1.1]',
@@ -1706,11 +1757,11 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
 # iscsi tcmu-runner container
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id-tcmu 2> /dev/null
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
-/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
+/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
 # iscsi.daemon_id
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id 2> /dev/null
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id 2> /dev/null
-/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
 """
 
     def test_get_container(self):
@@ -2106,7 +2157,7 @@ class TestPull:
 
 class TestApplySpec:
 
-    def test_parse_yaml(self, cephadm_fs):
+    def test_extract_host_info_from_applied_spec(self, cephadm_fs):
         yaml = '''---
 service_type: host
 hostname: vm-00
@@ -2123,7 +2174,6 @@ labels:
 ---      
 service_type: host
 hostname: vm-02
-addr: 192.168.122.165
 ---
 ---      
 service_type: rgw
@@ -2149,20 +2199,12 @@ spec:
 '''
 
         cephadm_fs.create_file('spec.yml', contents=yaml)
-        retdic = [{'service_type': 'host', 'hostname': 'vm-00', 'addr': '192.168.122.44', 'labels': '- example1- example2'},
-                  {'service_type': 'host', 'hostname': 'vm-01', 'addr': '192.168.122.247', 'labels': '- grafana'},
-                  {'service_type': 'host', 'hostname': 'vm-02', 'addr': '192.168.122.165'},
-                  {'service_id': 'myrgw',
-                   'service_type': 'rgw',
-                   'spec':
-                   'rgw_frontend_ssl_certificate: |-----BEGIN PRIVATE '
-                   'KEY-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
-                   'PRIVATE KEY----------BEGIN '
-                   'CERTIFICATE-----V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4gTG9yZW0gaXBzdW0gZG9sb3Igc2l0IGFtZXQsIGNvbnNldGV0dXIgc2FkaXBzY2luZyBlbGl0ciwgc2VkIGRpYW0gbm9udW15IGVpcm1vZCB0ZW1wb3IgaW52aWR1bnQgdXQgbGFib3JlIGV0IGRvbG9yZSBtYWduYSBhbGlxdXlhbSBlcmF0LCBzZWQgZGlhbSB2b2x1cHR1YS4gQXQgdmVybyBlb3MgZXQgYWNjdXNhbSBldCBqdXN0byBkdW8=-----END '
-                   'CERTIFICATE-----ssl: true'}]
+        retdic = [{'hostname': 'vm-00', 'addr': '192.168.122.44'},
+                  {'hostname': 'vm-01', 'addr': '192.168.122.247'},
+                  {'hostname': 'vm-02',}]
 
         with open('spec.yml') as f:
-            dic = _cephadm.parse_yaml_objs(f)
+            dic = _cephadm._extract_host_info_from_applied_spec(f)
             assert dic == retdic
 
     @mock.patch('cephadm.call', return_value=('', '', 0))

@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef CEPH_RGW_CORS_S3_H
-#define CEPH_RGW_CORS_S3_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -57,4 +56,3 @@ class RGWCORSXMLParser_S3 : public RGWXMLParser
 public:
   explicit RGWCORSXMLParser_S3(const DoutPrefixProvider *_dpp, CephContext *_cct) : dpp(_dpp), cct(_cct) {}
 };
-#endif /*CEPH_RGW_CORS_S3_H*/

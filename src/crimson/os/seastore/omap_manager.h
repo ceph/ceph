@@ -175,8 +175,8 @@ public:
    *
    * @param omap_root_t &omap_root,  omap btree root information
    * @param Transaction &t,  current transaction
-   * @param string &first, range start,  must alive during the call
-   * @param string &last, range end,  must alive during the call
+   * @param string &first, range start
+   * @param string &last, range end
    */
   using omap_rm_key_range_iertr = base_iertr;
   using omap_rm_key_range_ret = omap_rm_key_range_iertr::future<>;

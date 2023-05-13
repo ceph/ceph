@@ -32,7 +32,7 @@ class NodeExtent : public LogicalCachedExtent {
     return get_bptr().c_str();
   }
   NodeExtentMutable get_mutable() {
-    assert(is_pending());
+    assert(is_mutable());
     return do_get_mutable();
   }
 

@@ -35,6 +35,8 @@ class RGWDataSyncStatusManager;
 class RGWSyncModuleInstance;
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
 class RGWCompressionInfo;
+struct rgw_pubsub_topics;
+struct rgw_pubsub_bucket_topics;
 
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
@@ -244,14 +246,6 @@ class ObjectProcessor : public DataProcessor {
                        optional_yield y) = 0;
 };
 
-/** Base class for AIO completions */
-class Completions {
-  public:
-    Completions() {}
-    virtual ~Completions() = default;
-    virtual int drain() = 0;
-};
-
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
@@ -323,8 +317,6 @@ class Driver {
     virtual int cluster_stat(RGWClusterStat& stats) = 0;
     /** Get a @a Lifecycle object. Used to manage/run lifecycle transitions */
     virtual std::unique_ptr<Lifecycle> get_lifecycle(void) = 0;
-    /** Get a @a Completions object.  Used for Async I/O tracking */
-    virtual std::unique_ptr<Completions> get_completions(void) = 0;
 
      /** Get a @a Notification object.  Used to communicate with non-RGW daemons, such as
       * management/tracking software */
@@ -333,10 +325,18 @@ class Driver {
         rgw::notify::EventType event_type, optional_yield y, const std::string* object_name=nullptr) = 0;
     /** No-req_state variant (e.g., rgwlc) */
     virtual std::unique_ptr<Notification> get_notification(
-    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj, 
+    const DoutPrefixProvider* dpp, rgw::sal::Object* obj, rgw::sal::Object* src_obj,
     rgw::notify::EventType event_type, rgw::sal::Bucket* _bucket, std::string& _user_id, std::string& _user_tenant,
     std::string& _req_id, optional_yield y) = 0;
-
+    /** Read the topic config entry into @a data and (optionally) @a objv_tracker */
+    virtual int read_topics(const std::string& tenant, rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Write @a info and (optionally) @a objv_tracker into the config */
+    virtual int write_topics(const std::string& tenant, const rgw_pubsub_topics& topics, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Remove the topic config, optionally a specific version */
+    virtual int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
+        optional_yield y,const DoutPrefixProvider *dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
@@ -422,7 +422,7 @@ class Driver {
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
@@ -431,7 +431,7 @@ class Driver {
     /** Get a Writer that atomically writes an entire object */
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
@@ -770,6 +770,16 @@ class Bucket {
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
 				 CephContext* cct) = 0;
 
+    /** Read the bucket notification config into @a notifications with and (optionally) @a objv_tracker */
+    virtual int read_topics(rgw_pubsub_bucket_topics& notifications, 
+        RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Write @a notifications with (optionally) @a objv_tracker into the bucket notification config */
+    virtual int write_topics(const rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker,
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Remove the bucket notification config with (optionally) @a objv_tracker */
+    virtual int remove_topics(RGWObjVersionTracker* objv_tracker, 
+        optional_yield y, const DoutPrefixProvider *dpp) = 0;
+
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
     virtual RGWBucketInfo& get_info() = 0;
@@ -937,9 +947,6 @@ class Object {
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y,
 			      bool prevent_versioning = false) = 0;
-    /** Asynchronous delete call */
-    virtual int delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate, Completions* aio,
-			       bool keep_index_consistent, optional_yield y) = 0;
     /** Copy an this object to another object. */
     virtual int copy_object(User* user,
                req_info* info, const rgw_zone_id& source_zone,
@@ -1071,13 +1078,10 @@ class Object {
     /** Get a new DeleteOp for this object */
     virtual std::unique_ptr<DeleteOp> get_delete_op() = 0;
 
-    /** Get @a count OMAP values via listing, starting at @a marker for this object */
-    virtual int omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker, uint64_t count,
-			      std::map<std::string, bufferlist>* m,
-			      bool* pmore, optional_yield y) = 0;
-    /** Get all OMAP key/value pairs for this object */
-    virtual int omap_get_all(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>* m,
-			     optional_yield y) = 0;
+    /// Return stored torrent info or -ENOENT if there isn't any.
+    virtual int get_torrent_info(const DoutPrefixProvider* dpp,
+                                 optional_yield y, bufferlist& bl) = 0;
+
     /** Get the OMAP values matching the given set of keys */
     virtual int omap_get_vals_by_keys(const DoutPrefixProvider *dpp, const std::string& oid,
 			      const std::set<std::string>& keys,
@@ -1205,7 +1209,7 @@ public:
   /** Get a Writer to write to a part of this upload */
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
-			  std::unique_ptr<rgw::sal::Object> _head_obj,
+			  rgw::sal::Object* obj,
 			  const rgw_user& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
@@ -1575,6 +1579,7 @@ public:
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
+				      bool run_notification_thread,
 				      bool use_cache = true,
 				      bool use_gc = true) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, use_gc_thread,
@@ -1582,6 +1587,7 @@ public:
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
+                                                   run_notification_thread,
 						   use_cache, use_gc);
     return driver;
   }
@@ -1600,6 +1606,7 @@ public:
 						bool quota_threads,
 						bool run_sync_thread,
 						bool run_reshard_thread,
+                                                bool run_notification_thread,
 						bool use_metadata_cache,
 						bool use_gc);
   /** Initialize a new raw Driver */

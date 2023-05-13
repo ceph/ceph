@@ -123,7 +123,7 @@ public:
 			 const real_time& end_time, const std::string& marker,
 			 void **handle);
   void complete_list_entries(void *handle);
-  int list_entries(const DoutPrefixProvider *dpp, 
+  int list_entries(const DoutPrefixProvider *dpp,
                    void *handle,
                    int max_entries,
                    std::list<cls_log_entry>& entries,
@@ -152,7 +152,7 @@ struct RGWMetadataLogData {
   obj_version read_version;
   obj_version write_version;
   RGWMDLogStatus status;
-  
+
   RGWMetadataLogData() : status(MDLOG_STATUS_UNKNOWN) {}
 
   void encode(bufferlist& bl) const;

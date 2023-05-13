@@ -181,7 +181,7 @@ class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
   std::optional<RGWRESTGenerateHTTPHeaders> headers_gen;
   RGWEnv new_env;
   req_info new_info;
-  
+
 protected:
   std::optional<std::string> api_name;
   HostStyle host_style;
@@ -245,13 +245,13 @@ public:
                 out_cb(NULL), new_info(cct, &new_env), headers_gen(_cct, &new_env, &new_info) {}
   ~RGWRESTStreamS3PutObj() override;
 
-  void send_init(rgw::sal::Object* obj);
+  void send_init(const rgw_obj& obj);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, std::map<std::string, bufferlist>& rgw_attrs);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key, const std::map<std::string, std::string>& http_attrs,
                   RGWAccessControlPolicy& policy);
   void send_ready(const DoutPrefixProvider *dpp, RGWAccessKey& key);
 
-  void put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, rgw::sal::Object* obj, std::map<std::string, bufferlist>& attrs);
+  void put_obj_init(const DoutPrefixProvider *dpp, RGWAccessKey& key, const rgw_obj& obj, std::map<std::string, bufferlist>& attrs);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };

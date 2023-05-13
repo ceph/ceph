@@ -3,6 +3,7 @@ import os
 if 'UNITTEST' in os.environ:
     import tests
 
+import bcrypt
 import cephfs
 import contextlib
 import datetime
@@ -296,16 +297,10 @@ class CephfsConnectionPool(object):
 class CephfsClient(Generic[Module_T]):
     def __init__(self, mgr: Module_T):
         self.mgr = mgr
-        self.stopping = Event()
         self.connection_pool = CephfsConnectionPool(self.mgr)
-
-    def is_stopping(self) -> bool:
-        return self.stopping.is_set()
 
     def shutdown(self) -> None:
         logger.info("shutting down")
-        # first, note that we're shutting down
-        self.stopping.set()
         # second, delete all libcephfs handles from connection pool
         self.connection_pool.del_all_connections()
 
@@ -348,10 +343,6 @@ def open_filesystem(fsc: CephfsClient, fs_name: str) -> Generator["cephfs.LibCep
     :param fs_name: fs name
     :return: yields a fs handle (ceph filesystem handle)
     """
-    if fsc.is_stopping():
-        raise CephfsConnectionException(-errno.ESHUTDOWN,
-                                        "shutdown in progress")
-
     fs_handle = fsc.connection_pool.get_fs_handle(fs_name)
     try:
         yield fs_handle
@@ -575,10 +566,14 @@ def verify_cacrt_content(crt):
     # type: (str) -> None
     from OpenSSL import crypto
     try:
-        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        x509 = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
         if x509.has_expired():
             org, cn = get_cert_issuer_info(crt)
-            end_date = datetime.datetime.strptime(x509.get_notAfter().decode('ascii'), '%Y%m%d%H%M%SZ')
+            no_after = x509.get_notAfter()
+            end_date = None
+            if no_after is not None:
+                end_date = datetime.datetime.strptime(no_after.decode('ascii'), '%Y%m%d%H%M%SZ')
             msg = f'Certificate issued by "{org}/{cn}" expired on {end_date}'
             logger.warning(msg)
             raise ServerConfigException(msg)
@@ -607,8 +602,9 @@ def get_cert_issuer_info(crt: str) -> Tuple[Optional[str],Optional[str]]:
 
     from OpenSSL import crypto, SSL
     try:
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
         (org_name, cn) = (None, None)
-        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        cert = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
         components = cert.get_issuer().get_components()
         for c in components:
             if c[0].decode() == 'O':  # org comp
@@ -631,7 +627,8 @@ def verify_tls(crt, key):
         raise ServerConfigException(
             'Invalid private key: {}'.format(str(e)))
     try:
-        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt)
+        crt_buffer = crt.encode("ascii") if isinstance(crt, str) else crt
+        _crt = crypto.load_certificate(crypto.FILETYPE_PEM, crt_buffer)
     except ValueError as e:
         raise ServerConfigException(
             'Invalid certificate key: {}'.format(str(e))
@@ -867,3 +864,13 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
             return result
         return wrapper
     return outer
+
+
+def password_hash(password: Optional[str], salt_password: Optional[str] = None) -> Optional[str]:
+    if not password:
+        return None
+    if not salt_password:
+        salt = bcrypt.gensalt()
+    else:
+        salt = salt_password.encode('utf8')
+    return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')

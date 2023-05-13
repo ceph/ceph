@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_KEYSTONE_H
-#define CEPH_RGW_KEYSTONE_H
+#pragma once
 
 #include <atomic>
 #include <string_view>
@@ -162,8 +161,17 @@ public:
 
   class Role {
   public:
+    Role() : is_admin(false), is_reader(false) { }
+    Role(const Role &r) {
+      id = r.id;
+      name = r.name;
+      is_admin = r.is_admin;
+      is_reader = r.is_reader;
+    }
     std::string id;
     std::string name;
+    bool is_admin;
+    bool is_reader;
     void decode_json(JSONObj *obj);
   };
 
@@ -205,6 +213,8 @@ public:
             const std::string& token_str,
             ceph::buffer::list& bl /* in */,
             ApiVersion version);
+  void update_roles(const std::vector<std::string> & admin,
+                    const std::vector<std::string> & reader);
 };
 
 
@@ -332,5 +342,3 @@ public:
 
 }; /* namespace keystone */
 }; /* namespace rgw */
-
-#endif

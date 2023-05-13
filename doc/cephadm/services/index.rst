@@ -81,6 +81,15 @@ system name:
 
     ceph orch ps --daemon_type osd --daemon_id 0
 
+.. note::
+   The output of the command ``ceph orch ps`` may not reflect the current status of the daemons. By default,
+   the status is updated every 10 minutes. This interval can be shortened by modifying the ``mgr/cephadm/daemon_cache_timeout``
+   configuration variable (in seconds) e.g: ``ceph config set mgr mgr/cephadm/daemon_cache_timeout 60`` would reduce the refresh
+   interval to one minute. The information is updated every ``daemon_cache_timeout`` seconds unless the ``--refresh`` option
+   is used. This option would trigger a request to refresh the information, which may take some time depending on the size of
+   the cluster. In general ``REFRESHED`` value indicates how recent the information displayed by ``ceph orch ps`` and similar
+   commands is.
+
 .. _orchestrator-cli-service-spec:
 
 Service Specification
@@ -497,11 +506,20 @@ candidate hosts.
    If there are fewer hosts selected by the placement specification than
    demanded by ``count``, cephadm will deploy only on the selected hosts.
 
+.. _cephadm-extra-container-args:
+
 Extra Container Arguments
 =========================
 
 .. warning:: 
-  The arguments provided for extra container args are limited to whatever arguments are available for a `run` command from whichever container engine you are using. Providing any arguments the `run` command does not support (or invalid values for arguments) will cause the daemon to fail to start.
+  The arguments provided for extra container args are limited to whatever arguments are available for
+  a `run` command from whichever container engine you are using. Providing any arguments the `run`
+  command does not support (or invalid values for arguments) will cause the daemon to fail to start.
+
+.. note::
+
+  For arguments passed to the process running inside the container rather than the for
+  the container runtime itself, see :ref:`cephadm-extra-entrypoint-args`
 
 
 Cephadm supports providing extra miscellaneous container arguments for
@@ -544,6 +562,30 @@ For example:
     extra_container_args:
       - "-v"
       - "/opt/ceph_cert/host.cert:/etc/grafana/certs/cert_file:ro"
+
+.. _cephadm-extra-entrypoint-args:
+
+Extra Entrypoint Arguments
+==========================
+
+.. note::
+
+  For arguments intended for the container runtime rather than the process inside
+  it, see :ref:`cephadm-extra-container-args`
+
+Similar to extra container args for the container runtime, Cephadm supports
+appending to args passed to the entrypoint process running
+within a container. For example, to set the collector textfile directory for
+the node-exporter service , one could apply a service spec like
+
+.. code-block:: yaml
+
+  service_type: node-exporter
+  service_name: node-exporter
+  placement:
+    host_pattern: '*'
+  extra_entrypoint_args:
+    - "--collector.textfile.directory=/var/lib/node_exporter/textfile_collector2"
 
 Custom Config Files
 ===================
@@ -644,12 +686,35 @@ To disable the automatic management of dameons, set ``unmanaged=True`` in the
 
    ceph orch apply -i mgr.yaml
 
+Cephadm also supports setting the unmanaged parameter to true or false
+using the ``ceph orch set-unmanaged`` and ``ceph orch set-managed`` commands.
+The commands take the service name (as reported in ``ceph orch ls``) as
+the only argument. For example,
+
+.. prompt:: bash #
+
+   ceph orch set-unmanaged mon
+
+would set ``unmanaged: true`` for the mon service and
+
+.. prompt:: bash #
+
+   ceph orch set-managed mon
+
+would set ``unmanaged: false`` for the mon service
 
 .. note::
 
   After you apply this change in the Service Specification, cephadm will no
   longer deploy any new daemons (even if the placement specification matches
   additional hosts).
+
+.. note::
+
+  The "osd" service used to track OSDs that are not tied to any specific
+  service spec is special and will always be marked unmanaged. Attempting
+  to modify it with ``ceph orch set-unmanaged`` or ``ceph orch set-managed``
+  will result in a message ``No service of name osd found. Check "ceph orch ls" for all known services``
 
 Deploying a daemon on a host manually
 -------------------------------------

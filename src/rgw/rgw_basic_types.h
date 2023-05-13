@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /*
@@ -18,8 +18,7 @@
  * radosgw or OSD contexts (e.g., rgw_sal.h, rgw_common.h)
  */
 
-#ifndef CEPH_RGW_BASIC_TYPES_H
-#define CEPH_RGW_BASIC_TYPES_H
+#pragma once
 
 #include <string>
 #include <fmt/format.h>
@@ -250,10 +249,13 @@ struct RGWUploadPartInfo {
   RGWObjManifest manifest;
   RGWCompressionInfo cs_info;
 
+  // Previous part obj prefixes. Recorded here for later cleanup.
+  std::set<std::string> past_prefixes; 
+
   RGWUploadPartInfo() : num(0), size(0) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(4, 2, bl);
+    ENCODE_START(5, 2, bl);
     encode(num, bl);
     encode(size, bl);
     encode(etag, bl);
@@ -261,10 +263,11 @@ struct RGWUploadPartInfo {
     encode(manifest, bl);
     encode(cs_info, bl);
     encode(accounted_size, bl);
+    encode(past_prefixes, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
     decode(num, bl);
     decode(size, bl);
     decode(etag, bl);
@@ -277,11 +280,12 @@ struct RGWUploadPartInfo {
     } else {
       accounted_size = size;
     }
+    if (struct_v >= 5) {
+      decode(past_prefixes, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<RGWUploadPartInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWUploadPartInfo)
-
-#endif /* CEPH_RGW_BASIC_TYPES_H */

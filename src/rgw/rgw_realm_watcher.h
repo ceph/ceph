@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_REALM_WATCHER_H
-#define RGW_REALM_WATCHER_H
+#pragma once
 
 #include "include/rados/librados.hpp"
 #include "include/ceph_assert.h"
@@ -65,5 +64,3 @@ class RGWRealmWatcher : public librados::WatchCtx2 {
 
   std::map<RGWRealmNotify, Watcher&> watchers;
 };
-
-#endif // RGW_REALM_WATCHER_H

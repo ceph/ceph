@@ -288,7 +288,7 @@ mec_option::empty };
 }
 
 
-CryptoAccelRef get_crypto_accel(const DoutPrefixProvider* dpp, CephContext *cct)
+CryptoAccelRef get_crypto_accel(const DoutPrefixProvider* dpp, CephContext *cct, const size_t chunk_size, const size_t max_requests)
 {
   CryptoAccelRef ca_impl = nullptr;
   stringstream ss;
@@ -300,7 +300,7 @@ CryptoAccelRef get_crypto_accel(const DoutPrefixProvider* dpp, CephContext *cct)
     ldpp_dout(dpp, -1) << __func__ << " cannot load crypto accelerator of type " << crypto_accel_type << dendl;
     return nullptr;
   }
-  int err = factory->factory(&ca_impl, &ss);
+  int err = factory->factory(&ca_impl, &ss, chunk_size, max_requests);
   if (err) {
     ldpp_dout(dpp, -1) << __func__ << " factory return error " << err <<
         " with description: " << ss.str() << dendl;
@@ -404,6 +404,7 @@ public:
   static const size_t AES_256_KEYSIZE = 256 / 8;
   static const size_t AES_256_IVSIZE = 128 / 8;
   static const size_t CHUNK_SIZE = 4096;
+  static const size_t QAT_MIN_SIZE = 65536;
   const DoutPrefixProvider* dpp;
 private:
   static const uint8_t IV[AES_256_IVSIZE];
@@ -442,33 +443,55 @@ public:
                      size_t size,
                      off_t stream_offset,
                      const unsigned char (&key)[AES_256_KEYSIZE],
-                     bool encrypt)
+                     bool encrypt,
+                     optional_yield y)
   {
     static std::atomic<bool> failed_to_get_crypto(false);
     CryptoAccelRef crypto_accel;
     if (! failed_to_get_crypto.load())
     {
-      crypto_accel = get_crypto_accel(this->dpp, cct);
+      static size_t max_requests = g_ceph_context->_conf->rgw_thread_pool_size;
+      crypto_accel = get_crypto_accel(this->dpp, cct, CHUNK_SIZE, max_requests);
       if (!crypto_accel)
         failed_to_get_crypto = true;
     }
-    bool result = true;
-    unsigned char iv[AES_256_IVSIZE];
-    for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
-      size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
-      prepare_iv(iv, stream_offset + offset);
-      if (crypto_accel != nullptr) {
-        if (encrypt) {
-          result = crypto_accel->cbc_encrypt(out + offset, in + offset,
-                                             process_size, iv, key);
-        } else {
-          result = crypto_accel->cbc_decrypt(out + offset, in + offset,
-                                             process_size, iv, key);
-        }
+    bool result = false;
+    static std::string accelerator = cct->_conf->plugin_crypto_accelerator;
+    if (accelerator == "crypto_qat" && crypto_accel != nullptr && size >= QAT_MIN_SIZE) {
+      // now, batch mode is only for QAT plugin
+      size_t iv_num = size / CHUNK_SIZE;
+      if (size % CHUNK_SIZE) ++iv_num;
+      auto iv = new unsigned char[iv_num][AES_256_IVSIZE];
+      for (size_t offset = 0, i = 0; offset < size; offset += CHUNK_SIZE, i++) {
+        prepare_iv(iv[i], stream_offset + offset);
+      }
+      if (encrypt) {
+        result = crypto_accel->cbc_encrypt_batch(out, in, size, iv, key, y);
       } else {
-        result = cbc_transform(
-            out + offset, in + offset, process_size,
-            iv, key, encrypt);
+        result = crypto_accel->cbc_decrypt_batch(out, in, size, iv, key, y);
+      }
+      delete[] iv;
+    }
+    if (result == false) {
+      // If QAT don't have free instance, we can fall back to this
+      result = true;
+      unsigned char iv[AES_256_IVSIZE];
+      for (size_t offset = 0; result && (offset < size); offset += CHUNK_SIZE) {
+        size_t process_size = offset + CHUNK_SIZE <= size ? CHUNK_SIZE : size - offset;
+        prepare_iv(iv, stream_offset + offset);
+        if (crypto_accel != nullptr && accelerator != "crypto_qat") {
+          if (encrypt) {
+            result = crypto_accel->cbc_encrypt(out + offset, in + offset,
+                                              process_size, iv, key, y);
+          } else {
+            result = crypto_accel->cbc_decrypt(out + offset, in + offset,
+                                              process_size, iv, key, y);
+          }
+        } else {
+          result = cbc_transform(
+              out + offset, in + offset, process_size,
+              iv, key, encrypt);
+        }
       }
     }
     return result;
@@ -479,7 +502,8 @@ public:
                off_t in_ofs,
                size_t size,
                bufferlist& output,
-               off_t stream_offset)
+               off_t stream_offset,
+               optional_yield y)
   {
     bool result = false;
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
@@ -493,7 +517,7 @@ public:
     result = cbc_transform(buf_raw,
                            input_raw + in_ofs,
                            aligned_size,
-                           stream_offset, key, true);
+                           stream_offset, key, true, y);
     if (result && (unaligned_rest_size > 0)) {
       /* remainder to encrypt */
       if (aligned_size % CHUNK_SIZE > 0) {
@@ -534,7 +558,8 @@ public:
                off_t in_ofs,
                size_t size,
                bufferlist& output,
-               off_t stream_offset)
+               off_t stream_offset,
+               optional_yield y)
   {
     bool result = false;
     size_t aligned_size = size / AES_256_IVSIZE * AES_256_IVSIZE;
@@ -548,7 +573,7 @@ public:
     result = cbc_transform(buf_raw,
                            input_raw + in_ofs,
                            aligned_size,
-                           stream_offset, key, false);
+                           stream_offset, key, false, y);
     if (result && unaligned_rest_size > 0) {
       /* remainder to decrypt */
       if (aligned_size % CHUNK_SIZE > 0) {
@@ -635,7 +660,8 @@ bool AES_256_ECB_encrypt(const DoutPrefixProvider* dpp,
 RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                                                CephContext* cct,
                                                RGWGetObj_Filter* next,
-                                               std::unique_ptr<BlockCrypt> crypt)
+                                               std::unique_ptr<BlockCrypt> crypt,
+                                               optional_yield y)
     :
     RGWGetObj_Filter(next),
     dpp(dpp),
@@ -644,7 +670,8 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
     enc_begin_skip(0),
     ofs(0),
     end(0),
-    cache()
+    cache(),
+    y(y)
 {
   block_size = this->crypt->get_block_size();
 }
@@ -726,7 +753,7 @@ int RGWGetObj_BlockDecrypt::fixup_range(off_t& bl_ofs, off_t& bl_end) {
 int RGWGetObj_BlockDecrypt::process(bufferlist& in, size_t part_ofs, size_t size)
 {
   bufferlist data;
-  if (!crypt->decrypt(in, 0, size, data, part_ofs)) {
+  if (!crypt->decrypt(in, 0, size, data, part_ofs, y)) {
     return -ERR_INTERNAL_ERROR;
   }
   off_t send_size = size - enc_begin_skip;
@@ -799,12 +826,14 @@ int RGWGetObj_BlockDecrypt::flush() {
 RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(const DoutPrefixProvider *dpp,
                                                CephContext* cct,
                                                rgw::sal::DataProcessor *next,
-                                               std::unique_ptr<BlockCrypt> crypt)
+                                               std::unique_ptr<BlockCrypt> crypt,
+                                               optional_yield y)
   : Pipe(next),
     dpp(dpp),
     cct(cct),
     crypt(std::move(crypt)),
-    block_size(this->crypt->get_block_size())
+    block_size(this->crypt->get_block_size()),
+    y(y)
 {
 }
 
@@ -826,7 +855,7 @@ int RGWPutObj_BlockEncrypt::process(bufferlist&& data, uint64_t logical_offset)
   if (proc_size > 0) {
     bufferlist in, out;
     cache.splice(0, proc_size, &in);
-    if (!crypt->encrypt(in, 0, proc_size, out, logical_offset)) {
+    if (!crypt->encrypt(in, 0, proc_size, out, logical_offset, y)) {
       return -ERR_INTERNAL_ERROR;
     }
     int r = Pipe::process(std::move(out), logical_offset);

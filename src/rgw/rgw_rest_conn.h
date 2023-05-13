@@ -132,8 +132,8 @@ public:
 
 
   /* async requests */
-  int put_obj_send_init(rgw::sal::Object* obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
-  int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, rgw::sal::Object* obj,
+  int put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
+  int put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_user& uid, const rgw_obj& obj,
                          std::map<std::string, bufferlist>& attrs, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, std::string& etag,
                        ceph::real_time *mtime, optional_yield y);
@@ -154,6 +154,7 @@ public:
     bool get_op{false};
     bool rgwx_stat{false};
     bool sync_manifest{false};
+    bool sync_cloudtiered{false};
 
     bool skip_decrypt{true};
     RGWHTTPStreamRWRequest::ReceiveCB *cb{nullptr};
@@ -163,13 +164,14 @@ public:
     uint64_t range_end{0};
   };
 
-  int get_obj(const DoutPrefixProvider *dpp, const rgw::sal::Object* obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
+  int get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
 
-  int get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw::sal::Object* obj,
+  int get_obj(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info *info /* optional */, const rgw_obj& obj,
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
+              bool skip_decrypt, bool sync_cloudtiered,
+              bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req,
                        std::string *etag,
                        ceph::real_time *mtime,

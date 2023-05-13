@@ -41,6 +41,10 @@ PGMap::wait_for_pg(PGCreationBlockingEvent::TriggerI&& trigger, spg_t pgid)
   }
 }
 
+void PGMap::remove_pg(spg_t pgid) {
+  ceph_assert(pgs.erase(pgid) == 1);
+}
+
 Ref<PG> PGMap::get_pg(spg_t pgid)
 {
   if (auto pg = pgs.find(pgid); pg != pgs.end()) {

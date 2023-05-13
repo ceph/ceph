@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_ACL_S3_H
-#define CEPH_RGW_ACL_S3_H
+#pragma once
 
 #include <map>
 #include <string>
@@ -114,5 +113,3 @@ class RGWACLXMLParser_S3 : public RGWXMLParser
 public:
   explicit RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
-
-#endif

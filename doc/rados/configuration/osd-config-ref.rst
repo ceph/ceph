@@ -7,7 +7,7 @@
 You can configure Ceph OSD Daemons in the Ceph configuration file (or in recent
 releases, the central config store), but Ceph OSD
 Daemons can use the default values and a very minimal configuration. A minimal
-Ceph OSD Daemon configuration sets ``osd journal size`` (for Filestore), ``host``,  and
+Ceph OSD Daemon configuration sets ``host`` and
 uses default values for nearly everything else.
 
 Ceph OSD Daemons are numerically identified in incremental fashion, beginning
@@ -140,6 +140,8 @@ See `Pool & PG Config Reference`_ for details.
 
 .. index:: OSD; scrubbing
 
+.. _rados_config_scrubbing:
+
 Scrubbing
 =========
 
@@ -198,6 +200,11 @@ Operations
 .. confval:: osd_op_history_size
 .. confval:: osd_op_history_duration
 .. confval:: osd_op_log_threshold
+.. confval:: osd_op_thread_suicide_timeout
+.. note:: See https://old.ceph.com/planet/dealing-with-some-osd-timeouts/ for
+   more on ``osd_op_thread_suicide_timeout``. Be aware that this is a link to a
+   reworking of a blog post from 2017, and that its conclusion will direct you
+   back to this page "for more information".
 
 .. _dmclock-qos:
 

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef RGW_B64_H
-#define RGW_B64_H
+#pragma once
 
 #include <boost/archive/iterators/base64_from_binary.hpp>
 #include <boost/archive/iterators/binary_from_base64.hpp>
@@ -83,5 +82,3 @@ namespace rgw {
     return outstr;
   }
 } /* namespace */
-
-#endif /* RGW_B64_H */

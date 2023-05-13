@@ -87,7 +87,7 @@ The procedure for making changes to the Ceph repository is as follows:
    
    #. :ref:`Push the changes in your local working copy to your fork<push_changes>`.
 
-#. Create a Pull Request to push the change upstream
+#. Create a Pull Request to push the change upstream.
 
    #. Create a Pull Request that asks for your changes to be added into the
       "upstream Ceph" repository.
@@ -530,3 +530,58 @@ the **ptl-tool** have the following form::
              client: move client_lock to _unmount()
              client: add timer_lock support
      Reviewed-by: Patrick Donnelly <pdonnell@redhat.com>
+
+Miscellaneous
+-------------
+
+--set-upstream
+^^^^^^^^^^^^^^
+
+If you forget to include the ``--set-upstream origin x`` option in your ``git
+push`` command, you will see the following error message:
+
+::
+
+   fatal: The current branch {x} has no upstream branch.
+   To push the current branch and set the remote as upstream, use
+      git push --set-upstream origin {x}
+
+To set up git to automatically create the upstream branch that corresponds to
+the branch in your local working copy, run this command from within the
+``ceph/`` directory:
+
+.. prompt:: bash $
+
+   git config --global push.autoSetupRemote true
+
+Deleting a Branch Locally
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To delete the branch named ``localBranchName`` from the local working copy, run
+a command of this form:
+
+.. prompt:: bash $
+
+   git branch -d localBranchName
+
+Deleting a Branch Remotely
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To delete the branch named ``remoteBranchName`` from the remote upstream branch
+(which is also your fork of ``ceph/ceph``, as described in :ref:`forking`), run
+a command of this form:
+
+.. prompt:: bash $
+
+   git push origin --delete remoteBranchName
+
+Searching a File Longitudinally for a String
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To search for the commit that introduced a given string (in this example, that
+string is ``foo``) into a given file (in this example, that file is
+``file.rst``), run a command of this form:
+
+.. prompt:: bash $
+
+   git log -S 'foo' file.rst

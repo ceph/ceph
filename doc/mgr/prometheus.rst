@@ -18,9 +18,11 @@ for all reporting entities are returned in text exposition format.
 Enabling prometheus output
 ==========================
 
-The *prometheus* module is enabled with::
+The *prometheus* module is enabled with:
 
-  ceph mgr module enable prometheus
+.. prompt:: bash $
+
+   ceph mgr module enable prometheus
 
 Configuration
 -------------
@@ -39,6 +41,7 @@ Configuration
 .. confval:: rbd_stats_pools_refresh_interval
 .. confval:: standby_behaviour
 .. confval:: standby_error_status_code
+.. confval:: exclude_perf_counters
 
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
 and IPv6 addresses on the host.  The port and listen address are both
@@ -47,10 +50,10 @@ configurable with ``ceph config set``, with keys
 is registered with Prometheus's `registry
 <https://github.com/prometheus/prometheus/wiki/Default-port-allocations>`_.
 
-::
-
-    ceph config set mgr mgr/prometheus/server_addr 0.0.0.0
-    ceph config set mgr mgr/prometheus/server_port 9283
+.. prompt:: bash $
+   
+   ceph config set mgr mgr/prometheus/server_addr 0.0.0.
+   ceph config set mgr mgr/prometheus/server_port 9283
 
 .. warning::
 
@@ -65,9 +68,11 @@ recommended to use 15 seconds as scrape interval, though, in some cases it
 might be useful to increase the scrape interval.
 
 To set a different scrape interval in the Prometheus module, set
-``scrape_interval`` to the desired value::
+``scrape_interval`` to the desired value:
 
-    ceph config set mgr mgr/prometheus/scrape_interval 20
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/scrape_interval 20
 
 On large clusters (>1000 OSDs), the time to fetch the metrics may become
 significant.  Without the cache, the Prometheus manager module could, especially
@@ -75,7 +80,7 @@ in conjunction with multiple Prometheus instances, overload the manager and lead
 to unresponsive or crashing Ceph manager instances.  Hence, the cache is enabled
 by default.  This means that there is a possibility that the cache becomes
 stale.  The cache is considered stale when the time to fetch the metrics from
-Ceph exceeds the configured :confval:``mgr/prometheus/scrape_interval``.
+Ceph exceeds the configured :confval:`mgr/prometheus/scrape_interval`.
 
 If that is the case, **a warning will be logged** and the module will either
 
@@ -86,35 +91,47 @@ This behavior can be configured. By default, it will return a 503 HTTP status
 code (service unavailable). You can set other options using the ``ceph config
 set`` commands.
 
-To tell the module to respond with possibly stale data, set it to ``return``::
+To tell the module to respond with possibly stale data, set it to ``return``:
+
+.. prompt:: bash $
 
     ceph config set mgr mgr/prometheus/stale_cache_strategy return
 
-To tell the module to respond with "service unavailable", set it to ``fail``::
+To tell the module to respond with "service unavailable", set it to ``fail``:
 
-    ceph config set mgr mgr/prometheus/stale_cache_strategy fail
+.. prompt:: bash $
 
-If you are confident that you don't require the cache, you can disable it::
+   ceph config set mgr mgr/prometheus/stale_cache_strategy fail
 
-    ceph config set mgr mgr/prometheus/cache false
+If you are confident that you don't require the cache, you can disable it:
+
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/cache false
 
 If you are using the prometheus module behind some kind of reverse proxy or
 loadbalancer, you can simplify discovering the active instance by switching
-to ``error``-mode::
+to ``error``-mode:
 
-    ceph config set mgr mgr/prometheus/standby_behaviour error
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/standby_behaviour error
 
 If set, the prometheus module will respond with a HTTP error when requesting ``/``
 from the standby instance. The default error code is 500, but you can configure
-the HTTP response code with::
+the HTTP response code with:
 
-    ceph config set mgr mgr/prometheus/standby_error_status_code 503
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/standby_error_status_code 503
 
 Valid error codes are between 400-599.
 
-To switch back to the default behaviour, simply set the config key to ``default``::
+To switch back to the default behaviour, simply set the config key to ``default``:
 
-    ceph config set mgr mgr/prometheus/standby_behaviour default
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/standby_behaviour default
 
 .. _prometheus-rbd-io-statistics:
 
@@ -165,13 +182,17 @@ configuration parameter. The parameter is a comma or space separated list
 of ``pool[/namespace]`` entries. If the namespace is not specified the
 statistics are collected for all namespaces in the pool.
 
-Example to activate the RBD-enabled pools ``pool1``, ``pool2`` and ``poolN``::
+Example to activate the RBD-enabled pools ``pool1``, ``pool2`` and ``poolN``:
 
-  ceph config set mgr mgr/prometheus/rbd_stats_pools "pool1,pool2,poolN"
+.. prompt:: bash $
 
-The wildcard can be used to indicate all pools or namespaces::
+   ceph config set mgr mgr/prometheus/rbd_stats_pools "pool1,pool2,poolN"
 
-  ceph config set mgr mgr/prometheus/rbd_stats_pools "*"
+The wildcard can be used to indicate all pools or namespaces:
+
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/rbd_stats_pools "*"
 
 The module makes the list of all available images scanning the specified
 pools and namespaces and refreshes it periodically. The period is
@@ -180,9 +201,22 @@ parameter (in sec) and is 300 sec (5 minutes) by default. The module will
 force refresh earlier if it detects statistics from a previously unknown
 RBD image.
 
-Example to turn up the sync interval to 10 minutes::
+Example to turn up the sync interval to 10 minutes:
 
-  ceph config set mgr mgr/prometheus/rbd_stats_pools_refresh_interval 600
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/rbd_stats_pools_refresh_interval 600
+
+Ceph daemon performance counters metrics
+-----------------------------------------
+
+With the introduction of ``ceph-exporter`` daemon, the prometheus module will no longer export Ceph daemon
+perf counters as prometheus metrics by default. However, one may re-enable exporting these metrics by setting
+the module option ``exclude_perf_counters`` to ``false``:
+
+.. prompt:: bash $
+
+   ceph config set mgr mgr/prometheus/exclude_perf_counters false
 
 Statistic names and labels
 ==========================

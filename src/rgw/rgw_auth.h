@@ -1,9 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-
-#ifndef CEPH_RGW_AUTH_H
-#define CEPH_RGW_AUTH_H
+#pragma once
 
 #include <functional>
 #include <optional>
@@ -791,5 +789,3 @@ uint32_t rgw_perms_from_aclspec_default_strategy(
   const rgw_user& uid,
   const rgw::auth::Identity::aclspec_t& aclspec,
   const DoutPrefixProvider *dpp);
-
-#endif /* CEPH_RGW_AUTH_H */

@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_ROLE_H
-#define CEPH_RGW_ROLE_H
+#pragma once
 
 #include <string>
 
@@ -10,7 +9,7 @@
 
 #include "common/ceph_json.h"
 #include "common/ceph_context.h"
-#include "rgw/rgw_rados.h"
+#include "rgw_rados.h"
 #include "rgw_metadata.h"
 
 class RGWRados;
@@ -208,5 +207,3 @@ private:
   Driver* driver;
 };
 } } // namespace rgw::sal
-
-#endif /* CEPH_RGW_ROLE_H */

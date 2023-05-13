@@ -218,6 +218,51 @@ def activate_bluestore(osd_lvs, no_systemd=False, no_tmpfs=False):
         systemctl.start_osd(osd_id)
     terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
 
+def activate_seastore(osd_lvs, no_systemd=False, no_tmpfs=False):
+    for lv in osd_lvs:
+        if lv.tags.get('ceph.type') == 'block':
+            osd_block_lv = lv
+            break
+    else:
+        raise RuntimeError('could not find a seastore OSD to activate')
+
+    is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
+    dmcrypt_secret = None
+    osd_id = osd_block_lv.tags['ceph.osd_id']
+    conf.cluster = osd_block_lv.tags['ceph.cluster_name']
+    osd_fsid = osd_block_lv.tags['ceph.osd_fsid']
+    configuration.load_ceph_conf_path(osd_block_lv.tags['ceph.cluster_name'])
+    configuration.load()
+
+    # mount on tmpfs the osd directory
+    osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
+    if not system.path_is_mounted(osd_path):
+        # mkdir -p and mount as tmpfs
+        prepare_utils.create_osd_path(osd_id, tmpfs=not no_tmpfs)
+    # encryption is handled here, before priming the OSD dir
+    if is_encrypted:
+        osd_lv_path = '/dev/mapper/%s' % osd_block_lv.lv_uuid
+        lockbox_secret = osd_block_lv.tags['ceph.cephx_lockbox_secret']
+        encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
+        dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+        encryption_utils.luks_open(dmcrypt_secret, osd_block_lv.lv_path, osd_block_lv.lv_uuid)
+    else:
+        osd_lv_path = osd_block_lv.lv_path
+    
+    # always re-do the symlink regardless if it exists, so that the block
+    # devices that may have changed can be mapped correctly every time
+    process.run(['ln', '-snf', osd_lv_path, os.path.join(osd_path, 'block')])
+    system.chown(os.path.join(osd_path, 'block'))
+    if no_systemd is False:        
+        # enable the ceph-volume unit for this OSD
+        systemctl.enable_volume(osd_id, osd_fsid, 'lvm')
+
+        # enable the OSD
+        systemctl.enable_osd(osd_id)
+
+        # start the OSD
+        systemctl.start_osd(osd_id)
+    terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
 
 class Activate(object):
 
@@ -297,6 +342,8 @@ class Activate(object):
         # explicit filestore/bluestore flags take precedence
         if getattr(args, 'bluestore', False):
             activate_bluestore(lvs, args.no_systemd, getattr(args, 'no_tmpfs', False))
+        elif getattr(args, 'seastore', False):
+            activate_seastore(lvs, args.no_systemd, getattr(args, 'no_tmpfs', False))
         elif getattr(args, 'filestore', False):
             activate_filestore(lvs, args.no_systemd)
         elif any('ceph.block_device' in lv.tags for lv in lvs):
@@ -347,6 +394,11 @@ class Activate(object):
             '--bluestore',
             action='store_true',
             help='force bluestore objectstore activation',
+        )
+        parser.add_argument(
+            '--seastore',
+            action='store_true',
+            help='force seastore objectstore activation',
         )
         parser.add_argument(
             '--filestore',

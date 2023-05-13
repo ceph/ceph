@@ -135,7 +135,7 @@ integration tests for all the Ceph components.
     - verify that teuthology can run integration tests, with and without OpenStack
 
   * - `upgrade <https://github.com/ceph/ceph/tree/master/qa/suites/upgrade>`_
-    - for various versions of Ceph, verify that upgrades can happen without disrupting an ongoing workload
+    - for various versions of Ceph, verify that upgrades can happen without disrupting an ongoing workload (`Upgrade Testing`_)
 
 teuthology-describe
 -------------------
@@ -476,6 +476,81 @@ A single test from the rbd/thrash suite can be run by adding the
       --machine-type smithi \
       --suite rbd/thrash \
       --filter 'rbd/thrash/{clusters/fixed-2.yaml clusters/openstack.yaml workloads/rbd_api_tests_copy_on_read.yaml}'
+
+.. _upgrade-testing:
+
+Upgrade Testing
+^^^^^^^^^^^^^^^
+
+Using the upgrade suite we are able to verify that upgrades from earlier releases can complete
+successfully without disrupting any ongoing workload.
+Each Release branch upgrade directory includes 2-x upgrade testing.
+Meaning, we are able to test the upgrade from 2 preceding releases to the current one.
+The upgrade sequence is done in `parallel <https://github.com/ceph/teuthology/blob/main/teuthology/task/parallel.py>`_
+with other given workloads.
+
+For instance, the upgrade test directory from the Quincy release branch is as follows:
+
+.. code-block:: none
+
+  .
+  ├── octopus-x
+  └── pacific-x
+
+It is possible to test upgrades from Octopus (2-x) or from Pacific (1-x) to Quincy (x).
+A simple upgrade test consists the following order:
+
+.. code-block:: none
+
+  ├── 0-start.yaml
+  ├── 1-tasks.yaml
+  ├── upgrade-sequence.yaml
+  └── workload
+
+After starting the cluster with the older release we begin running the given ``workload``
+and the ``upgrade-sequnce`` in parallel.
+
+.. code-block:: yaml
+
+  - print: "**** done start parallel"
+  - parallel:
+      - workload
+      - upgrade-sequence
+  - print: "**** done end parallel"
+
+While the ``workload`` directory consists regular yaml files just as in any other suite,
+the ``upgrade-sequnce`` is resposible for running the upgrade and awaitng its completion:
+
+.. code-block:: yaml
+
+  - print: "**** done start upgrade, wait"
+  ...
+    mon.a:
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+      - while ceph orch upgrade status | jq '.in_progress' | grep true ; do ceph orch ps ; ceph versions ; sleep 30 ; done\
+  ...
+  - print: "**** done end upgrade, wait..."
+
+
+It is also possible to upgrade in stages while running workloads in between those:
+
+.. code-block:: none
+
+  ├── %
+  ├── 0-cluster
+  ├── 1-ceph-install
+  ├── 2-partial-upgrade
+  ├── 3-thrash
+  ├── 4-workload
+  ├── 5-finish-upgrade.yaml
+  ├── 6-quincy.yaml
+  └── 8-final-workload
+
+After starting a cluster we upgrade only 2/3 of the cluster (``2-partial-upgrade``).
+The next stage is running thrash tests and given workload tests. Later on, continuing to upgrade the
+rest of the cluster (``5-finish-upgrade.yaml``).
+The last stage is requiring the updated release (``ceph require-osd-release quincy``,
+``ceph osd set-require-min-compat-client quincy``) and running the ``final-workload``.
 
 Position Independent Linking
 ----------------------------

@@ -267,12 +267,6 @@ std::unique_ptr<Lifecycle> FilterDriver::get_lifecycle(void)
   return std::make_unique<FilterLifecycle>(std::move(lc));
 }
 
-std::unique_ptr<Completions> FilterDriver::get_completions(void)
-{
-  std::unique_ptr<Completions> c = next->get_completions();
-  return std::make_unique<FilterCompletions>(std::move(c));
-}
-
 std::unique_ptr<Notification> FilterDriver::get_notification(rgw::sal::Object* obj,
 				rgw::sal::Object* src_obj, req_state* s,
 				rgw::notify::EventType event_type, optional_yield y,
@@ -488,38 +482,34 @@ int FilterDriver::get_oidc_providers(const DoutPrefixProvider *dpp,
 
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
 				  uint64_t *cur_accounted_size)
 {
-  std::unique_ptr<Object> no = nextObject(_head_obj.get())->clone();
-
-  std::unique_ptr<Writer> writer = next->get_append_writer(dpp, y, std::move(no),
+  std::unique_ptr<Writer> writer = next->get_append_writer(dpp, y, nextObject(obj),
 							   owner, ptail_placement_rule,
 							   unique_tag, position,
 							   cur_accounted_size);
 
-  return std::make_unique<FilterWriter>(std::move(writer), std::move(_head_obj));
+  return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
 
 std::unique_ptr<Writer> FilterDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-  std::unique_ptr<Object> no = nextObject(_head_obj.get())->clone();
-
-  std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, std::move(no),
+  std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, nextObject(obj),
 							   owner, ptail_placement_rule,
 							   olh_epoch, unique_tag);
 
-  return std::make_unique<FilterWriter>(std::move(writer), std::move(_head_obj));
+  return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
 
 const std::string& FilterDriver::get_compression_type(const rgw_placement_rule& rule)
@@ -861,13 +851,6 @@ int FilterObject::delete_object(const DoutPrefixProvider* dpp,
   return next->delete_object(dpp, y, prevent_versioning);
 }
 
-int FilterObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
-				 Completions* aio, bool keep_index_consistent,
-				 optional_yield y)
-{
-  return next->delete_obj_aio(dpp, astate, aio, keep_index_consistent, y);
-}
-
 int FilterObject::copy_object(User* user,
 			      req_info* info,
 			      const rgw_zone_id& source_zone,
@@ -1024,18 +1007,10 @@ std::unique_ptr<Object::DeleteOp> FilterObject::get_delete_op()
   return std::make_unique<FilterDeleteOp>(std::move(d));
 }
 
-int FilterObject::omap_get_vals(const DoutPrefixProvider *dpp, const std::string& marker,
-				uint64_t count, std::map<std::string, bufferlist> *m,
-				bool* pmore, optional_yield y)
+int FilterObject::get_torrent_info(const DoutPrefixProvider* dpp,
+                                   optional_yield y, bufferlist& bl)
 {
-  return next->omap_get_vals(dpp, marker, count, m, pmore, y);
-}
-
-int FilterObject::omap_get_all(const DoutPrefixProvider *dpp,
-			       std::map<std::string, bufferlist> *m,
-			       optional_yield y)
-{
-  return next->omap_get_all(dpp, m, y);
+  return next->get_torrent_info(dpp, y, bl);
 }
 
 int FilterObject::omap_get_vals_by_keys(const DoutPrefixProvider *dpp,
@@ -1170,19 +1145,17 @@ int FilterMultipartUpload::get_info(const DoutPrefixProvider *dpp,
 std::unique_ptr<Writer> FilterMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
-				  std::unique_ptr<rgw::sal::Object> _head_obj,
+				  rgw::sal::Object* obj,
 				  const rgw_user& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
 {
-  std::unique_ptr<Object> no = nextObject(_head_obj.get())->clone();
-
   std::unique_ptr<Writer> writer;
-  writer = next->get_writer(dpp, y, std::move(no), owner,
+  writer = next->get_writer(dpp, y, nextObject(obj), owner,
 			    ptail_placement_rule, part_num, part_num_str);
 
-  return std::make_unique<FilterWriter>(std::move(writer), std::move(_head_obj));
+  return std::make_unique<FilterWriter>(std::move(writer), obj);
 }
 
 int FilterMPSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur,

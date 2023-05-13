@@ -8,6 +8,7 @@ tasks:
 - openssl_keys:
 - rgw:
     client.0:
+- tox: [client.0]
 
 overrides:
   ceph:

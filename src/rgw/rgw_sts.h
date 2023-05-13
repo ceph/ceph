@@ -1,8 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#ifndef CEPH_RGW_STS_H
-#define CEPH_RGW_STS_H
+#pragma once
 
 #include "rgw_role.h"
 #include "rgw_auth.h"
@@ -239,7 +238,6 @@ class STSService {
   rgw_user user_id;
   std::unique_ptr<rgw::sal::RGWRole> role;
   rgw::auth::Identity* identity;
-  int storeARN(const DoutPrefixProvider *dpp, std::string& arn, optional_yield y);
 public:
   STSService() = default;
   STSService(CephContext* cct, rgw::sal::Driver* driver, rgw_user user_id,
@@ -251,4 +249,3 @@ public:
   AssumeRoleWithWebIdentityResponse assumeRoleWithWebIdentity(const DoutPrefixProvider *dpp, AssumeRoleWithWebIdentityRequest& req);
 };
 }
-#endif /* CEPH_RGW_STS_H */

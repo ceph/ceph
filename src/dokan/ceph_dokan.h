@@ -34,6 +34,8 @@ struct Config {
   std::wstring win_vol_name = L"";
   unsigned long win_vol_serial = 0;
   unsigned long max_path_len = 256;
+  mode_t file_mode = 0755;
+  mode_t dir_mode = 0755;
 };
 
 extern Config *g_cfg;

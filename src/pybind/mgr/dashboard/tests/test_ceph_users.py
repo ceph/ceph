@@ -1,6 +1,8 @@
 import unittest.mock as mock
 
-from ..controllers.ceph_users import CephUser
+from jsonschema import validate
+
+from ..controllers.ceph_users import CephUser, create_form
 from ..tests import ControllerTestCase
 
 auth_dump_mock = {"auth_dump": [
@@ -41,3 +43,10 @@ class CephUsersControllerTestCase(ControllerTestCase):
              "key": "***********"
              }
         ])
+
+    def test_create_form(self):
+        form_dict = create_form.to_dict()
+        schema = {'schema': form_dict['control_schema'], 'layout': form_dict['ui_schema']}
+        validate(instance={'user_entity': 'foo',
+                           'capabilities': [{"entity": "mgr", "cap": "allow *"}]},
+                 schema=schema['schema'])

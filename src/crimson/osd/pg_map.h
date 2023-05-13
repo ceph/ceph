@@ -33,19 +33,27 @@ public:
   }
 
   /// Returns mapping for pgid, creates new one if it doesn't already exist
-  core_id_t maybe_create_pg(spg_t pgid) {
-    auto [insert_iter, inserted] = pg_to_core.emplace(pgid, NULL_CORE);
+  core_id_t maybe_create_pg(spg_t pgid, core_id_t core = NULL_CORE) {
+    auto [insert_iter, inserted] = pg_to_core.emplace(pgid, core);
     if (!inserted) {
       ceph_assert_always(insert_iter->second != NULL_CORE);
+      if (core != NULL_CORE) {
+	ceph_assert_always(insert_iter->second == core);
+      }
       return insert_iter->second;
     } else {
       ceph_assert_always(core_to_num_pgs.size() > 0);
-      auto core_iter = std::min_element(
-	core_to_num_pgs.begin(),
-	core_to_num_pgs.end(),
-	[](const auto &left, const auto &right) {
-	  return left.second < right.second;
-	});
+      std::map<core_id_t, unsigned>::iterator core_iter;
+      if (core == NULL_CORE) {
+        core_iter = std::min_element(
+          core_to_num_pgs.begin(),
+          core_to_num_pgs.end(),
+          [](const auto &left, const auto &right) {
+            return left.second < right.second;
+        });
+      } else {
+	core_iter = core_to_num_pgs.find(core);
+      }
       ceph_assert_always(core_to_num_pgs.end() != core_iter);
       insert_iter->second = core_iter->first;
       core_iter->second++;
@@ -153,6 +161,8 @@ public:
    * Cancel pending creation of pgid.
    */
   void pg_creation_canceled(spg_t pgid);
+
+  void remove_pg(spg_t pgid);
 
   pgs_t& get_pgs() { return pgs; }
   const pgs_t& get_pgs() const { return pgs; }

@@ -63,6 +63,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
   ${PROJECT_SOURCE_DIR}/src/common/options.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
+  ${PROJECT_SOURCE_DIR}/src/common/perf_counters_key.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/page.cc
   ${PROJECT_SOURCE_DIR}/src/common/pick_address.cc
@@ -175,11 +176,12 @@ set(crimson_net_srcs
   ${PROJECT_SOURCE_DIR}/src/msg/async/compression_onwire.cc
   ${PROJECT_SOURCE_DIR}/src/msg/async/frames_v2.cc
   net/Errors.cc
+  net/FrameAssemblerV2.cc
+  net/io_handler.cc
   net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
   net/Socket.cc
-  net/Protocol.cc
   net/ProtocolV2.cc
   net/chained_dispatchers.cc)
 add_library(crimson STATIC

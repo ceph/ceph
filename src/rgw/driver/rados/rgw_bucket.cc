@@ -110,7 +110,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
       auto& bucket = i->second;
 
       std::unique_ptr<rgw::sal::Bucket> actual_bucket;
-      int r = driver->get_bucket(dpp, &user, user.get_tenant(), bucket->get_name(), &actual_bucket, null_yield);
+      int r = driver->get_bucket(dpp, &user, user.get_tenant(), bucket->get_name(), &actual_bucket, y);
       if (r < 0) {
         ldout(driver->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
@@ -123,7 +123,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
         cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = actual_bucket->chown(dpp, user, null_yield);
+	  r = actual_bucket->chown(dpp, user, y);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -870,7 +870,6 @@ static int bucket_stats(rgw::sal::Driver* driver,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
-  real_time mtime;
   int ret = driver->get_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, null_yield);
   if (ret < 0) {
     return ret;
@@ -891,7 +890,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
     return ret;
   }
 
-  utime_t ut(mtime);
+  utime_t ut(bucket->get_modification_time());
   utime_t ctime_ut(bucket->get_creation_time());
 
   formatter->open_object_section("stats");
@@ -984,7 +983,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 				     * as we may now not reach the end of
 				     * the loop body */
 
-	ret = bucket->load_bucket(dpp, null_yield);
+	ret = bucket->load_bucket(dpp, y);
 	if (ret < 0)
 	  continue;
 
@@ -1060,7 +1059,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   int ret = 0;
   const std::string& bucket_name = op_state.get_bucket_name();
   if (!bucket_name.empty()) {
-    ret = bucket.init(driver, op_state, null_yield, dpp);
+    ret = bucket.init(driver, op_state, y, dpp);
     if (-ENOENT == ret)
       return -ERR_NO_SUCH_BUCKET;
     else if (ret < 0)
@@ -2167,6 +2166,10 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
     }
     bci.info.layout.current_index.layout.type = rule_info.index_type;
   } else {
+    /* always keep bucket versioning enabled on archive zone */
+    if (bihandler->driver->get_zone()->get_tier_type() == "archive") {
+      bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
+    }
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
@@ -2766,7 +2769,7 @@ int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp,
   if (!pent) {
     pent = &ent;
   }
-  int r = svc.bi->read_stats(dpp, bucket_info, pent, null_yield);
+  int r = svc.bi->read_stats(dpp, bucket_info, pent, y);
   if (r < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
     return r;

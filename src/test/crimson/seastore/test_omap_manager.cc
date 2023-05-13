@@ -158,7 +158,7 @@ struct omap_manager_test_t :
     size_t count = 0;
     for (auto iter = test_omap_mappings.begin();
 	iter != test_omap_mappings.end(); ) {
-      if (iter->first >= first && iter->first <= last) {
+      if (iter->first >= first && iter->first < last) {
 	keys.push_back(iter->first);
 	iter = test_omap_mappings.erase(iter);
 	count++;

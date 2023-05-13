@@ -13,8 +13,7 @@
  *
  */
 
-#ifndef RGW_HTTP_CLIENT_CURL_H
-#define RGW_HTTP_CLIENT_CURL_H
+#pragma once
 
 #include <map>
 #include <boost/optional.hpp>
@@ -28,5 +27,3 @@ void setup_curl(boost::optional<const fe_map_t&> m);
 void cleanup_curl();
 }
 }
-
-#endif

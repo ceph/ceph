@@ -10,10 +10,9 @@
  *
 */
 
-#include "include/compat.h"
+#pragma once
 
-std::wstring to_wstring(const std::string& str);
-std::string to_string(const std::wstring& str);
+#include "include/compat.h"
 
 void to_filetime(time_t t, LPFILETIME pft);
 void to_unix_time(FILETIME ft, time_t *t);

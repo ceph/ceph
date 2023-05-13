@@ -492,6 +492,17 @@ class MDSCluster(CephCluster):
 
 
 class Filesystem(MDSCluster):
+
+    """
+    Generator for all Filesystems in the cluster.
+    """
+    @classmethod
+    def get_all_fs(cls, ctx):
+        mdsc = MDSCluster(ctx)
+        status = mdsc.status()
+        for fs in status.get_filesystems():
+            yield cls(ctx, fscid=fs['id'])
+
     """
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
@@ -597,6 +608,9 @@ class Filesystem(MDSCluster):
 
     def set_bal_rank_mask(self, bal_rank_mask):
         self.set_var("bal_rank_mask", bal_rank_mask)
+
+    def set_refuse_client_session(self, yes):
+        self.set_var("refuse_client_session", yes)
 
     def compat(self, *args):
         a = map(lambda x: str(x).lower(), args)
@@ -1132,6 +1146,9 @@ class Filesystem(MDSCluster):
         if timeout is None:
             timeout = DAEMON_WAIT_TIMEOUT
 
+        if self.id is None:
+            status = self.getinfo(refresh=True)
+
         if status is None:
             status = self.status()
 
@@ -1246,12 +1263,12 @@ class Filesystem(MDSCluster):
             out.append((rank, f(perf)))
         return out
 
-    def read_cache(self, path, depth=None):
+    def read_cache(self, path, depth=None, rank=None):
         cmd = ["dump", "tree", path]
         if depth is not None:
             cmd.append(depth.__str__())
-        result = self.mds_asok(cmd)
-        if len(result) == 0:
+        result = self.rank_asok(cmd, rank=rank)
+        if result is None or len(result) == 0:
             raise RuntimeError("Path not found in cache: {0}".format(path))
 
         return result
@@ -1644,6 +1661,9 @@ class Filesystem(MDSCluster):
 
     def get_scrub_status(self, rank=0):
         return self.run_scrub(["status"], rank)
+
+    def flush(self, rank=0):
+        return self.rank_tell(["flush", "journal"], rank=rank)
 
     def wait_until_scrub_complete(self, result=None, tag=None, rank=0, sleep=30,
                                   timeout=300, reverse=False):

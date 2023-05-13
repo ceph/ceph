@@ -20,11 +20,10 @@ tasks:
 - mds_pre_upgrade:
 - print: "**** done mds pre-upgrade sequence"
 - install.upgrade:
+    # upgrade the single cluster node, which is running all the mon/mds/osd/mgr daemons
     mon.a:
       branch: quincy
-    mon.b:
-      branch: quincy
-- print: "**** done install.upgrade both hosts"
+- print: "**** done install.upgrade the host"
 - ceph.restart:
     daemons: [mon.*, mgr.*]
     mon-health-to-clog: false

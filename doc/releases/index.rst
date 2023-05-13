@@ -68,8 +68,12 @@ Release timeline
 .. _17.2.3: quincy#v17-2-3-quincy
 .. _17.2.4: quincy#v17-2-4-quincy
 .. _17.2.5: quincy#v17-2-5-quincy
+.. _17.2.6: quincy#v17-2-6-quincy
 
 .. _Pacific: pacific
+.. _16.2.13: pacific#v16-2-13-pacific
+.. _16.2.12: pacific#v16-2-12-pacific
+.. _16.2.11: pacific#v16-2-11-pacific
 .. _16.2.10: pacific#v16-2-10-pacific
 .. _16.2.9: pacific#v16-2-9-pacific
 .. _16.2.8: pacific#v16-2-8-pacific
@@ -271,4 +275,4 @@ Release timeline
 .. _0.67.1: dumpling#v0-67-1-dumpling
 .. _0.67: dumpling#v0-67-dumpling
 .. _Dumpling:  dumpling
-   
+

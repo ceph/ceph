@@ -78,7 +78,15 @@ By default, `cephfs-top` connects to cluster name `ceph`. To use a non-default c
 
   $ cephfs-top -d <seconds>
 
-Interval should be greater than or equal to 0.5 seconds. Fractional seconds are honoured.
+Refresh interval should be a positive integer.
+
+To dump the metrics to stdout without creating a curses display use::
+
+  $ cephfs-top --dump
+
+To dump the metrics of the given filesystem to stdout without creating a curses display use::
+
+  $ cephfs-top --dumpfs <fs_name>
 
 Interactive Commands
 --------------------
@@ -104,3 +112,5 @@ The metrics display can be scrolled using the Arrow Keys, PgUp/PgDn, Home/End an
 Sample screenshot running `cephfs-top` with 2 filesystems:
 
 .. image:: cephfs-top.png
+
+.. note:: Minimum compatible python version for cephfs-top is 3.6.0. cephfs-top is supported on distros RHEL 8, Ubuntu 18.04, CentOS 8 and above.

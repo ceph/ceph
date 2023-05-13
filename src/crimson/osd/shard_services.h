@@ -65,7 +65,7 @@ class PerShardState {
 #define assert_core() ceph_assert(seastar::this_shard_id() == core);
 
   const int whoami;
-  crimson::os::FuturizedStore &store;
+  crimson::os::FuturizedStore::Shard &store;
   crimson::common::CephContext cct;
 
   PerfCounters *perf = nullptr;
@@ -91,8 +91,6 @@ class PerShardState {
     assert_core();
     up_epoch = epoch;
   }
-
-  crimson::osd::ObjectContextRegistry obc_registry;
 
   // prevent creating new osd operations when system is shutting down,
   // this is necessary because there are chances that a new operation
@@ -134,11 +132,35 @@ class PerShardState {
     auto op = registry.create_operation<T>(std::forward<Args>(args)...);
     crimson::get_logger(ceph_subsys_osd).info(
       "PerShardState::{}, {}", __func__, *op);
-    auto fut = op->start().then([op /* by copy */] {
-      // ensure the op's lifetime is appropriate. It is not enough to
-      // guarantee it's alive at the scheduling stages (i.e. `then()`
-      // calling) but also during the actual execution (i.e. when passed
-      // lambdas are actually run).
+    auto fut = seastar::yield().then([op] {
+      return op->start().finally([op /* by copy */] {
+	// ensure the op's lifetime is appropriate. It is not enough to
+	// guarantee it's alive at the scheduling stages (i.e. `then()`
+	// calling) but also during the actual execution (i.e. when passed
+	// lambdas are actually run).
+      });
+    });
+    return std::make_pair(std::move(op), std::move(fut));
+  }
+
+  template <typename InterruptorT, typename T, typename... Args>
+  auto start_operation_may_interrupt(Args&&... args) {
+    assert_core();
+    if (__builtin_expect(stopping, false)) {
+      throw crimson::common::system_shutdown_exception();
+    }
+    auto op = registry.create_operation<T>(std::forward<Args>(args)...);
+    crimson::get_logger(ceph_subsys_osd).info(
+      "PerShardState::{}, {}", __func__, *op);
+    auto fut = InterruptorT::make_interruptible(
+      seastar::yield()
+    ).then_interruptible([op] {
+      return op->start().finally([op /* by copy */] {
+	// ensure the op's lifetime is appropriate. It is not enough to
+	// guarantee it's alive at the scheduling stages (i.e. `then()`
+	// calling) but also during the actual execution (i.e. when passed
+	// lambdas are actually run).
+      });
     });
     return std::make_pair(std::move(op), std::move(fut));
   }
@@ -237,6 +259,8 @@ private:
     crimson::net::Connection &conn,
     epoch_t first);
 
+  seastar::future<> send_incremental_map_to_osd(int osd, epoch_t first);
+
   auto get_pool_info(int64_t poolid) {
     return get_meta_coll().load_final_pool_info(poolid);
   }
@@ -271,6 +295,7 @@ private:
   } finisher;
   AsyncReserver<spg_t, DirectFinisher> local_reserver;
   AsyncReserver<spg_t, DirectFinisher> remote_reserver;
+  AsyncReserver<spg_t, DirectFinisher> snap_reserver;
 
   epoch_t up_thru_wanted = 0;
   seastar::future<> send_alive(epoch_t want);
@@ -349,8 +374,16 @@ public:
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
-  crimson::os::FuturizedStore &get_store() {
+  crimson::os::FuturizedStore::Shard &get_store() {
     return local_state.store;
+  }
+
+  auto remove_pg(spg_t pgid) {
+    local_state.pg_map.remove_pg(pgid);
+    return with_singleton(
+      [pgid](auto &osstate) {
+      osstate.pg_to_shard_mapping.remove_pg(pgid);
+    });
   }
 
   crimson::common::CephContext *get_cct() {
@@ -360,6 +393,12 @@ public:
   template <typename T, typename... Args>
   auto start_operation(Args&&... args) {
     return local_state.start_operation<T>(std::forward<Args>(args)...);
+  }
+
+  template <typename InterruptorT, typename T, typename... Args>
+  auto start_operation_may_interrupt(Args&&... args) {
+    return local_state.start_operation_may_interrupt<
+      InterruptorT, T>(std::forward<Args>(args)...);
   }
 
   auto &get_registry() { return local_state.registry; }
@@ -444,6 +483,7 @@ public:
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 
   FORWARD_TO_OSD_SINGLETON(send_incremental_map)
+  FORWARD_TO_OSD_SINGLETON(send_incremental_map_to_osd)
 
   FORWARD_TO_OSD_SINGLETON(osdmap_subscribe)
   FORWARD_TO_OSD_SINGLETON(queue_want_pg_temp)
@@ -456,11 +496,6 @@ public:
   FORWARD_TO_LOCAL(get_hb_stamps)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
-
-  FORWARD(
-    maybe_get_cached_obc, maybe_get_cached_obc, local_state.obc_registry)
-  FORWARD(
-    get_cached_obc, get_cached_obc, local_state.obc_registry)
 
   FORWARD_TO_OSD_SINGLETON_TARGET(
     local_update_priority,
@@ -477,6 +512,12 @@ public:
   FORWARD_TO_OSD_SINGLETON_TARGET(
     remote_dump_reservations,
     remote_reserver.dump)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_cancel_reservation,
+    snap_reserver.cancel_reservation)
+  FORWARD_TO_OSD_SINGLETON_TARGET(
+    snap_dump_reservations,
+    snap_reserver.dump)
 
   Context *invoke_context_on_core(core_id_t core, Context *c) {
     if (!c) return nullptr;
@@ -521,6 +562,20 @@ public:
       },
       invoke_context_on_core(seastar::this_shard_id(), on_reserved),
       invoke_context_on_core(seastar::this_shard_id(), on_preempt));
+  }
+  seastar::future<> snap_request_reservation(
+    spg_t item,
+    Context *on_reserved,
+    unsigned prio) {
+    return with_singleton(
+      [item, prio](OSDSingletonState &singleton,
+		   Context *wrapped_on_reserved) {
+	return singleton.snap_reserver.request_reservation(
+	  item,
+	  wrapped_on_reserved,
+	  prio);
+      },
+      invoke_context_on_core(seastar::this_shard_id(), on_reserved));
   }
 
 #undef FORWARD_CONST

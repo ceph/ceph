@@ -14,6 +14,7 @@
 #include "include/int_types.h"
 
 #include "gtest/gtest.h"
+#include "include/compat.h"
 #include "include/ceph_fs.h"
 #include "include/cephfs/libcephfs.h"
 #include <errno.h>

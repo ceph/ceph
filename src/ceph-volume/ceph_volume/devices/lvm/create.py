@@ -68,7 +68,7 @@ class Create(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
-        exclude_group_options(parser, groups=['filestore', 'bluestore'], argv=self.argv)
+        exclude_group_options(parser, groups=['filestore', 'bluestore', 'seastore'], argv=self.argv)
         args = parser.parse_args(self.argv)
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True

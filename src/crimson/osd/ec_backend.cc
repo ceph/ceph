@@ -6,8 +6,9 @@ ECBackend::ECBackend(shard_id_t shard,
                      ECBackend::CollectionRef coll,
                      crimson::osd::ShardServices& shard_services,
                      const ec_profile_t&,
-                     uint64_t)
-  : PGBackend{shard, coll, shard_services}
+                     uint64_t,
+		     DoutPrefixProvider &dpp)
+  : PGBackend{shard, coll, shard_services, dpp}
 {
   // todo
 }

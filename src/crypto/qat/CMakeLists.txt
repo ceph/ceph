@@ -13,7 +13,8 @@ add_dependencies(crypto_plugins ceph_crypto_qat)
 
 target_link_libraries(ceph_crypto_qat PRIVATE
                       QatDrv::qat_s
-                      QatDrv::usdm_drv_s)
+                      QatDrv::usdm_drv_s
+                      spawn)
 
 add_dependencies(crypto_plugins ceph_crypto_qat)
 set_target_properties(ceph_crypto_qat PROPERTIES VERSION 1.0.0 SOVERSION 1)

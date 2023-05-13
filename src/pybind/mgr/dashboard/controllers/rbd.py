@@ -179,7 +179,7 @@ class Rbd(RESTController):
     @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
     def set(self, image_spec, name=None, size=None, features=None,
             configuration=None, metadata=None, enable_mirror=None, primary=None,
-            resync=False, mirror_mode=None, schedule_interval='',
+            force=False, resync=False, mirror_mode=None, schedule_interval='',
             remove_scheduling=False):
 
         pool_name, namespace, image_name = parse_image_spec(image_spec)
@@ -231,7 +231,7 @@ class Rbd(RESTController):
 
             if primary and not mirror_image_info['primary']:
                 RbdMirroringService.promote_image(
-                    image_name, pool_name, namespace)
+                    image_name, pool_name, namespace, force)
             elif primary is False and mirror_image_info['primary']:
                 RbdMirroringService.demote_image(
                     image_name, pool_name, namespace)
@@ -351,15 +351,14 @@ class RbdSnapshot(RESTController):
     RESOURCE_ID = "snapshot_name"
 
     @RbdTask('snap/create',
-             ['{image_spec}', '{snapshot_name}'], 2.0)
-    def create(self, image_spec, snapshot_name):
+             ['{image_spec}', '{snapshot_name}', '{mirrorImageSnapshot}'], 2.0)
+    def create(self, image_spec, snapshot_name, mirrorImageSnapshot):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
 
         def _create_snapshot(ioctx, img, snapshot_name):
             mirror_info = img.mirror_image_get_info()
             mirror_mode = img.mirror_image_get_mode()
-            if (mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED
-                    and mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT):
+            if (mirror_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED and mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT) and mirrorImageSnapshot:  # noqa E501 #pylint: disable=line-too-long
                 img.mirror_image_create_snapshot()
             else:
                 img.create_snap(snapshot_name)

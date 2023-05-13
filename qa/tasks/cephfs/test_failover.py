@@ -76,7 +76,8 @@ class TestClusterAffinity(CephFSTestCase):
         self._change_target_state(target, names[0], {'join_fscid': self.fs.id})
         self._change_target_state(target, names[1], {'join_fscid': self.fs.id})
         self._reach_target(target)
-        status = self.fs.status()
+        time.sleep(5) # MDSMonitor tick
+        status = self.fs.wait_for_daemons()
         active = self.fs.get_active_names(status=status)[0]
         self.assertIn(active, names)
         self.config_rm('mds.'+active, 'mds_join_fs')

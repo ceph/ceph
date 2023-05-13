@@ -35,6 +35,7 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/version.h"
+#include "common/win32/wstring.h"
 
 #include "global/global_init.h"
 
@@ -111,7 +112,7 @@ static NTSTATUS WinCephCreateDirectory(
     return 0;
   }
 
-  int ret = ceph_mkdir(cmount, path.c_str(), 0755);
+  int ret = ceph_mkdir(cmount, path.c_str(), g_cfg->dir_mode);
   if (ret < 0) {
     dout(2) << __func__ << " " << path
             << ": ceph_mkdir failed. Error: " << ret << dendl;
@@ -166,13 +167,14 @@ static NTSTATUS WinCephCreateFile(
         return STATUS_OBJECT_NAME_COLLISION;
       case TRUNCATE_EXISTING:
         // open O_TRUNC & return 0
-        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR,
+                            g_cfg->file_mode, fdc);
       case OPEN_ALWAYS:
         // open & return STATUS_OBJECT_NAME_COLLISION
         if (!WRITE_ACCESS_REQUESTED(AccessMode))
           fdc->read_only = 1;
         if ((st = do_open_file(path, fdc->read_only ? O_RDONLY : O_RDWR,
-                               0755, fdc)))
+                               g_cfg->file_mode, fdc)))
           return st;
         return STATUS_OBJECT_NAME_COLLISION;
       case OPEN_EXISTING:
@@ -180,12 +182,13 @@ static NTSTATUS WinCephCreateFile(
         if (!WRITE_ACCESS_REQUESTED(AccessMode))
           fdc->read_only = 1;
         if ((st = do_open_file(path, fdc->read_only ? O_RDONLY : O_RDWR,
-                               0755, fdc)))
+                               g_cfg->file_mode, fdc)))
           return st;
         return 0;
       case CREATE_ALWAYS:
         // open O_TRUNC & return STATUS_OBJECT_NAME_COLLISION
-        if ((st = do_open_file(path, O_CREAT | O_TRUNC | O_RDWR, 0755, fdc)))
+        if ((st = do_open_file(path, O_CREAT | O_TRUNC | O_RDWR,
+                               g_cfg->file_mode, fdc)))
           return st;
         return STATUS_OBJECT_NAME_COLLISION;
       }
@@ -204,7 +207,7 @@ static NTSTATUS WinCephCreateFile(
         return 0;
       case OPEN_ALWAYS:
       case OPEN_EXISTING:
-        return do_open_file(path, O_RDONLY, 0755, fdc);
+        return do_open_file(path, O_RDONLY, g_cfg->file_mode, fdc);
       case CREATE_ALWAYS:
         return STATUS_OBJECT_NAME_COLLISION;
       }
@@ -220,18 +223,21 @@ static NTSTATUS WinCephCreateFile(
       if ((st = WinCephCreateDirectory(FileName, DokanFileInfo)))
         return st;
       // Dokan expects a file handle even when creating new directories.
-      return do_open_file(path, O_RDONLY, 0755, fdc);
+      return do_open_file(path, O_RDONLY, g_cfg->file_mode, fdc);
     }
     dout(20) << __func__ << " " << path << ". New file." << dendl;
     switch (CreationDisposition) {
       case CREATE_NEW:
         // create & return 0
-        return do_open_file(path, O_CREAT | O_RDWR | O_EXCL, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_RDWR | O_EXCL,
+                            g_cfg->file_mode, fdc);
       case CREATE_ALWAYS:
         // create & return 0
-        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_TRUNC | O_RDWR,
+                            g_cfg->file_mode, fdc);
       case OPEN_ALWAYS:
-        return do_open_file(path, O_CREAT | O_RDWR, 0755, fdc);
+        return do_open_file(path, O_CREAT | O_RDWR,
+                            g_cfg->file_mode, fdc);
       case OPEN_EXISTING:
       case TRUNCATE_EXISTING:
         dout(2) << __func__ << " " << path << ": Not found." << dendl;

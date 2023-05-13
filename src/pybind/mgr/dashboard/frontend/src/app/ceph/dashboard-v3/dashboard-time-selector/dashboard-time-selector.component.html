@@ -1,0 +1,11 @@
+<div class="timeSelector">
+  <select id="timepicker"
+          name="timepicker"
+          [(ngModel)]="time"
+          (ngModelChange)="emitTime()"
+          class="form-select">
+    <option *ngFor="let key of times"
+            [ngValue]="key.value">{{ key.name }}
+    </option>
+  </select>
+</div>

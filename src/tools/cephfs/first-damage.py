@@ -56,7 +56,10 @@ MEMO = None
 REMOVE = False
 POOL = None
 NEXT_SNAP = None
-CONF = None
+CONF = os.environ.get('CEPH_CONF')
+REPAIR_NOSNAP = None
+
+CEPH_NOSNAP = 0xfffffffe # int32 -2
 
 DIR_PATTERN = re.compile(r'[0-9a-fA-F]{8,}\.[0-9a-fA-F]+')
 
@@ -73,28 +76,43 @@ def traverse(MEMO, ioctx):
         log.info("examining: %s", o.key)
 
         with rados.ReadOpCtx() as rctx:
-            it = ioctx.get_omap_vals(rctx, None, None, 100000)[0]
-            ioctx.operate_read_op(rctx, o.key)
-            for (dnk, val) in it:
-                log.debug('\t%s', dnk)
-                (first,) = struct.unpack('<I', val[:4])
-                if first > NEXT_SNAP:
-                    log.warning(f"found {o.key}:{dnk} first (0x{first:x}) > NEXT_SNAP (0x{NEXT_SNAP:x})")
-                    if REMOVE:
-                        log.warning(f"removing {o.key}:{dnk}")
-                        with rados.WriteOpCtx() as wctx:
-                            ioctx.remove_omap_keys(wctx, [dnk])
-                            ioctx.operate_write_op(wctx, o.key)
+            nkey = None
+            while True:
+                it = ioctx.get_omap_vals(rctx, nkey, None, 100)[0]
+                ioctx.operate_read_op(rctx, o.key)
+                nkey = None
+                for (dnk, val) in it:
+                    log.debug('\t%s: val size %d', dnk, len(val))
+                    (first,) = struct.unpack('<I', val[:4])
+                    if first > NEXT_SNAP:
+                        log.warning(f"found {o.key}:{dnk} first (0x{first:x}) > NEXT_SNAP (0x{NEXT_SNAP:x})")
+                        if REPAIR_NOSNAP and dnk.endswith("_head") and first == CEPH_NOSNAP:
+                            log.warning(f"repairing first==CEPH_NOSNAP damage, setting to NEXT_SNAP (0x{NEXT_SNAP:x})")
+                            first = NEXT_SNAP
+                            nval = bytearray(val)
+                            struct.pack_into("<I", nval, 0, NEXT_SNAP)
+                            with rados.WriteOpCtx() as wctx:
+                                ioctx.set_omap(wctx, (dnk,), (bytes(nval),))
+                                ioctx.operate_write_op(wctx, o.key)
+                        elif REMOVE:
+                            log.warning(f"removing {o.key}:{dnk}")
+                            with rados.WriteOpCtx() as wctx:
+                                ioctx.remove_omap_keys(wctx, [dnk])
+                                ioctx.operate_write_op(wctx, o.key)
+                    nkey = dnk
+                if nkey is None:
+                    break
         MEMO.write(f"{o.key}\n")
 
 if __name__ == '__main__':
     outpath = os.path.join(os.path.expanduser('~'), os.path.basename(sys.argv[0]))
     P = argparse.ArgumentParser(description="remove CephFS metadata dentries with invalid first snapshot")
-    P.add_argument('--conf', action='store', help='Ceph conf file', type=str)
+    P.add_argument('--conf', action='store', help='Ceph conf file', type=str, default=CONF)
     P.add_argument('--debug', action='store', help='debug file', type=str, default=outpath+'.log')
     P.add_argument('--memo', action='store', help='db for traversed dirs', default=outpath+'.memo')
     P.add_argument('--next-snap', action='store', help='force next-snap (dev)', type=int)
     P.add_argument('--remove', action='store_true', help='remove bad dentries', default=False)
+    P.add_argument('--repair-nosnap', action='store_true', help='repair first=CEPH_NOSNAP damage', default=False)
     P.add_argument('pool', action='store', help='metadata pool', type=str)
     NS = P.parse_args()
 
@@ -105,6 +123,7 @@ if __name__ == '__main__':
     POOL = NS.pool
     NEXT_SNAP = NS.next_snap
     CONF = NS.conf
+    REPAIR_NOSNAP = NS.repair_nosnap
 
     log.info("running as pid %d", os.getpid())
 

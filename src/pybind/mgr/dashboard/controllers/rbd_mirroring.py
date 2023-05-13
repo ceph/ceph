@@ -94,7 +94,7 @@ def get_daemons():
 
 def get_daemon_health(daemon):
     health = {
-        'health': MirrorHealth.MIRROR_HEALTH_UNKNOWN
+        'health': MirrorHealth.MIRROR_HEALTH_DISABLED
     }
     for _, pool_data in daemon['status'].items():
         if (health['health'] != MirrorHealth.MIRROR_HEALTH_ERROR
@@ -109,7 +109,7 @@ def get_daemon_health(daemon):
             health = {
                 'health': MirrorHealth.MIRROR_HEALTH_WARNING
             }
-        elif health['health'] == MirrorHealth.MIRROR_HEALTH_INFO:
+        elif health['health'] == MirrorHealth.MIRROR_HEALTH_DISABLED:
             health = {
                 'health': MirrorHealth.MIRROR_HEALTH_OK
             }
@@ -649,7 +649,7 @@ class RbdMirroringStatus(BaseController):
         # using dashboard.
         if not orch_status['available']:
             return status
-        if not CephService.get_service_list('rbd-mirror') or not CephService.get_pool_list('rbd'):
+        if not CephService.get_service_list('rbd-mirror') and not CephService.get_pool_list('rbd'):
             status['available'] = False
             status['message'] = 'RBD mirroring is not configured'  # type: ignore
         return status

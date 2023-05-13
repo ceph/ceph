@@ -8,6 +8,7 @@
 
 #include <deque>
 #include <list>
+#include <memory>
 #include <vector>
 #include <stdarg.h>
 #include <sstream>
@@ -61,6 +62,12 @@ namespace ceph {
     }
     static Formatter *create(std::string_view type) {
       return create(type, "json-pretty", "");
+    }
+    template <typename... Params>
+    static std::unique_ptr<Formatter> create_unique(Params &&...params)
+    {
+      return std::unique_ptr<Formatter>(
+	  Formatter::create(std::forward<Params>(params)...));
     }
 
     Formatter();

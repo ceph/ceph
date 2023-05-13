@@ -38,7 +38,7 @@ class TestWithSSH:
                 asyncssh_connect.side_effect = ConnectionLost('reason')
                 code, out, err = cephadm_module.check_host('test')
                 assert out == ''
-                assert "Host 'test' not found" in err
+                assert "Failed to connect to test at address (1::4)" in err
 
                 out = wait(cephadm_module, cephadm_module.get_hosts())[0].to_json()
                 assert out == HostSpec('test', '1::4', status='Offline').to_json()

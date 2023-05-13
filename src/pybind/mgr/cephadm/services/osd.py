@@ -74,7 +74,8 @@ class OSDService(CephService):
                        for h, ds in self.prepare_drivegroup(drive_group)]
             return await gather(*futures)
 
-        ret = self.mgr.wait_async(all_hosts())
+        with self.mgr.async_timeout_handler('cephadm deploy (osd daemon)'):
+            ret = self.mgr.wait_async(all_hosts())
         return ", ".join(filter(None, ret))
 
     async def create_single_host(self,
@@ -308,7 +309,8 @@ class OSDService(CephService):
 
                 # get preview data from ceph-volume
                 for cmd in cmds:
-                    out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
+                    with self.mgr.async_timeout_handler(host, f'cephadm ceph-volume -- {cmd}'):
+                        out, err, code = self.mgr.wait_async(self._run_ceph_volume_command(host, cmd))
                     if out:
                         try:
                             concat_out: Dict[str, Any] = json.loads(' '.join(out))
@@ -542,10 +544,14 @@ class RemoveUtil(object):
     def zap_osd(self, osd: "OSD") -> str:
         "Zaps all devices that are associated with an OSD"
         if osd.hostname is not None:
-            out, err, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
-                osd.hostname, 'osd', 'ceph-volume',
-                ['--', 'lvm', 'zap', '--destroy', '--osd-id', str(osd.osd_id)],
-                error_ok=True))
+            cmd = ['--', 'lvm', 'zap', '--osd-id', str(osd.osd_id)]
+            if not osd.no_destroy:
+                cmd.append('--destroy')
+            with self.mgr.async_timeout_handler(osd.hostname, f'cephadm ceph-volume {" ".join(cmd)}'):
+                out, err, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
+                    osd.hostname, 'osd', 'ceph-volume',
+                    cmd,
+                    error_ok=True))
             self.mgr.cache.invalidate_host_devices(osd.hostname)
             if code:
                 raise OrchestratorError('Zap failed: %s' % '\n'.join(out + err))
@@ -608,7 +614,8 @@ class OSD:
                  replace: bool = False,
                  force: bool = False,
                  hostname: Optional[str] = None,
-                 zap: bool = False):
+                 zap: bool = False,
+                 no_destroy: bool = False):
         # the ID of the OSD
         self.osd_id = osd_id
 
@@ -647,6 +654,8 @@ class OSD:
 
         # Whether devices associated with the OSD should be zapped (DATA ERASED)
         self.zap = zap
+        # Whether all associated LV devices should be destroyed.
+        self.no_destroy = no_destroy
 
     def start(self) -> None:
         if self.started:
@@ -886,7 +895,7 @@ class OSDRemovalQueue(object):
     def _ready_to_drain_osds(self) -> List["OSD"]:
         """
         Returns OSDs that are ok to stop and not yet draining. Only returns as many OSDs as can
-        be accomodated by the 'max_osd_draining_count' config value, considering the number of OSDs
+        be accommodated by the 'max_osd_draining_count' config value, considering the number of OSDs
         that are already draining.
         """
         draining_limit = max(1, self.mgr.max_osd_draining_count)

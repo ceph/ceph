@@ -15,6 +15,7 @@
  *
  */
 
+#include <algorithm>
 #include <list>
 #include <map>
 #include <ostream>
@@ -5681,7 +5682,7 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(9, 5, bl);
+  ENCODE_START(10, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
@@ -5696,12 +5697,13 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode((uint32_t)0, bl);  // map<int64_t,epoch_t> pool_last_epoch_marked_full
   encode(purged_snaps_last, bl);
   encode(last_purged_snaps_scrub, bl);
+  encode(cluster_osdmap_trim_lower_bound, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -5735,6 +5737,11 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     purged_snaps_last = 0;
   }
+  if (struct_v >= 10) {
+    decode(cluster_osdmap_trim_lower_bound, bl);
+  } else {
+    cluster_osdmap_trim_lower_bound = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5754,6 +5761,8 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_int("last_epoch_mounted", mounted);
   f->dump_unsigned("purged_snaps_last", purged_snaps_last);
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
+  f->dump_int("cluster_osdmap_trim_lower_bound",
+              cluster_osdmap_trim_lower_bound);
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
@@ -6708,9 +6717,34 @@ ostream& operator<<(ostream& out, const PushReplyOp &op)
 
 uint64_t PushReplyOp::cost(CephContext *cct) const
 {
-
-  return cct->_conf->osd_push_per_object_cost +
-    cct->_conf->osd_recovery_max_chunk;
+  if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+    /* In general, we really never want to throttle PushReplyOp messages.
+     * As long as the object is smaller than osd_recovery_max_chunk (8M at
+     * time of writing this comment, so this is basically always true),
+     * processing the PushReplyOp does not cost any further IO and simply
+     * permits the object once more to be written to.
+     *
+     * In the unlikely event that the object is larger than
+     * osd_recovery_max_chunk (again, 8M at the moment, so never for common
+     * configurations of rbd and virtually never for cephfs and rgw),
+     * we *still* want to push out the next portion immediately so that we can
+     * release the object for IO.
+     *
+     * The throttling for this operation on the primary occurs at the point
+     * where we queue the PGRecoveryContext which calls into recover_missing
+     * and recover_backfill to initiate pushes.
+     * See OSD::queue_recovery_context.
+     */
+    return 1;
+  } else {
+    /* We retain this legacy behavior for WeightedPriorityQueue. It seems to
+     * require very large costs for several messages in order to do any
+     * meaningful amount of throttling.  This branch should be removed after
+     * Reef.
+     */
+    return cct->_conf->osd_push_per_object_cost +
+      cct->_conf->osd_recovery_max_chunk;
+  }
 }
 
 // -- PullOp --
@@ -6774,8 +6808,20 @@ ostream& operator<<(ostream& out, const PullOp &op)
 
 uint64_t PullOp::cost(CephContext *cct) const
 {
-  return cct->_conf->osd_push_per_object_cost +
-    cct->_conf->osd_recovery_max_chunk;
+  if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+    return std::clamp<uint64_t>(
+      recovery_progress.estimate_remaining_data_to_recover(recovery_info),
+      1,
+      cct->_conf->osd_recovery_max_chunk);
+  } else {
+    /* We retain this legacy behavior for WeightedPriorityQueue. It seems to
+     * require very large costs for several messages in order to do any
+     * meaningful amount of throttling.  This branch should be removed after
+     * Reef.
+     */
+    return cct->_conf->osd_push_per_object_cost +
+      cct->_conf->osd_recovery_max_chunk;
+  }
 }
 
 // -- PushOp --

@@ -54,9 +54,12 @@ namespace TOPNSPC::crypto {
       private:
 	EVP_MD_CTX *mpContext;
 	const EVP_MD *mpType;
+        EVP_MD *mpType_FIPS = nullptr;
       public:
 	OpenSSLDigest (const EVP_MD *_type);
 	~OpenSSLDigest ();
+	OpenSSLDigest(OpenSSLDigest&& o) noexcept;
+	OpenSSLDigest& operator=(OpenSSLDigest&& o) noexcept;
 	void Restart();
 	void SetFlags(int flags);
 	void Update (const unsigned char *input, size_t length);

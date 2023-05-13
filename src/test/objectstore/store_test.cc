@@ -26,7 +26,6 @@
 #include <gtest/gtest.h>
 
 #include "os/ObjectStore.h"
-#include "os/filestore/FileStore.h"
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
 #include "os/bluestore/BlueFS.h"
@@ -6839,7 +6838,6 @@ INSTANTIATE_TEST_SUITE_P(
   StoreTest,
   ::testing::Values(
     "memstore",
-    "filestore",
 #if defined(WITH_BLUESTORE)
     "bluestore",
 #endif
@@ -6851,7 +6849,6 @@ INSTANTIATE_TEST_SUITE_P(
   StoreTestSpecificAUSize,
   ::testing::Values(
     "memstore",
-    "filestore",
 #if defined(WITH_BLUESTORE)
     "bluestore",
 #endif
@@ -6863,7 +6860,6 @@ INSTANTIATE_TEST_SUITE_P(
   StoreTestOmapUpgrade,
   ::testing::Values(
     "memstore",
-    "filestore",
 #if defined(WITH_BLUESTORE)
     "bluestore",
 #endif
@@ -10397,6 +10393,14 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "rocksdb_original");
+  // original RocksDB settings used before https://github.com/ceph/ceph/pull/47221/
+  // which enable BlueFS spillover.
+  SetVal(g_conf(), "bluestore_rocksdb_options",
+    "compression=kNoCompression,max_write_buffer_number=4,"
+    "min_write_buffer_number_to_merge=1,recycle_log_file_num=4,"
+    "write_buffer_size=268435456,writable_file_max_buffer_size=0,"
+    "compaction_readahead_size=2097152,max_background_compactions=2,"
+    "max_total_wal_size=1073741824");
 
   g_conf().apply_changes(nullptr);
 
@@ -10410,10 +10414,17 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
       //experimentally it was discovered that this case results in 400+MB spillover
       //using lower 300MB threshold just to be safe enough
-      std::cout << "db_used:" << logger->get(l_bluefs_db_used_bytes) << std::endl;
-      std::cout << "slow_used:" << logger->get(l_bluefs_slow_used_bytes) << std::endl;
+      std::cout << "DB used:" << logger->get(l_bluefs_db_used_bytes) << std::endl;
+      std::cout << "SLOW used:" << logger->get(l_bluefs_slow_used_bytes) << std::endl;
       ASSERT_GE(logger->get(l_bluefs_slow_used_bytes), 16 * 1024 * 1024);
 
+      struct store_statfs_t statfs;
+      osd_alert_list_t alerts;
+      int r = store->statfs(&statfs, &alerts);
+      ASSERT_EQ(r, 0);
+      ASSERT_EQ(alerts.count("BLUEFS_SPILLOVER"), 1);
+      std::cout << "spillover_alert:" << alerts.find("BLUEFS_SPILLOVER")->second
+                << std::endl;
     }
   );
 }

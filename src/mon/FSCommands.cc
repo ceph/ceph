@@ -461,6 +461,17 @@ public:
       {
         fs->mds_map.set_max_filesize(n);
       });
+    } else if (var == "max_xattr_size") {
+      if (interr.length()) {
+	ss << var << " requires an integer value";
+	return -EINVAL;
+      }
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [n](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_max_xattr_size(n);
+      });
     } else if (var == "allow_new_snaps") {
       bool enable_snaps = false;
       int r = parse_bool(val, &enable_snaps, ss);
@@ -681,6 +692,38 @@ public:
         fs->mds_map.set_min_compat_client(vno);
       };
       fsmap.modify_filesystem(fs->fscid, std::move(f));
+    } else if (var == "refuse_client_session") {
+      bool refuse_session = false;
+      int r = parse_bool(val, &refuse_session, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      if (refuse_session) {
+        if (!(fs->mds_map.test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION))) {
+          fsmap.modify_filesystem(
+            fs->fscid,
+            [](std::shared_ptr<Filesystem> fs)
+          {
+            fs->mds_map.set_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);
+          });
+          ss << "client(s) blocked from establishing new session(s)"; 
+        } else {
+          ss << "client(s) already blocked from establishing new session(s)";
+        }     
+      } else {
+          if (fs->mds_map.test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION)) {
+            fsmap.modify_filesystem(
+              fs->fscid,
+              [](std::shared_ptr<Filesystem> fs)
+            {
+              fs->mds_map.clear_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);
+            });
+            ss << "client(s) allowed to establish new session(s)"; 
+          } else {
+            ss << "client(s) already allowed to establish new session(s)";
+          }
+      }
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;
@@ -1543,6 +1586,12 @@ int FileSystemCommandHandler::_check_pool(
   if (!pool) {
     *ss << "pool id '" << pool_id << "' does not exist";
     return -ENOENT;
+  }
+
+  if (pool->has_snaps()) {
+    *ss << "pool(" << pool_id <<") already has mon-managed snaps; "
+	   "can't attach pool to fs";
+    return -EOPNOTSUPP;
   }
 
   const string& pool_name = osd_map.get_pool_name(pool_id);

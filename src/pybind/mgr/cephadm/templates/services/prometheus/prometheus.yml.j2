@@ -8,33 +8,102 @@ rule_files:
 {% if alertmanager_sd_url %}
 alerting:
   alertmanagers:
+{% if secure_monitoring_stack %}
+    - scheme: https
+      basic_auth:
+        username: {{ alertmanager_web_user }}
+        password: {{ alertmanager_web_password }}
+      tls_config:
+        ca_file: root_cert.pem
+      http_sd_configs:
+        - url: {{ alertmanager_sd_url }}
+          basic_auth:
+            username: {{ service_discovery_username }}
+            password: {{ service_discovery_password }}
+          tls_config:
+            ca_file: root_cert.pem
+{% else %}
     - scheme: http
       http_sd_configs:
         - url: {{ alertmanager_sd_url }}
-          tls_config:
-            ca_file: root_cert.pem
+{% endif %}
 {% endif %}
 
 scrape_configs:
   - job_name: 'ceph'
+{% if secure_monitoring_stack %}
+    scheme: https
+    tls_config:
+      ca_file: mgr_prometheus_cert.pem
     honor_labels: true
     http_sd_configs:
     - url: {{ mgr_prometheus_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+{% else %}
+    honor_labels: true
+    http_sd_configs:
+    - url: {{ mgr_prometheus_sd_url }}
+{% endif %}
 
 {% if node_exporter_sd_url %}
   - job_name: 'node'
+{% if secure_monitoring_stack %}
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
     http_sd_configs:
     - url: {{ node_exporter_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+{% else %}
+    http_sd_configs:
+    - url: {{ node_exporter_sd_url }}
+{% endif %}
 {% endif %}
 
 {% if haproxy_sd_url %}
   - job_name: 'haproxy'
+{% if secure_monitoring_stack %}
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
     http_sd_configs:
     - url: {{ haproxy_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
       tls_config:
         ca_file: root_cert.pem
+{% else %}
+    http_sd_configs:
+    - url: {{ haproxy_sd_url }}
+{% endif %}
+{% endif %}
+
+{% if ceph_exporter_sd_url %}
+  - job_name: 'ceph-exporter'
+{% if secure_monitoring_stack %}
+    honor_labels: true
+    scheme: https
+    tls_config:
+      ca_file: root_cert.pem
+    http_sd_configs:
+    - url: {{ ceph_exporter_sd_url }}
+      basic_auth:
+        username: {{ service_discovery_username }}
+        password: {{ service_discovery_password }}
+      tls_config:
+        ca_file: root_cert.pem
+{% else %}
+    honor_labels: true
+    http_sd_configs:
+    - url: {{ ceph_exporter_sd_url }}
+{% endif %}
 {% endif %}
