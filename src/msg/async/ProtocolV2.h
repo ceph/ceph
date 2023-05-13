@@ -153,6 +153,10 @@ private:
   ssize_t write_message(Message *m, bool more);
   void handle_message_ack(uint64_t seq);
   void reset_compression();
+  inline void log_latency(const char* name,
+    const double& lat,
+    double lat_threshold,
+    const char* info = "");
 
   CONTINUATION_DECL(ProtocolV2, _wait_for_peer_banner);
   READ_BPTR_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner);

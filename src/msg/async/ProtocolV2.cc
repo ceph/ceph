@@ -759,6 +759,21 @@ void ProtocolV2::write_event() {
   }
 }
 
+void ProtocolV2::log_latency(
+  const char* name,
+  const double& lat,
+  double lat_threshold,
+  const char* info)
+{
+  if (lat_threshold > 0.0 &&
+      lat >= lat_threshold) {
+    ldout(cct, 0) << __func__ << " slow operation observed for " << name
+      << ", latency = " << lat
+      << info
+      << dendl;
+  }
+}
+
 bool ProtocolV2::is_queued() {
   return !out_queue.empty() || connection->is_queued();
 }
@@ -1418,6 +1433,12 @@ CtPtr ProtocolV2::handle_message() {
   message->set_recv_stamp(recv_stamp);
   message->set_throttle_stamp(throttle_stamp);
   message->set_recv_complete_stamp(ceph_clock_now());
+
+  const utime_t latency = ceph_clock_now() - recv_stamp;
+  connection->logger->tinc(l_msgr_all_read_lat, latency);
+  log_latency(__func__,
+    latency,
+    cct->_conf->ms_log_op_age);
 
   // check received seq#.  if it is old, drop the message.
   // note that incoming messages may skip ahead.  this is convenient for the

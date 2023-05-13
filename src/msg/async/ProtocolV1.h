@@ -206,6 +206,11 @@ protected:
   void reset_recv_state();
   void reset_security();
 
+  inline void log_latency(const char* name,
+    const double& lat,
+    double lat_threshold,
+    const char* info = "");
+
   std::ostream& _conn_prefix(std::ostream *_dout);
 
 public:

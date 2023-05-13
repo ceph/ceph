@@ -957,6 +957,12 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
   message->set_throttle_stamp(throttle_stamp);
   message->set_recv_complete_stamp(ceph_clock_now());
 
+  const utime_t latency = ceph_clock_now() - recv_stamp;
+  connection->logger->tinc(l_msgr_all_read_lat, latency);
+  log_latency(__func__,
+    latency,
+    cct->_conf->ms_log_op_age);
+
   // check received seq#.  if it is old, drop the message.
   // note that incoming messages may skip ahead.  this is convenient for the
   // client side queueing because messages can't be renumbered, but the (kernel)
@@ -1317,6 +1323,21 @@ void ProtocolV1::reset_recv_state()
         << connection->dispatch_queue->dispatch_throttler.get_current() << "/"
         << connection->dispatch_queue->dispatch_throttler.get_max() << dendl;
     connection->dispatch_queue->dispatch_throttle_release(cur_msg_size);
+  }
+}
+
+void ProtocolV1::log_latency(
+  const char* name,
+  const double& lat,
+  double lat_threshold,
+  const char* info)
+{
+  if (lat_threshold > 0.0 &&
+      lat >= lat_threshold) {
+    ldout(cct, 0) << __func__ << " slow operation observed for " << name
+      << ", latency = " << lat
+      << info
+      << dendl;
   }
 }
 

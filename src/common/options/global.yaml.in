@@ -1504,6 +1504,12 @@ options:
   level: advanced
   default: 8192
   with_legacy: true
+- name: ms_log_op_age
+  type: float
+  level: advanced
+  desc: log operation if it's slower than this age (seconds)
+  default: 1
+  with_legacy: true
 - name: inject_early_sigterm
   type: bool
   level: dev
