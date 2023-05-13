@@ -58,7 +58,7 @@
 #include "ZonedFreelistManager.h"
 #endif
 
-#if defined(WITH_LTTNG)
+#if defined(WITH_LTTNG) && !defined(WITH_EXPERIMENTAL)
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/bluestore.h"
@@ -71,8 +71,31 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
-using bid_t = decltype(BlueStore::Blob::id);
+#ifdef WITH_EXPERIMENTAL
+#  define BS_FLAVOR "bluestore-rdr"
+#else
+#  define BS_FLAVOR "bluestore"
+#endif
 
+#ifdef WITH_EXPERIMENTAL
+// bluestore_cache_onode
+MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Onode, bluestore_onode_exp,
+			      bluestore_cache_onode);
+
+// bluestore_cache_other
+MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Buffer, bluestore_buffer_exp,
+			      bluestore_Buffer);
+MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Extent, bluestore_extent_exp,
+			      bluestore_Extent);
+MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Blob, bluestore_blob_exp,
+			      bluestore_Blob);
+MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::SharedBlob, bluestore_shared_blob_exp,
+			      bluestore_SharedBlob);
+
+// bluestore_txc
+MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::TransContext, bluestore_transcontext_exp,
+			      bluestore_txc);
+#else
 // bluestore_cache_onode
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::Onode, bluestore_onode,
 			      bluestore_cache_onode);
@@ -89,6 +112,14 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::SharedBlob, bluestore_shared_blob,
 // bluestore_txc
 MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
 			      bluestore_txc);
+#endif // WITH_EXPERIMENTAL
+
+#ifdef WITH_EXPERIMENTAL
+namespace ceph::experimental {
+#endif
+
+using bid_t = decltype(BlueStore::Blob::id);
+
 using std::byte;
 using std::deque;
 using std::min;
@@ -1699,7 +1730,7 @@ BlueStore::BufferCacheShard *BlueStore::BufferCacheShard::create(
 // BufferSpace
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.BufferSpace(" << this << " in " << cache << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".BufferSpace(" << this << " in " << cache << ") "
 
 void BlueStore::BufferSpace::_clear(BufferCacheShard* cache)
 {
@@ -1987,7 +2018,7 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::BufferSpace& bc)
 // OnodeSpace
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.OnodeSpace(" << this << " in " << cache << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".OnodeSpace(" << this << " in " << cache << ") "
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::add_onode(const ghobject_t& oid,
   OnodeRef& o)
@@ -2119,7 +2150,7 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
 // SharedBlob
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.sharedblob(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".sharedblob(" << this << ") "
 #undef dout_context
 #define dout_context coll->store->cct
 
@@ -2224,7 +2255,7 @@ void BlueStore::SharedBlob::finish_write(uint64_t seq)
 // SharedBlobSet
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.sharedblobset(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".sharedblobset(" << this << ") "
 
 template <int LogLevelV = 30>
 void BlueStore::SharedBlobSet::dump(CephContext *cct)
@@ -2238,7 +2269,7 @@ void BlueStore::SharedBlobSet::dump(CephContext *cct)
 // Blob
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".blob(" << this << ") "
 
 #ifdef WITH_ESB
 BlueStore::Blob::~Blob()
@@ -2455,7 +2486,7 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
 }
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.blob(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".blob(" << this << ") "
 #undef dout_context
 #define dout_context cct
 
@@ -3054,7 +3085,7 @@ BlueStore::OldExtent* BlueStore::OldExtent::create(CollectionRef c,
 // ExtentMap
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.extentmap(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".extentmap(" << this << ") "
 #undef dout_context
 #define dout_context onode->c->store->cct
 
@@ -4642,7 +4673,7 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::ExtentMap::debug_au
 // Onode
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
+#define dout_prefix *_dout << BS_FLAVOR ".onode(" << this << ")." << __func__ << " "
 
 const std::string& BlueStore::Onode::calc_omap_prefix(uint8_t flags)
 {
@@ -4848,7 +4879,7 @@ bool BlueStore::WriteContext::has_conflict(
 
 // DeferredBatch
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.DeferredBatch(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".DeferredBatch(" << this << ") "
 #undef dout_context
 #define dout_context cct
 
@@ -4959,7 +4990,7 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 // Collection
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR "(" << store->path << ").collection(" << cid << " " << this << ") "
 
 BlueStore::Collection::Collection(BlueStore *store_, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t cid)
   : CollectionImpl(store_->cct, cid),
@@ -5307,7 +5338,7 @@ void BlueStore::Collection::split_cache(
 // MempoolThread
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.MempoolThread(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".MempoolThread(" << this << ") "
 #undef dout_context
 #define dout_context store->cct
 
@@ -5545,7 +5576,7 @@ void BlueStore::MempoolThread::_update_cache_settings()
 // OmapIteratorImpl
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore.OmapIteratorImpl(" << this << ") "
+#define dout_prefix *_dout << BS_FLAVOR ".OmapIteratorImpl(" << this << ") "
 
 BlueStore::OmapIteratorImpl::OmapIteratorImpl(
   PerfCounters* _logger, CollectionRef c, OnodeRef& o, KeyValueDB::Iterator it)
@@ -5695,7 +5726,7 @@ bufferlist BlueStore::OmapIteratorImpl::value()
 // =====================================
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore(" << path << ") "
+#define dout_prefix *_dout << BS_FLAVOR "(" << path << ") "
 #undef dout_context
 #define dout_context cct
 
@@ -7487,7 +7518,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
       return r;
     }
 
-    if (type != "bluestore") {
+    if (type != BS_FLAVOR) {
       derr << __func__ << " expected bluestore, but type is " << type << dendl;
       return -EIO;
     }
@@ -8192,12 +8223,12 @@ int BlueStore::mkfs()
     string type;
     r = read_meta("type", &type);
     if (r == 0) {
-      if (type != "bluestore") {
+      if (type != BS_FLAVOR) {
 	derr << __func__ << " expected bluestore, but type is " << type << dendl;
 	return -EIO;
       }
     } else {
-      r = write_meta("type", "bluestore");
+      r = write_meta("type", BS_FLAVOR);
       if (r < 0)
         return r;
     }
@@ -19385,7 +19416,7 @@ bool RocksDBBlueFSVolumeSelector::compare(BlueFSVolumeSelector* other) {
 //================================================================================================================
 
 #undef dout_prefix
-#define dout_prefix *_dout << "bluestore::NCB::" << __func__ << "::"
+#define dout_prefix *_dout << BS_FLAVOR "::NCB::" << __func__ << "::"
 
 static const std::string allocator_dir    = "ALLOCATOR_NCB_DIR";
 static const std::string allocator_file   = "ALLOCATOR_NCB_FILE";
@@ -19468,7 +19499,13 @@ struct allocator_image_header {
     }
   }
 };
+#ifdef WITH_EXPERIMENTAL
+}
+WRITE_CLASS_DENC(ceph::experimental::allocator_image_header)
+namespace ceph::experimental {
+#else
 WRITE_CLASS_DENC(allocator_image_header)
+#endif
 
 // 56 Bytes trailer for on-disk alloator image
 struct allocator_image_trailer {
@@ -19581,7 +19618,13 @@ struct allocator_image_trailer {
     denc(v.allocation_size, p);
   }
 };
+#ifdef WITH_EXPERIMENTAL
+}
+WRITE_CLASS_DENC(ceph::experimental::allocator_image_trailer)
+namespace ceph::experimental {
+#else
 WRITE_CLASS_DENC(allocator_image_trailer)
+#endif
 
 
 //-------------------------------------------------------------------------------------
@@ -20786,3 +20829,7 @@ int BlueStore::commit_to_real_manager()
 
 //================================================================================================================
 //================================================================================================================
+
+#ifdef WITH_EXPERIMENTAL
+} // namespace ceph::experimental
+#endif

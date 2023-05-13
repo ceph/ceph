@@ -3753,6 +3753,7 @@ options:
   default: bluestore
   enum_values:
   - bluestore
+  - bluestore-rdr
   - filestore
   - memstore
   - kstore

@@ -20,6 +20,7 @@
 #include "memstore/MemStore.h"
 #if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
+#include "bluestore/BlueStore_exp.h"
 #endif
 #ifndef WITH_SEASTAR
 #include "kstore/KStore.h"
@@ -36,8 +37,22 @@ std::unique_ptr<ObjectStore> ObjectStore::create(
     return std::make_unique<MemStore>(cct, data);
   }
 #if defined(WITH_BLUESTORE)
-  if (type == "bluestore" || type == "random") {
+  if (type == "bluestore") {
     return std::make_unique<BlueStore>(cct, data);
+#ifndef WITH_SEASTAR
+  } else if (type == "bluestore-rdr") {
+    return std::make_unique<ceph::experimental::BlueStore>(cct, data);
+#endif
+  } else if (type == "random") {
+#ifndef WITH_SEASTAR
+    if (rand() % 2) {
+      return std::make_unique<BlueStore>(cct, data);
+    } else {
+      return std::make_unique<ceph::experimental::BlueStore>(cct, data);
+    }
+#else
+    return std::make_unique<BlueStore>(cct, data);
+#endif
   }
 #endif
   return nullptr;
