@@ -18,6 +18,7 @@ set(libos_srcs
   kstore/KStore.cc
   kstore/kstore_types.cc
   fs/FS.cc)
+set (libos_exp_srcs)
 
 if(WITH_BLUESTORE)
   list(APPEND libos_srcs
@@ -36,6 +37,9 @@ if(WITH_BLUESTORE)
     bluestore/AvlAllocator.cc
     bluestore/BtreeAllocator.cc
     bluestore/HybridAllocator.cc
+  )
+  list (APPEND libos_exp_srcs
+    bluestore/BlueStore.cc
   )
 endif(WITH_BLUESTORE)
 
@@ -66,8 +70,10 @@ if(HAVE_LIBZFS)
 endif()
 
 add_library(os STATIC ${libos_srcs})
-target_link_libraries(os blk)
+add_library(os_exp STATIC ${libos_exp_srcs})
+target_compile_definitions(os_exp PRIVATE -DWITH_EXPERIMENTAL)
 
+target_link_libraries(os blk)
 target_link_libraries(os heap_profiler kv)
 
 if(WITH_BLUEFS)
@@ -98,6 +104,9 @@ if(WITH_JAEGER)
 endif()
 
 target_link_libraries(os kv)
+target_link_libraries(os_exp os)
+target_link_libraries(os_exp kv)
+target_link_libraries(os os_exp)
 
 add_dependencies(os compressor_plugins)
 add_dependencies(os crypto_plugins)
