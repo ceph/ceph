@@ -36,7 +36,8 @@ void stack_dump(lua_State* L) {
   std::cout << std::endl << " ----------------  Stack Dump ----------------" << std::endl;
   std::cout << "Stack Size: " << top << std::endl;
   for (int i = 1, j = -top; i <= top; i++, j++) {
-    std::cout << "[" << i << "," << j << "]: " << luaL_tolstring(L, i, NULL) << std::endl;
+    std::cout << "[" << i << "," << j << "][" << lua_typename(L, lua_type(L, i)) << "]: " 
+        << luaL_tolstring(L, i, NULL) << std::endl;
     lua_pop(L, 1);
   }
   std::cout << "--------------- Stack Dump Finished ---------------" << std::endl;
