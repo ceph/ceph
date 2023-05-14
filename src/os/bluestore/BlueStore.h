@@ -62,6 +62,10 @@ class FreelistManager;
 class SimpleBitmap;
 
 #ifdef WITH_EXPERIMENTAL
+
+// enable particular experimental features of BlueStore
+#define WITH_ESB
+
 namespace ceph::experimental {
 #endif
 
