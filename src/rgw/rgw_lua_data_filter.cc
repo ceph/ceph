@@ -37,7 +37,7 @@ struct BufferlistMetaTable : public EmptyMetaTable {
   }
 
   static int PairsClosure(lua_State* L) {
-    auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(1)));
+    auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ceph_assert(bl);
     lua_pushlightuserdata(L, bl);
     lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
