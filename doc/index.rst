@@ -11,6 +11,12 @@ Ceph delivers **object, block, and file storage in one unified system**.
    Ceph project. (Click anywhere in this paragraph to read the "Basic 
    Workflow" page of the Ceph Developer Guide.) <basic workflow dev guide>`.
 
+.. note::
+
+   :ref:`If you want to make a commit to the documentation but you don't
+   know how to get started, read the "Documenting Ceph" page. (Click anywhere
+   in this paragraph to read the "Documenting Ceph" page.) <documenting_ceph>`.
+
 .. raw:: html
 
       <style type="text/css">div.body h3{margin:5px 0px 0px 0px;}</style>
