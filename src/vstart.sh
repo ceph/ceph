@@ -229,6 +229,7 @@ options:
 	--rgw_compression specify the rgw compression plugin
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
+	--bluestore-rdr use experimental, RDR variant of bluestore as the osd objectstore backend
 	-K, --kstore use kstore as the osd objectstore backend
 	--cyanstore use cyanstore as the osd objectstore backend
 	--memstore use memstore as the osd objectstore backend
@@ -467,6 +468,9 @@ case $1 in
         ;;
     -b | --bluestore)
         objectstore="bluestore"
+        ;;
+    --bluestore-rdr)
+        objectstore="bluestore-rdr"
         ;;
     -K | --kstore)
         objectstore="kstore"
@@ -754,7 +758,7 @@ EOF
         COSDSHORT="        osd max object name len = 460
         osd max object namespace len = 64"
     fi
-    if [ "$objectstore" == "bluestore" ]; then
+    if [ "$objectstore" == "bluestore" -o "$objectstore" == "bluestore-rdr"]; then
         if [ "$spdk_enabled" -eq 1 ] || [ "$pmem_enabled" -eq 1 ]; then
             BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
@@ -1029,7 +1033,7 @@ EOF
                     ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
                 fi
             fi
-            if [ "$objectstore" == "bluestore" ]; then
+            if [ "$objectstore" == "bluestore" -o "$objectstore" == "bluestore-rdr"]; then
                 wconf <<EOF
         bluestore fsck on mount = false
 EOF
