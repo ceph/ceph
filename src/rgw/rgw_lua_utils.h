@@ -126,31 +126,42 @@ void create_metatable(lua_State* L, bool toplevel, Upvalues... upvalues)
   }
   // create metatable
   [[maybe_unused]] const auto rc = luaL_newmetatable(L, MetaTable::Name().c_str());
+  const auto table_stack_pos = lua_gettop(L);
+
+  // add "index" closure to metatable
   lua_pushliteral(L, "__index");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::IndexClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+
+  // add "newindex" closure to metatable
   lua_pushliteral(L, "__newindex");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::NewIndexClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+
+  // add "pairs" closure to metatable
   lua_pushliteral(L, "__pairs");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::PairsClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+
+  // add "len" closure to metatable
   lua_pushliteral(L, "__len");
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
   lua_pushcclosure(L, MetaTable::LenClosure, upvals_size);
-  lua_rawset(L, -3);
+  lua_rawset(L, table_stack_pos);
+
   // tie metatable and table
+  ceph_assert(lua_gettop(L) == table_stack_pos);
   lua_setmetatable(L, -2);
 }
 
