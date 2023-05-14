@@ -50,6 +50,7 @@
 #include "common/blkdev.h"
 #include "common/numa.h"
 #include "common/pretty_binary.h"
+#include "common/WorkQueue.h"
 #include "kv/KeyValueHistogram.h"
 
 #ifdef HAVE_LIBZBD
@@ -8466,8 +8467,6 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
 
   return o;
 }
-
-#include "common/WorkQueue.h"
 
 class ShallowFSCKThreadPool : public ThreadPool
 {
@@ -19180,8 +19179,6 @@ int BlueStore::read_allocation_from_drive_on_startup()
 // Not meant to be run by customers
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
-#include <stdlib.h>
-#include <algorithm>
 //---------------------------------------------------------
 int cmpfunc (const void * a, const void * b)
 {
