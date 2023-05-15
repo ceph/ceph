@@ -8599,6 +8599,98 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
   return r;
 }
 
+int Client::get_stat_size(Inode *in, const UserPerm& perms, uint64_t *stat_size)
+{
+  int r;
+
+  *stat_size = 0;
+
+  if (cct->_conf->client_dirsize_rbytes) {
+    if (in->snapid == CEPH_SNAPDIR) {
+      if (mdsmap->get_snap_rstat()) {
+        vinodeno_t vino(in->vino().ino, CEPH_NOSNAP);
+        if (!inode_map.count(vino)) {
+          r = _lookup_vino(vino, perms, nullptr);
+          if (r) {
+            return r;
+          }
+        }
+        ceph_assert(inode_map.count(vino));
+        Inode *pin = inode_map[vino];
+
+        for (const auto &[snapid, rstat] : pin->snap_rstats) {
+          *stat_size += rstat.rbytes;
+        }
+	if (!pin->is_inode_cowed) {
+          *stat_size += pin->rstat.rbytes;
+        }
+      } else {
+        *stat_size = 0;
+      }
+    } else if (in->snapid != CEPH_NOSNAP) {
+      if (mdsmap->get_snap_rstat()) {
+        vinodeno_t vino(in->vino().ino, CEPH_NOSNAP);
+        if (!inode_map.count(vino)) {
+          r = _lookup_vino(vino, perms, nullptr);
+          if (r) {
+            return r;
+          }
+        }
+        ceph_assert(inode_map.count(vino));
+        Inode *pin = inode_map[vino];
+
+        /*
+         * If not in the snap_rstats map we are sure that the MDSs haven't
+         * COWed the CInode to the old_inodes yet. Then we should use the
+         * rstat from the parent.
+         */
+        if (pin->snap_rstats.count(in->snapid)) {
+          *stat_size = pin->snap_rstats[in->snapid].rbytes;
+        } else {
+          *stat_size = pin->rstat.rbytes;
+        }
+      } else {
+        *stat_size = 0;
+      }
+    } else {
+      *stat_size = in->rstat.rbytes;
+    }
+  } else {
+    if (in->snapid == CEPH_SNAPDIR) {
+      SnapRealm *realm = get_snap_realm_maybe(in->vino().ino);
+      if (realm) {
+        *stat_size = realm->my_snaps.size();
+        put_snap_realm(realm);
+      }
+    } else if (in->snapid != CEPH_NOSNAP) {
+      vinodeno_t vino(in->vino().ino, CEPH_NOSNAP);
+      if (!inode_map.count(vino)) {
+        r = _lookup_vino(vino, perms, nullptr);
+        if (r) {
+          return r;
+        }
+      }
+      ceph_assert(inode_map.count(vino));
+      Inode *pin = inode_map[vino];
+
+      /*
+       * If not in the snap_dirstats map we are sure that the MDSs haven't
+       * COWed the CInode to the old_inodes yet. Then we should use the
+       * rstat from the parent.
+       */
+      if (pin->snap_dirstats.count(in->snapid)) {
+        *stat_size = pin->snap_dirstats[in->snapid].size();
+      } else {
+        *stat_size = pin->dirstat.size();
+      }
+    } else {
+      *stat_size = in->dirstat.size();
+    }
+  }
+
+  return 0;
+}
+
 int Client::fill_stat(Inode *in, struct stat *st, const UserPerm& perms,
                       frag_info_t *dirstat, nest_info_t *rstat)
 {
@@ -8643,17 +8735,13 @@ int Client::fill_stat(Inode *in, struct stat *st, const UserPerm& perms,
   stat_set_mtime_sec(st, in->mtime.sec());
   stat_set_mtime_nsec(st, in->mtime.nsec());
   if (in->is_dir()) {
-    if (cct->_conf->client_dirsize_rbytes) {
-      st->st_size = in->rstat.rbytes;
-    } else if (in->snapid == CEPH_SNAPDIR) {
-      SnapRealm *realm = get_snap_realm_maybe(in->vino().ino);
-      if (realm) {
-        st->st_size = realm->my_snaps.size();
-        put_snap_realm(realm);
-      }
-    } else {
-      st->st_size = in->dirstat.size();
+    uint64_t st_size;
+    int ret = get_stat_size(in, perms, &st_size);
+    if (ret < 0) {
+      return ret;
     }
+    st->st_size = st_size;
+
 // The Windows "stat" structure provides just a subset of the fields that are
 // available on Linux.
 #ifndef _WIN32
@@ -8736,16 +8824,9 @@ int Client::fill_statx(Inode *in, const UserPerm& perms, unsigned int mask,
     in->mtime.to_timespec(&stx->stx_mtime);
 
     if (in->is_dir()) {
-      if (cct->_conf->client_dirsize_rbytes) {
-	stx->stx_size = in->rstat.rbytes;
-      } else if (in->snapid == CEPH_SNAPDIR) {
-        SnapRealm *realm = get_snap_realm_maybe(in->vino().ino);
-	if (realm) {
-          stx->stx_size = realm->my_snaps.size();
-          put_snap_realm(realm);
-	}
-      } else {
-	stx->stx_size = in->dirstat.size();
+      int ret = get_stat_size(in, perms, &stx->stx_size);
+      if (ret < 0) {
+        return ret;
       }
       stx->stx_blocks = 1;
     } else {

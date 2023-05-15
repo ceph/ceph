@@ -1089,6 +1089,7 @@ protected:
   Dentry* link(Dir *dir, const std::string& name, Inode *in, Dentry *dn);
   void unlink(Dentry *dn, bool keepdir, bool keepdentry);
 
+  int get_stat_size(Inode *in, const UserPerm& perms, uint64_t *stat_size);
   int fill_stat(Inode *in, struct stat *st, const UserPerm& perms, frag_info_t *dirstat=0, nest_info_t *rstat=0);
   int fill_stat(InodeRef& in, struct stat *st, const UserPerm& perms, frag_info_t *dirstat=0, nest_info_t *rstat=0) {
     return fill_stat(in.get(), st, perms, dirstat, rstat);
