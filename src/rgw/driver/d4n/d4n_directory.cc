@@ -5,7 +5,7 @@
 
 namespace rgw { namespace d4n {
 
-int RGWBlockDirectory::findClient(cpp_redis::client *client) {
+int BlockDirectory::find_client(cpp_redis::client* client) {
   if (client->is_connected())
     return 0;
 
@@ -22,12 +22,12 @@ int RGWBlockDirectory::findClient(cpp_redis::client *client) {
   return 0;
 }
 
-std::string RGWBlockDirectory::buildIndex(cache_block *ptr) {
-  return "rgw-object:" + ptr->c_obj.obj_name + ":directory";
+std::string BlockDirectory::build_index(CacheBlock* block) {
+  return "rgw-object:" + block->cacheObj.objName + ":directory";
 }
 
-int RGWBlockDirectory::existKey(std::string key) {
-  int result = -1;
+int BlockDirectory::exist_key(std::string key) {
+  int result = 0;
   std::vector<std::string> keys;
   keys.push_back(key);
   
@@ -48,11 +48,11 @@ int RGWBlockDirectory::existKey(std::string key) {
   return result;
 }
 
-int RGWBlockDirectory::setValue(cache_block *ptr) {
-  /* Creating the index based on obj_name */
-  std::string key = buildIndex(ptr);
+int BlockDirectory::set_value(CacheBlock* block) {
+  /* Creating the index based on objName */
+  std::string key = build_index(block);
   if (!client.is_connected()) { 
-    findClient(&client);
+    find_client(&client);
   }
 
   std::string result;
@@ -66,13 +66,14 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
   }
     
   std::string endpoint = addr.host + ":" + std::to_string(addr.port);
-  std::vector<std::pair<std::string, std::string>> list;
+  std::vector< std::pair<std::string, std::string> > list;
     
-  /* Creating a list of key's properties */
+  /* Creating a list of the entry's properties */
   list.push_back(make_pair("key", key));
-  list.push_back(make_pair("size", std::to_string(ptr->size_in_bytes)));
-  list.push_back(make_pair("bucket_name", ptr->c_obj.bucket_name));
-  list.push_back(make_pair("obj_name", ptr->c_obj.obj_name));
+  list.push_back(make_pair("size", std::to_string(block->size)));
+  list.push_back(make_pair("globalWeight", std::to_string(block->globalWeight)));
+  list.push_back(make_pair("bucketName", block->cacheObj.bucketName));
+  list.push_back(make_pair("objName", block->cacheObj.objName));
   list.push_back(make_pair("hosts", endpoint)); 
 
   try {
@@ -83,7 +84,7 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
     });
 
     client.sync_commit(std::chrono::milliseconds(1000));
-    
+
     if (result != "OK") {
       return -1;
     }
@@ -94,11 +95,12 @@ int RGWBlockDirectory::setValue(cache_block *ptr) {
   return 0;
 }
 
-int RGWBlockDirectory::getValue(cache_block *ptr) {
-  std::string key = buildIndex(ptr);
+int BlockDirectory::get_value(CacheBlock* block) {
+  int keyExist = -2;
+  std::string key = build_index(block);
 
   if (!client.is_connected()) {
-    findClient(&client);
+    find_client(&client);
   }
 
   if (existKey(key)) {
@@ -106,61 +108,102 @@ int RGWBlockDirectory::getValue(cache_block *ptr) {
     
     std::string hosts;
     std::string size;
-    std::string bucket_name;
-    std::string obj_name;
+    std::string bucketName;
+    std::string objName;
     std::vector<std::string> fields;
 
     fields.push_back("key");
     fields.push_back("hosts");
     fields.push_back("size");
-    fields.push_back("bucket_name");
-    fields.push_back("obj_name");
+    fields.push_back("bucketName");
+    fields.push_back("objName");
 
     try {
-      client.hmget(key, fields, [&key, &hosts, &size, &bucket_name, &obj_name, &field_exist](cpp_redis::reply &reply) {
+      client.hmget(key, fields, [&key, &hosts, &size, &bucketName, &objName, &keyExist](cpp_redis::reply &reply) {
         if (reply.is_array()) {
 	  auto arr = reply.as_array();
 
 	  if (!arr[0].is_null()) {
-	    field_exist = 0;
+	    keyExist = 0;
 	    key = arr[0].as_string();
 	    hosts = arr[1].as_string();
 	    size = arr[2].as_string();
-	    bucket_name = arr[3].as_string();
-	    obj_name = arr[4].as_string();
+	    bucketName = arr[3].as_string();
+	    objName = arr[4].as_string();
 	  }
 	}
       });
 
       client.sync_commit(std::chrono::milliseconds(1000));
 
-      if (field_exist < 0) {
-        return field_exist;
+      if (keyExist < 0 ) {
+        return keyExist;
       }
 
       /* Currently, there can only be one host */
-      ptr->size_in_bytes = std::stoi(size);
-      ptr->c_obj.bucket_name = bucket_name;
-      ptr->c_obj.obj_name = obj_name;
+      block->size = std::stoi(size);
+      block->cacheObj.bucketName = bucketName;
+      block->cacheObj.objName = objName;
     } catch(std::exception &e) {
-      return -1;
+      keyExist = -1;
+    }
+  }
+
+  return keyExist;
+}
+
+int BlockDirectory::copy_value(CacheBlock* block, CacheBlock* copy_block) {
+  std::string result;
+  std::string key = build_index(block);
+  
+  if (!client.is_connected()){
+    find_client(&client);
+  }
+  
+  if (exist_key(key)) {
+    std::vector< std::pair<std::string, std::string> > list;
+    key = build_index(copy_block); 
+      
+    /* Creating a list of the copy's properties */
+    list.push_back(make_pair("key", key));
+    list.push_back(make_pair("size", std::to_string(copy_block->size)));
+    list.push_back(make_pair("globalWeight", std::to_string(copy_block->globalWeight))); // Do we want to reset global weight? -Sam
+    list.push_back(make_pair("bucketName", copy_block->cacheObj.bucketName));
+    list.push_back(make_pair("objName", copy_block->cacheObj.objName));
+    list.push_back(make_pair("hosts", copy_block->hostsList[0])); 
+
+    /* Set copy with new values */
+    try {
+      client.hmset(key, list, [&result](cpp_redis::reply &reply) {
+	if (!reply.is_null()) {
+	  result = reply.as_string();
+	}
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+
+      if (result != "OK") {
+	return -1;
+      }
+    } catch(std::exception &e) {
+      return -2;
     }
   }
 
   return 0;
 }
 
-int RGWBlockDirectory::delValue(cache_block *ptr) {
+int BlockDirectory::del_value(CacheBlock* block){
   int result = 0;
   std::vector<std::string> keys;
-  std::string key = buildIndex(ptr);
+  std::string key = build_index(block);
   keys.push_back(key);
   
-  if (!client.is_connected()) {
-    findClient(&client);
+  if (!client.is_connected()){
+    find_client(&client);
   }
   
-  if (existKey(key)) {
+  if (exist_key(key)) {
     try {
       client.del(keys, [&result](cpp_redis::reply &reply) {
         if (reply.is_integer()) {
