@@ -191,8 +191,8 @@ ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec
 # NOTE: If you change this version number make sure the package is available
 # at the three URLs referenced below (may involve uploading to download.ceph.com)
-boost_version=1.79.0
-download_boost $boost_version 475d589d51a7f8b3ba2ba4eda022b170e562ca3b760ee922c146b6c65856ef39 \
+boost_version=1.82.0
+download_boost $boost_version a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6 \
                https://boostorg.jfrog.io/artifactory/main/release/$boost_version/source \
                https://download.ceph.com/qa
 download_liburing 0.7 8e2842cfe947f3a443af301bdd6d034455536c38a455c7a700d0c1ad165a7543 \
