@@ -2,21 +2,27 @@
 #define CEPH_RGWD4NCACHE_H
 
 #include "rgw_common.h"
+#include "d4n_directory.h"
 #include <cpp_redis/cpp_redis>
 #include <string>
 #include <iostream>
+
+namespace rgw { namespace d4n {
 
 class RGWD4NCache {
   public:
     CephContext *cct;
 
     RGWD4NCache() {}
-    RGWD4NCache(std::string cacheHost, int cachePort):host(cacheHost), port(cachePort) {}
+    RGWD4NCache(std::string host, int port) {
+      addr.host = host;
+      addr.port = port;
+    }
 
     void init(CephContext *_cct) {
       cct = _cct;
-      host = cct->_conf->rgw_d4n_host;
-      port = cct->_conf->rgw_d4n_port;
+      addr.host = cct->_conf->rgw_d4n_host;
+      addr.port = cct->_conf->rgw_d4n_port;
     }
 
     int findClient(cpp_redis::client *client);
@@ -32,9 +38,10 @@ class RGWD4NCache {
 
   private:
     cpp_redis::client client;
-    std::string host = "";
-    int port = 0;
+    Address addr;
     std::vector< std::pair<std::string, std::string> > buildObject(rgw::sal::Attrs* binary);
 };
+
+} } // namespace rgw::d4n
 
 #endif
