@@ -23,6 +23,7 @@
 
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_datacache.h"
+#include "driver/d4n/d4n_policy.h"
 
 namespace rgw { namespace sal {
 

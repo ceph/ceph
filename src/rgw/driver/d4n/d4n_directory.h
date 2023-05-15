@@ -1,5 +1,5 @@
-#ifndef CEPH_RGWD4NDIRECTORY_H
-#define CEPH_RGWD4NDIRECTORY_H
+#ifndef CEPH_D4NDIRECTORY_H
+#define CEPH_D4NDIRECTORY_H
 
 #include "rgw_common.h"
 #include <cpp_redis/cpp_redis>
@@ -13,51 +13,53 @@ struct Address {
   int port;
 };
 
-struct cache_obj {
-  std::string bucket_name; /* s3 bucket name */
-  std::string obj_name; /* s3 obj name */
+struct CacheObj {
+  std::string bucketName; /* s3 bucket name */
+  std::string objName; /* s3 obj name */
 };
 
-struct cache_block {
-  cache_obj c_obj;
-  uint64_t size_in_bytes; /* block size_in_bytes */
-  std::vector<std::string> hosts_list; /* Currently not supported: list of hostnames <ip:port> of block locations */
+struct CacheBlock {
+  CacheObj cacheObj;
+  uint64_t size; /* block size in bytes */
+  int globalWeight = 0;
+  std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of block locations */
 };
 
-class D4NDirectory {
+class Directory {
   public:
-    RGWDirectory() {}
-    CephContext *cct;
+    Directory() {}
+    CephContext* cct;
 };
 
-class BlockDirectory: D4NDirectory {
+class BlockDirectory: Directory {
   public:
-    RGWBlockDirectory() {}
-    RGWBlockDirectory(std::string host, int port) {
+    BlockDirectory() {}
+    BlockDirectory(std::string host, int port) {
       addr.host = host;
       addr.port = port;
     }
     
-    void init(CephContext *_cct) {
+    void init(CephContext* _cct) {
       cct = _cct;
       addr.host = cct->_conf->rgw_d4n_host;
       addr.port = cct->_conf->rgw_d4n_port;
     }
 	
-    int findClient(cpp_redis::client *client);
-    int existKey(std::string key);
-    int setValue(cache_block *ptr);
-    int getValue(cache_block *ptr);
-    int delValue(cache_block *ptr);
-
+    int find_client(cpp_redis::client* client);
+    int exist_key(std::string key);
     Address get_addr() { return addr; }
+    int set_value(CacheBlock* block);
+    int get_value(CacheBlock* block);
+    int copy_value(CacheBlock* block, CacheBlock* copy_block);
+    int del_value(CacheBlock* block);
+
 
   private:
     cpp_redis::client client;
     Address addr;
-    std::string buildIndex(cache_block *ptr);
+    std::string build_index(CacheBlock* block);
 };
 
 } } // namespace rgw::d4n
-   
+
 #endif
