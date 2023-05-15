@@ -1091,10 +1091,31 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     // the inode stat is from auth mds
     if (new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) {
       in->dir_layout = st->dir_layout;
-      ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
+      ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash
+                     << " snap_rstats " << st->snap_rstats
+                     << " snap_dirstats " << st->snap_dirstats << dendl;
       in->rstat = st->rstat;
       in->quota = st->quota;
       in->dir_pin = st->dir_pin;
+
+      Inode *pin = in;
+      if (in->snapid != CEPH_NOSNAP) {
+        vinodeno_t vino(in->vino().ino, CEPH_NOSNAP);
+	if (inode_map.count(vino)) {
+          pin = inode_map[vino];
+        } else {
+          pin = nullptr;
+        }
+      }
+      /*
+       * Just skip saving this because the fill_stat will lookup
+       * the parent anyway when needed.
+       */
+      if (likely(pin != nullptr)) {
+        pin->is_inode_cowed = st->is_inode_cowed;
+        pin->snap_rstats = st->snap_rstats;
+        pin->snap_dirstats = st->snap_dirstats;
+      }
     }
     // move me if/when version reflects fragtree changes.
     if (in->dirfragtree != st->dirfragtree) {

@@ -131,6 +131,10 @@ struct InodeStat {
   frag_info_t dirstat;
   nest_info_t rstat;
 
+  uint32_t is_inode_cowed = false;
+  std::map<snapid_t, nest_info_t> snap_rstats; //static rstat for snapshots
+  std::map<snapid_t, frag_info_t> snap_dirstats; //static dirstat for snapshots
+
   fragtree_t dirfragtree;
   std::string  symlink;   // symlink content (if symlink)
 
@@ -158,7 +162,7 @@ struct InodeStat {
   void decode(ceph::buffer::list::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(7, p);
+      DECODE_START(8, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -220,6 +224,11 @@ struct InodeStat {
       if (struct_v >= 7) {
         decode(fscrypt_auth, p);
         decode(fscrypt_file, p);
+      }
+      if (struct_v >= 8) {
+        decode(is_inode_cowed, p);
+        decode(snap_rstats, p);
+        decode(snap_dirstats, p);
       }
       DECODE_FINISH(p);
     }
