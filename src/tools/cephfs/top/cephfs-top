@@ -338,13 +338,14 @@ class FSTop(object):
         key = 0
         endwhile = False
         while not endwhile:
-            global current_states
+            global current_states, fs_list
+            fs_list = self.get_fs_names()
 
             if key == curses.KEY_UP and curr_row1 > 0:
                 curr_row1 -= 1
             elif key == curses.KEY_DOWN and curr_row1 < len(field_menu) - 1:
                 curr_row1 += 1
-            elif key == curses.KEY_ENTER or key in [10, 13]:
+            elif (key in [curses.KEY_ENTER, 10, 13]) and fs_list:
                 self.stdscr.erase()
                 last_fs = current_states["last_fs"]
                 if curr_row1 != len(field_menu) - 1:
@@ -358,10 +359,10 @@ class FSTop(object):
                 endwhile = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if isinstance(current_states['last_fs'], list):
-                    self.run_all_display()
-                else:
+                if fs_list and self.current_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endwhile = True
 
             try:
