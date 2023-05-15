@@ -25,8 +25,9 @@ struct obj_version;
 int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx,
-		   bool create = false,
-		   bool mostly_omap = false);
+                   bool create = false,
+                   bool mostly_omap = false,
+                   bool bulk = false);
 
 #define RGW_NO_SHARD -1
 

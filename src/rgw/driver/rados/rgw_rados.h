@@ -359,7 +359,7 @@ class RGWRados
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
 
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx&  io_ctx,
-		    bool mostly_omap);
+		    bool mostly_omap, bool bulk);
 
 
   ceph::mutex lock{ceph::make_mutex("rados_timer_lock")};
