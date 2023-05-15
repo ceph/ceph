@@ -1260,6 +1260,91 @@ class RgwClient(RestClient):
                     raise DashboardException(error, http_status_code=500, component='rgw')
         return all_users_info
 
+    def migrate_to_multisite(self, realm_name: str, zonegroup_name: str, zone_name: str,
+                             zonegroup_endpoints: List[str], zone_endpoints: List[str], user: str):
+        rgw_realm_create_cmd = ['realm', 'create', '--rgw-realm', realm_name, '--default']
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_realm_create_cmd, False)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to create realm',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        rgw_zonegroup_edit_cmd = ['zonegroup', 'rename', '--rgw-zonegroup', 'default',
+                                  '--zonegroup-new-name', zonegroup_name]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zonegroup_edit_cmd, False)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to rename zonegroup to {}'.format(zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        rgw_zone_edit_cmd = ['zone', 'rename', '--rgw-zone',
+                             'default', '--zone-new-name', zone_name,
+                             '--rgw-zonegroup', zonegroup_name]
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_edit_cmd, False)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to rename zone to {}'.format(zone_name),  # noqa E501 #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        rgw_zonegroup_modify_cmd = ['zonegroup', 'modify',
+                                    '--rgw-realm', realm_name,
+                                    '--rgw-zonegroup', zonegroup_name]
+        if zonegroup_endpoints:
+            if len(zonegroup_endpoints) > 1:
+                endpoint = ','.join(str(e) for e in zonegroup_endpoints)
+            else:
+                endpoint = zonegroup_endpoints[0]
+            rgw_zonegroup_modify_cmd.append('--endpoints')
+            rgw_zonegroup_modify_cmd.append(endpoint)
+        rgw_zonegroup_modify_cmd.append('--master')
+        rgw_zonegroup_modify_cmd.append('--default')
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zonegroup_modify_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to modify zonegroup {}'.format(zonegroup_name),  # noqa E501  #pylint: disable=line-too-long
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-realm', realm_name,
+                               '--rgw-zonegroup', zonegroup_name,
+                               '--rgw-zone', zone_name]
+        if zone_endpoints:
+            if len(zone_endpoints) > 1:
+                endpoint = ','.join(str(e) for e in zone_endpoints)
+            else:
+                endpoint = zone_endpoints[0]
+            rgw_zone_modify_cmd.append('--endpoints')
+            rgw_zone_modify_cmd.append(endpoint)
+        rgw_zone_modify_cmd.append('--master')
+        rgw_zone_modify_cmd.append('--default')
+        try:
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
+            if exit_code > 0:
+                raise DashboardException(e=err, msg='Unable to modify zone',
+                                         http_status_code=500, component='rgw')
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+
+        if user:
+            access_key, secret_key = self.get_rgw_user_keys(user, zone_name)
+            rgw_zone_modify_cmd = ['zone', 'modify', '--rgw-zone', zone_name,
+                                   '--access-key', access_key, '--secret', secret_key]
+            try:
+                exit_code, _, err = mgr.send_rgwadmin_command(rgw_zone_modify_cmd)
+                if exit_code > 0:
+                    raise DashboardException(e=err, msg='Unable to modify zone',
+                                             http_status_code=500, component='rgw')
+            except SubprocessError as error:
+                raise DashboardException(error, http_status_code=500, component='rgw')
+        self.update_period()
+
     @RestClient.api_get('/{bucket_name}?versioning')
     def get_bucket_versioning(self, bucket_name, request=None):
         """

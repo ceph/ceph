@@ -211,7 +211,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.onZoneGroupChange(this.info.data.parent);
       setTimeout(() => {
         this.getUserInfo(zone);
-      }, 1500);
+      }, 1000);
     }
     if (
       this.multisiteZoneForm.getValue('selectedZonegroup') !==
@@ -330,7 +330,7 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
       this.zone.name = this.info.data.name;
       this.zone.endpoints =
         values['zone_endpoints'] === this.info.data.endpoints
-          ? values['zonegroup_endpoints']
+          ? values['zone_endpoints']
           : this.checkUrlArray(values['zone_endpoints']);
       this.rgwZoneService
         .update(
