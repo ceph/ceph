@@ -1,11 +1,11 @@
-#ifndef CEPH_RGWD4NPOLICY_H
-#define CEPH_RGWD4NPOLICY_H
+#ifndef CEPH_D4NPOLICY_H
+#define CEPH_D4NPOLICY_H
 
 #include <string>
 #include <iostream>
 #include <cpp_redis/cpp_redis>
 #include "rgw_common.h"
-#include "rgw_d4n_directory.h"
+#include "d4n_directory.h"
 
 namespace rgw { namespace d4n {
 
