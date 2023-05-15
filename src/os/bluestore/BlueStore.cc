@@ -6110,40 +6110,73 @@ bool BlueStore::test_mount_in_use()
 }
 
 /**
-   Layers of initalization
+   Layers of initialization
 
    1. open bluefs RO
-   - export bluefs content
-   - show sharding
-   - print bluefs replay log
-   or 1a. open posix filesystem
+   - allows export bluefs content
+   - allows show sharding
+   - allows print bluefs replay log
+   or
+   1a. open posix filesystem
 
    2. prepare db env (BlueRockEnv gluer, merge operator)
-   - RocksDB repair procedure ready to work
 
    3. open db RO
-   - ceph-kv-tool RO operations enabled
-   - recover allocations from db
+   - allows ceph-kvstore-tool RO operations
+   - allows recover allocations from db
 
    4. open BlueStore RO
-   - ceph-objectstore-tool export PG (mount RO)
+   - allows ceph-objectstore-tool export PG (mount RO)
 
    1. open bluefs RW
-   - compact bluefs log
-   - import file to bluefs
-   - write allocation file
+   - allows compact bluefs log
+   - allows import file to bluefs
+   - allows write allocation file
 
-   2. open db RW
-   - all ops for ceph-kvstore-tool
+   2. prepare db env (BlueRockEnv gluer, merge operator)
+   - allows RocksDB repair procedure
 
-   3. open BlueStore RW
-   - bluestore full mount
+   3. open db RW
+   - allows all ops for ceph-kvstore-tool
+   Opening RocksDB RW requires initialized allocations.
 
-   1. create bluefs
-   1a. setup posix filesystem
-   2. create db
-   3. create BlueStore
+   4. open BlueStore RW
+   - allows bluestore full mount
+   Opening BlueStore RW requires initialized allocations.
 
+   open_bluefs(ro/rw)
+   open_db(ro/rw/repair)
+   open_bluestore(ro/rw)
+
+   close_bluestore();
+   close_db();
+   close_bluefs();
+
+
+   Open is done from state 0 to some desired state,
+   in case of failure all steps are reverted.
+   Close is done from current state to state 0.
+
+   InitializeAllocation()
+   Case A. Allocations from DB
+   1) Requires BlueFS and DB not initialized
+   2) Opens BlueFS RO
+   3) Opens DB RO
+   4) Creates AllocationManager
+   5) Reads allocations
+   6) Leaves AllocationManager active
+   7) Closes DB
+   This leaves BlueFS in RO mode.
+   Further transitions for BlueFS RO->RW will be done by promotion.
+
+   Case B. Allocations from File
+   1) Requires BlueFS not initialized
+   2) Opens BlueFS RO
+   3) Reads AllocationFile
+   If AllocationFile problem, recover:
+   4) Opens DB RO
+   5) Iterate through Onodes to recover allocations
+   6) Close DB
 
 
    Elements
@@ -6704,6 +6737,8 @@ int BlueStore::_create_rocksdb_fs()
 }
 /**
  * Opens already existing filesystem required by rocksdb.
+ * For BlueFS then there is a distinction readwrite / read_only mode.
+ * For posix-grade filesystem it is always readwrite.
  */
 int BlueStore::_open_rocksdb_fs(bool read_only)
 {
