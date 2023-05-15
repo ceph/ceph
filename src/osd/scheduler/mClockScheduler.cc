@@ -583,6 +583,12 @@ void mClockScheduler::handle_conf_change(
         }
       }
     }
+    // Alternatively, the QoS parameter, if set ephemerally for this OSD via
+    // the 'daemon' or 'tell' interfaces must be removed.
+    if (!cct->_conf.rm_val(*key)) {
+      dout(10) << __func__ << " Restored " << *key << " to default" << dendl;
+      cct->_conf.apply_changes(nullptr);
+    }
   }
 }
 

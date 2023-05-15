@@ -173,6 +173,11 @@ in order to ensure mClock scheduler is able to provide predictable QoS.
 
 mClock Config Options
 ---------------------
+.. important:: These defaults cannot be changed using any of the config
+   subsytem commands like *config set* or via the *config daemon* or *config
+   tell* interfaces. Although the above command(s) report success, the mclock
+   QoS parameters are reverted to their respective built-in profile defaults.
+
 When a built-in profile is enabled, the mClock scheduler calculates the low
 level mclock parameters [*reservation*, *weight*, *limit*] based on the profile
 enabled for each client type. The mclock parameters are calculated based on
