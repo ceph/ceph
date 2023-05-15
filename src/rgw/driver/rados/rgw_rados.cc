@@ -3890,6 +3890,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                void *progress_data,
                const DoutPrefixProvider *dpp,
                RGWFetchObjFilter *filter,
+               const rgw_zone_set_entry& source_trace_entry,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred)
 {
@@ -4111,6 +4112,21 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     bl.clear(); // overwrite source's status
     bl.append("REPLICA");
   }
+  { // update replication trace
+    std::vector<rgw_zone_set_entry> trace;
+    if (auto i = cb.get_attrs().find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+        i != cb.get_attrs().end()) {
+      try {
+        decode(trace, i->second);
+      } catch (const buffer::error&) {}
+    }
+    // add the source entry to the end
+    trace.push_back(source_trace_entry);
+
+    bufferlist bl;
+    encode(trace, bl);
+    cb.get_attrs()[RGW_ATTR_OBJ_REPLICATION_TRACE] = std::move(bl);
+  }
 
   if (source_zone.empty()) {
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
@@ -4317,13 +4333,14 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   ldpp_dout(dpp, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
+    rgw_zone_set_entry source_trace_entry{source_zone.id, std::nullopt};
     return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, dpp,
-               nullptr /* filter */);
+               nullptr /* filter */, source_trace_entry);
   }
 
   map<string, bufferlist> src_attrs;
