@@ -163,7 +163,7 @@ class CephFSTestCase(CephTestCase):
             # In case some test messed with auth caps, reset them
             for client_id in client_mount_ids:
                 cmd = ['auth', 'caps', f'client.{client_id}', 'mon','allow r',
-                       'osd', f'allow rw pool={self.fs.get_data_pool_name()}',
+                       'osd', f'allow rw tag cephfs data={self.fs.name}',
                        'mds', 'allow']
 
                 if self.run_cluster_cmd_result(cmd) == 0:
