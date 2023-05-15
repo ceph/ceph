@@ -126,13 +126,6 @@ bluestore_args = {
     },
 }
 
-seastore_args = {
-    '--seastore': {
-        'action': 'store_true',
-        'help': 'Use the seastore objectstore',
-    },
-}
-
 filestore_args = {
     '--filestore': {
         'action': 'store_true',
@@ -159,7 +152,7 @@ def get_default_args():
     defaults = {}
     def format_name(name):
         return name.strip('-').replace('-', '_').replace('.', '_')
-    for argset in (common_args, filestore_args, bluestore_args, seastore_args):
+    for argset in (common_args, filestore_args, bluestore_args):
         defaults.update({format_name(name): val.get('default', None) for name, val in argset.items()})
     return defaults
 
@@ -177,7 +170,6 @@ def common_parser(prog, description):
 
     filestore_group = parser.add_argument_group('filestore')
     bluestore_group = parser.add_argument_group('bluestore')
-    seastore_group = parser.add_argument_group('seastore')
 
     for name, kwargs in common_args.items():
         parser.add_argument(name, **kwargs)
@@ -187,9 +179,6 @@ def common_parser(prog, description):
 
     for name, kwargs in filestore_args.items():
         filestore_group.add_argument(name, **kwargs)
-
-    for name, kwargs in seastore_args.items():
-        seastore_group.add_argument(name, **kwargs)
 
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
