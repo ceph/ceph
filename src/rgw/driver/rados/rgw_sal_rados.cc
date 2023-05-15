@@ -2959,7 +2959,7 @@ MPRadosSerializer::MPRadosSerializer(const DoutPrefixProvider *dpp, RadosStore* 
   oid = raw_obj.oid;
   store->getRados()->get_obj_data_pool(obj->get_bucket()->get_placement_rule(),
 				       obj->get_obj(), &meta_pool);
-  store->getRados()->open_pool_ctx(dpp, meta_pool, ioctx, true);
+  store->getRados()->open_pool_ctx(dpp, meta_pool, ioctx, true, true);
 }
 
 int MPRadosSerializer::try_lock(const DoutPrefixProvider *dpp, utime_t dur, optional_yield y)
