@@ -2676,8 +2676,7 @@ private:
   int _create_rocksdb_fs();
   int _open_rocksdb_fs(bool read_only);
   int _open_rocksdb_env();
-  int _prepare_db_environment(bool create, bool read_only,
-			      std::string* kv_dir, std::string* kv_backend);
+  int _prepare_db_environment();
 
   /*
    * @warning to_repair_db means that we open this db to repair it, will not

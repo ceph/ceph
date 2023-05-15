@@ -6741,15 +6741,12 @@ int BlueStore::_open_rocksdb_env()
  * Sets up options for rocksdb and creates db object.
  * db prepared this way is suitable for: create, open-r, open-rw, repair
  */
-int BlueStore::_prepare_db_environment(bool create, bool read_only,
-				       std::string* _fn, std::string* _kv_backend)
+int BlueStore::_prepare_db_environment()
 {
   ceph_assert(!db);
-  std::string& fn=*_fn;
-  std::string& kv_backend=*_kv_backend;
+  std::string fn = "db";
+  std::string kv_backend = "rocksdb";
   // simplify the dir names, too, as "seen" by rocksdb
-  fn = "db";
-  kv_backend = "rocksdb";
   rocksdb::Env *env = static_cast<rocksdb::Env*>(db_env);
   ceph_assert(env);
 
@@ -6837,16 +6834,13 @@ int BlueStore::_create_db()
     derr << __func__ << " failed to create db fs: " << cpp_strerror(r) << dendl;
     return r;
   }
-  std::string kv_dir_fn, kv_backend;
-  r = _prepare_db_environment(true, true, &kv_dir_fn, &kv_backend);
+  r = _prepare_db_environment();
   if (r < 0) {
     derr << __func__ << " failed to prepare db environment: " << cpp_strerror(r) << dendl;
     return r;
   }
-  if (kv_backend == "rocksdb") {
-    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
-      sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
-    }
+  if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+    sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
   }
   stringstream err;
   r = db->create_and_open(err, sharding_def);
@@ -6863,24 +6857,20 @@ int BlueStore::_open_db(bool read_only)
 {
   dout(10) << __func__ << " read_only=" << read_only << dendl;
   int r;
-  string kv_dir_fn;
-  string kv_backend;
   std::string sharding_def;
   r = _open_rocksdb_fs(read_only);
   if (r < 0) {
     derr << __func__ << " failed to open db fs: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = _prepare_db_environment(false, read_only, &kv_dir_fn, &kv_backend);
+  r = _prepare_db_environment();
   if (r < 0) {
     derr << __func__ << " failed to prepare db environment: " << cpp_strerror(r) << dendl;
     return -EIO;
   }
 
-  if (kv_backend == "rocksdb") {
-    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
-      sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
-    }
+  if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+    sharding_def = cct->_conf.get_val<std::string>("bluestore_rocksdb_cfs");
   }
   // we pass in cf list here, but it is only used if the db already has
   // column families created.
@@ -6904,14 +6894,12 @@ int BlueStore::_repair_db()
 {
   dout(10) << __func__ << dendl;
   int r;
-  string kv_dir_fn;
-  string kv_backend;
   r = _open_rocksdb_fs(false);
   if (r < 0) {
     derr << __func__ << " failed to open db fs: " << cpp_strerror(r) << dendl;
     return r;
   }
-  r = _prepare_db_environment(false, false, &kv_dir_fn, &kv_backend);
+  r = _prepare_db_environment();
   if (r < 0) {
     derr << __func__ << " failed to prepare db environment: " << cpp_strerror(r) << dendl;
     return -EIO;
