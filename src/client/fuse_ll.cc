@@ -40,6 +40,7 @@
 #include "ioctl.h"
 #include "fscrypt_uapi.h"
 #include "FSCrypt.h"
+#include "Inode.h"
 #include "common/config.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/ceph_ll_client.h"
@@ -952,7 +953,49 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       fuse_reply_ioctl(req, 0, &l, sizeof(struct ceph_ioctl_layout));
     }
     break;
+    case FS_IOC_GET_ENCRYPTION_POLICY_EX_RESTRICTED:
     case FS_IOC_GET_ENCRYPTION_POLICY_EX: {
+      auto arg = (fscrypt_get_policy_ex_arg *)in_buf;
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": in_bufsz=" << in_bufsz << " out_bufsz=" << out_bufsz << " FS_IOC_GET_ENCRYPTION_POLICY_EX buffer:\n" << hex_str(in_buf, in_bufsz) << dendl;
+
+      struct fscrypt_get_policy_ex_arg out_arg;
+      if (out_bufsz < sizeof(out_arg.policy)) {
+        fuse_reply_err(req, ERANGE);
+        break;
+      }
+
+      Fh *fh = (Fh*)fi->fh;
+      Inode *in = fh->inode.get();
+
+      if (in->fscrypt_auth.size() > 0) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_auth:\n" << hex_str((const char *)in->fscrypt_auth.data(), in->fscrypt_auth.size()) << dendl;
+
+        bufferlist bl;
+        bl.append((const char *)in->fscrypt_auth.data(), in->fscrypt_auth.size());
+        
+        auto bliter = bl.cbegin();
+
+        uint32_t ver;
+        ceph::decode(ver, bliter);
+
+        string s;
+        ceph::decode(s, bliter);
+
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": s.size()=" << s.size() << dendl;
+
+        if (s.size() < sizeof(out_arg)) {
+          fuse_reply_err(req, EINVAL);
+          break;
+        }
+
+        memcpy(&out_arg.policy, s.data(), sizeof(out_arg.policy));
+        out_arg.policy_size = sizeof(out_arg.policy);
+
+        fuse_reply_ioctl(req, 0, &out_arg, sizeof(out_arg));
+        break;
+      }
+
       fuse_reply_err(req, ENODATA);
     }
     break;
@@ -984,15 +1027,17 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      FSCryptKey k;
+      auto& key_store = cfuse->client->fscrypt->get_key_store();
 
-      int r  = k.init((const char *)arg->raw, arg->raw_size);
+      FSCryptKeyRef k;
+
+      int r = key_store.create((const char *)arg->raw, arg->raw_size, k);
       if (r < 0) {
         generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to calc hkdf: r=" << r << dendl;
         fuse_reply_err(req, -r);
       }
 
-      const auto& identifier = k.get_identifier();
+      const auto& identifier = k->get_identifier();
 
       generic_dout(0) << __FILE__ << ":" << __LINE__ << ": hkdf:\n" << hex_str(identifier.raw, sizeof(identifier.raw)) << dendl;
 
