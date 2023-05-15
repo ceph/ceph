@@ -843,6 +843,8 @@ This message can be silenced by disabling self-heal behavior (that is, setting
 ``mgr/devicehealth/mark_out_threshold``, or by addressing whichever condition
 is preventing data from being migrated off of the ailing OSD(s).
 
+.. _rados_health_checks_device_health_toomany:
+
 DEVICE_HEALTH_TOOMANY
 _____________________
 
