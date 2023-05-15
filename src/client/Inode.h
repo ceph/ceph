@@ -152,6 +152,10 @@ struct Inode : RefCountedObject {
   frag_info_t dirstat;
   nest_info_t rstat;
 
+  uint32_t is_inode_cowed = false;
+  std::map<snapid_t, nest_info_t> snap_rstats; //static rstat for snapshots
+  std::map<snapid_t, frag_info_t> snap_dirstats; //static dirstat for snapshots
+
   // special stuff
   version_t version = 0;           // auth only
   version_t xattr_version = 0;

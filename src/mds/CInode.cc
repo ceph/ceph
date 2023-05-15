@@ -3833,6 +3833,12 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     }
   }
 
+  /*
+   * After last snapshot being created whether has this CInode been COWed,
+   * if not the 'first' must be in the realm's snaps list else the 'first'
+   * will be bumped up.
+   */
+  __u32 is_inode_cowed = !realm->has_snaps_in_range(first, first);
 
   bool no_caps = !valid ||
 		 session->is_stale() ||
@@ -3926,9 +3932,19 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   } else {
     xattr_version = 0;
   }
-  
+
   // do we have room?
   if (max_bytes) {
+    unsigned snap_rstats_size = 0;
+    unsigned snap_dirstats_size = 0;
+    if (old_inodes) {
+      // snapid, rstat.rctime ~ rstat.rsnaps
+      snap_rstats_size = old_inodes->size() * (8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec));
+
+      // snapid, dirstat.mtime ~ dirstat.nsubdirs
+      snap_dirstats_size = old_inodes->size() * (8 + 8 + 8 + 8 + sizeof(struct ceph_timespec));
+    }
+
     unsigned bytes =
       8 + 8 + 4 + 8 + 8 + sizeof(ceph_mds_reply_cap) +
       sizeof(struct ceph_file_layout) +
@@ -3937,7 +3953,9 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       8 + 8 + 8 + 8 + 8 + sizeof(struct ceph_timespec) + // dirstat.nfiles ~ rstat.rctime
       sizeof(__u32) + sizeof(__u32) * 2 * dirfragtree._splits.size() + // dirfragtree
       sizeof(__u32) + symlink.length() + // symlink
-      sizeof(struct ceph_dir_layout); // dir_layout
+      sizeof(struct ceph_dir_layout) + // dir_layout
+      snap_rstats_size + // snap_rstats
+      snap_dirstats_size; // snap_dirstats
 
     if (xattr_version) {
       bytes += sizeof(__u32) + sizeof(__u32); // xattr buffer len + number entries
@@ -4091,7 +4109,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(7, 1, bl);
+    ENCODE_START(8, 1, bl);
     encode(oi->ino, bl);
     encode(snapid, bl);
     encode(oi->rdev, bl);
@@ -4139,6 +4157,22 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(!file_i->fscrypt_auth.empty(), bl);
     encode(file_i->fscrypt_auth, bl);
     encode(file_i->fscrypt_file, bl);
+    encode(is_inode_cowed, bl);
+    if (old_inodes) {
+      encode((__u32)old_inodes->size(), bl);
+      for (const auto &p : *old_inodes) {
+        encode(p.first, bl);
+        encode(p.second.inode.rstat, bl);
+      }
+      encode((__u32)old_inodes->size(), bl);
+      for (const auto &p : *old_inodes) {
+        encode(p.first, bl);
+        encode(p.second.inode.dirstat, bl);
+      }
+    } else {
+      encode((__u32)0, bl);
+      encode((__u32)0, bl);
+    }
     ENCODE_FINISH(bl);
   }
   else {
