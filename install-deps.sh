@@ -182,8 +182,7 @@ function clean_boost_on_ubuntu {
 
 function install_boost_on_ubuntu {
     ci_debug "Running install_boost_on_ubuntu() in install-deps.sh"
-    # Once we get to this point, clean_boost_on_ubuntu() should ensure
-    # that there is no more than one installed version.
+    local ver=1.82
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
