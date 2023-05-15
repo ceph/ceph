@@ -1,4 +1,4 @@
-#include "rgw_d4n_policy.h"
+#include "d4n_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
