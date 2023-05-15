@@ -766,20 +766,20 @@ public:
 };
 
 class RGWSimpleRadosLockCR : public RGWSimpleCoroutine {
-  RGWAsyncRadosProcessor *async_rados;
-  rgw::sal::RadosStore* store;
-  std::string lock_name;
-  std::string cookie;
-  uint32_t duration;
+    RGWAsyncRadosProcessor *async_rados;
+    rgw::sal::RadosStore* store;
+    std::string lock_name;
+    std::string cookie;
+    uint32_t duration;
 
-  rgw_raw_obj obj;
+    rgw_raw_obj obj;
 
-  RGWAsyncLockSystemObj *req;
+    RGWAsyncLockSystemObj *req;
 
 public:
   RGWSimpleRadosLockCR(RGWAsyncRadosProcessor *_async_rados, rgw::sal::RadosStore* _store,
 		      const rgw_raw_obj& _obj,
-                      const std::string& _lock_name,
+          const std::string& _lock_name,
 		      const std::string& _cookie,
 		      uint32_t _duration);
   ~RGWSimpleRadosLockCR() override {
