@@ -61,6 +61,11 @@ class Allocator;
 class FreelistManager;
 class SimpleBitmap;
 
+#ifdef HAVE_LIBZBD
+class ZonedAllocator;
+class ZonedFreelistManager;
+#endif
+
 #ifdef WITH_EXPERIMENTAL
 namespace ceph::experimental {
 #endif
@@ -2753,8 +2758,8 @@ private:
   void _zoned_cleaner_stop();
   void _zoned_cleaner_thread();
   void _zoned_clean_zone(uint64_t zone_num,
-			 class ZonedAllocator *a,
-			 class ZonedFreelistManager *f);
+			 ZonedAllocator *a,
+			 ZonedFreelistManager *f);
   void _clean_some(ghobject_t oid, uint32_t zone_num);
 #endif
 
