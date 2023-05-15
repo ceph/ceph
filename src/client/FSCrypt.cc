@@ -20,6 +20,8 @@
 
 #include "client/FSCrypt.h"
 
+#include <string.h>
+
 
 using ceph::crypto::HMACSHA512;
 
@@ -106,4 +108,68 @@ int fscrypt_calc_hkdf(const char *salt, int salt_len,
   return hkdf_expand(extract_buf, extract_len,
                      FSCRYPT_INFO_STR, sizeof(FSCRYPT_INFO_STR) - 1,
                      dest, dest_len);
+}
+
+int FSCryptKey::init(const char *k, int klen) {
+  int r = fscrypt_calc_hkdf(nullptr, 0,
+                            (const char *)k, klen,
+                            identifier.raw, sizeof(identifier.raw));
+  if (r < 0) {
+    return r;
+  }
+
+  key.append_hole(klen);
+  memcpy(key.c_str(), k, klen);
+
+  return 0;
+}
+
+int ceph_fscrypt_key_identifier::init(const char *k, int klen) {
+  if (klen != sizeof(raw)) {
+    return -EINVAL;
+  }
+  memcpy(raw, k, klen);
+
+  return 0;
+}
+
+bool ceph_fscrypt_key_identifier::operator<(const struct ceph_fscrypt_key_identifier& r) const {
+  return (memcmp(raw, r.raw, sizeof(raw)) < 0);
+}
+
+int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyRef& key)
+{
+  key = std::make_shared<FSCryptKey>();
+
+  int r = key->init(k, klen);
+  if (r < 0) {
+    return r;
+  }
+
+  std::unique_lock wl{lock};
+
+  const auto& id = key->get_identifier();
+  
+  auto iter = m.find(id);
+  if (iter != m.end()) {
+    return -EEXIST;
+  }
+
+  m[id] = key;
+
+  return 0;
+}
+
+int FSCryptKeyStore::find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyRef& key)
+{
+  std::shared_lock rl{lock};
+
+  auto iter = m.find(id);
+  if (iter == m.end()) {
+    return -ENOENT;
+  }
+
+  key = iter->second;
+
+  return 0;
 }
