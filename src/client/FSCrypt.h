@@ -46,3 +46,15 @@ public:
   int create(const char *k, int klen, FSCryptKeyRef& key);
   int find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyRef& key);
 };
+
+
+class FSCrypt {
+  FSCryptKeyStore key_store;
+
+public:
+  FSCrypt() {}
+
+  FSCryptKeyStore& get_key_store() {
+    return key_store;
+  }
+};

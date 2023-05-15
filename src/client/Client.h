@@ -42,6 +42,7 @@
 #include "InodeRef.h"
 #include "MetaSession.h"
 #include "UserPerm.h"
+#include "FSCrypt.h"
 
 #include <fstream>
 #include <map>
@@ -912,8 +913,11 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
 
+  std::unique_ptr<FSCrypt> fscrypt;
+
   bool fuse_default_permissions;
   bool _collect_and_send_global_metrics;
+
 
 protected:
   std::list<ceph::condition_variable*> waiting_for_reclaim;
