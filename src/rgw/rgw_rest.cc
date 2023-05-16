@@ -1732,17 +1732,15 @@ int RGWHandler_REST::allocate_formatter(req_state *s,
     } else {
       const char *accept = s->info.env->get("HTTP_ACCEPT");
       if (accept) {
-        char format_buf[64];
-        unsigned int i = 0;
-        for (; i < sizeof(format_buf) - 1 && accept[i] && accept[i] != ';'; ++i) {
-          format_buf[i] = accept[i];
-        }
-        format_buf[i] = 0;
-        if ((strcmp(format_buf, "text/xml") == 0) || (strcmp(format_buf, "application/xml") == 0)) {
+        // trim at first ;
+        std::string_view format = accept;
+        format = format.substr(0, format.find(';'));
+
+        if (format == "text/xml" || format == "application/xml") {
           type = RGWFormat::XML;
-        } else if (strcmp(format_buf, "application/json") == 0) {
+        } else if (format == "application/json") {
           type = RGWFormat::JSON;
-        } else if (strcmp(format_buf, "text/html") == 0) {
+        } else if (format == "text/html") {
           type = RGWFormat::HTML;
         }
       }
