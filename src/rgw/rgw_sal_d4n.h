@@ -32,7 +32,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* cacheBlock;
     rgw::d4n::D4NDatacache* d4nCache;
-    rgw::d4n::PolicyDriver* cacheDriver;
+    rgw::d4n::PolicyDriver* policyDriver;
 
   public:
     D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
@@ -40,15 +40,15 @@ class D4NFilterDriver : public FilterDriver {
       blockDir = new rgw::d4n::BlockDirectory(); /* Initialize directory address with cct */
       cacheBlock = new rgw::d4n::CacheBlock();
       d4nCache = new rgw::d4n::D4NDatacache();
-      cacheDriver = new rgw::d4n::PolicyDriver("lfuda");
+      policyDriver = new rgw::d4n::PolicyDriver("lfuda");
     }
     virtual ~D4NFilterDriver() {
       delete blockDir; 
       delete cacheBlock;
       delete d4nCache;
 
-      cacheDriver->delete_policy();
-      delete cacheDriver;
+      policyDriver->delete_policy();
+      delete policyDriver;
     }
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
@@ -66,7 +66,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
     rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
     rgw::d4n::D4NDatacache* get_d4n_cache() { return d4nCache; }
-    rgw::d4n::PolicyDriver* get_cache_driver() { return cacheDriver; }
+    rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver; }
 };
 
 class D4NFilterUser : public FilterUser {

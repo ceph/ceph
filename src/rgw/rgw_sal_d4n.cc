@@ -42,8 +42,8 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   blockDir->init(cct); // check for successful initialization -Sam
   d4nCache->init(cct);
 
-  cacheDriver->set_policy();
-  cacheDriver->cachePolicy->init(cct);
+  policyDriver->set_policy();
+  policyDriver->cachePolicy->init(cct);
   
   return 0;
 }
@@ -120,7 +120,7 @@ int D4NFilterObject::copy_object(User* user,
                               optional_yield y)
 {
   /* Build cache block copy */
-  rgw::d4n::CacheBlock* copyCacheBlock = new rgw::d4n::CacheBlock();
+  rgw::d4n::CacheBlock* copyCacheBlock = new rgw::d4n::CacheBlock(); // How will this copy work in lfuda? -Sam
 
   copyCacheBlock->hostsList.push_back(driver->get_cache_block()->hostsList[0]); 
   copyCacheBlock->size = driver->get_cache_block()->size;
@@ -363,6 +363,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation succeeded." << dendl;
   }
 
+  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block()/*, cacheNode*/);
+  // check for successful return
+
   rgw::sal::Attrs newAttrs;
   std::vector< std::pair<std::string, std::string> > newMetadata;
   int getObjReturn = source->driver->get_d4n_cache()->get_attrs(source->get_key().get_oid(), 
@@ -488,15 +491,14 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  rgw::d4n::CacheBlock* tempCacheBlock = driver->get_cache_block();
   rgw::d4n::BlockDirectory* tempBlockDir = driver->get_block_dir();
 
-  tempCacheBlock->hostsList.push_back(tempBlockDir->get_addr().host + ":" + std::to_string(tempBlockDir->get_addr().port)); 
-  tempCacheBlock->size = accounted_size;
-  tempCacheBlock->cacheObj.bucketName = obj->get_bucket()->get_name();
-  tempCacheBlock->cacheObj.objName = obj->get_key().get_oid();
+  driver->get_cache_block()->hostsList.push_back(tempBlockDir->get_addr().host + ":" + std::to_string(tempBlockDir->get_addr().port)); 
+  driver->get_cache_block()->size = accounted_size;
+  driver->get_cache_block()->cacheObj.bucketName = obj->get_bucket()->get_name();
+  driver->get_cache_block()->cacheObj.objName = obj->get_key().get_oid();
 
-  int setDirReturn = tempBlockDir->set_value(tempCacheBlock);
+  int setDirReturn = tempBlockDir->set_value(driver->get_cache_block());
 
   if (setDirReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Directory set operation failed." << dendl;

@@ -44,35 +44,194 @@ int CachePolicy::exist_key(std::string key) {
   return result;
 }
 
-int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
+int LFUDAPolicy::set_age(int age) {
   int result = -1;
-  std::string key = "rgw-object:" + block->cacheObj.objName + ":cache";
+
+  try {
+    client.hset("lfuda", "age", std::to_string(age), [&result](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+	result = reply.as_integer();
+      }
+    }); 
+
+    client.sync_commit();
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return result;
+}
+
+int LFUDAPolicy::get_age() {
+  int ret = 0;
+  int age = -1;
+
+  try {
+    client.hexists("lfuda", "age", [&ret](cpp_redis::reply& reply) { // set up global values for lfuda -Sam
+      if (!reply.is_null()) {
+        ret = reply.as_integer();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  if (!ret) {
+    ret = set_age(0); /* Initialize age */
+    return ret; // Test return value -Sam
+  }
+
+  try {
+    client.hget("lfuda", "age", [&age](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+        age = std::stoi(reply.as_string());
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return age;
+}
+
+int LFUDAPolicy::set_global_weight(std::string key, int weight) {
+  int result = -1;
+
+  try {
+    client.hset(key, "globalWeight", std::to_string(weight), [&result](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+	result = reply.as_integer();
+      }
+    }); 
+
+    client.sync_commit();
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return result;
+}
+
+int LFUDAPolicy::get_global_weight(std::string key) {
+  int weight = -1;
+
+  try {
+    client.hget(key, "globalWeight", [&weight](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+	weight = reply.as_integer();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return weight;
+}
+
+int LFUDAPolicy::set_min_avg_weight(int weight, std::string cacheLocation) {
+  int result = -1;
+
+  try {
+    client.hset("lfuda", "minAvgWeight:cache", cacheLocation, [&result](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+	result = reply.as_integer();
+      }
+    }); 
+
+    client.sync_commit();
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  if (result) {
+    result = -1;
+    try {
+      client.hset("lfuda", "minAvgWeight:weight", std::to_string(weight), [&result](cpp_redis::reply& reply) {
+	if (!reply.is_null()) {
+	  result = reply.as_integer();
+	}
+      }); 
+
+      client.sync_commit();
+    } catch(std::exception &e) {
+      return -1;
+    }
+  }
+
+  return result;
+}
+
+int LFUDAPolicy::get_min_avg_weight() {
+  int ret = 0;
+  int weight = -1;
+
+  try {
+    client.hexists("lfuda", "minAvgWeight:cache", [&ret](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+        ret = reply.as_integer();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  if (!ret) {
+    ret = set_min_avg_weight(INT_MAX, "initial"); /* Initialize minimum average weight */
+    return ret; // Test return value -Sam
+  }
+
+  try {
+    client.hget("lfuda", "minAvgWeight:weight", [&weight](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+        weight = std::stoi(reply.as_string());
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return weight;
+}
+
+int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
+  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
+  int localWeight = block->localWeight;
 
   if (!client.is_connected()) {
     find_client(&client);
   }
 
   if (exist_key(key)) {
-    /* Check if data is cached */
-    try {
-      client.hexists(key, "data", [&result](cpp_redis::reply& reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer();
-        }
-      });
+    int age = get_age();
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return -1;
-    }
+    if (0/*cacheNode->key_exists(block->cacheObj.objName)*/) { /* Local copy */
+      localWeight += age;
+    } else {
+      uint64_t freeSpace = 0; //cacheNode->get_free_space();
 
-    if (result) {
-      std::string location;
+      while (freeSpace < block->size) {
+	int newSpace = eviction(/*cacheNode*/);
+	
+	if (newSpace > 0)
+	  freeSpace += newSpace;
+      }
+
+      std::string hosts;
 
       try {
-	client.hget(key, "location", [&location](cpp_redis::reply& reply) {
+	client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
 	  if (!reply.is_null()) {
-	    location = reply.as_string();
+	    hosts = reply.as_string();
 	  }
 	});
 
@@ -81,56 +240,14 @@ int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
 	return -1;
       }
 
-      /* Check local cache */
-      if (location == (get_addr().host + ":" + std::to_string(get_addr().port))) {
-	  // get local weight from cache
-	  // add age to local weight
-	  // update in cache
-      } else {
-	uint64_t freeSpace = 0; // find free space
-
-	while (freeSpace < block->size) {
-	  freeSpace += eviction();
-	}
-
-	/* Check remote cache */
-	if (location.length() > 0) {
-	  int globalWeight;
-
-	  try {
-	    client.hget(key, "globalWeight", [&globalWeight](cpp_redis::reply& reply) {
-	      if (!reply.is_null()) {
-		globalWeight = reply.as_integer();
-	      }
-	    });
-
-	    client.sync_commit(std::chrono::milliseconds(1000));
-	  } catch(std::exception &e) {
-	    return -1;
-	  }
-
-	  // add age to global weight
-	  
-	  result = 0;
-	  try {
-	    client.hset(key, "globalWeight", std::to_string(globalWeight), [&result](cpp_redis::reply& reply) {
-	      if (!reply.is_null()) {
-	        result = reply.as_integer();
-	      }
-	    }); 
-
-	    client.sync_commit();
-	  } catch(std::exception &e) {
-	    return -1;
-	  }
-	  
-	  if (result)
-	    return -2;
-	} else { // make less repetitive -Sam
-	  // get local weight from data lake
-	  // add age to local weight
-	  // update in cache
-	}
+      if (hosts.length() > 0) { /* Remote copy */
+	int globalWeight = get_global_weight(key);
+	globalWeight += age;
+	
+	if (set_global_weight(key, globalWeight))
+	  return -2;
+      } else { /* No remote copy */
+	localWeight += age;
       }
     }
   } else {
@@ -140,107 +257,57 @@ int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
   return 0;
 }
 
-int LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
-  CacheBlock* victim = NULL; // find victim
-  int result = -1;
-  std::string response;
-  std::string key = "rgw-object:" + victim->cacheObj.objName + ":cache";
+uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
+  CacheBlock* victim = NULL; // find victim; make lowest local weight directory value
+  std::string key = "rgw-object:" + victim->cacheObj.objName + ":directory";
+  std::string hosts;
+  int globalWeight = get_global_weight(key);
+  int localWeight = victim->localWeight;
 
-  if (!client.is_connected()) {
-    find_client(&client);
+  try {
+    client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+	hosts = reply.as_string();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
   }
 
-  if (exist_key(key)) {
-    /* Check if data is cached */
-    try {
-      client.hexists(key, "data", [&result](cpp_redis::reply& reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer();
-        }
-      });
+  if (!hosts.length()) { /* Last copy */
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return -1;
+    if (globalWeight > 0) {
+      localWeight += globalWeight;
+      int ret = set_global_weight(key, 0);
+
+      if (ret)
+	return -2;
     }
 
-    if (result) {
-      std::string location;
+    int avgWeight = get_min_avg_weight();
 
-      try {
-	client.hget(key, "location", [&location](cpp_redis::reply& reply) {
-	  if (!reply.is_null()) {
-	    location = reply.as_string();
-	  }
-	});
+    if (avgWeight < 0)
+      return -2;
 
-	client.sync_commit(std::chrono::milliseconds(1000));
-      } catch(std::exception &e) {
-	return -1;
-      }
-
-      /* Check if block is not in remote cache */
-      if (!location.length()) {
-	// get local weight from cache
-	int globalWeight;
-
-	try {
-	  client.hget(key, "globalWeight", [&globalWeight](cpp_redis::reply& reply) {
-	    if (!reply.is_null()) {
-	      globalWeight = reply.as_integer();
-	    }
-	  });
-
-	  client.sync_commit(std::chrono::milliseconds(1000));
-	} catch(std::exception &e) {
-	  return -1;
-	}
-
-	if (globalWeight != 0) {
-	  std::vector< std::pair<std::string, std::string> > updatedWeights;
-	  // localWeight += globalWeight;
-	  globalWeight = 0;
-
-	  updatedWeights.push_back({"globalWeight", std::to_string(globalWeight)});
-
-	  /*
-	  try {
-	    client.hset(key, [&response](cpp_redis::reply& reply) {
-	      if (!reply.is_null()) {
-	        response = reply.as_string();
-	      }
-	    }); 
-
-	    client.sync_commit();
-	  } catch(std::exception &e) {
-	    return -1;
-	  }
-	  
-	  if (response != "OK")
-	    return -2;
-	  }
-	  */
-	}
-      }
-
-      // get cache node with minimum average weight
-      //int avgWeight = 0; //cache node's avg weight
-
-      /*
-      if (localWeight < avgWeight) {
-        // push block to remote cache
-      }
-      */
+    if (localWeight < avgWeight) {
+      // push block to remote cache
     }
-
-    //globalWeight += localWeight;
-    // remove victim from local cache
-    // update age
-    // update in cache
   }
 
-  // return victim size
-  return 0;
+  globalWeight += localWeight;
+  // call set_min_avg_weight() for deleted block
+  // cacheNode->delete_data(dpp, victim->cacheObj.objName);
+
+  int age = get_age();
+  age = std::max(localWeight, age);
+  int ret = set_age(age);
+  
+  if (ret)
+    return -2;
+
+  return victim->size;
 }
 
 int PolicyDriver::set_policy() { // Add "none" option? -Sam

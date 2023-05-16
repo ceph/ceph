@@ -14,14 +14,15 @@ struct Address {
 };
 
 struct CacheObj {
-  std::string bucketName; /* s3 bucket name */
-  std::string objName; /* s3 obj name */
+  std::string bucketName; /* S3 bucket name */
+  std::string objName; /* S3 object name */
 };
 
 struct CacheBlock {
   CacheObj cacheObj;
-  uint64_t size; /* block size in bytes */
+  uint64_t size; /* Block size in bytes */
   int globalWeight = 0;
+  int localWeight = 0;
   std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of block locations */
 };
 
