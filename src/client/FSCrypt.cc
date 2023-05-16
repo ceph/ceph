@@ -133,6 +133,14 @@ int ceph_fscrypt_key_identifier::init(const char *k, int klen) {
   return 0;
 }
 
+int ceph_fscrypt_key_identifier::init(const struct fscrypt_key_specifier& k) {
+  if (k.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
+    return -ENOTSUP;
+  }
+
+  return init((const char *)k.u.identifier, sizeof(k.u.identifier));
+}
+
 bool ceph_fscrypt_key_identifier::operator<(const struct ceph_fscrypt_key_identifier& r) const {
   return (memcmp(raw, r.raw, sizeof(raw)) < 0);
 }

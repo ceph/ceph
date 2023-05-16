@@ -17,6 +17,7 @@ struct ceph_fscrypt_key_identifier {
   char raw[FSCRYPT_KEY_IDENTIFIER_LEN];
 
   int init(const char *k, int klen);
+  int init(const struct fscrypt_key_specifier& k);
 
   bool operator<(const struct ceph_fscrypt_key_identifier& r) const;
 };
