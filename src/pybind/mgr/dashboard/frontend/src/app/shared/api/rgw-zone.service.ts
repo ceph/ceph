@@ -62,12 +62,18 @@ export class RgwZoneService {
     });
   }
 
-  delete(zonegroupName: string, zoneName: string, deletePools: boolean): Observable<any> {
+  delete(
+    zoneName: string,
+    deletePools: boolean,
+    pools: Set<string>,
+    zonegroupName: string
+  ): Observable<any> {
     return this.rgwDaemonService.request((params: HttpParams) => {
       params = params.appendAll({
-        zonegroup_name: zonegroupName,
         zone_name: zoneName,
-        delete_pools: deletePools
+        delete_pools: deletePools,
+        pools: Array.from(pools.values()),
+        zonegroup_name: zonegroupName
       });
       return this.http.delete(`${this.url}/${zoneName}`, { params: params });
     });
