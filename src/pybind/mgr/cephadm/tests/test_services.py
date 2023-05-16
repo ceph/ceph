@@ -299,14 +299,35 @@ log_to_file = False"""
                 _run_cephadm.assert_called_with(
                     'test',
                     f'iscsi.{iscsi_daemon_id}',
-                    'deploy',
-                    [
-                        '--name', f'iscsi.{iscsi_daemon_id}',
-                        '--meta-json', f'{"{"}"service_name": "iscsi.{pool}", "ports": [{api_port}], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null{"}"}',
-                        '--config-json', '-', '--tcp-ports', '3456'
-                    ],
-                    stdin=json.dumps({"config": "", "keyring": f"[client.iscsi.{iscsi_daemon_id}]\nkey = None\n", "files": {"iscsi-gateway.cfg": iscsi_gateway_conf}}),
-                    image='')
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": f'iscsi.{iscsi_daemon_id}',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [api_port],
+                        },
+                        "meta": {
+                            'service_name': f'iscsi.{pool}',
+                            'ports': [api_port],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            "config": "",
+                            "keyring": f"[client.iscsi.{iscsi_daemon_id}]\nkey = None\n",
+                            "files": {
+                                "iscsi-gateway.cfg": iscsi_gateway_conf,
+                            },
+                        }
+                    }),
+                )
 
 
 class TestMonitoring:
@@ -386,24 +407,35 @@ class TestMonitoring:
             with with_service(cephadm_module, AlertManagerSpec()):
                 y = dedent(self._get_config(expected_yaml_url)).lstrip()
                 _run_cephadm.assert_called_with(
-                    "test",
+                    'test',
                     "alertmanager.test",
-                    "deploy",
-                    [
-                        "--name",
-                        "alertmanager.test",
-                        "--meta-json",
-                        ('{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        "--config-json",
-                        "-",
-                        "--tcp-ports",
-                        "9093 9094",
-                    ],
-                    stdin=json.dumps(
-                        {"files": {"alertmanager.yml": y}, "peers": []}
-                    ),
-                    image="",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'alertmanager.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9093, 9094],
+                        },
+                        "meta": {
+                            'service_name': 'alertmanager',
+                            'ports': [9093, 9094],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            "files": {
+                                "alertmanager.yml": y,
+                            },
+                            "peers": [],
+                        }
+                    }),
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -466,25 +498,40 @@ class TestMonitoring:
 
                 _run_cephadm.assert_called_with(
                     'test',
-                    'alertmanager.test',
-                    'deploy',
-                    [
-                        '--name', 'alertmanager.test',
-                        '--meta-json', '{"service_name": "alertmanager", "ports": [9093, 9094], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}',
-                        '--config-json', '-', '--tcp-ports', '9093 9094'
-                    ],
+                    "alertmanager.test",
+                    ['_orch', 'deploy'],
+                    [],
                     stdin=json.dumps({
-                        "files": {
-                            "alertmanager.yml": y,
-                            'alertmanager.crt': 'mycert',
-                            'alertmanager.key': 'mykey',
-                            'web.yml': web_config,
-                            'root_cert.pem': 'my_root_cert'
+                        "fsid": "fsid",
+                        "name": 'alertmanager.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9093, 9094],
                         },
-                        'peers': [],
-                        'web_config': '/etc/alertmanager/web.yml'
+                        "meta": {
+                            'service_name': 'alertmanager',
+                            'ports': [9093, 9094],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            "files": {
+                                "alertmanager.yml": y,
+                                'alertmanager.crt': 'mycert',
+                                'alertmanager.key': 'mykey',
+                                'web.yml': web_config,
+                                'root_cert.pem': 'my_root_cert'
+                            },
+                            'peers': [],
+                            'web_config': '/etc/alertmanager/web.yml',
+                        }
                     }),
-                    image='')
+                )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
@@ -542,21 +589,37 @@ class TestMonitoring:
 
                 _run_cephadm.assert_called_with(
                     'test',
-                    'prometheus.test',
-                    'deploy',
-                    [
-                        '--name', 'prometheus.test',
-                        '--meta-json',
-                        ('{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '9095'
-                    ],
-                    stdin=json.dumps({"files": {"prometheus.yml": y,
-                                                "/etc/prometheus/alerting/custom_alerts.yml": ""},
-                                      'retention_time': '15d',
-                                      'retention_size': '0'}),
-                    image='')
+                    "prometheus.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'prometheus.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9095],
+                        },
+                        "meta": {
+                            'service_name': 'prometheus',
+                            'ports': [9095],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            "files": {
+                                "prometheus.yml": y,
+                                "/etc/prometheus/alerting/custom_alerts.yml": "",
+                            },
+                            'retention_time': '15d',
+                            'retention_size': '0',
+                        },
+                    }),
+                )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '::1')
@@ -672,29 +735,42 @@ class TestMonitoring:
 
                 _run_cephadm.assert_called_with(
                     'test',
-                    'prometheus.test',
-                    'deploy',
-                    [
-                        '--name', 'prometheus.test',
-                        '--meta-json',
-                        '{"service_name": "prometheus", "ports": [9095], "ip": null, "deployed_by": [], "rank": null, "rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}',
-                        '--config-json', '-',
-                        '--tcp-ports', '9095'
-                    ],
+                    "prometheus.test",
+                    ['_orch', 'deploy'],
+                    [],
                     stdin=json.dumps({
-                        'files': {
-                            'prometheus.yml': y,
-                            'root_cert.pem': '',
-                            'mgr_prometheus_cert.pem': '',
-                            'web.yml': web_config,
-                            'prometheus.crt': 'mycert',
-                            'prometheus.key': 'mykey',
-                            "/etc/prometheus/alerting/custom_alerts.yml": "",
+                        "fsid": "fsid",
+                        "name": 'prometheus.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9095],
                         },
-                        'retention_time': '15d',
-                        'retention_size': '0',
-                        'web_config': '/etc/prometheus/web.yml'}),
-                    image=''
+                        "meta": {
+                            'service_name': 'prometheus',
+                            'ports': [9095],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            'files': {
+                                'prometheus.yml': y,
+                                'root_cert.pem': '',
+                                'mgr_prometheus_cert.pem': '',
+                                'web.yml': web_config,
+                                'prometheus.crt': 'mycert',
+                                'prometheus.key': 'mykey',
+                                "/etc/prometheus/alerting/custom_alerts.yml": "",
+                            },
+                            'retention_time': '15d',
+                            'retention_size': '0',
+                            'web_config': '/etc/prometheus/web.yml',
+                        },
+                    }),
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -736,18 +812,34 @@ class TestMonitoring:
 
                 _run_cephadm.assert_called_with(
                     'test',
-                    'loki.test',
-                    'deploy',
-                    [
-                        '--name', 'loki.test',
-                        '--meta-json',
-                        ('{"service_name": "loki", "ports": [3100], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '3100'
-                    ],
-                    stdin=json.dumps({"files": {"loki.yml": y}}),
-                    image='')
+                    "loki.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'loki.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [3100],
+                        },
+                        "meta": {
+                            'service_name': 'loki',
+                            'ports': [3100],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            "files": {
+                                "loki.yml": y
+                            },
+                        },
+                    }),
+                )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_promtail_config(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -778,18 +870,34 @@ class TestMonitoring:
 
                 _run_cephadm.assert_called_with(
                     'test',
-                    'promtail.test',
-                    'deploy',
-                    [
-                        '--name', 'promtail.test',
-                        '--meta-json',
-                        ('{"service_name": "promtail", "ports": [9080], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '9080'
-                    ],
-                    stdin=json.dumps({"files": {"promtail.yml": y}}),
-                    image='')
+                    "promtail.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'promtail.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9080],
+                        },
+                        "meta": {
+                            'service_name': 'promtail',
+                            'ports': [9080],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            "files": {
+                                "promtail.yml": y
+                            },
+                        },
+                    }),
+                )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '1::4')
@@ -861,16 +969,32 @@ class TestMonitoring:
 
                 _run_cephadm.assert_called_with(
                     'test',
-                    'grafana.test',
-                    'deploy',
-                    [
-                        '--name', 'grafana.test',
-                        '--meta-json',
-                        ('{"service_name": "grafana", "ports": [3000], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-', '--tcp-ports', '3000'],
-                    stdin=json.dumps({"files": files}),
-                    image='')
+                    "grafana.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'grafana.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [3000],
+                        },
+                        "meta": {
+                            'service_name': 'grafana',
+                            'ports': [3000],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": {
+                            "files": files,
+                        },
+                    }),
+                )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_grafana_initial_admin_pw(self, cephadm_module: CephadmOrchestrator):
@@ -991,16 +1115,32 @@ spec:
                     CephadmServe(cephadm_module)._check_daemons()
 
                     _run_cephadm.assert_called_with(
-                        'test', 'alertmanager.test', 'deploy', [
-                            '--name', 'alertmanager.test',
-                            '--meta-json', ('{"service_name": "alertmanager", "ports": [4200, 9094], "ip": null, "deployed_by": [], "rank": null, '
-                                            '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                            '--config-json', '-',
-                            '--tcp-ports', '4200 9094',
-                            '--reconfig'
-                        ],
-                        stdin='{}',
-                        image='')
+                        'test',
+                        "alertmanager.test",
+                        ['_orch', 'deploy'],
+                        [],
+                        stdin=json.dumps({
+                            "fsid": "fsid",
+                            "name": 'alertmanager.test',
+                            "image": '',
+                            "deploy_arguments": [],
+                            "params": {
+                                'tcp_ports': [4200, 9094],
+                                'reconfig': True,
+                            },
+                            "meta": {
+                                'service_name': 'alertmanager',
+                                'ports': [4200, 9094],
+                                'ip': None,
+                                'deployed_by': [],
+                                'rank': None,
+                                'rank_generation': None,
+                                'extra_container_args': None,
+                                'extra_entrypoint_args': None,
+                            },
+                            "config_blobs": {},
+                        }),
+                    )
 
 
 class TestRGWService:
@@ -1083,18 +1223,29 @@ class TestSNMPGateway:
             with with_service(cephadm_module, spec):
                 _run_cephadm.assert_called_with(
                     'test',
-                    'snmp-gateway.test',
-                    'deploy',
-                    [
-                        '--name', 'snmp-gateway.test',
-                        '--meta-json',
-                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '9464'
-                    ],
-                    stdin=json.dumps(config),
-                    image=''
+                    "snmp-gateway.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'snmp-gateway.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9464],
+                        },
+                        "meta": {
+                            'service_name': 'snmp-gateway',
+                            'ports': [9464],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": config,
+                    }),
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1119,18 +1270,29 @@ class TestSNMPGateway:
             with with_service(cephadm_module, spec):
                 _run_cephadm.assert_called_with(
                     'test',
-                    'snmp-gateway.test',
-                    'deploy',
-                    [
-                        '--name', 'snmp-gateway.test',
-                        '--meta-json',
-                        ('{"service_name": "snmp-gateway", "ports": [9465], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '9465'
-                    ],
-                    stdin=json.dumps(config),
-                    image=''
+                    "snmp-gateway.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'snmp-gateway.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9465],
+                        },
+                        "meta": {
+                            'service_name': 'snmp-gateway',
+                            'ports': [9465],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": config,
+                    }),
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1159,18 +1321,29 @@ class TestSNMPGateway:
             with with_service(cephadm_module, spec):
                 _run_cephadm.assert_called_with(
                     'test',
-                    'snmp-gateway.test',
-                    'deploy',
-                    [
-                        '--name', 'snmp-gateway.test',
-                        '--meta-json',
-                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '9464'
-                    ],
-                    stdin=json.dumps(config),
-                    image=''
+                    "snmp-gateway.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'snmp-gateway.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9464],
+                        },
+                        "meta": {
+                            'service_name': 'snmp-gateway',
+                            'ports': [9464],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": config,
+                    }),
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -1204,18 +1377,29 @@ class TestSNMPGateway:
             with with_service(cephadm_module, spec):
                 _run_cephadm.assert_called_with(
                     'test',
-                    'snmp-gateway.test',
-                    'deploy',
-                    [
-                        '--name', 'snmp-gateway.test',
-                        '--meta-json',
-                        ('{"service_name": "snmp-gateway", "ports": [9464], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '9464'
-                    ],
-                    stdin=json.dumps(config),
-                    image=''
+                    "snmp-gateway.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'snmp-gateway.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9464],
+                        },
+                        "meta": {
+                            'service_name': 'snmp-gateway',
+                            'ports': [9464],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": config,
+                    }),
                 )
 
 
@@ -2039,19 +2223,29 @@ class TestJaeger:
             with with_service(cephadm_module, spec):
                 _run_cephadm.assert_called_with(
                     'test',
-                    'jaeger-query.test',
-                    'deploy',
-                    [
-                        '--name', 'jaeger-query.test',
-                        '--meta-json',
-                        ('{"service_name": "jaeger-query", "ports": [16686], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '16686'
-
-                    ],
-                    stdin=json.dumps(config),
-                    image=''
+                    "jaeger-query.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'jaeger-query.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [16686],
+                        },
+                        "meta": {
+                            'service_name': 'jaeger-query',
+                            'ports': [16686],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": config,
+                    }),
                 )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -2067,37 +2261,57 @@ class TestJaeger:
                 "elasticsearch_nodes": f'http://{build_url(host=cephadm_module.inventory.get_addr("test"), port=9200).lstrip("/")}'}
             with with_service(cephadm_module, es_spec):
                 _run_cephadm.assert_called_with(
-                    'test',
-                    'elasticsearch.test',
-                    'deploy',
-                    [
-                        '--name', 'elasticsearch.test',
-                        '--meta-json',
-                        ('{"service_name": "elasticsearch", "ports": [9200], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '9200'
-
-                    ],
-                    stdin=json.dumps(es_config),
-                    image=''
+                    "test",
+                    "elasticsearch.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'elasticsearch.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [9200],
+                        },
+                        "meta": {
+                            'service_name': 'elasticsearch',
+                            'ports': [9200],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": es_config,
+                    }),
                 )
                 with with_service(cephadm_module, collector_spec):
                     _run_cephadm.assert_called_with(
-                        'test',
-                        'jaeger-collector.test',
-                        'deploy',
-                        [
-                            '--name', 'jaeger-collector.test',
-                            '--meta-json',
-                            ('{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, '
-                             '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                            '--config-json', '-',
-                            '--tcp-ports', '14250'
-
-                        ],
-                        stdin=json.dumps(collector_config),
-                        image=''
+                        "test",
+                        "jaeger-collector.test",
+                        ['_orch', 'deploy'],
+                        [],
+                        stdin=json.dumps({
+                            "fsid": "fsid",
+                            "name": 'jaeger-collector.test',
+                            "image": '',
+                            "deploy_arguments": [],
+                            "params": {
+                                'tcp_ports': [14250],
+                            },
+                            "meta": {
+                                'service_name': 'jaeger-collector',
+                                'ports': [14250],
+                                'ip': None,
+                                'deployed_by': [],
+                                'rank': None,
+                                'rank_generation': None,
+                                'extra_container_args': None,
+                                'extra_entrypoint_args': None,
+                            },
+                            "config_blobs": collector_config,
+                        }),
                     )
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
@@ -2113,35 +2327,55 @@ class TestJaeger:
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, collector_spec):
                 _run_cephadm.assert_called_with(
-                    'test',
-                    'jaeger-collector.test',
-                    'deploy',
-                    [
-                        '--name', 'jaeger-collector.test',
-                        '--meta-json',
-                        ('{"service_name": "jaeger-collector", "ports": [14250], "ip": null, "deployed_by": [], "rank": null, '
-                         '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                        '--config-json', '-',
-                        '--tcp-ports', '14250'
-
-                    ],
-                    stdin=json.dumps(collector_config),
-                    image=''
+                    "test",
+                    "jaeger-collector.test",
+                    ['_orch', 'deploy'],
+                    [],
+                    stdin=json.dumps({
+                        "fsid": "fsid",
+                        "name": 'jaeger-collector.test',
+                        "image": '',
+                        "deploy_arguments": [],
+                        "params": {
+                            'tcp_ports': [14250],
+                        },
+                        "meta": {
+                            'service_name': 'jaeger-collector',
+                            'ports': [14250],
+                            'ip': None,
+                            'deployed_by': [],
+                            'rank': None,
+                            'rank_generation': None,
+                            'extra_container_args': None,
+                            'extra_entrypoint_args': None,
+                        },
+                        "config_blobs": collector_config,
+                    }),
                 )
                 with with_service(cephadm_module, agent_spec):
                     _run_cephadm.assert_called_with(
-                        'test',
-                        'jaeger-agent.test',
-                        'deploy',
-                        [
-                            '--name', 'jaeger-agent.test',
-                            '--meta-json',
-                            ('{"service_name": "jaeger-agent", "ports": [6799], "ip": null, "deployed_by": [], "rank": null, '
-                             '"rank_generation": null, "extra_container_args": null, "extra_entrypoint_args": null}'),
-                            '--config-json', '-',
-                            '--tcp-ports', '6799'
-
-                        ],
-                        stdin=json.dumps(agent_config),
-                        image=''
+                        "test",
+                        "jaeger-agent.test",
+                        ['_orch', 'deploy'],
+                        [],
+                        stdin=json.dumps({
+                            "fsid": "fsid",
+                            "name": 'jaeger-agent.test',
+                            "image": '',
+                            "deploy_arguments": [],
+                            "params": {
+                                'tcp_ports': [6799],
+                            },
+                            "meta": {
+                                'service_name': 'jaeger-agent',
+                                'ports': [6799],
+                                'ip': None,
+                                'deployed_by': [],
+                                'rank': None,
+                                'rank_generation': None,
+                                'extra_container_args': None,
+                                'extra_entrypoint_args': None,
+                            },
+                            "config_blobs": agent_config,
+                        }),
                     )
