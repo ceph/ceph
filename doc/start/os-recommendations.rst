@@ -26,8 +26,10 @@ Linux Kernel
   for kernel version guidance.
 
   Older kernel client versions may not support your `CRUSH tunables`_ profile
-  or other newer features of the Ceph cluster, requiring the storage cluster
-  to be configured with those features disabled.
+  or other newer features of the Ceph cluster, requiring the storage cluster to
+  be configured with those features disabled. For RBD, a kernel of version 5.3
+  or CentOS 8.2 is the minimum necessary for reasonable support for RBD image
+  features.
 
 
 Platforms
