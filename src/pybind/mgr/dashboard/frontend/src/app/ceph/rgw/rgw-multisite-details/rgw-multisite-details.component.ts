@@ -79,8 +79,9 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   defaultZoneId = '';
   multisiteInfo: object[] = [];
   defaultsInfo: string[] = [];
-  title: string = 'Edit';
   showMigrateAction: boolean = false;
+  editTitle: string = 'Edit';
+  deleteTitle: string = 'Delete';
 
   constructor(
     private modalService: ModalService,
@@ -323,11 +324,11 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
         }
       });
       if (!isMasterZone) {
-        this.title =
+        this.editTitle =
           'Please create a master zone for each existing zonegroup to enable this feature';
         return this.messages.noMasterZone;
       } else {
-        this.title = 'Edit';
+        this.editTitle = 'Edit';
         return false;
       }
     }
@@ -346,6 +347,55 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
       this.showMigrateAction = false;
     }
     return this.showMigrateAction;
+  }
+
+  isDeleteDisabled(node: TreeNode): boolean {
+    let disable: boolean = false;
+    let masterZonegroupCount: number = 0;
+    if (node.data.type === 'realm' && node.data.is_default && this.realms.length < 2) {
+      disable = true;
+    }
+
+    if (node.data.type === 'zonegroup') {
+      if (this.zonegroups.length < 2) {
+        this.deleteTitle = 'You can not delete the only zonegroup available';
+        disable = true;
+      } else if (node.data.is_default) {
+        this.deleteTitle = 'You can not delete the default zonegroup';
+        disable = true;
+      } else if (node.data.is_master) {
+        for (let zonegroup of this.zonegroups) {
+          if (zonegroup.is_master === true) {
+            masterZonegroupCount++;
+            if (masterZonegroupCount > 1) break;
+          }
+        }
+        if (masterZonegroupCount < 2) {
+          this.deleteTitle = 'You can not delete the only master zonegroup available';
+          disable = true;
+        }
+      }
+    }
+
+    if (node.data.type === 'zone') {
+      if (this.zones.length < 2) {
+        this.deleteTitle = 'You can not delete the only zone available';
+        disable = true;
+      } else if (node.data.is_default) {
+        this.deleteTitle = 'You can not delete the default zone';
+        disable = true;
+      } else if (node.data.is_master && node.data.zone_zonegroup.zones.length < 2) {
+        this.deleteTitle =
+          'You can not delete the master zone as there are no more zones in this zonegroup';
+        disable = true;
+      }
+    }
+
+    if (!disable) {
+      this.deleteTitle = 'Delete';
+    }
+
+    return disable;
   }
 
   delete(node: TreeNode) {

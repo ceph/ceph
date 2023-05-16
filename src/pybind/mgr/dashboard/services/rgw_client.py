@@ -927,7 +927,7 @@ class RgwClient(RestClient):
             all_zonegroups_info['default_zonegroup'] = ''  # type: ignore
         return all_zonegroups_info
 
-    def delete_zonegroup(self, zonegroup_name: str, delete_pools: str):
+    def delete_zonegroup(self, zonegroup_name: str, delete_pools: str, pools: List[str]):
         if delete_pools == 'true':
             zonegroup_info = self.get_zonegroup(zonegroup_name)
         rgw_delete_zonegroup_cmd = ['zonegroup', 'delete', '--rgw-zonegroup', zonegroup_name]
@@ -941,8 +941,7 @@ class RgwClient(RestClient):
         self.update_period()
         if delete_pools == 'true':
             for zone in zonegroup_info['zones']:
-                zone_info = self.get_zone(zone['name'])
-                self.delete_zone_pools(zone['name'], zone_info)
+                self.delete_zone(zone['name'], 'true', pools)
 
     def create_zone(self, zone_name, zonegroup_name, default, master, endpoints, user,
                     createSystemUser, master_zone_of_master_zonegroup):
@@ -1150,11 +1149,11 @@ class RgwClient(RestClient):
             all_zones_info['default_zone'] = ''  # type: ignore
         return all_zones_info
 
-    def delete_zone(self, zonegroup_name: str, zone_name: str, delete_pools: str):
+    def delete_zone(self, zone_name: str, delete_pools: str, pools: List[str],
+                    zonegroup_name: str = '',):
         rgw_remove_zone_from_zonegroup_cmd = ['zonegroup', 'remove', '--rgw-zonegroup',
                                               zonegroup_name, '--rgw-zone', zone_name]
         rgw_delete_zone_cmd = ['zone', 'delete', '--rgw-zone', zone_name]
-        zone_info = self.get_zone(zone_name)
         if zonegroup_name:
             try:
                 exit_code, _, _ = mgr.send_rgwadmin_command(rgw_remove_zone_from_zonegroup_cmd)
@@ -1173,31 +1172,12 @@ class RgwClient(RestClient):
             raise DashboardException(error, http_status_code=500, component='rgw')
         self.update_period()
         if delete_pools == 'true':
-            self.delete_zone_pools(zone_name, zone_info)
+            self.delete_pools(pools)
 
-    def delete_zone_pools(self, zone_name, zone_info):
-        # pylint: disable=unused-variable
-        for key, value in zone_info.items():
-            if zone_name in value:
-                if mgr.rados.pool_exists(value):
-                    mgr.rados.delete_pool(value)
-        self.search_and_delete_pools(zone_info['placement_pools'], zone_name)
-
-    def search_and_delete_pools(self, obj, pool_name):
-        if isinstance(obj, dict):
-            # pylint: disable=unused-variable
-            for key, value in obj.items():
-                if isinstance(value, str) and pool_name in value:
-                    if mgr.rados.pool_exists(value):
-                        mgr.rados.delete_pool(value)
-                self.search_and_delete_pools(value, pool_name)
-        elif isinstance(obj, list):
-            for item in obj:
-                self.search_and_delete_pools(item, pool_name)
-        else:
-            if isinstance(obj, str) and pool_name in obj:
-                if mgr.rados.pool_exists(obj):
-                    mgr.rados.delete_pool(obj)
+    def delete_pools(self, pools):
+        for pool in pools:
+            if mgr.rados.pool_exists(pool):
+                mgr.rados.delete_pool(pool)
 
     def get_multisite_status(self):
         is_multisite_configured = True
