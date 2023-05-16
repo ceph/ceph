@@ -1214,6 +1214,7 @@ class CephadmServe:
                              osd_uuid_map: Optional[Dict[str, Any]] = None,
                              ) -> str:
 
+        daemon_params: Dict[str, Any] = {}
         with set_exception_subject('service', orchestrator.DaemonDescription(
                 daemon_type=daemon_spec.daemon_type,
                 daemon_id=daemon_spec.daemon_id,
@@ -1234,9 +1235,7 @@ class CephadmServe:
 
                 # TCP port to open in the host firewall
                 if len(ports) > 0:
-                    daemon_spec.extra_args.extend([
-                        '--tcp-ports', ' '.join(map(str, ports))
-                    ])
+                    daemon_params['tcp_ports'] = list(ports)
 
                 # osd deployments needs an --osd-uuid arg
                 if daemon_spec.daemon_type == 'osd':
@@ -1245,14 +1244,14 @@ class CephadmServe:
                     osd_uuid = osd_uuid_map.get(daemon_spec.daemon_id)
                     if not osd_uuid:
                         raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
-                    daemon_spec.extra_args.extend(['--osd-fsid', osd_uuid])
+                    daemon_params['osd_fsid'] = osd_uuid
 
                 if reconfig:
-                    daemon_spec.extra_args.append('--reconfig')
+                    daemon_params['reconfig'] = True
                 if self.mgr.allow_ptrace:
-                    daemon_spec.extra_args.append('--allow-ptrace')
+                    daemon_params['allow_ptrace'] = True
 
-                daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec)
+                daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
 
                 if daemon_spec.service_name in self.mgr.spec_store:
                     configs = self.mgr.spec_store[daemon_spec.service_name].spec.custom_configs
@@ -1277,6 +1276,7 @@ class CephadmServe:
                         "name": daemon_spec.name(),
                         "image": image,
                         "deploy_arguments": daemon_spec.extra_args,
+                        "params": daemon_params,
                         "meta": {
                             'service_name': daemon_spec.service_name,
                             'ports': daemon_spec.ports,
@@ -1333,35 +1333,31 @@ class CephadmServe:
                     self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
                 raise
 
-    def _setup_extra_deployment_args(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[CephadmDaemonDeploySpec, Optional[List[str]], Optional[List[str]]]:
+    def _setup_extra_deployment_args(self, daemon_spec: CephadmDaemonDeploySpec, params: Dict[str, Any]) -> Tuple[CephadmDaemonDeploySpec, Optional[List[str]], Optional[List[str]]]:
         # this function is for handling any potential user specified
         # (in the service spec) extra runtime or entrypoint args for a daemon
         # we are going to deploy. Effectively just adds a set of extra args to
         # pass to the cephadm binary to indicate the daemon being deployed
         # needs extra runtime/entrypoint args. Returns the modified daemon spec
         # as well as what args were added (as those are included in unit.meta file)
+        def _to_args(lst: List[str]) -> List[str]:
+            out: List[str] = []
+            for value in lst:
+                for arg in value.split(' '):
+                    if arg:
+                        out.append(arg)
+            return out
+
         try:
             eca = daemon_spec.extra_container_args
             if eca:
-                for a in eca:
-                    # args with spaces need to be split into multiple args
-                    # in order to work properly
-                    args = a.split(' ')
-                    for arg in args:
-                        if arg:
-                            daemon_spec.extra_args.append(f'--extra-container-args={arg}')
+                params['extra_container_args'] = _to_args(eca)
         except AttributeError:
             eca = None
         try:
             eea = daemon_spec.extra_entrypoint_args
             if eea:
-                for a in eea:
-                    # args with spaces need to be split into multiple args
-                    # in order to work properly
-                    args = a.split(' ')
-                    for arg in args:
-                        if arg:
-                            daemon_spec.extra_args.append(f'--extra-entrypoint-args={arg}')
+                params['extra_entrypoint_args'] = _to_args(eea)
         except AttributeError:
             eea = None
         return daemon_spec, eca, eea
