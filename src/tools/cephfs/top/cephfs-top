@@ -383,7 +383,7 @@ class FSTop(FSTopBase):
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         title = ['No filesystem available',
-                 'Press "q" to go back to home (all filesystem info) screen']
+                 'Press "q" to go back to home (All Filesystem Info) screen']
         pos_x1 = w // 2 - len(title[0]) // 2
         pos_x2 = w // 2 - len(title[1]) // 2
         stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
@@ -411,10 +411,10 @@ class FSTop(FSTopBase):
                 endmenu = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if self.active_screen == FS_TOP_ALL_FS_APP:
-                    self.run_all_display()
-                else:
+                if fs_list and self.active_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endmenu = True
 
             try:
