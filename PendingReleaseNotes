@@ -148,6 +148,33 @@
 * CEPHFS: After recovering a Ceph File System post following the disaster recovery
   procedure, the recovered files under `lost+found` directory can now be deleted.
 * core: cache-tiering is now deprecated.
+* mClock Scheduler: The mClock scheduler (default scheduler in Quincy) has
+  undergone significant usability and design improvements to address the slow
+  backfill issue. Some important changes are:
+  * The 'balanced' profile is set as the default mClock profile because it
+    represents a compromise between prioritizing client IO or recovery IO. Users
+    can then choose either the 'high_client_ops' profile to prioritize client IO
+    or the 'high_recovery_ops' profile to prioritize recovery IO.
+  * QoS parameters like reservation and limit are now specified in terms of a
+    fraction (range: 0.0 to 1.0) of the OSD's IOPS capacity.
+  * The cost parameters (osd_mclock_cost_per_io_usec_* and
+    osd_mclock_cost_per_byte_usec_*) have been removed. The cost of an operation
+    is now determined using the random IOPS and maximum sequential bandwidth
+    capability of the OSD's underlying device.
+  * Degraded object recovery is given higher priority when compared to misplaced
+    object recovery because degraded objects present a data safety issue not
+    present with objects that are merely misplaced. Therefore, backfilling
+    operations with the 'balanced' and 'high_client_ops' mClock profiles may
+    progress slower than what was seen with the 'WeightedPriorityQueue' (WPQ)
+    scheduler.
+  * The QoS allocations in all the mClock profiles are optimized based on the above
+    fixes and enhancements.
+  * For more detailed information see:
+    https://docs.ceph.com/en/latest/rados/configuration/mclock-config-ref/
+* mgr/snap_schedule: The snap-schedule mgr module now retains one less snapshot
+  than the number mentioned against the config tunable `mds_max_snaps_per_dir`
+  so that a new snapshot can be created and retained during the next schedule
+  run.
 
 >=17.2.1
 
