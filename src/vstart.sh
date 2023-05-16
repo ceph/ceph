@@ -160,7 +160,11 @@ overwrite_conf=0
 cephx=1 #turn cephx on by default
 gssapi_authx=0
 cache=""
-objectstore="bluestore"
+if [ `uname` = FreeBSD ]; then
+    objectstore="memstore"
+else
+    objectstore="bluestore"
+fi
 ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
