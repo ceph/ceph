@@ -671,11 +671,10 @@ rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& pref
  * CF handle. In all other cases, we return a nullptr to indicate that the specified bounds cannot necessarily be mapped
  * to a single CF.
  */
-rocksdb::ColumnFamilyHandle *RocksDBStore::get_cf_handle(const std::string& prefix, const IteratorBounds& bounds) {
+rocksdb::ColumnFamilyHandle *RocksDBStore::check_cf_handle_bounds(const cf_handles_iterator& iter, const IteratorBounds& bounds) {
   if (!bounds.lower_bound || !bounds.upper_bound) {
     return nullptr;
   }
-  auto iter = cf_handles.find(prefix);
   ceph_assert(iter != cf_handles.end());
   ceph_assert(iter->second.handles.size() != 1);
   if (iter->second.hash_l != 0) {
@@ -3007,7 +3006,7 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
     if (cf_it->second.handles.size() == 1) {
       cf = cf_it->second.handles[0];
     } else if (cct->_conf->osd_rocksdb_iterator_bounds_enabled) {
-      cf = get_cf_handle(prefix, bounds);
+      cf = check_cf_handle_bounds(cf_it, bounds);
     }
     if (cf) {
       return std::make_shared<CFIteratorImpl>(
@@ -3023,7 +3022,13 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix, Itera
         std::move(bounds));
     }
   } else {
-    return KeyValueDB::get_iterator(prefix, opts);
+    // use wholespace engine if no cfs are configured
+    // or use default cf otherwise as there is no
+    // matching cf for the specified prefix.
+    auto w_it = cf_handles.size() == 0 || prefix.empty() ?
+      get_wholespace_iterator(opts) :
+      get_default_cf_iterator();
+    return KeyValueDB::make_iterator(prefix, w_it);
   }
 }
 
