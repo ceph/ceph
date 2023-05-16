@@ -1057,6 +1057,48 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       break;
     }
     break;
+    case FS_IOC_GET_ENCRYPTION_KEY_STATUS: {
+      if (!in_buf ||
+        in_bufsz != sizeof(fscrypt_get_key_status_arg)) {
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": ioctl buffer <none>" << dendl;
+        fuse_reply_err(req, EINVAL);
+        break;
+      }
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GET_ENCRYPTION_KEY_STATUS ioctl buffer:\n" << hex_str(in_buf, in_bufsz) << dendl;
+
+      auto arg = (fscrypt_get_key_status_arg *)in_buf;
+      if (arg->key_spec.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
+        fuse_reply_err(req, ENOTSUP);
+        break;
+      }
+
+      ceph_fscrypt_key_identifier kid;
+      int r = kid.init(arg->key_spec);
+      if (r < 0) {
+        fuse_reply_err(req, -r);
+        break;
+      }
+
+      FSCryptKeyRef key;
+      r = cfuse->client->fscrypt->get_key_store().find(kid, key);
+      if (r < 0 && r != -ENOENT) {
+        fuse_reply_err(req, -r);
+        break;
+      }
+
+      bool found = (r == 0);
+
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GET_ENCRYPTION_KEY_STATUS found=" << found << dendl;
+
+      /* TODO: return correct info */
+      arg->status = (found ? FSCRYPT_KEY_STATUS_PRESENT : FSCRYPT_KEY_STATUS_ABSENT);
+      arg->status_flags = 0;
+      arg->user_count = !!found; /* FIXME */
+
+      fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
+    }
+    break;
     default:
       fuse_reply_err(req, EINVAL);
   }
