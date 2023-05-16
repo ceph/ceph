@@ -181,3 +181,12 @@ int FSCryptKeyStore::find(const struct ceph_fscrypt_key_identifier& id, FSCryptK
 
   return 0;
 }
+
+int FSCryptKeyStore::remove(const struct ceph_fscrypt_key_identifier& id)
+{
+  std::unique_lock rl{lock};
+
+  m.erase(id);
+
+  return 0;
+}
