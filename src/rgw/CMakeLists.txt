@@ -223,7 +223,12 @@ if(WITH_RADOSGW_DAOS)
 endif()
 if(WITH_RADOSGW_POSIX)
   #add_subdirectory(driver/posix)
-  list(APPEND librgw_common_srcs driver/posix/rgw_sal_posix.cc)
+  find_package(LMDB REQUIRED)
+  list(APPEND librgw_common_srcs
+	      driver/posix/rgw_sal_posix.cc
+	      driver/posix/lmdb-safe/lmdb-safe.cc
+	      driver/posix/bucket_cache.cpp
+	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
@@ -233,7 +238,6 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # list(APPEND radosgw_srcs rgw_flight.cc rgw_flight_frontend.cc)
   list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
-
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
@@ -268,6 +272,7 @@ target_link_libraries(rgw_common
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
+    ${LMDB_LIBRARIES}
     ${ALLOC_LIBS}
   PUBLIC
     ${LUA_LIBRARIES}

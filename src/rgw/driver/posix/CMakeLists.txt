@@ -49,6 +49,8 @@ ENDIF()
 # add pthread library
 set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} pthread)
 
+find_package(LMDB REQUIRED)
+
 find_package(gtest QUIET)
 if(WITH_TESTS)
     add_subdirectory(tests)
