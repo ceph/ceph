@@ -44,21 +44,25 @@
                 </span>
                 <div class="btn-group align-inline-btns"
                      *ngIf="node.isFocused"
-                     [title]="title"
                      role="group">
-                  <button type="button"
-                          class="btn btn-light dropdown-toggle-split ms-1"
-                          (click)="openModal(node, true)"
-                          [disabled]="getDisable()">
-                    <i [ngClass]="[icons.edit]"></i>
-                  </button>
-                  <button type="button"
-                          title="Delete"
-                          class="btn btn-light ms-1"
-                          i18n-title
-                          (click)="delete(node)">
-                    <i [ngClass]="[icons.destroy]"></i>
-                  </button>
+                  <div [title]="editTitle"
+                       i18n-title>
+                    <button type="button"
+                            class="btn btn-light dropdown-toggle-split ms-1"
+                            (click)="openModal(node, true)"
+                            [disabled]="getDisable()">
+                      <i [ngClass]="[icons.edit]"></i>
+                    </button>
+                  </div>
+                  <div [title]="deleteTitle"
+                       i18n-title>
+                    <button type="button"
+                            class="btn btn-light ms-1"
+                            [disabled]="isDeleteDisabled(node)"
+                            (click)="delete(node)">
+                      <i [ngClass]="[icons.destroy]"></i>
+                    </button>
+                  </div>
                 </div>
               </ng-template>
             </tree-root>

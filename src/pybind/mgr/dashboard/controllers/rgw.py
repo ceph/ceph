@@ -839,10 +839,13 @@ class RgwZonegroup(RESTController):
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
 
-    def delete(self, zonegroup_name, delete_pools, daemon_name=None):
+    def delete(self, zonegroup_name, delete_pools, pools: Optional[List[str]] = None,
+               daemon_name=None):
+        if pools is None:
+            pools = []
         try:
             instance = RgwClient.admin_instance(daemon_name)
-            result = instance.delete_zonegroup(zonegroup_name, delete_pools)
+            result = instance.delete_zonegroup(zonegroup_name, delete_pools, pools)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
@@ -909,10 +912,15 @@ class RgwZone(RESTController):
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
 
-    def delete(self, zonegroup_name, zone_name, delete_pools, daemon_name=None):
+    def delete(self, zone_name, delete_pools, pools: Optional[List[str]] = None,
+               zonegroup_name=None, daemon_name=None):
+        if pools is None:
+            pools = []
+        if zonegroup_name is None:
+            zonegroup_name = ''
         try:
             instance = RgwClient.admin_instance(daemon_name)
-            result = instance.delete_zone(zonegroup_name, zone_name, delete_pools)
+            result = instance.delete_zone(zone_name, delete_pools, pools, zonegroup_name)
             return result
         except NoRgwDaemonsException as e:
             raise DashboardException(e, http_status_code=404, component='rgw')
