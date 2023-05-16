@@ -24,6 +24,7 @@ import { RgwUserS3KeyModalComponent } from './rgw-user-s3-key-modal/rgw-user-s3-
 import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal/rgw-user-subuser-modal.component';
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { RgwUserTabsComponent } from './rgw-user-tabs/rgw-user-tabs.component';
+import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.component';
 
 @NgModule({
   imports: [
@@ -88,7 +89,6 @@ const routes: Routes = [
       },
       {
         path: 'roles',
-        component: CRUDTableComponent,
         data: {
           breadcrumbs: 'Roles',
           resource: 'api.rgw.user.roles@1.0',
@@ -102,7 +102,20 @@ const routes: Routes = [
               url: '/rgw/user/roles'
             }
           ]
-        }
+        },
+        children: [
+          {
+            path: '',
+            component: CRUDTableComponent
+          },
+          {
+            path: URLVerbs.CREATE,
+            component: CrudFormComponent,
+            data: {
+              breadcrumbs: ActionLabels.CREATE
+            }
+          }
+        ]
       }
     ]
   },

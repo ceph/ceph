@@ -5,6 +5,7 @@ class Table {
   columns: CdTableColumn[];
   columnMode: string;
   toolHeader: boolean;
+  selectionType: string;
 }
 
 export class CrudMetadata {
@@ -12,4 +13,5 @@ export class CrudMetadata {
   permissions: string[];
   actions: CdTableAction[];
   forms: any;
+  columnKey: string;
 }
