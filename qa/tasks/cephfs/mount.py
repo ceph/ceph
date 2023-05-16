@@ -1503,6 +1503,3 @@ class CephFSMount(object):
             subvol_paths = self.ctx.created_subvols[self.cephfs_name]
             path_to_mount = subvol_paths[mount_subvol_num]
             self.cephfs_mntpt = path_to_mount
-        elif not self.cephfs_mntpt:
-            # default to the "/" path
-            self.cephfs_mntpt = "/"
