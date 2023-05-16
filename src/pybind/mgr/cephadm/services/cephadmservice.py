@@ -80,8 +80,10 @@ class CephadmDaemonDeploySpec:
         # for run_cephadm.
         self.keyring: Optional[str] = keyring
 
+        # FIXME: finish removing this
         # For run_cephadm. Would be great to have more expressive names.
-        self.extra_args: List[str] = extra_args or []
+        # self.extra_args: List[str] = extra_args or []
+        assert not extra_args
 
         self.ceph_conf = ceph_conf
         self.extra_files = extra_files or {}
@@ -147,6 +149,10 @@ class CephadmDaemonDeploySpec:
             extra_container_args=self.extra_container_args,
             extra_entrypoint_args=self.extra_entrypoint_args,
         )
+
+    @property
+    def extra_args(self) -> List[str]:
+        return []
 
 
 class CephadmService(metaclass=ABCMeta):
