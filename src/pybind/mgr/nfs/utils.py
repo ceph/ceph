@@ -1,7 +1,12 @@
+import functools
+import logging
+import stat
 from typing import List, Tuple, TYPE_CHECKING
 
 from object_format import ErrorResponseBase
 import orchestrator
+import cephfs
+from mgr_util import CephfsClient, open_filesystem
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -9,6 +14,8 @@ if TYPE_CHECKING:
 EXPORT_PREFIX: str = "export-"
 CONF_PREFIX: str = "conf-nfs."
 USER_CONF_PREFIX: str = "userconf-nfs."
+
+log = logging.getLogger(__name__)
 
 
 class NonFatalError(ErrorResponseBase):
@@ -82,3 +89,16 @@ def check_fs(mgr: 'Module', fs_name: str) -> bool:
     '''
     fs_map = mgr.get('fs_map')
     return fs_name in [fs['mdsmap']['fs_name'] for fs in fs_map['filesystems']]
+
+
+def cephfs_path_is_dir(mgr: 'Module', fs: str, path: str) -> None:
+    @functools.lru_cache(maxsize=1)
+    def _get_cephfs_client() -> CephfsClient:
+        return CephfsClient(mgr)
+    cephfs_client = _get_cephfs_client()
+
+    with open_filesystem(cephfs_client, fs) as fs_handle:
+        stx = fs_handle.statx(path.encode('utf-8'), cephfs.CEPH_STATX_MODE,
+                              cephfs.AT_SYMLINK_NOFOLLOW)
+        if not stat.S_ISDIR(stx.get('mode')):
+            raise NotADirectoryError()
