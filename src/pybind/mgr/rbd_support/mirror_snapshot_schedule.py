@@ -338,10 +338,11 @@ class MirrorSnapshotScheduleHandler:
         self.last_refresh_images = datetime(1970, 1, 1)
         self.create_snapshot_requests = CreateSnapshotRequests(self)
 
-        self.init_schedule_queue()
-
         self.stop_thread = False
         self.thread = Thread(target=self.run)
+
+    def setup(self) -> None:
+        self.init_schedule_queue()
         self.thread.start()
 
     def shutdown(self) -> None:
