@@ -46,6 +46,7 @@ public:
 
   int create(const char *k, int klen, FSCryptKeyRef& key);
   int find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyRef& key);
+  int remove(const struct ceph_fscrypt_key_identifier& id);
 };
 
 
