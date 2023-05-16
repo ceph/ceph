@@ -45,8 +45,6 @@ FS_TOP_SUPPORTED_VER = 2
 ITEMS_PAD_LEN = 3
 ITEMS_PAD = " " * ITEMS_PAD_LEN
 DEFAULT_REFRESH_INTERVAL = 1
-# min refresh interval allowed
-MIN_REFRESH_INTERVAL = 0.5
 
 # metadata provided by mgr/stats
 FS_TOP_MAIN_WINDOW_COL_CLIENT_ID = "client_id"
@@ -1185,14 +1183,6 @@ class FSTop(FSTopBase):
 
 
 if __name__ == '__main__':
-    def float_greater_than(x):
-        value = float(x)
-        if value < MIN_REFRESH_INTERVAL:
-            raise argparse.ArgumentTypeError(
-                'Refresh interval should be greater than or equal to'
-                f' {MIN_REFRESH_INTERVAL}')
-        return value
-
     parser = argparse.ArgumentParser(description='Ceph Filesystem top utility')
     parser.add_argument('--cluster', nargs='?', const='ceph', default='ceph',
                         help='Ceph cluster to connect (default: ceph)')
@@ -1202,11 +1192,11 @@ if __name__ == '__main__':
                         help='Path to cluster configuration file')
     parser.add_argument('--selftest', dest='selftest', action='store_true',
                         help='Run in selftest mode')
-    parser.add_argument('-d', '--delay', nargs='?',
+    parser.add_argument('-d', '--delay', metavar='DELAY', dest='delay', choices=range(1, 26),
                         default=DEFAULT_REFRESH_INTERVAL,
-                        type=float_greater_than,
+                        type=int,
                         help='Refresh interval in seconds '
-                        f'(default: {DEFAULT_REFRESH_INTERVAL})')
+                        f'(default: {DEFAULT_REFRESH_INTERVAL}, range: 1 - 25)')
     parser.add_argument('--dump', dest='dump', action='store_true',
                         help='Dump the metrics to stdout')
     parser.add_argument('--dumpfs', action='append',
