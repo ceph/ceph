@@ -17494,8 +17494,8 @@ void BlueStore::BlueStoreThrottle::complete(TransContext &txc)
     pending_deferred_ios -= 1;
   }
   if (txc.tracing) {
-    mono_clock::time_point now = mono_clock::now();
-    mono_clock::duration lat = now - txc.start;
+    [[maybe_unused]] mono_clock::time_point now = mono_clock::now();
+    [[maybe_unused]] mono_clock::duration lat = now - txc.start;
     tracepoint(
       bluestore,
       transaction_total_duration,
