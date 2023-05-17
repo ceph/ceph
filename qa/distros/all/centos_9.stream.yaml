@@ -1,2 +1,9 @@
 os_type: centos
 os_version: "9.stream"
+
+# enable the ceph/el9 copr for python packages that aren't in epel9 yet
+# see https://tracker.ceph.com/issues/58832
+overrides:
+  install:
+    ceph:
+      enable_coprs: [ceph/el9]
