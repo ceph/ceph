@@ -8244,6 +8244,9 @@ paths:
                     id:
                       description: Daemon ID
                       type: string
+                    port:
+                      description: Port
+                      type: integer
                     server_hostname:
                       description: ''
                       type: string
@@ -8263,6 +8266,7 @@ paths:
                 - server_hostname
                 - zonegroup_name
                 - zone_name
+                - port
                 type: array
           description: OK
         '400':
