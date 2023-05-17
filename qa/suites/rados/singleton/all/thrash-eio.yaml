@@ -12,11 +12,11 @@ openstack:
   - volumes: # attached to each instance
       count: 3
       size: 10 # GB
-override:
+overrides:
   ceph:
     conf:
       mon:
-        osd default pool size: 3
+        osd pool default size: 3
 tasks:
 - install:
 - ceph:
