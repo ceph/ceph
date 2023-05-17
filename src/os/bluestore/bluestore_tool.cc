@@ -369,6 +369,8 @@ int main(int argc, char **argv)
     args.push_back(log_file.c_str());
     static char ll[10];
     snprintf(ll, sizeof(ll), "%d", log_level);
+    args.push_back("--debug-bdev");
+    args.push_back(ll);
     args.push_back("--debug-bluestore");
     args.push_back(ll);
     args.push_back("--debug-bluefs");
