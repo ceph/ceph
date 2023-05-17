@@ -63,6 +63,7 @@ private:
   entity_inst_t req_src_inst;
   uint8_t hit_flag_points;
   uint8_t latest_flag_point;
+  const char* last_event_detail = nullptr;
   utime_t dequeued_time;
   static const uint8_t flag_queued_for_pg=1 << 0;
   static const uint8_t flag_reached_pg =  1 << 1;
@@ -111,7 +112,7 @@ public:
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";
-    case flag_delayed: return "delayed";
+    case flag_delayed: return last_event_detail;
     case flag_started: return "started";
     case flag_sub_op_sent: return "waiting for sub ops";
     case flag_commit_sent: return "commit sent; apply or cleanup";
@@ -152,8 +153,8 @@ public:
   void mark_reached_pg() {
     mark_flag_point(flag_reached_pg, "reached_pg");
   }
-  void mark_delayed(const std::string& s) {
-    mark_flag_point_string(flag_delayed, s);
+  void mark_delayed(const char* s) {
+    mark_flag_point(flag_delayed, s);
   }
   void mark_started() {
     mark_flag_point(flag_started, "started");
