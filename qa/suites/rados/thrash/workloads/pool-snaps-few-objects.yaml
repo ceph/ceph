@@ -1,4 +1,4 @@
-override:
+overrides:
   conf:
     osd:
       osd deep scrub update digest min age: 0
