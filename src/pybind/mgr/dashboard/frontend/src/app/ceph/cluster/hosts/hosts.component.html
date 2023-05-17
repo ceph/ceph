@@ -61,6 +61,17 @@
   </span>
 </ng-template>
 
+<ng-template #hostNameTpl
+             let-row="row">
+  <span [ngClass]="row">
+    {{ row.hostname }}
+  </span><br>
+  <span class="text-muted fst-italic"
+        *ngIf="row.addr">
+    ({{ row.addr }})
+  </span>
+</ng-template>
+
 <ng-template #maintenanceConfirmTpl>
   <div *ngFor="let msg of errorMessage; let last=last">
     <ul *ngIf="!last || errorMessage.length === '1'">
