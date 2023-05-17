@@ -33,7 +33,8 @@ describe('RgwDaemonListComponent', () => {
     realm_name: 'realm1',
     zonegroup_name: 'zg1-realm1',
     zone_name: 'zone1-zg1-realm1',
-    default: true
+    default: true,
+    port: 80
   };
 
   const expectTabsAndHeading = (length: number, heading: string) => {
