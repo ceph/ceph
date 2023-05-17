@@ -4,10 +4,11 @@
   <div class="input-group my-2">
     <ng-container *ngFor="let config of matcherConfig">
       <span class="input-group-text"
-            *ngIf="config.attribute === 'isRegex'"
-            [ngbTooltip]="config.tooltip">
-        <i *ngIf="matcher[config.attribute]">~</i>
-        <i *ngIf="!matcher[config.attribute]">=</i>
+            *ngIf="config.attribute === 'isRegex'">
+        <i *ngIf="matcher[config.attribute]"
+           [ngbTooltip]="config.tooltip">~</i>
+        <i *ngIf="!matcher[config.attribute]"
+           ngbTooltip="Equals">=</i>
       </span>
 
       <ng-container *ngIf="config.attribute !== 'isRegex'">
