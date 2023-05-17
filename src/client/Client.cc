@@ -8528,7 +8528,11 @@ int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
     ldout(cct, 3) << __func__ << " exit on error!" << dendl;
     return r;
   }
-  fill_stat(in, stbuf, dirstat);
+  r = fill_stat(in, stbuf, perms, dirstat);
+  if (r < 0) {
+    return r;
+  }
+
   ldout(cct, 3) << __func__ << " exit (relpath " << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
@@ -8586,12 +8590,17 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
     ldout(cct, 3) << __func__ << " exit on error!" << dendl;
     return r;
   }
-  fill_stat(in, stbuf, dirstat);
+  r = fill_stat(in, stbuf, perms, dirstat);
+  if (r < 0) {
+    return r;
+  }
+
   ldout(cct, 3) << __func__ << " exit (relpath " << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 
-int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat)
+int Client::fill_stat(Inode *in, struct stat *st, const UserPerm& perms,
+                      frag_info_t *dirstat, nest_info_t *rstat)
 {
   ldout(cct, 10) << __func__ << " on " << in->ino << " snap/dev" << in->snapid
 	   << " mode 0" << oct << in->mode << dec
@@ -12116,7 +12125,11 @@ int Client::fstat(int fd, struct stat *stbuf, const UserPerm& perms, int mask)
   int r = _getattr(f->inode, mask, perms);
   if (r < 0)
     return r;
-  fill_stat(f->inode, stbuf, NULL);
+  r = fill_stat(f->inode, stbuf, perms, NULL);
+  if (r < 0) {
+    return r;
+  }
+
   ldout(cct, 5) << "fstat(" << fd << ", " << stbuf << ") = " << r << dendl;
   return r;
 }
@@ -13106,7 +13119,10 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   }
 
   ceph_assert(in);
-  fill_stat(in, attr);
+  r = fill_stat(in, attr, perms);
+  if (r < 0) {
+    return r;
+  }
   _ll_get(in.get());
 
  out:
@@ -13421,8 +13437,12 @@ int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 
   int res = _ll_getattr(in, CEPH_STAT_CAP_INODE_ALL, perms);
 
-  if (res == 0)
-    fill_stat(in, attr);
+  if (res == 0) {
+    int ret = fill_stat(in, attr, perms);
+    if (ret < 0) {
+      return ret;
+    }
+  }
   ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
   return res;
 }
@@ -13513,7 +13533,10 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
   int res = _ll_setattrx(in, &stx, mask, perms, &target);
   if (res == 0) {
     ceph_assert(in == target.get());
-    fill_stat(in, attr);
+    int ret = fill_stat(in, attr, perms);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
@@ -14675,7 +14698,10 @@ int Client::ll_mknod(Inode *parent, const char *name, mode_t mode,
   InodeRef in;
   int r = _mknod(parent, name, mode, rdev, perms, &in);
   if (r == 0) {
-    fill_stat(in, attr);
+    int ret = fill_stat(in, attr, perms);
+    if (ret < 0) {
+      return ret;
+    }
     _ll_get(in.get());
   }
   tout(cct) << attr->st_ino << std::endl;
@@ -14913,7 +14939,10 @@ int Client::ll_mkdir(Inode *parent, const char *name, mode_t mode,
   InodeRef in;
   int r = _mkdir(parent, name, mode, perm, &in);
   if (r == 0) {
-    fill_stat(in, attr);
+    int ret = fill_stat(in, attr, perm);
+    if (ret < 0) {
+      return ret;
+    }
     _ll_get(in.get());
   }
   tout(cct) << attr->st_ino << std::endl;
@@ -15032,7 +15061,10 @@ int Client::ll_symlink(Inode *parent, const char *name, const char *value,
   InodeRef in;
   int r = _symlink(parent, name, value, perms, "", &in);
   if (r == 0) {
-    fill_stat(in, attr);
+    int ret = fill_stat(in, attr, perms);
+    if (ret < 0) {
+      return ret;
+    }
     _ll_get(in.get());
   }
   tout(cct) << attr->st_ino << std::endl;
@@ -15741,7 +15773,11 @@ int Client::ll_create(Inode *parent, const char *name, mode_t mode,
       _ll_get(in.get());
       *outp = in.get();
     }
-    fill_stat(in, attr);
+
+    int ret = fill_stat(in, attr, perms);
+    if (ret < 0) {
+      return ret;
+    }
   } else {
     attr->st_ino = 0;
   }
