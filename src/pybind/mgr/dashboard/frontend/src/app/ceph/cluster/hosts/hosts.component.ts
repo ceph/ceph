@@ -26,7 +26,6 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
-import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -50,6 +49,10 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   table: TableComponent;
   @ViewChild('servicesTpl', { static: true })
   public servicesTpl: TemplateRef<any>;
+  @ViewChild('hostMetricTmpl', { static: true })
+  public hostMetricTmpl: TemplateRef<any>;
+  @ViewChild('hostDimlessTmpl', { static: true })
+  public hostDimlessTmpl: TemplateRef<any>;
   @ViewChild('maintenanceConfirmTpl', { static: true })
   maintenanceConfirmTpl: TemplateRef<any>;
   @ViewChild('orchTmpl', { static: true })
@@ -108,7 +111,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
 
   constructor(
     private authStorageService: AuthStorageService,
-    private dimlessBinary: DimlessBinaryPipe,
     private emptyPipe: EmptyPipe,
     private hostService: HostService,
     private actionLabels: ActionLabelsI18n,
@@ -233,39 +235,44 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`CPUs`,
         prop: 'cpu_count',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`Cores`,
         prop: 'cpu_cores',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`Total Memory`,
         prop: 'memory_total_bytes',
-        pipe: this.dimlessBinary,
+        cellTemplate: this.hostDimlessTmpl,
         flexGrow: 0.4
       },
       {
         name: $localize`Raw Capacity`,
         prop: 'raw_capacity',
-        pipe: this.dimlessBinary,
+        cellTemplate: this.hostDimlessTmpl,
         flexGrow: 0.5
       },
       {
         name: $localize`HDDs`,
         prop: 'hdd_count',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`Flash`,
         prop: 'flash_count',
         headerTemplate: this.flashTmpl,
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`NICs`,
         prop: 'nic_count',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       }
     ];
@@ -512,5 +519,16 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
           context.error();
         }
       );
+  }
+
+  validValue(value: any) {
+    // Check if value is a number(int or float) and that it isn't null
+    return (
+      Number(value) == value &&
+      value % 1 == 0 &&
+      value !== undefined &&
+      value !== null &&
+      value !== ''
+    );
   }
 }
