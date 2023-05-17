@@ -217,7 +217,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            maintenance: { class: 'badge-warning' }
+            maintenance: { class: 'badge-warning' },
+            available: { class: 'badge-success' }
           }
         }
       },
@@ -495,6 +496,11 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       .subscribe(
         (hostList) => {
           this.hosts = hostList;
+          this.hosts.forEach((host: object) => {
+            if (host['status'] === '') {
+              host['status'] = 'available';
+            }
+          });
           this.transformHostsData();
           this.isLoadingHosts = false;
         },
