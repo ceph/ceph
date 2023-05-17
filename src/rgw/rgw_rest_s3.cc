@@ -2661,10 +2661,6 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
 
   map_qs_metadata(s);
 
-  ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket->get_name()
-		    << dendl;
-  env.add_var("bucket", s->bucket->get_name());
-
   bool done;
   do {
     struct post_form_part part;
@@ -2714,6 +2710,10 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     string part_str(part.data.c_str(), part.data.length());
     env.add_var(part.name, part_str);
   } while (!done);
+
+  ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket->get_name()
+		    << dendl;
+  env.add_var("bucket", s->bucket->get_name());
 
   string object_str;
   if (!part_str(parts, "key", &object_str)) {
