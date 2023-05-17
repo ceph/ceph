@@ -7,6 +7,8 @@
 #include <map>
 
 
+#define FSCRYPT_FILE_NONCE_SIZE 16
+
 int fscrypt_calc_hkdf(const char *salt, int salt_len,
                       const char *key, int key_len,
                       char *dest, int dest_len);
@@ -36,6 +38,55 @@ public:
 };
 
 using FSCryptKeyRef = std::shared_ptr<FSCryptKey>;
+
+struct FSCryptPolicy {
+  uint8_t version;
+  uint8_t contents_encryption_mode;
+  uint8_t filenames_encryption_mode;
+  uint8_t flags;
+  uint8_t master_key_identifier[FSCRYPT_KEY_IDENTIFIER_SIZE];
+
+  virtual ~FSCryptPolicy() {}
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(version, bl);
+    decode(contents_encryption_mode, bl);
+    decode(filenames_encryption_mode, bl);
+    decode(flags, bl);
+
+    uint32_t __reserved;
+    decode(__reserved, bl);
+
+    bl.copy(sizeof(master_key_identifier), (char *)master_key_identifier);
+
+    decode_extra(bl);
+    DECODE_FINISH(bl);
+  }
+
+  virtual void decode_extra(bufferlist::const_iterator& bl) {}
+
+  void convert_to(struct fscrypt_policy_v2 *dest) {
+    dest->version = version;
+    dest->contents_encryption_mode = contents_encryption_mode;
+    dest->filenames_encryption_mode = filenames_encryption_mode;
+    dest->flags = flags;
+    memset(dest->__reserved, 0, sizeof(dest->__reserved));
+    memcpy(dest->master_key_identifier, master_key_identifier, sizeof(master_key_identifier));
+  }
+};
+
+using FSCryptPolicyRef = std::shared_ptr<FSCryptPolicy>;
+
+struct FSCryptContext : public FSCryptPolicy {
+  uint8_t nonce[FSCRYPT_FILE_NONCE_SIZE];
+
+  void decode_extra(bufferlist::const_iterator& bl) override {
+    bl.copy(sizeof(nonce), (char *)nonce);
+  }
+};
+
+using FSCryptContextRef = std::shared_ptr<FSCryptContext>;
 
 
 class FSCryptKeyStore {

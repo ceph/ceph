@@ -22,6 +22,12 @@
 #include "UserPerm.h"
 #include "Delegation.h"
 
+#include "FSCrypt.h"
+
+#ifndef S_ENCRYPTED
+#define S_ENCRYPTED (1 << 14)
+#endif
+
 class Client;
 class Dentry;
 class Dir;
@@ -167,14 +173,19 @@ struct Inode : RefCountedObject {
 
   std::vector<uint8_t> fscrypt_auth;
   std::vector<uint8_t> fscrypt_file;
+  FSCryptContextRef fscrypt_ctx;
+
   bool is_fscrypt_enabled() {
     return !!fscrypt_auth.size();
   }
+
+  FSCryptContextRef init_fscrypt_ctx();
 
   bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
+  bool is_encrypted() const { return (mode & S_ENCRYPTED) == S_ENCRYPTED; }
 
   bool has_dir_layout() const {
     return layout != file_layout_t();
