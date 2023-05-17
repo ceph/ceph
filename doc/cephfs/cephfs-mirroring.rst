@@ -98,19 +98,32 @@ To disable mirroring for a given file system::
   $ ceph fs snapshot mirror disable <fs_name>
 
 Once mirroring is enabled, add a peer to which directory snapshots are to be mirrored.
-Peers are specified by `<client>@<cluster>` and are assigned a unique-id (UUID)
-when added. See `Creating Users` section on how to create Ceph users for mirroring.
+Peers are specified by `<client>@<cluster>` format which is also termed as `remote_cluster_spec`
+(further in this document) and are assigned a unique-id (UUID) when added. See `Creating Users`
+section on how to create Ceph users for mirroring.
 
 To add a peer use::
 
   $ ceph fs snapshot mirror peer_add <fs_name> <remote_cluster_spec> [<remote_fs_name>] [<remote_mon_host>] [<cephx_key>]
 
+`<remote_cluster_spec>` is of format `client.<id>@<cluster_name>`.
 `<remote_fs_name>` is optional, and defaults to `<fs_name>` (on the remote cluster).
 
 This requires the remote cluster ceph configuration and user keyring to be available in
-the primary cluster. See `Bootstrap Peers` section to avoid this. `peer_add` additionally
-supports passing the remote cluster monitor address and the user key. However, bootstrapping
-a peer is the recommended way to add a peer.
+the primary cluster.  E.g.: Say, user `client_mirror` is created on the remote cluster which
+has `rwps` permissions for the remote file system `remote_fs` (Refer `Creating Users`) and the
+remote cluster is named `remote_ceph` (i.e., the remote cluster configuration file is named
+`remote_ceph.conf` on the primary cluster), use the following command to add the remote filesystem
+as a peer to the primary filesystem `primary_fs`::
+
+  $ ceph fs snapshot mirror peer_add primary_fs client.mirror_remote@remote_ceph remote_fs
+
+To avoid maintaining remote cluster configuration file and remote ceph user keyring in the primary
+cluster, users can bootstrap a peer (which stores the relevant remote cluster details in the monitor
+config store on the parimary cluster). See `Bootstrap Peers` section.
+
+Note that, `peer_add` additionally supports passing the remote cluster monitor address and the user key.
+However, bootstrapping a peer is the recommended way to add a peer.
 
 .. note:: Only a single peer is currently supported.
 
