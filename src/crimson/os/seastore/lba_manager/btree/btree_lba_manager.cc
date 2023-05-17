@@ -616,6 +616,56 @@ void BtreeLBAManager::register_metrics()
   );
 }
 
+BtreeLBAManager::ref_iertr::future<std::optional<std::pair<paddr_t, extent_len_t>>>
+BtreeLBAManager::_decref_intermediate(
+  Transaction &t,
+  laddr_t addr,
+  extent_len_t len)
+{
+  auto c = get_context(t);
+  return with_btree<LBABtree>(
+    cache,
+    c,
+    [c, addr, len](auto &btree) mutable {
+    return btree.upper_bound_right(
+      c, addr
+    ).si_then([&btree, addr, len, c](auto iter) {
+      return seastar::do_with(
+	std::move(iter),
+	[&btree, addr, len, c](auto &iter) {
+	ceph_assert(!iter.is_end());
+	ceph_assert(iter.get_key() <= addr);
+	auto val = iter.get_val();
+	ceph_assert(iter.get_key() + val.len >= addr + len);
+	ceph_assert(val.pladdr.is_paddr());
+	ceph_assert(val.refcount >= 1);
+	val.refcount -= 1;
+
+	LOG_PREFIX(BtreeLBAManager::_decref_intermediate);
+	TRACET("decreased refcount of intermediate key {} -- {}",
+	  c.trans,
+	  iter.get_key(),
+	  val);
+
+	if (!val.refcount) {
+	  return btree.remove(c, iter
+	  ).si_then([val] {
+	    return std::make_optional<
+	      std::pair<paddr_t, extent_len_t>>(
+		val.pladdr.get_paddr(), val.len);
+	  });
+	} else {
+	  return btree.update(c, iter, val, nullptr
+	  ).si_then([](auto) {
+	    return seastar::make_ready_future<
+	      std::optional<std::pair<paddr_t, extent_len_t>>>(std::nullopt);
+	  });
+	}
+      });
+    });
+  });
+}
+
 BtreeLBAManager::update_refcount_ret
 BtreeLBAManager::update_refcount(
   Transaction &t,
@@ -634,13 +684,32 @@ BtreeLBAManager::update_refcount(
       return out;
     },
     nullptr
-  ).si_then([&t, addr, delta, FNAME](auto result) {
+  ).si_then([&t, addr, delta, FNAME, this](auto result) {
     DEBUGT("laddr={}, delta={} done -- {}", t, addr, delta, result);
-    return ref_update_result_t{
-      result.refcount,
-      result.pladdr,
-      result.len
-     };
+    auto fut = ref_iertr::make_ready_future<
+      std::optional<std::pair<paddr_t, extent_len_t>>>();
+    if (!result.refcount && result.pladdr.is_laddr()) {
+      fut = _decref_intermediate(
+	t,
+	result.pladdr.get_laddr(),
+	result.len
+      );
+    }
+    return fut.si_then([result](auto removed) {
+      if (result.pladdr.is_laddr()
+	  && removed) {
+	return ref_update_result_t{
+	  result.refcount,
+	  removed->first,
+	  removed->second};
+      } else {
+	return ref_update_result_t{
+	  result.refcount,
+	  result.pladdr,
+	  result.len
+	};
+      }
+    });
   });
 }
 
