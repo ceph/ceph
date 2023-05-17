@@ -29,12 +29,23 @@ namespace rgw { namespace sal {
 const int64_t READ_SIZE = 8 * 1024;
 char read_buf[READ_SIZE];
 const std::string ATTR_PREFIX = "user.X-RGW-";
-const std::string RGW_POSIX_ATTR_MPUPLOAD = "POSIX-Multipart-Upload";
+#define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_PART_FMT = "{:0>5}";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 
+
+static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
+{
+  auto iter = attrs.find(name);
+  if (iter == attrs.end()) {
+    return false;
+  }
+
+  bl = iter->second;
+  return true;
+}
 
 static inline User* nextUser(User* t)
 {
@@ -46,8 +57,7 @@ static inline User* nextUser(User* t)
 
 static inline std::string decode_name(const char* name)
 {
-  std::string decoded_name(name);
-  return decoded_name;
+  return url_decode(name);
 }
 
 static inline void bucket_statx_save(struct statx& stx, RGWBucketEnt& ent, ceph::real_time& mtime)
@@ -156,7 +166,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   int ret;
   int dir_fd = -1;
 
-  if (delete_children) {
+  //if (delete_children) {
     DIR* dir;
     struct dirent* entry;
 
@@ -188,6 +198,12 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 	continue;
       }
 
+      std::string_view d_name = entry->d_name;
+      bool is_mp = d_name.starts_with("." + mp_ns);
+      if (!is_mp && !delete_children) {
+	return -ENOTEMPTY;
+      }
+
       ret = statx(dir_fd, entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
       if (ret < 0) {
 	ret = errno;
@@ -215,7 +231,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 	return -ret;
       }
     }
-  }
+  //}
 
   ret = unlinkat(parent_fd, dname, AT_REMOVEDIR);
   if (ret < 0) {
@@ -588,16 +604,37 @@ std::unique_ptr<Object> POSIXBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<POSIXObject>(driver, k, this);
 }
 
+// TODO  marker and other params
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
 		       ListResults& results, optional_yield y)
 {
-  int ret = for_each(dpp, [this, &results, &dpp](const char* name) {
+  // Names are url_encoded, so encode prefix and delimiter
+  params.prefix = url_encode(params.prefix);
+  params.delim = url_encode(params.delim);
+
+  int ret = for_each(dpp, [this, &results, &dpp, &params, &max](const char* name) {
     int ret;
     struct statx stx;
 
     if (name[0] == '.') {
       /* Skip dotfiles */
       return 0;
+    }
+
+    std::string_view vname = name;
+    //if (vname.find(params.delim) == std::string_view::npos) {
+      //// Delimiter doesn't match; skip
+      //return 0;
+    //}
+
+    if (!vname.starts_with(params.prefix)) {
+      // Prefix doesn't match; skip
+      ldpp_dout(dpp, 0) << "C3PO vname: " << vname << " prefix: \"" << params.prefix << "\"" << dendl;
+      return 0;
+    }
+
+    if (max-- <= 0) {
+      return -EAGAIN;
     }
 
     ret = statx(dir_fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
@@ -645,8 +682,8 @@ int POSIXBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
   for(auto& it : new_attrs) {
 	  attrs[it.first] = it.second;
   }
-  /* TODO store attributes */
-  return 0;
+
+  return write_attrs(dpp, y);
 }
 
 int POSIXBucket::remove_bucket(const DoutPrefixProvider* dpp,
@@ -688,6 +725,10 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     info.owner = owner->get_id();
   }
 
+  ret = open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
   get_x_attrs(y, dpp, dir_fd, attrs, get_name());
 
   return 0;
@@ -770,13 +811,18 @@ int POSIXBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::r
     return -ret;
   }
 
-  ret = open(dpp);
+  return write_attrs(dpp, null_yield);
+}
+
+int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  int ret = open(dpp);
   if (ret < 0) {
     return ret;
   }
 
   for (auto& it : attrs) {
-	  int ret = write_x_attr(dpp, null_yield, dir_fd, it.first, it.second, get_name());
+	  ret = write_x_attr(dpp, y, dir_fd, it.first, it.second, get_name());
 	  if (ret < 0) {
 	    return ret;
 	  }
@@ -829,7 +875,13 @@ int POSIXBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time
   }
 
   *pmtime = mtime;
-  /* TODO Get attributes */
+
+  ret = open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+  get_x_attrs(null_yield, dpp, dir_fd, attrs, get_name());
+
   return 0;
 }
 
@@ -931,9 +983,9 @@ std::string POSIXBucket::get_fname()
   std::string name;
 
   if (ns)
-    name = "." + *ns + "_" + get_name();
+    name = "." + *ns + "_" + url_encode(get_name(), true);
   else
-    name = get_name();
+    name = url_encode(get_name(), true);
 
   return name;
 }
@@ -1000,9 +1052,12 @@ int POSIXBucket::for_each(const DoutPrefixProvider* dpp, const F func)
       ret = r;
     }
   }
-  return ret;
 
-  return 0;
+  if (ret == -EAGAIN) {
+    /* Limit reached */
+    ret = 0;
+  }
+  return ret;
 }
 
 int POSIXBucket::open(const DoutPrefixProvider* dpp)
@@ -1090,7 +1145,25 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
       return -EINVAL;
   }
 
-  int ret = unlinkat(b->get_dir_fd(dpp), get_fname().c_str(), 0);
+  int ret = stat(dpp);
+  if (ret < 0) {
+    ret = errno;
+    if (errno != ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove object " << get_name() << ": "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+    // ENOENT is success
+    return 0;
+  }
+
+  if (S_ISDIR(stx.stx_mode)) {
+    // Was a mulitpart upload.
+    ret = delete_directory(b->get_dir_fd(dpp), get_fname().c_str(), true, dpp);
+    return ret;
+  }
+
+  ret = unlinkat(b->get_dir_fd(dpp), get_fname().c_str(), 0);
   if (ret < 0) {
     ret = errno;
     if (errno != ENOENT) {
@@ -1191,25 +1264,36 @@ int POSIXObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
                                optional_yield y, const DoutPrefixProvider* dpp)
 {
   state.attrset[attr_name] = attr_val;
-  /* TODO Write out attrs */
-  return 0;
+  return write_attr(dpp, y, attr_name, attr_val);
 }
 
 int POSIXObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
                                optional_yield y)
 {
   state.attrset.erase(attr_name);
-  /* TODO Write out attrs */
+
+  int ret = open(dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = fremovexattr(obj_fd, attr_name);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not remover attribute " << attr_name << " for " << get_name() << ": " << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
   return 0;
 }
 
 bool POSIXObject::is_expired()
 {
-  auto iter = state.attrset.find(RGW_ATTR_DELETE_AT);
-  if (iter != state.attrset.end()) {
+  bufferlist bl;
+  if (get_attr(state.attrset, RGW_ATTR_DELETE_AT, bl)) {
     utime_t delete_at;
     try {
-      auto bufit = iter->second.cbegin();
+      auto bufit = bl.cbegin();
       decode(delete_at, bufit);
     } catch (buffer::error& err) {
       ldout(driver->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
@@ -1626,13 +1710,58 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
   if (ret < 0)
     return ret;
 
-  auto iter = source->get_attrs().find(RGW_ATTR_ETAG);
-  if (iter == source->get_attrs().end()) {
+  bufferlist etag_bl;
+  if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
     /* Sideloaded file.  Generate necessary attributes. Only done once. */
     int ret = source->generate_attrs(dpp, y);
     if (ret < 0) {
 	ldpp_dout(dpp, 0) << " ERROR: could not generate attrs for " << source->get_name() << " error: " << cpp_strerror(ret) << dendl;
 	return ret;
+    }
+  }
+
+  if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+    return -EINVAL;
+  }
+
+#if 0 // WIP
+  if (params.mod_ptr || params.unmod_ptr) {
+    obj_time_weight src_weight;
+    src_weight.init(astate);
+    src_weight.high_precision = params.high_precision_time;
+
+    obj_time_weight dest_weight;
+    dest_weight.high_precision = params.high_precision_time;
+
+    if (params.mod_ptr && !params.if_nomatch) {
+      dest_weight.init(*params.mod_ptr, params.mod_zone_id, params.mod_pg_ver);
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      if (!(dest_weight < src_weight)) {
+        return -ERR_NOT_MODIFIED;
+      }
+    }
+
+    if (params.unmod_ptr && !params.if_match) {
+      dest_weight.init(*params.unmod_ptr, params.mod_zone_id, params.mod_pg_ver);
+      ldpp_dout(dpp, 10) << "If-UnModified-Since: " << dest_weight << " Last-Modified: " << src_weight << dendl;
+      if (dest_weight < src_weight) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+#endif
+
+  if (params.if_match) {
+    std::string if_match_str = rgw_string_unquote(params.if_match);
+
+    if (if_match_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) != 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  if (params.if_nomatch) {
+    std::string if_nomatch_str = rgw_string_unquote(params.if_nomatch);
+    if (if_nomatch_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) == 0) {
+      return -ERR_PRECONDITION_FAILED;
     }
   }
 
@@ -1696,19 +1825,18 @@ int POSIXObject::generate_mp_etag(const DoutPrefixProvider* dpp, optional_yield 
       if (ret < 0) {
 	return ret;
       }
-      auto iter = shadow_obj->get_attrs().find(RGW_ATTR_ETAG);
-      if (iter == shadow_obj->get_attrs().end()) {
+      bufferlist etag_bl;
+      if (!get_attr(shadow_obj->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
 	// Generate part's etag
 	ret = shadow_obj->generate_etag(dpp, y);
 	if (ret < 0)
 	  return ret;
       }
-      iter = shadow_obj->get_attrs().find(RGW_ATTR_ETAG);
-      if (iter == shadow_obj->get_attrs().end()) {
+      if (!get_attr(shadow_obj->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
 	// Can't get etag.
 	return -EINVAL;
       }
-      hex_to_buf(iter->second.c_str(), etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE);
+      hex_to_buf(etag_bl.c_str(), etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE);
       hash.Update((const unsigned char *)etag_buf, sizeof(etag_buf));
       count++;
     }
@@ -1770,7 +1898,7 @@ int POSIXObject::generate_etag(const DoutPrefixProvider* dpp, optional_yield y)
 
 const std::string POSIXObject::get_fname()
 {
-  std::string fname = get_obj().get_oid();
+  std::string fname = url_encode(get_obj().get_oid(), true);
 
   if (!get_obj().key.get_ns().empty()) {
     /* Namespaced objects are hidden */
@@ -1835,13 +1963,13 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 
 int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
 {
-  auto& attrs = source->get_attrs();
-  auto iter = attrs.find(name);
-  if (iter == attrs.end()) {
+  ldpp_dout(dpp, 0) << "Revan 1 " << name << dendl;
+  if (!rgw::sal::get_attr(source->get_attrs(), name, dest)) {
+  ldpp_dout(dpp, 0) << "Revan 2 " << name << dendl;
     return -ENODATA;
   }
 
-  dest = iter->second;
+  ldpp_dout(dpp, 0) << "Revan 3 " << name << dendl;
   return 0;
 }
 
@@ -2177,13 +2305,13 @@ int POSIXMultipartUpload::get_info(const DoutPrefixProvider *dpp, optional_yield
 	  return ret;
 	}
       }
-      auto iter = meta_obj->get_attrs().find(RGW_POSIX_ATTR_MPUPLOAD);
-      if (iter == meta_obj->get_attrs().end()) {
+      bufferlist bl;
+      if (!get_attr(meta_obj->get_attrs(), RGW_POSIX_ATTR_MPUPLOAD, bl)) {
 	ldpp_dout(dpp, 0) << " ERROR: could not get meta object attrs for mp upload "
 	  << get_key() << dendl;
 	return ret;
       }
-      auto biter = iter->second.cbegin();
+      auto biter = bl.cbegin();
       decode(mp_obj, biter);
     }
     *rule = &mp_obj.upload_info.dest_placement;
@@ -2303,6 +2431,22 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        optional_yield y)
 {
   int ret;
+
+  if (if_match) {
+    if (strcmp(if_match, "*") == 0) {
+      // test the object is existing
+      if (!obj.exists(dpp)) {
+	return -ERR_PRECONDITION_FAILED;
+      }
+    } else {
+      bufferlist bl;
+      if (!get_attr(attrs, RGW_ATTR_ETAG, bl) ||
+	  strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+	return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+
   for (auto attr : attrs) {
     ret = obj.write_attr(dpp, y, attr.first, attr.second);
     if (ret < 0) {

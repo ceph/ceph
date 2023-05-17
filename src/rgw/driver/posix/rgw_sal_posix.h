@@ -168,6 +168,16 @@ public:
     acls()
     { }
 
+  POSIXBucket(POSIXBucket& _o) :
+    StoreBucket(_o),
+    driver(_o.driver),
+    parent_fd(_o.parent_fd),
+    /* Don't want to copy dir_fd */
+    stx(_o.stx),
+    stat_done(_o.stat_done),
+    acls(_o.acls),
+    ns(_o.ns) {}
+
   virtual ~POSIXBucket() { close(); }
 
   virtual void set_owner(rgw::sal::User* _owner) override {
@@ -255,6 +265,7 @@ public:
   int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
 private:
   int stat(const DoutPrefixProvider *dpp);
+  int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
 };
 
 class POSIXObject : public StoreObject {
@@ -384,6 +395,7 @@ public:
   void gen_temp_fname();
   /* TODO dang Escape the object name for file use */
   const std::string get_fname();
+  bool exists(const DoutPrefixProvider* dpp) { stat(dpp); return state.exists; }
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int generate_attrs(const DoutPrefixProvider* dpp, optional_yield y);
