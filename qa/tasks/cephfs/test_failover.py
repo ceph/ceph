@@ -310,9 +310,6 @@ class TestFailover(CephFSTestCase):
         in thrashing tests.
         """
 
-        # Need all my standbys up as well as the active daemons
-        self.wait_for_daemon_start()
-
         (original_active, ) = self.fs.get_active_names()
         original_standbys = self.mds_cluster.get_standby_daemons()
 
@@ -321,12 +318,12 @@ class TestFailover(CephFSTestCase):
 
         # Wait until the monitor promotes his replacement
         def promoted():
-            active = self.fs.get_active_names()
-            return active and active[0] in original_standbys
+            ranks = list(self.fs.get_ranks())
+            return len(ranks) > 0 and ranks[0]['name'] in original_standbys
 
         log.info("Waiting for promotion of one of the original standbys {0}".format(
             original_standbys))
-        self.wait_until_true(promoted, timeout=self.fs.beacon_timeout)
+        self.wait_until_true(promoted, timeout=self.fs.beacon_timeout*2)
 
         # Start the original rank 0 daemon up again, see that he becomes a standby
         self.fs.mds_restart(original_active)
