@@ -486,6 +486,132 @@ def service_spec_allow_invalid_from_json() -> Iterator[None]:
     _service_spec_from_json_validate = True
 
 
+class ArgumentSpec:
+    """The ArgumentSpec type represents an argument that can be
+    passed to an underyling subsystem, like a container engine or
+    another command line tool.
+
+    The ArgumentSpec aims to be backwards compatible with the previous
+    form of argument, a single string. The string was always assumed
+    to be indentended to be split on spaces. For example:
+    `--cpus 8` becomes `["--cpus", "8"]`. This type is converted from
+    either a string or an json/yaml object. In the object form you
+    can choose if the string part should be split so an argument like
+    `--migrate-from=//192.168.5.22/My Documents` can be expressed.
+    """
+    _fields = ['argument', 'split']
+
+    class OriginalType(enum.Enum):
+        OBJECT = 0
+        STRING = 1
+
+    def __init__(
+        self,
+        argument: str,
+        split: bool = False,
+        *,
+        origin: OriginalType = OriginalType.OBJECT,
+    ) -> None:
+        self.argument = argument
+        self.split = bool(split)
+        # origin helps with round-tripping between inputs that
+        # are simple strings or objects (dicts)
+        self._origin = origin
+        self.validate()
+
+    def to_json(self) -> Union[str, Dict[str, Any]]:
+        """Return a json-safe represenation of the ArgumentSpec."""
+        if self._origin == self.OriginalType.STRING:
+            return self.argument
+        return {
+            'argument': self.argument,
+            'split': self.split,
+        }
+
+    def to_args(self) -> List[str]:
+        """Convert this ArgumentSpec into a list of arguments suitable for
+        adding to an argv-style command line.
+        """
+        if not self.split:
+            return [self.argument]
+        return [part for part in self.argument.split(" ") if part]
+
+    def __eq__(self, other: Any) -> bool:
+        if isinstance(other, ArgumentSpec):
+            return (
+                self.argument == other.argument
+                and self.split == other.split
+            )
+        if isinstance(other, object):
+            # This is a workaround for silly ceph mgr object/type identity
+            # mismatches due to multiple python interpreters in use.
+            try:
+                argument = getattr(other, 'argument')
+                split = getattr(other, 'split')
+                return (self.argument == argument and self.split == split)
+            except AttributeError:
+                pass
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        return f'ArgumentSpec({self.argument!r}, {self.split!r})'
+
+    def validate(self) -> None:
+        if not isinstance(self.argument, str):
+            raise SpecValidationError(
+                    f'ArgumentSpec argument must be a string. Got {type(self.argument)}')
+        if not isinstance(self.split, bool):
+            raise SpecValidationError(
+                    f'ArgumentSpec split must be a boolean. Got {type(self.split)}')
+
+    @classmethod
+    def from_json(cls, data: Union[str, Dict[str, Any]]) -> "ArgumentSpec":
+        """Convert a json-object (dict) to an ArgumentSpec."""
+        if isinstance(data, str):
+            return cls(data, split=True, origin=cls.OriginalType.STRING)
+        if 'argument' not in data:
+            raise SpecValidationError(f'ArgumentSpec must have an "argument" field')
+        for k in data.keys():
+            if k not in cls._fields:
+                raise SpecValidationError(f'ArgumentSpec got an unknown field {k!r}')
+        return cls(**data)
+
+    @staticmethod
+    def map_json(
+        values: Optional["ArgumentList"]
+    ) -> Optional[List[Union[str, Dict[str, Any]]]]:
+        """Given a list of ArgumentSpec objects return a json-safe
+        representation.of them."""
+        if values is None:
+            return None
+        return [v.to_json() for v in values]
+
+    @classmethod
+    def from_general_args(cls, data: "GeneralArgList") -> "ArgumentList":
+        """Convert a list of strs, dicts, or existing ArgumentSpec objects
+        to a list of only ArgumentSpec objects.
+        """
+        out: ArgumentList = []
+        for item in data:
+            if isinstance(item, (str, dict)):
+                out.append(cls.from_json(item))
+            elif isinstance(item, cls):
+                out.append(item)
+            elif hasattr(item, 'to_json'):
+                # This is a workaround for silly ceph mgr object/type identity
+                # mismatches due to multiple python interpreters in use.
+                # It should be safe because we already have to be able to
+                # round-trip between json/yaml.
+                out.append(cls.from_json(item.to_json()))
+            else:
+                raise SpecValidationError(f"Unknown type for argument: {type(item)}")
+        return out
+
+
+ArgumentList = List[ArgumentSpec]
+GeneralArgList = List[Union[str, Dict[str, Any], "ArgumentSpec"]]
+
+
 class ServiceSpec(object):
     """
     Details of service creation.
