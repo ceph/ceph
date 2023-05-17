@@ -375,6 +375,11 @@ private:
     op_context_t<laddr_t> c,
     std::list<BtreeLBAMappingRef> &pin_list);
 
+  ref_iertr::future<std::optional<std::pair<paddr_t, extent_len_t>>>
+  _decref_intermediate(
+    Transaction &t,
+    laddr_t addr,
+    extent_len_t len);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

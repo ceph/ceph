@@ -1195,7 +1195,7 @@ public:
     laddr = nladdr;
   }
 
-  void maybe_set_intermediate_laddr(LBAMapping* mapping) {
+  void maybe_set_intermediate_laddr(LBAMapping &mapping) {
     laddr = mapping.is_indirect()
       ? mapping.get_intermediate_key()
       : mapping.get_key();
