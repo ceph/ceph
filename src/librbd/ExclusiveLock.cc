@@ -95,7 +95,7 @@ void ExclusiveLock<I>::block_requests(int r) {
     m_request_blocked_ret_val = r;
   }
 
-  ldout(m_image_ctx.cct, 20) << "r=" << r << dendl;
+  ldout(m_image_ctx.cct, 20) << ": r=" << r << dendl;
 }
 
 template <typename I>
