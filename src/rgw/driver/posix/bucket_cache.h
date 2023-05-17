@@ -13,11 +13,12 @@
 #include <shared_mutex>
 #include <condition_variable>
 #include <filesystem>
+#include <functional>
 #include <boost/intrusive/avl_set.hpp>
 #include "include/function2.hpp"
-//#include "include/buffer.h" // XXX
 #include "common/cohort_lru.h"
 #include "lmdb-safe/lmdb-safe.hh"
+#include "zpp_bits.h"
 #include "notify.h"
 #include <stdint.h>
 #include <xxhash.h>
@@ -285,6 +286,19 @@ public:
       return result;
     } /* get_bucket */
 
+  struct FakeDirEntry
+  {
+    std::string fname;
+    std::string s1;
+    int i1;
+    int i2;
+    FakeDirEntry()
+      {}
+    FakeDirEntry(std::string fname, std::string s1, int i1, int i2)
+      : fname(fname), s1(s1), i1(i1), i2(i2)
+      {}
+  };
+
   void fill(Bucket* bucket, uint32_t flags) /* assert: LOCKED */
     {
       sf::path bp{rp / bucket->name};
@@ -296,7 +310,12 @@ public:
       auto txn = bucket->env->getRWTransaction();
       for (const auto& dir_entry : sf::directory_iterator{bp}) {
 	auto fname = dir_entry.path().filename().string();
-	txn->put(bucket->dbi, fname, fname /* TODO: structure, stat, &c */);
+	// TODO: unfakening
+	FakeDirEntry fde{fname, "famous", 1776, 2112};
+	std::string ser_data;
+	zpp::bits::out out(ser_data);
+	out(fde.fname, fde.s1, fde.i1, fde.i2).or_throw();
+        txn->put(bucket->dbi, fname, ser_data);
 	//std::cout << fmt::format("{} {}", __func__, fname) << '\n';
       }
       txn->commit();
@@ -305,7 +324,7 @@ public:
     } /* fill */
 
   void list_bucket(std::string& name, std::string& marker,
-		   const fu2::unique_function<int(const std::string_view&) const>& func /* XXX for now */)
+		   const fu2::unique_function<int(const std::string_view&, const FakeDirEntry&) const>& func)
     {
       GetBucketResult gbr = get_bucket(name, BucketCache::FLAG_LOCK);
       auto [b, flags] = gbr;
@@ -326,7 +345,16 @@ public:
 
 	const auto proc_result = [&]() {
 	  std::string_view svk = key.get<string_view>();
-	  (void) func(svk);
+	  std::string_view svv = data.get<string_view>();
+	  std::string ser_data{svv};
+	  zpp::bits::in in(ser_data);
+	  // TODO: unfakening
+	  FakeDirEntry fde;
+	  auto errc = in(fde.fname, fde.s1, fde.i1, fde.i2);
+	  if (errc.code != std::errc{0}) {
+	    abort();
+	  }
+	  (void) func(svk, fde);
 	  count++;
 	};
 
@@ -376,7 +404,12 @@ public:
 	case EventType::ADD:
 	{
 	  auto& ev_name = *ev.name;
-	  txn->put(b->dbi, ev_name, ev_name);
+	  // TODO: unfakening
+	  FakeDirEntry fde{std::string(ev_name), "blinkered", 1050, 3801};
+	  std::string ser_data;
+	  zpp::bits::out out(ser_data);
+	  out(fde.fname, fde.s1, fde.i1, fde.i2).or_throw();
+	  txn->put(b->dbi, ev_name, ser_data);
 	}
 	  break;
 	case EventType::REMOVE:

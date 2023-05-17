@@ -66,9 +66,11 @@ TEST(BucketCache, InitBucketCache)
   bc = new BucketCache{bucket_root, database_root}; // default tuning
 }
 
-auto func = [](const std::string_view& k) -> int 
+using FakeDirEntry = file::listing::BucketCache::FakeDirEntry;
+
+auto func = [](const std::string_view& k, const FakeDirEntry& fde) -> int
   {
-    //std::cout << fmt::format("called back with {}", k) << std::endl;
+    //std::cout << fmt::format("called back with {} {}", k, fde.fname) << std::endl;
     return 0;
   };
 
@@ -93,7 +95,7 @@ TEST(BucketCache, ListThreads) /* clocked at 21ms on lemon, and yes,
   auto nthreads = 15;
   std::vector<std::thread> threads;
 
-  auto func = [](const std::string_view& k) -> int 
+  auto func = [](const std::string_view& k, const FakeDirEntry& fde) -> int
     {
       //std::cout << fmt::format("called back with {}", k) << std::endl;
       return 0;
@@ -214,7 +216,7 @@ TEST(BucketCache, ListMarker1)
   std::string marker{"file_18"}; // midpoint+1
   std::vector<std::string> names;
 
-  auto f = [&](const std::string_view& k) -> int {
+  auto f = [&](const std::string_view& k, const FakeDirEntry& fde) -> int {
     //std::cout << fmt::format("called back with {}", k) << std::endl;
     names.push_back(std::string{k});
     return 0;
@@ -262,7 +264,7 @@ TEST(BucketCache, ListInotify1)
   std::string marker{""};
   std::vector<std::string> names;
 
-  auto f = [&](const std::string_view& k) -> int {
+  auto f = [&](const std::string_view& k, const FakeDirEntry& fde) -> int {
     //std::cout << fmt::format("called back with {}", k) << std::endl;
     names.push_back(std::string{k});
     return 0;
@@ -306,7 +308,7 @@ TEST(BucketCache, List2Inotify1)
   std::string marker{""};
   std::vector<std::string> names;
 
-  auto f = [&](const std::string_view& k) -> int {
+  auto f = [&](const std::string_view& k, const FakeDirEntry& fde) -> int {
     //std::cout << fmt::format("called back with {}", k) << std::endl;
     names.push_back(std::string{k});
     return 0;
