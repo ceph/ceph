@@ -56,6 +56,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   orchTmpl: TemplateRef<any>;
   @ViewChild('flashTmpl', { static: true })
   flashTmpl: TemplateRef<any>;
+  @ViewChild('hostNameTpl', { static: true })
+  hostNameTpl: TemplateRef<any>;
 
   @Input()
   hiddenColumns: string[] = [];
@@ -193,7 +195,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Hostname`,
         prop: 'hostname',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTemplate: this.hostNameTpl
       },
       {
         name: $localize`Service Instances`,
