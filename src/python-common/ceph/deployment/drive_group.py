@@ -4,6 +4,7 @@ import yaml
 from ceph.deployment.inventory import Device
 from ceph.deployment.service_spec import (
     CustomConfig,
+    GeneralArgList,
     PlacementSpec,
     ServiceSpec,
 )
@@ -194,8 +195,8 @@ class DriveGroupSpec(ServiceSpec):
                  unmanaged=False,  # type: bool
                  filter_logic='AND',  # type: str
                  preview_only=False,  # type: bool
-                 extra_container_args=None,  # type: Optional[List[str]]
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  data_allocate_fraction=None,  # type: Optional[float]
                  method=None,  # type: Optional[OSDMethod]
                  config=None,  # type: Optional[Dict[str, str]]
