@@ -686,8 +686,8 @@ class ServiceSpec(object):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
 
@@ -727,8 +727,14 @@ class ServiceSpec(object):
         if config:
             self.config = {k.replace(' ', '_'): v for k, v in config.items()}
 
-        self.extra_container_args: Optional[List[str]] = extra_container_args
-        self.extra_entrypoint_args: Optional[List[str]] = extra_entrypoint_args
+        self.extra_container_args: Optional[ArgumentList] = None
+        self.extra_entrypoint_args: Optional[ArgumentList] = None
+        if extra_container_args:
+            self.extra_container_args = ArgumentSpec.from_general_args(
+                extra_container_args)
+        if extra_entrypoint_args:
+            self.extra_entrypoint_args = ArgumentSpec.from_general_args(
+                extra_entrypoint_args)
         self.custom_configs: Optional[List[CustomConfig]] = custom_configs
 
     @classmethod
@@ -856,9 +862,13 @@ class ServiceSpec(object):
         if self.networks:
             ret['networks'] = self.networks
         if self.extra_container_args:
-            ret['extra_container_args'] = self.extra_container_args
+            ret['extra_container_args'] = ArgumentSpec.map_json(
+                self.extra_container_args
+            )
         if self.extra_entrypoint_args:
-            ret['extra_entrypoint_args'] = self.extra_entrypoint_args
+            ret['extra_entrypoint_args'] = ArgumentSpec.map_json(
+                self.extra_entrypoint_args
+            )
         if self.custom_configs:
             ret['custom_configs'] = [c.to_json() for c in self.custom_configs]
 
@@ -937,8 +947,8 @@ class NFSServiceSpec(ServiceSpec):
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
                  virtual_ip: Optional[str] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'nfs'
@@ -1008,8 +1018,8 @@ class RGWSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
                  subcluster: Optional[str] = None,  # legacy, only for from_json on upgrade
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  rgw_realm_token: Optional[str] = None,
                  update_endpoints: Optional[bool] = False,
@@ -1102,8 +1112,8 @@ class IscsiServiceSpec(ServiceSpec):
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'iscsi'
@@ -1180,8 +1190,8 @@ class IngressSpec(ServiceSpec):
                  unmanaged: bool = False,
                  ssl: bool = False,
                  keepalive_only: bool = False,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'ingress'
@@ -1257,11 +1267,12 @@ class CustomContainerSpec(ServiceSpec):
                  preview_only: bool = False,
                  image: Optional[str] = None,
                  entrypoint: Optional[str] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  uid: Optional[int] = None,
                  gid: Optional[int] = None,
                  volume_mounts: Optional[Dict[str, str]] = {},
-                 args: Optional[List[str]] = [],  # args for the container runtime, not entrypoint
+                 # args are for the container runtime, not entrypoint
+                 args: Optional[GeneralArgList] = [],
                  envs: Optional[List[str]] = [],
                  privileged: Optional[bool] = False,
                  bind_mounts: Optional[List[List[str]]] = None,
@@ -1324,8 +1335,8 @@ class MonitoringSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  port: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type in ['grafana', 'node-exporter', 'prometheus', 'alertmanager',
@@ -1372,8 +1383,8 @@ class AlertManagerSpec(MonitoringSpec):
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
                  secure: bool = False,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'alertmanager'
@@ -1428,8 +1439,8 @@ class GrafanaSpec(MonitoringSpec):
                  protocol: Optional[str] = 'https',
                  initial_admin_password: Optional[str] = None,
                  anonymous_access: Optional[bool] = True,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'grafana'
@@ -1472,8 +1483,8 @@ class PrometheusSpec(MonitoringSpec):
                  port: Optional[int] = None,
                  retention_time: Optional[str] = None,
                  retention_size: Optional[str] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'prometheus'
@@ -1546,8 +1557,8 @@ class SNMPGatewaySpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  port: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'snmp-gateway'
@@ -1669,8 +1680,8 @@ class MDSSpec(ServiceSpec):
                  config: Optional[Dict[str, str]] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'mds'
@@ -1703,7 +1714,7 @@ class MONSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  networks: Optional[List[str]] = None,
-                 extra_container_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  crush_locations: Optional[Dict[str, List[str]]] = None,
                  ):
@@ -1863,7 +1874,7 @@ class CephExporterSpec(ServiceSpec):
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
-                 extra_container_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
                  ):
         assert service_type == 'ceph-exporter'
 

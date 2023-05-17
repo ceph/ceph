@@ -8,6 +8,7 @@ import pytest
 
 from ceph.deployment.service_spec import (
     AlertManagerSpec,
+    ArgumentSpec,
     CustomContainerSpec,
     GrafanaSpec,
     HostPlacementSpec,
@@ -1114,5 +1115,5 @@ def test_extra_args_handling(y, ec_args, ee_args):
     data = yaml.safe_load(y)
     spec_obj = ServiceSpec.from_json(data)
 
-    assert spec_obj.extra_container_args == ec_args
-    assert spec_obj.extra_entrypoint_args == ee_args
+    assert ArgumentSpec.map_json(spec_obj.extra_container_args) == ec_args
+    assert ArgumentSpec.map_json(spec_obj.extra_entrypoint_args) == ee_args
