@@ -20,14 +20,14 @@ describe('Services page', () => {
     services.addService('mds', false);
     services.checkExist(mdsDaemonName, true);
 
-    services.clickServiceTab(mdsDaemonName, 'Details');
+    services.clickServiceTab(mdsDaemonName, 'Daemons');
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus(mdsDaemonName);
     });
   });
 
   it('should stop a daemon', () => {
-    services.clickServiceTab(mdsDaemonName, 'Details');
+    services.clickServiceTab(mdsDaemonName, 'Daemons');
     services.checkServiceStatus(mdsDaemonName);
 
     services.daemonAction('mds', 'stop');
@@ -38,7 +38,7 @@ describe('Services page', () => {
 
   it('should restart a daemon', () => {
     services.checkExist(mdsDaemonName, true);
-    services.clickServiceTab(mdsDaemonName, 'Details');
+    services.clickServiceTab(mdsDaemonName, 'Daemons');
     services.daemonAction('mds', 'restart');
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus(mdsDaemonName, 'running');
@@ -47,7 +47,7 @@ describe('Services page', () => {
 
   it('should redeploy a daemon', () => {
     services.checkExist(mdsDaemonName, true);
-    services.clickServiceTab(mdsDaemonName, 'Details');
+    services.clickServiceTab(mdsDaemonName, 'Daemons');
 
     services.daemonAction('mds', 'stop');
     cy.get('cd-service-details').within(() => {
@@ -61,7 +61,7 @@ describe('Services page', () => {
 
   it('should start a daemon', () => {
     services.checkExist(mdsDaemonName, true);
-    services.clickServiceTab(mdsDaemonName, 'Details');
+    services.clickServiceTab(mdsDaemonName, 'Daemons');
 
     services.daemonAction('mds', 'stop');
     cy.get('cd-service-details').within(() => {
@@ -82,7 +82,7 @@ describe('Services page', () => {
     services.addService('snmp-gateway', false, 1, 'V2c');
     services.checkExist('snmp-gateway', true);
 
-    services.clickServiceTab('snmp-gateway', 'Details');
+    services.clickServiceTab('snmp-gateway', 'Daemons');
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus('snmp-gateway');
     });
@@ -95,7 +95,7 @@ describe('Services page', () => {
     services.addService('snmp-gateway', false, 1, 'V3', true);
     services.checkExist('snmp-gateway', true);
 
-    services.clickServiceTab('snmp-gateway', 'Details');
+    services.clickServiceTab('snmp-gateway', 'Daemons');
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus('snmp-gateway');
     });
@@ -108,7 +108,7 @@ describe('Services page', () => {
     services.addService('snmp-gateway', false, 1, 'V3', false);
     services.checkExist('snmp-gateway', true);
 
-    services.clickServiceTab('snmp-gateway', 'Details');
+    services.clickServiceTab('snmp-gateway', 'Daemons');
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus('snmp-gateway');
     });
@@ -125,7 +125,7 @@ describe('Services page', () => {
   });
 
   it('should check if exporter daemons are running', () => {
-    services.clickServiceTab('ceph-exporter', 'Details');
+    services.clickServiceTab('ceph-exporter', 'Daemons');
     cy.get('cd-service-details').within(() => {
       services.checkServiceStatus('ceph-exporter', 'running');
     });
