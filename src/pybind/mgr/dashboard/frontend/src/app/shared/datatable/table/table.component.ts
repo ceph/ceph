@@ -879,18 +879,18 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
             return false;
           }
 
-          if (_.isArray(cellValue)) {
-            cellValue = cellValue.join(' ');
-          } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
-            cellValue = cellValue.toString();
-          }
-
           if (_.isObjectLike(cellValue)) {
             if (this.searchableObjects) {
               cellValue = JSON.stringify(cellValue);
             } else {
               return false;
             }
+          }
+
+          if (_.isArray(cellValue)) {
+            cellValue = cellValue.join(' ');
+          } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
+            cellValue = cellValue.toString();
           }
 
           return cellValue.toLowerCase().indexOf(searchTerm) !== -1;

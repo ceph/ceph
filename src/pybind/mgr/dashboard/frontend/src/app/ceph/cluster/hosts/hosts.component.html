@@ -11,6 +11,7 @@
                 columnMode="flex"
                 (fetchData)="getHosts($event)"
                 selectionType="single"
+                [searchableObjects]="true"
                 [hasDetails]="hasTableDetails"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
