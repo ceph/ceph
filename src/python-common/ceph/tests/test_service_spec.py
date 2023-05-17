@@ -1110,6 +1110,116 @@ spec:
     ["--cap-add=CAP_NET_BIND_SERVICE", "--oom-score-adj=12"],
     ["--lasers=blue", "--title=Custom NFS Options"],
     id="both_kinds_nfs"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+extra_entrypoint_args:
+- argument: "--lasers=blue"
+  split: true
+- argument: "--enable-confetti"
+""",
+    None,
+    [
+        {"argument": "--lasers=blue", "split": True},
+        {"argument": "--enable-confetti", "split": False},
+    ],
+    id="only_extra_entrypoint_args_obj_toplevel"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+  extra_entrypoint_args:
+  - argument: "--lasers=blue"
+    split: true
+  - argument: "--enable-confetti"
+""",
+    None,
+    [
+        {"argument": "--lasers=blue", "split": True},
+        {"argument": "--enable-confetti", "split": False},
+    ],
+    id="only_extra_entrypoint_args_obj_indented"),
+    pytest.param("""
+service_type: nfs
+service_id: mynfs
+service_name: nfs.mynfs
+spec:
+  port: 1234
+extra_entrypoint_args:
+- argument: "--lasers=blue"
+- argument: "--title=Custom NFS Options"
+extra_container_args:
+- argument: "--cap-add=CAP_NET_BIND_SERVICE"
+- argument: "--oom-score-adj=12"
+""",
+    [
+        {"argument": "--cap-add=CAP_NET_BIND_SERVICE", "split": False},
+        {"argument": "--oom-score-adj=12", "split": False},
+    ],
+    [
+        {"argument": "--lasers=blue", "split": False},
+        {"argument": "--title=Custom NFS Options", "split": False},
+    ],
+    id="both_kinds_obj_nfs"),
 ])
 def test_extra_args_handling(y, ec_args, ee_args):
     data = yaml.safe_load(y)
