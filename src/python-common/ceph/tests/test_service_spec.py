@@ -964,3 +964,146 @@ def test_service_spec_validation_error(y, error_match):
     with pytest.raises(SpecValidationError) as err:
         specObj = ServiceSpec.from_json(data)
     assert err.match(error_match)
+
+
+@pytest.mark.parametrize("y, ec_args, ee_args", [
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+""",
+    None,
+    None,
+    id="no_extra_args"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  extra_entrypoint_args:
+  - "--lasers=blue"
+  - "--enable-confetti"
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+""",
+    None,
+    ["--lasers=blue", "--enable-confetti"],
+    id="only_extra_entrypoint_args_spec"),
+    pytest.param("""
+service_type: container
+service_id: hello-world
+service_name: container.hello-world
+spec:
+  args:
+  - --foo
+  bind_mounts:
+  - - type=bind
+    - source=lib/modules
+    - destination=/lib/modules
+    - ro=true
+  dirs:
+  - foo
+  - bar
+  entrypoint: /usr/bin/bash
+  envs:
+  - FOO=0815
+  files:
+    bar.conf:
+    - foo
+    - bar
+    foo.conf: 'foo
+
+      bar'
+  gid: 2000
+  image: docker.io/library/hello-world:latest
+  ports:
+  - 8080
+  - 8443
+  uid: 1000
+  volume_mounts:
+    foo: /foo
+extra_entrypoint_args:
+- "--lasers=blue"
+- "--enable-confetti"
+""",
+    None,
+    ["--lasers=blue", "--enable-confetti"],
+    id="only_extra_entrypoint_args_toplevel"),
+    pytest.param("""
+service_type: nfs
+service_id: mynfs
+service_name: nfs.mynfs
+spec:
+  port: 1234
+  extra_entrypoint_args:
+  - "--lasers=blue"
+  - "--title=Custom NFS Options"
+  extra_container_args:
+  - "--cap-add=CAP_NET_BIND_SERVICE"
+  - "--oom-score-adj=12"
+""",
+    ["--cap-add=CAP_NET_BIND_SERVICE", "--oom-score-adj=12"],
+    ["--lasers=blue", "--title=Custom NFS Options"],
+    id="both_kinds_nfs"),
+])
+def test_extra_args_handling(y, ec_args, ee_args):
+    data = yaml.safe_load(y)
+    spec_obj = ServiceSpec.from_json(data)
+
+    assert spec_obj.extra_container_args == ec_args
+    assert spec_obj.extra_entrypoint_args == ee_args
