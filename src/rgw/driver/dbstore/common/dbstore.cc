@@ -291,6 +291,7 @@ int DB::get_user(const DoutPrefixProvider *dpp,
     return -1;
   }
 
+  ldpp_dout(dpp, 0)<<"In GetUser (" << query_str <<"), query_str_val(" << query_str_val << "), user_id(" << uinfo.user_id << ")" << dendl;
   ret = ProcessOp(dpp, "GetUser", &params);
 
   if (ret)
@@ -755,6 +756,7 @@ int DB::Bucket::List::list_objects(const DoutPrefixProvider *dpp, int64_t max,
   DBOpParams db_params = {};
   store->InitializeParams(dpp, &db_params);
 
+  ldpp_dout(dpp, 0) << "C3PO 1.25 marker: " << params.marker.name << " max: " << max << " end_marker: " << params.end_marker.name << dendl;
   db_params.op.bucket.info = target->get_bucket_info(); 
   /* XXX: Handle whole marker? key -> name, instance, ns? */
   db_params.op.obj.min_marker = params.marker.name;
@@ -794,6 +796,7 @@ int DB::Bucket::List::list_objects(const DoutPrefixProvider *dpp, int64_t max,
 
     prev_obj = entry.key.name;
 
+  ldpp_dout(dpp, 0) << "C3PO 1.5 marker: " << params.marker.name << " name: " << entry.key.name << dendl;
     if (count >= max) {
       *is_truncated = true;
       next_marker.name = entry.key.name;
@@ -826,6 +829,7 @@ int DB::Bucket::List::list_objects(const DoutPrefixProvider *dpp, int64_t max,
       break;
     }
     count++;
+      ldpp_dout(dpp, 0) << "C3PO 2 name: " << entry.key.name << dendl;
     result->push_back(std::move(entry));
   }
 out:

@@ -29,6 +29,7 @@ namespace rgw { namespace sal {
 const int64_t READ_SIZE = 8 * 1024;
 char read_buf[READ_SIZE];
 const std::string ATTR_PREFIX = "user.X-RGW-";
+#define RGW_POSIX_ATTR_BUCKET_INFO "POSIX-Bucket-Info"
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
@@ -68,10 +69,11 @@ static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp&
 
 static inline void bucket_statx_save(struct statx& stx, RGWBucketEnt& ent, ceph::real_time& mtime)
 {
-  mtime = from_statx_timestamp(stx.stx_mtime);
-  ent.creation_time = from_statx_timestamp(stx.stx_btime);
-  ent.size = stx.stx_size;
-  ent.size_rounded = stx.stx_blocks * 512;
+  mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+  ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+  // TODO Calculate size of bucket (or save it somewhere?)
+  //ent.size = stx.stx_size;
+  //ent.size_rounded = stx.stx_blocks * 512;
 }
 
 static inline int copy_dir_fd(int old_fd)
@@ -562,7 +564,7 @@ int POSIXUser::create_bucket(const DoutPrefixProvider* dpp,
 			      const RGWQuotaInfo * pquota_info,
 			      const RGWAccessControlPolicy& policy,
 			      Attrs& attrs,
-			      RGWBucketInfo& info,
+			      RGWBucketInfo& binfo,
 			      obj_version& ep_objv,
 			      bool exclusive,
 			      bool obj_lock_enabled,
@@ -571,8 +573,19 @@ int POSIXUser::create_bucket(const DoutPrefixProvider* dpp,
 			      std::unique_ptr<Bucket>* bucket_out,
 			      optional_yield y)
 {
-  info.bucket = b;
-  POSIXBucket* fb = new POSIXBucket(driver, driver->get_root_fd(), info, this);
+  binfo.bucket = b;
+  binfo.owner = get_id();
+  binfo.zonegroup = zonegroup_id;
+  binfo.placement_rule = placement_rule;
+  binfo.swift_ver_location = swift_ver_location;
+  binfo.swift_versioning = (!swift_ver_location.empty());
+  binfo.requester_pays = false;
+  binfo.creation_time = ceph::real_clock::now();
+  if (pquota_info) {
+    binfo.quota = *pquota_info;
+  }
+
+  POSIXBucket* fb = new POSIXBucket(driver, driver->get_root_fd(), binfo, this);
 
   int ret = fb->create(dpp, y, existed);
   if (ret < 0) {
@@ -603,6 +616,7 @@ int POSIXUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 
 int POSIXUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
+  ldpp_dout(dpp, 10) << "R2D2 6.1 \"" << get_display_name() << "\"" << dendl;
   return next->load_user(dpp, y);
 }
 
@@ -709,7 +723,7 @@ int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
 int POSIXBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 					Attrs& new_attrs, optional_yield y)
 {
-  for(auto& it : new_attrs) {
+  for (auto& it : new_attrs) {
 	  attrs[it.first] = it.second;
   }
 
@@ -761,6 +775,27 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   }
   get_x_attrs(y, dpp, dir_fd, attrs, get_name());
 
+  ldpp_dout(dpp, 10) << "Rey 1 \"" << get_name() << "\"" << dendl;
+  bufferlist bl;
+  if (get_attr(attrs, RGW_POSIX_ATTR_BUCKET_INFO, bl)) {
+    // Proper bucket with saved info
+    ldpp_dout(dpp, 10) << "Rey 2 owner \"" << info.owner << "\"" << dendl;
+    try {
+      auto bufit = bl.cbegin();
+      decode(info, bufit);
+    } catch (buffer::error &err) {
+      ldout(driver->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode " RGW_POSIX_ATTR_BUCKET_INFO " attr" << dendl;
+      return -EINVAL;
+    }
+    ldpp_dout(dpp, 10) << "Rey 3 owner \"" << info.owner << "\"" << dendl;
+    // info isn't stored in attrs
+    attrs.erase(RGW_POSIX_ATTR_BUCKET_INFO);
+  } else {
+    // TODO dang: fake info up (UID to owner conversion?)
+  }
+
+  info.creation_time = ent.creation_time;
+
   return 0;
 }
 
@@ -776,7 +811,7 @@ int POSIXBucket::set_acl(const DoutPrefixProvider* dpp,
   attrs[RGW_ATTR_ACL] = aclbl;
   info.owner = acl.get_owner().get_id();
 
-  return 0;
+  return write_attrs(dpp, y);
 }
 
 int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
@@ -851,11 +886,20 @@ int POSIXBucket::write_attrs(const DoutPrefixProvider* dpp, optional_yield y)
     return ret;
   }
 
+  ldpp_dout(dpp, 10) << "Vader 1 owner \"" << info.owner << "\"" << dendl;
+  // Bucket info is stored as an attribute, but on in attrs[]
+  bufferlist bl;
+  encode(info, bl);
+  ret = write_x_attr(dpp, y, dir_fd, RGW_POSIX_ATTR_BUCKET_INFO, bl, get_name());
+  if (ret < 0) {
+    return ret;
+  }
+
   for (auto& it : attrs) {
-	  ret = write_x_attr(dpp, y, dir_fd, it.first, it.second, get_name());
-	  if (ret < 0) {
-	    return ret;
-	  }
+    ret = write_x_attr(dpp, y, dir_fd, it.first, it.second, get_name());
+    if (ret < 0) {
+      return ret;
+    }
   }
   return 0;
 }
@@ -882,6 +926,7 @@ int POSIXBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
   errno = 0;
   while ((entry = readdir(dir)) != NULL) {
     if (entry->d_name[0] != '.') {
+	ldpp_dout(dpp, 0) << "ENOTEMPTY: " << entry->d_name << dendl;
       return -ENOTEMPTY;
     }
     if (entry->d_name[1] == '.' || entry->d_name[1] == '\0') {
@@ -1003,9 +1048,10 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* e
     } else if (existed != nullptr) {
       *existed = true;
     }
+    return ret;
   }
 
-  return open(dpp);
+  return write_attrs(dpp, y);
 }
 
 std::string POSIXBucket::get_fname()
@@ -1098,6 +1144,7 @@ int POSIXBucket::open(const DoutPrefixProvider* dpp)
 
   int ret = openat(parent_fd, get_fname().c_str(),
 		   O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  ldpp_dout(dpp, 0) << "Chewy 01 openat bucket " << get_name() << ": " << ret << dendl;
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << get_name() << ": "
@@ -1106,6 +1153,7 @@ int POSIXBucket::open(const DoutPrefixProvider* dpp)
   }
 
   dir_fd = ret;
+  ldpp_dout(dpp, 0) << "Chewy 02 dir_fd " << dir_fd << dendl;
 
   return 0;
 }
@@ -1187,6 +1235,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  ldpp_dout(dpp, 0) << "delete_object name: " << get_name() << " fname: " << get_fname() << dendl;
   if (S_ISDIR(stx.stx_mode)) {
     // Was a mulitpart upload.
     ret = delete_directory(b->get_dir_fd(dpp), get_fname().c_str(), true, dpp);
@@ -1795,6 +1844,42 @@ int POSIXObject::POSIXReadOp::prepare(optional_yield y, const DoutPrefixProvider
     }
   }
 
+  if (!rgw::sal::get_attr(source->get_attrs(), RGW_ATTR_ETAG, etag_bl)) {
+    return -EINVAL;
+  }
+
+  if (params.mod_ptr || params.unmod_ptr) {
+    if (params.mod_ptr && !params.if_nomatch) {
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.mod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
+      if (!(*params.mod_ptr < source->get_mtime())) {
+        return -ERR_NOT_MODIFIED;
+      }
+    }
+
+    if (params.unmod_ptr && !params.if_match) {
+      ldpp_dout(dpp, 10) << "If-Modified-Since: " << *params.unmod_ptr << " Last-Modified: " << source->get_mtime() << dendl;
+      if (*params.unmod_ptr < source->get_mtime()) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
+
+  if (params.if_match) {
+    std::string if_match_str = rgw_string_unquote(params.if_match);
+    ldpp_dout(dpp, 10) << "If-Match: " << if_match_str << " ETAG: " << etag_bl.c_str() << dendl;
+
+    if (if_match_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) != 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+  if (params.if_nomatch) {
+    std::string if_nomatch_str = rgw_string_unquote(params.if_nomatch);
+    ldpp_dout(dpp, 10) << "If-No-Match: " << if_nomatch_str << " ETAG: " << etag_bl.c_str() << dendl;
+    if (if_nomatch_str.compare(0, etag_bl.length(), etag_bl.c_str(), etag_bl.length()) == 0) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+  }
+
   return 0;
 }
 
@@ -2390,6 +2475,21 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
   int ret;
   POSIXUploadPartInfo info;
   bufferlist bl;
+
+  if (if_match) {
+    if (strcmp(if_match, "*") == 0) {
+      // test the object is existing
+      if (!obj->exists(dpp)) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    } else {
+      bufferlist bl;
+      if (!get_attr(attrs, RGW_ATTR_ETAG, bl) ||
+          strncmp(if_match, bl.c_str(), bl.length()) != 0) {
+        return -ERR_PRECONDITION_FAILED;
+      }
+    }
+  }
 
   info.num = part_num;
   info.etag = etag;

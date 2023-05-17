@@ -566,6 +566,9 @@ namespace rgw::sal {
 
   bool DBZone::has_zonegroup_api(const std::string& api) const
   {
+    if (api == "default")
+      return true;
+
     return false;
   }
 

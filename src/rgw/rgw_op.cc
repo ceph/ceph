@@ -1387,15 +1387,18 @@ int RGWOp::do_aws4_auth_completion()
 
 int RGWOp::init_quota()
 {
+  ldpp_dout(this, 10) << "R2D2 1" << dendl;
   /* no quota enforcement for system requests */
   if (s->system_request)
     return 0;
 
+  ldpp_dout(this, 10) << "R2D2 2" << dendl;
   /* init quota related stuff */
   if (!(s->user->get_info().op_mask & RGW_OP_TYPE_MODIFY)) {
     return 0;
   }
 
+  ldpp_dout(this, 10) << "R2D2 3" << dendl;
   /* Need a bucket to get quota */
   if (rgw::sal::Bucket::empty(s->bucket.get())) {
     return 0;
@@ -1405,16 +1408,21 @@ int RGWOp::init_quota()
 			driver->get_user(s->bucket->get_info().owner);
   rgw::sal::User* user;
 
+  ldpp_dout(this, 10) << "R2D2 4 bucket owner: \"" << s->bucket->get_info().owner << "\"" << dendl;
   if (s->user->get_id() == s->bucket_owner.get_id()) {
+  ldpp_dout(this, 10) << "R2D2 5" << dendl;
     user = s->user.get();
   } else {
+  ldpp_dout(this, 10) << "R2D2 6 \"" << owner_user->get_display_name() << "\"" << " ID \"" << owner_user->get_id().id << "\"" << dendl;
     int r = owner_user->load_user(this, s->yield);
     if (r < 0)
       return r;
+  ldpp_dout(this, 10) << "R2D2 7" << dendl;
     user = owner_user.get();
     
   }
 
+  ldpp_dout(this, 10) << "R2D2 8" << dendl;
   driver->get_quota(quota);
 
   if (s->bucket->get_info().quota.enabled) {
@@ -1422,11 +1430,13 @@ int RGWOp::init_quota()
   } else if (user->get_info().quota.bucket_quota.enabled) {
     quota.bucket_quota = user->get_info().quota.bucket_quota;
   }
+  ldpp_dout(this, 10) << "R2D2 9" << dendl;
 
   if (user->get_info().quota.user_quota.enabled) {
     quota.user_quota = user->get_info().quota.user_quota;
   }
 
+  ldpp_dout(this, 10) << "R2D2 10" << dendl;
   return 0;
 }
 
@@ -4338,6 +4348,7 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
   bl.append(etag.c_str(), etag.size());
+  ldpp_dout(this, 0) << "put_obj etag: " << etag << " bl etag: " << bl.c_str() << dendl;
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   populate_with_generic_attrs(s, attrs);
@@ -7098,6 +7109,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner;
   del_op->params.marker_version_id = version_id;
 
+  ldpp_dout(this, 5) << "multi-delete: deleting " << obj << dendl;
   op_ret = del_op->delete_obj(this, y);
   if (op_ret == -ENOENT) {
     op_ret = 0;
@@ -7154,6 +7166,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     }
     int multi_delete_object_num = multi_delete->objects.size();
     if (multi_delete_object_num > max_num) {
+      ldpp_dout(this, 5) << "multi_delete_object_num: " << multi_delete_object_num << " max_num " << max_num << dendl;
       op_ret = -ERR_MALFORMED_XML;
       goto error;
     }
