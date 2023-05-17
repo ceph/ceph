@@ -968,28 +968,8 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       Fh *fh = (Fh*)fi->fh;
       Inode *in = fh->inode.get();
 
-      if (in->fscrypt_auth.size() > 0) {
-        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_auth:\n" << hex_str((const char *)in->fscrypt_auth.data(), in->fscrypt_auth.size()) << dendl;
-
-        bufferlist bl;
-        bl.append((const char *)in->fscrypt_auth.data(), in->fscrypt_auth.size());
-        
-        auto bliter = bl.cbegin();
-
-        uint32_t ver;
-        ceph::decode(ver, bliter);
-
-        string s;
-        ceph::decode(s, bliter);
-
-        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": s.size()=" << s.size() << dendl;
-
-        if (s.size() < sizeof(out_arg)) {
-          fuse_reply_err(req, EINVAL);
-          break;
-        }
-
-        memcpy(&out_arg.policy, s.data(), sizeof(out_arg.policy));
+      if (in->fscrypt_ctx) {
+        in->fscrypt_ctx->convert_to(&out_arg.policy.v2);
         out_arg.policy_size = sizeof(out_arg.policy);
 
         fuse_reply_ioctl(req, 0, &out_arg, sizeof(out_arg));

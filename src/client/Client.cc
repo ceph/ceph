@@ -1058,6 +1058,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->snap_btime = st->snap_btime;
     in->snap_metadata = st->snap_metadata;
     in->fscrypt_auth = st->fscrypt_auth;
+    in->fscrypt_ctx = in->init_fscrypt_ctx();
+
+
 ldout(cct, 0) << __func__ << " XXXXX ino=" << in->ino << " in->fscrypt_auth.size()=" << in->fscrypt_auth.size() << dendl;
 if (in->fscrypt_auth.size() > 0) {
   bufferlist bl;

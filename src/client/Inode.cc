@@ -812,3 +812,23 @@ void Inode::mark_caps_clean()
 }
 
 
+FSCryptContextRef Inode::init_fscrypt_ctx()
+{
+  if (fscrypt_auth.size() == 0) {
+    return nullptr;
+  }
+
+  FSCryptContextRef ctx = std::make_shared<FSCryptContext>();
+
+  bufferlist bl;
+  bl.append((const char *)fscrypt_auth.data(), fscrypt_auth.size());
+        
+  auto bliter = bl.cbegin();
+  try {
+    ctx->decode(bliter);
+  } catch (buffer::error& err) {
+    return nullptr;
+  }
+
+  return ctx;
+}
