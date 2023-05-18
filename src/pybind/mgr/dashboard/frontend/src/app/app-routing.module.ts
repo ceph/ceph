@@ -121,7 +121,7 @@ const routes: Routes = [
         path: 'ceph-users',
         component: CRUDTableComponent,
         data: {
-          breadcrumbs: 'Cluster/Users',
+          breadcrumbs: 'Cluster/Ceph Users',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -129,7 +129,7 @@ const routes: Routes = [
         path: 'cluster/user/create',
         component: CrudFormComponent,
         data: {
-          breadcrumbs: 'Cluster/Users',
+          breadcrumbs: 'Cluster/Ceph Users/Create',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -137,7 +137,7 @@ const routes: Routes = [
         path: 'cluster/user/import',
         component: CrudFormComponent,
         data: {
-          breadcrumbs: 'Cluster/Users',
+          breadcrumbs: 'Cluster/Ceph Users/Import',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -145,7 +145,7 @@ const routes: Routes = [
         path: 'cluster/user/edit',
         component: CrudFormComponent,
         data: {
-          breadcrumbs: 'Cluster/Users',
+          breadcrumbs: 'Cluster/Ceph Users/Edit',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -237,7 +237,7 @@ const routes: Routes = [
       },
       {
         path: 'monitoring',
-        data: { breadcrumbs: 'Cluster/Monitoring' },
+        data: { breadcrumbs: 'Cluster/Alerts' },
         children: [
           { path: '', redirectTo: 'active-alerts', pathMatch: 'full' },
           {
