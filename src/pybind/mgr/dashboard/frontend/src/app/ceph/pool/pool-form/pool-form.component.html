@@ -171,11 +171,16 @@
         </div>
         <!-- Applications -->
         <div class="form-group row">
-          <label i18n
-                 class="cd-col-form-label"
-                 for="applications">Applications</label>
+          <label class="cd-col-form-label required"
+                 for="applications">
+            <ng-container i18n>Applications</ng-container>
+            <cd-helper>
+              <span i18n>Pools need to be associated with an application before use</span>
+            </cd-helper>
+          </label>
           <div class="cd-col-form-input">
             <cd-select-badges id="applications"
+                              name="applications"
                               [customBadges]="true"
                               [customBadgeValidators]="data.applications.validators"
                               [messages]="data.applications.messages"
@@ -189,6 +194,9 @@
                title="Pools should be associated with an application tag"
                class="{{icons.warning}} icon-warning-color">
             </i>
+            <span class="invalid-feedback"
+                  *ngIf="!isApplicationsSelected && data.applications.selected <= 0"
+                  i18n>Application selection is required!</span>
           </div>
         </div>
         <!-- Mirroring -->
