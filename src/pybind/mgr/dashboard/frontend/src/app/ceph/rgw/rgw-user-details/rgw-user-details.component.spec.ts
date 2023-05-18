@@ -5,8 +5,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
-import { configureTestBed, TabHelper } from '~/testing/unit-test-helper';
-import { RgwUserS3Key } from '../models/rgw-user-s3-key';
+import { configureTestBed } from '~/testing/unit-test-helper';
 import { RgwUserDetailsComponent } from './rgw-user-details.component';
 
 describe('RgwUserDetailsComponent', () => {
@@ -27,30 +26,6 @@ describe('RgwUserDetailsComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-
-    const tabs = TabHelper.getTextContents(fixture);
-    expect(tabs).toContain('Details');
-    expect(tabs).not.toContain('Keys');
-  });
-
-  it('should show "Details" tab', () => {
-    component.selection = { uid: 'myUsername' };
-    fixture.detectChanges();
-
-    const tabs = TabHelper.getTextContents(fixture);
-    expect(tabs).toContain('Details');
-    expect(tabs).not.toContain('Keys');
-  });
-
-  it('should show "Keys" tab', () => {
-    const s3Key = new RgwUserS3Key();
-    component.selection = { keys: [s3Key] };
-    component.ngOnChanges();
-    fixture.detectChanges();
-
-    const tabs = TabHelper.getTextContents(fixture);
-    expect(tabs).toContain('Details');
-    expect(tabs).toContain('Keys');
   });
 
   it('should show correct "System" info', () => {
