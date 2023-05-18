@@ -147,7 +147,6 @@ TEST_F(DBStoreTest, InsertUser) {
   params.op.user.uinfo.user_email = "user1@dbstore.com";
   params.op.user.uinfo.suspended = 123;
   params.op.user.uinfo.max_buckets = 456;
-  params.op.user.uinfo.assumed_role_arn = "role";
   params.op.user.uinfo.placement_tags.push_back("tags");
   RGWAccessKey k1("id1", "key1");
   RGWAccessKey k2("id2", "key2");
@@ -171,7 +170,6 @@ TEST_F(DBStoreTest, GetUser) {
   ASSERT_EQ(params.op.user.uinfo.user_id.id, "user_id1");
   ASSERT_EQ(params.op.user.uinfo.suspended, 123);
   ASSERT_EQ(params.op.user.uinfo.max_buckets, 456);
-  ASSERT_EQ(params.op.user.uinfo.assumed_role_arn, "role");
   ASSERT_EQ(params.op.user.uinfo.placement_tags.back(), "tags");
   RGWAccessKey k;
   map<string, RGWAccessKey>::iterator it2 = params.op.user.uinfo.access_keys.begin();
@@ -199,7 +197,6 @@ TEST_F(DBStoreTest, GetUserQuery) {
   ASSERT_EQ(params.op.user.uinfo.user_id.id, "user_id1");
   ASSERT_EQ(params.op.user.uinfo.suspended, 123);
   ASSERT_EQ(params.op.user.uinfo.max_buckets, 456);
-  ASSERT_EQ(params.op.user.uinfo.assumed_role_arn, "role");
   ASSERT_EQ(params.op.user.uinfo.placement_tags.back(), "tags");
   RGWAccessKey k;
   map<string, RGWAccessKey>::iterator it2 = params.op.user.uinfo.access_keys.begin();
@@ -227,7 +224,6 @@ TEST_F(DBStoreTest, GetUserQueryByEmail) {
   ASSERT_EQ(uinfo.user_id.id, "user_id1");
   ASSERT_EQ(uinfo.suspended, 123);
   ASSERT_EQ(uinfo.max_buckets, 456);
-  ASSERT_EQ(uinfo.assumed_role_arn, "role");
   ASSERT_EQ(uinfo.placement_tags.back(), "tags");
   RGWAccessKey k;
   map<string, RGWAccessKey>::iterator it2 = uinfo.access_keys.begin();
@@ -253,7 +249,6 @@ TEST_F(DBStoreTest, GetUserQueryByAccessKey) {
   ASSERT_EQ(uinfo.user_id.id, "user_id1");
   ASSERT_EQ(uinfo.suspended, 123);
   ASSERT_EQ(uinfo.max_buckets, 456);
-  ASSERT_EQ(uinfo.assumed_role_arn, "role");
   ASSERT_EQ(uinfo.placement_tags.back(), "tags");
   RGWAccessKey k;
   map<string, RGWAccessKey>::iterator it2 = uinfo.access_keys.begin();
@@ -284,7 +279,6 @@ TEST_F(DBStoreTest, StoreUser) {
   uinfo.user_email = "user2@dbstore.com";
   uinfo.suspended = 123;
   uinfo.max_buckets = 456;
-  uinfo.assumed_role_arn = "role";
   uinfo.placement_tags.push_back("tags");
   RGWAccessKey k1("id1", "key1");
   RGWAccessKey k2("id2", "key2");
@@ -336,7 +330,6 @@ TEST_F(DBStoreTest, GetUserQueryByUserID) {
   ASSERT_EQ(uinfo.user_id.id, "user_id2");
   ASSERT_EQ(uinfo.suspended, 123);
   ASSERT_EQ(uinfo.max_buckets, 456);
-  ASSERT_EQ(uinfo.assumed_role_arn, "role");
   ASSERT_EQ(uinfo.placement_tags.back(), "tags");
   RGWAccessKey k;
   map<string, RGWAccessKey>::iterator it = uinfo.access_keys.begin();
