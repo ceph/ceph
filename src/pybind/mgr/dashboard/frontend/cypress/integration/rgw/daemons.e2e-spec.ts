@@ -11,7 +11,7 @@ describe('RGW daemons page', () => {
 
   describe('breadcrumb and tab tests', () => {
     it('should open and show breadcrumb', () => {
-      daemons.expectBreadcrumbText('Daemons');
+      daemons.expectBreadcrumbText('Gateways');
     });
 
     it('should show two tabs', () => {
@@ -19,7 +19,7 @@ describe('RGW daemons page', () => {
     });
 
     it('should show daemons list tab at first', () => {
-      daemons.getTabText(0).should('eq', 'Daemons List');
+      daemons.getTabText(0).should('eq', 'Gateways List');
     });
 
     it('should show overall performance as a second tab', () => {
