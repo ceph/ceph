@@ -1,6 +1,6 @@
 import { UsersPageHelper } from './users.po';
 
-describe('Cluster Users', () => {
+describe('Cluster Ceph Users', () => {
   const users = new UsersPageHelper();
 
   beforeEach(() => {
@@ -11,7 +11,7 @@ describe('Cluster Users', () => {
 
   describe('breadcrumb and tab tests', () => {
     it('should open and show breadcrumb', () => {
-      users.expectBreadcrumbText('Users');
+      users.expectBreadcrumbText('Ceph Users');
     });
   });
 

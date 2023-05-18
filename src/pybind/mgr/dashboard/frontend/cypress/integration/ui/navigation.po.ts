@@ -27,9 +27,9 @@ export class NavigationPageHelper extends PageHelper {
         { menu: 'Configuration', component: 'cd-configuration' },
         { menu: 'CRUSH map', component: 'cd-crushmap' },
         { menu: 'Manager Modules', component: 'cd-mgr-module-list' },
-        { menu: 'Users', component: 'cd-crud-table' },
+        { menu: 'Ceph Users', component: 'cd-crud-table' },
         { menu: 'Logs', component: 'cd-logs' },
-        { menu: 'Monitoring', component: 'cd-prometheus-tabs' }
+        { menu: 'Alerts', component: 'cd-prometheus-tabs' }
       ]
     },
     { menu: 'Pools', component: 'cd-pool-list' },
