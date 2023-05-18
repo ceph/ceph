@@ -143,6 +143,8 @@
 #define MSG_OSD_PG_LEASE        133
 #define MSG_OSD_PG_LEASE_ACK    134
 
+#define MSG_OSD_PG_QUERY_OBJECT_INFO 135
+
 // *** MDS ***
 
 #define MSG_MDS_BEACON             100  // to monitor

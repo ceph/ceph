@@ -374,6 +374,7 @@ public:
     virtual Context *on_clean() = 0;
     virtual void on_activate_committed() = 0;
     virtual void on_active_exit() = 0;
+    virtual void cancel_query_object_info() = 0;
 
     // ====================== PG deletion =======================
     /// Notification of removal complete, t must be populated to complete removal
@@ -751,7 +752,8 @@ public:
       boost::statechart::custom_reaction<UnsetForceRecovery>,
       boost::statechart::custom_reaction<SetForceBackfill>,
       boost::statechart::custom_reaction<UnsetForceBackfill>,
-      boost::statechart::custom_reaction<RequestScrub>
+      boost::statechart::custom_reaction<RequestScrub>,
+      boost::statechart::custom_reaction< RecoverUnfoundObject>
       > reactions;
     boost::statechart::result react(const ActMap&);
     boost::statechart::result react(const MNotifyRec&);
@@ -760,6 +762,7 @@ public:
     boost::statechart::result react(const SetForceBackfill&);
     boost::statechart::result react(const UnsetForceBackfill&);
     boost::statechart::result react(const RequestScrub&);
+    boost::statechart::result react(const RecoverUnfoundObject&);
   };
 
   struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,
@@ -1428,6 +1431,7 @@ public:
   map<pg_shard_t, pg_missing_t> peer_missing; ///< peer missing sets
   set<pg_shard_t> peer_log_requested; ///< logs i've requested (and start stamps)
   set<pg_shard_t> peer_missing_requested; ///< missing sets requested
+  map<pg_shard_t, bool>    peer_activate; ///< peer osd is activated (up acting stray or prior)
 
   /// features supported by all peers
   uint64_t peer_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -1833,6 +1837,12 @@ public:
     pg_shard_t peer,
     const hobject_t soid);
 
+  bool discover_unfound_missing(
+    const set<pg_shard_t> peers,
+    const hobject_t &object,
+    const pg_missing_item &missing,
+    PeeringCtxWrapper &ctx);
+
   /// Pull missing sets from all candidate peers
   bool discover_all_missing(
     BufferedRecoveryMessages &rctx);
@@ -2222,6 +2232,8 @@ public:
       hoid, get_min_last_complete_ondisk());
   }
 
+  const std::set<pg_shard_t> get_might_have_unfound();
+
   /**
    * Returns whether all peers which might have unfound objects have been
    * queried or marked lost.
@@ -2255,6 +2267,14 @@ public:
   }
   unsigned int get_num_missing() const {
     return pg_log.get_missing().num_missing();
+  }
+
+  bool add_source_info_for_one_unfound(
+    const pg_shard_t fromosd,
+    const hobject_t &soid,
+    const pg_missing_item &missing) {
+    return missing_loc.add_source_info_for_one_unfound(
+	     fromosd, soid, missing);
   }
 
   const MissingLoc &get_missing_loc() const {

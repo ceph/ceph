@@ -108,6 +108,7 @@
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
+#include "messages/MOSDPGQueryObjectInfo.h"
 
 #include "messages/MOSDPeeringOp.h"
 
@@ -2392,6 +2393,7 @@ void OSD::asok_command(
   if (prefix == "pg" ||
       prefix == "query" ||
       prefix == "mark_unfound_lost" ||
+      prefix == "find_unfound_object" ||
       prefix == "list_unfound" ||
       prefix == "scrub" ||
       prefix == "deep_scrub"
@@ -3968,6 +3970,14 @@ void OSD::final_init()
   r = admin_socket->register_command(
     "pg "			   \
     "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=find_unfound_object " \
+    "name=objname,type=CephString,req=true",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
     "name=cmd,type=CephChoices,strings=list_unfound " \
     "name=offset,type=CephString,req=false",
     asok_hook,
@@ -4001,6 +4011,14 @@ void OSD::final_init()
     "name=mulcmd,type=CephChoices,strings=revert|delete",
     asok_hook,
     "mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "find_unfound_object "					\
+    "name=pgid,type=CephPgid,req=false "			\
+    "name=objname,type=CephString,req=true",
+    asok_hook,
+    "find specific unfound object in this pg " \
+    "find source osd for current need version if one is available");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "list_unfound "					\

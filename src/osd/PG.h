@@ -1489,6 +1489,7 @@ protected:
 
   // OpRequest queueing
   bool can_discard_op(OpRequestRef& op);
+  bool can_discard_query_object_info(OpRequestRef op);
   bool can_discard_scan(OpRequestRef op);
   bool can_discard_backfill(OpRequestRef op);
   bool can_discard_request(OpRequestRef& op);

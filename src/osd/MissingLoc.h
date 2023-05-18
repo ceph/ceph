@@ -253,6 +253,11 @@ class MissingLoc {
     it->second.need = need;
   }
 
+  bool add_source_info_for_one_unfound(
+    const pg_shard_t fromosd,
+    const hobject_t &soid,
+    const pg_missing_item &missing);
+
   /// Adds info about a possible recovery source
   bool add_source_info(
     pg_shard_t source,           ///< [in] source

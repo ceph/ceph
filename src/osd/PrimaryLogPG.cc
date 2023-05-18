@@ -39,6 +39,7 @@
 #include "messages/MOSDPGBackfillRemove.h"
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
+#include "messages/MOSDPGQueryObjectInfo.h"
 #include "messages/MCommandReply.h"
 #include "messages/MOSDScrubReserve.h"
 #include "common/EventTrace.h"
@@ -994,6 +995,39 @@ void PrimaryLogPG::do_command(
     f->close_section();
   }
 
+  else if (prefix == "find_unfound_object") {
+    string objname;
+    if (!cmd_getval(cmdmap, "objname", objname)) {
+      ss << "must specific the objname param";
+      ret = -EINVAL;
+      goto out;
+    }
+
+    if (!is_primary()) {
+      ss << "not primary";
+      ret = -EROFS;
+      goto out;
+    }
+
+    uint64_t unfound = recovery_state.get_missing_loc().num_unfound();
+    if (!unfound) {
+      ss << "pg has no unfound objects";
+      goto out;  // make command idempotent
+    }
+
+    if (!recovery_state.all_unfound_are_queried_or_lost(get_osdmap())) {
+      ss << "pg has " << unfound
+	 << " unfound objects but we haven't probed all sources, not marking lost";
+      ret = -EINVAL;
+      goto out;
+    }
+
+    dout(0) << __func__ << " find_unfound_object for " << objname << dendl;
+
+    find_unfound_object(objname, on_finish);
+    return;
+  }
+
   else if (prefix == "mark_unfound_lost") {
     string mulcmd;
     cmd_getval(cmdmap, "mulcmd", mulcmd);
@@ -1693,6 +1727,11 @@ void PrimaryLogPG::do_request(
 	return;
       }
     }
+  }
+
+  if (msg_type == MSG_OSD_PG_QUERY_OBJECT_INFO) {
+    do_query_object_info(op, handle);
+    return;
   }
 
   if (!is_peered()) {
@@ -4125,6 +4164,408 @@ void PrimaryLogPG::set_dynamic_perf_stats_queries(
 void PrimaryLogPG::get_dynamic_perf_stats(DynamicPerfStats *stats)
 {
   std::swap(m_dynamic_perf_stats, *stats);
+}
+
+bool PrimaryLogPG::is_same_op_for_one_unfound_object(
+  const hobject_t &object,
+  const pg_missing_item &missing,
+  const object_info_t &oi,
+  const pg_shard_t &peer,
+  map<pg_shard_t, object_info_t> &auth_locations)
+{
+  if (oi.soid != object) {
+    dout(0) << __func__ << " skip, unfound object=" << object
+            << " missing=" << missing
+            << " peer=" << peer
+            << ", oi.soid(" << oi.soid
+            << ") != object(" << object << ")" << dendl;
+    return false;
+  }
+
+  if (oi.version != missing.need) {
+    dout(0) << __func__ << " skip, unfound object=" << object
+            << " missing=" << missing
+            << " peer=" << peer
+            << ", oi.version(" << oi.version
+            << ") != need(" << missing.need << ")" << dendl;
+    return false;
+  }
+
+  if (auth_locations.empty()) {
+    dout(0) << __func__ << " found, unfound object=" << object
+            << " missing=" << missing
+            << " peer=" << peer
+            << ", oi.version(" << oi.version << ")"
+	    << ", duto auth_locations is empty, we think soid==object and version==need"
+	    << dendl;
+    return true;
+  }
+
+  map<pg_shard_t, object_info_t>::const_iterator auth_iter = auth_locations.begin();
+  map<pg_shard_t, object_info_t>::const_iterator auth_end = auth_locations.end();
+
+  for (; auth_iter != auth_end; ++auth_iter) {
+    const pg_shard_t &auth_peer = auth_iter->first;
+    const object_info_t &auth_oi = auth_iter->second;
+
+    if (oi.soid != auth_oi.soid) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", soid=" << oi.soid << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", soid=" << auth_oi.soid << ")" << dendl;
+      return false;
+    }
+
+    if (oi.last_reqid != auth_oi.last_reqid) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", last_reqid=" << oi.last_reqid<< ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", last_reqid=" << auth_oi.last_reqid << ")" << dendl;
+      return false;
+    }
+
+    if (oi.mtime != auth_oi.mtime) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", mtime=" << oi.mtime<< ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", mtime=" << auth_oi.mtime << ")" << dendl;
+      return false;
+    }
+
+    if (oi.local_mtime != auth_oi.local_mtime) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", local_mtime=" << oi.local_mtime<< ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", local_mtime=" << auth_oi.local_mtime << ")" << dendl;
+      return false;
+    }
+
+    if (oi.version != auth_oi.version) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", version=" << oi.version << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", version=" << auth_oi.version << ")" << dendl;
+      return false;
+    }
+
+    if (oi.prior_version != auth_oi.prior_version) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", prior_version=" << oi.prior_version << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", prior_version=" << auth_oi.prior_version << ")" << dendl;
+      return false;
+    }
+
+    if (oi.user_version != auth_oi.user_version) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", user_version=" << oi.user_version << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", user_version=" << auth_oi.user_version << ")" << dendl;
+      return false;
+    }
+
+    if (oi.size != auth_oi.size) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", is_lost=" << oi.is_lost() << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", is_lost=" << auth_oi.is_lost() << ")" << dendl;
+      return false;
+    }
+
+    if (oi.flags != auth_oi.flags) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", flags=" << oi.flags << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", flags=" << auth_oi.flags << ")" << dendl;
+      return false;
+    }
+
+    if (oi.truncate_seq != auth_oi.truncate_seq) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", truncate_seq=" << oi.truncate_seq << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", truncate_seq=" << auth_oi.truncate_seq << ")" << dendl;
+      return false;
+    }
+
+    if (oi.truncate_size != auth_oi.truncate_size) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", truncate_size=" << oi.truncate_size << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", truncate_size=" << auth_oi.truncate_size << ")" << dendl;
+      return false;
+    }
+
+    if (oi.expected_object_size != auth_oi.expected_object_size) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", expected_object_size=" << oi.expected_object_size << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", expected_object_size=" << auth_oi.expected_object_size << ")" << dendl;
+      return false;
+    }
+
+    if (oi.expected_write_size != auth_oi.expected_write_size) {
+      dout(0) << __func__ << " skip, unfound object=" << object
+              << " missing=" << missing
+              << " new_source_info(peer=" << peer
+              << ", expected_write_size=" << oi.expected_write_size << ") !="
+              << " auth_source_info(peer=" << auth_peer
+              << ", expected_write_size=" << auth_oi.expected_write_size << ")" << dendl;
+      return false;
+    }
+  }
+
+  dout(0) << __func__ << " found, unfound object=" << object
+          << " missing=" << missing
+          << " peer=" << peer
+          << ", oi.version(" << oi.version << ")"
+	  << ", auth_source_info=" << auth_locations << dendl;
+
+  return true;
+}
+
+void PrimaryLogPG::check_query_object_info(
+  QueryObjectInfoCtx &query_obj_ctx)
+{
+  hobject_t &object = query_obj_ctx.object;
+  pg_missing_item &missing = query_obj_ctx.missing;
+  map<pg_shard_t, object_info_t> &result = query_obj_ctx.result;
+  map<pg_shard_t, object_info_t> auth_locations;
+
+  if (result.empty()) {
+    dout(0) << __func__ << " unfound object=" << object
+	    << " missing=" << missing
+	    << " result is empty" << dendl;
+    return;
+  }
+
+  dout(0) << __func__ << " unfound object=" << object
+	  << " missing=" << missing
+	  << " result=" << result << dendl;
+
+  /* find object_info_t for missing_loc */
+  map<hobject_t, set<pg_shard_t>>::const_iterator location
+    = get_missing_loc_shards().find(object);
+  if (location != get_missing_loc_shards().end()) {
+    for (set<pg_shard_t>::iterator j = location->second.begin();
+      j != location->second.end(); ++j) {
+
+      map<pg_shard_t, object_info_t>::const_iterator auth_iter = result.find(*j);
+      if (auth_iter != result.end()) {
+	auth_locations[*j] = auth_iter->second;
+	const object_info_t &oi = auth_iter->second;
+        dout(0) << __func__ << " auth, unfound object=" << object
+                << " missing=" << missing
+                << ", missing_loc=" << *j
+                << ", oid=" << oi.soid
+                << ", version=" << oi.version
+                << ", prior_version=" << oi.prior_version
+                << ", last_reqid=" << oi.last_reqid
+                << ", user_version=" << oi.user_version
+                << ", size=" << oi.size
+                << ", mtime=" << oi.mtime
+                << ", local_mtime=" << oi.local_mtime
+                << ", lost=" << oi.is_lost()
+                << ", flags=" << oi.flags
+                << ", truncate_seq=" << oi.truncate_seq
+                << ", truncate_size=" << oi.truncate_size
+                << ", data_digest=" << oi.data_digest
+                << ", omap_digest=" << oi.omap_digest
+                << ", expected_object_size=" << oi.expected_object_size
+                << ", expected_write_size=" << oi.expected_write_size
+                << ", alloc_hint_flags=" << oi.alloc_hint_flags
+                << dendl;
+	result.erase(*j);
+      } else {
+	dout(0) << __func__ << " unfound object=" << object
+		<< " missing=" << missing
+		<< " missing_loc=" << *j
+		<< " not found object_info_t" << dendl;
+      }
+    }
+  }
+
+  if (result.empty()) {
+    dout(0) << __func__ << " unfound object=" << object
+	    << " missing=" << missing
+	    << " only found missing_loc object_info_t,"
+	    << " but not found other source object_info_t"
+	    << dendl;
+    return;
+  }
+
+  /* find object_info_t from others */
+  map<pg_shard_t, object_info_t>::const_iterator i = result.begin();
+  map<pg_shard_t, object_info_t>::const_iterator end = result.end();
+
+  for (; i != end; ++i) {
+    const pg_shard_t &peer = i->first;
+    const object_info_t &oi = i->second;
+
+    dout(0) << __func__ << " maybe, unfound object=" << object
+	    << " missing=" << missing
+	    << ", peer=" << peer
+	    << ", oid=" << oi.soid
+	    << ", version=" << oi.version
+	    << ", prior_version=" << oi.prior_version
+	    << ", last_reqid=" << oi.last_reqid
+	    << ", user_version=" << oi.user_version
+	    << ", size=" << oi.size
+	    << ", mtime=" << oi.mtime
+	    << ", local_mtime=" << oi.local_mtime
+	    << ", lost=" << oi.is_lost()
+	    << ", flags=" << oi.flags
+	    << ", truncate_seq=" << oi.truncate_seq
+	    << ", truncate_size=" << oi.truncate_size
+	    << ", data_digest=" << oi.data_digest
+	    << ", omap_digest=" << oi.omap_digest
+	    << ", expected_object_size=" << oi.expected_object_size
+	    << ", expected_write_size=" << oi.expected_write_size
+	    << ", alloc_hint_flags=" << oi.alloc_hint_flags
+	    << dendl;
+
+    if (is_same_op_for_one_unfound_object(
+	  object, missing, oi, peer, auth_locations)) {
+	dout(0) << __func__ << " found unfound object=" << object
+		<< " missing=" << missing
+		<< " new source info(peer=" << peer
+		<< ", object_info_t=" << oi << ")" << dendl;
+	recovery_state.add_source_info_for_one_unfound(
+	  peer, object, missing);
+    }
+  }
+}
+
+void PrimaryLogPG::do_query_object_info(
+  OpRequestRef op,
+  ThreadPool::TPHandle &handle)
+{
+  auto m = op->get_req<MOSDPGQueryObjectInfo>();
+  ceph_assert(m->get_type() == MSG_OSD_PG_QUERY_OBJECT_INFO);
+  dout(0) << __func__ << " " << *m << dendl;
+
+  op->mark_started();
+
+  switch (m->op) {
+  case MOSDPGQueryObjectInfo::OP_GET_OBJECT_INFO:
+    {
+      dout(0) << __func__ << " receive OP_GET_OBJECT_INFO to osd." << m->from << dendl;
+
+      hobject_t object = m->object;
+
+      object_info_t oi;
+
+      bufferlist bl;
+      int r = pgbackend->objects_get_attr(object, OI_ATTR, &bl);
+
+      if (r >= 0) {
+	oi = object_info_t(bl);
+	dout(0) << __func__ << " object : " << object
+		<< " object_info_t : " << oi
+		<< " r=" << r << dendl;
+      } else {
+	oi = object_info_t();
+	dout(0) << __func__ << " object : " << object
+		<< " object_info_t r=" << r << dendl;
+      }
+
+      MOSDPGQueryObjectInfo *reply = new MOSDPGQueryObjectInfo(
+	MOSDPGQueryObjectInfo::OP_OBJECT_INFO,
+	m->get_tid(),
+	pg_whoami,
+	get_osdmap_epoch(),
+	m->query_epoch,
+	spg_t(info.pgid.pgid, get_primary().shard),
+	object,
+	r);
+
+      encode(oi, reply->get_data(),
+	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+
+      dout(0) << __func__ << " send OP_OBJECT_INFO to osd." << m->from << dendl;
+      osd->send_message_osd_cluster(reply, m->get_connection());
+    }
+    break;
+
+  case MOSDPGQueryObjectInfo::OP_OBJECT_INFO:
+    {
+      dout(0) << __func__ << " receive OP_OBJECT_INFO to osd." << m->from << " tid=" << m->get_tid() << dendl;
+
+      pg_shard_t from = m->from;
+      hobject_t object = m->object;
+      int32_t result = m->result;
+
+      object_info_t oi;
+      auto p = m->get_data().cbegin();
+
+      auto it = query_object_info_ctx_waiting_on.find(m->get_tid());
+      if (it != query_object_info_ctx_waiting_on.end()) {
+	dout(0) << __func__ << " waiting_on : " << it->second.waiting_on << dendl;
+        if (it->second.waiting_on.count(from)) {
+	  if (result >= 0) {
+	    decode(oi, p);
+	    it->second.result[from] = oi;
+
+	    dout(0) << __func__ << " object : " << object
+		    << " object_info_t : "  << oi
+		    << " from osd." << from.osd
+		    << " result=" << result << dendl;
+	  } else {
+	    dout(0) << __func__ << " object : " << object
+		    << " from osd." << from.osd
+		    << " result=" << result << dendl;
+	  }
+
+          it->second.waiting_on.erase(from);
+        } else {
+          osd->clog->error()
+            << info.pgid << " got reply "
+            << *m << " from shard we are not waiting for "
+            << from;
+        }
+
+        if (it->second.waiting_on.empty()) {
+	  check_query_object_info(it->second);
+
+	  eval_read_repop(it->second.repop.get());
+
+	  dout(0) << __func__ << " OP_OBJECT_INFO "
+		  << "query_object_info_ctx_waiting_on.erase(it)" << dendl;
+
+          query_object_info_ctx_waiting_on.erase(it);
+        }
+      } else {
+        osd->clog->error()
+          << info.pgid << " got reply "
+          << *m << " on unknown tid " << m->get_tid();
+      }
+    }
+    break;
+  }
 }
 
 void PrimaryLogPG::do_scan(
@@ -10553,6 +10994,31 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
   }
 }
 
+void PrimaryLogPG::eval_read_repop(RepGather *repop)
+{
+  dout(0) << "eval_read_repop " << *repop
+    << (repop->op && repop->op->get_req<MOSDOp>() ? "" : " (no op)") << dendl;
+
+  // ondisk?
+  dout(0) << __func__ << " removing " << *repop << dendl;
+
+  ceph_assert(!repop_queue.empty());
+  dout(0) << __func__ << " q front is " << *repop_queue.front() << dendl;
+
+  if (repop_queue.front() == repop) {
+    RepGather *to_remove = repop;
+    while (!repop_queue.empty()) {
+      repop_queue.pop_front();
+      for (auto p = to_remove->on_success.begin();
+           p != to_remove->on_success.end();
+           to_remove->on_success.erase(p++)) {
+        (*p)();
+      }
+      remove_repop(to_remove);
+    }
+  }
+}
+
 void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 {
   FUNCTRACE(cct);
@@ -11813,6 +12279,309 @@ void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
   }
 }
 
+void PrimaryLogPG::find_object_source(
+  const std::set<pg_shard_t> might_have_unfound,
+  ObcLockManager &&manager,
+  const hobject_t &object,
+  const pg_missing_item &missing,
+  std::optional<std::function<void(void)> > &&_on_complete,
+  OpRequestRef op,
+  int r)
+{
+  ceph_assert(is_primary());
+
+  dout(0) << __func__ << " unfound object : " << object
+          << " pg_missing_item : " << missing << dendl;
+
+  boost::intrusive_ptr<RepGather> repop;
+  std::optional<std::function<void(void)> > on_complete;
+  if (get_osdmap()->require_osd_release >= ceph_release_t::jewel) {
+    repop = new_repop(
+      eversion_t(),
+      r,
+      std::move(manager),
+      std::move(op),
+      std::move(_on_complete));
+  } else {
+    on_complete = std::move(_on_complete);
+  }
+
+  set<pg_shard_t>::const_iterator i = might_have_unfound.begin();
+  set<pg_shard_t>::const_iterator mend = might_have_unfound.end();
+
+  set<pg_shard_t> waiting_on;
+
+  for (; i != mend; ++i) {
+    pg_shard_t peer(*i);
+
+    dout(0) << __func__ << " might_have_unfound osd." << *i
+            << " exists=" << get_osdmap()->exists(peer.osd)
+            << " up=" << get_osdmap()->is_up(peer.osd) << dendl;
+
+    if (peer == pg_whoami)
+      continue;
+
+    if (!get_osdmap()->exists(peer.osd))
+      continue;
+
+    if (!get_osdmap()->is_up(peer.osd))
+      continue;
+
+    ceph_assert(repop);
+
+    epoch_t e = get_osdmap_epoch();
+
+    MOSDPGQueryObjectInfo *m = new MOSDPGQueryObjectInfo(
+      MOSDPGQueryObjectInfo::OP_GET_OBJECT_INFO,
+      repop->rep_tid,
+      pg_whoami,
+      e,
+      e,
+      spg_t(info.pgid.pgid, peer.shard),
+      object,
+      -1);
+
+    dout(0) << __func__ << " send OP_GET_OBJECT_INFO to osd." << *i
+	    << " " << *m << dendl;
+
+    osd->send_message_osd_cluster(
+      peer.osd, m, get_osdmap_epoch());
+
+    waiting_on.insert(peer);
+  }
+
+  dout(0) << __func__ << " prepare waiting_on : " << waiting_on
+	  << " repop->rep_tid=" << repop->rep_tid << dendl;
+
+  ceph_tid_t rep_tid = repop->rep_tid;
+
+  dout(0) << __func__ << " query_object_info_ctx_waiting_on.insert"
+	  <<"(tid=" << rep_tid << ")" << dendl;
+  query_object_info_ctx_waiting_on.insert(
+    make_pair(
+    rep_tid,
+    QueryObjectInfoCtx{std::move(repop), std::move(waiting_on),
+		       std::move(object), std::move(missing)}
+    ));
+
+  object_info_t oi;
+
+  bufferlist bl;
+  int ret = pgbackend->objects_get_attr(object, OI_ATTR, &bl);
+  auto it = query_object_info_ctx_waiting_on.find(rep_tid);
+  if (it != query_object_info_ctx_waiting_on.end()) {
+    if (ret >= 0) {
+      oi = object_info_t(bl);
+
+      it->second.result[pg_whoami] = oi;
+
+      dout(0) << __func__ << " object : " << object
+	      << " object_info_t : " << oi
+	      << " r=" << ret << dendl;
+    } else {
+      oi = object_info_t();
+      dout(0) << __func__ << " object : " << object
+	      << " object_info_t r=" << ret << dendl;
+    }
+  }
+}
+
+void PrimaryLogPG::find_unfound_object(
+  const string objname,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
+{
+  stringstream ss;
+  dout(0) << __func__ << " starting find unfound object for " << objname << dendl;
+
+  int exists_up_count = 0;
+  uint64_t num_unfound = 0;
+  bool found_object = false;
+  ObcLockManager manager;
+  hobject_t oid;
+  pg_missing_item missing;
+  set<pg_shard_t> old_location;
+  map<hobject_t, set<pg_shard_t>>::const_iterator old_source;
+
+  /* need_recovery_map */
+  map<hobject_t, pg_missing_item>::const_iterator m =
+    recovery_state.get_missing_loc().get_needs_recovery().begin();
+  map<hobject_t, pg_missing_item>::const_iterator mend =
+    recovery_state.get_missing_loc().get_needs_recovery().end();
+
+  /* might_have_unfound */
+  const std::set<pg_shard_t> might_have_unfound
+    = recovery_state.get_might_have_unfound();
+
+  dout(0) << __func__ << " might_have_unfound osd count is "
+	  << might_have_unfound.size() << dendl;
+
+  set<pg_shard_t>::const_iterator peer = might_have_unfound.begin();
+  set<pg_shard_t>::const_iterator mhu_end = might_have_unfound.end();
+
+  /* case1: might_have_unfound set is empty, not query */
+  if (might_have_unfound.empty()) {
+    ss << "pg might_have_unfound is empty, not need to find source "
+       << "for objanme=" << objname;
+    dout(0) << __func__ << " might_have_unfound is empty" << dendl;
+    goto out;
+  }
+
+  /* case2: num_unfound is 0, not query */
+  num_unfound = recovery_state.get_missing_loc().num_unfound();
+  dout(0) << __func__ << " num_unfound is " << num_unfound << dendl;
+
+  if (!num_unfound) {
+    ss << "pg not has unfound object, not need to find source"
+       << "for objanme=" << objname;
+    dout(0) << __func__ << " num_unfound is 0" << dendl;
+    goto out;
+  }
+
+  /* case3: might_have_unfound set not empty,
+   *        but all osds are not exists&up, not query */
+  for (; peer != mhu_end; ++peer) {
+    dout(0) << __func__ << " might_have_unfound osd." << *peer
+            << " exists=" << get_osdmap()->exists(peer->osd)
+            << " up=" << get_osdmap()->is_up(peer->osd) << dendl;
+
+    if (get_osdmap()->exists(peer->osd) && get_osdmap()->is_up(peer->osd)) {
+      exists_up_count++;
+    }
+  }
+
+  if (!exists_up_count) {
+    ss << "pg all of might_have_unfound osd status "
+       << "are not-exists or not-up in current-osdmap, "
+       << "can not find source for objname=" << objname;
+    dout(0) << __func__ << " might_have_unfound exists & up osd count is 0" << dendl;
+    goto out;
+  }
+
+  while (m != mend) {
+    const hobject_t &tmp_oid(m->first);
+
+    if (tmp_oid.oid.name == objname) {
+      found_object = true;
+      oid = m->first;
+      missing = m->second;
+
+      dout(0) << __func__ << " found object=" << tmp_oid
+	      << " missing=" << missing << dendl;
+      break;
+    }
+
+    ++m;
+  }
+
+  if (!found_object) {
+    ss << "objname=" << objname
+       << " not found in missing objects,"
+       << " maybe is not unfound object,"
+       << " not need to find source";
+
+    dout(0) << "objname=" << objname
+       << " not found in missing objects,"
+       << " maybe is not unfound object,"
+       << " not need to find source" << dendl;
+    goto out;
+  }
+
+  /* found specific object in missing_loc */
+
+  if (!recovery_state.get_missing_loc().is_unfound(oid)) {
+    // We only care about unfound objects
+    ss << "objname=" << objname
+       << " is not unfound object, not need to find source";
+    dout(0) << __func__ << " found object is not unfound "
+            << oid << dendl;
+    goto out;
+  }
+
+  /* case4: might_have_unfound set not emtpy,
+   *        and have exists&up osds, to query object_info_t */
+  old_source = get_missing_loc_shards().find(oid);
+  if (old_source != get_missing_loc_shards().end()) {
+    old_location = old_source->second;
+    dout(0) << __func__ << " oid=" << oid
+            << ", missing=" << missing
+            << ", old_location=" << old_location
+            << dendl;
+  }
+
+  find_object_source(
+    might_have_unfound,
+    std::move(manager),
+    oid,
+    missing,
+    std::optional<std::function<void(void)> >(
+      [this, oid, missing, old_location, on_finish]() {
+        set<pg_shard_t> new_location;
+        map<hobject_t, set<pg_shard_t>>::const_iterator location
+          = get_missing_loc_shards().find(oid);
+        if (location != get_missing_loc_shards().end()) {
+          new_location = location->second;
+        }
+
+        if (old_location != new_location &&
+            is_active() &&
+            is_recovery_unfound() &&
+            !recovery_state.get_missing_loc().is_unfound(oid)) {
+
+          dout(0) << __func__ << " activate(maybe) stray osds"
+		  << " and trigger recovery for oid=" << oid
+		  << ", missing" << missing
+		  << ", old_location=" << old_location
+		  << ", new_location=" << new_location
+		  << dendl;
+
+          queue_peering_event(
+            PGPeeringEventRef(
+              std::make_shared<PGPeeringEvent>(
+              get_osdmap_epoch(),
+              get_osdmap_epoch(),
+              RecoverUnfoundObject(
+	  new_location,
+	  oid,
+	  missing))));
+        }
+
+        stringstream ss;
+        ss << "pg has " << oid
+           << " object unfound "
+           << " missing " << missing
+           << " old_location " << old_location
+           << " new_location " << new_location
+           << " and find all might have unfound source";
+
+        string rs = ss.str();
+        dout(0) << "do_command r=" << 0 << " " << rs << dendl;
+        osd->clog->info() << rs;
+        bufferlist empty;
+        on_finish(0, rs, empty);
+      }),
+      OpRequestRef());
+
+  return;
+
+out:
+  string rs = ss.str();
+  dout(0) << "do_command r=" << 0 << " " << rs << dendl;
+  osd->clog->info() << rs;
+  bufferlist empty;
+  on_finish(0, rs, empty);
+}
+
+void PrimaryLogPG::cancel_query_object_info()
+{
+  // get rid of all the QueryObjectInfoCtx so their references to repops are
+  // dropped
+  if (query_object_info_ctx_waiting_on.empty())
+    return;
+
+  query_object_info_ctx_waiting_on.clear();
+  dout(0) << __func__ << " query_object_info_ctx_waiting_on clear" << dendl;;
+}
+
 /* Mark all unfound objects as lost.
  */
 void PrimaryLogPG::mark_all_unfound_lost(
@@ -12076,6 +12845,7 @@ void PrimaryLogPG::on_shutdown()
 
   apply_and_flush_repops(false);
   cancel_log_updates();
+  cancel_query_object_info();
   // we must remove PGRefs, so do this this prior to release_backoffs() callers
   clear_backoffs(); 
   // clean up snap trim references
@@ -12252,6 +13022,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
   // any dups
   apply_and_flush_repops(is_primary());
   cancel_log_updates();
+  cancel_query_object_info();
 
   // do this *after* apply_and_flush_repops so that we catch any newly
   // registered watches.
