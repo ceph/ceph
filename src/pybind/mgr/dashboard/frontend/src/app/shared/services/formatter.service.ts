@@ -13,6 +13,9 @@ export class FormatterService {
     if (!_.isNumber(n)) {
       return '-';
     }
+    if (_.isNaN(n)) {
+      return 'N/A';
+    }
     let unit = n < 1 ? 0 : Math.floor(Math.log(n) / Math.log(divisor));
     unit = unit >= units.length ? units.length - 1 : unit;
     let result = _.round(n / Math.pow(divisor, unit), decimals).toString();
