@@ -27,7 +27,7 @@ the following forms:
    ceph device ls-by-daemon <daemon>
    ceph device ls-by-host <host>
 
-To see information about the location of an individual device and about how the
+To see information about the location of an specific device and about how the
 device is being consumed, run a command of the following form:
 
 .. prompt:: bash $
@@ -43,9 +43,9 @@ command of the following form::
 
   device light on|off <devid> [ident|fault] [--force]
 
-.. note:: In some situations (depending on your kernel revision or your SES
-   firmware or the setup of your HBA), using this command to blink the lights
-   will not work.
+.. note:: Using this command to blink the lights might not work. Whether it
+   works will depend upon such factors as your kernel revision, your SES
+   firmware, or the setup of your HBA.
 
 The ``<devid>`` parameter is the device identification. To retrieve this
 information, run the following command:
@@ -118,8 +118,7 @@ form:
 
 By default, device metrics are scraped once every 24 hours.
 
-
-To manually scrape all devices , run the following command:
+To manually scrape all devices, run the following command:
    
 .. prompt:: bash $
 
@@ -151,7 +150,7 @@ Ceph can predict drive life expectancy and device failures by analyzing the
 health metrics that it collects. The prediction modes are as follows:
 
 * *none*: disable device failure prediction.
-* *local*: use a pre-trained prediction model from the ``ceph-mgr`` daemon
+* *local*: use a pre-trained prediction model from the ``ceph-mgr`` daemon.
 
 To configure the prediction mode, run a command of the following form:
 
@@ -174,8 +173,8 @@ To see the metadata of a specific device, run a command of the following form:
 
    ceph device info <devid>
 
-To explicitly force prediction of a device's life expectancy, run a command of
-the following form:
+To explicitly force prediction of a specific device's life expectancy, run a
+command of the following form:
 
 .. prompt:: bash $
 
@@ -183,7 +182,7 @@ the following form:
 
 In addition to Ceph's internal device failure prediction, you might have an
 external source of information about device failures. To inform Ceph of a
-device's life expectancy, run a command of the following form:
+specific device's life expectancy, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -198,8 +197,8 @@ Health alerts
 -------------
 
 The ``mgr/devicehealth/warn_threshold`` configuration option controls the
-health check for an expected device failure. If the device failure is expected
-to occur within the specified time interval, an alert is raised.
+health check for an expected device failure. If the device is expected to fail
+within the specified time interval, an alert is raised.
 
 To check the stored life expectancy of all devices and generate any appropriate
 health alert, run the following command:
@@ -216,13 +215,12 @@ migrates data away from devices that are expected to fail soon. If this option
 is enabled, the module marks such devices ``out`` so that automatic migration
 will occur.
 
-.. note:: The ``mon_osd_min_up_ratio`` can help to prevent this process from
-   cascading to total failure. In a situation in which the "self heal" module
-   marks out a number of OSDs sufficient to exceed the ratio set by
-   ``mon_osd_min_up_ratio``, the cluster raises the ``DEVICE_HEALTH_TOOMANY``
-   health state. See
-   :ref:`DEVICE_HEALTH_TOOMANY<rados_health_checks_device_health_toomany>` for
-   instructions on what to do in this situation.
+.. note:: The ``mon_osd_min_up_ratio`` configuration option can help prevent
+   this process from cascading to total failure. If the "self heal" module
+   marks ``out`` so many OSDs that the ratio value of ``mon_osd_min_up_ratio``
+   is exceeded, then the cluster raises the ``DEVICE_HEALTH_TOOMANY`` health
+   check. For instructions on what to do in this situation, see
+   :ref:`DEVICE_HEALTH_TOOMANY<rados_health_checks_device_health_toomany>`.
 
 The ``mgr/devicehealth/mark_out_threshold`` configuration option specifies the
 time interval for automatic migration. If a device is expected to fail within
