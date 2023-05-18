@@ -423,6 +423,7 @@ private:
         // Checking the connection idlesness
         if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
           ldout(conn->cct, 20) << "Time for deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
+          std::lock_guard lock(connections_lock);
           ERASE_AND_CONTINUE(conn_it, connections);
         }
 
