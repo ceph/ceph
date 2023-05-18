@@ -13,6 +13,7 @@ from typing import (
     Set,
     cast)
 from os.path import normpath
+import cephfs
 
 from rados import TimedOut, ObjectNotFound, Rados, LIBRADOS_ALL_NSPACES
 
@@ -20,7 +21,7 @@ from orchestrator import NoOrchestrator
 from mgr_module import NFS_POOL_NAME as POOL_NAME, NFS_GANESHA_SUPPORTED_FSALS
 
 from .export_utils import GaneshaConfParser, Export, RawBlock, CephFSFSAL, RGWFSAL
-from .exception import NFSException, NFSInvalidOperation, FSNotFound
+from .exception import NFSException, NFSInvalidOperation, FSNotFound, NFSObjectNotFound
 from .utils import (
     CONF_PREFIX,
     EXPORT_PREFIX,
@@ -29,7 +30,7 @@ from .utils import (
     conf_obj_name,
     available_clusters,
     check_fs,
-    restart_nfs_service)
+    restart_nfs_service, cephfs_path_is_dir)
 
 if TYPE_CHECKING:
     from nfs.module import Module
@@ -631,6 +632,16 @@ class ExportMgr:
                              access_type: str,
                              clients: list = [],
                              sectype: Optional[List[str]] = None) -> Tuple[int, str, str]:
+
+        try:
+            cephfs_path_is_dir(self.mgr, fs_name, path)
+        except NotADirectoryError:
+            raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
+        except cephfs.ObjectNotFound:
+            raise NFSObjectNotFound(f"path {path} does not exist")
+        except cephfs.Error as e:
+            raise NFSException(e.args[1], -e.args[0])
+
         pseudo_path = normalize_path(pseudo_path)
 
         if not self._fetch_export(cluster_id, pseudo_path):
