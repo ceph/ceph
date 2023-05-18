@@ -1,7 +1,7 @@
 <div class="container-fluid"
      *ngIf="healthData && enabledFeature$ | async as enabledFeature">
   <div class="row mx-0">
-    <cd-card title="Details"
+    <cd-card cardTitle="Details"
              i18n-title
              class="col-sm-3 px-3"
              [ngClass]="{'d-flex': flexHeight}"
@@ -16,7 +16,7 @@
       </dl>
     </cd-card>
 
-    <cd-card title="Status"
+    <cd-card cardTitle="Status"
              i18n-title
              class="col-sm-6 px-3 d-flex"
              aria-label="Status card">
@@ -77,7 +77,7 @@
       </section>
     </cd-card>
 
-    <cd-card title="Capacity"
+    <cd-card cardTitle="Capacity"
              i18n-title
              class="col-sm-3 px-3"
              [ngClass]="{'d-flex': flexHeight}"
@@ -94,7 +94,7 @@
   <!-- Second row -->
   <div class="row mx-0">
     <!-- Inventory Card -->
-    <cd-card title="Inventory"
+    <cd-card cardTitle="Inventory"
              i18n-title
              class="col-sm-3 px-3 d-flex"
              aria-label="Inventory card">
@@ -183,7 +183,7 @@
       </li>
     </cd-card>
 
-    <cd-card title="Cluster utilization"
+    <cd-card cardTitle="Cluster utilization"
              i18n-title
              class="col-sm-9 px-3 d-flex"
              aria-label="Cluster utilization card">
