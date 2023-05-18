@@ -109,36 +109,36 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:uid`,
         component: RgwUserFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
+  },
+  {
+    path: 'roles',
+    data: {
+      breadcrumbs: 'Roles',
+      resource: 'api.rgw.user.roles@1.0',
+      tabs: [
+        {
+          name: 'Users',
+          url: '/rgw/user'
+        },
+        {
+          name: 'Roles',
+          url: '/rgw/roles'
+        }
+      ]
+    },
+    children: [
+      {
+        path: '',
+        component: CRUDTableComponent
       },
       {
-        path: 'roles',
+        path: URLVerbs.CREATE,
+        component: CrudFormComponent,
         data: {
-          breadcrumbs: 'Roles',
-          resource: 'api.rgw.user.roles@1.0',
-          tabs: [
-            {
-              name: 'Users',
-              url: '/rgw/user'
-            },
-            {
-              name: 'Roles',
-              url: '/rgw/user/roles'
-            }
-          ]
-        },
-        children: [
-          {
-            path: '',
-            component: CRUDTableComponent
-          },
-          {
-            path: URLVerbs.CREATE,
-            component: CrudFormComponent,
-            data: {
-              breadcrumbs: ActionLabels.CREATE
-            }
-          }
-        ]
+          breadcrumbs: ActionLabels.CREATE
+        }
       }
     ]
   },
