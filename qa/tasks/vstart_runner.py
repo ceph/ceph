@@ -1432,6 +1432,12 @@ def exec_test():
     remote.run(args=[CEPH_CMD, "tell", "osd.*", "injectargs", "--osd-mon-report-interval", "5"])
     ceph_cluster.set_ceph_conf("osd", "osd_mon_report_interval", "5")
 
+    # Enable override of recovery options if mClock scheduler is active. This is to allow
+    # current and future tests to modify recovery related limits. This is because by default,
+    # with mclock enabled, a subset of recovery options are not allowed to be modified.
+    remote.run(args=[CEPH_CMD, "tell", "osd.*", "injectargs", "--osd-mclock-override-recovery-settings", "true"])
+    ceph_cluster.set_ceph_conf("osd", "osd_mclock_override_recovery_settings", "true")
+
     # Vstart defaults to two segments, which very easily gets a "behind on trimming" health warning
     # from normal IO latency.  Increase it for running teests.
     ceph_cluster.set_ceph_conf("mds", "mds log max segments", "10")
