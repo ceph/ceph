@@ -364,7 +364,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   }
 
   int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block()/*, cacheNode*/);
-  // check for successful return
+  // check for successful return -Sam
 
   rgw::sal::Attrs newAttrs;
   std::vector< std::pair<std::string, std::string> > newMetadata;
