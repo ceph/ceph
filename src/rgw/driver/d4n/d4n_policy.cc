@@ -67,7 +67,7 @@ int LFUDAPolicy::get_age() {
   int age = -1;
 
   try {
-    client.hexists("lfuda", "age", [&ret](cpp_redis::reply& reply) { // set up global values for lfuda -Sam
+    client.hexists("lfuda", "age", [&ret](cpp_redis::reply& reply) {
       if (!reply.is_null()) {
         ret = reply.as_integer();
       }
@@ -205,7 +205,7 @@ int LFUDAPolicy::get_min_avg_weight() {
 
 int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
-  int localWeight = block->localWeight;
+  int localWeight = 0; //cacheNode->get_attr(block->cacheObj.objName, "localWeight"); // change to block name eventually -Sam
 
   if (!client.is_connected()) {
     find_client(&client);
@@ -254,15 +254,16 @@ int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
     return -1; 
   } 
 
-  return 0;
+  //int ret = cacheNode->set_attr(block->cacheObj.objName, "localWeight", localWeight);
+  return 0; // return ret
 }
 
 uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
-  CacheBlock* victim = NULL; // find victim; make lowest local weight directory value
+  CacheBlock* victim = NULL; // find victim
   std::string key = "rgw-object:" + victim->cacheObj.objName + ":directory";
   std::string hosts;
   int globalWeight = get_global_weight(key);
-  int localWeight = victim->localWeight;
+  int localWeight = 0;//cacheNode->get_attr(victim->cacheObj.objName, "localWeight"); ;
 
   try {
     client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
@@ -277,9 +278,9 @@ uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
   }
 
   if (!hosts.length()) { /* Last copy */
-
     if (globalWeight > 0) {
       localWeight += globalWeight;
+      //int ret = cacheNode->set_attr(victim->cacheObj.objName, "localWeight", localWeight);
       int ret = set_global_weight(key, 0);
 
       if (ret)
@@ -297,8 +298,8 @@ uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
   }
 
   globalWeight += localWeight;
-  // call set_min_avg_weight() for deleted block
   // cacheNode->delete_data(dpp, victim->cacheObj.objName);
+  //int ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries())) // Where else must this be set? -Sam
 
   int age = get_age();
   age = std::max(localWeight, age);
