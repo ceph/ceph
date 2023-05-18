@@ -227,7 +227,6 @@ if(WITH_RADOSGW_POSIX)
   list(APPEND librgw_common_srcs
 	      driver/posix/rgw_sal_posix.cc
 	      driver/posix/lmdb-safe/lmdb-safe.cc
-	      driver/posix/bucket_cache.cpp
 	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
