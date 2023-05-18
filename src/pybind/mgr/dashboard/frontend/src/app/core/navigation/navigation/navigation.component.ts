@@ -104,6 +104,14 @@ export class NavigationComponent implements OnInit, OnDestroy {
     }
   }
 
+  toggleClusterSubMenu(menu: string) {
+    if (this.displayedSubMenu === menu) {
+      this.displayedSubMenu = 'cluster';
+    } else {
+      this.displayedSubMenu = menu;
+    }
+  }
+
   toggleRightSidebar() {
     this.rightSidebarOpen = !this.rightSidebarOpen;
   }

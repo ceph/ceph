@@ -68,7 +68,7 @@
     color: vv.$gray-200;
     display: block;
     line-height: 1;
-    padding: 13.5px 18px !important;
+    padding: 13.5px 18px;
     position: relative;
     text-decoration: none;
   }
@@ -239,7 +239,7 @@ $sidebar-width: 200px;
   ul ul a {
     background: lighten(vv.$secondary, 10);
     font-size: 1.1em !important;
-    padding-left: 40px !important;
+    padding-left: 40px;
   }
 
   .cd-navbar-primary a:focus {
@@ -265,4 +265,17 @@ $sidebar-width: 200px;
   &.active {
     width: 100vw;
   }
+}
+
+.horizontal-line {
+  color: vv.$gray-200;
+  margin-left: 12px;
+}
+
+.align-items li a {
+  padding-left: 40px !important;
+}
+
+.align-nested-items li a {
+  padding-left: 53px !important;
 }
