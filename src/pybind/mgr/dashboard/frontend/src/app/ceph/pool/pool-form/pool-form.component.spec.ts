@@ -1096,6 +1096,7 @@ describe('PoolFormComponent', () => {
       });
 
       it('minimum requirements without ECP to create ec pool', () => {
+        component.data.applications.selected = ['cephfs', 'rgw'];
         // Mock that no ec profiles exist
         infoReturn.erasure_code_profiles = [];
         setUpPoolComponent();
@@ -1113,6 +1114,7 @@ describe('PoolFormComponent', () => {
       });
 
       it('creates ec pool with erasure coded profile', () => {
+        component.data.applications.selected = ['cephfs', 'rgw'];
         const ecp = { name: 'ecpMinimalMock' };
         setMultipleValues({
           erasureProfile: ecp
@@ -1123,6 +1125,7 @@ describe('PoolFormComponent', () => {
       });
 
       it('creates ec pool with ec_overwrite flag', () => {
+        component.data.applications.selected = ['cephfs', 'rgw'];
         setMultipleValues({
           ecOverwrites: true
         });
@@ -1132,6 +1135,7 @@ describe('PoolFormComponent', () => {
       });
 
       it('should ignore replicated set settings for ec pools', () => {
+        component.data.applications.selected = ['cephfs', 'rgw'];
         setMultipleValues({
           size: 2 // will be ignored
         });
@@ -1139,6 +1143,7 @@ describe('PoolFormComponent', () => {
       });
 
       it('creates a pool with compression', () => {
+        component.data.applications.selected = ['cephfs', 'rgw'];
         setMultipleValues({
           mode: 'passive',
           algorithm: 'lz4',
@@ -1199,6 +1204,7 @@ describe('PoolFormComponent', () => {
           size: 2,
           pgNum: 32
         });
+        component.data.applications.selected = ['cephfs', 'rgw'];
         expectValidSubmit({
           pool: 'minRepPool',
           pool_type: 'replicated',
@@ -1218,6 +1224,7 @@ describe('PoolFormComponent', () => {
          *  if type `replicated` is set, pgNum will be set to 256 with the current rule for
          *  a replicated pool.
          */
+        component.data.applications.selected = ['cephfs', 'rgw'];
         expectReplicatedSubmit({
           pg_num: 256
         });
@@ -1228,6 +1235,7 @@ describe('PoolFormComponent', () => {
           max_bytes: 1024 * 1024,
           max_objects: 3000
         });
+        component.data.applications.selected = ['cephfs', 'rgw'];
         expectReplicatedSubmit({
           quota_max_bytes: 1024 * 1024,
           quota_max_objects: 3000
@@ -1238,6 +1246,7 @@ describe('PoolFormComponent', () => {
         component.currentConfigurationValues = {
           rbd_qos_bps_limit: 55
         };
+        component.data.applications.selected = ['cephfs', 'rgw'];
         expectReplicatedSubmit({
           configuration: {
             rbd_qos_bps_limit: 55

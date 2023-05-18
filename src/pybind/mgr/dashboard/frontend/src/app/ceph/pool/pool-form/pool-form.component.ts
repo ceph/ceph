@@ -83,6 +83,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
   crushUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   ecpUsage: string[] = undefined; // Will only be set if a rule is used by some pool
   crushRuleMaxSize = 10;
+  isApplicationsSelected = true;
 
   private modalSubscription: Subscription;
 
@@ -840,12 +841,20 @@ export class PoolFormComponent extends CdForm implements OnInit {
     const apps = this.data.applications.selected;
     if (apps.length > 0 || this.editing) {
       pool['application_metadata'] = apps;
+      this.isApplicationsSelected = true;
+    } else {
+      this.isApplicationsSelected = false;
     }
 
     // Only collect configuration data for replicated pools, as QoS cannot be configured on EC
     // pools. EC data pools inherit their settings from the corresponding replicated metadata pool.
     if (this.isReplicated && !_.isEmpty(this.currentConfigurationValues)) {
       pool['configuration'] = this.currentConfigurationValues;
+    }
+
+    if (!this.isApplicationsSelected) {
+      this.form.setErrors({ cdSubmitButton: true });
+      return;
     }
 
     this.triggerApiTask(pool);
