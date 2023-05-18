@@ -41,6 +41,11 @@ function(build_rocksdb)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES ZLIB::ZLIB)
   endif()
 
+  list(APPEND rocksdb_CMAKE_ARGS -DWITH_LIBURING=${WITH_LIBURING})
+  if(WITH_LIBURING)
+    list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES uring::uring)
+  endif()
+
   list(APPEND rocksdb_CMAKE_ARGS -DPORTABLE=ON)
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_AR=${CMAKE_AR})
   list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE})
