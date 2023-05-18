@@ -25,6 +25,7 @@ from mgr_module import MonCommandFailed
 from mgr_util import format_bytes, verify_tls, get_cert_issuer_info, ServerConfigException
 
 from . import utils
+from . import exchange
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -1271,24 +1272,23 @@ class CephadmServe:
                     daemon_spec.name(),
                     ['_orch', 'deploy'],
                     [],
-                    stdin=json.dumps({
-                        "fsid": self.mgr._cluster_fsid,
-                        "name": daemon_spec.name(),
-                        "image": image,
-                        "deploy_arguments": daemon_spec.extra_args,
-                        "params": daemon_params,
-                        "meta": {
-                            'service_name': daemon_spec.service_name,
-                            'ports': daemon_spec.ports,
-                            'ip': daemon_spec.ip,
-                            'deployed_by': self.mgr.get_active_mgr_digests(),
-                            'rank': daemon_spec.rank,
-                            'rank_generation': daemon_spec.rank_generation,
-                            'extra_container_args': extra_container_args,
-                            'extra_entrypoint_args': extra_entrypoint_args
-                        },
-                        "config_blobs": daemon_spec.final_config,
-                    }),
+                    stdin=exchange.Deploy(
+                        fsid=self.mgr._cluster_fsid,
+                        name=daemon_spec.name(),
+                        image=image,
+                        params=daemon_params,
+                        meta=exchange.DeployMeta(
+                            service_name=daemon_spec.service_name,
+                            ports=daemon_spec.ports,
+                            ip=daemon_spec.ip,
+                            deployed_by=self.mgr.get_active_mgr_digests(),
+                            rank=daemon_spec.rank,
+                            rank_generation=daemon_spec.rank_generation,
+                            extra_container_args=extra_container_args,
+                            extra_entrypoint_args=extra_entrypoint_args,
+                        ),
+                        config_blobs=daemon_spec.final_config,
+                    ).dump_json_str(),
                 )
 
                 if daemon_spec.daemon_type == 'agent':
