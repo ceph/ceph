@@ -89,6 +89,7 @@ DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 QUIET_LOG_LEVEL = 9  # DEBUG is 10, so using 9 to be lower level than DEBUG
+NO_DEPRECATED = False
 
 logger: logging.Logger = None  # type: ignore
 
@@ -2337,6 +2338,17 @@ def executes_early(func: FuncT) -> FuncT:
     """
     cast(Any, func)._execute_early = True
     return func
+
+
+def deprecated_command(func: FuncT) -> FuncT:
+    @wraps(func)
+    def _deprecated_command(ctx: CephadmContext) -> Any:
+        logger.warning(f'Deprecated command used: {func}')
+        if NO_DEPRECATED:
+            raise Error('running deprecated commands disabled')
+        return func(ctx)
+
+    return cast(FuncT, _deprecated_command)
 
 
 def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -> Optional[ContainerInfo]:
@@ -6261,6 +6273,7 @@ def get_deployment_type(ctx: CephadmContext, daemon_type: str, daemon_id: str) -
 
 
 @default_image
+@deprecated_command
 def command_deploy(ctx):
     # type: (CephadmContext) -> None
     daemon_type, daemon_id = ctx.name.split('.', 1)
