@@ -1537,7 +1537,7 @@ class Filesystem(MDSCluster):
         if quiet:
             base_args = [os.path.join(self._prefix, tool), '--debug-mds=1', '--debug-objecter=1']
         else:
-            base_args = [os.path.join(self._prefix, tool), '--debug-mds=4', '--debug-objecter=1']
+            base_args = [os.path.join(self._prefix, tool), '--debug-mds=20', '--debug-ms=1', '--debug-objecter=1']
 
         if rank is not None:
             base_args.extend(["--rank", "%s" % str(rank)])
