@@ -22,7 +22,6 @@ struct CacheBlock {
   CacheObj cacheObj;
   uint64_t size; /* Block size in bytes */
   int globalWeight = 0;
-  int localWeight = 0;
   std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of block locations */
 };
 
