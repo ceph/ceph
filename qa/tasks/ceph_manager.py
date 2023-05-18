@@ -3148,11 +3148,14 @@ class CephManager:
                         raise
         self.log("quorum is size %d" % size)
 
-    def get_mon_health(self, debug=False):
+    def get_mon_health(self, debug=False, detail=False):
         """
         Extract all the monitor health information.
         """
-        out = self.raw_cluster_cmd('health', '--format=json')
+        if detail:
+            out = self.raw_cluster_cmd('health', 'detail', '--format=json')
+        else:
+            out = self.raw_cluster_cmd('health', '--format=json')
         if debug:
             self.log('health:\n{h}'.format(h=out))
         return json.loads(out)
