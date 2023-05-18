@@ -164,9 +164,9 @@ def setup_database(ctx, config):
         if remote.os.name == 'rhel' or remote.os.name == 'centos':
             remote.run(args=['sudo', 'systemctl', 'restart', 'mariadb'])
 
-        run_mysql_query(ctx, remote, "CREATE USER 'keystone'@'localhost' IDENTIFIED WITH MYSQL_NATIVE_PASSWORD BY 'SECRET';")
+        run_mysql_query(ctx, remote, "CREATE USER 'keystone'@'localhost' IDENTIFIED BY 'SECRET';")
         run_mysql_query(ctx, remote, "CREATE DATABASE keystone;")
-        run_mysql_query(ctx, remote, "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost';")
+        run_mysql_query(ctx, remote, "GRANT ALL PRIVILEGES ON keystone TO 'keystone'@'localhost';")
         run_mysql_query(ctx, remote, "FLUSH PRIVILEGES;")
 
     try:
