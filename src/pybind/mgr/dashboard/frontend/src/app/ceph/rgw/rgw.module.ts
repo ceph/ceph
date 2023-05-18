@@ -94,7 +94,7 @@ const routes: Routes = [
   {
     path: '' // Required for a clean reload on daemon selection.
   },
-  { path: 'daemon', component: RgwDaemonListComponent, data: { breadcrumbs: 'Daemons' } },
+  { path: 'daemon', component: RgwDaemonListComponent, data: { breadcrumbs: 'Gateways' } },
   {
     path: 'user',
     data: { breadcrumbs: 'Users' },

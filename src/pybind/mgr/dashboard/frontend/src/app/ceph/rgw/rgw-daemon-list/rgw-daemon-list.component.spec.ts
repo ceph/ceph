@@ -83,10 +83,10 @@ describe('RgwDaemonListComponent', () => {
     fixture.destroy();
   }));
 
-  it('should only show Daemons List tab', () => {
+  it('should only show Gateways List tab', () => {
     fixture.detectChanges();
 
-    expectTabsAndHeading(1, 'Daemons List');
+    expectTabsAndHeading(1, 'Gateways List');
   });
 
   it('should show Overall Performance tab', () => {
