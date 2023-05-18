@@ -3,7 +3,6 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RgwRealm } from '~/app/ceph/rgw/models/rgw-multisite';
 import { Icons } from '../enum/icons.enum';
-import { RgwDaemonService } from './rgw-daemon.service';
 
 @Injectable({
   providedIn: 'root'
@@ -11,54 +10,43 @@ import { RgwDaemonService } from './rgw-daemon.service';
 export class RgwRealmService {
   private url = 'api/rgw/realm';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(private http: HttpClient) {}
 
   create(realm: RgwRealm, defaultRealm: boolean) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        realm_name: realm.name,
-        default: defaultRealm
-      });
-      return this.http.post(`${this.url}`, null, { params: params });
-    });
+    let requestBody = {
+      realm_name: realm.name,
+      default: defaultRealm
+    };
+    return this.http.post(`${this.url}`, requestBody);
   }
 
   update(realm: RgwRealm, defaultRealm: boolean, newRealmName: string) {
-    return this.rgwDaemonService.request((requestBody: any) => {
-      requestBody = {
-        realm_name: realm.name,
-        default: defaultRealm,
-        new_realm_name: newRealmName
-      };
-      return this.http.put(`${this.url}/${realm.name}`, requestBody);
-    });
+    let requestBody = {
+      realm_name: realm.name,
+      default: defaultRealm,
+      new_realm_name: newRealmName
+    };
+    return this.http.put(`${this.url}/${realm.name}`, requestBody);
   }
 
   list(): Observable<object> {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get<object>(`${this.url}`);
-    });
+    return this.http.get<object>(`${this.url}`);
   }
 
-  get(realm: RgwRealm): Observable<RgwRealm> {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get(`${this.url}/${realm.name}`);
-    });
+  get(realm: RgwRealm): Observable<object> {
+    return this.http.get(`${this.url}/${realm.name}`);
   }
 
   getAllRealmsInfo(): Observable<object> {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get(`${this.url}/get_all_realms_info`);
-    });
+    return this.http.get(`${this.url}/get_all_realms_info`);
   }
 
   delete(realmName: string): Observable<any> {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        realm_name: realmName
-      });
-      return this.http.delete(`${this.url}/${realmName}`, { params: params });
+    let params = new HttpParams();
+    params = params.appendAll({
+      realm_name: realmName
     });
+    return this.http.delete(`${this.url}/${realmName}`, { params: params });
   }
 
   getRealmTree(realm: RgwRealm, defaultRealmId: string) {

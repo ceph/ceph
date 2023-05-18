@@ -3,7 +3,6 @@ import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { RgwRealm, RgwZone, RgwZonegroup } from '~/app/ceph/rgw/models/rgw-multisite';
 import { Icons } from '../enum/icons.enum';
-import { RgwDaemonService } from './rgw-daemon.service';
 
 @Injectable({
   providedIn: 'root'
@@ -11,7 +10,7 @@ import { RgwDaemonService } from './rgw-daemon.service';
 export class RgwZoneService {
   private url = 'api/rgw/zone';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {}
+  constructor(private http: HttpClient) {}
 
   create(
     zone: RgwZone,
@@ -29,48 +28,40 @@ export class RgwZoneService {
     } else {
       master_zone_name = '';
     }
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        zone_name: zone.name,
-        zonegroup_name: zonegroup.name,
-        default: defaultZone,
-        master: master,
-        zone_endpoints: endpoints,
-        user: user,
-        createSystemUser: createSystemUser,
-        master_zone_of_master_zonegroup: master_zone_name
-      });
-      return this.http.post(`${this.url}`, null, { params: params });
+    let params = new HttpParams();
+    params = params.appendAll({
+      zone_name: zone.name,
+      zonegroup_name: zonegroup.name,
+      default: defaultZone,
+      master: master,
+      zone_endpoints: endpoints,
+      user: user,
+      createSystemUser: createSystemUser,
+      master_zone_of_master_zonegroup: master_zone_name
     });
+    return this.http.post(`${this.url}`, null, { params: params });
   }
 
   list(): Observable<object> {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get<object>(`${this.url}`);
-    });
+    return this.http.get<object>(`${this.url}`);
   }
 
-  get(zone: RgwZone): Observable<RgwZone> {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get(`${this.url}/${zone.name}`);
-    });
+  get(zone: RgwZone): Observable<object> {
+    return this.http.get(`${this.url}/${zone.name}`);
   }
 
   getAllZonesInfo(): Observable<object> {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get(`${this.url}/get_all_zones_info`);
-    });
+    return this.http.get(`${this.url}/get_all_zones_info`);
   }
 
   delete(zonegroupName: string, zoneName: string, deletePools: boolean): Observable<any> {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        zonegroup_name: zonegroupName,
-        zone_name: zoneName,
-        delete_pools: deletePools
-      });
-      return this.http.delete(`${this.url}/${zoneName}`, { params: params });
+    let params = new HttpParams();
+    params = params.appendAll({
+      zonegroup_name: zonegroupName,
+      zone_name: zoneName,
+      delete_pools: deletePools
     });
+    return this.http.delete(`${this.url}/${zoneName}`, { params: params });
   }
 
   update(
@@ -96,26 +87,24 @@ export class RgwZoneService {
     } else {
       master_zone_name = '';
     }
-    return this.rgwDaemonService.request((requestBody: any) => {
-      requestBody = {
-        zone_name: zone.name,
-        zonegroup_name: zonegroup.name,
-        new_zone_name: newZoneName,
-        default: defaultZone,
-        master: master,
-        zone_endpoints: endpoints,
-        user: user,
-        placement_target: placementTarget,
-        data_pool: dataPool,
-        index_pool: indexPool,
-        data_extra_pool: dataExtraPool,
-        storage_class: storageClass,
-        data_pool_class: dataPoolClass,
-        compression: compression,
-        master_zone_of_master_zonegroup: master_zone_name
-      };
-      return this.http.put(`${this.url}/${zone.name}`, requestBody);
-    });
+    let requestBody = {
+      zone_name: zone.name,
+      zonegroup_name: zonegroup.name,
+      new_zone_name: newZoneName,
+      default: defaultZone,
+      master: master,
+      zone_endpoints: endpoints,
+      user: user,
+      placement_target: placementTarget,
+      data_pool: dataPool,
+      index_pool: indexPool,
+      data_extra_pool: dataExtraPool,
+      storage_class: storageClass,
+      data_pool_class: dataPoolClass,
+      compression: compression,
+      master_zone_of_master_zonegroup: master_zone_name
+    };
+    return this.http.put(`${this.url}/${zone.name}`, requestBody);
   }
 
   getZoneTree(zone: RgwZone, defaultZoneId: string, zonegroup?: RgwZonegroup, realm?: RgwRealm) {
@@ -142,27 +131,22 @@ export class RgwZoneService {
   }
 
   getPoolNames() {
-    return this.rgwDaemonService.request(() => {
-      return this.http.get(`${this.url}/get_pool_names`);
-    });
+    return this.http.get(`${this.url}/get_pool_names`);
   }
 
   createSystemUser(userName: string, zone: string) {
-    return this.rgwDaemonService.request((requestBody: any) => {
-      requestBody = {
-        userName: userName,
-        zoneName: zone
-      };
-      return this.http.put(`${this.url}/create_system_user`, requestBody);
-    });
+    let requestBody = {
+      userName: userName,
+      zoneName: zone
+    };
+    return this.http.put(`${this.url}/create_system_user`, requestBody);
   }
 
   getUserList(zoneName: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        zoneName: zoneName
-      });
-      return this.http.get(`${this.url}/get_user_list`, { params: params });
+    let params = new HttpParams();
+    params = params.appendAll({
+      zoneName: zoneName
     });
+    return this.http.get(`${this.url}/get_user_list`, { params: params });
   }
 }
