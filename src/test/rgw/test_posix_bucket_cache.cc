@@ -18,23 +18,73 @@
 
 #include <gtest/gtest.h>
 
-using namespace file::listing;
 using namespace std::chrono_literals;
 
 namespace {
+
+  namespace sf = std::filesystem; 
+
   std::string bucket_root = "bucket_root";
   std::string database_root = "lmdb_root";
-  uint32_t max_buckets = 100;
   std::string bucket1_name = "stanley";
   std::string bucket1_marker = ""; // start at the beginning
 
   std::random_device rd;
   std::mt19937 mt(rd());
 
+  DoutPrefixProvider* dpp{nullptr};
   std::string tdir1{"tdir1"};
   std::uniform_int_distribution<> dist_1m(1, 1000000);
-  BucketCache* bc{nullptr};
   std::vector<std::string> bvec;
+
+  class MockSalDriver
+  {
+  public:
+    /* called by BucketCache layer when a new object is discovered
+     * by inotify or similar */
+    int mint_listing_entry(
+      const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */) {
+
+      return 0;
+    }
+  }; /* MockSalDriver */
+
+  class MockSalBucket
+  {
+    std::string name;
+  public:
+    MockSalBucket(const std::string& name)
+      : name(name)
+      {}
+    const std::string& get_name() {
+      return name;
+    }
+
+    using fill_cache_cb_t = file::listing::fill_cache_cb_t;
+
+    int fill_cache(const DoutPrefixProvider* dpp, fill_cache_cb_t cb) {
+      sf::path rp{bucket_root};
+      sf::path bp{rp / name};
+      if (! (sf::exists(rp) && sf::is_directory(rp))) {
+	std::cerr << fmt::format("{} bucket {} invalid", __func__, name)
+		  << std::endl;
+	exit(1);
+      }
+      for (const auto& dir_entry : sf::directory_iterator{bp}) {
+	rgw_bucket_dir_entry bde{};
+	auto fname = dir_entry.path().filename().string();
+	bde.key.name = fname;
+	cb(dpp, bde);
+      }
+      return 0;
+    } /* fill_cache */
+
+  }; /* MockSalBucket */
+
+  using BucketCache = file::listing::BucketCache<MockSalDriver, MockSalBucket>;
+  MockSalDriver sal_driver;
+  BucketCache* bucket_cache{nullptr};
+
 } // anonymous ns
 
 namespace sf = std::filesystem;
@@ -63,30 +113,37 @@ TEST(BucketCache, SetupTDir1)
 
 TEST(BucketCache, InitBucketCache)
 {
-  bc = new BucketCache{bucket_root, database_root}; // default tuning
+  bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root}; // default tuning
 }
 
-using FakeDirEntry = file::listing::BucketCache::FakeDirEntry;
-
-auto func = [](const std::string_view& k, const FakeDirEntry& fde) -> int
+auto func = [](const rgw_bucket_dir_entry& bde) -> int
   {
-    //std::cout << fmt::format("called back with {} {}", k, fde.fname) << std::endl;
+    //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
     return 0;
   };
 
 TEST(BucketCache, ListTDir1)
 {
-  bc->list_bucket(tdir1, bucket1_marker, func);
+  MockSalBucket sb{tdir1};
+  rgw::sal::Bucket::ListParams params{};
+  params.marker.name = bucket1_marker;
+  (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
 }
 
 TEST(BucketCache, ListTDir2)
 {
-  bc->list_bucket(tdir1, bucket1_marker, func);
+  MockSalBucket sb{tdir1};
+  rgw::sal::Bucket::ListParams params{};
+  params.marker.name = bucket1_marker;
+  (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
 }
 
 TEST(BucketCache, ListTDir3)
 {
-  bc->list_bucket(tdir1, bucket1_marker, func);
+  MockSalBucket sb{tdir1};
+  rgw::sal::Bucket::ListParams params{};
+  params.marker.name = bucket1_marker;
+  (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
 }
 
 TEST(BucketCache, ListThreads) /* clocked at 21ms on lemon, and yes,
@@ -95,15 +152,19 @@ TEST(BucketCache, ListThreads) /* clocked at 21ms on lemon, and yes,
   auto nthreads = 15;
   std::vector<std::thread> threads;
 
-  auto func = [](const std::string_view& k, const FakeDirEntry& fde) -> int
+  auto func = [](const rgw_bucket_dir_entry& bde) -> int
     {
-      //std::cout << fmt::format("called back with {}", k) << std::endl;
+      //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
       return 0;
     };
 
+  MockSalBucket sb{tdir1};
+  rgw::sal::Bucket::ListParams params{};
+  params.marker.name = bucket1_marker;
+
   for (int ix = 0; ix < nthreads; ++ix) {
     threads.push_back(std::thread([&]() {
-      bc->list_bucket(tdir1, bucket1_marker, func);
+      (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
     }));
   }
   for (auto& t : threads) {
@@ -147,27 +208,30 @@ TEST(BucketCache, SetupRecycle1)
 
 TEST(BucketCache, InitBucketCacheRecycle1)
 {
-  bc = new BucketCache{bucket_root, database_root, 1, 1, 1, 1};
+  bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 1, 1, 1, 1};
 }
 
 TEST(BucketCache, ListNRecycle1)
 {
   /* the effect is to allocate a Bucket cache entry once, then recycle n-1 times */
   for (auto& bucket : bvec) {
-    bc->list_bucket(bucket, bucket1_marker, func);
+    MockSalBucket sb{bucket};
+    rgw::sal::Bucket::ListParams params{};
+    params.marker.name = bucket1_marker;
+    (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
   }
-  ASSERT_EQ(bc->recycle_count, 4);
+  ASSERT_EQ(bucket_cache->recycle_count, 4);
 }
 
 TEST(BucketCache, TearDownBucketCacheRecycle1)
 {
-  delete bc;
-  bc = nullptr;
+  delete bucket_cache;
+  bucket_cache = nullptr;
 }
 
 TEST(BucketCache, InitBucketCacheRecyclePartitions1)
 {
-  bc = new BucketCache{bucket_root, database_root, 1, 1, 5 /* max partitions */, 1};
+  bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root, 1, 1, 5 /* max partitions */, 1};
 }
 
 TEST(BucketCache, ListNRecyclePartitions1)
@@ -176,15 +240,18 @@ TEST(BucketCache, ListNRecyclePartitions1)
    * n-1 times--in addition, 5 cache partitions are mapped to 1 lru
    * lane--verifying independence */
   for (auto& bucket : bvec) {
-    bc->list_bucket(bucket, bucket1_marker, func);
+    MockSalBucket sb{bucket};
+    rgw::sal::Bucket::ListParams params{};
+    params.marker.name = bucket1_marker;
+    (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
   }
-  ASSERT_EQ(bc->recycle_count, 4);
+  ASSERT_EQ(bucket_cache->recycle_count, 4);
 }
 
 TEST(BucketCache, TearDownBucketCacheRecyclePartitions1)
 {
-  delete bc;
-  bc = nullptr;
+  delete bucket_cache;
+  bucket_cache = nullptr;
 }
 
 TEST(BucketCache, SetupMarker1)
@@ -207,7 +274,7 @@ TEST(BucketCache, SetupMarker1)
 
 TEST(BucketCache, InitBucketCacheMarker1)
 {
-  bc = new BucketCache{bucket_root, database_root};
+  bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
 }
 
 TEST(BucketCache, ListMarker1)
@@ -216,13 +283,16 @@ TEST(BucketCache, ListMarker1)
   std::string marker{"file_18"}; // midpoint+1
   std::vector<std::string> names;
 
-  auto f = [&](const std::string_view& k, const FakeDirEntry& fde) -> int {
-    //std::cout << fmt::format("called back with {}", k) << std::endl;
-    names.push_back(std::string{k});
+  auto f = [&](const rgw_bucket_dir_entry& bde) -> int {
+    //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
+    names.push_back(bde.key.name);
     return 0;
   };
 
-  bc->list_bucket(bucket, marker, f);
+  MockSalBucket sb{bucket};
+  rgw::sal::Bucket::ListParams params{};
+  params.marker.name = marker;
+  (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, f);
 
   ASSERT_EQ(names.size(), 10);
   ASSERT_EQ(*names.begin(), "file_18");
@@ -231,8 +301,8 @@ TEST(BucketCache, ListMarker1)
 
 TEST(BucketCache, TearDownBucketCacheMarker1)
 {
-  delete bc;
-  bc = nullptr;
+  delete bucket_cache;
+  bucket_cache = nullptr;
 }
 
 TEST(BucketCache, SetupInotify1)
@@ -255,7 +325,7 @@ TEST(BucketCache, SetupInotify1)
 
 TEST(BucketCache, InitBucketCacheInotify1)
 {
-  bc = new BucketCache{bucket_root, database_root};
+  bucket_cache = new BucketCache{&sal_driver, bucket_root, database_root};
 }
 
 TEST(BucketCache, ListInotify1)
@@ -264,13 +334,17 @@ TEST(BucketCache, ListInotify1)
   std::string marker{""};
   std::vector<std::string> names;
 
-  auto f = [&](const std::string_view& k, const FakeDirEntry& fde) -> int {
-    //std::cout << fmt::format("called back with {}", k) << std::endl;
-    names.push_back(std::string{k});
+  auto f = [&](const rgw_bucket_dir_entry& bde) -> int {
+    //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
+    names.push_back(bde.key.name);
     return 0;
   };
 
-  bc->list_bucket(bucket, marker, f);
+  MockSalBucket sb{bucket};
+  rgw::sal::Bucket::ListParams params{};
+  params.marker.name = marker;
+
+  (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, f);
   ASSERT_EQ(names.size(), 20);
 } /* ListInotify1 */
 
@@ -308,13 +382,16 @@ TEST(BucketCache, List2Inotify1)
   std::string marker{""};
   std::vector<std::string> names;
 
-  auto f = [&](const std::string_view& k, const FakeDirEntry& fde) -> int {
-    //std::cout << fmt::format("called back with {}", k) << std::endl;
-    names.push_back(std::string{k});
+  auto f = [&](const rgw_bucket_dir_entry& bde) -> int {
+    //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
+    names.push_back(bde.key.name);
     return 0;
   };
 
-  bc->list_bucket(bucket, marker, f);
+  MockSalBucket sb{bucket};
+  rgw::sal::Bucket::ListParams params{};
+  params.marker.name = marker;
+  (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, f);
   ASSERT_EQ(names.size(), 25);
 
   /* check these */
@@ -336,8 +413,8 @@ TEST(BucketCache, List2Inotify1)
 
 TEST(BucketCache, TearDownInotify1)
 {
-  delete bc;
-  bc = nullptr;
+  delete bucket_cache;
+  bucket_cache = nullptr;
 }
 
 int main (int argc, char *argv[])

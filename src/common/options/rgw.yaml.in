@@ -3695,6 +3695,42 @@ options:
   default: /tmp/rgw_posix_driver
   services:
   - rgw
+- name: rgw_posix_database_root
+  type: str
+  level: advanced
+  desc: experimental Path to parent of POSIX Driver LMDB bucket listing cache
+  long_desc: Parent directory of LMDB bucket listing cache databases.
+  default: /var/lib/ceph/radosgw
+  services:
+  - rgw
+- name: rgw_posix_cache_max_buckets
+  type: int
+  level: advanced
+  desc: experimental Number of buckets to maintain in the ordered listing cache
+  default: 100
+  services:
+  - rgw
+- name: rgw_posix_cache_lanes
+  type: int
+  level: advanced
+  desc: experimental Number of lanes in cache LRU
+  default: 3
+  services:
+  - rgw
+- name: rgw_posix_cache_partitions
+  type: int
+  level: advanced
+  desc: experimental Number of partitions in cache AVL
+  default: 3
+  services:
+  - rgw
+- name: rgw_posix_cache_lmdb_count
+  type: int
+  level: advanced
+  desc: experimental Number of lmdb partitions in the ordered listing cache
+  default: 3
+  services:
+  - rgw
 - name: rgw_luarocks_location
   type: str
   level: advanced
