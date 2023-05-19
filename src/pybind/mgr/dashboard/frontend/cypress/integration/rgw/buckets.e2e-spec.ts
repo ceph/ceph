@@ -32,6 +32,11 @@ describe('RGW buckets page', () => {
       buckets.delete(bucket_name);
     });
 
+    it('should check default encryption is SSE-S3', () => {
+      buckets.navigateTo('create');
+      buckets.checkForDefaultEncryption();
+    });
+
     it('should create bucket with object locking enabled', () => {
       buckets.navigateTo('create');
       buckets.create(bucket_name, BucketsPageHelper.USERS[0], 'default-placement', true);
