@@ -633,6 +633,7 @@ private:
   /// provided by the executing scrub (i.e. taken from PgScrubber::m_flags)
   template <class MSG_TYPE>
   void queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority);
+  int64_t get_scrub_cost();
 
   utime_t defer_recovery_until;
   uint64_t recovery_ops_active;
