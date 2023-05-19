@@ -167,10 +167,10 @@ public:
     if (features)
       return features;
 #ifdef WITH_SEASTAR
-    // In crimson, conn is independently maintained outside Message.
-    ceph_abort();
-#endif
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
     return get_connection()->get_features();
+#endif
   }
 
   MOSDOp()
