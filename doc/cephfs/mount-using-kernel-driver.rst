@@ -96,6 +96,28 @@ non-default FS as follows::
 
     mount -t ceph :/ /mnt/mycephfs2 -o name=fs,fs=mycephfs2
 
+Backward Compatibility
+======================
+The old syntax is supported for backward compatibility.
+
+To mount CephFS with the kernel driver::
+
+    mkdir /mnt/mycephfs
+    mount -t ceph :/ /mnt/mycephfs -o name=admin
+
+The key-value argument right after option ``-o`` is CephX credential;
+``name`` is the username of the CephX user we are using to mount CephFS.
+
+To mount a non-default FS ``cephfs2``, in case the cluster has multiple FSs::
+
+    mount -t ceph :/ /mnt/mycephfs -o name=admin,fs=cephfs2
+
+    or
+
+    mount -t ceph :/ /mnt/mycephfs -o name=admin,mds_namespace=cephfs2
+
+.. note:: The option ``mds_namespace`` is deprecated. Use ``fs=`` instead when using the old syntax for mounting.
+
 Unmounting CephFS
 =================
 To unmount the Ceph file system, use the ``umount`` command as usual::
