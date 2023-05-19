@@ -303,37 +303,36 @@ seastar::future<> Heartbeat::maybe_share_osdmap(
   Ref<MOSDPing> m)
 {
   const osd_id_t from = m->get_source().num();
-  const epoch_t osdmap_epoch = service.get_map()->get_epoch();
-  const epoch_t peer_epoch = m->map_epoch;
+  const epoch_t current_osdmap_epoch = service.get_map()->get_epoch();
   auto found = peers.find(from);
   if (found == peers.end()) {
     return seastar::now();
   }
   auto& peer = found->second;
 
-  if (peer_epoch > peer.get_projected_epoch()) {
+  if (m->map_epoch > peer.get_projected_epoch()) {
     logger().debug("{} updating session's projected_epoch"
                    "from {} to peer's (id: {}) map epoch of {}",
                    __func__, peer.get_projected_epoch(),
-                   from, peer_epoch);
-    peer.set_projected_epoch(peer_epoch);
+                   from, m->map_epoch);
+    peer.set_projected_epoch(m->map_epoch);
   }
 
-  if (osdmap_epoch <= peer.get_projected_epoch()) {
+  if (current_osdmap_epoch <= peer.get_projected_epoch()) {
     logger().info("{} projected_epoch {} is already later "
                   "than osdmap epoch of {}",
                   __func__ , peer.get_projected_epoch(),
-                  osdmap_epoch);
+                  current_osdmap_epoch);
     return seastar::now();
   }
 
   logger().info("{} peer id: {} epoch is {} while osdmap is {}",
-                __func__ , from, m->map_epoch, osdmap_epoch);
-  if (osdmap_epoch > m->map_epoch) {
+                __func__ , from, m->map_epoch, current_osdmap_epoch);
+  if (current_osdmap_epoch > m->map_epoch) {
     logger().debug("{} sharing osdmap epoch of {} with peer id {}",
-                   __func__, osdmap_epoch, from);
+                   __func__, current_osdmap_epoch, from);
     // Peer's newest map is m->map_epoch. Therfore it misses
-    // the osdmaps in the range of `m->map_epoch` to `osdmap_epoch`.
+    // the osdmaps in the range of `m->map_epoch` to `current_osdmap_epoch`.
     return service.send_incremental_map_to_osd(from, m->map_epoch);
   }
   return seastar::now();
