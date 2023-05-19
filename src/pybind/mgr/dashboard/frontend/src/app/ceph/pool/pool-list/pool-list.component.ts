@@ -121,7 +121,7 @@ export class PoolListComponent extends ListWithDetails implements OnInit {
       {
         prop: 'pool_name',
         name: $localize`Name`,
-        flexGrow: 4,
+        flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
