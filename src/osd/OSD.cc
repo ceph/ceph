@@ -1756,9 +1756,8 @@ void OSDService::queue_scrub_event_msg(PG* pg,
   auto msg = new MSG_TYPE(pg->get_pgid(), epoch, act_token);
   dout(15) << "queue a scrub event (" << *msg << ") for " << *pg
            << ". Epoch: " << epoch << " token: " << act_token << dendl;
-
   enqueue_back(OpSchedulerItem(
-    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), get_scrub_cost(),
     pg->scrub_requeue_priority(with_priority, qu_priority), ceph_clock_now(), 0, epoch));
 }
 
@@ -1769,10 +1768,20 @@ void OSDService::queue_scrub_event_msg(PG* pg,
   const auto epoch = pg->get_osdmap_epoch();
   auto msg = new MSG_TYPE(pg->get_pgid(), epoch);
   dout(15) << "queue a scrub event (" << *msg << ") for " << *pg << ". Epoch: " << epoch << dendl;
-
   enqueue_back(OpSchedulerItem(
-    unique_ptr<OpSchedulerItem::OpQueueable>(msg), cct->_conf->osd_scrub_cost,
+    unique_ptr<OpSchedulerItem::OpQueueable>(msg), get_scrub_cost(),
     pg->scrub_requeue_priority(with_priority), ceph_clock_now(), 0, epoch));
+}
+
+int64_t OSDService::get_scrub_cost()
+{
+
+  int64_t cost_for_queue = cct->_conf->osd_scrub_cost;
+  if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+    cost_for_queue = cct->_conf->osd_scrub_event_cost *
+                     cct->_conf->osd_shallow_scrub_chunk_max;
+  }
+  return cost_for_queue;
 }
 
 void OSDService::queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority)
