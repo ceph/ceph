@@ -1094,9 +1094,9 @@ protected:
     return fill_stat(in.get(), st, perms, dirstat, rstat);
   }
 
-  void fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx);
-  void fill_statx(InodeRef& in, unsigned int mask, struct ceph_statx *stx) {
-    return fill_statx(in.get(), mask, stx);
+  int fill_statx(Inode *in, const UserPerm& perms, unsigned int mask, struct ceph_statx *stx);
+  int fill_statx(InodeRef& in, const UserPerm& perms, unsigned int mask, struct ceph_statx *stx) {
+    return fill_statx(in.get(), perms, mask, stx);
   }
 
   void touch_dn(Dentry *dn);

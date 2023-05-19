@@ -8677,7 +8677,8 @@ int Client::fill_stat(Inode *in, struct stat *st, const UserPerm& perms,
   return in->caps_issued();
 }
 
-void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
+int Client::fill_statx(Inode *in, const UserPerm& perms, unsigned int mask,
+                       struct ceph_statx *stx)
 {
   ldout(cct, 10) << __func__ << " on " << in->ino << " snap/dev" << in->snapid
 	   << " mode 0" << oct << in->mode << dec
@@ -8765,6 +8766,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
     stx->stx_mask |= (CEPH_STATX_CTIME|CEPH_STATX_VERSION);
   }
 
+  return 0;
 }
 
 void Client::touch_dn(Dentry *dn)
@@ -9437,7 +9439,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 
     struct ceph_statx stx;
     struct dirent de;
-    fill_statx(dn->inode, caps, &stx);
+    fill_statx(dn->inode, dirp->perms, caps, &stx);
 
     uint64_t next_off = dn->offset + 1;
     fill_dirent(&de, dn->name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
@@ -9565,7 +9567,7 @@ int Client::_readdir_r_cb(int op,
     if (r < 0)
       return r;
 
-    fill_statx(diri, caps, &stx);
+    fill_statx(diri, dirp->perms, caps, &stx);
     fill_dirent(&de, ".", S_IFDIR, stx.stx_ino, next_off);
 
     Inode *inode = NULL;
@@ -9598,7 +9600,7 @@ int Client::_readdir_r_cb(int op,
     if (r < 0)
       return r;
 
-    fill_statx(in, caps, &stx);
+    fill_statx(in, dirp->perms, caps, &stx);
     fill_dirent(&de, "..", S_IFDIR, stx.stx_ino, next_off);
 
     Inode *inode = NULL;
@@ -9672,7 +9674,7 @@ int Client::_readdir_r_cb(int op,
 	  return r;
       }
 
-      fill_statx(entry.inode, caps, &stx);
+      fill_statx(entry.inode, dirp->perms, caps, &stx);
       fill_dirent(&de, entry.name.c_str(), stx.stx_mode, stx.stx_ino, next_off);
 
       Inode *inode = NULL;
@@ -12160,7 +12162,7 @@ int Client::fstatx(int fd, struct ceph_statx *stx, const UserPerm& perms,
     }
   }
 
-  fill_statx(f->inode, mask, stx);
+  fill_statx(f->inode, perms, mask, stx);
   ldout(cct, 3) << "fstatx(" << fd << ", " << stx << ") = " << r << dendl;
   return r;
 }
@@ -12198,7 +12200,7 @@ int Client::statxat(int dirfd, const char *relpath,
     return r;
   }
 
-  fill_statx(in, mask, stx);
+  fill_statx(in, perms, mask, stx);
   ldout(cct, 3) << __func__ << " dirfd" << dirfd << ", r= " << r << dendl;
   return r;
 }
@@ -13220,7 +13222,7 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
     stx->stx_mask = 0;
   } else {
     ceph_assert(in);
-    fill_statx(in, mask, stx);
+    fill_statx(in, perms, mask, stx);
     _ll_get(in.get());
   }
 
@@ -13257,7 +13259,7 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
     return rc;
   } else {
     ceph_assert(in);
-    fill_statx(in, mask, stx);
+    fill_statx(in, perms, mask, stx);
     _ll_get(in.get());
     *out = in.get();
     return 0;
@@ -13463,7 +13465,7 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
     res = _ll_getattr(in, mask, perms);
 
   if (res == 0)
-    fill_statx(in, mask, stx);
+    fill_statx(in, perms, mask, stx);
   ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
   return res;
 }
@@ -13510,7 +13512,7 @@ int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
   int res = _ll_setattrx(in, stx, mask, perms, &target);
   if (res == 0) {
     ceph_assert(in == target.get());
-    fill_statx(in, in->caps_issued(), stx);
+    fill_statx(in, perms, in->caps_issued(), stx);
   }
 
   ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
@@ -14742,7 +14744,7 @@ int Client::ll_mknodx(Inode *parent, const char *name, mode_t mode,
   InodeRef in;
   int r = _mknod(parent, name, mode, rdev, perms, &in);
   if (r == 0) {
-    fill_statx(in, caps, stx);
+    fill_statx(in, perms, caps, stx);
     _ll_get(in.get());
   }
   tout(cct) << stx->stx_ino << std::endl;
@@ -14979,7 +14981,7 @@ int Client::ll_mkdirx(Inode *parent, const char *name, mode_t mode, Inode **out,
   InodeRef in;
   int r = _mkdir(parent, name, mode, perms, &in);
   if (r == 0) {
-    fill_statx(in, statx_to_mask(flags, want), stx);
+    fill_statx(in, perms, statx_to_mask(flags, want), stx);
     _ll_get(in.get());
   } else {
     stx->stx_ino = 0;
@@ -15102,7 +15104,7 @@ int Client::ll_symlinkx(Inode *parent, const char *name, const char *value,
   InodeRef in;
   int r = _symlink(parent, name, value, perms, "", &in);
   if (r == 0) {
-    fill_statx(in, statx_to_mask(flags, want), stx);
+    fill_statx(in, perms, statx_to_mask(flags, want), stx);
     _ll_get(in.get());
   }
   tout(cct) << stx->stx_ino << std::endl;
@@ -15807,7 +15809,7 @@ int Client::ll_createx(Inode *parent, const char *name, mode_t mode,
       _ll_get(in.get());
       *outp = in.get();
     }
-    fill_statx(in, caps, stx);
+    fill_statx(in, perms, caps, stx);
   } else {
     stx->stx_ino = 0;
     stx->stx_mask = 0;
