@@ -311,25 +311,25 @@ seastar::future<> Heartbeat::maybe_share_osdmap(
   auto& peer = found->second;
 
   if (m->map_epoch > peer.get_projected_epoch()) {
-    logger().debug("{} updating session's projected_epoch"
-                   "from {} to peer's (id: {}) map epoch of {}",
-                   __func__, peer.get_projected_epoch(),
-                   from, m->map_epoch);
+    logger().debug("{} updating peer {} session's projected_epoch"
+                   "from {} to ping map epoch of {}",
+                   __func__, from, peer.get_projected_epoch(),
+                   m->map_epoch);
     peer.set_projected_epoch(m->map_epoch);
   }
 
   if (current_osdmap_epoch <= peer.get_projected_epoch()) {
-    logger().info("{} projected_epoch {} is already later "
-                  "than osdmap epoch of {}",
-                  __func__ , peer.get_projected_epoch(),
-                  current_osdmap_epoch);
+    logger().debug("{} peer {} projected_epoch {} is already later "
+		   "than our osdmap epoch of {}",
+		   __func__ , from, peer.get_projected_epoch(),
+		   current_osdmap_epoch);
     return seastar::now();
   }
 
-  logger().info("{} peer id: {} epoch is {} while osdmap is {}",
-                __func__ , from, m->map_epoch, current_osdmap_epoch);
+  logger().debug("{} peer {} projected_epoch is {} while osdmap is {}",
+		 __func__ , from, m->map_epoch, current_osdmap_epoch);
   if (current_osdmap_epoch > m->map_epoch) {
-    logger().debug("{} sharing osdmap epoch of {} with peer id {}",
+    logger().debug("{} sharing osdmap epoch of {} with peer {}",
                    __func__, current_osdmap_epoch, from);
     // Peer's newest map is m->map_epoch. Therfore it misses
     // the osdmaps in the range of `m->map_epoch` to `current_osdmap_epoch`.
