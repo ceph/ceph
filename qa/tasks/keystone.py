@@ -166,7 +166,7 @@ def setup_database(ctx, config):
 
         run_mysql_query(ctx, remote, "CREATE USER 'keystone'@'localhost' IDENTIFIED BY 'SECRET';")
         run_mysql_query(ctx, remote, "CREATE DATABASE keystone;")
-        run_mysql_query(ctx, remote, "GRANT ALL PRIVILEGES ON keystone TO 'keystone'@'localhost';")
+        run_mysql_query(ctx, remote, "GRANT ALL PRIVILEGES ON keystone.* TO 'keystone'@'localhost';")
         run_mysql_query(ctx, remote, "FLUSH PRIVILEGES;")
 
     try:
