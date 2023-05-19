@@ -349,6 +349,11 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   "mgr/prometheus/x/server_port" will be displayed instead of
   "mgr/prometheus/server_port". This matches the output of the non pretty-print
   formatted version of the command.
+* CEPHFS: New MDSMap field `snap_rstat` which can be set using the `fs set` command.
+  This MDSMap field allows to configure to enable/disable the snap rstat for all
+  MDS daemons and clients. It effectively replaces the old per-MDS `mds_snap_rstat`
+  setting, which is now dropped.
+  Relevant tracker: https://tracker.ceph.com/issues/61151
 
 >=17.2.1
 

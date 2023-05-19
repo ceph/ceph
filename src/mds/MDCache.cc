@@ -1818,7 +1818,7 @@ void MDCache::project_rstat_inode_to_frag(const MutationRef& mut,
 				 linkunlink, update);
   }
 
-  if (g_conf()->mds_snap_rstat) {
+  if (mds->mdsmap->get_snap_rstat()) {
     for (const auto &p : cur->dirty_old_rstats) {
       const auto &old = cur->get_old_inodes()->at(p);
       snapid_t ofirst = std::max(old.first, floor);
@@ -1863,7 +1863,7 @@ void MDCache::_project_rstat_inode_to_frag(const CInode::mempool_inode* inode, s
     snapid_t first;
     auto pf = parent->_get_projected_fnode();
     if (last == CEPH_NOSNAP) {
-      if (g_conf()->mds_snap_rstat)
+      if (mds->mdsmap->get_snap_rstat())
 	first = std::max(ofirst, parent->first);
       else
 	first = parent->first;
@@ -1881,7 +1881,7 @@ void MDCache::_project_rstat_inode_to_frag(const CInode::mempool_inode* inode, s
 	parent->dirty_old_rstat[first-1].accounted_rstat = pf->accounted_rstat;
       }
       parent->first = first;
-    } else if (!g_conf()->mds_snap_rstat) {
+    } else if (!mds->mdsmap->get_snap_rstat()) {
       // drop snapshots' rstats
       break;
     } else if (last >= parent->first) {
@@ -2340,7 +2340,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     // first, if the frag is stale, bring it back in sync.
     parent->resync_accounted_rstat();
 
-    if (g_conf()->mds_snap_rstat) {
+    if (mds->mdsmap->get_snap_rstat()) {
       for (auto &p : parent->dirty_old_rstat) {
 	project_rstat_frag_to_inode(p.second.rstat, p.second.accounted_rstat, p.second.first,
 				    p.first, pin, true);

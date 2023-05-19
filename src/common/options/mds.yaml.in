@@ -1304,14 +1304,6 @@ options:
   services:
   - mds
   with_legacy: true
-- name: mds_snap_rstat
-  type: bool
-  level: advanced
-  desc: enabled nested rstat for snapshots
-  default: false
-  services:
-  - mds
-  with_legacy: true
 - name: mds_verify_backtrace
   type: uint
   level: dev

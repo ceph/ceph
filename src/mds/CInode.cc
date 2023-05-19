@@ -3082,7 +3082,7 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
 
   old.inode.trim_client_ranges(follows);
 
-  if (g_conf()->mds_snap_rstat &&
+  if (mdcache->mds->mdsmap->get_snap_rstat() &&
       !(old.inode.rstat == old.inode.accounted_rstat))
     dirty_old_rstats.insert(follows);
   
