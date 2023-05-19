@@ -22,6 +22,7 @@
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/state.h"
 #include "common/AsyncReserver.h"
+#include "crimson/net/Connection.h"
 
 namespace crimson::net {
   class Messenger;

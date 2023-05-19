@@ -55,7 +55,11 @@ public:
   void _dump(ceph::Formatter *f) const override;
 
   bool has_feature(uint64_t f) const {
+#ifdef WITH_SEASTAR
+    ceph_abort("In crimson, conn is independently maintained outside Message");
+#else
     return request->get_connection()->has_feature(f);
+#endif
   }
 
 private:
