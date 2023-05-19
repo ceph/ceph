@@ -1100,31 +1100,6 @@ log_type get_log_type(const string& type_str) {
   return static_cast<log_type>(0xff);
 }
 
-void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
-{
-  auto iter = bl.cbegin();
-  switch (index_type) {
-    case BIIndexType::Plain:
-    case BIIndexType::Instance:
-      {
-        rgw_bucket_dir_entry entry;
-        decode(entry, iter);
-        encode_json("entry", entry, formatter);
-      }
-      break;
-    case BIIndexType::OLH:
-      {
-        rgw_bucket_olh_entry entry;
-        decode(entry, iter);
-        encode_json("entry", entry, formatter);
-      }
-      break;
-    default:
-      ceph_abort();
-      break;
-  }
-}
-
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
   encode_json("user_info", info, formatter);
