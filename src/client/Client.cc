@@ -1058,17 +1058,6 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->snap_metadata = st->snap_metadata;
     in->fscrypt_auth = st->fscrypt_auth;
     in->fscrypt_ctx = in->init_fscrypt_ctx();
-
-
-ldout(cct, 0) << __func__ << " XXXXX ino=" << in->ino << " in->fscrypt_auth.size()=" << in->fscrypt_auth.size() << dendl;
-if (in->fscrypt_auth.size() > 0) {
-  bufferlist bl;
-  auto data = bl.append_hole(in->fscrypt_auth.size());
-  data.copy_in(in->fscrypt_auth.size(), (const char *)in->fscrypt_auth.data());
-  std::stringstream ss;
-  bl.hexdump(ss, false);
-  ldout(cct, 0) << __func__ << " XXXXX " << ss.str() << dendl;
-}
     need_snapdir_attr_refresh = true;
   }
 
@@ -1087,15 +1076,6 @@ if (in->fscrypt_auth.size() > 0) {
       (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
     in->layout = st->layout;
     in->fscrypt_file = st->fscrypt_file;
-ldout(cct, 0) << __func__ << " XXXXX ino=" << in->ino << " in->fscrypt_file.size()=" << in->fscrypt_file.size() << dendl;
-if (in->fscrypt_file.size() > 0) {
-  bufferlist bl;
-  auto data = bl.append_hole(in->fscrypt_file.size());
-  data.copy_in(in->fscrypt_file.size(), (const char *)in->fscrypt_file.data());
-  std::stringstream ss;
-  bl.hexdump(ss, false);
-  ldout(cct, 0) << __func__ << " XXXXX " << ss.str() << dendl;
-}
     update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
   }
 
@@ -1397,14 +1377,34 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     _readdir_drop_dirp_buffer(dirp);
     dirp->buffer.reserve(numdn);
 
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx);
+
     string dname;
     LeaseStat dlease;
+    char dec_fname[NAME_MAX + FSCRYPT_KEY_SIZE]; /* some extra just in case */
+
     for (unsigned i=0; i<numdn; i++) {
       decode(dname, p);
       dlease.decode(p, features);
       InodeStat ist(p, features);
 
       ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
+
+      if (fscrypt_denc) {
+        char enc[NAME_MAX];
+        int len = fscrypt_fname_unarmor(dname.c_str(), dname.size(),
+                                        enc, sizeof(enc));
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": base64 decoded fname orig len=" << dname.size() << " dest len=" << len << dendl;
+
+        int r = fscrypt_denc->decrypt(enc, len,
+                                      dec_fname, sizeof(dec_fname));
+
+        if (r >= 0) {
+          dname = dec_fname;
+        } else {
+          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename" << dendl;
+        }
+      }
 
       Inode *in = add_update_inode(&ist, request->sent_stamp, session,
 				   request->perms);
@@ -7934,6 +7934,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->fscrypt_auth = *aux;
+      in->fscrypt_ctx = in->init_fscrypt_ctx();
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_FSCRYPT_AUTH;
     } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||

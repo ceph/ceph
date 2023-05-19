@@ -811,9 +811,9 @@ void Inode::mark_caps_clean()
   dirty_cap_item.remove_myself();
 }
 
-
 FSCryptContextRef Inode::init_fscrypt_ctx()
 {
+lsubdout(client->cct, client, 0) << __func__ << " auth.size()=" << fscrypt_auth.size() << dendl;
   if (fscrypt_auth.size() == 0) {
     return nullptr;
   }
@@ -827,6 +827,7 @@ FSCryptContextRef Inode::init_fscrypt_ctx()
   try {
     ctx->decode(bliter);
   } catch (buffer::error& err) {
+lsubdout(client->cct, client, 0) << __func__ << " " << *this << " failed to decode" << dendl;
     return nullptr;
   }
 
