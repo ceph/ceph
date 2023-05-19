@@ -128,7 +128,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
       maxBlobSize: new FormControl('', {
         updateOn: 'blur'
       }),
-      ratio: new FormControl('', {
+      ratio: new FormControl('0.875', {
         updateOn: 'blur'
       })
     });
