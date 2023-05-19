@@ -77,14 +77,16 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'id': 'daemon1',
                 'realm_name': 'realm1',
                 'zonegroup_name': 'zg1',
-                'zone_name': 'zone1'
+                'zone_name': 'zone1',
+                'frontend_config#0': 'beast port=80'
             },
             {
                 'ceph_version': 'ceph version master (dev)',
                 'id': 'daemon2',
                 'realm_name': 'realm2',
                 'zonegroup_name': 'zg2',
-                'zone_name': 'zone2'
+                'zone_name': 'zone2',
+                'frontend_config#0': 'beast port=80'
             }]
         self._get('/test/api/rgw/daemon')
         self.assertStatus(200)
@@ -95,7 +97,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'server_hostname': 'host1',
             'realm_name': 'realm1',
             'zonegroup_name': 'zg1',
-            'zone_name': 'zone1', 'default': True
+            'zone_name': 'zone1', 'default': True,
+            'port': 80
         },
             {
             'id': 'daemon2',
@@ -105,7 +108,8 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
             'realm_name': 'realm2',
             'zonegroup_name': 'zg2',
             'zone_name': 'zone2',
-            'default': False
+            'default': False,
+            'port': 80
         }])
 
     def test_list_empty(self):

@@ -34,7 +34,8 @@ RGW_DAEMON_SCHEMA = {
     "version": (str, "Ceph Version"),
     "server_hostname": (str, ""),
     "zonegroup_name": (str, "Zone Group"),
-    "zone_name": (str, "Zone")
+    "zone_name": (str, "Zone"),
+    "port": (int, "Port"),
 }
 
 RGW_USER_SCHEMA = {
@@ -152,7 +153,8 @@ class RgwDaemon(RESTController):
                     'realm_name': metadata['realm_name'],
                     'zonegroup_name': metadata['zonegroup_name'],
                     'zone_name': metadata['zone_name'],
-                    'default': instance.daemon.name == metadata['id']
+                    'default': instance.daemon.name == metadata['id'],
+                    'port': int(metadata['frontend_config#0'].split('port=')[1])
                 }
 
                 daemons.append(daemon)
