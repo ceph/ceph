@@ -35,7 +35,8 @@ export class RbdSnapshotActionsModel {
       permission: 'update',
       icon: Icons.edit,
       name: actionLabels.RENAME,
-      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
+      disable: (selection: CdTableSelection) =>
+        this.disableForMirrorSnapshot(selection) || !selection.hasSingleSelection
     };
     this.protect = {
       permission: 'update',
@@ -76,7 +77,8 @@ export class RbdSnapshotActionsModel {
       permission: 'update',
       icon: Icons.undo,
       name: actionLabels.ROLLBACK,
-      disable: (selection: CdTableSelection) => this.disableForMirrorSnapshot(selection)
+      disable: (selection: CdTableSelection) =>
+        this.disableForMirrorSnapshot(selection) || !selection.hasSingleSelection
     };
     this.deleteSnap = {
       permission: 'delete',

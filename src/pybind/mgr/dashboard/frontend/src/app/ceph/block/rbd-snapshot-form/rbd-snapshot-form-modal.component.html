@@ -24,13 +24,14 @@
                    autofocus>
             <span class="invalid-feedback"
                   *ngIf="snapshotForm.showError('snapshotName', formDir, 'required')"
-                  i18n>This field is required.</span><br><br>
+                  i18n>This field is required.</span>
             <span *ngIf="((mirroring === 'snapshot') ? true : null) && (snapshotForm.getValue('mirrorImageSnapshot') === true) ? true: null"
                   i18n>Snapshot mode is enabled on image <b>{{ imageName }}</b>: snapshot names are auto generated</span>
           </div>
         </div>
-        <div *ngIf="(mirroring === 'snapshot') ? true : null">
-          <div class="form-group row">
+        <ng-container *ngIf="(mirroring === 'snapshot') ? true : null">
+          <div class="form-group row"
+               *ngIf="peerConfigured$ | async as peerConfigured">
             <div class="cd-col-form-offset">
               <div class="custom-control custom-checkbox">
                 <input type="checkbox"
@@ -38,14 +39,17 @@
                        formControlName="mirrorImageSnapshot"
                        name="mirrorImageSnapshot"
                        id="mirrorImageSnapshot"
+                       [attr.disabled]="!(peerConfigured.length > 0) ? true : null"
                        (change)="onMirrorCheckBoxChange()">
                 <label for="mirrorImageSnapshot"
                        class="custom-control-label"
                        i18n>Mirror Image Snapshot</label>
+                <cd-helper i18n
+                           *ngIf="!peerConfigured.length > 0">The peer must be registered to do this action.</cd-helper>
               </div>
             </div>
           </div>
-        </div>
+        </ng-container>
       </div>
       <div class="modal-footer">
         <cd-form-button-panel (submitActionEvent)="submit()"

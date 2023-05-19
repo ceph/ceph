@@ -7,7 +7,6 @@ import { NgbModalModule, NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { MockComponent } from 'ng-mocks';
 import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
-import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
 
 import { RbdService } from '~/app/shared/api/rbd.service';
 import { ComponentsModule } from '~/app/shared/components/components.module';
@@ -86,7 +85,6 @@ describe('RbdSnapshotListComponent', () => {
   describe('api delete request', () => {
     let called: boolean;
     let rbdService: RbdService;
-    let rbdMirroringService: RbdMirroringService;
     let notificationService: NotificationService;
     let authStorageService: AuthStorageService;
 
@@ -95,7 +93,6 @@ describe('RbdSnapshotListComponent', () => {
       const modalService = TestBed.inject(ModalService);
       const actionLabelsI18n = TestBed.inject(ActionLabelsI18n);
       called = false;
-      rbdMirroringService = new RbdMirroringService(null, null);
       rbdService = new RbdService(null, null);
       notificationService = new NotificationService(null, null, null);
       authStorageService = new AuthStorageService();
@@ -106,7 +103,6 @@ describe('RbdSnapshotListComponent', () => {
         null,
         null,
         rbdService,
-        rbdMirroringService,
         null,
         notificationService,
         null,
@@ -205,7 +201,8 @@ describe('RbdSnapshotListComponent', () => {
           null,
           null,
           null,
-          TestBed.inject(ActionLabelsI18n)
+          TestBed.inject(ActionLabelsI18n),
+          null
         );
         ref.componentInstance.onSubmit = new Subject();
         return ref;
