@@ -294,11 +294,12 @@
                 <label class="form-check-label"
                        for="encryption_enabled"
                        i18n>Encryption</label>
-                <cd-helper>
+                <cd-helper aria-label="toggle encryption helper">
                   <span i18n>Enables encryption for the objects in the bucket.
                      To enable encryption on a bucket you need to set the configuration values for SSE-S3 or SSE-KMS.
                      To set the configuration values <a href="#/rgw/bucket/create"
-                                                        (click)="openConfigModal()">Click here</a></span>
+                                                        (click)="openConfigModal()"
+                                                        aria-label="click here">Click here</a></span>
                 </cd-helper>
               </div>
             </div>
