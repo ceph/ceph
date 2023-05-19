@@ -467,6 +467,7 @@ class RgwDaemonTest(RgwTestCase):
         self.assertIn('server_hostname', data)
         self.assertIn('zonegroup_name', data)
         self.assertIn('zone_name', data)
+        self.assertIn('port', data)
 
     def test_get(self):
         data = self._get('/api/rgw/daemon')
