@@ -511,6 +511,18 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
       {
         fs.get_mds_map().set_max_filesize(n);
       });
+    } else if (var == "snap_rstat") {
+      bool snap_rstat = true;
+      int r = parse_bool(val, &snap_rstat, ss);
+      if (r != 0) {
+        return r;
+      }
+      fsmap.modify_filesystem(
+          fsp->get_fscid(),
+          [snap_rstat](auto&& fs)
+      {
+        fs.get_mds_map().set_snap_rstat(snap_rstat);
+      });
     } else if (var == "max_xattr_size") {
       if (interr.length()) {
 	ss << var << " requires an integer value";

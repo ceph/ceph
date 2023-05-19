@@ -208,6 +208,9 @@ public:
   uint64_t get_max_xattr_size() const { return max_xattr_size; }
   void set_max_xattr_size(uint64_t m) { max_xattr_size = m; }
 
+  bool get_snap_rstat() const { return snap_rstat; }
+  void set_snap_rstat(bool m) { snap_rstat = m; }
+
   void set_min_compat_client(ceph_release_t version);
 
   void add_required_client_feature(size_t bit) {
@@ -672,6 +675,8 @@ protected:
   uint64_t max_file_size = 1ULL<<40; /* 1TB */
 
   uint64_t max_xattr_size = MDS_MAX_XATTR_SIZE;
+
+  bool snap_rstat = true;
 
   feature_bitset_t required_client_features;
 

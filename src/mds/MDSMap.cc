@@ -184,6 +184,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("max_xattr_size", max_xattr_size);
   f->dump_int("last_failure", last_failure);
   f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
+  f->dump_bool("snap_rstat", snap_rstat);
   f->open_object_section("compat");
   compat.dump(f);
   f->close_section();
@@ -285,6 +286,7 @@ void MDSMap::print(ostream& out) const
   out << "required_client_features\t" << cephfs_stringify_features(required_client_features) << "\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
+  out << "snap_rstat\t" << snap_rstat << "\n";
   out << "compat\t" << compat << "\n";
   out << "max_mds\t" << max_mds << "\n";
   out << "in\t" << in << "\n"
@@ -782,7 +784,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 19;
+  __u16 ev = 20;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -813,6 +815,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(max_xattr_size, bl);
   encode(qdb_cluster_leader, bl);
   encode(qdb_cluster_members, bl);
+  encode(snap_rstat, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -971,6 +974,10 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   if (ev >= 19) {
     decode(qdb_cluster_leader, p);
     decode(qdb_cluster_members, p);
+  }
+
+  if (ev >= 20) {
+    decode(snap_rstat, p);
   }
 
   /* All MDS since at least v14.0.0 understand INLINE */
