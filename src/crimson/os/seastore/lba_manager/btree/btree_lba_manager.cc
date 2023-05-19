@@ -561,7 +561,7 @@ BtreeLBAManager::_update_mapping(
 	  return btree.remove(
 	    c,
 	    iter
-	  ).si_then([ret] {
+	  ).si_then([ret](auto) {
 	    return ret;
 	  });
 	} else {
