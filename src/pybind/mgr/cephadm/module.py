@@ -542,6 +542,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.autotune_memory_target_ratio = 0.0
             self.autotune_interval = 0
             self.ssh_user: Optional[str] = None
+            self.sudo_password: Optional[str] = None
             self._ssh_options: Optional[str] = None
             self.tkey = NamedTemporaryFile()
             self.ssh_config_fname: Optional[str] = None
@@ -1143,6 +1144,31 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             msg += '. sudo will be used'
         self.log.info(msg)
         return 0, msg, ''
+
+    @orchestrator._cli_write_command(
+        'cephadm set-password')
+    def set_sudo_password(self, password: str) -> Tuple[int, str, str]:
+        """
+        Set user sudo password for non-root users deployments
+        """
+        current_password = self.sudo_password
+        if password == current_password:
+            return 0, "value unchanged", ""
+
+        self._validate_and_set_ssh_val('sudo_password', password, current_password)
+
+        msg = 'sudo password is set'
+        self.log.info(msg)
+        return 0, msg, ''
+
+    @orchestrator._cli_write_command(
+        'cephadm clear-password')
+    def _clear_password(self) -> Tuple[int, str, str]:
+        """Clear ssh user sudo password"""
+        self.set_store('sudo_password', None)
+        self.ssh._reconfig_ssh()
+        self.log.info('Cleared sudo password')
+        return 0, '', ''
 
     @orchestrator._cli_read_command(
         'cephadm registry-login')

@@ -149,6 +149,17 @@ class SSHManager:
         with self.mgr.async_timeout_handler(host, f'ssh {host} (addr {addr})'):
             return self.mgr.wait_async(self._remote_connection(host, addr))
 
+    def create_askpass_script(self, host: str, path: str) -> None:
+        if not self.mgr.sudo_password:
+            return
+        content = f"#!/bin/bash\necho '{self.mgr.sudo_password}'\n"
+        self.write_remote_file(host, path, content.encode(), mode=0o700)
+
+    async def get_home_path(self, host: str) -> str:
+        conn = self.remote_connection(host)
+        r = await conn.run("echo $HOME", check=True, timeout=5)
+        return self._rstrip(r.stdout)
+
     async def _execute_command(self,
                                host: str,
                                cmd_components: List[str],
@@ -158,7 +169,19 @@ class SSHManager:
                                ) -> Tuple[str, str, int]:
 
         conn = await self._remote_connection(host, addr)
-        sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
+        export_env = None
+        askpass_script = None
+        if self.mgr.ssh_user != 'root':
+            if self.mgr.sudo_password:
+                home_path = self.get_home_path(host)
+                askpass_script = f"{home_path}/cephadm-askpass.sh"
+                self.create_askpass_script(host, askpass_script)
+                export_env = f"export SUDO_ASKPASS={askpass_script}"
+                sudo_prefix = "sudo --askpass "
+            else:
+                sudo_prefix = "sudo "
+        else:
+            sudo_prefix = ""
         cmd = sudo_prefix + " ".join(quote(x) for x in cmd_components)
         try:
             address = addr or self.mgr.inventory.get_addr(host)
@@ -167,6 +190,8 @@ class SSHManager:
         if log_command:
             logger.debug(f'Running command: {cmd}')
         try:
+            if export_env:
+                r = await conn.run(export_env, check=True, timeout=5)
             r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)  # host quick check
             r = await conn.run(cmd, input=stdin)
         # handle these Exceptions otherwise you might get a weird error like
@@ -176,7 +201,8 @@ class SSHManager:
             logger.debug(f'Connection to {host} failed. {str(e)}')
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
-            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, address)
+            raise HostConnectionError(
+                f'Unable to reach remote host {host}. {str(e)}', host, address)
         except asyncssh.ProcessError as e:
             msg = f"Cannot execute the command '{cmd}' on the {host}. {str(e.stderr)}."
             logger.debug(msg)
@@ -190,21 +216,21 @@ class SSHManager:
             self.mgr.offline_hosts.add(host)
             raise HostConnectionError(msg, host, address)
 
-        def _rstrip(v: Union[bytes, str, None]) -> str:
-            if not v:
-                return ''
-            if isinstance(v, str):
-                return v.rstrip('\n')
-            if isinstance(v, bytes):
-                return v.decode().rstrip('\n')
-            raise OrchestratorError(
-                f'Unable to parse ssh output with type {type(v)} from remote host {host}')
-
-        out = _rstrip(r.stdout)
-        err = _rstrip(r.stderr)
+        out = self._rstrip(r.stdout)
+        err = self._rstrip(r.stderr)
         rc = r.returncode if r.returncode else 0
 
         return out, err, rc
+
+    def _rstrip(self, v: Union[bytes, str, None]) -> str:
+        if not v:
+            return ''
+        if isinstance(v, str):
+            return v.rstrip('\n')
+        if isinstance(v, bytes):
+            return v.decode().rstrip('\n')
+        raise OrchestratorError(
+            f'Unable to parse ssh output with type {type(v)} from remote host')
 
     def execute_command(self,
                         host: str,
@@ -267,9 +293,10 @@ class SSHManager:
                 conn = await self._remote_connection(host, addr)
                 async with conn.start_sftp_client() as sftp:
                     await sftp.put(f.name, tmp_path)
-            if uid is not None and gid is not None and mode is not None:
+            if uid is not None and gid is not None:
                 # shlex quote takes str or byte object, not int
                 await self._check_execute_command(host, ['chown', '-R', str(uid) + ':' + str(gid), tmp_path], addr=addr)
+            if mode is not None:
                 await self._check_execute_command(host, ['chmod', oct(mode)[2:], tmp_path], addr=addr)
             await self._check_execute_command(host, ['mv', tmp_path, path], addr=addr)
         except Exception as e:
@@ -327,6 +354,10 @@ class SSHManager:
             self.mgr.validate_ssh_config_fname(self.mgr.ssh_config_fname)
             ssh_options += ['-F', self.mgr.ssh_config_fname]
         self.mgr.ssh_config = ssh_config
+
+        # sudo password
+        sudo_password = self.mgr.get_store("sudo_password")
+        self.mgr.sudo_password = sudo_password
 
         # identity
         ssh_key = self.mgr.get_store("ssh_identity_key")

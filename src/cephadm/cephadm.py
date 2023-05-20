@@ -5522,7 +5522,7 @@ def prepare_ssh(
             pathify(ctx.ssh_config.name): '/tmp/cephadm-ssh-config:z',
         }
         cli(['cephadm', 'set-ssh-config', '-i', '/tmp/cephadm-ssh-config'], extra_mounts=mounts)
-
+    save_sudo_password(ctx, cli)
     if ctx.ssh_private_key and ctx.ssh_public_key:
         logger.info('Using provided ssh keys...')
         mounts = {
@@ -5891,6 +5891,28 @@ def save_cluster_config(ctx: CephadmContext, uid: int, gid: int, fsid: str) -> N
             copy_file(ctx.output_pub_ssh_key, os.path.join(conf_dir, CEPH_PUBKEY))
     else:
         logger.warning(f'Cannot create cluster configuration directory {conf_dir}')
+
+
+def save_sudo_password(ctx: CephadmContext, cli: Callable) -> None:
+    if ctx.ssh_user != 'root' and ctx.sudo_password:
+        logger.info('Using provided sudo password for non root user...')
+        cli(['cephadm', 'set-password', ctx.sudo_password])
+
+
+def load_sudo_password(ctx: CephadmContext) -> None:
+    # make sure we have a valid sudo password if we are not root and sudo_json is set.
+    # we would use sudo_password afterwards
+    if ctx.ssh_user != 'root' and ctx.sudo_json:
+        logger.info('Pulling custom sudo login info from %s.' % ctx.sudo_json)
+        d = get_parm(ctx.sudo_json)
+        if d.get('password'):
+            ctx.sudo_password = d.get('password')
+        else:
+            raise Error('json provided for custom sudo login did not include "password" field. '
+                        'Please setup json file as\n'
+                        '{\n'
+                        ' "password": "SUDO_PASSWORD"\n'
+                        '}')
 
 
 def rollback(func: FuncT) -> FuncT:
@@ -7941,8 +7963,8 @@ def check_ssh_connectivity(ctx: CephadmContext) -> None:
             logger.warning(f'Command not found: {cmd}')
             return False
         return True
-
-    if not cmd_is_available('ssh') or not cmd_is_available('ssh-keygen'):
+    load_sudo_password(ctx)
+    if not cmd_is_available('ssh') or not cmd_is_available('ssh-keygen') or (not cmd_is_available('scp') and ctx.sudo_password):
         logger.warning('Cannot check ssh connectivity. Skipping...')
         return
 
@@ -7965,12 +7987,17 @@ def check_ssh_connectivity(ctx: CephadmContext) -> None:
         key = f.read().strip()
     new_key = authorize_ssh_key(key, ctx.ssh_user)
     ssh_cfg_file_arg = ['-F', pathify(ctx.ssh_config.name)] if ctx.ssh_config else []
+    askpass_script = '~/cephadm-askpass.sh'
+    host = get_hostname()
+    if ctx.sudo_password:
+        write_remote_file(ctx, host, f"#!/bin/bash\necho '{ctx.sudo_password}'\n", askpass_script, ssh_priv_key_path, ssh_cfg_file_arg)
     _, _, code = call(ctx, ['ssh', '-o StrictHostKeyChecking=no',
                             *ssh_cfg_file_arg, '-i', ssh_priv_key_path,
                             '-o PasswordAuthentication=no',
-                            f'{ctx.ssh_user}@{get_hostname()}',
-                            'sudo echo'])
-
+                            f'{ctx.ssh_user}@{host}',
+                            f'export SUDO_ASKPASS={askpass_script}; sudo --askpass echo' if ctx.sudo_password else 'sudo echo'])
+    if ctx.sudo_password:
+        delete_remote_file(ctx, host, askpass_script, ssh_priv_key_path, ssh_cfg_file_arg)
     # we only remove the key if it's a new one. In case the user has provided
     # some already existing key then we don't alter authorized_keys file
     if new_key:
@@ -7981,11 +8008,43 @@ def check_ssh_connectivity(ctx: CephadmContext) -> None:
     ssh_cfg_msg = '- The ssh configuration file configured by --ssh-config is valid\n' if ctx.ssh_config else ''
     err_msg = f"""
 ** Please verify your user's ssh configuration and make sure:
-- User {ctx.ssh_user} must have passwordless sudo access
+- User {ctx.ssh_user} must have passwordless sudo access or specify password by --sudo-password(--sudo-json for better security) for sudoing if passwordless sudo is not enabled
 {pub_key_msg}{prv_key_msg}{ssh_cfg_msg}
 """
     if code != 0:
         raise Error(err_msg)
+
+
+def write_remote_file(ctx: CephadmContext, host: str, data: str, path: str, ssh_priv_key_path: str, ssh_cfg_file_arg: List[str]) -> None:
+    """
+    Write data to a remote file.
+    """
+    tmpfile = tempfile.NamedTemporaryFile(delete=False)
+    tmpfile.write(data.encode('utf-8'))
+    tmpfile.close()
+    # change mode to 700 for excutable scripts
+    os.chmod(tmpfile.name, 0o700)
+    uid, gid, dir = get_ssh_vars(ctx.ssh_user)
+    os.chown(tmpfile.name, uid, gid)
+    
+    _, _, code = call(ctx, ['scp', '-o', 'LogLevel=ERROR', '-o', 'StrictHostKeyChecking=no',
+                            '-i', ssh_priv_key_path, '-o PasswordAuthentication=no', *ssh_cfg_file_arg,
+                            tmpfile.name, f'{ctx.ssh_user}@{host}:{path}'])
+    if code != 0:
+        os.unlink(tmpfile.name)
+        raise RuntimeError(f'Failed to write remote file to {host}')
+    os.unlink(tmpfile.name)
+
+
+def delete_remote_file(ctx: CephadmContext, host: str, path: str, ssh_priv_key_path: str, ssh_cfg_file_arg: List[str]) -> None:
+    """
+    Delete a remote file.
+    """
+    _, _, code = call(ctx, ['ssh', '-o', 'LogLevel=ERROR', '-o', 'StrictHostKeyChecking=no',
+                            '-i', ssh_priv_key_path, '-o PasswordAuthentication=no', *ssh_cfg_file_arg,
+                            f'{ctx.ssh_user}@{host}', f'rm -f {path}'])
+    if code != 0:
+        raise RuntimeError(f'Failed to delete remote file to {host}')
 
 
 def command_prepare_host(ctx: CephadmContext) -> None:
@@ -10031,7 +10090,13 @@ def _get_parser():
     parser_bootstrap.add_argument(
         '--ssh-user',
         default='root',
-        help='set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users')
+        help='set user for SSHing to cluster hosts, sudo will be needed for non-root users')
+    parser_bootstrap.add_argument(
+        '--sudo-password',
+        help='set password for sudoing on cluster hosts if passwordless sudo is not enabled. not recommended for security reasons. use --sudo-json instead.')
+    parser_bootstrap.add_argument(
+        '--sudo-json',
+        help='provide a json file with password for sudoing on cluster hosts if passwordless sudo is not enabled.')
     parser_bootstrap.add_argument(
         '--skip-mon-network',
         action='store_true',
