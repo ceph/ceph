@@ -326,16 +326,15 @@ seastar::future<> Heartbeat::maybe_share_osdmap(
     return seastar::now();
   }
 
-  logger().debug("{} peer {} projected_epoch is {} while osdmap is {}",
-		 __func__ , from, m->map_epoch, current_osdmap_epoch);
-  if (current_osdmap_epoch > m->map_epoch) {
-    logger().debug("{} sharing osdmap epoch of {} with peer {}",
-                   __func__, current_osdmap_epoch, from);
-    // Peer's newest map is m->map_epoch. Therfore it misses
-    // the osdmaps in the range of `m->map_epoch` to `current_osdmap_epoch`.
-    return service.send_incremental_map_to_osd(from, m->map_epoch);
-  }
-  return seastar::now();
+  const epoch_t send_from = peer.get_projected_epoch();
+  logger().debug("{} sending peer {} peer maps from projected epoch {} through "
+		 "local osdmap epoch {}",
+		 __func__,
+		 from,
+		 send_from,
+		 current_osdmap_epoch);
+  peer.set_projected_epoch(current_osdmap_epoch);
+  return service.send_incremental_map_to_osd(from, send_from);
 }
 
 seastar::future<> Heartbeat::handle_reply(crimson::net::ConnectionRef conn,
