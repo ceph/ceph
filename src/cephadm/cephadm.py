@@ -2791,8 +2791,8 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         if daemon_type not in ['grafana', 'loki', 'promtail']:
             ip = ''
             port = Monitoring.port_map[daemon_type][0]
-            if 'meta_json' in ctx and ctx.meta_json:
-                meta = json.loads(ctx.meta_json) or {}
+            meta = fetch_meta(ctx)
+            if meta:
                 if 'ip' in meta and meta['ip']:
                     ip = meta['ip']
                 if 'ports' in meta and meta['ports']:
@@ -3692,9 +3692,7 @@ def deploy_daemon_units(
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
         # some metadata about the deploy
-        meta: Dict[str, Any] = {}
-        if 'meta_json' in ctx and ctx.meta_json:
-            meta = json.loads(ctx.meta_json) or {}
+        meta: Dict[str, Any] = fetch_meta(ctx)
         meta.update({
             'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
             'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
@@ -4517,10 +4515,8 @@ class CephadmAgent():
         with write_new(unit_run_path) as f:
             f.write(self.unit_run())
 
-        meta: Dict[str, Any] = {}
+        meta: Dict[str, Any] = fetch_meta(self.ctx)
         meta_file_path = os.path.join(self.daemon_dir, 'unit.meta')
-        if 'meta_json' in self.ctx and self.ctx.meta_json:
-            meta = json.loads(self.ctx.meta_json) or {}
         with write_new(meta_file_path) as f:
             f.write(json.dumps(meta, indent=4) + '\n')
 
@@ -5394,7 +5390,7 @@ def create_mon(
     fsid: str, mon_id: str
 ) -> None:
     mon_c = get_container(ctx, fsid, 'mon', mon_id)
-    ctx.meta_json = json.dumps({'service_name': 'mon'})
+    ctx.meta_properties = {'service_name': 'mon'}
     deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
 
@@ -5441,7 +5437,7 @@ def create_mgr(
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
     # Note:the default port used by the Prometheus node exporter is opened in fw
-    ctx.meta_json = json.dumps({'service_name': 'mgr'})
+    ctx.meta_properties = {'service_name': 'mgr'}
     ports = [9283, 8765]
     if not ctx.skip_monitoring_stack:
         ports.append(8443)
