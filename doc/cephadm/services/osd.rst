@@ -317,7 +317,7 @@ Replacing an OSD
 
 .. prompt:: bash #
 
-  orch osd rm <osd_id(s)> --replace [--force]
+  ceph orch osd rm <osd_id(s)> --replace [--force]
 
 Example:
 
