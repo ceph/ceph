@@ -6294,10 +6294,8 @@ def command_deploy(ctx):
     _common_deploy(ctx, daemon_type, daemon_id, daemon_ports, deployment_type)
 
 
-def command_deploy_from(ctx: CephadmContext) -> None:
-    """The deploy-from command is similar to deploy but sources nearly all
-    configuration parameters from an input JSON configuration file.
-    """
+def read_configuration_source(ctx: CephadmContext) -> Dict[str, Any]:
+    """Read a JSON configuration based on the `ctx.source` value."""
     source = '-'
     if 'source' in ctx and ctx.source:
         source = ctx.source
@@ -6307,9 +6305,16 @@ def command_deploy_from(ctx: CephadmContext) -> None:
         with open(source, 'rb') as fh:
             config_data = json.load(fh)
     logger.debug('Loaded deploy configuration: %r', config_data)
+    return config_data
 
-    # Bind properties taken from the json to our ctx, similar to how
-    # cli options on `deploy` are bound to the context.
+
+def apply_deploy_config_to_ctx(
+    config_data: Dict[str, Any],
+    ctx: CephadmContext,
+) -> None:
+    """Bind properties taken from the config_data dictionary to our ctx,
+    similar to how cli options on `deploy` are bound to the context.
+    """
     ctx.name = config_data['name']
     if 'image' in config_data:
         ctx.image = config_data['image']
@@ -6340,6 +6345,14 @@ def command_deploy_from(ctx: CephadmContext) -> None:
         setattr(ctx, key, value)
     update_default_image(ctx)
     logger.debug('Determined image: %r', ctx.image)
+
+
+def command_deploy_from(ctx: CephadmContext) -> None:
+    """The deploy-from command is similar to deploy but sources nearly all
+    configuration parameters from an input JSON configuration file.
+    """
+    config_data = read_configuration_source(ctx)
+    apply_deploy_config_to_ctx(config_data, ctx)
 
     daemon_type, daemon_id = ctx.name.split('.', 1)
 
