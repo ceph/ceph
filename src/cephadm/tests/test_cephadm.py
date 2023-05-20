@@ -313,6 +313,8 @@ class TestCephAdm(object):
     @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
     @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (0, 0))
     @mock.patch('cephadm.get_deployment_container')
+    @mock.patch('cephadm.read_configuration_source', lambda c: {})
+    @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
     def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _get_parm, _deploy_daemon, _file_lock, _logger):
         """
         test that crush location for mon is set if it is included in config_json
@@ -354,7 +356,7 @@ class TestCephAdm(object):
         _deploy_daemon.side_effect = _crush_location_checker
 
         with pytest.raises(Exception, match='--set-crush-location database=a'):
-            _cephadm.command_deploy(ctx)
+            _cephadm.command_deploy_from(ctx)
 
     @mock.patch('cephadm.logger')
     @mock.patch('cephadm.fetch_custom_config_files')
