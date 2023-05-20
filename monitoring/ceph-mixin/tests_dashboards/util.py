@@ -43,6 +43,7 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
     if 'panels' not in dashboard_data:
         return
     error = 0
+    panel_ids_in_file = set()
     for panel in dashboard_data['panels']:
         if (
                 'title' in panel
@@ -54,18 +55,13 @@ def add_dashboard_queries(data: Dict[str, Any], dashboard_data: Dict[str, Any], 
                 title = panel['title']
                 legend_format = target['legendFormat'] if 'legendFormat' in target else ""
                 query_id = f'{title}-{legend_format}'
-                if query_id in data['queries']:
-                    # NOTE: If two or more panels have the same name and legend it
-                    # might suggest a refactoring is needed or add something else
-                    # to identify each query.
-                    conflict_file = Path(data['queries'][query_id]['path']).name
-                    file = Path(path).name
+                if query_id in panel_ids_in_file:
                     cprint((f'ERROR: Query in panel "{title}" with legend "{legend_format}"'
-                                       f' already exists. Conflict "{conflict_file}" '
-                                       f'with: "{file}"'), 'red')
+                            f' already exists in the same file: "{path}"'), 'red')
                     error = 1
                 data['queries'][query_id] = {'query': target['expr'], 'path': path}
                 data['stats'][path]['total'] += 1
+                panel_ids_in_file.add(query_id)
     if error:
         raise ValueError('Missing legend_format in queries, please add a proper value.')
 
