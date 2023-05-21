@@ -152,6 +152,18 @@ class TestCephAdm(object):
         args = _cephadm._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
 
+    def test_check_required_global_args(self):
+        ctx = _cephadm.CephadmContext()
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        require_image = _cephadm.require_image(mock_fn)
+
+        with pytest.raises(_cephadm.Error, match='This command requires the global --image option to be set'):
+            require_image(ctx)
+
+        ctx.image = 'sample-image'
+        require_image(ctx)
+
     @mock.patch('cephadm.logger')
     def test_parse_mem_usage(self, _logger):
         len, summary = _cephadm._parse_mem_usage(0, 'c6290e3f1489,-- / --')
