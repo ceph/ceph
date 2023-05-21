@@ -651,15 +651,20 @@ class MonService(CephService):
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         daemon_spec.final_config, daemon_spec.deps = super().generate_config(daemon_spec)
 
-        mon_spec = cast(MONSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        if mon_spec.crush_locations:
-            if daemon_spec.host in mon_spec.crush_locations:
-                # the --crush-location flag only supports a single bucket=loc pair so
-                # others will have to be handled later. The idea is to set the flag
-                # for the first bucket=loc pair in the list in order to facilitate
-                # replacing a tiebreaker mon (https://docs.ceph.com/en/quincy/rados/operations/stretch-mode/#other-commands)
-                c_loc = mon_spec.crush_locations[daemon_spec.host][0]
-                daemon_spec.final_config['crush_location'] = c_loc
+        # realistically, we expect there to always be a mon spec
+        # in a real deployment, but the way teuthology deploys some daemons
+        # it's possible there might not be. For that reason we need to
+        # verify the service is present in the spec store.
+        if daemon_spec.service_name in self.mgr.spec_store:
+            mon_spec = cast(MONSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+            if mon_spec.crush_locations:
+                if daemon_spec.host in mon_spec.crush_locations:
+                    # the --crush-location flag only supports a single bucket=loc pair so
+                    # others will have to be handled later. The idea is to set the flag
+                    # for the first bucket=loc pair in the list in order to facilitate
+                    # replacing a tiebreaker mon (https://docs.ceph.com/en/quincy/rados/operations/stretch-mode/#other-commands)
+                    c_loc = mon_spec.crush_locations[daemon_spec.host][0]
+                    daemon_spec.final_config['crush_location'] = c_loc
 
         return daemon_spec.final_config, daemon_spec.deps
 
