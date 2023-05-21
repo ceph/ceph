@@ -19,7 +19,7 @@ Synopsis
 
 | **cephadm** **pull**
 
-| **cephadm** **inspect-image**
+| **cephadm** --image IMAGE_NAME **inspect-image**
 
 | **cephadm** **ls** [-h] [--no-detail] [--legacy-dir LEGACY_DIR]
 
@@ -334,7 +334,10 @@ Positional arguments:
 inspect-image
 -------------
 
-inspect local ceph container image.
+Inspect local Ceph container image. From Reef onward, requires specifying
+the image to inspect with ``--image``::
+
+    cephadm --image IMAGE_NAME inspect-image
 
 list-networks
 -------------
