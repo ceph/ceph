@@ -380,6 +380,85 @@ function TEST_profile_disallow_builtin_params_modify() {
     teardown $dir || return 1
 }
 
+function TEST_profile_disallow_builtin_params_override() {
+    local dir=$1
+
+    setup $dir || return 1
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+
+    run_osd $dir 0 --osd_op_queue=mclock_scheduler || return 1
+
+    # Verify that the default mclock profile is set on the OSD
+    local def_mclock_profile=$(ceph config get osd.0 osd_mclock_profile)
+    test "$def_mclock_profile" = "balanced" || return 1
+
+    # Verify the running mClock profile
+    local cur_mclock_profile=$(CEPH_ARGS='' ceph --format=json daemon \
+      $(get_asok_path osd.0) config get osd_mclock_profile |\
+      jq .osd_mclock_profile)
+    cur_mclock_profile=$(eval echo $cur_mclock_profile)
+    test $cur_mclock_profile = "high_recovery_ops" || return 1
+
+    declare -a options=("osd_mclock_scheduler_background_recovery_res"
+      "osd_mclock_scheduler_client_res")
+
+    local retries=10
+    local errors=0
+    for opt in "${options[@]}"
+    do
+      # Override a mclock config param and confirm that no change occurred
+      local opt_val_orig=$(CEPH_ARGS='' ceph --format=json daemon \
+        $(get_asok_path osd.0) config get $opt | jq .$opt | bc)
+      local opt_val_new=$(echo "$opt_val_orig + 0.1" | bc -l)
+      ceph tell osd.0 config set $opt $opt_val_new || return 1
+
+      # Check configuration values
+      for count in $(seq 0 $(expr $retries - 1))
+      do
+        errors=0
+        sleep 2 # Allow time for changes to take effect
+
+        echo "Check configuration values - Attempt#: $count"
+        # Check configuration value on Mon store (or the default) for the osd
+        local res=$(ceph config get osd.0 $opt) || return 1
+        echo "Mon db (or default): osd.0 $opt = $res"
+        if (( $(echo "$res == $opt_val_new" | bc -l) )); then
+          errors=$(expr $errors + 1)
+        fi
+
+        # Check running configuration value using "config show" cmd
+        res=$(ceph config show osd.0 | grep $opt |\
+          awk '{ print $2 }' | bc ) || return 1
+        echo "Running config: osd.0 $opt = $res"
+        if (( $(echo "$res == $opt_val_new" | bc -l) || \
+              $(echo "$res != $opt_val_orig" | bc -l)  )); then
+          errors=$(expr $errors + 1)
+        fi
+
+        # Check value in the in-memory 'values' map is unmodified
+        res=$(CEPH_ARGS='' ceph --format=json daemon $(get_asok_path \
+          osd.0) config get $opt | jq .$opt | bc)
+        echo "Values map: osd.0 $opt = $res"
+        if (( $(echo "$res == $opt_val_new" | bc -l) || \
+              $(echo "$res != $opt_val_orig" | bc -l) )); then
+          errors=$(expr $errors + 1)
+        fi
+
+        # Check if we succeeded or exhausted retry count
+        if [ $errors -eq 0 ]
+        then
+          break
+        elif [ $count -eq $(expr $retries - 1) ]
+        then
+          return 1
+        fi
+      done
+    done
+
+    teardown $dir || return 1
+}
+
 main mclock-config "$@"
 
 # Local Variables:
