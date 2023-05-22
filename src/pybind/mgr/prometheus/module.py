@@ -761,6 +761,20 @@ class Module(MgrModule):
             HEALTHCHECK_DETAIL
         )
 
+        metrics['pool_objects_repaired'] = Metric(
+            'counter',
+            'pool_objects_repaired',
+            'Number of objects repaired in a pool',
+            ('pool_id',)
+        )
+
+        metrics['daemon_health_metrics'] = Metric(
+            'gauge',
+            'daemon_health_metrics',
+            'Health metrics for Ceph daemons',
+            ('type', 'ceph_daemon',)
+        )
+
         for flag in OSD_FLAGS:
             path = 'osd_flag_{}'.format(flag)
             metrics[path] = Metric(
@@ -1601,14 +1615,7 @@ class Module(MgrModule):
     def get_pool_repaired_objects(self) -> None:
         dump = self.get('pg_dump')
         for stats in dump['pool_stats']:
-            path = f'pool_objects_repaired{stats["poolid"]}'
-            self.metrics[path] = Metric(
-                'counter',
-                'pool_objects_repaired',
-                'Number of objects repaired in a pool Count',
-                ('poolid',)
-            )
-
+            path = 'pool_objects_repaired'
             self.metrics[path].set(stats['stat_sum']['num_objects_repaired'],
                                    labelvalues=(stats['poolid'],))
 
@@ -1617,13 +1624,7 @@ class Module(MgrModule):
         self.log.debug('metrics jeje %s' % (daemon_metrics))
         for daemon_name, health_metrics in daemon_metrics.items():
             for health_metric in health_metrics:
-                path = f'daemon_health_metrics{daemon_name}{health_metric["type"]}'
-                self.metrics[path] = Metric(
-                    'counter',
-                    'daemon_health_metrics',
-                    'Health metrics for Ceph daemons',
-                    ('type', 'ceph_daemon',)
-                )
+                path = 'daemon_health_metrics'
                 self.metrics[path].set(health_metric['value'], labelvalues=(
                     health_metric['type'], daemon_name,))
 
