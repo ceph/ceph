@@ -374,7 +374,7 @@ class TestScrubChecks(CephFSTestCase):
         test flag scrub_mdsdir
         """
         self.scrub_with_stray_evaluation(self.fs, self.mount_a, "/",
-                                         "scrub_mdsdir")
+                                         "recursive,scrub_mdsdir")
 
     @staticmethod
     def json_validator(json_out, rc, element, expected_value):
