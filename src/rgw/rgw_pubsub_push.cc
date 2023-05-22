@@ -497,8 +497,8 @@ private:
   };
   CephContext* const cct;
   const std::string topic;
-  kafka::connection_ptr_t conn;
   const ack_level_t ack_level;
+  std::string conn_name;
 
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
@@ -519,21 +519,21 @@ private:
   class NoAckPublishCR : public RGWCoroutine {
   private:
     const std::string topic;
-    kafka::connection_ptr_t conn;
+    std::string conn_name;
     const std::string message;
 
   public:
     NoAckPublishCR(CephContext* cct,
               const std::string& _topic,
-              kafka::connection_ptr_t& _conn,
+              const std::string& _conn_name,
               const std::string& _message) :
       RGWCoroutine(cct),
-      topic(_topic), conn(_conn), message(_message) {}
+      topic(_topic), conn_name(_conn_name), message(_message) {}
 
     // send message to endpoint, without waiting for reply
     int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
-        const auto rc = kafka::publish(conn, topic, message);
+        const auto rc = kafka::publish(conn_name, topic, message);
         if (rc < 0) {
           return set_cr_error(rc);
         }
@@ -549,23 +549,23 @@ private:
   class AckPublishCR : public RGWCoroutine, public RGWIOProvider {
   private:
     const std::string topic;
-    kafka::connection_ptr_t conn;
+    std::string conn_name;
     const std::string message;
 
   public:
     AckPublishCR(CephContext* cct,
               const std::string& _topic,
-              kafka::connection_ptr_t& _conn,
+              const std::string& _conn_name,
               const std::string& _message) :
       RGWCoroutine(cct),
-      topic(_topic), conn(_conn), message(_message) {}
+      topic(_topic), conn_name(_conn_name), message(_message) {}
 
     // send message to endpoint, waiting for reply
     int operate(const DoutPrefixProvider *dpp) override {
       reenter(this) {
         yield {
           init_new_io(this);
-          const auto rc = kafka::publish_with_confirm(conn, 
+          const auto rc = kafka::publish_with_confirm(conn_name, 
               topic,
               message,
               std::bind(&AckPublishCR::request_complete, this, std::placeholders::_1));
@@ -610,28 +610,26 @@ public:
       CephContext* _cct) : 
         cct(_cct),
         topic(_topic),
-        conn(kafka::connect(_endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), args.get_optional("ca-location"))) ,
         ack_level(get_ack_level(args)) {
-    if (!conn) { 
+    if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), 
+          args.get_optional("ca-location"))) {
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
     }
   }
 
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {
-    ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
+      return new NoAckPublishCR(cct, topic, conn_name, json_format_pubsub_event(event));
     } else {
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
+      return new AckPublishCR(cct, topic, conn_name, json_format_pubsub_event(event));
     }
   }
   
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_s3_event& event, RGWDataSyncEnv* env) override {
-    ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return new NoAckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
+      return new NoAckPublishCR(cct, topic, conn_name, json_format_pubsub_event(event));
     } else {
-      return new AckPublishCR(cct, topic, conn, json_format_pubsub_event(event));
+      return new AckPublishCR(cct, topic, conn_name, json_format_pubsub_event(event));
     }
   }
 
@@ -690,12 +688,11 @@ public:
   };
 
   int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
-    ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn, topic, json_format_pubsub_event(event));
+      return kafka::publish(conn_name, topic, json_format_pubsub_event(event));
     } else {
       auto w = std::make_unique<Waiter>();
-      const auto rc = kafka::publish_with_confirm(conn, 
+      const auto rc = kafka::publish_with_confirm(conn_name, 
         topic,
         json_format_pubsub_event(event),
         [wp = w.get()](int r) { wp->finish(r); }
@@ -710,7 +707,7 @@ public:
 
   std::string to_str() const override {
     std::string str("Kafka Endpoint");
-    str += kafka::to_string(conn);
+    str += "\nBroker: " + conn_name;
     str += "\nTopic: " + topic;
     return str;
   }
