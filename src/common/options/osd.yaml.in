@@ -182,7 +182,7 @@ options:
   desc: Maximum concurrent scrubs on a single OSD
   fmt_desc: The maximum number of simultaneous scrub operations for
     a Ceph OSD Daemon.
-  default: 1
+  default: 3
   with_legacy: true
 - name: osd_scrub_during_recovery
   type: bool
