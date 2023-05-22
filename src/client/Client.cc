@@ -1379,22 +1379,23 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
     auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx);
 
+    string orig_dname;
     string dname;
     LeaseStat dlease;
     char dec_fname[NAME_MAX + FSCRYPT_KEY_SIZE]; /* some extra just in case */
 
     for (unsigned i=0; i<numdn; i++) {
-      decode(dname, p);
+      decode(orig_dname, p);
       dlease.decode(p, features);
       InodeStat ist(p, features);
 
-      ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
+      ldout(cct, 15) << "" << i << ": '" << orig_dname << "'" << dendl;
 
       if (fscrypt_denc) {
         char enc[NAME_MAX];
-        int len = fscrypt_fname_unarmor(dname.c_str(), dname.size(),
+        int len = fscrypt_fname_unarmor(orig_dname.c_str(), orig_dname.size(),
                                         enc, sizeof(enc));
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": base64 decoded fname orig len=" << dname.size() << " dest len=" << len << dendl;
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": base64 decoded fname orig len=" << orig_dname.size() << " dest len=" << len << dendl;
 
         int r = fscrypt_denc->decrypt(enc, len,
                                       dec_fname, sizeof(dec_fname));
@@ -1404,6 +1405,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
         } else {
           ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename" << dendl;
         }
+      } else {
+        dname = orig_dname;
       }
 
       Inode *in = add_update_inode(&ist, request->sent_stamp, session,
@@ -1429,7 +1432,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       if (hash_order) {
-	unsigned hash = ceph_frag_value(diri->hash_dentry_name(dname));
+	unsigned hash = ceph_frag_value(diri->hash_dentry_name(orig_dname));
 	if (hash != last_hash)
 	  readdir_offset = 2;
 	last_hash = hash;
