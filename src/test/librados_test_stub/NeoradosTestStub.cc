@@ -550,7 +550,7 @@ void RADOS::execute(const Object& o, const IOContext& ioc, WriteOp&& op,
   }
 
   auto completion = create_aio_completion(std::move(c));
-  auto r = io_ctx->aio_operate(std::string{o}, *ops, completion, &snapc, 0U);
+  auto r = io_ctx->aio_operate(std::string{o}, *ops, completion, &snapc, nullptr, 0U);
   ceph_assert(r == 0);
 }
 

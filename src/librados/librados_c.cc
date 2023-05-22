@@ -4048,7 +4048,7 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_write_op_operate)(
   ::ObjectOperation *oo = (::ObjectOperation *) write_op;
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
-  int retval = ctx->aio_operate(obj, oo, c, ctx->snapc, translate_flags(flags));
+  int retval = ctx->aio_operate(obj, oo, c, ctx->snapc, nullptr, translate_flags(flags));
   tracepoint(librados, rados_aio_write_op_operate_exit, retval);
   return retval;
 }
