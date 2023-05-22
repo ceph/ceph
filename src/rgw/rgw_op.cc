@@ -2309,6 +2309,22 @@ void RGWGetObj::execute(optional_yield y)
       filter = &*decompress;
   }
 
+  attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+  if (attr_iter != attrs.end()) {
+    try {
+      std::vector<rgw_zone_set_entry> zones;
+      auto p = attr_iter->second.cbegin();
+      decode(zones, p);
+      for (const auto& zone: zones) {
+        if (zone.zone == dst_zone_trace.zone) {
+          op_ret = -ERR_NOT_MODIFIED;
+          ldpp_dout(this, 4) << "Object already has been copied to this destination. Returning "
+            << op_ret << dendl;
+          goto done_err;
+        }
+      }
+    } catch (const buffer::error&) {}
+
   if (get_type() == RGW_OP_GET_OBJ && get_data) {
     op_ret = handle_cloudtier_obj(attrs, sync_cloudtiered);
     if (op_ret < 0) {
