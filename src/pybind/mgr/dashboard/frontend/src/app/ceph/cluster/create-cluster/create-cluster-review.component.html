@@ -29,12 +29,12 @@
         <tr>
           <td i18n
               class="bold">CPUs</td>
-          <td>{{ totalCPUs }}</td>
+          <td>{{ totalCPUs | empty }}</td>
         </tr>
         <tr>
           <td i18n
               class="bold">Memory</td>
-          <td>{{ totalMemory }}</td>
+          <td>{{ totalMemory | empty }}</td>
         </tr>
       </table>
     </fieldset>
