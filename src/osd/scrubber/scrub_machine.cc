@@ -538,11 +538,8 @@ sc::result WaitReplicas::react(const GotReplicas&)
       return transit<PendingTimer>();
 
     } else {
-
-      // maps_compare_n_cleanup() will arrange for MapsCompared event to be
-      // sent:
       scrbr->maps_compare_n_cleanup();
-      return discard_event();
+      return transit<WaitDigestUpdate>();
     }
   } else {
     return discard_event();

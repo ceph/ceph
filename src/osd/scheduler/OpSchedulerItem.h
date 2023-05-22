@@ -435,14 +435,6 @@ class PGScrubGotReplMaps : public PGScrubItem {
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-class PGScrubMapsCompared : public PGScrubItem {
- public:
-  PGScrubMapsCompared(spg_t pg, epoch_t epoch_queued)
-    : PGScrubItem{pg, epoch_queued, "PGScrubMapsCompared"}
-  {}
-  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
-};
-
 class PGRepScrub : public PGScrubItem {
  public:
   PGRepScrub(spg_t pg, epoch_t epoch_queued, Scrub::act_token_t op_token)

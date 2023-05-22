@@ -1868,12 +1868,6 @@ void OSDService::queue_scrub_got_repl_maps(PG* pg, Scrub::scrub_prio_t with_prio
   queue_scrub_event_msg<PGScrubGotReplMaps>(pg, with_priority);
 }
 
-void OSDService::queue_scrub_maps_compared(PG* pg, Scrub::scrub_prio_t with_priority)
-{
-  // Resulting scrub event: 'MapsCompared'
-  queue_scrub_event_msg<PGScrubMapsCompared>(pg, with_priority);
-}
-
 void OSDService::queue_scrub_replica_pushes(PG *pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'ReplicaPushesUpd'
