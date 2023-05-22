@@ -37,7 +37,7 @@ class RedfishSystem(System):
         return result
 
     def get_status(self):
-        return self._system['Status']
+        return self._system['status']
 
     def get_metadata(self):
         return self._system['metadata']
