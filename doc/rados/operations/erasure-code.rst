@@ -196,6 +196,8 @@ file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
 Erasure-coded pools and cache tiering
 -------------------------------------
 
+.. note:: Cache tiering is deprecated in Reef.
+
 Erasure-coded pools require more resources than replicated pools and
 lack some of the functionality supported by replicated pools (for example, omap).
 To overcome these limitations, one can set up a `cache tier <../cache-tiering>`_
