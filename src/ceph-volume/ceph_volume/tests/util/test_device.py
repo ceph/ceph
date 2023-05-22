@@ -592,7 +592,7 @@ class TestDeviceEncryption(object):
 
 class TestDeviceOrdering(object):
 
-    def setup(self):
+    def setup_method(self):
         self.data = {
                 "/dev/sda": {"removable": 0},
                 "/dev/sdb": {"removable": 1}, # invalid
