@@ -388,3 +388,15 @@ Note regarding different variables used in the code
 * a ``daemon_id`` is typically ``<service_id>.<hostname>.<random-string>``.
   (Not the case for e.g. OSDs. OSDs are always called OSD.N)
 * a ``daemon_name`` is ``<daemon_type>.<daemon_id>``
+
+
+Compiling cephadm
+=================
+
+Recent versions of cephadm are based on `Python Zip Application`_ support, and
+is "compiled" from Python source code files in the ceph tree. To create your
+own copy of the cephadm "binary" use the script located at
+``src/cephadm/build.py`` in the Ceph tree.  The command should take the form
+``./src/cephadm/build.py [output]``.
+
+.. _Python Zip Application: https://peps.python.org/pep-0441/
