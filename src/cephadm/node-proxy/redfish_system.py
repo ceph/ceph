@@ -45,13 +45,9 @@ class RedfishSystem(System):
     def get_storage(self):
         return self._system['storage']
 
-    def _process_redfish_system(self, redfish_system):
-        return redfish_system
-
     def _update_system(self):
         redfish_system = self.client.get_path(self.system_endpoint)
-        _system = self._process_redfish_system(redfish_system)
-        self._system = {**_system, **self._system}
+        self._system = {**redfish_system, **self._system}
 
     def _update_metadata(self):
         raise NotImplementedError()
