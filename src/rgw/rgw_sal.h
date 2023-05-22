@@ -884,6 +884,7 @@ class Object {
         const char* if_nomatch{nullptr};
         ceph::real_time* lastmod{nullptr};
         rgw_obj* target_obj{nullptr}; // XXX dang remove?
+        rgw_zone_set_entry* dst_zone_trace{nullptr};
       } params;
 
       virtual ~ReadOp() = default;
