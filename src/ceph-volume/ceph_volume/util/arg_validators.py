@@ -5,7 +5,7 @@ from ceph_volume import terminal, decorators, process
 from ceph_volume.util.device import Device
 from ceph_volume.util import disk
 from ceph_volume.util.encryption import set_dmcrypt_no_workqueue
-from ceph_volume import process, conf
+
 
 def valid_osd_id(val):
     return str(int(val))

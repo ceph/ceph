@@ -234,9 +234,17 @@ class Batch(object):
                   'are passed in DEVICES'),
         )
         parser.add_argument(
+            '--objectstore',
+            dest='objectstore',
+            help='The OSD objectstore.',
+            default='bluestore',
+            choices=['bluestore', 'seastore'],
+            type=str,
+        )
+        parser.add_argument(
             '--bluestore',
             action='store_true',
-            help='bluestore objectstore (default)',
+            help='bluestore objectstore (default). (DEPRECATED: use --objectstore instead)',
         )
         parser.add_argument(
             '--report',
@@ -323,6 +331,8 @@ class Batch(object):
             type=arg_validators.valid_osd_id
         )
         self.args = parser.parse_args(argv)
+        if self.args.bluestore:
+            self.args.objectstore = 'bluestore'
         self.parser = parser
         for dev_list in ['', 'db_', 'wal_']:
             setattr(self, '{}usable'.format(dev_list), [])
@@ -383,11 +393,6 @@ class Batch(object):
         if not self.args.devices:
             return self.parser.print_help()
 
-        # Default to bluestore here since defaulting it in add_argument may
-        # cause both to be True
-        if not self.args.bluestore:
-            self.args.bluestore = True
-
         if (self.args.auto and not self.args.db_devices and not
             self.args.wal_devices):
             self._sort_rotational_disks()
@@ -398,7 +403,7 @@ class Batch(object):
                                      self.args.db_devices,
                                      self.args.wal_devices)
 
-        plan = self.get_plan(self.args)
+        plan = self.get_deployment_layout()
 
         if self.args.report:
             self.report(plan)
@@ -425,43 +430,38 @@ class Batch(object):
         for osd in plan:
             args = osd.get_args(defaults)
             if self.args.prepare:
-                p = Prepare([])
-                p.safe_prepare(argparse.Namespace(**args))
+                p = Prepare([], args=argparse.Namespace(**args))
+                p.main()
             else:
-                c = Create([])
-                c.create(argparse.Namespace(**args))
+                c = Create([], args=argparse.Namespace(**args))
+                c.create()
 
-
-    def get_plan(self, args):
-        if args.bluestore:
-            plan = self.get_deployment_layout(args, args.devices, args.db_devices,
-                                              args.wal_devices)
-        return plan
-
-    def get_deployment_layout(self, args, devices, fast_devices=[],
-                              very_fast_devices=[]):
+    def get_deployment_layout(self):
         '''
         The methods here are mostly just organization, error reporting and
         setting up of (default) args. The heavy lifting code for the deployment
         layout can be found in the static get_*_osds and get_*_fast_allocs
         functions.
         '''
+        devices = self.args.devices
+        fast_devices = self.args.db_devices
+        very_fast_devices = self.args.wal_devices
         plan = []
         phys_devs, lvm_devs = separate_devices_from_lvs(devices)
         mlogger.debug(('passed data devices: {} physical,'
                        ' {} LVM').format(len(phys_devs), len(lvm_devs)))
 
-        plan.extend(get_physical_osds(phys_devs, args))
+        plan.extend(get_physical_osds(phys_devs, self.args))
 
-        plan.extend(get_lvm_osds(lvm_devs, args))
+        plan.extend(get_lvm_osds(lvm_devs, self.args))
 
         num_osds = len(plan)
         if num_osds == 0:
             mlogger.info('All data devices are unavailable')
             return plan
-        requested_osds = args.osds_per_device * len(phys_devs) + len(lvm_devs)
+        requested_osds = self.args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
-        if args.bluestore:
+        if self.args.objectstore == 'bluestore':
             fast_type = 'block_db'
         fast_allocations = self.fast_allocations(fast_devices,
                                                  requested_osds,
@@ -491,7 +491,7 @@ class Batch(object):
             if fast_devices:
                 osd.add_fast_device(*fast_allocations.pop(),
                                     type_=fast_type)
-            if very_fast_devices and args.bluestore:
+            if very_fast_devices and self.args.objectstore == 'bluestore':
                 osd.add_very_fast_device(*very_fast_allocations.pop())
         return plan
 
