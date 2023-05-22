@@ -1,6 +1,9 @@
 from threading import Thread
 import requests
 import time
+from util import logger
+
+log = logger(__name__, level=10)
 
 class Reporter:
     def __init__(self, system, observer_url):
