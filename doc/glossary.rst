@@ -12,12 +12,13 @@
 	:ref:`BlueStore<rados_config_storage_devices_bluestore>`
                 OSD BlueStore is a storage back end used by OSD daemons, and
                 was designed specifically for use with Ceph. BlueStore was
-                introduced in the Ceph Kraken release. In the Ceph Luminous
-                release, BlueStore became Ceph's default storage back end,
-                supplanting FileStore. BlueStore stores objects directly on 
-                Ceph block devices without any file system interface. 
-                Since Luminous (12.2), BlueStore has been Ceph's default 
-                and recommended storage back end.
+                introduced in the Ceph Kraken release. The Luminous release of
+                Ceph promoted BlueStore to the default OSD back end,
+                supplanting FileStore. As of the Reef release, FileStore is no
+                longer available as a storage backend.
+                
+                BlueStore stores objects directly on Ceph block devices without
+                a mounted file system.  
 
         Bucket
                 In the context of :term:`RGW`, a bucket is a group of objects.
