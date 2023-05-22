@@ -13015,19 +13015,14 @@ void MDCache::enqueue_scrub(
 
   bool is_internal = false;
   std::string tag_str(tag);
-  C_MDS_EnqueueScrub *cs;
-  if ((path == "~mdsdir" && scrub_mdsdir)) {
+  if (tag_str.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    tag_str = uuid_gen.to_string();
     is_internal = true;
-    cs = new C_MDS_EnqueueScrub(tag_str, f, fin, false);
-  } else {
-    if (tag_str.empty()) {
-      uuid_d uuid_gen;
-      uuid_gen.generate_random();
-      tag_str = uuid_gen.to_string();
-      is_internal = true;
-    }
-    cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
   }
+
+  C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
   cs->header = std::make_shared<ScrubHeader>(tag_str, is_internal, force,
                                              recursive, repair, scrub_mdsdir);
 
