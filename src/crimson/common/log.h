@@ -82,7 +82,7 @@ static inline seastar::log_level to_log_level(int level) {
 #define LOGDPP(level_, MSG, dpp, ...) \
   LOCAL_LOGGER.log(level_, "{} {}: " MSG, dpp, FNAME , ##__VA_ARGS__)
 #define TRACEDPP(...) LOGDPP(seastar::log_level::trace, __VA_ARGS__)
-#define DEBUGDPP(...) LOGDPP(seastar::log_level::trace, __VA_ARGS__)
-#define INFODPP(...) LOGDPP(seastar::log_level::trace, __VA_ARGS__)
-#define WARNDPP(...) LOGDPP(seastar::log_level::trace, __VA_ARGS__)
-#define ERRORDPP(...) LOGDPP(seastar::log_level::trace, __VA_ARGS__)
+#define DEBUGDPP(...) LOGDPP(seastar::log_level::debug, __VA_ARGS__)
+#define INFODPP(...) LOGDPP(seastar::log_level::info, __VA_ARGS__)
+#define WARNDPP(...) LOGDPP(seastar::log_level::warn, __VA_ARGS__)
+#define ERRORDPP(...) LOGDPP(seastar::log_level::error, __VA_ARGS__)
