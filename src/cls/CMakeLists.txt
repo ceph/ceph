@@ -201,7 +201,7 @@ if (WITH_RADOSGW)
     rgw/cls_rgw_types.cc
     ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
   add_library(cls_rgw SHARED ${cls_rgw_srcs})
-  target_link_libraries(cls_rgw json_spirit)
+  target_link_libraries(cls_rgw fmt json_spirit)
   target_include_directories(cls_rgw
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
@@ -359,6 +359,7 @@ set_target_properties(cls_fifo PROPERTIES
   SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
+target_link_libraries(cls_fifo fmt)
 install(TARGETS cls_fifo DESTINATION ${cls_dir})
 
 # cls_test_remote_reads
