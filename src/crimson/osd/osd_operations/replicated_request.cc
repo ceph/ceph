@@ -58,11 +58,23 @@ seastar::future<> RepRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
   logger().debug("{}: RepRequest::with_pg", *this);
-
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    return pg->handle_rep_op(req);
-  }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
+    logger().debug("{}: pg present", *this);
+    return this->template enter_stage<interruptor>(pp(*pg).await_map
+    ).then_interruptible([this, pg] {
+      return this->template with_blocking_event<
+        PG_OSDMapGate::OSDMapBlocker::BlockingEvent
+      >([this, pg](auto &&trigger) {
+        return pg->osdmap_gate.wait_for_map(
+          std::move(trigger), req->min_epoch);
+      });
+    }).then_interruptible([this, pg] (auto) {
+      return pg->handle_rep_op(req);
+    });
+  }, [ref](std::exception_ptr) {
+    return seastar::now();
+  }, pg);
 }
 
 }
