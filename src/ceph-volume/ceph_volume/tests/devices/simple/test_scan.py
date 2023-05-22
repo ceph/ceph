@@ -5,7 +5,7 @@ from ceph_volume.devices.simple import scan
 
 class TestGetContents(object):
 
-    def setup(self):
+    def setup_method(self):
         self.magic_file_name = '/tmp/magic-file'
 
     def test_multiple_lines_are_left_as_is(self, fake_filesystem):

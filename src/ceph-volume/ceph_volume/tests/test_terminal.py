@@ -100,7 +100,7 @@ def stream():
 
 class TestWriteUnicode(object):
 
-    def setup(self):
+    def setup_method(self):
         self.octpus_and_squid_en = u'octpus and squid'
         self.octpus_and_squid_zh = u'章鱼和鱿鱼'
         self.message = self.octpus_and_squid_en + self.octpus_and_squid_zh

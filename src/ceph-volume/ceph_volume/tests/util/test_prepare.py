@@ -116,31 +116,6 @@ class TestFormatDevice(object):
         assert expected == fake_run.calls[0]['args'][0]
 
 
-mkfs_filestore_flags = [
-    'ceph-osd',
-    '--cluster',
-    '--osd-objectstore', 'filestore',
-    '--mkfs',
-    '-i',
-    '--monmap',
-    '--keyfile', '-', # goes through stdin
-    '--osd-data',
-    '--osd-journal',
-    '--osd-uuid',
-    '--setuser', 'ceph',
-    '--setgroup', 'ceph'
-]
-
-
-class TestOsdMkfsFilestore(object):
-
-    @pytest.mark.parametrize('flag', mkfs_filestore_flags)
-    def test_keyring_is_used(self, fake_call, monkeypatch, flag):
-        monkeypatch.setattr(system, 'chown', lambda path: True)
-        prepare.osd_mkfs_filestore(1, 'asdf', keyring='secret')
-        assert flag in fake_call.calls[0]['args'][0]
-
-
 class TestOsdMkfsBluestore(object):
 
     def test_keyring_is_added(self, fake_call, monkeypatch):
@@ -289,35 +264,6 @@ class TestNormalizeFlags(object):
         assert ','.join(result) == 'auto,discard,exec,rw'
 
 
-class TestMkfsFilestore(object):
-
-    def test_non_zero_exit_status(self, stub_call, monkeypatch):
-        conf.cluster = 'ceph'
-        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
-        stub_call(([], [], 1))
-        with pytest.raises(RuntimeError) as error:
-            prepare.osd_mkfs_filestore('1', 'asdf-1234', 'keyring')
-        assert "Command failed with exit code 1" in str(error.value)
-
-    def test_non_zero_exit_formats_command_correctly(self, stub_call, monkeypatch):
-        conf.cluster = 'ceph'
-        monkeypatch.setattr('ceph_volume.util.prepare.system.chown', lambda x: True)
-        stub_call(([], [], 1))
-        with pytest.raises(RuntimeError) as error:
-            prepare.osd_mkfs_filestore('1', 'asdf-1234', 'keyring')
-        expected = ' '.join([
-            'ceph-osd',
-            '--cluster',
-            'ceph',
-            '--osd-objectstore', 'filestore', '--mkfs',
-            '-i', '1', '--monmap', '/var/lib/ceph/osd/ceph-1/activate.monmap',
-            '--keyfile', '-', '--osd-data', '/var/lib/ceph/osd/ceph-1/',
-            '--osd-journal', '/var/lib/ceph/osd/ceph-1/journal',
-            '--osd-uuid', 'asdf-1234',
-            '--setuser', 'ceph', '--setgroup', 'ceph'])
-        assert expected in str(error.value)
-
-
 class TestMkfsBluestore(object):
 
     def test_non_zero_exit_status(self, stub_call, monkeypatch):
@@ -344,57 +290,3 @@ class TestMkfsBluestore(object):
             '--osd-uuid', 'asdf-1234',
             '--setuser', 'ceph', '--setgroup', 'ceph'])
         assert expected in str(error.value)
-
-
-class TestGetJournalSize(object):
-
-    def test_undefined_size_fallbacks_formatted(self, conf_ceph_stub):
-        conf_ceph_stub(dedent("""
-        [global]
-        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
-        """))
-        result = prepare.get_journal_size()
-        assert result == '5G'
-
-    def test_undefined_size_fallbacks_unformatted(self, conf_ceph_stub):
-        conf_ceph_stub(dedent("""
-        [global]
-        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
-        """))
-        result = prepare.get_journal_size(lv_format=False)
-        assert result.gb.as_int() == 5
-
-    def test_defined_size_unformatted(self, conf_ceph_stub):
-        conf_ceph_stub(dedent("""
-        [global]
-        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
-
-        [osd]
-        osd journal size = 10240
-        """))
-        result = prepare.get_journal_size(lv_format=False)
-        assert result.gb.as_int() == 10
-
-    def test_defined_size_formatted(self, conf_ceph_stub):
-        conf_ceph_stub(dedent("""
-        [global]
-        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
-
-        [osd]
-        osd journal size = 10240
-        """))
-        result = prepare.get_journal_size()
-        assert result == '10G'
-
-    def test_refuse_tiny_journals(self, conf_ceph_stub):
-        conf_ceph_stub(dedent("""
-        [global]
-        fsid = a25d19a6-7d57-4eda-b006-78e35d2c4d9f
-
-        [osd]
-        osd journal size = 1024
-        """))
-        with pytest.raises(RuntimeError) as error:
-            prepare.get_journal_size()
-        assert 'journal sizes must be larger' in str(error.value)
-        assert 'detected: 1024.00 MB' in str(error.value)

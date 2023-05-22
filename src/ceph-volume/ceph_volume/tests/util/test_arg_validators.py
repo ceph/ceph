@@ -8,7 +8,7 @@ from mock.mock import patch, MagicMock
 
 class TestOSDPath(object):
 
-    def setup(self):
+    def setup_method(self):
         self.validator = arg_validators.OSDPath()
 
     def test_is_not_root(self, monkeypatch):
@@ -34,7 +34,7 @@ class TestOSDPath(object):
 
 class TestExcludeGroupOptions(object):
 
-    def setup(self):
+    def setup_method(self):
         self.parser = argparse.ArgumentParser()
 
     def test_flags_in_one_group(self):
@@ -79,7 +79,7 @@ class TestExcludeGroupOptions(object):
 
 class TestValidDevice(object):
 
-    def setup(self, fake_filesystem):
+    def setup_method(self, fake_filesystem):
         self.validator = arg_validators.ValidDevice()
 
     @patch('ceph_volume.util.arg_validators.disk.has_bluestore_label', return_value=False)
@@ -113,7 +113,7 @@ class TestValidDevice(object):
             self.validator('/dev/foo')
 
 class TestValidZapDevice(object):
-    def setup(self):
+    def setup_method(self):
         self.validator = arg_validators.ValidZapDevice()
 
     @patch('ceph_volume.util.arg_validators.Device')
@@ -146,7 +146,7 @@ class TestValidZapDevice(object):
         assert self.validator('/dev/foo')
 
 class TestValidDataDevice(object):
-    def setup(self):
+    def setup_method(self):
         self.validator = arg_validators.ValidDataDevice()
 
     @patch('ceph_volume.util.arg_validators.Device')
@@ -194,7 +194,7 @@ class TestValidDataDevice(object):
             self.validator('/dev/foo')
 
 class TestValidRawDevice(object):
-    def setup(self):
+    def setup_method(self):
         self.validator = arg_validators.ValidRawDevice()
 
     @patch('ceph_volume.util.arg_validators.Device')
@@ -268,7 +268,7 @@ class TestValidRawDevice(object):
             assert self.validator('/dev/foo')
 
 class TestValidBatchDevice(object):
-    def setup(self):
+    def setup_method(self):
         self.validator = arg_validators.ValidBatchDevice()
 
     @patch('ceph_volume.util.arg_validators.Device')
@@ -303,7 +303,7 @@ class TestValidBatchDevice(object):
         assert self.validator('/dev/foo')
 
 class TestValidBatchDataDevice(object):
-    def setup(self):
+    def setup_method(self):
         self.validator = arg_validators.ValidBatchDataDevice()
 
     @patch('ceph_volume.util.arg_validators.Device')
@@ -340,7 +340,7 @@ class TestValidBatchDataDevice(object):
 
 class TestValidFraction(object):
 
-    def setup(self):
+    def setup_method(self):
         self.validator = arg_validators.ValidFraction()
 
     def test_fraction_is_valid(self, fake_call):
