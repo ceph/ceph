@@ -355,17 +355,30 @@ std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  int getDirReturn = source->driver->get_block_dir()->get_value(source->driver->get_cache_block());
+  int ret = source->driver->get_policy_driver->cachePolicy->get_block(); 
 
-  if (getDirReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation failed." << dendl;
+  /* Local cache check */
+  if (0/*source->driver->get_policy_driver()->cacheDriver->key_exists(source->get_name())*/) { // Entire object for now -Sam
+    read = "local";
   } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation succeeded." << dendl;
+    /* Directory check */
+    int getDirReturn = source->driver->get_block_dir()->get_value(source->driver->get_cache_block());
+
+    if (getDirReturn >= 0) {
+      ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation succeeded." << dendl;
+      read = "remote";
+    } else {
+      /* Backend store retrieval */
+      ldpp_dout(dpp, 20) << "D4N Filter: Directory get operation failed." << dendl;
+      read = "backend";
+    }
   }
 
-  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block()/*, cacheNode*/);
-  // check for successful return -Sam
 
+  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block()/*, cacheNode*/);
+  return policyRet;
+  // check for successful return -Sam
+/*
   rgw::sal::Attrs newAttrs;
   std::vector< std::pair<std::string, std::string> > newMetadata;
   int getObjReturn = source->driver->get_d4n_cache()->get_attrs(source->get_key().get_oid(), 
@@ -376,9 +389,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   
   if (getObjReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
-  } else {
+  } else {  */
     /* Set metadata locally */
-    RGWQuotaInfo quota_info;
+/*    RGWQuotaInfo quota_info;
     RGWObjState* astate;
     source->get_obj_state(dpp, &astate, y);
 
@@ -410,9 +423,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 
     source->get_bucket()->get_owner()->set_info(quota_info);
     source->set_obj_state(*astate);
-   
+*/   
     /* Set attributes locally */
-    int set_attrsReturn = source->set_attrs(newAttrs);
+/*    int set_attrsReturn = source->set_attrs(newAttrs);
 
     if (set_attrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
@@ -420,6 +433,31 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation succeeded." << dendl;
     }   
   }
+
+  return ret;*/
+}
+
+int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
+                        RGWGetDataCB* cb, optional_yield y) 
+{
+  int ret = -1;
+  bufferlist bl;
+  uint64_t len = end - ofs + 1;
+
+  if (read == "local") {
+    //ret = source->driver->policyDriver->cacheNode->get(dpp, source->get_obj_name(), ofs, len, bl, source->get_attrs());
+    cb->handle_data(bl, ofs, len);
+  } else if (read == "remote") {
+
+    cb->handle_data(bl, ofs, len);
+  } else if (read == "writeback") {
+
+    cb->handle_data(bl, ofs, len);
+  } else if (read == "backend") {
+    ret = next->iterate(dpp, ofs, end, cb, y);
+
+  } else
+    return -1;
 
   return ret;
 }

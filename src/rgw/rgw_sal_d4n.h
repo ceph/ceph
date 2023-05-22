@@ -117,12 +117,15 @@ class D4NFilterObject : public FilterObject {
   public:
     struct D4NFilterReadOp : FilterReadOp {
       D4NFilterObject* source;
+      std::string read;
 
       D4NFilterReadOp(std::unique_ptr<ReadOp> _next, D4NFilterObject* _source) : FilterReadOp(std::move(_next)),
 										 source(_source) {}
       virtual ~D4NFilterReadOp() = default;
 
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
+        RGWGetDataCB* cb, optional_yield y) override;
     };
 
     struct D4NFilterDeleteOp : FilterDeleteOp {
