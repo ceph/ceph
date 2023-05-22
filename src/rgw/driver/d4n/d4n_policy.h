@@ -52,7 +52,7 @@ class LFUDAPolicy : public CachePolicy {
 class PolicyDriver {
   public:
     CachePolicy* cachePolicy;
-    //CacheDriver* cacheDriver;
+    //CacheDriver* cacheDriver; // might place elsewhere -Sam
 
     PolicyDriver(std::string _policyName) : policyName(_policyName) {}
 
