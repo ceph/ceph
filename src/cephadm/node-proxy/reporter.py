@@ -23,6 +23,19 @@ class Reporter:
             # scenario probably we should just send the sub-parts
             # that have changed to minimize the traffic in
             # dense clusters
-            d = self.system.get_system()
-            requests.post(self.observer_url, json=d)
-            time.sleep(10)
+            if self.system.data_ready:
+                log.debug("waiting for a lock.")
+                try:
+                    self.system.lock.acquire()
+                    log.debug("lock acquired.")
+                    if not self.system.get_system() == self.system.previous_data:
+                        self.system.previous_data = self.system.get_system()
+                        log.info('data has changed since last iteration.')
+                        d = self.system.get_system()
+                        requests.post(f"{self.observer_url}/fake_endpoint", json=d)
+                    else:
+                        log.info('no diff, not sending data to the mgr.')
+                finally:
+                    self.system.lock.release()
+                    log.debug("lock released.")
+            time.sleep(20)
