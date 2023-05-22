@@ -2,7 +2,6 @@ from system import System
 from redfish_client import RedFishClient
 from threading import Thread
 from time import sleep
-from flask import request
 from util import logger
 
 log = logger(__name__)
