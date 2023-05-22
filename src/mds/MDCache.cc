@@ -12960,24 +12960,19 @@ class C_MDS_EnqueueScrub : public Context
   std::string tag;
   Formatter *formatter;
   Context *on_finish;
-  bool dump_values;
 public:
   ScrubHeaderRef header;
-  C_MDS_EnqueueScrub(std::string_view tag, Formatter *f, Context *fin,
-                     bool dump_values = true) :
-    tag(tag), formatter(f), on_finish(fin), dump_values(dump_values),
-    header(nullptr) {}
+  C_MDS_EnqueueScrub(std::string_view tag, Formatter *f, Context *fin) :
+    tag(tag), formatter(f), on_finish(fin), header(nullptr) {}
 
   void finish(int r) override {
-    if (dump_values) {
-      formatter->open_object_section("results");
-      formatter->dump_int("return_code", r);
-      if (r == 0) {
-        formatter->dump_string("scrub_tag", tag);
-        formatter->dump_string("mode", "asynchronous");
-      }
-      formatter->close_section();
+    formatter->open_object_section("results");
+    formatter->dump_int("return_code", r);
+    if (r == 0) {
+      formatter->dump_string("scrub_tag", tag);
+      formatter->dump_string("mode", "asynchronous");
     }
+    formatter->close_section();
 
     r = 0;
     if (on_finish)
