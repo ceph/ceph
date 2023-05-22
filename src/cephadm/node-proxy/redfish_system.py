@@ -1,6 +1,6 @@
 from system import System
 from redfish_client import RedFishClient
-from threading import Thread
+from threading import Thread, Lock
 from time import sleep
 from util import logger
 
@@ -19,6 +19,9 @@ class RedfishSystem(System):
         self.run = False
         self.thread = None
         self.start_client()
+        self.data_ready = False
+        self.previous_data = {}
+        self.lock = Lock()
 
     def start_client(self):
         log.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
@@ -85,15 +88,23 @@ class RedfishSystem(System):
         #  - caching logic
         try:
             while self.run:
-                self._update_system()
-                # following calls in theory can be done in parallel
-                self._update_metadata()
-                self._update_memory()
-                self._update_power()
-                self._update_network()
-                self._update_processors()
-                self._update_storage()
-                sleep(3)
+                log.debug("waiting for a lock.")
+                self.lock.acquire()
+                log.debug("lock acquired.")
+                try:
+                    self._update_system()
+                    # following calls in theory can be done in parallel
+                    self._update_metadata()
+                    self._update_memory()
+                    self._update_power()
+                    self._update_network()
+                    self._update_processors()
+                    self._update_storage()
+                    self.data_ready = True
+                    sleep(5)
+                finally:
+                    self.lock.release()
+                    log.debug("lock released.")
         # Catching 'Exception' is probably not a good idea (devel only)
         except Exception as e:
             log.error(f"Error detected, logging out from redfish api.\n{e}")
