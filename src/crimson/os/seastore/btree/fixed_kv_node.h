@@ -206,7 +206,7 @@ struct FixedKVInternalNode
   /**
    * Internal relative addresses on read or in memory prior to commit
    * are either record or block relative depending on whether this
-   * physical node is is_initial_pending() or just is_pending().
+   * physical node is is_initial_pending() or just is_mutable().
    *
    * User passes appropriate base depending on lifecycle and
    * resolve_relative_addrs fixes up relative internal references
