@@ -272,17 +272,21 @@ completely optional, and disabled by default.::
 Leaderboard
 -----------
 
-Users who are interested in participating in a leaderboard in the `public
-dashboards <https://telemetry-public.ceph.com/>`_ can do so with::
+To participate in a leaderboard in the `public dashboards
+<https://telemetry-public.ceph.com/>`_, run the following command:
 
-  ceph config set mgr mgr/telemetry/leaderboard true
+.. prompt:: bash $
 
-The leaderboard displays basic information about the cluster, like total
-storage capacity, number of OSDs, etc. A description of the cluster can be
-added with::
+   ceph config set mgr mgr/telemetry/leaderboard true
 
-  ceph config set mgr mgr/telemetry/leaderboard_description 'Ceph cluster for Computational Biology at the University of XYZ'
+The leaderboard displays basic information about the cluster. This includes the
+total storage capacity and the number of OSDs. To add a description of the
+cluster, run a command of the following form: 
 
-In case the 'ident' channel is enabled, its details will not be displayed in
-the leaderboard.
+.. prompt:: bash $
+
+   ceph config set mgr mgr/telemetry/leaderboard_description 'Ceph cluster for Computational Biology at the University of XYZ'
+
+If the ``ident`` channel is enabled, its details will not be displayed in the
+leaderboard.
 
