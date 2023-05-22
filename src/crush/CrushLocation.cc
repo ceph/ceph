@@ -5,9 +5,6 @@
 
 #include "CrushLocation.h"
 #include "CrushWrapper.h"
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-#include "common/SubProcess.h"
-#endif
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -16,7 +13,7 @@
 #include "include/compat.h"
 #include "include/str_list.h"
 
-namespace TOPNSPC::crush {
+namespace ceph::crush {
 
 int CrushLocation::update_from_conf()
 {

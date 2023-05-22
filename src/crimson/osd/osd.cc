@@ -55,6 +55,7 @@
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
+#include "crimson/crush/CrushLocation.h"
 
 namespace {
   seastar::logger& logger() {
@@ -556,15 +557,21 @@ seastar::future<> OSD::_add_me_to_crush()
     }
   };
   return get_weight().then([this](auto weight) {
-    const crimson::crush::CrushLocation loc{make_unique<CephContext>().get()};
-    logger().info("{} crush location is {}", __func__, loc);
-    string cmd = fmt::format(R"({{
-      "prefix": "osd crush create-or-move",
-      "id": {},
-      "weight": {:.4f},
-      "args": [{}]
-    }})", whoami, weight, loc);
-    return monc->run_command(std::move(cmd), {});
+    const crimson::crush::CrushLocation loc;
+    return seastar::do_with(
+      std::move(loc),
+      [this, weight] (crimson::crush::CrushLocation& loc) {
+      return loc.init_on_startup().then([this, weight, &loc]() {
+        logger().info("crush location is {}", loc);
+        string cmd = fmt::format(R"({{
+          "prefix": "osd crush create-or-move",
+          "id": {},
+          "weight": {:.4f},
+          "args": [{}]
+        }})", whoami, weight, loc);
+        return monc->run_command(std::move(cmd), {});
+      });
+    });
   }).then([](auto&& command_result) {
     [[maybe_unused]] auto [code, message, out] = std::move(command_result);
     if (code) {
