@@ -54,14 +54,14 @@ class TestBatch(object):
                        devices=devs,
                        db_devices=[],
                        wal_devices=[],
-                       bluestore=True,
+                       objectstore='bluestore',
                        block_db_size="1G",
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
                       )
         b = batch.Batch([])
-        plan = b.get_plan(args)
         b.args = args
+        plan = b.get_deployment_layout()
         b.report(plan)
 
     @pytest.mark.parametrize('format_', ['json', 'json-pretty'])
