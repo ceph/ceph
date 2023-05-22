@@ -313,8 +313,11 @@ int send_map_request(std::string arguments) {
     return -EINVAL;
   }
   if (reply.status) {
-    derr << "The ceph service failed to map the image. Error: "
-         << reply.status << dendl;
+    derr << "The ceph service failed to map the image. "
+         << "Check the log file or pass '-f' (foreground mode) "
+         << "for additional information. "
+         << "Error: " << cpp_strerror(reply.status)
+         << dendl;
   }
 
   return reply.status;
