@@ -5449,8 +5449,10 @@ def finish_bootstrap_config(
         cli(['config', 'set', 'global', 'container_image', f'{ctx.image}'])
 
     if mon_network:
-        logger.info(f'Setting mon public_network to {mon_network}')
-        cli(['config', 'set', 'mon', 'public_network', mon_network])
+        cp = read_config(ctx.config)
+        cfg_section = 'global' if cp.has_option('global', 'public_network') else 'mon'
+        logger.info(f'Setting public_network to {mon_network} in {cfg_section} config section')
+        cli(['config', 'set', cfg_section, 'public_network', mon_network])
 
     if cluster_network:
         logger.info(f'Setting cluster_network to {cluster_network}')
