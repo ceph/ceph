@@ -138,6 +138,7 @@
   `ceph config set mgr mgr/telemetry/leaderboard_description ‘Cluster description’`.
 * CEPHFS: After recovering a Ceph File System post following the disaster recovery
   procedure, the recovered files under `lost+found` directory can now be deleted.
+* core: cache-tiering is now deprecated.
 
 >=17.2.1
 
