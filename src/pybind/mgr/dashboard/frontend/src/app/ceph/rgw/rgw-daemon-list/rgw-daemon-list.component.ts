@@ -34,6 +34,11 @@ export class RgwDaemonListComponent extends ListWithDetails implements OnInit {
     this.grafanaPermission = this.authStorageService.getPermissions().grafana;
     this.columns = [
       {
+        name: $localize`ID`,
+        prop: 'id',
+        flexGrow: 2
+      },
+      {
         name: $localize`Hostname`,
         prop: 'server_hostname',
         flexGrow: 2
