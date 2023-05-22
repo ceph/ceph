@@ -50,6 +50,20 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph_test_libcephfs_suidsgid
     DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+  add_executable(ceph_test_libcephfs_snapsize
+    main.cc
+    snapsize.cc
+  )
+  target_link_libraries(ceph_test_libcephfs_snapsize
+    ceph-common
+    cephfs
+    ${UNITTEST_LIBS}
+    ${EXTRALIBS}
+    ${CMAKE_DL_LIBS}
+    )
+  install(TARGETS ceph_test_libcephfs_snapsize
+    DESTINATION ${CMAKE_INSTALL_BINDIR})
+
   add_executable(ceph_test_libcephfs_newops
     main.cc
     newops.cc
