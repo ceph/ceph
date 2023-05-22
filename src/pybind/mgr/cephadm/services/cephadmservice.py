@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
-from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec
+from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec, MONSpec
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from mgr_util import build_url, merge_dicts
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
@@ -599,22 +599,29 @@ class MonService(CephService):
 
         return daemon_spec
 
-    def _check_safe_to_destroy(self, mon_id: str) -> None:
+    def config(self, spec: ServiceSpec) -> None:
+        assert self.TYPE == spec.service_type
+        self.set_crush_locations(self.mgr.cache.get_daemons_by_type('mon'), spec)
+
+    def _get_quorum_status(self) -> Dict[Any, Any]:
         ret, out, err = self.mgr.check_mon_command({
             'prefix': 'quorum_status',
         })
         try:
             j = json.loads(out)
-        except Exception:
-            raise OrchestratorError('failed to parse quorum status')
+        except Exception as e:
+            raise OrchestratorError(f'failed to parse mon quorum status: {e}')
+        return j
 
-        mons = [m['name'] for m in j['monmap']['mons']]
+    def _check_safe_to_destroy(self, mon_id: str) -> None:
+        quorum_status = self._get_quorum_status()
+        mons = [m['name'] for m in quorum_status['monmap']['mons']]
         if mon_id not in mons:
             logger.info('Safe to remove mon.%s: not in monmap (%s)' % (
                 mon_id, mons))
             return
         new_mons = [m for m in mons if m != mon_id]
-        new_quorum = [m for m in j['quorum_names'] if m != mon_id]
+        new_quorum = [m for m in quorum_status['quorum_names'] if m != mon_id]
         if len(new_quorum) > len(new_mons) / 2:
             logger.info('Safe to remove mon.%s: new quorum should be %s (from %s)' %
                         (mon_id, new_quorum, new_mons))
@@ -640,6 +647,66 @@ class MonService(CephService):
         # Do not remove the mon keyring.
         # super().post_remove(daemon)
         pass
+
+    def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
+        daemon_spec.final_config, daemon_spec.deps = super().generate_config(daemon_spec)
+
+        # realistically, we expect there to always be a mon spec
+        # in a real deployment, but the way teuthology deploys some daemons
+        # it's possible there might not be. For that reason we need to
+        # verify the service is present in the spec store.
+        if daemon_spec.service_name in self.mgr.spec_store:
+            mon_spec = cast(MONSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+            if mon_spec.crush_locations:
+                if daemon_spec.host in mon_spec.crush_locations:
+                    # the --crush-location flag only supports a single bucket=loc pair so
+                    # others will have to be handled later. The idea is to set the flag
+                    # for the first bucket=loc pair in the list in order to facilitate
+                    # replacing a tiebreaker mon (https://docs.ceph.com/en/quincy/rados/operations/stretch-mode/#other-commands)
+                    c_loc = mon_spec.crush_locations[daemon_spec.host][0]
+                    daemon_spec.final_config['crush_location'] = c_loc
+
+        return daemon_spec.final_config, daemon_spec.deps
+
+    def set_crush_locations(self, daemon_descrs: List[DaemonDescription], spec: ServiceSpec) -> None:
+        logger.debug('Setting mon crush locations from spec')
+        if not daemon_descrs:
+            return
+        assert self.TYPE == spec.service_type
+        mon_spec = cast(MONSpec, spec)
+
+        if not mon_spec.crush_locations:
+            return
+
+        quorum_status = self._get_quorum_status()
+        mons_in_monmap = [m['name'] for m in quorum_status['monmap']['mons']]
+        for dd in daemon_descrs:
+            assert dd.daemon_id is not None
+            assert dd.hostname is not None
+            if dd.hostname not in mon_spec.crush_locations:
+                continue
+            if dd.daemon_id not in mons_in_monmap:
+                continue
+            # expected format for crush_locations from the quorum status is
+            # {bucket1=loc1,bucket2=loc2} etc. for the number of bucket=loc pairs
+            try:
+                current_crush_locs = [m['crush_location'] for m in quorum_status['monmap']['mons'] if m['name'] == dd.daemon_id][0]
+            except (KeyError, IndexError) as e:
+                logger.warning(f'Failed setting crush location for mon {dd.daemon_id}: {e}\n'
+                               'Mon may not have a monmap entry yet. Try re-applying mon spec once mon is confirmed up.')
+            desired_crush_locs = '{' + ','.join(mon_spec.crush_locations[dd.hostname]) + '}'
+            logger.debug(f'Found spec defined crush locations for mon on {dd.hostname}: {desired_crush_locs}')
+            logger.debug(f'Current crush locations for mon on {dd.hostname}: {current_crush_locs}')
+            if current_crush_locs != desired_crush_locs:
+                logger.info(f'Setting crush location for mon {dd.daemon_id} to {desired_crush_locs}')
+                try:
+                    ret, out, err = self.mgr.check_mon_command({
+                        'prefix': 'mon set_location',
+                        'name': dd.daemon_id,
+                        'args': mon_spec.crush_locations[dd.hostname]
+                    })
+                except Exception as e:
+                    logger.error(f'Failed setting crush location for mon {dd.daemon_id}: {e}')
 
 
 class MgrService(CephService):

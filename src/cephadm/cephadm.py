@@ -6157,8 +6157,21 @@ def command_deploy(ctx):
         uid, gid = extract_uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
+        config_json: Optional[Dict[str, str]] = None
+        if 'config_json' in ctx and ctx.config_json:
+            config_json = get_parm(ctx.config_json)
+
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
                                      ptrace=ctx.allow_ptrace)
+
+        if daemon_type == 'mon' and config_json is not None:
+            if 'crush_location' in config_json:
+                c_loc = config_json['crush_location']
+                # was originally "c.args.extend(['--set-crush-location', c_loc])"
+                # but that doesn't seem to persist in the object after it's passed
+                # in further function calls
+                c.args = c.args + ['--set-crush-location', c_loc]
+
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,
                       osd_fsid=ctx.osd_fsid,
