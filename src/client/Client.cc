@@ -8553,7 +8553,12 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     st->st_blocks = 1;
 #endif
   } else {
-    st->st_size = in->size;
+    if (!in->fscrypt_file.empty() &&
+      in->fscrypt_file.size() >= sizeof(ceph_le64)) {
+      st->st_size = *(ceph_le64 *)in->fscrypt_file.data();
+    } else {
+      st->st_size = in->size;
+    }
 #ifndef _WIN32
     st->st_blocks = (in->size + 511) >> 9;
 #endif
