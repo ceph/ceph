@@ -395,7 +395,7 @@ Compiling cephadm
 =================
 
 Recent versions of cephadm are based on `Python Zip Application`_ support, and
-is "compiled" from Python source code files in the ceph tree. To create your
+are "compiled" from Python source code files in the ceph tree. To create your
 own copy of the cephadm "binary" use the script located at
 ``src/cephadm/build.py`` in the Ceph tree.  The command should take the form
 ``./src/cephadm/build.py [output]``.
