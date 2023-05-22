@@ -204,10 +204,12 @@ public:
 
   void register_client(std::string_view name, entity_addrvec_t addrs)
   {
+    std::lock_guard l(lock);
     clients.emplace(std::string(name), std::move(addrs));
   }
   void unregister_client(std::string_view name, const entity_addrvec_t& addrs)
   {
+    std::lock_guard l(lock);
     auto itp = clients.equal_range(std::string(name));
     for (auto it = itp.first; it != itp.second; ++it) {
       if (it->second == addrs) {
@@ -219,12 +221,8 @@ public:
 
   auto get_clients() const
   {
-    std::scoped_lock l(lock);
-    std::vector<entity_addrvec_t> v;
-    for (const auto& p : clients) {
-      v.push_back(p.second);
-    }
-    return v;
+    std::lock_guard l(lock);
+    return clients;
   }
 
   // <<< (end of ActivePyModules cheeky call-throughs)
