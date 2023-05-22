@@ -29,7 +29,12 @@ class RedfishSystem(System):
         self.client.login()
 
     def get_system(self):
-        return self._system
+        result = {
+            'storage': self.get_storage(),
+            'processors': self.get_processors(),
+            'network': self.get_network(),
+        }
+        return result
 
     def get_status(self):
         return self._system['Status']
