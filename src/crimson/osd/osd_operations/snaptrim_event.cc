@@ -4,6 +4,7 @@
 #include "crimson/osd/osd_operations/snaptrim_event.h"
 #include "crimson/osd/ops_executer.h"
 #include "crimson/osd/pg.h"
+#include <seastar/core/sleep.hh>
 
 namespace {
   seastar::logger& logger() {
