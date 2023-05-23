@@ -3997,18 +3997,15 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_write_op_operate)(
 {
   tracepoint(librados, rados_write_op_operate_enter, write_op, io, oid, mtime, flags);
   object_t obj(oid);
-  ::ObjectOperation *oo = to_object_operation(write_op);
+  auto oimpl = static_cast<librados::ObjectOperationImpl*>(write_op);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
-  ceph::real_time *prt = NULL;
-  ceph::real_time rt;
-
   if (mtime) {
-    rt = ceph::real_clock::from_time_t(*mtime);
-    prt = &rt;
+    oimpl->rt = ceph::real_clock::from_time_t(*mtime);
+    oimpl->prt = &oimpl->rt;
   }
 
-  int retval = ctx->operate(obj, oo, prt, translate_flags(flags));
+  int retval = ctx->operate(obj, &oimpl->o, oimpl->prt, translate_flags(flags));
   tracepoint(librados, rados_write_op_operate_exit, retval);
   return retval;
 }
@@ -4023,18 +4020,15 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_write_op_operate2)(
 {
   tracepoint(librados, rados_write_op_operate2_enter, write_op, io, oid, ts, flags);
   object_t obj(oid);
-  ::ObjectOperation *oo = to_object_operation(write_op);
+  auto oimpl = static_cast<librados::ObjectOperationImpl*>(write_op);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
-  ceph::real_time *prt = NULL;
-  ceph::real_time rt;
-
   if (ts) {
-    rt = ceph::real_clock::from_timespec(*ts);
-    prt = &rt;
+    oimpl->rt = ceph::real_clock::from_timespec(*ts);
+    oimpl->prt = &oimpl->rt;
   }
 
-  int retval = ctx->operate(obj, oo, prt, translate_flags(flags));
+  int retval = ctx->operate(obj, &oimpl->o, oimpl->prt, translate_flags(flags));
   tracepoint(librados, rados_write_op_operate_exit, retval);
   return retval;
 }
