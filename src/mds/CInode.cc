@@ -3053,6 +3053,7 @@ const CInode::mempool_old_inode& CInode::cow_old_inode(snapid_t follows, bool co
 void CInode::pre_cow_old_inode()
 {
   snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  dout(20) << __func__ << " follows " << follows << " on " << *this << dendl;
   if (first <= follows)
     cow_old_inode(follows, true);
 }
