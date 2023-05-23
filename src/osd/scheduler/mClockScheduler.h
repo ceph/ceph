@@ -33,7 +33,7 @@
 
 namespace ceph::osd::scheduler {
 
-constexpr double default_min = 1.0;
+constexpr double default_min = 0.0;
 constexpr double default_max = std::numeric_limits<double>::is_iec559 ?
   std::numeric_limits<double>::infinity() :
   std::numeric_limits<double>::max();
