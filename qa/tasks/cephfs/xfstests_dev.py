@@ -200,6 +200,8 @@ class XFSTestsDev(CephFSTestCase):
             xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
 
             if self.install_xfsprogs:
+                if distro == 'centosstream' and major_ver_num == 8:
+                    deps += ['--enablerepo=powertools']
                 deps += ['inih-devel', 'userspace-rcu-devel', 'libblkid-devel',
                          'gettext', 'libedit-devel', 'libattr-devel',
                          'device-mapper-devel', 'libicu-devel']
