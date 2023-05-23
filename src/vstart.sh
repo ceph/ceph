@@ -186,6 +186,7 @@ with_mgr_restful=false
 kstore_path=
 declare -a block_devs
 declare -a secondary_block_devs
+secondary_block_devs_type="SSD"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -253,7 +254,8 @@ options:
 	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
-	--seastore-secondary-des: comma-separated list of secondary blockdevs to use for seastore
+	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
+	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
 \n
 EOF
@@ -505,6 +507,10 @@ case $1 in
         ;;
     --seastore-secondary-devs)
         parse_secondary_devs --seastore-devs "$2"
+        shift
+        ;;
+    --seastore-secondary-devs-type)
+        secondary_block_devs_type="$2"
         shift
         ;;
     --crimson-smp)
@@ -1019,7 +1025,8 @@ EOF
                 fi
                 if [ -n "${secondary_block_devs[$osd]}" ]; then
                     dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.segmented.1
+                    mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
+                    ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
                 fi
             fi
             if [ "$objectstore" == "bluestore" ]; then

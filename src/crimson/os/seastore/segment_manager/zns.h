@@ -115,6 +115,10 @@ namespace crimson::os::seastore::segment_manager::zns {
       size_t len, 
       ceph::bufferptr &out) final;
 
+    device_type_t get_device_type() const final {
+      return device_type_t::ZNS;
+    }
+
     size_t get_available_size() const final {
       return metadata.size;
     };
