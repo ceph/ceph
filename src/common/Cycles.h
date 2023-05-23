@@ -32,6 +32,8 @@
 #ifndef CEPH_CYCLES_H
 #define CEPH_CYCLES_H
 
+#include <cstdint>
+
 /**
  * This class provides static methods that read the fine-grain CPU
  * cycle counter and translate between cycle-level times and absolute
