@@ -7405,9 +7405,6 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 
   /* update olh object */
   r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
-  if (r == -ECANCELED) {
-    r = 0;
-  }
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not apply olh update, r=" << r << dendl;
     return r;
@@ -7718,6 +7715,12 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& buc
 
     int ret = update_olh(dpp, obj_ctx, state, bucket_info, olh_obj);
     if (ret < 0) {
+      if (ret == -ECANCELED) {
+        // In this context, ECANCELED means that the OLH tag changed in either the bucket index entry or the OLH object.
+        // If the OLH tag changed, it indicates that a previous OLH entry was removed since this request started. We
+        // return ENOENT to indicate that the OLH object was removed.
+        ret = -ENOENT;
+      }
       return ret;
     }
   }
