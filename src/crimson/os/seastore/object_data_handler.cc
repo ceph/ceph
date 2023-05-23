@@ -22,18 +22,6 @@ namespace crimson::os::seastore {
 using context_t = ObjectDataHandler::context_t;
 using get_iertr = ObjectDataHandler::write_iertr;
 
-auto read_pin(
-  context_t ctx,
-  LBAPinRef pin) {
-  return ctx.tm.pin_to_extent<ObjectDataBlock>(
-    ctx.t,
-    std::move(pin)
-  ).handle_error_interruptible(
-    get_iertr::pass_further{},
-    crimson::ct_error::assert_all{ "read_pin: invalid error" }
-  );
-}
-
 /**
  * extent_to_write_t
  *
@@ -488,7 +476,7 @@ using operate_ret_bare = std::pair<
   std::optional<extent_to_write_t>,
   std::optional<bufferptr>>;
 using operate_ret = get_iertr::future<operate_ret_bare>;
-operate_ret operate_left(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &overwrite_plan)
+operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan_t &overwrite_plan)
 {
   if (overwrite_plan.get_left_size() == 0) {
     return get_iertr::make_ready_future<operate_ret_bare>(
@@ -518,7 +506,8 @@ operate_ret operate_left(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &
         std::nullopt,
         std::nullopt);
     } else {
-      return read_pin(ctx, pin->duplicate()
+      return ctx.tm.read_pin<ObjectDataBlock>(
+	ctx.t, pin->duplicate()
       ).si_then([prepend_len](auto left_extent) {
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::nullopt,
@@ -545,7 +534,8 @@ operate_ret operate_left(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &
         left_to_write_extent,
         std::nullopt);
     } else {
-      return read_pin(ctx, pin->duplicate()
+      return ctx.tm.read_pin<ObjectDataBlock>(
+	ctx.t, pin->duplicate()
       ).si_then([prepend_offset=extent_len, prepend_len,
                  left_to_write_extent=std::move(left_to_write_extent)]
                 (auto left_extent) mutable {
@@ -565,7 +555,7 @@ operate_ret operate_left(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &
  *
  * Proceed overwrite_plan.right_operation.
  */
-operate_ret operate_right(context_t ctx, LBAPinRef &pin, const overwrite_plan_t &overwrite_plan)
+operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_plan_t &overwrite_plan)
 {
   if (overwrite_plan.get_right_size() == 0) {
     return get_iertr::make_ready_future<operate_ret_bare>(
@@ -598,7 +588,8 @@ operate_ret operate_right(context_t ctx, LBAPinRef &pin, const overwrite_plan_t 
         std::nullopt);
     } else {
       auto append_offset = overwrite_plan.data_end - right_pin_begin;
-      return read_pin(ctx, pin->duplicate()
+      return ctx.tm.read_pin<ObjectDataBlock>(
+	ctx.t, pin->duplicate()
       ).si_then([append_offset, append_len](auto right_extent) {
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::nullopt,
@@ -626,7 +617,8 @@ operate_ret operate_right(context_t ctx, LBAPinRef &pin, const overwrite_plan_t 
         std::nullopt);
     } else {
       auto append_offset = overwrite_plan.data_end - right_pin_begin;
-      return read_pin(ctx, pin->duplicate()
+      return ctx.tm.read_pin<ObjectDataBlock>(
+	ctx.t, pin->duplicate()
       ).si_then([append_offset, append_len,
                  right_to_write_extent=std::move(right_to_write_extent)]
                 (auto right_extent) mutable {
@@ -731,8 +723,8 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	} else {
 	  /* First pin overlaps the boundary and has data, read in extent
 	   * and rewrite portion prior to size */
-	  return read_pin(
-	    ctx,
+	  return ctx.tm.read_pin<ObjectDataBlock>(
+	    ctx.t,
 	    pin.duplicate()
 	  ).si_then([ctx, size, pin_offset, &pin, &object_data, &to_write](
 		     auto extent) {
@@ -1069,7 +1061,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		      current = end;
 		      return seastar::now();
 		    } else {
-		      return ctx.tm.pin_to_extent<ObjectDataBlock>(
+		      return ctx.tm.read_pin<ObjectDataBlock>(
 			ctx.t,
 			std::move(pin)
 		      ).si_then([&ret, &current, end](auto extent) {

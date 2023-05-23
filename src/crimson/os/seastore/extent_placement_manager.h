@@ -246,7 +246,12 @@ public:
     extent_types_t type,
     extent_len_t length,
     placement_hint_t hint,
+#ifdef UNIT_TESTS_BUILT
+    rewrite_gen_t gen,
+    std::optional<paddr_t> external_paddr = std::nullopt
+#else
     rewrite_gen_t gen
+#endif
   ) {
     assert(hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(gen));
@@ -261,7 +266,14 @@ public:
       buffer::create_page_aligned(length));
     bp.zero();
     paddr_t addr;
+#ifdef UNIT_TESTS_BUILT
+    if (unlikely(external_paddr.has_value())) {
+      assert(external_paddr->is_fake());
+      addr = *external_paddr;
+    } else if (gen == INLINE_GENERATION) {
+#else
     if (gen == INLINE_GENERATION) {
+#endif
       addr = make_record_relative_paddr(0);
     } else if (category == data_category_t::DATA) {
       assert(data_writers_by_gen[generation_to_writer(gen)]);

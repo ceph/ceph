@@ -117,13 +117,13 @@ public:
     if (ref->is_exist_clean() ||
 	ref->is_exist_mutation_pending()) {
       existing_block_stats.dec(ref);
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
     } else if (ref->is_initial_pending()) {
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
     } else if (ref->is_mutation_pending()) {
-      ref->state = CachedExtent::extent_state_t::INVALID;
+      ref->set_invalid(*this);
       write_set.erase(*ref);
       assert(ref->prior_instance);
       retired_set.insert(ref->prior_instance);
@@ -140,8 +140,16 @@ public:
   void add_to_read_set(CachedExtentRef ref) {
     if (is_weak()) return;
 
+    assert(ref->is_valid());
+
+    auto it = ref->transactions.lower_bound(
+      this, read_set_item_t<Transaction>::trans_cmp_t());
+    if (it != ref->transactions.end() && it->t == this) return;
+
     auto [iter, inserted] = read_set.emplace(this, ref);
     ceph_assert(inserted);
+    ref->transactions.insert_before(
+      it, const_cast<read_set_item_t<Transaction>&>(*iter));
   }
 
   void add_fresh_extent(
@@ -161,8 +169,11 @@ public:
       pre_alloc_list.emplace_back(ref->cast<LogicalCachedExtent>());
       fresh_block_stats.increment(ref->get_length());
     } else {
-      assert(ref->get_paddr() == make_record_relative_paddr(0));
-      ref->set_paddr(make_record_relative_paddr(offset));
+      if (likely(ref->get_paddr() == make_record_relative_paddr(0))) {
+	ref->set_paddr(make_record_relative_paddr(offset));
+      } else {
+	ceph_assert(ref->get_paddr().is_fake());
+      }
       offset += ref->get_length();
       inline_block_list.push_back(ref);
       fresh_block_stats.increment(ref->get_length());
@@ -231,7 +242,8 @@ public:
       assert(where != read_set.end());
       assert(where->ref.get() == &placeholder);
       where = read_set.erase(where);
-      read_set.emplace_hint(where, this, &extent);
+      auto it = read_set.emplace_hint(where, this, &extent);
+      extent.transactions.insert(const_cast<read_set_item_t<Transaction>&>(*it));
     }
     {
       auto where = retired_set.find(&placeholder);
@@ -337,16 +349,18 @@ public:
     bool weak,
     src_t src,
     journal_seq_t initiated_after,
-    on_destruct_func_t&& f
+    on_destruct_func_t&& f,
+    transaction_id_t trans_id
   ) : weak(weak),
       handle(std::move(handle)),
       on_destruct(std::move(f)),
-      src(src)
+      src(src),
+      trans_id(trans_id)
   {}
 
   void invalidate_clear_write_set() {
     for (auto &&i: write_set) {
-      i.state = CachedExtent::extent_state_t::INVALID;
+      i.set_invalid(*this);
     }
     write_set.clear();
   }
@@ -468,6 +482,10 @@ public:
     return existing_block_stats;
   }
 
+  transaction_id_t get_trans_id() const {
+    return trans_id;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -553,17 +571,21 @@ private:
   on_destruct_func_t on_destruct;
 
   const src_t src;
+
+  transaction_id_t trans_id = TRANS_ID_NULL;
 };
 using TransactionRef = Transaction::Ref;
 
 /// Should only be used with dummy staged-fltree node extent manager
 inline TransactionRef make_test_transaction() {
+  static transaction_id_t next_id = 0;
   return std::make_unique<Transaction>(
     get_dummy_ordering_handle(),
     false,
     Transaction::src_t::MUTATE,
     JOURNAL_SEQ_NULL,
-    [](Transaction&) {}
+    [](Transaction&) {},
+    ++next_id
   );
 }
 
