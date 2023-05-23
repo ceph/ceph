@@ -6409,7 +6409,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
   }
 
   // send request to notification manager
-  int ret = res->publish_commit(this, ofs, target_obj->get_mtime(), etag, target_obj->get_instance());
+  int ret = res->publish_commit(this, ofs, upload->get_mtime(), etag, target_obj->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
