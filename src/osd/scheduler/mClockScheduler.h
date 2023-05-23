@@ -197,6 +197,8 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
     }
   }
 
+  unsigned cutoff_priority = get_io_prio_cut(cct);
+
   /**
    * set_osd_capacity_params_from_config
    *
@@ -214,7 +216,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   // Set the mclock related config params based on the profile
   void set_config_defaults_from_profile();
 
-public:
+public: 
   mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
     int shard_id, bool is_rotational, MonClient *monc);
   ~mClockScheduler() override;
