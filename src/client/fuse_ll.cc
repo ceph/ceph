@@ -1004,8 +1004,9 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 
       int r = key_store.create((const char *)arg->raw, arg->raw_size, kh);
       if (r < 0) {
-        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to calc hkdf: r=" << r << dendl;
+        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to create a new key: r=" << r << dendl;
         fuse_reply_err(req, -r);
+        break;
       }
 
       Fh *fh = (Fh*)fi->fh;
@@ -1104,7 +1105,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 
       /* TODO: return correct info */
       arg->status = (found ? FSCRYPT_KEY_STATUS_PRESENT : FSCRYPT_KEY_STATUS_ABSENT);
-      arg->status_flags = 0;
+      arg->status_flags = (found ? 0x1 : 0); /* FIXME */
       arg->user_count = !!found; /* FIXME */
 
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
