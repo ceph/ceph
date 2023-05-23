@@ -4059,6 +4059,31 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_write_op_operate)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_aio_write_op_operate);
 
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_write_op_operate2)(
+  rados_write_op_t write_op,
+  rados_ioctx_t io,
+  rados_completion_t completion,
+  const char *oid,
+  struct timespec *mtime,
+  int flags)
+{
+  tracepoint(librados, rados_aio_write_op_operate2_enter, write_op, io, completion, oid, mtime, flags);
+  object_t obj(oid);
+  auto oimpl = static_cast<librados::ObjectOperationImpl*>(write_op);
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
+
+  if (mtime) {
+    oimpl->rt = ceph::real_clock::from_timespec(*mtime);
+    oimpl->prt = &oimpl->rt;
+  }
+
+  int retval = ctx->aio_operate(obj, &oimpl->o, c, ctx->snapc, oimpl->prt, translate_flags(flags));
+  tracepoint(librados, rados_aio_write_op_operate_exit, retval);
+  return retval;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_aio_write_op_operate2);
+
 extern "C" rados_read_op_t LIBRADOS_C_API_DEFAULT_F(rados_create_read_op)()
 {
   tracepoint(librados, rados_create_read_op_enter);
