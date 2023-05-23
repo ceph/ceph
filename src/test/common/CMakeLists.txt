@@ -407,3 +407,8 @@ if(WITH_SYSTEMD)
   target_link_libraries(unittest_journald_logger ceph-common)
   add_ceph_unittest(unittest_journald_logger)
 endif()
+
+add_executable(unittest_async_call test_async_call.cc)
+target_link_libraries(unittest_async_call librados ceph-common Boost::system
+  spawn GTest::GTest)
+add_ceph_unittest(unittest_async_call)
