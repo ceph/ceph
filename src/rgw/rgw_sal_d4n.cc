@@ -124,10 +124,11 @@ int D4NFilterObject::copy_object(User* user,
 
   copyCacheBlock->hostsList.push_back(driver->get_cache_block()->hostsList[0]); 
   copyCacheBlock->size = driver->get_cache_block()->size;
+  copyCacheBlock->size = driver->get_cache_block()->globalWeight; // Do we want to reset the global weight? -Sam
   copyCacheBlock->cacheObj.bucketName = dest_bucket->get_name();
   copyCacheBlock->cacheObj.objName = dest_object->get_key().get_oid();
   
-  int copy_valueReturn = driver->get_block_dir()->copy_value(driver->get_cache_block(), copyCacheBlock);
+  int copy_valueReturn = driver->get_block_dir()->set_value(copyCacheBlock);
 
   if (copy_valueReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Directory copy operation failed." << dendl;
@@ -355,7 +356,11 @@ std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  int ret = source->driver->get_policy_driver->cachePolicy->get_block(); 
+  /* Execute cache replacement policy */
+  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block()/*, cacheNode*/); // should it be called before or after cache check? -Sam
+  
+  if (policyRet < 0)
+    ldpp_dout(dpp, 20) << "D4N Filter: Cache replacement operation failed." << dendl;
 
   /* Local cache check */
   if (0/*source->driver->get_policy_driver()->cacheDriver->key_exists(source->get_name())*/) { // Entire object for now -Sam
@@ -374,11 +379,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     }
   }
 
-
-  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block()/*, cacheNode*/);
-  return policyRet;
-  // check for successful return -Sam
-/*
   rgw::sal::Attrs newAttrs;
   std::vector< std::pair<std::string, std::string> > newMetadata;
   int getObjReturn = source->driver->get_d4n_cache()->get_attrs(source->get_key().get_oid(), 
@@ -389,9 +389,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   
   if (getObjReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
-  } else {  */
+  } else {
     /* Set metadata locally */
-/*    RGWQuotaInfo quota_info;
+    RGWQuotaInfo quota_info;
     RGWObjState* astate;
     source->get_obj_state(dpp, &astate, y);
 
@@ -423,9 +423,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 
     source->get_bucket()->get_owner()->set_info(quota_info);
     source->set_obj_state(*astate);
-*/   
+   
     /* Set attributes locally */
-/*    int set_attrsReturn = source->set_attrs(newAttrs);
+    int set_attrsReturn = source->set_attrs(newAttrs);
 
     if (set_attrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
@@ -434,7 +434,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     }   
   }
 
-  return ret;*/
+  return ret;
 }
 
 int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,

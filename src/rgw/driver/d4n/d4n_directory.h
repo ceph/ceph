@@ -14,8 +14,11 @@ struct Address {
 };
 
 struct CacheObj {
-  std::string bucketName; /* S3 bucket name */
   std::string objName; /* S3 object name */
+  std::string bucketName; /* S3 bucket name */
+  time_t creationTime; // Creation time of the S3 Object
+  bool dirty;
+  std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of object locations for multiple backends */
 };
 
 struct CacheBlock {
@@ -31,7 +34,35 @@ class Directory {
     CephContext* cct;
 };
 
-class BlockDirectory: Directory {
+class ObjectDirectory: public Directory {
+  public:
+    ObjectDirectory() {}
+    ObjectDirectory(std::string host, int port) {
+      addr.host = host;
+      addr.port = port;
+    }
+
+    void init(CephContext* _cct) {
+      cct = _cct;
+      addr.host = cct->_conf->rgw_d4n_host;
+      addr.port = cct->_conf->rgw_d4n_port;
+    }
+
+    int find_client(cpp_redis::client* client);
+    int exist_key(std::string key);
+    Address get_addr() { return addr; }
+    int set_value(CacheObj* object);
+    int get_value(CacheObj* object);
+    int copy_value(CacheObj* object, CacheObj* copyObject);
+    int del_value(CacheObj* object);
+
+  private:
+    cpp_redis::client client;
+    Address addr;
+    std::string build_index(CacheObj* object);
+};
+
+class BlockDirectory: public Directory {
   public:
     BlockDirectory() {}
     BlockDirectory(std::string host, int port) {
@@ -50,7 +81,7 @@ class BlockDirectory: Directory {
     Address get_addr() { return addr; }
     int set_value(CacheBlock* block);
     int get_value(CacheBlock* block);
-    int copy_value(CacheBlock* block, CacheBlock* copy_block);
+    int copy_value(CacheBlock* block, CacheBlock* copyBlock);
     int del_value(CacheBlock* block);
 
 
