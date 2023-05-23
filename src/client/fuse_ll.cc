@@ -41,6 +41,7 @@
 #include "fscrypt_uapi.h"
 #include "FSCrypt.h"
 #include "Inode.h"
+#include "Dir.h"
 #include "common/config.h"
 #include "include/ceph_assert.h"
 #include "include/cephfs/ceph_ll_client.h"
@@ -999,13 +1000,19 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 
       auto& key_store = cfuse->client->fscrypt->get_key_store();
 
-      FSCryptKeyRef k;
+      FSCryptKeyHandlerRef kh;
 
-      int r = key_store.create((const char *)arg->raw, arg->raw_size, k);
+      int r = key_store.create((const char *)arg->raw, arg->raw_size, kh);
       if (r < 0) {
         generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to calc hkdf: r=" << r << dendl;
         fuse_reply_err(req, -r);
       }
+
+      Fh *fh = (Fh*)fi->fh;
+      Inode *in = fh->inode.get();
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": XXXX ioctl ion=" << in->ino << dendl;
+
+      auto& k = kh->get_key();
 
       const auto& identifier = k->get_identifier();
 
@@ -1038,8 +1045,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       }
 
       /* FIXME: handle busy cases */
-      FSCryptKeyRef key;
-      r = cfuse->client->fscrypt->get_key_store().remove(kid);
+      r = cfuse->client->fscrypt->get_key_store().invalidate(kid);
       if (r < 0) {
         fuse_reply_err(req, -r);
         break;
@@ -1085,14 +1091,14 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      FSCryptKeyRef key;
-      r = cfuse->client->fscrypt->get_key_store().find(kid, key);
+      FSCryptKeyHandlerRef kh;
+      r = cfuse->client->fscrypt->get_key_store().find(kid, kh, false);
       if (r < 0 && r != -ENOENT) {
         fuse_reply_err(req, -r);
         break;
       }
 
-      bool found = (r == 0);
+      bool found = (r == 0 && kh->get_key());
 
       generic_dout(0) << __FILE__ << ":" << __LINE__ << ": FS_IOC_GET_ENCRYPTION_KEY_STATUS found=" << found << dendl;
 

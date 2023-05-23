@@ -1377,7 +1377,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     _readdir_drop_dirp_buffer(dirp);
     dirp->buffer.reserve(numdn);
 
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx);
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator);
 
     string orig_dname;
     string dname;
@@ -9303,6 +9303,12 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
 	   << dendl;
+
+  if (dirp->inode->fscrypt_key_validator &&
+      !dirp->inode->fscrypt_key_validator->is_valid()) {
+    clear_dir_complete_and_ordered(dirp->inode.get(), true);
+  }
+
   if (dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&
       dirp->inode->caps_issued_mask(CEPH_CAP_FILE_SHARED, true)) {
