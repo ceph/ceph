@@ -13,9 +13,8 @@ tasks:
       read: 100
       write: 100
       delete: 50
-      snap_create: 0
-      snap_remove: 0
-      # TODO: CEPH_OSD_OP_ROLLBACK
+      snap_create: 50
+      snap_remove: 50
       rollback: 0
       # TODO: CEPH_OSD_OP_COPY_FROM
       copy_from: 0
