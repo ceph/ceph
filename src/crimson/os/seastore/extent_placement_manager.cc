@@ -593,6 +593,7 @@ RandomBlockOolWriter::do_write(
     stats.extents.bytes += ex->get_length();
     stats.num_records += 1;
 
+    ex->prepare_write();
     return rbm->write(paddr,
       ex->get_bptr()
     ).handle_error(
