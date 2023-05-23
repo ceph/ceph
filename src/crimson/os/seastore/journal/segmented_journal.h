@@ -17,6 +17,7 @@
 #include "crimson/osd/exceptions.h"
 #include "segment_allocator.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
+#include "record_submitter.h"
 
 namespace crimson::os::seastore::journal {
 /**
