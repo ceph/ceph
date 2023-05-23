@@ -99,11 +99,11 @@ int OSDriver::get_keys(
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, keys
-  ).safe_then([out] (FuturizedStore::omap_values_t&& vals) {
+  ).safe_then([out] (FuturizedStore::Shard::omap_values_t&& vals) {
     // just the difference in comparator (`std::less<>` in omap_values_t`)
-    reinterpret_cast<FuturizedStore::omap_values_t&>(*out) = std::move(vals);
+    reinterpret_cast<FuturizedStore::Shard::omap_values_t&>(*out) = std::move(vals);
     return 0;
-  }, FuturizedStore::read_errorator::all_same_way([] (auto& e) {
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] (auto& e) {
     assert(e.value() > 0);
     return -e.value();
   }))); // this requires seastar::thread
@@ -118,7 +118,7 @@ int OSDriver::get_next(
   using crimson::os::FuturizedStore;
   return interruptor::green_get(os->omap_get_values(
     ch, hoid, key
-  ).safe_then_unpack([&key, next] (bool, FuturizedStore::omap_values_t&& vals) {
+  ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
     CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
     if (auto nit = std::begin(vals); nit == std::end(vals)) {
       CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
@@ -129,7 +129,7 @@ int OSDriver::get_next(
       *next = *nit;
       return 0;
     }
-  }, FuturizedStore::read_errorator::all_same_way([] {
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
     CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
     return -EINVAL;
   }))); // this requires seastar::thread
@@ -144,12 +144,12 @@ int OSDriver::get_next_or_current(
   using crimson::os::FuturizedStore;
   // let's try to get current first
   return interruptor::green_get(os->omap_get_values(
-    ch, hoid, FuturizedStore::omap_keys_t{key}
-  ).safe_then([&key, next_or_current] (FuturizedStore::omap_values_t&& vals) {
+    ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
+  ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
     assert(vals.size() == 1);
     *next_or_current = std::make_pair(key, std::move(vals[0]));
     return 0;
-  }, FuturizedStore::read_errorator::all_same_way(
+  }, FuturizedStore::Shard::read_errorator::all_same_way(
     [next_or_current, &key, this] {
     // no current, try next
     return get_next(key, next_or_current);
