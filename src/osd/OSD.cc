@@ -7301,25 +7301,20 @@ void OSDService::maybe_share_map(
 	     << " -> " << peer_epoch_lb << " (as per caller)" << dendl;
     session->last_sent_epoch = peer_epoch_lb;
   }
-  epoch_t last_sent_epoch = session->last_sent_epoch;
-  session->sent_epoch_lock.unlock();
 
-  if (osdmap->get_epoch() <= last_sent_epoch) {
+  if (osdmap->get_epoch() <= session->last_sent_epoch) {
+    session->sent_epoch_lock.unlock();
     return;
   }
 
-  send_incremental_map(last_sent_epoch, con, osdmap);
-  last_sent_epoch = osdmap->get_epoch();
-
-  session->sent_epoch_lock.lock();
-  if (session->last_sent_epoch < last_sent_epoch) {
+  const epoch_t send_from = session->last_sent_epoch;
     dout(10) << __func__ << " con " << con
 	     << " " << con->get_peer_addr()
 	     << " map epoch " << session->last_sent_epoch
-	     << " -> " << last_sent_epoch << " (shared)" << dendl;
-    session->last_sent_epoch = last_sent_epoch;
-  }
+	     << " -> " << osdmap->get_epoch() << " (shared)" << dendl;
+  session->last_sent_epoch = osdmap->get_epoch();
   session->sent_epoch_lock.unlock();
+  send_incremental_map(send_from, con, osdmap);
 }
 
 void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRef osdmap)
