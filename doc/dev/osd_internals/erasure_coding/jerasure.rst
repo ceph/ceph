@@ -5,7 +5,7 @@ jerasure plugin
 Introduction
 ------------
 
-The parameters interpreted by the jerasure plugin are:
+The parameters interpreted by the ``jerasure`` plugin are:
 
 ::
  
@@ -31,3 +31,5 @@ upstream repositories `http://jerasure.org/jerasure/jerasure
 `http://jerasure.org/jerasure/gf-complete
 <http://jerasure.org/jerasure/gf-complete>`_ . The difference
 between the two, if any, should match pull requests against upstream.
+Note that as of 2023, the ``jerasure.org`` web site may no longer be
+legitimate and/or associated with the original project.
