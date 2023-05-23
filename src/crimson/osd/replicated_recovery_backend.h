@@ -23,7 +23,8 @@ public:
     : RecoveryBackend(pg, shard_services, coll, backend)
   {}
   interruptible_future<> handle_recovery_op(
-    Ref<MOSDFastDispatchOp> m) final;
+    Ref<MOSDFastDispatchOp> m,
+    crimson::net::ConnectionRef conn) final;
 
   interruptible_future<> recover_object(
     const hobject_t& soid,

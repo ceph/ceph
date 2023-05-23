@@ -25,7 +25,6 @@ namespace crimson::net {
 
 class ProtocolV2;
 class SocketMessenger;
-class SocketConnection;
 using SocketConnectionRef = seastar::shared_ptr<SocketConnection>;
 
 #ifdef UNIT_TESTS_BUILT
@@ -165,6 +164,8 @@ class SocketConnection : public Connection {
   SocketMessenger &get_messenger() const {
     return messenger;
   }
+
+  ConnectionRef get_local_shared_foreign_from_this();
 
 private:
   seastar::shard_id shard_id() const;
