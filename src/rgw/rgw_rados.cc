@@ -5321,7 +5321,7 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, rgw::sal::RGWStore*
 
 static bool is_olh(map<string, bufferlist>& attrs)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_INFO);
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_VER);
   return (iter != attrs.end());
 }
 
@@ -6649,6 +6649,18 @@ int RGWRados::olh_init_modification_impl(const DoutPrefixProvider *dpp, const RG
   if (has_tag) {
     /* guard against racing writes */
     bucket_index_guard_olh_op(dpp, state, op);
+  } else if (state.exists) {
+    // This is the case where a null versioned object already exists for this key
+    // but it hasn't been initialized as an OLH object yet. We immediately add
+    // the RGW_ATTR_OLH_INFO attr so that the OLH points back to itself and
+    // therefore effectively makes this an unobservable modification.
+    op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, bufferlist());
+    RGWOLHInfo info;
+    info.target = olh_obj;
+    info.removed = false;
+    bufferlist bl;
+    encode(info, bl);
+    op.setxattr(RGW_ATTR_OLH_INFO, bl);    
   }
 
   if (!has_tag) {
@@ -7516,7 +7528,7 @@ int RGWRados::get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket
     return r;
   }
 
-  auto iter = attrset.find(RGW_ATTR_OLH_INFO);
+  auto iter = attrset.find(RGW_ATTR_OLH_VER);
   if (iter == attrset.end()) { /* not an olh */
     return -EINVAL;
   }
@@ -7618,9 +7630,13 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& buc
     }
   }
 
-  auto iter = state->attrset.find(RGW_ATTR_OLH_INFO);
+  auto iter = state->attrset.find(RGW_ATTR_OLH_VER);
   if (iter == state->attrset.end()) {
     return -EINVAL;
+  }
+  iter = state->attrset.find(RGW_ATTR_OLH_INFO);
+  if (iter == state->attrset.end()) {
+    return -ENOENT;
   }
 
   RGWOLHInfo olh;
