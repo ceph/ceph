@@ -41,20 +41,19 @@ struct D3nChunkDataInfo : public LRUObject {
 
 struct D3nCacheAioWriteRequest {
 	std::string oid;
-	void *data;
-	int fd;
-	struct aiocb *cb;
-	D3nDataCache *priv_data;
-	CephContext *cct;
+	void *data = nullptr;
+	int fd = -1;
+	struct aiocb *cb = nullptr;
+	D3nDataCache *priv_data = nullptr;
+	CephContext *cct = nullptr;
 
 	D3nCacheAioWriteRequest(CephContext *_cct) : cct(_cct) {}
 	int d3n_prepare_libaio_write_op(bufferlist& bl, unsigned int len, std::string oid, std::string cache_location);
 
   ~D3nCacheAioWriteRequest() {
     ::close(fd);
-		cb->aio_buf = nullptr;
-		free(data);
-		data = nullptr;
+    free(data);
+    cb->aio_buf = nullptr;
 		delete(cb);
   }
 };
