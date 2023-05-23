@@ -543,8 +543,13 @@ class CephadmServe:
                 self.mgr.agent_helpers._apply_agent()
                 return r
         else:
+            _specs: List[ServiceSpec] = []
             for sn, spec in self.mgr.spec_store.active_specs.items():
-                specs.append(spec)
+                _specs.append(spec)
+            # apply specs that don't use count first sice their placement is deterministic
+            # and not dependant on other daemon's placements in any way
+            specs = [s for s in _specs if not s.placement.count] + [s for s in _specs if s.placement.count]
+
         for name in ['CEPHADM_APPLY_SPEC_FAIL', 'CEPHADM_DAEMON_PLACE_FAIL']:
             self.mgr.remove_health_warning(name)
         self.mgr.apply_spec_fails = []
@@ -673,6 +678,7 @@ class CephadmServe:
 
         svc = self.mgr.cephadm_services[service_type]
         daemons = self.mgr.cache.get_daemons_by_service(service_name)
+        related_service_daemons = self.mgr.cache.get_related_service_daemons(spec)
 
         public_networks: List[str] = []
         if service_type == 'mon':
@@ -709,14 +715,15 @@ class CephadmServe:
             unreachable_hosts=self.mgr.cache.get_unreachable_hosts(),
             draining_hosts=self.mgr.cache.get_draining_hosts(),
             daemons=daemons,
+            related_service_daemons=related_service_daemons,
             networks=self.mgr.cache.networks,
             filter_new_host=(
                 matches_network if service_type == 'mon'
                 else None
             ),
             allow_colo=svc.allow_colo(),
-            primary_daemon_type=svc.primary_daemon_type(),
-            per_host_daemon_type=svc.per_host_daemon_type(),
+            primary_daemon_type=svc.primary_daemon_type(spec),
+            per_host_daemon_type=svc.per_host_daemon_type(spec),
             rank_map=rank_map,
         )
 
@@ -875,8 +882,10 @@ class CephadmServe:
                     hostname=slot.hostname,
                     daemon_type=slot.daemon_type,
                     daemon_id=daemon_id,
+                    service_name=spec.service_name()
                 )
                 daemons.append(sd)
+                self.mgr.cache.append_tmp_daemon(slot.hostname, sd)
 
             if daemon_place_fails:
                 self.mgr.set_health_warning('CEPHADM_DAEMON_PLACE_FAIL', f'Failed to place {len(daemon_place_fails)} daemon(s)', len(
