@@ -594,6 +594,8 @@ void OSD::dump_status(Formatter* f) const
   f->dump_unsigned("whoami", superblock.whoami);
   f->dump_string("state", state.to_string());
   f->dump_unsigned("oldest_map", superblock.oldest_map);
+  f->dump_unsigned("cluster_osdmap_trim_lower_bound",
+                   superblock.cluster_osdmap_trim_lower_bound);
   f->dump_unsigned("newest_map", superblock.newest_map);
   f->dump_unsigned("num_pgs", pg_map.get_pgs().size());
 }
@@ -616,7 +618,9 @@ void OSD::print(std::ostream& out) const
 {
   out << "{osd." << superblock.whoami << " "
     << superblock.osd_fsid << " [" << superblock.oldest_map
-    << "," << superblock.newest_map << "] " << pg_map.get_pgs().size()
+    << "," << superblock.newest_map << "] "
+    << "tlb:" << superblock.cluster_osdmap_trim_lower_bound
+    << " " << pg_map.get_pgs().size()
     << " pgs}";
 }
 
@@ -1064,7 +1068,8 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
   const auto first = m->get_first();
   const auto last = m->get_last();
   logger().info("handle_osd_map epochs [{}..{}], i have {}, src has [{}..{}]",
-                first, last, superblock.newest_map, m->oldest_map, m->newest_map);
+                first, last, superblock.newest_map,
+                m->cluster_osdmap_trim_lower_bound, m->newest_map);
   // make sure there is something new, here, before we bother flushing
   // the queues and such
   if (last <= superblock.newest_map) {
@@ -1076,15 +1081,16 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
   if (first > start) {
     logger().info("handle_osd_map message skips epochs {}..{}",
                   start, first - 1);
-    if (m->oldest_map <= start) {
+    if (m->cluster_osdmap_trim_lower_bound <= start) {
       return shard_services.osdmap_subscribe(start, false);
     }
     // always try to get the full range of maps--as many as we can.  this
     //  1- is good to have
     //  2- is at present the only way to ensure that we get a *full* map as
     //     the first map!
-    if (m->oldest_map < first) {
-      return shard_services.osdmap_subscribe(m->oldest_map - 1, true);
+    if (m->cluster_osdmap_trim_lower_bound < first) {
+      return shard_services.osdmap_subscribe(
+        m->cluster_osdmap_trim_lower_bound - 1, true);
     }
     skip_maps = true;
     start = first;
@@ -1178,7 +1184,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       logger().info("osd.{}: now preboot", whoami);
 
       if (m->get_source().is_mon()) {
-        return _preboot(m->oldest_map, m->newest_map);
+        return _preboot(
+          m->cluster_osdmap_trim_lower_bound, m->newest_map);
       } else {
         logger().info("osd.{}: start_boot", whoami);
         return start_boot();
@@ -1209,7 +1216,7 @@ seastar::future<> OSD::send_incremental_map(crimson::net::ConnectionRef conn,
     .then([this, conn, first](auto&& bls) {
       auto m = crimson::make_message<MOSDMap>(monc->get_fsid(),
 	  osdmap->get_encoding_features());
-      m->oldest_map = first;
+      m->cluster_osdmap_trim_lower_bound = first;
       m->newest_map = superblock.newest_map;
       m->maps = std::move(bls);
       return conn->send(std::move(m));
@@ -1219,7 +1226,7 @@ seastar::future<> OSD::send_incremental_map(crimson::net::ConnectionRef conn,
     .then([this, conn](auto&& bl) mutable {
       auto m = crimson::make_message<MOSDMap>(monc->get_fsid(),
 	  osdmap->get_encoding_features());
-      m->oldest_map = superblock.oldest_map;
+      m->cluster_osdmap_trim_lower_bound = superblock.oldest_map;
       m->newest_map = superblock.newest_map;
       m->maps.emplace(osdmap->get_epoch(), std::move(bl));
       return conn->send(std::move(m));

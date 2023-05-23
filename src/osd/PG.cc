@@ -1625,8 +1625,8 @@ void PG::on_new_interval()
   m_scrubber->on_maybe_registration_change(m_planned_scrub);
 }
 
-epoch_t PG::oldest_stored_osdmap() {
-  return osd->get_superblock().oldest_map;
+epoch_t PG::cluster_osdmap_trim_lower_bound() {
+  return osd->get_superblock().cluster_osdmap_trim_lower_bound;
 }
 
 OstreamTemp PG::get_clog_info() {

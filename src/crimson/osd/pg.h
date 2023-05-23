@@ -346,7 +346,8 @@ public:
   void on_active_advmap(const OSDMapRef &osdmap) final {
     // Not needed yet
   }
-  epoch_t oldest_stored_osdmap() final {
+
+  epoch_t cluster_osdmap_trim_lower_bound() final {
     // TODO
     return 0;
   }
