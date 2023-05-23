@@ -298,7 +298,10 @@ add_executable(unittest_log_backing test_log_backing.cc)
 target_include_directories(unittest_log_backing
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/store/rados")
-target_link_libraries(unittest_log_backing radostest-cxx ${UNITTEST_LIBS}
+target_link_libraries(unittest_log_backing
+  libneorados
+  neoradostest-support
+  ${UNITTEST_LIBS}
   ${rgw_libs})
 
 add_executable(unittest_rgw_lua test_rgw_lua.cc)

@@ -4,6 +4,7 @@
 #include "auth/AuthRegistry.h"
 
 #include "common/errno.h"
+#include "librados/AioCompletionImpl.h"
 #include "librados/librados_asio.h"
 
 #include "include/stringify.h"

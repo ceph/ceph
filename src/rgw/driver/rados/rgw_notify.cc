@@ -18,6 +18,8 @@
 #include "common/dout.h"
 #include <chrono>
 
+#include "librados/AioCompletionImpl.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::notify {

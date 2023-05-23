@@ -1,15 +1,33 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
-#include "cls/log/cls_log_client.h"
-#include "cls/version/cls_version_client.h"
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/use_awaitable.hpp>
+
+#include <boost/system/detail/errc.hpp>
+#include <boost/system/error_code.hpp>
+#include <boost/system/errc.hpp>
+#include <boost/system/system_error.hpp>
+
+#include "include/neorados/RADOS.hpp"
+
+#include "common/async/blocked_completion.h"
+#include "common/async/async_call.h"
+
+#include "neorados/cls/log.h"
+#include "neorados/cls/version.h"
+#include "neorados/cls/fifo.h"
 
 #include "rgw_log_backing.h"
-#include "rgw_tools.h"
-#include "cls_fifo_legacy.h"
+#include "rgw_common.h"
 
 using namespace std::chrono_literals;
-namespace cb = ceph::buffer;
+
+namespace async = ceph::async;
+namespace buffer = ceph::buffer;
+
+namespace version = neorados::cls::version;
 
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
@@ -31,678 +49,647 @@ inline std::ostream& operator <<(std::ostream& m, const shard_check& t) {
 
 namespace {
 /// Return the shard type, and a bool to see whether it has entries.
-shard_check
-probe_shard(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
-	    bool& fifo_unsupported, optional_yield y)
+asio::awaitable<shard_check>
+probe_shard(const DoutPrefixProvider* dpp, neorados::RADOS& rados,
+	    const neorados::Object& obj, const neorados::IOContext& loc,
+	    bool& fifo_unsupported)
 {
   ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		     << " probing oid=" << oid
-		     << dendl;
+		     << " probing obj=" << obj << dendl;
   if (!fifo_unsupported) {
-    std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
-    auto r = rgw::cls::fifo::FIFO::open(dpp, ioctx, oid,
-					&fifo, y,
-					std::nullopt, true);
-    switch (r) {
-    case 0:
+    sys::error_code ec;
+    auto fifo = co_await fifo::FIFO::open(
+      dpp, rados, obj, loc,
+      asio::redirect_error(asio::use_awaitable, ec),
+      std::nullopt, true);
+    if (!ec) {
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			 << ": oid=" << oid << " is FIFO"
+			 << ": obj=" << obj << " is FIFO"
 			 << dendl;
-      return shard_check::fifo;
-
-    case -ENODATA:
+      co_return shard_check::fifo;
+    } else if (ec == sys::errc::no_message_available) {
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			 << ": oid=" << oid << " is empty and therefore OMAP"
+			 << ": obj=" << obj << " is empty and therefore OMAP"
 			 << dendl;
-      return shard_check::omap;
-
-    case -ENOENT:
+      co_return shard_check::omap;
+    } else if (ec == sys::errc::no_such_file_or_directory) {
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			 << ": oid=" << oid << " does not exist"
+			 << ": obj=" << obj << " does not exist"
 			 << dendl;
-      return shard_check::dne;
-
-    case -EPERM:
+      co_return shard_check::dne;
+    } else if (ec == sys::errc::operation_not_permitted) {
       ldpp_dout(dpp, 20) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			 << ": FIFO is unsupported, marking."
 			 << dendl;
       fifo_unsupported = true;
-      return shard_check::omap;
-
-    default:
+      co_return shard_check::omap;
+    } else {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			 << ": error probing: r=" << r
-			 << ", oid=" << oid << dendl;
-      return shard_check::corrupt;
+			 << ": error probing: " << ec.message()
+			 << ", obj=" << obj << dendl;
+      co_return shard_check::corrupt;
     }
   } else {
     // Since FIFO is unsupported, OMAP is the only alternative
-    return shard_check::omap;
+    co_return shard_check::omap;
   }
 }
 
-tl::expected<log_type, bs::error_code>
-handle_dne(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx,
-	   log_type def,
-	   std::string oid,
-	   bool fifo_unsupported,
-	   optional_yield y)
+asio::awaitable<log_type> handle_dne(const DoutPrefixProvider *dpp,
+				     neorados::RADOS& rados,
+				     const neorados::Object& obj,
+				     const neorados::IOContext& loc,
+				     log_type def,
+				     bool fifo_unsupported)
 {
   if (def == log_type::fifo) {
     if (fifo_unsupported) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " WARNING: FIFO set as default but not supported by OSD. "
 		 << "Falling back to OMAP." << dendl;
-      return log_type::omap;
+      co_return log_type::omap;
     }
-    std::unique_ptr<rgw::cls::fifo::FIFO> fifo;
-    auto r = rgw::cls::fifo::FIFO::create(dpp, ioctx, oid,
-					  &fifo, y,
-					  std::nullopt);
-    if (r < 0) {
+    try {
+      auto fifo = co_await fifo::FIFO::create(dpp, rados, obj, loc,
+					      asio::use_awaitable);
+    } catch (const std::exception& e) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << " error creating FIFO: r=" << r
-		 << ", oid=" << oid << dendl;
-      return tl::unexpected(bs::error_code(-r, bs::system_category()));
+			 << " error creating FIFO: " << e.what()
+			 << ", obj=" << obj << dendl;
+      throw;
     }
   }
-  return def;
+  co_return def;
 }
 }
 
-tl::expected<log_type, bs::error_code>
-log_backing_type(const DoutPrefixProvider *dpp, 
-                 librados::IoCtx& ioctx,
+asio::awaitable<log_type>
+log_backing_type(const DoutPrefixProvider* dpp,
+		 neorados::RADOS& rados,
+                 const neorados::IOContext& loc,
 		 log_type def,
 		 int shards,
-		 const fu2::unique_function<std::string(int) const>& get_oid,
-		 optional_yield y)
+		 const fu2::unique_function<std::string(int) const>& get_oid)
 {
   auto check = shard_check::dne;
   bool fifo_unsupported = false;
   for (int i = 0; i < shards; ++i) {
-    auto c = probe_shard(dpp, ioctx, get_oid(i), fifo_unsupported, y);
+    auto c = co_await probe_shard(dpp, rados, neorados::Object(get_oid(i)), loc,
+				  fifo_unsupported);
     if (c == shard_check::corrupt)
-      return tl::unexpected(bs::error_code(EIO, bs::system_category()));
+      throw sys::system_error(EIO, sys::generic_category());
     if (c == shard_check::dne) continue;
     if (check == shard_check::dne) {
       check = c;
       continue;
     }
-
     if (check != c) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << " clashing types: check=" << check
 		 << ", c=" << c << dendl;
-      return tl::unexpected(bs::error_code(EIO, bs::system_category()));
+      throw sys::system_error(EIO, sys::generic_category());
     }
   }
   if (check == shard_check::corrupt) {
     ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 	       << " should be unreachable!" << dendl;
-    return tl::unexpected(bs::error_code(EIO, bs::system_category()));
+    throw sys::system_error(EIO, sys::system_category());
   }
 
   if (check == shard_check::dne)
-    return handle_dne(dpp, ioctx,
-		      def,
-		      get_oid(0),
-		      fifo_unsupported,
-		      y);
+    co_return co_await handle_dne(dpp, rados, get_oid(0), loc, def,
+				  fifo_unsupported);
 
-  return (check == shard_check::fifo ? log_type::fifo : log_type::omap);
+  co_return (check == shard_check::fifo ? log_type::fifo : log_type::omap);
 }
 
-bs::error_code log_remove(const DoutPrefixProvider *dpp, 
-                          librados::IoCtx& ioctx,
-			  int shards,
-			  const fu2::unique_function<std::string(int) const>& get_oid,
-			  bool leave_zero,
-			  optional_yield y)
+asio::awaitable<void> log_remove(
+  const DoutPrefixProvider *dpp,
+  neorados::RADOS& rados,
+  const neorados::IOContext& loc,
+  int shards,
+  const fu2::unique_function<std::string(int) const>& get_oid,
+  bool leave_zero)
 {
-  bs::error_code ec;
+  sys::error_code ec;
   for (int i = 0; i < shards; ++i) {
     auto oid = get_oid(i);
-    rados::cls::fifo::info info;
-    uint32_t part_header_size = 0, part_entry_overhead = 0;
-
-    auto r = rgw::cls::fifo::get_meta(dpp, ioctx, oid, std::nullopt, &info,
-				      &part_header_size, &part_entry_overhead,
-				      0, y, true);
-    if (r == -ENOENT) continue;
-    if (r == 0 && info.head_part_num > -1) {
+    auto [info, part_header_size, part_entry_overhead]
+      = co_await fifo::FIFO::get_meta(rados, oid, loc, std::nullopt,
+				      asio::redirect_error(asio::use_awaitable,
+							   ec));
+    if (ec == sys::errc::no_such_file_or_directory) continue;
+    if (!ec && info.head_part_num > -1) {
       for (auto j = info.tail_part_num; j <= info.head_part_num; ++j) {
-	librados::ObjectWriteOperation op;
-	op.remove();
-	auto part_oid = info.part_oid(j);
-	auto subr = rgw_rados_operate(dpp, ioctx, part_oid, &op, y);
-	if (subr < 0 && subr != -ENOENT) {
-	  if (!ec)
-	    ec = bs::error_code(-subr, bs::system_category());
+	sys::error_code subec;
+	co_await rados.execute(info.part_oid(j),
+			       loc, neorados::WriteOp{}.remove(),
+			       asio::redirect_error(asio::use_awaitable, subec));
+	if (subec && subec != sys::errc::no_such_file_or_directory) {
+	  if (!ec) ec = subec;
 	  ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		     << ": failed removing FIFO part: part_oid=" << part_oid
-		     << ", subr=" << subr << dendl;
+			     << ": failed removing FIFO part " << j
+			     << ": " << subec.message() << dendl;
 	}
       }
     }
-    if (r < 0 && r != -ENODATA) {
-      if (!ec)
-	ec = bs::error_code(-r, bs::system_category());
+    if (ec && ec != sys::errc::no_message_available) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": failed checking FIFO part: oid=" << oid
-		 << ", r=" << r << dendl;
+			 << ": failed checking FIFO part: oid=" << oid
+			 << ": " << ec.message() << dendl;
     }
-    librados::ObjectWriteOperation op;
+    neorados::WriteOp op;
     if (i == 0 && leave_zero) {
       // Leave shard 0 in existence, but remove contents and
       // omap. cls_lock stores things in the xattrs. And sync needs to
       // rendezvous with locks on generation 0 shard 0.
-      op.omap_set_header({});
-      op.omap_clear();
-      op.truncate(0);
+      op.set_omap_header({})
+	.clear_omap()
+	.truncate(0);
     } else {
       op.remove();
     }
-    r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
-    if (r < 0 && r != -ENOENT) {
-      if (!ec)
-	ec = bs::error_code(-r, bs::system_category());
+    co_await rados.execute(oid, loc, std::move(op),
+			   asio::redirect_error(asio::use_awaitable, ec));
+    if (ec && ec != sys::errc::no_such_file_or_directory) {
       ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": failed removing shard: oid=" << oid
-		 << ", r=" << r << dendl;
+			 << ": failed removing shard: oid=" << oid
+			 << ": " << ec.message() << dendl;
     }
   }
-  return ec;
+  if (ec)
+    throw sys::error_code(ec);
+  co_return;
 }
 
 logback_generations::~logback_generations() {
   if (watchcookie > 0) {
-    auto cct = static_cast<CephContext*>(ioctx.cct());
-    auto r = ioctx.unwatch2(watchcookie);
-    if (r < 0) {
+    auto cct = rados.cct();
+    sys::error_code ec;
+    rados.unwatch(watchcookie, loc, async::use_blocked[ec]);
+    if (ec) {
       lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
 		 << ": failed unwatching oid=" << oid
-		 << ", r=" << r << dendl;
+		 << ", " << ec.message() << dendl;
     }
   }
 }
 
-bs::error_code logback_generations::setup(const DoutPrefixProvider *dpp,
-                                          log_type def,
-					  optional_yield y) noexcept
+asio::awaitable<void> logback_generations::setup(const DoutPrefixProvider *dpp,
+						 log_type def)
 {
+  bool must_create = false;
   try {
     // First, read.
-    auto cct = static_cast<CephContext*>(ioctx.cct());
-    auto res = read(dpp, y);
-    if (!res && res.error() != bs::errc::no_such_file_or_directory) {
-      return res.error();
+    auto [es, v] = co_await read(dpp);
+    co_await async::async_dispatch(
+      strand,
+      [&] {
+	entries = std::move(es);
+	version = std::move(v);
+      }, asio::use_awaitable);
+  } catch (const sys::system_error& e) {
+    if (e.code() != sys::errc::no_such_file_or_directory) {
+      throw;
     }
-    if (res) {
-      std::unique_lock lock(m);
-      std::tie(entries_, version) = std::move(*res);
-    } else {
-      // Are we the first? Then create generation 0 and the generations
-      // metadata.
-      librados::ObjectWriteOperation op;
-      auto type = log_backing_type(dpp, ioctx, def, shards,
-				   [this](int shard) {
-				     return this->get_oid(0, shard);
-				   }, y);
-      if (!type)
-	return type.error();
-
-      logback_generation l;
-      l.type = *type;
-
-      std::unique_lock lock(m);
-      version.ver = 1;
-      static constexpr auto TAG_LEN = 24;
-      version.tag.clear();
-      append_rand_alpha(cct, version.tag, version.tag, TAG_LEN);
-      op.create(true);
-      cls_version_set(op, version);
-      cb::list bl;
-      entries_.emplace(0, std::move(l));
-      encode(entries_, bl);
-      lock.unlock();
-
-      op.write_full(bl);
-      auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
-      if (r < 0 && r != -EEXIST) {
-	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		   << ": failed writing oid=" << oid
-		   << ", r=" << r << dendl;
-	bs::system_error(-r, bs::system_category());
-      }
-      // Did someone race us? Then re-read.
-      if (r != 0) {
-	res = read(dpp, y);
-	if (!res)
-	  return res.error();
-	if (res->first.empty())
-	  return bs::error_code(EIO, bs::system_category());
-	auto l = res->first.begin()->second;
-	// In the unlikely event that someone raced us, created
-	// generation zero, incremented, then erased generation zero,
-	// don't leave generation zero lying around.
-	if (l.gen_id != 0) {
-	  auto ec = log_remove(dpp, ioctx, shards,
-			       [this](int shard) {
-				 return this->get_oid(0, shard);
-			       }, true, y);
-	  if (ec) return ec;
-	}
-	std::unique_lock lock(m);
-	std::tie(entries_, version) = std::move(*res);
-      }
-    }
-    // Pass all non-empty generations to the handler
-    std::unique_lock lock(m);
-    auto i = lowest_nomempty(entries_);
-    entries_t e;
-    std::copy(i, entries_.cend(),
-	      std::inserter(e, e.end()));
-    m.unlock();
-    auto ec = watch();
-    if (ec) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": failed to re-establish watch, unsafe to continue: oid="
-		 << oid << ", ec=" << ec.message() << dendl;
-    }
-    return handle_init(std::move(e));
-  } catch (const std::bad_alloc&) {
-    return bs::error_code(ENOMEM, bs::system_category());
+    // No co_awaiting in a try block.
+    must_create = true;
   }
+  if (must_create) {
+    // Are we the first? Then create generation 0 and the generations
+    // metadata.
+    auto type = co_await log_backing_type(dpp, rados, loc, def, shards,
+					  [this](int shard) {
+					    return this->get_oid(0, shard);
+					  });
+    auto op = co_await async::async_dispatch(
+      strand,
+      [this, type] {
+	neorados::WriteOp op;
+	logback_generation l;
+	l.type = type;
+	version.ver = 1;
+	static constexpr auto TAG_LEN = 24;
+	version.tag.clear();
+	append_rand_alpha(rados.cct(), version.tag, version.tag, TAG_LEN);
+	buffer::list bl;
+	entries.emplace(0, std::move(l));
+	encode(entries, bl);
+	op.create(true)
+	  .exec(version::set(version))
+	  .write_full(std::move(bl));
+	return op;
+      }, asio::use_awaitable);
+
+    sys::error_code ec;
+    co_await rados.execute(oid, loc, std::move(op),
+			   asio::redirect_error(asio::use_awaitable, ec));
+    if (ec && ec != sys::errc::file_exists) {
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": failed writing oid=" << oid
+			 << ", " << ec.message() << dendl;
+      throw sys::system_error(ec);
+    }
+    // Did someone race us? Then re-read.
+    if (ec == sys::errc::file_exists) {
+      auto [es, v] = co_await read(dpp);
+      if (es.empty()) {
+	throw sys::system_error{
+	  EIO, sys::generic_category(),
+	  "Generations metadata object exists, but empty."};
+      }
+      auto l = es.begin()->second;
+      // In the unlikely event that someone raced us, created
+      // generation zero, incremented, then erased generation zero,
+      // don't leave generation zero lying around.
+      if (l.gen_id != 0) {
+	co_await log_remove(dpp, rados, loc, shards,
+			    [this](int shard) {
+			      return this->get_oid(0, shard);
+			    }, true);
+      }
+      co_await async::async_dispatch(
+	strand,
+	[&] {
+	  entries = std::move(es);
+	  version = std::move(v);
+	}, asio::use_awaitable);
+    }
+  }
+
+  // Pass all non-empty generations to the handler
+  auto e = co_await async::async_dispatch(
+    strand,
+    [&] {
+      auto i = lowest_nomempty(entries);
+      entries_t e;
+      std::copy(i, entries.cend(),
+		std::inserter(e, e.end()));
+      return e;
+    }, asio::use_awaitable);
+  try {
+    co_await watch();
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		       << ": failed to re-establish watch, unsafe to continue: oid="
+		       << oid << ", " << e.what() << dendl;
+    throw;
+  }
+  handle_init(std::move(e));
+  co_return;
 }
 
-bs::error_code logback_generations::update(const DoutPrefixProvider *dpp, optional_yield y) noexcept
+asio::awaitable<void> logback_generations::update(const DoutPrefixProvider *dpp)
 {
-  try {
-    auto res = read(dpp, y);
-    if (!res) {
-      return res.error();
-    }
-
-    std::unique_lock l(m);
-    auto& [es, v] = *res;
-    if (v == version) {
-      // Nothing to do!
-      return {};
-    }
-
-    // Check consistency and prepare update
-    if (es.empty()) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": INCONSISTENCY! Read empty update." << dendl;
-      return bs::error_code(EFAULT, bs::system_category());
-    }
-    auto cur_lowest = lowest_nomempty(entries_);
-    // Straight up can't happen
-    assert(cur_lowest != entries_.cend());
-    auto new_lowest = lowest_nomempty(es);
-    if (new_lowest == es.cend()) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": INCONSISTENCY! Read update with no active head." << dendl;
-      return bs::error_code(EFAULT, bs::system_category());
-    }
-    if (new_lowest->first < cur_lowest->first) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": INCONSISTENCY! Tail moved wrong way." << dendl;
-      return bs::error_code(EFAULT, bs::system_category());
-    }
-
-    std::optional<uint64_t> highest_empty;
-    if (new_lowest->first > cur_lowest->first && new_lowest != es.begin()) {
-      --new_lowest;
-      highest_empty = new_lowest->first;
-    }
-
-    entries_t new_entries;
-
-    if ((es.end() - 1)->first < (entries_.end() - 1)->first) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": INCONSISTENCY! Head moved wrong way." << dendl;
-      return bs::error_code(EFAULT, bs::system_category());
-    }
-
-    if ((es.end() - 1)->first > (entries_.end() - 1)->first) {
-      auto ei = es.lower_bound((entries_.end() - 1)->first + 1);
-      std::copy(ei, es.end(), std::inserter(new_entries, new_entries.end()));
-    }
-
-    // Everything checks out!
-
-    version = v;
-    entries_ = es;
-    l.unlock();
-
-    if (highest_empty) {
-      auto ec = handle_empty_to(*highest_empty);
-      if (ec) return ec;
-    }
-
-    if (!new_entries.empty()) {
-      auto ec = handle_new_gens(std::move(new_entries));
-      if (ec) return ec;
-    }
-  } catch (const std::bad_alloc&) {
-    return bs::error_code(ENOMEM, bs::system_category());
-  }
-  return {};
-}
-
-auto logback_generations::read(const DoutPrefixProvider *dpp, optional_yield y) noexcept ->
-  tl::expected<std::pair<entries_t, obj_version>, bs::error_code>
-{
-  try {
-    librados::ObjectReadOperation op;
-    std::unique_lock l(m);
-    cls_version_check(op, version, VER_COND_GE);
-    l.unlock();
-    obj_version v2;
-    cls_version_read(op, &v2);
-    cb::list bl;
-    op.read(0, 0, &bl, nullptr);
-    auto r = rgw_rados_operate(dpp, ioctx, oid, &op, nullptr, y);
-    if (r < 0) {
-      if (r == -ENOENT) {
-	ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		      << ": oid=" << oid
-		      << " not found" << dendl;
-      } else {
-	ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		   << ": failed reading oid=" << oid
-		   << ", r=" << r << dendl;
-      }
-      return tl::unexpected(bs::error_code(-r, bs::system_category()));
-    }
-    auto bi = bl.cbegin();
-    entries_t e;
-    try {
-      decode(e, bi);
-    } catch (const cb::error& err) {
-      return tl::unexpected(err.code());
-    }
-    return std::pair{ std::move(e), std::move(v2) };
-  } catch (const std::bad_alloc&) {
-    return tl::unexpected(bs::error_code(ENOMEM, bs::system_category()));
-  }
-}
-
-bs::error_code logback_generations::write(const DoutPrefixProvider *dpp, entries_t&& e,
-					  std::unique_lock<std::mutex>&& l_,
-					  optional_yield y) noexcept
-{
-  auto l = std::move(l_);
-  ceph_assert(l.mutex() == &m &&
-	      l.owns_lock());
-  try {
-    librados::ObjectWriteOperation op;
-    cls_version_check(op, version, VER_COND_GE);
-    cb::list bl;
-    encode(e, bl);
-    op.write_full(bl);
-    cls_version_inc(op);
-    auto r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
-    if (r == 0) {
-      entries_ = std::move(e);
-      version.inc();
-      return {};
-    }
-    l.unlock();
-    if (r < 0 && r != -ECANCELED) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": failed reading oid=" << oid
-		 << ", r=" << r << dendl;
-      return { -r, bs::system_category() };
-    }
-    if (r == -ECANCELED) {
-      auto ec = update(dpp, y);
-      if (ec) {
-	return ec;
-      } else {
-	return { ECANCELED, bs::system_category() };
-      }
-    }
-  } catch (const std::bad_alloc&) {
-    return { ENOMEM, bs::system_category() };
-  }
-  return {};
-}
-
-
-bs::error_code logback_generations::watch() noexcept {
-  try {
-    auto cct = static_cast<CephContext*>(ioctx.cct());
-    auto r = ioctx.watch2(oid, &watchcookie, this);
-    if (r < 0) {
-      lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": failed to set watch oid=" << oid
-		 << ", r=" << r << dendl;
-      return { -r, bs::system_category() };
-    }
-  } catch (const std::bad_alloc&) {
-    return bs::error_code(ENOMEM, bs::system_category());
-  }
-  return {};
-}
-
-bs::error_code logback_generations::new_backing(const DoutPrefixProvider *dpp, 
-                                                log_type type,
-						optional_yield y) noexcept {
-  static constexpr auto max_tries = 10;
-  try {
-    auto ec = update(dpp, y);
-    if (ec) return ec;
-    auto tries = 0;
-    entries_t new_entries;
-    do {
-      std::unique_lock l(m);
-      auto last = entries_.end() - 1;
-      if (last->second.type == type) {
-	// Nothing to be done
-	return {};
-      }
-      auto newgenid = last->first + 1;
-      logback_generation newgen;
-      newgen.gen_id = newgenid;
-      newgen.type = type;
-      new_entries.emplace(newgenid, newgen);
-      auto es = entries_;
-      es.emplace(newgenid, std::move(newgen));
-      ec = write(dpp, std::move(es), std::move(l), y);
-      ++tries;
-    } while (ec == bs::errc::operation_canceled &&
-	     tries < max_tries);
-    if (tries >= max_tries) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": exhausted retry attempts." << dendl;
-      return ec;
-    }
-
-    if (ec) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": write failed with ec=" << ec.message() << dendl;
-      return ec;
-    }
-
-    cb::list bl, rbl;
-
-    auto r = rgw_rados_notify(dpp, ioctx, oid, bl, 10'000, &rbl, y);
-    if (r < 0) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": notify failed with r=" << r << dendl;
-      return { -r, bs::system_category() };
-    }
-    ec = handle_new_gens(new_entries);
-  } catch (const std::bad_alloc&) {
-    return bs::error_code(ENOMEM, bs::system_category());
-  }
-  return {};
-}
-
-bs::error_code logback_generations::empty_to(const DoutPrefixProvider *dpp, 
-                                             uint64_t gen_id,
-					     optional_yield y) noexcept {
-  static constexpr auto max_tries = 10;
-  try {
-    auto ec = update(dpp, y);
-    if (ec) return ec;
-    auto tries = 0;
-    uint64_t newtail = 0;
-    do {
-      std::unique_lock l(m);
-      {
-	auto last = entries_.end() - 1;
-	if (gen_id >= last->first) {
-	  ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		     << ": Attempt to trim beyond the possible." << dendl;
-	  return bs::error_code(EINVAL, bs::system_category());
+  auto [es, v] = co_await read(dpp);
+  auto [do_nothing, highest_empty, new_entries] =
+    co_await async::async_dispatch(
+      strand,
+      [&]() -> std::tuple<bool, std::optional<std::uint64_t>, entries_t> {
+	if (v == version) {
+	  // Nothing to do!
+	  return {true, {}, {}};
 	}
-      }
-      auto es = entries_;
-      auto ei = es.upper_bound(gen_id);
-      if (ei == es.begin()) {
-	// Nothing to be done.
-	return {};
-      }
-      for (auto i = es.begin(); i < ei; ++i) {
-	newtail = i->first;
-	i->second.pruned = ceph::real_clock::now();
-      }
-      ec = write(dpp, std::move(es), std::move(l), y);
-      ++tries;
-    } while (ec == bs::errc::operation_canceled &&
-	     tries < max_tries);
-    if (tries >= max_tries) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": exhausted retry attempts." << dendl;
-      return ec;
-    }
+	// Check consistency and prepare update
+	if (es.empty()) {
+	  throw sys::system_error{
+	    EFAULT, sys::generic_category(),
+	    "logback_generations::update: INCONSISTENCY! Read empty update."};
+	}
+	auto cur_lowest = lowest_nomempty(entries);
+	// Straight up can't happen
+	assert(cur_lowest != entries.cend());
+	auto new_lowest = lowest_nomempty(es);
+	if (new_lowest == es.cend()) {
+	  throw sys::system_error{
+	    EFAULT, sys::generic_category(),
+	    "logback_generations::update: INCONSISTENCY! Read update with no "
+	    "active head!"};
+	}
+	if (new_lowest->first < cur_lowest->first) {
+	  throw sys::system_error{
+	    EFAULT, sys::generic_category(),
+	    "logback_generations::update: INCONSISTENCY! Tail moved wrong way."};
+	}
+	std::optional<uint64_t> highest_empty;
+	if (new_lowest->first > cur_lowest->first && new_lowest != es.begin()) {
+	  --new_lowest;
+	  highest_empty = new_lowest->first;
+	}
+	entries_t new_entries;
 
-    if (ec) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": write failed with ec=" << ec.message() << dendl;
-      return ec;
-    }
+	if ((es.end() - 1)->first < (entries.end() - 1)->first) {
+	  throw sys::system_error{
+	    EFAULT, sys::generic_category(),
+	    "logback_generations::update: INCONSISTENCY! Head moved wrong way."};
+	}
+	if ((es.end() - 1)->first > (entries.end() - 1)->first) {
+	  auto ei = es.lower_bound((entries.end() - 1)->first + 1);
+	  std::copy(ei, es.end(), std::inserter(new_entries, new_entries.end()));
+	}
+	// Everything checks out!
+	version = std::move(v);
+	entries = std::move(es);
+	return {false, highest_empty, new_entries};
+      }, asio::use_awaitable);
 
-    cb::list bl, rbl;
-
-    auto r = rgw_rados_notify(dpp, ioctx, oid, bl, 10'000, &rbl, y);
-    if (r < 0) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": notify failed with r=" << r << dendl;
-      return { -r, bs::system_category() };
-    }
-    ec = handle_empty_to(newtail);
-  } catch (const std::bad_alloc&) {
-    return bs::error_code(ENOMEM, bs::system_category());
+  if (do_nothing) {
+    co_return;
   }
-  return {};
+  if (highest_empty) {
+    handle_empty_to(*highest_empty);
+  }
+
+  if (!new_entries.empty()) {
+    handle_new_gens(std::move(new_entries));
+  }
+  co_return;
 }
 
-bs::error_code logback_generations::remove_empty(const DoutPrefixProvider *dpp, optional_yield y) noexcept {
-  static constexpr auto max_tries = 10;
-  try {
-    auto ec = update(dpp, y);
-    if (ec) return ec;
-    auto tries = 0;
-    entries_t new_entries;
-    std::unique_lock l(m);
-    ceph_assert(!entries_.empty());
-    {
-      auto i = lowest_nomempty(entries_);
-      if (i == entries_.begin()) {
-	return {};
-      }
-    }
-    entries_t es;
-    auto now = ceph::real_clock::now();
-    l.unlock();
-    do {
-      std::copy_if(entries_.cbegin(), entries_.cend(),
-		   std::inserter(es, es.end()),
-		   [now](const auto& e) {
-		     if (!e.second.pruned)
-		       return false;
-
-		     auto pruned = *e.second.pruned;
-		     return (now - pruned) >= 1h;
-		   });
-      auto es2 = entries_;
-      for (const auto& [gen_id, e] : es) {
-	ceph_assert(e.pruned);
-	auto ec = log_remove(dpp, ioctx, shards,
-			     [this, gen_id = gen_id](int shard) {
-			       return this->get_oid(gen_id, shard);
-			     }, (gen_id == 0), y);
-	if (ec) {
-	  ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			     << ": Error pruning: gen_id=" << gen_id
-			     << " ec=" << ec.message() << dendl;
-	}
-	if (auto i = es2.find(gen_id); i != es2.end()) {
-	  es2.erase(i);
-	}
-      }
-      l.lock();
-      es.clear();
-      ec = write(dpp, std::move(es2), std::move(l), y);
-      ++tries;
-    } while (ec == bs::errc::operation_canceled &&
-	     tries < max_tries);
-    if (tries >= max_tries) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": exhausted retry attempts." << dendl;
-      return ec;
-    }
-
-    if (ec) {
-      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-		 << ": write failed with ec=" << ec.message() << dendl;
-      return ec;
-    }
-  } catch (const std::bad_alloc&) {
-    return bs::error_code(ENOMEM, bs::system_category());
-  }
-  return {};
-}
-
-void logback_generations::handle_notify(uint64_t notify_id,
-					uint64_t cookie,
-					uint64_t notifier_id,
-					bufferlist& bl)
+auto logback_generations::read(const DoutPrefixProvider *dpp)
+  -> asio::awaitable<std::pair<entries_t, obj_version>>
 {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
-  const DoutPrefix dp(cct, dout_subsys, "logback generations handle_notify: ");
-  if (notifier_id != my_id) {
-    auto ec = update(&dp, null_yield);
-    if (ec) {
-      lderr(cct)
-	<< __PRETTY_FUNCTION__ << ":" << __LINE__
-	<< ": update failed, no one to report to and no safe way to continue."
-	<< dendl;
-      abort();
-    }
-  }
-  cb::list rbl;
-  ioctx.notify_ack(oid, notify_id, watchcookie, rbl);
-}
-
-void logback_generations::handle_error(uint64_t cookie, int err) {
-  auto cct = static_cast<CephContext*>(ioctx.cct());
-  auto r = ioctx.unwatch2(watchcookie);
-  if (r < 0) {
-    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-	       << ": failed to set unwatch oid=" << oid
-	       << ", r=" << r << dendl;
-  }
-
-  auto ec = watch();
+  neorados::ReadOp op;
+  op.exec(version::check(co_await async::async_dispatch(
+			   strand,
+			   [this] {
+			     return version;
+			   }, asio::use_awaitable),
+			 VER_COND_GE));
+  obj_version v2;
+  op.exec(version::read(&v2));
+  buffer::list bl;
+  op.read(0, 0, &bl, nullptr);
+  sys::error_code ec;
+  co_await rados.execute(oid, loc, std::move(op), nullptr,
+			 asio::redirect_error(asio::use_awaitable, ec));
   if (ec) {
-    lderr(cct) << __PRETTY_FUNCTION__ << ":" << __LINE__
-	       << ": failed to re-establish watch, unsafe to continue: oid="
-	       << oid << ", ec=" << ec.message() << dendl;
+    if (ec == sys::errc::no_such_file_or_directory) {
+      ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			<< ": oid=" << oid
+			<< " not found" << dendl;
+    } else {
+      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": failed reading oid=" << oid
+			 << ", " << ec.message() << dendl;
+    }
+    throw sys::system_error(ec);
+  }
+  auto bi = bl.cbegin();
+  entries_t e;
+  decode(e, bi);
+  co_return std::pair{std::move(e), std::move(v2)};
+}
+
+// This *must* be executed in logback_generations::strand
+//
+// The return value must be used. If true, run update and retry.
+asio::awaitable<bool> logback_generations::write(const DoutPrefixProvider *dpp,
+						 entries_t&& e)
+{
+  ceph_assert(co_await asio::this_coro::executor == strand);
+  bool canceled = false;
+  buffer::list bl;
+  encode(e, bl);
+  neorados::WriteOp op;
+  op.exec(version::check(version, VER_COND_GE))
+    .write_full(std::move(bl))
+    .exec(version::inc());
+  sys::error_code ec;
+  co_await rados.execute(oid, loc, std::move(op),
+			 asio::redirect_error(asio::use_awaitable, ec));
+  if (!ec) {
+    entries = std::move(e);
+    version.inc();
+  } else if (ec == sys::errc::operation_canceled) {
+    canceled = true;
+  } else {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		       << ": failed reading oid=" << oid
+		       << ", " << ec.message() << dendl;
+    throw sys::system_error(ec);
+  }
+  co_return canceled;
+}
+
+
+asio::awaitable<void> logback_generations::watch()
+{
+  watchcookie = co_await rados.watch(oid, loc, std::nullopt, std::ref(*this),
+				     asio::use_awaitable);
+  co_return;
+}
+
+asio::awaitable<void>
+logback_generations::new_backing(const DoutPrefixProvider* dpp, log_type type) {
+  static constexpr auto max_tries = 10;
+  auto tries = 0;
+  entries_t new_entries;
+  bool canceled = false;
+  do {
+    co_await update(dpp);
+    canceled =
+      co_await asio::co_spawn(
+	strand,
+	[](logback_generations& l, log_type type, entries_t& new_entries,
+	   const DoutPrefixProvider* dpp)
+	-> asio::awaitable<bool> {
+	  auto last = l.entries.end() - 1;
+	  if (last->second.type == type) {
+	    // Nothing to be done
+	    co_return false;
+	  }
+	  auto newgenid = last->first + 1;
+	  logback_generation newgen;
+	  newgen.gen_id = newgenid;
+	  newgen.type = type;
+	  new_entries.emplace(newgenid, newgen);
+	  auto es = l.entries;
+	  es.emplace(newgenid, std::move(newgen));
+	  co_return co_await l.write(dpp, std::move(es));
+	}(*this, type, new_entries, dpp),
+	asio::use_awaitable);
+    ++tries;
+  } while (canceled && tries < max_tries);
+  if (tries >= max_tries) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		       << ": exhausted retry attempts." << dendl;
+    throw sys::system_error(ECANCELED, sys::generic_category(),
+			    "Exhausted retry attempts");
+  }
+
+  co_await rados.notify(oid, loc, {}, 10s, asio::use_awaitable);
+  handle_new_gens(new_entries);
+  co_return;
+}
+
+asio::awaitable<void>
+logback_generations::empty_to(const DoutPrefixProvider* dpp,
+			      uint64_t gen_id) {
+  static constexpr auto max_tries = 10;
+  auto tries = 0;
+  uint64_t newtail = 0;
+  bool canceled = false;
+  do {
+    co_await update(dpp);
+    canceled =
+      co_await asio::co_spawn(
+	strand,
+	[](logback_generations& l, uint64_t gen_id,
+	   uint64_t& newtail, const DoutPrefixProvider* dpp)
+	-> asio::awaitable<bool> {
+	  {
+	    auto last = l.entries.end() - 1;
+	    if (gen_id >= last->first) {
+	      ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+				 << ": Attempt to trim beyond the possible."
+				 << dendl;
+	      throw sys::system_error{EINVAL, sys::system_category()};
+	    }
+	  }
+	  auto es = l.entries;
+	  auto ei = es.upper_bound(gen_id);
+	  if (ei == es.begin()) {
+	    // Nothing to be done.
+	    co_return false;
+	  }
+	  for (auto i = es.begin(); i < ei; ++i) {
+	    newtail = i->first;
+	    i->second.pruned = ceph::real_clock::now();
+	  }
+	  co_return co_await l.write(dpp, std::move(es));
+	}(*this, gen_id, newtail, dpp),
+	asio::use_awaitable);
+    if (canceled) {
+      co_await update(dpp);
+    }
+    ++tries;
+  } while (canceled && tries < max_tries);
+  if (tries >= max_tries) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		       << ": exhausted retry attempts." << dendl;
+    throw sys::system_error(ECANCELED, sys::generic_category(),
+			    "Exhausted retry attempts");
+  }
+  co_await rados.notify(oid, loc, {}, 10s, asio::use_awaitable);
+  handle_empty_to(newtail);
+  co_return;
+}
+
+asio::awaitable<void>
+logback_generations::remove_empty(const DoutPrefixProvider* dpp) {
+  static constexpr auto max_tries = 10;
+  co_await update(dpp);
+  auto tries = 0;
+  entries_t new_entries;
+  bool nothing_to_do =
+    co_await async::async_dispatch(
+      strand,
+      [this] {
+	ceph_assert(!entries.empty());
+	auto i = lowest_nomempty(entries);
+	return i == entries.begin();
+      }, asio::use_awaitable);
+  if (nothing_to_do)
+    co_return;
+  entries_t es;
+  auto now = ceph::real_clock::now();
+  bool canceled = false;
+  do {
+    entries_t es2;
+    co_await async::async_dispatch(
+      strand,
+      [this, now, &es, &es2] {
+	std::copy_if(entries.cbegin(), entries.cend(),
+		     std::inserter(es, es.end()),
+		     [now](const auto& e) {
+		       if (!e.second.pruned)
+			 return false;
+		       auto pruned = *e.second.pruned;
+		       return (now - pruned) >= 1h;
+		     });
+	es2 = entries;
+      }, asio::use_awaitable);
+    for (const auto& [gen_id, e] : es) {
+      ceph_assert(e.pruned);
+      co_await log_remove(dpp, rados, loc, shards,
+			  [this, gen_id = gen_id](int shard) {
+			    return this->get_oid(gen_id, shard);
+			  }, (gen_id == 0));
+      if (auto i = es2.find(gen_id); i != es2.end()) {
+	es2.erase(i);
+      }
+    }
+    es.clear();
+    canceled = co_await co_spawn(
+      strand,
+      write(dpp, std::move(es2)),
+      asio::use_awaitable);
+    if (canceled) {
+      co_await update(dpp);
+    }
+    ++tries;
+  } while (canceled && tries < max_tries);
+  if (tries >= max_tries) {
+    ldpp_dout(dpp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		       << ": exhausted retry attempts." << dendl;
+    throw sys::system_error(ECANCELED, sys::generic_category(),
+			    "Exhausted retry attempts");
+  }
+  co_await rados.notify(oid, loc, {}, 10s, asio::use_awaitable);
+}
+
+void logback_generations::operator ()(sys::error_code ec,
+				      uint64_t notify_id,
+				      uint64_t cookie,
+				      uint64_t notifier_id,
+				      bufferlist&& bl) {
+  co_spawn(rados.get_executor(),
+	   handle_notify(ec, notify_id, cookie, notifier_id, std::move(bl)),
+	   asio::detached);
+}
+
+asio::awaitable<void>
+logback_generations::handle_notify(sys::error_code ec,
+				   uint64_t notify_id,
+				   uint64_t cookie,
+				   uint64_t notifier_id,
+				   bufferlist&& bl) {
+  const DoutPrefix dp(rados.cct(), dout_subsys,
+		      "logback generations handle_notify: ");
+  if (!ec) {
+    if (notifier_id != my_id) {
+      try {
+	co_await update(&dp);
+      } catch (const std::exception& e) {
+	ldpp_dout(&dp, -1)
+	  << __PRETTY_FUNCTION__ << ":" << __LINE__
+	  << ": update failed (" << e.what()
+	  << "), no one to report to and no safe way to continue."
+	  << dendl;
+	std::terminate();
+      }
+    }
+    co_await rados.notify_ack(oid, loc, notify_id, watchcookie, {},
+			      asio::use_awaitable);
+  } else {
+    ec.clear();
+    co_await rados.unwatch(watchcookie, loc,
+			   asio::redirect_error(asio::use_awaitable, ec));
+    if (ec) {
+      ldpp_dout(&dp, -1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+			 << ": failed to set unwatch oid=" << oid
+			 << ", " << ec.message() << dendl;
+    }
+
+    try {
+      co_await watch();
+    } catch (const std::exception& e) {
+      ldpp_dout(&dp, -1)
+	<< __PRETTY_FUNCTION__ << ":" << __LINE__
+	<< ": failed to re-establish watch, unsafe to continue: oid="
+	<< oid << ": " << e.what() << dendl;
+      std::terminate();
+    }
   }
 }
