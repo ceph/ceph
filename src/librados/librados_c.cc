@@ -4050,10 +4050,16 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_write_op_operate)(
 {
   tracepoint(librados, rados_aio_write_op_operate_enter, write_op, io, completion, oid, mtime, flags);
   object_t obj(oid);
-  ::ObjectOperation *oo = to_object_operation(write_op);
+  auto oimpl = static_cast<librados::ObjectOperationImpl*>(write_op);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
-  int retval = ctx->aio_operate(obj, oo, c, ctx->snapc, nullptr, translate_flags(flags));
+
+  if (mtime) {
+    oimpl->rt = ceph::real_clock::from_time_t(*mtime);
+    oimpl->prt = &oimpl->rt;
+  }
+
+  int retval = ctx->aio_operate(obj, &oimpl->o, c, ctx->snapc, oimpl->prt, translate_flags(flags));
   tracepoint(librados, rados_aio_write_op_operate_exit, retval);
   return retval;
 }
