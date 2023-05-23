@@ -33,17 +33,19 @@ BUCKET_NAME = 'a-bucket'
 VER_BUCKET_NAME = 'myver'
 INDEX_POOL = 'default.rgw.buckets.index'
 
-def exec_cmd(cmd, **kwargs):
+def exec_cmd(cmd, wait = True, **kwargs):
     check_retcode = kwargs.pop('check_retcode', True)
     kwargs['shell'] = True
     kwargs['stdout'] = subprocess.PIPE
     proc = subprocess.Popen(cmd, **kwargs)
     log.info(proc.args)
-    out, _ = proc.communicate()
-    if check_retcode:
-        assert(proc.returncode == 0)
-        return out
-    return (out, proc.returncode)
+    if wait:
+        out, _ = proc.communicate()
+        if check_retcode:
+            assert(proc.returncode == 0)
+            return out
+        return (out, proc.returncode)
+    return ('', 0)
 
 class BucketStats:
     def __init__(self, bucket_name, bucket_id, num_objs=0, size_kb=0, num_shards=0):
@@ -197,7 +199,7 @@ def main():
     # create a bucket
     bucket = connection.create_bucket(Bucket=BUCKET_NAME)
     ver_bucket = connection.create_bucket(Bucket=VER_BUCKET_NAME)
-    connection.BucketVersioning('ver_bucket')
+    connection.BucketVersioning(VER_BUCKET_NAME).enable()
 
     bucket_acl = connection.BucketAcl(BUCKET_NAME).load()
     ver_bucket_acl = connection.BucketAcl(VER_BUCKET_NAME).load()
@@ -313,13 +315,22 @@ def main():
     json_op = json.loads(cmd.decode('utf-8', 'ignore')) # ignore utf-8 can't decode 0x80
     assert len(json_op) == 0
 
+    # TESTCASE 'check that PUT succeeds during reshard'
+    log.debug(' test: PUT succeeds during reshard')
+    num_shards = get_bucket_stats(VER_BUCKET_NAME).num_shards
+    exec_cmd('''radosgw-admin --inject-delay-at=do_reshard --inject-delay-ms=5000 \
+                bucket reshard --bucket {} --num-shards {}'''
+                .format(VER_BUCKET_NAME, num_shards + 1), wait = False)
+    ver_bucket.put_object(Key='put_during_reshard', Body=b"some_data")
+    log.debug('put object successful')
+
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.objects.all().delete()
     bucket.delete()
     log.debug("Deleting bucket {}".format(VER_BUCKET_NAME))
+    ver_bucket.object_versions.all().delete()
     ver_bucket.delete()
-
 
 main()
 log.info("Completed resharding tests")
