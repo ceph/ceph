@@ -2324,6 +2324,7 @@ void RGWGetObj::execute(optional_yield y)
         }
       }
     } catch (const buffer::error&) {}
+  }
 
   if (get_type() == RGW_OP_GET_OBJ && get_data) {
     op_ret = handle_cloudtier_obj(attrs, sync_cloudtiered);
