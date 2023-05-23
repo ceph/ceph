@@ -29,6 +29,7 @@
 
 #include "librados/AioCompletionImpl.h"
 #include "librados/IoCtxImpl.h"
+#include "librados/ObjectOperationImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "librados/RadosXattrIter.h"
@@ -85,18 +86,6 @@ static TracepointProvider::Traits tracepoint_traits("librados_tp.so", "rados_tra
  * |          RadosClient                 |
  * +--------------------------------------+
  */
-
-namespace librados {
-
-struct ObjectOperationImpl {
-  ::ObjectOperation o;
-  real_time rt;
-  real_time *prt;
-
-  ObjectOperationImpl() : prt(NULL) {}
-};
-
-}
 
 size_t librados::ObjectOperation::size()
 {
