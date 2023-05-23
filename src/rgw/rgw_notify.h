@@ -77,7 +77,8 @@ struct reservation_t {
 		req_state* _s,
 		rgw::sal::Object* _object,
 		rgw::sal::Object* _src_object,
-		const std::string* _object_name);
+		const std::string* _object_name,
+		optional_yield y);
 
   /* ctor for non-request caller (e.g., lifecycle) */
   reservation_t(const DoutPrefixProvider* _dpp,

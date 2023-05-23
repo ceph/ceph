@@ -175,6 +175,14 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_multi_obj_del_max_aio
+  type: uint
+  level: advanced
+  desc: Max number of concurrent RADOS requests per multi-object delete request.
+  default: 16
+  services:
+  - rgw
+  with_legacy: true
 # whether or not the quota/gc threads should be started
 - name: rgw_enable_quota_threads
   type: bool

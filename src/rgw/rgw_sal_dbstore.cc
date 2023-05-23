@@ -1767,7 +1767,8 @@ namespace rgw::sal {
 
   std::unique_ptr<Notification> DBStore::get_notification(
     rgw::sal::Object* obj, rgw::sal::Object* src_obj, struct req_state* s,
-    rgw::notify::EventType event_type, const std::string* object_name)
+    rgw::notify::EventType event_type, optional_yield y,
+    const std::string* object_name)
   {
     return std::make_unique<DBNotification>(obj, src_obj, event_type);
   }
