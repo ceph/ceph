@@ -482,3 +482,8 @@ add_test(NAME unittest_decode_start_v_checker_expect_failure
          WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 set_tests_properties(unittest_decode_start_v_checker_expect_failure
   PROPERTIES WILL_FAIL TRUE)
+
+add_executable(unittest_async_call test_async_call.cc)
+target_link_libraries(unittest_async_call librados ceph-common Boost::system
+  GTest::GTest)
+add_ceph_unittest(unittest_async_call)
