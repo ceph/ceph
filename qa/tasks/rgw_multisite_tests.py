@@ -9,7 +9,7 @@ from teuthology.exceptions import ConfigError
 from teuthology.task import Task
 from teuthology import misc
 
-from tasks.rgw_multi import multisite, tests, tests_ps
+from tasks.rgw_multi import multisite, tests
 
 log = logging.getLogger(__name__)
 
@@ -67,9 +67,6 @@ class RGWMultisiteTests(Task):
         result = nose.run(defaultTest=tests.__name__, argv=argv, config=conf)
         if not result:
             error_msg += 'rgw multisite, '
-        result = nose.run(defaultTest=tests_ps.__name__, argv=argv, config=conf)
-        if not result:
-            error_msg += 'rgw multisite pubsub, '
         if error_msg:
             raise RuntimeError(error_msg + 'test failures')
 
