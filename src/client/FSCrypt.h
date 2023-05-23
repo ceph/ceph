@@ -173,16 +173,47 @@ public:
 
 using FSCryptDencRef = std::shared_ptr<FSCryptDenc>;
 
+class FSCryptKeyHandler {
+  ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyHandler");
+  int64_t epoch = -1;
+  FSCryptKeyRef key;
+public:
+  FSCryptKeyHandler() {}
+  FSCryptKeyHandler(int64_t epoch, FSCryptKeyRef k) : epoch(epoch), key(k) {}
+
+  void reset(int64_t epoch, FSCryptKeyRef k);
+
+  int64_t get_epoch();
+  FSCryptKeyRef& get_key();
+};
+
+using FSCryptKeyHandlerRef = std::shared_ptr<FSCryptKeyHandler>;
+
 class FSCryptKeyStore {
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyStore");
-  std::map<ceph_fscrypt_key_identifier, FSCryptKeyRef> m;
+  int64_t epoch = 0;
+  std::map<ceph_fscrypt_key_identifier, FSCryptKeyHandlerRef> m;
+
+  int _find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& key);
 public:
   FSCryptKeyStore() {}
 
-  int create(const char *k, int klen, FSCryptKeyRef& key);
-  int find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyRef& key);
-  int remove(const struct ceph_fscrypt_key_identifier& id);
+  int create(const char *k, int klen, FSCryptKeyHandlerRef& key);
+  int find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& key);
+  int invalidate(const struct ceph_fscrypt_key_identifier& id);
 };
+
+struct FSCryptKeyValidator {
+  CephContext *cct;
+  FSCryptKeyHandlerRef handler;
+  int64_t epoch;
+
+  FSCryptKeyValidator(CephContext *cct, FSCryptKeyHandlerRef& kh, int64_t e);
+
+  bool is_valid() const;
+};
+
+using FSCryptKeyValidatorRef = std::shared_ptr<FSCryptKeyValidator>;
 
 
 class FSCrypt {
@@ -195,5 +226,5 @@ public:
     return key_store;
   }
 
-  FSCryptDencRef get_fname_denc(FSCryptContextRef& ctx);
+  FSCryptDencRef get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
 };

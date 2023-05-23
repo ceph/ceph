@@ -386,9 +386,28 @@ void FSCryptContext::generate_iv(uint64_t block_num, FSCryptIV& iv) const
   iv.u.block_num = block_num;
 }
 
-int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyRef& key)
+void FSCryptKeyHandler::reset(int64_t _epoch, FSCryptKeyRef k)
 {
-  key = std::make_shared<FSCryptKey>();
+  std::unique_lock wl{lock};
+  epoch = _epoch;
+  key = k;
+}
+
+int64_t FSCryptKeyHandler::get_epoch()
+{
+  std::shared_lock rl{lock};
+  return epoch;
+}
+
+FSCryptKeyRef& FSCryptKeyHandler::get_key()
+{
+  std::shared_lock rl{lock};
+  return key;
+}
+
+int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_handler)
+{
+  auto key = std::make_shared<FSCryptKey>();
 
   int r = key->init(k, klen);
   if (r < 0) {
@@ -401,35 +420,63 @@ int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyRef& key)
   
   auto iter = m.find(id);
   if (iter != m.end()) {
-    return -EEXIST;
+    /* found a key handler entry, check that there is a key there */
+    key_handler = iter->second;
+    if (key_handler->get_key()) {
+      return -EEXIST;
+    }
+    key_handler->reset(++epoch, key);
+  } else {
+    key_handler = std::make_shared<FSCryptKeyHandler>(++epoch, key);
+    m[id] = key_handler;
   }
-
-  m[id] = key;
 
   return 0;
 }
 
-int FSCryptKeyStore::find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyRef& key)
+int FSCryptKeyStore::_find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& kh)
 {
-  std::shared_lock rl{lock};
-
   auto iter = m.find(id);
   if (iter == m.end()) {
     return -ENOENT;
   }
 
-  key = iter->second;
+  kh = iter->second;
 
   return 0;
 }
 
-int FSCryptKeyStore::remove(const struct ceph_fscrypt_key_identifier& id)
+int FSCryptKeyStore::find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& kh)
+{
+  std::shared_lock rl{lock};
+
+  return _find(id, kh);
+}
+
+int FSCryptKeyStore::invalidate(const struct ceph_fscrypt_key_identifier& id)
 {
   std::unique_lock rl{lock};
+
+  FSCryptKeyHandlerRef kh;
+  int r = _find(id, kh);
+  if (r == -ENOENT) {
+    return 0;
+  } else if (r < 0) {
+    return r;
+  }
+
+  kh->reset(++epoch, nullptr);
 
   m.erase(id);
 
   return 0;
+}
+
+FSCryptKeyValidator::FSCryptKeyValidator(CephContext *cct, FSCryptKeyHandlerRef& kh, int64_t e) : cct(cct), handler(kh), epoch(e) {
+}
+
+bool FSCryptKeyValidator::is_valid() const {
+  return (handler->get_epoch() == epoch);
 }
 
 FSCryptDenc::FSCryptDenc(): cipher(EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL)),
@@ -490,18 +537,32 @@ FSCryptDenc::~FSCryptDenc()
   EVP_CIPHER_CTX_free(cipher_ctx);
 }
 
-FSCryptDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx)
+FSCryptDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
 {
   if (!ctx) {
     return nullptr;
   }
 
-  FSCryptKeyRef master_key;
-  int r = key_store.find(ctx->master_key_identifier, master_key);
+  FSCryptKeyHandlerRef master_kh;
+  int r = key_store.find(ctx->master_key_identifier, master_kh);
   if (r == 0) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key found" << dendl;
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key handler found" << dendl;
   } else if (r == -ENOENT) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key not found" << dendl;
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key handler not found" << dendl;
+    return nullptr;
+  } else {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": error: r=" << r << dendl;
+    return nullptr;
+  }
+
+  if (kv) {
+    *kv = make_shared<FSCryptKeyValidator>(cct, master_kh, master_kh->get_epoch());
+  }
+
+  auto& master_key = master_kh->get_key();
+
+  if (!master_key) {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key key is null" << dendl;
     return nullptr;
   }
 

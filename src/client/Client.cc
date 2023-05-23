@@ -1401,7 +1401,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
     _readdir_drop_dirp_buffer(dirp);
     dirp->buffer.reserve(numdn);
 
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx);
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator);
 
     string orig_dname;
     string dname;
@@ -1465,11 +1465,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       if (hash_order) {
-<<<<<<< HEAD
-	unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(dname));
-=======
-	unsigned hash = ceph_frag_value(diri->hash_dentry_name(orig_dname));
->>>>>>> a648a309db0 (fscrypt: hash_dentry based on unencrypted fname)
+	unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(orig_dname));
 	if (hash != last_hash)
 	  readdir_offset = 2;
 	last_hash = hash;
@@ -9515,6 +9511,12 @@ int Client::_readdir_r_cb(int op,
 	   << dirp->inode->is_complete_and_ordered()
 	   << " issued " << ccap_string(dirp->inode->caps_issued())
 	   << dendl;
+
+  if (dirp->inode->fscrypt_key_validator &&
+      !dirp->inode->fscrypt_key_validator->is_valid()) {
+    clear_dir_complete_and_ordered(dirp->inode.get(), true);
+  }
+
   if (!bypass_cache &&
       dirp->inode->snapid != CEPH_SNAPDIR &&
       dirp->inode->is_complete_and_ordered() &&

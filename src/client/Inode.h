@@ -174,6 +174,7 @@ struct Inode : RefCountedObject {
   std::vector<uint8_t> fscrypt_auth;
   std::vector<uint8_t> fscrypt_file;
   FSCryptContextRef fscrypt_ctx;
+  FSCryptKeyValidatorRef fscrypt_key_validator;
 
   bool is_fscrypt_enabled() {
     return !!fscrypt_auth.size();
