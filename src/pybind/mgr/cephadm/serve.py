@@ -1431,7 +1431,7 @@ class CephadmServe:
     async def _run_cephadm(self,
                            host: str,
                            entity: Union[CephadmNoImage, str],
-                           command: str,
+                           command: Union[str, List[str]],
                            args: List[str],
                            addr: Optional[str] = "",
                            stdin: Optional[str] = "",
@@ -1496,7 +1496,10 @@ class CephadmServe:
         final_args += ['--timeout', str(timeout)]
 
         # subcommand
-        final_args.append(command)
+        if isinstance(command, list):
+            final_args.extend([str(v) for v in command])
+        else:
+            final_args.append(command)
 
         # subcommand args
         if not no_fsid:
