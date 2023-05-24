@@ -189,6 +189,10 @@ public:
                   const std::string &notify_id);
   void notify_all(const LogEntry &log_entry);
 
+  auto& get_module_finisher(const std::string &name) {
+    return modules.at(name)->finisher;
+  }
+
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;
   }

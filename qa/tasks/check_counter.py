@@ -5,6 +5,8 @@ import json
 from teuthology.task import Task
 from teuthology import misc
 
+from tasks import ceph_manager
+
 log = logging.getLogger(__name__)
 
 
@@ -30,8 +32,16 @@ class CheckCounter(Task):
         counters:
             mds:
                 - "mds.dir_split"
+                -
+                    name: "mds.dir_update"
+                    min: 3
     - workunit: ...
     """
+    @property
+    def admin_remote(self):
+        first_mon = misc.get_first_mon(self.ctx, None)
+        (result,) = self.ctx.cluster.only(first_mon).remotes.keys()
+        return result
 
     def start(self):
         log.info("START")
@@ -47,6 +57,10 @@ class CheckCounter(Task):
         if cluster_name is None:
             cluster_name = next(iter(self.ctx.managers.keys()))
 
+
+        mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=self.ctx, logger=log.getChild('ceph_manager'))
+        active_mgr = json.loads(mon_manager.raw_cluster_cmd("mgr", "dump", "--format=json-pretty"))["active_name"]
+
         for daemon_type, counters in targets.items():
             # List of 'a', 'b', 'c'...
             daemon_ids = list(misc.all_roles_of_type(self.ctx.cluster, daemon_type))
@@ -54,11 +68,14 @@ class CheckCounter(Task):
                              self.ctx.daemons.get_daemon(daemon_type, daemon_id))
                             for daemon_id in daemon_ids])
 
+            expected = set()
             seen = set()
 
             for daemon_id, daemon in daemons.items():
                 if not daemon.running():
                     log.info("Ignoring daemon {0}, it isn't running".format(daemon_id))
+                    continue
+                elif daemon_type == 'mgr' and daemon_id != active_mgr:
                     continue
                 else:
                     log.debug("Getting stats from {0}".format(daemon_id))
@@ -72,23 +89,38 @@ class CheckCounter(Task):
                     log.warning("No admin socket response from {0}, skipping".format(daemon_id))
                     continue
 
+                minval = ''
+                expected_val = ''
                 for counter in counters:
-                    subsys, counter_id = counter.split(".")
-                    if subsys not in perf_dump or counter_id not in perf_dump[subsys]:
-                        log.warning("Counter '{0}' not found on daemon {1}.{2}".format(
-                            counter, daemon_type, daemon_id))
-                        continue
-                    value = perf_dump[subsys][counter_id]
+                    if isinstance(counter, dict):
+                        name = counter['name']
+                        if 'min' in counter:
+                            minval = counter['min']
+                        if 'expected_val' in counter:
+                            expected_val = counter['expected_val']
+                    else:
+                        name = counter
+                        minval = 1
+                    expected.add(name)
 
-                    log.info("Daemon {0}.{1} {2}={3}".format(
-                        daemon_type, daemon_id, counter, value
-                    ))
+                    val = perf_dump
+                    for key in name.split('.'):
+                        if key not in val:
+                            log.warning(f"Counter '{name}' not found on daemon {daemon_type}.{daemon_id}")
+                            val = None
+                            break
 
-                    if value > 0:
-                        seen.add(counter)
+                        val = val[key]
+
+                    if val is not None:
+                        log.info(f"Daemon {daemon_type}.{daemon_id} {name}={val}")
+                        if isinstance(minval, int) and val >= minval:
+                            seen.add(name)
+                        elif isinstance(expected_val, int) and val == expected_val:
+                            seen.add(name)
 
             if not dry_run:
-                unseen = set(counters) - set(seen)
+                unseen = set(expected) - set(seen)
                 if unseen:
                     raise RuntimeError("The following counters failed to be set "
                                        "on {0} daemons: {1}".format(
