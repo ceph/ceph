@@ -29,8 +29,7 @@ protected:
   Ref<PG> pg;
   PipelineHandle handle;
 
-  std::optional<epoch_t> from;
-  epoch_t to;
+  const epoch_t from, to;
 
   PeeringCtx rctx;
   const bool do_init;
