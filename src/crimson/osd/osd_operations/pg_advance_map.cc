@@ -73,6 +73,7 @@ seastar::future<> PGAdvanceMap::start()
       });
     }
     return fut.then([this] {
+      ceph_assert(std::cmp_less_equal(*from, to));
       return seastar::do_for_each(
 	boost::make_counting_iterator(*from + 1),
 	boost::make_counting_iterator(to + 1),
