@@ -16,10 +16,6 @@ class FakeDaemonDescription:
 
 class FakeCache:
     def get_daemons_by_service(self, service_type):
-        if service_type == 'ceph-exporter':
-            return [FakeDaemonDescription('1.2.3.4', [9926], 'node0'),
-                    FakeDaemonDescription('1.2.3.5', [9926], 'node1')]
-
         return [FakeDaemonDescription('1.2.3.4', [9100], 'node0'),
                 FakeDaemonDescription('1.2.3.5', [9200], 'node1')]
 
@@ -153,20 +149,6 @@ class TestCephadmService:
         # check content
         assert cfg[0]['targets'] == ['1.2.3.4:9049']
         assert cfg[0]['labels'] == {'instance': 'ingress'}
-
-    def test_get_sd_config_ceph_exporter(self):
-        mgr = FakeMgr()
-        root = Root(mgr)
-        cfg = root.get_sd_config('ceph-exporter')
-
-        # check response structure
-        assert cfg
-        for entry in cfg:
-            assert 'labels' in entry
-            assert 'targets' in entry
-
-        # check content
-        assert cfg[0]['targets'] == ['1.2.3.4:9926']
 
     def test_get_sd_config_invalid_service(self):
         mgr = FakeMgr()
