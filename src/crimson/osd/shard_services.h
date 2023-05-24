@@ -428,7 +428,6 @@ public:
   get_or_create_pg_ret get_or_create_pg(
     PGMap::PGCreationBlockingEvent::TriggerI&&,
     spg_t pgid,
-    epoch_t epoch,
     std::unique_ptr<PGCreateInfo> info);
 
   using wait_for_pg_ertr = PGMap::wait_for_pg_ertr;
