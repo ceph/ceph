@@ -535,7 +535,7 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
     }
     logger().info("{}: {} new removed snaps {}, snap_trimq now{}",
                   *this, __func__, it->second, snap_trimq);
-    assert(!bad || local_conf().get_val<bool>("osd_debug_verify_cached_snaps"));
+    assert(!bad || !local_conf().get_val<bool>("osd_debug_verify_cached_snaps"));
   }
 }
 
