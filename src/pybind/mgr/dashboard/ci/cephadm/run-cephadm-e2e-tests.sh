@@ -55,5 +55,5 @@ kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --pl
 
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'
 
-cypress_run ["cypress/e2e/orchestrator/workflow/*.feature, cypress/e2e/orchestrator/workflow/*-spec.ts"]
+cypress_run ["cypress/e2e/orchestrator/workflow/*.feature","cypress/e2e/orchestrator/workflow/*-spec.ts"]
 cypress_run "cypress/e2e/orchestrator/grafana/*.feature"

@@ -61,7 +61,7 @@ Then(
               .should('be.visible')
               .within(() => {
                 for (const legend of legends.split(', ')) {
-                  cy.get('a').contains(legend);
+                  cy.get(`button`).contains(legend);
                 }
               });
           });
