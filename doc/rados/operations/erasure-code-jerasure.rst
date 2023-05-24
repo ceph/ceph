@@ -7,8 +7,8 @@ also the default for Ceph erasure coded pools.
 
 The *jerasure* plugin encapsulates the `Jerasure
 <https://github.com/ceph/jerasure>`_ library. It is
-recommended to read the ``jerasuredocumentation to get a better
-understanding of the parameters. Note that the ``jerasure.org``
+recommended to read the ``jerasure`` documentation to
+understand the parameters. Note that the ``jerasure.org``
 web site as of 2023 may no longer be connected to the original
 project or legitimate.
 
