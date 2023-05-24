@@ -796,6 +796,11 @@ struct PG::do_osd_ops_params_t {
     return false;
   }
 
+  // Only used by ExecutableMessagePimpl
+  entity_name_t get_source() const {
+    return orig_source_inst.name;
+  }
+
   crimson::net::ConnectionRef &conn;
   osd_reqid_t reqid;
   utime_t mtime;
