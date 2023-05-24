@@ -454,7 +454,7 @@ class TestCephadm(object):
                         '--config-json', '-',
                         '--reconfig',
                     ],
-                    stdin='{"config": "\\n\\n[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
+                    stdin='{"config": "[mon]\\nk=v\\n[mon.test]\\npublic network = 127.0.0.0/8\\n", '
                     + '"keyring": "", "files": {"config": "[mon.test]\\npublic network = 127.0.0.0/8\\n"}}',
                     image='')
 
@@ -1655,7 +1655,7 @@ class TestCephadm(object):
             cephadm_module._set_extra_ceph_conf('[mon]\nk=v')
             CephadmServe(cephadm_module)._refresh_hosts_and_daemons()
             _write_file.assert_called_with('test', '/etc/ceph/ceph.conf',
-                                           b'\n\n[mon]\nk=v\n', 0o644, 0, 0)
+                                           b'[mon]\nk=v\n', 0o644, 0, 0)
 
             # reload
             cephadm_module.cache.last_client_files = {}
@@ -1675,6 +1675,48 @@ class TestCephadm(object):
     def test_etc_ceph_init(self):
         with with_cephadm_module({'manage_etc_ceph_ceph_conf': True}) as m:
             assert m.manage_etc_ceph_ceph_conf is True
+
+    @mock.patch("cephadm.CephadmOrchestrator.check_mon_command")
+    @mock.patch("cephadm.CephadmOrchestrator.extra_ceph_conf")
+    def test_extra_ceph_conf(self, _extra_ceph_conf, _check_mon_cmd, cephadm_module: CephadmOrchestrator):
+        # settings put into the [global] section in the extra conf
+        # need to be appended to existing [global] section in given
+        # minimal ceph conf, but anything in another section (e.g. [mon])
+        # needs to continue to be its own section
+
+        # this is the conf "ceph generate-minimal-conf" will return in this test
+        _check_mon_cmd.return_value = (0, """[global]
+global_k1 = global_v1
+global_k2 = global_v2
+[mon]
+mon_k1 = mon_v1
+[osd]
+osd_k1 = osd_v1
+osd_k2 = osd_v2
+""", '')
+
+        # test with extra ceph conf that has some of the sections from minimal conf
+        _extra_ceph_conf.return_value = CephadmOrchestrator.ExtraCephConf(conf="""[mon]
+mon_k2 = mon_v2
+[global]
+global_k3 = global_v3
+""", last_modified=datetime_now())
+
+        expected_combined_conf = """[global]
+global_k1 = global_v1
+global_k2 = global_v2
+global_k3 = global_v3
+
+[mon]
+mon_k1 = mon_v1
+mon_k2 = mon_v2
+
+[osd]
+osd_k1 = osd_v1
+osd_k2 = osd_v2
+"""
+
+        assert cephadm_module.get_minimal_ceph_conf() == expected_combined_conf
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_registry_login(self, _run_cephadm, cephadm_module: CephadmOrchestrator):

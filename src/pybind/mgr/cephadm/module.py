@@ -1901,8 +1901,39 @@ Then run the following:
         })
         extra = self.extra_ceph_conf().conf
         if extra:
-            config += '\n\n' + extra.strip() + '\n'
+            try:
+                config = self._combine_confs(config, extra)
+            except Exception as e:
+                self.log.error(f'Failed to add extra ceph conf settings to minimal ceph conf: {e}')
         return config
+
+    def _combine_confs(self, conf1: str, conf2: str) -> str:
+        section_to_option: Dict[str, List[str]] = {}
+        final_conf: str = ''
+        for conf in [conf1, conf2]:
+            if not conf:
+                continue
+            section = ''
+            for line in conf.split('\n'):
+                if line.strip().startswith('#') or not line.strip():
+                    continue
+                if line.strip().startswith('[') and line.strip().endswith(']'):
+                    section = line.strip().replace('[', '').replace(']', '')
+                    if section not in section_to_option:
+                        section_to_option[section] = []
+                else:
+                    section_to_option[section].append(line.strip())
+
+        first_section = True
+        for section, options in section_to_option.items():
+            if not first_section:
+                final_conf += '\n'
+            final_conf += f'[{section}]\n'
+            for option in options:
+                final_conf += f'{option}\n'
+            first_section = False
+
+        return final_conf
 
     def _invalidate_daemons_and_kick_serve(self, filter_host: Optional[str] = None) -> None:
         if filter_host:
