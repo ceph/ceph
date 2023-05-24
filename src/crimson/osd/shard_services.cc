@@ -611,7 +611,6 @@ ShardServices::get_or_create_pg_ret
 ShardServices::get_or_create_pg(
   PGMap::PGCreationBlockingEvent::TriggerI&& trigger,
   spg_t pgid,
-  epoch_t epoch,
   std::unique_ptr<PGCreateInfo> info)
 {
   if (info) {
