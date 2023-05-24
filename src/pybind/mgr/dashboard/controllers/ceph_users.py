@@ -1,5 +1,4 @@
 import logging
-from enum import Enum
 from errno import EINVAL
 from typing import List, NamedTuple, Optional
 
@@ -9,7 +8,7 @@ from ..services.ceph_service import CephService, SendCommandError
 from . import APIDoc, APIRouter, CRUDCollectionMethod, CRUDEndpoint, \
     EndpointDoc, RESTController, SecretStr
 from ._crud import ArrayHorizontalContainer, CRUDMeta, Form, FormField, \
-    FormTaskInfo, Icon, SelectionType, TableAction, Validator, \
+    FormTaskInfo, Icon, MethodType, SelectionType, TableAction, Validator, \
     VerticalContainer
 
 logger = logging.getLogger("controllers.ceph_users")
@@ -25,11 +24,6 @@ class CephUserCaps(NamedTuple):
 class Cap(NamedTuple):
     entity: str
     cap: str
-
-
-class MethodType(Enum):
-    POST = 'post'
-    PUT = 'put'
 
 
 class CephUserEndpoints:
