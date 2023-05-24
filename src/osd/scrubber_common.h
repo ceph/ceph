@@ -235,8 +235,6 @@ struct ScrubPgIF {
 
   virtual void send_scrub_is_finished(epoch_t epoch_queued) = 0;
 
-  virtual void send_maps_compared(epoch_t epoch_queued) = 0;
-
   virtual void on_applied_when_primary(const eversion_t& applied_version) = 0;
 
   // --------------------------------------------------

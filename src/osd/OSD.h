@@ -559,10 +559,6 @@ public:
   /// Signals that there are more chunks to handle
   void queue_scrub_next_chunk(PG* pg, Scrub::scrub_prio_t with_priority);
 
-  /// Signals that we have finished comparing the maps for this chunk
-  /// Note: required, as in Crimson this operation is 'futurized'.
-  void queue_scrub_maps_compared(PG* pg, Scrub::scrub_prio_t with_priority);
-
   void queue_for_rep_scrub(PG* pg,
 			   Scrub::scrub_prio_t with_high_priority,
 			   unsigned int qu_priority,

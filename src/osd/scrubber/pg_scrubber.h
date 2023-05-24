@@ -371,8 +371,6 @@ class PgScrubber : public ScrubPgIF,
 
   void send_local_map_done(epoch_t epoch_queued) final;
 
-  void send_maps_compared(epoch_t epoch_queued) final;
-
   void send_get_next_chunk(epoch_t epoch_queued) final;
 
   void send_scrub_is_finished(epoch_t epoch_queued) final;
