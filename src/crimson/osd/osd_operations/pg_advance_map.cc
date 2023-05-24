@@ -20,10 +20,10 @@ namespace {
 
 namespace crimson::osd {
 
-PGAdvanceMap::PGAdvanceMap(
-  ShardServices &shard_services, Ref<PG> pg, epoch_t to,
+PGAdvanceMap::PGAdvanceMap(crimson::net::ConnectionRef conn,
+  ShardServices &shard_services, Ref<PG> pg, epoch_t from, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
-  : shard_services(shard_services), pg(pg), to(to),
+  : conn(conn), shard_services(shard_services), pg(pg), from(from) ,to(to),
     rctx(std::move(rctx)), do_init(do_init)
   {
     logger().debug("{}: created", *this);
@@ -65,7 +65,6 @@ seastar::future<> PGAdvanceMap::start()
   return enter_stage<>(
     pg->peering_request_pg_pipeline.process
   ).then([this] {
-    from = pg->get_osdmap_epoch();
     auto fut = seastar::now();
     if (do_init) {
       fut = pg->handle_initialize(rctx
