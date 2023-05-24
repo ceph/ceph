@@ -3,6 +3,7 @@
 
 #include "crimson/osd/pg_shard_manager.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/osd_operations/pg_advance_map.h"
 
 namespace {
   seastar::logger& logger() {
@@ -109,15 +110,28 @@ PGShardManager::get_pg_stats() const
     });
 }
 
-seastar::future<> PGShardManager::broadcast_map_to_pgs(epoch_t epoch)
+seastar::future<> PGShardManager::broadcast_map_to_pgs(crimson::net::ConnectionRef conn, epoch_t advance_from, epoch_t advance_to)
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return shard_services.invoke_on_all([epoch](auto &local_service) {
-    return local_service.local_state.broadcast_map_to_pgs(
-      local_service, epoch
-    );
-  }).then([this, epoch] {
-    get_osd_singleton_state().osdmap_gate.got_map(epoch);
+  return shard_services.invoke_on_all([this, conn, advance_from, advance_to](auto &local_service) {
+    auto &state = local_service.local_state;
+    auto &pgs = state.pg_map.get_pgs();
+    return seastar::parallel_for_each(
+      pgs.begin(), pgs.end(),
+      [this, conn, advance_from, advance_to, &state](auto& pg) {
+        return start_pg_operation_with_state<PGAdvanceMap>(
+          state,
+          conn,
+          shard_services.local(),
+          pg.second, advance_from, advance_to,
+          PeeringCtx{}, false).second;
+      });
+  }).then([this, advance_from, advance_to] {
+    logger().debug("PGShardManager::broadcast_map_to_pgs "
+                   "broadcasted {} to {}",
+                    advance_from,
+                    advance_to);
+    get_osd_singleton_state().osdmap_gate.got_map(advance_to);
     return seastar::now();
   });
 }
