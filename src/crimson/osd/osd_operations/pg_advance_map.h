@@ -60,9 +60,7 @@ protected:
   Ref<PG> pg;
   PipelineHandle handle;
 
-  // todo: no longer optional
-  std::optional<epoch_t> from;
-  epoch_t to;
+  const epoch_t from, to;
 
   PeeringCtx rctx;
   const bool do_init;
@@ -77,7 +75,7 @@ public:
   void dump_detail(ceph::Formatter *f) const final;
   seastar::future<> start();
   PipelineHandle &get_handle() { return handle; }
-  epoch_t get_epoch() const { return *from; }
+  epoch_t get_epoch() const { return from; }
 
   seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
     assert(conn);

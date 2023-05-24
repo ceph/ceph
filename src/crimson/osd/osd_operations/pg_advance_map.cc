@@ -35,7 +35,7 @@ void PGAdvanceMap::print(std::ostream &lhs) const
 {
   lhs << "PGAdvanceMap("
       << "pg=" << pg->get_pgid()
-      << " from=" << (from ? *from : -1)
+      << " from=" << from
       << " to=" << to;
   if (do_init) {
     lhs << " do_init";
@@ -47,9 +47,7 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
 {
   f->open_object_section("PGAdvanceMap");
   f->dump_stream("pgid") << pg->get_pgid();
-  if (from) {
-    f->dump_int("from", *from);
-  }
+  f->dump_int("from", from);
   f->dump_int("to", to);
   f->dump_bool("do_init", do_init);
   f->close_section();
@@ -73,9 +71,9 @@ seastar::future<> PGAdvanceMap::start()
       });
     }
     return fut.then([this] {
-      ceph_assert(std::cmp_less_equal(*from, to));
+      ceph_assert(std::cmp_less_equal(from, to));
       return seastar::do_for_each(
-	boost::make_counting_iterator(*from + 1),
+	boost::make_counting_iterator(from + 1),
 	boost::make_counting_iterator(to + 1),
 	[this](epoch_t next_epoch) {
 	  logger().debug("{}: start: getting map {}",
