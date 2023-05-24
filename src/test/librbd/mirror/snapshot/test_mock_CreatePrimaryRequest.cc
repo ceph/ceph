@@ -58,15 +58,18 @@ template <>
 struct UnlinkPeerRequest<MockTestImageCtx> {
   uint64_t snap_id = CEPH_NOSNAP;
   std::string mirror_peer_uuid;
+  bool allow_remove;
   Context* on_finish = nullptr;
   static UnlinkPeerRequest* s_instance;
   static UnlinkPeerRequest *create(MockTestImageCtx *image_ctx,
                                    uint64_t snap_id,
                                    const std::string &mirror_peer_uuid,
+                                   bool allow_remove,
                                    Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->snap_id = snap_id;
     s_instance->mirror_peer_uuid = mirror_peer_uuid;
+    s_instance->allow_remove = allow_remove;
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -175,13 +178,15 @@ public:
   void expect_unlink_peer(MockTestImageCtx &mock_image_ctx,
                           MockUnlinkPeerRequest &mock_unlink_peer_request,
                           uint64_t snap_id, const std::string &peer_uuid,
-                          bool is_linked, bool complete, int r) {
+                          bool is_linked, bool complete, bool allow_remove,
+                          int r) {
     EXPECT_CALL(mock_unlink_peer_request, send())
       .WillOnce(Invoke([&mock_image_ctx, &mock_unlink_peer_request,
-                        snap_id, peer_uuid, is_linked, complete, r]() {
+                        snap_id, peer_uuid, is_linked, complete, allow_remove, r]() {
                          ASSERT_EQ(mock_unlink_peer_request.mirror_peer_uuid,
                                    peer_uuid);
                          ASSERT_EQ(mock_unlink_peer_request.snap_id, snap_id);
+                         ASSERT_EQ(mock_unlink_peer_request.allow_remove, allow_remove);
                          if (r == 0) {
                            auto it = mock_image_ctx.snap_info.find(snap_id);
                            ASSERT_NE(it, mock_image_ctx.snap_info.end());
@@ -325,7 +330,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkIncomplete) {
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
   expect_unlink_peer(mock_image_ctx, mock_unlink_peer_request, snap_id, "uuid",
-                     true, false, 0);
+                     true, false, true, 0);
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
                                           0U, 0U, nullptr, &ctx);
@@ -362,7 +367,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkPeer) {
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
   expect_unlink_peer(mock_image_ctx, mock_unlink_peer_request, snap_id, "uuid",
-                     true, true, 0);
+                     true, true, true, 0);
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
                                           0U, 0U, nullptr, &ctx);
@@ -397,7 +402,7 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkNoPeer) {
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
   expect_unlink_peer(mock_image_ctx, mock_unlink_peer_request, snap_id, "uuid",
-                     false, true, 0);
+                     false, true, true, 0);
 
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
@@ -438,9 +443,9 @@ TEST_F(TestMockMirrorSnapshotCreatePrimaryRequest, SuccessUnlinkMultiplePeers) {
   auto it = mock_image_ctx.snap_info.rbegin();
   auto snap_id = it->first;
   expect_unlink_peer(mock_image_ctx, mock_unlink_peer_request, snap_id, "uuid1",
-                     true, true, 0);
+                     true, true, true, 0);
   expect_unlink_peer(mock_image_ctx, mock_unlink_peer_request, snap_id, "uuid2",
-                     true, true, 0);
+                     true, true, true, 0);
   C_SaferCond ctx;
   auto req = new MockCreatePrimaryRequest(&mock_image_ctx, "gid", CEPH_NOSNAP,
                                           0U, 0U, nullptr, &ctx);
