@@ -513,6 +513,21 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
   return 0;
 }
 
+int RGWBucket::redirect(const std::string& redirect_zone, const DoutPrefixProvider *dpp, std::string *err_msg)
+{
+  if (!driver->is_meta_master()) {
+    set_err_msg(err_msg, "ERROR: failed to update bucket redirect_zone: only allowed on meta master zone");
+    return -EINVAL;
+  }
+  auto& info = bucket->get_info();
+  info.redirect_zone = redirect_zone;
+  int r = bucket->put_info(dpp, false, real_time());
+  if (r < 0) {
+    set_err_msg(err_msg, "ERROR: failed writing bucket instance info:" + cpp_strerror(-r));
+  }
+
+  return r;
+}
 
 int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
 {
@@ -861,6 +876,16 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   return bucket.sync(op_state, dpp, err_msg);
 }
 
+int RGWBucketAdminOp::redirect(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const std::string& redirect_zone, const DoutPrefixProvider *dpp, string *err_msg)
+{
+  RGWBucket bucket;
+  int ret = bucket.init(driver, op_state, null_yield, dpp, err_msg);
+  if (ret < 0) {
+    return ret;
+  }
+  return bucket.redirect(redirect_zone, dpp, err_msg);
+}
+
 static int bucket_stats(rgw::sal::Driver* driver,
 			const std::string& tenant_name,
 			const std::string& bucket_name,
@@ -899,6 +924,7 @@ static int bucket_stats(rgw::sal::Driver* driver,
 		      bucket->get_info().layout.current_index.layout.normal.num_shards);
   formatter->dump_string("tenant", bucket->get_tenant());
   formatter->dump_string("zonegroup", bucket->get_info().zonegroup);
+  formatter->dump_string("redirect_zone", bucket->get_info().redirect_zone);
   formatter->dump_string("placement_rule", bucket->get_info().placement_rule.to_str());
   ::encode_json("explicit_placement", bucket->get_key().explicit_placement, formatter);
   formatter->dump_string("id", bucket->get_bucket_id());

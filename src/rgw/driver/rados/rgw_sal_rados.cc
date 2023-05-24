@@ -3301,6 +3301,15 @@ bool RadosZone::is_writeable()
   return !rgw_zone.read_only;
 }
 
+bool RadosZone::get_zone_endpoint(std::string* endpoint, const std::string& zone_id)
+{
+  if (local_zone) {
+    return store->svc()->zone->get_zone_endpoint(endpoint, zone_id);
+  } else {
+    return false;
+  }
+}
+
 bool RadosZone::get_redirect_endpoint(std::string* endpoint)
 {
   if (local_zone)

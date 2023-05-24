@@ -1060,15 +1060,15 @@ int RGWSI_Zone::list_placement_set(const DoutPrefixProvider *dpp, set<rgw_pool>&
   return names.size();
 }
 
-bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
+bool RGWSI_Zone::get_zone_endpoint(string *endpoint, const std::string& zone_id)
 {
-  if (zone_public_config->redirect_zone.empty()) {
+  if (zone_id.empty()) {
     return false;
   }
 
-  auto iter = zone_conn_map.find(zone_public_config->redirect_zone);
+  auto iter = zone_conn_map.find(zone_id);
   if (iter == zone_conn_map.end()) {
-    ldout(cct, 0) << "ERROR: cannot find entry for redirect zone: " << zone_public_config->redirect_zone << dendl;
+    ldout(cct, 0) << "ERROR: cannot find entry for zone: " << zone_id << dendl;
     return false;
   }
 
@@ -1076,10 +1076,20 @@ bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
 
   int ret = conn->get_url(*endpoint);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
+    ldout(cct, 0) << "ERROR: zone endpoint, conn->get_endpoint() returned ret=" << ret << dendl;
     return false;
   }
 
   return true;
 }
+
+bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
+{
+  if (zone_public_config->redirect_zone.empty()) {
+    return false;
+  }
+
+  return get_zone_endpoint(endpoint, zone_public_config->redirect_zone);
+}
+
 

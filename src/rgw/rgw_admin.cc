@@ -154,6 +154,7 @@ void usage()
   cout << "  bucket link                link bucket to specified user\n";
   cout << "  bucket unlink              unlink bucket from specified user\n";
   cout << "  bucket stats               returns bucket statistics\n";
+  cout << "  bucket redirect            set redirect_zone on a bucket\n";
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
   cout << "  bucket chown               link bucket to specified user and update its object ACLs\n";
@@ -216,7 +217,7 @@ void usage()
   cout << "  zonegroup get              show zone group info\n";
   cout << "  zonegroup modify           modify an existing zonegroup\n";
   cout << "  zonegroup set              set zone group info (requires infile)\n";
-  cout << "  zonegroup rm               remove a zone from a zonegroup\n";
+  cout << "  zonegroup remove           remove a zone from a zonegroup\n";
   cout << "  zonegroup rename           rename a zone group\n";
   cout << "  zonegroup list             list all zone groups set on this cluster\n";
   cout << "  zonegroup placement list   list zonegroup's placement targets\n";
@@ -226,7 +227,7 @@ void usage()
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
   cout << "  zonegroup placement default  set a zonegroup's default placement target\n";
   cout << "  zone create                create a new zone\n";
-  cout << "  zone rm                    remove a zone\n";
+  cout << "  zone delete                delete a zone\n";
   cout << "  zone get                   show zone cluster params\n";
   cout << "  zone modify                modify an existing zone\n";
   cout << "  zone set                   set zone cluster params (requires infile)\n";
@@ -664,6 +665,7 @@ enum class OPT {
   BUCKET_SYNC_DISABLE,
   BUCKET_SYNC_ENABLE,
   BUCKET_RM,
+  BUCKET_REDIRECT,
   BUCKET_REWRITE,
   BUCKET_RESHARD,
   BUCKET_CHOWN,
@@ -878,6 +880,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket sync disable", OPT::BUCKET_SYNC_DISABLE },
   { "bucket sync enable", OPT::BUCKET_SYNC_ENABLE },
   { "bucket rm", OPT::BUCKET_RM },
+  { "bucket redirect", OPT::BUCKET_REDIRECT },
   { "bucket rewrite", OPT::BUCKET_REWRITE },
   { "bucket reshard", OPT::BUCKET_RESHARD },
   { "bucket chown", OPT::BUCKET_CHOWN },
@@ -8296,6 +8299,25 @@ next:
 	return 1;
       }
       RGWBucketAdminOp::remove_bucket(driver, bucket_op, null_yield, dpp(), bypass_gc, false);
+    }
+  }
+
+  // Set the redirect zone on a bucket
+  if (opt_cmd == OPT::BUCKET_REDIRECT) {
+    if (not redirect_zone_set) {
+      cerr << "no --redirect-zone provided" << std::endl;
+      return EINVAL;
+    }
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    bucket_op.set_tenant(tenant);
+    string err_msg;
+    ret = RGWBucketAdminOp::redirect(driver, bucket_op, redirect_zone, dpp(), &err_msg);
+    if (ret < 0) {
+      cerr << err_msg << std::endl;
+      return -ret;
     }
   }
 

@@ -102,6 +102,7 @@ class RadosZone : public StoreZone {
     virtual const std::string& get_id() override;
     virtual const std::string& get_name() const override;
     virtual bool is_writeable() override;
+    virtual bool get_zone_endpoint(std::string* endpoint, const std::string& zone_id) override;
     virtual bool get_redirect_endpoint(std::string* endpoint) override;
     virtual bool has_zonegroup_api(const std::string& api) const override;
     virtual const std::string& get_current_period_id() override;

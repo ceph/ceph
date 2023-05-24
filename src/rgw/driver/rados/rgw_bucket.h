@@ -347,6 +347,7 @@ public:
   int policy_bl_to_stream(bufferlist& bl, std::ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y, const DoutPrefixProvider *dpp);
   int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  int redirect(const std::string& redirect_zone, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 
   void clear_failure() { failure = false; }
 
@@ -391,6 +392,7 @@ public:
 			    RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, bool dry_run = false);
 
   static int sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  static int redirect(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const std::string& redirect_zone, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
 };
 
 struct rgw_ep_info {

@@ -636,7 +636,12 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     ret = -EACCES;
   }
 
-  bool success = driver->get_zone()->get_redirect_endpoint(&s->redirect_zone_endpoint);
+  bool success = false;
+  if (s->bucket_exists && !s->bucket->get_info().redirect_zone.empty()) {
+    success = driver->get_zone()->get_zone_endpoint(&s->redirect_zone_endpoint, s->bucket->get_info().redirect_zone);
+  } else {
+    success = driver->get_zone()->get_redirect_endpoint(&s->redirect_zone_endpoint);
+  }
   if (success) {
     ldpp_dout(dpp, 20) << "redirect_zone_endpoint=" << s->redirect_zone_endpoint << dendl;
   }
@@ -5295,8 +5300,10 @@ int RGWCopyObj::verify_permission(optional_yield y)
   RGWAccessControlPolicy src_acl(s->cct);
   boost::optional<Policy> src_policy;
 
+  const auto& src_redirect_zone = src_bucket->get_info().redirect_zone;
+
   /* get buckets info (source and dest) */
-  if (s->local_source &&  source_zone.empty()) {
+  if (s->local_source && source_zone.empty()) {
     s->src_object->set_atomic();
     s->src_object->set_prefetch_data();
 
@@ -5306,6 +5313,13 @@ int RGWCopyObj::verify_permission(optional_yield y)
     op_ret = read_obj_policy(this, driver, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket.get(), s->src_object.get(), y);
     if (op_ret < 0) {
+      if (op_ret == -ENOENT) {
+        // Source object doesn't exist. Check if source bucket has redirect_zone set and it is different from ours.
+        if (!src_redirect_zone.empty() && src_redirect_zone != driver->get_zone()->get_id()) {
+          source_zone = src_redirect_zone;
+          goto check_dest_policy; // Skip the outmost if block entirely since source_zone is no longer empty.
+        }
+      }
       return op_ret;
     }
 
@@ -5391,6 +5405,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
   }
 
+check_dest_policy:
   RGWAccessControlPolicy dest_bucket_policy(s->cct);
 
   s->object->set_atomic();

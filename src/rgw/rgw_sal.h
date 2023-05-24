@@ -1508,6 +1508,8 @@ class Zone {
     virtual const std::string& get_name() const = 0;
     /** True if this zone is writable */
     virtual bool is_writeable() = 0;
+    /** Get the URL for the endpoint of another zone */
+    virtual bool get_zone_endpoint(std::string* endpoint, const std::string& zone_id) {return false;}
     /** Get the URL for the endpoint for redirecting to this zone */
     virtual bool get_redirect_endpoint(std::string* endpoint) = 0;
     /** Check to see if the given API is supported in this zone */

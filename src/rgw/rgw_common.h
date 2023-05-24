@@ -889,6 +889,7 @@ struct RGWBucketInfo {
   rgw_user owner;
   uint32_t flags{0};
   std::string zonegroup;
+  std::string redirect_zone;
   ceph::real_time creation_time;
   rgw_placement_rule placement_rule;
   bool has_instance_obj{false};
