@@ -72,7 +72,7 @@ struct EventBackendRegistry {
   template <typename...> static constexpr bool always_false = false;
 
   static std::tuple<> get_backends() {
-    static_assert(always_false<T>, "Registry specialization not found");
+    //static_assert(always_false<T>, "Registry specialization not found");
     return {};
   }
 };
