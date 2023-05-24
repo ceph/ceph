@@ -171,46 +171,6 @@ A successful ``which cephadm`` command will return this:
 
    /usr/sbin/cephadm
 
-* Although the standalone cephadm is sufficient to get a cluster started, it is
-  convenient to have the ``cephadm`` command installed on the host.  To install
-  the packages that provide the ``cephadm`` command, run the following
-  commands:
-
-update cephadm
---------------
-
-The cephadm binary can be used to bootstrap a cluster and for a variety
-of other management and debugging tasks. The Ceph team strongly recommends
-using an actively supported version of cephadm. Additionally, although
-the standalone cephadm is sufficient to get a cluster started, it is
-convenient to have the ``cephadm`` command installed on the host. Older or LTS
-distros may also have ``cephadm`` packages that are out-of-date and
-running the commands below can help install a more recent version
-from the Ceph project's repositories.
-
-To install the packages provided by the Ceph project that provide the
-``cephadm`` command, run the following commands:
-
-.. prompt:: bash #
-   :substitutions:
-
-   ./cephadm add-repo --release |stable-release|
-   ./cephadm install
-
-Confirm that ``cephadm`` is now in your PATH by running ``which`` or
-``command -v``:
-
-.. prompt:: bash #
-
-   which cephadm
-
-A successful ``which cephadm`` command will return this:
-
-.. code-block:: bash
-
-   /usr/sbin/cephadm
-
-
 
 Bootstrap a new cluster
 =======================
