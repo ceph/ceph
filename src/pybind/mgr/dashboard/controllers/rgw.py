@@ -16,8 +16,8 @@ from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CRUDCollectionMethod, \
     CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, RESTController, \
     UIRouter, allow_empty_body
-from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, \
-    MethodType, TableAction, Validator, VerticalContainer
+from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, \
+    TableAction, Validator, VerticalContainer
 from ._version import APIVersion
 
 logger = logging.getLogger("controllers.rgw")
