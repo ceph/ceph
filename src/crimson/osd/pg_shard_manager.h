@@ -337,9 +337,20 @@ public:
   }
 
   template <typename T, typename... Args>
+  auto start_pg_operation_with_state(PerShardState& _state, Args&&... args) {
+    ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+    return _start_pg_operation<T>(_state, std::forward<Args>(args)...);
+  }
+
+  template <typename T, typename... Args>
   auto start_pg_operation(Args&&... args) {
     ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-    auto op = get_local_state().registry.create_operation<T>(
+    return _start_pg_operation<T>(get_local_state(), std::forward<Args>(args)...);
+  }
+
+  template <typename T, typename... Args>
+  auto _start_pg_operation(PerShardState& state, Args&&... args) {
+    auto op = state.registry.create_operation<T>(
       std::forward<Args>(args)...);
     auto &logger = crimson::get_logger(ceph_subsys_osd);
     logger.debug("{}: starting {}", *op, __func__);
