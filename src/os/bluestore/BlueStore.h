@@ -640,7 +640,7 @@ public:
     bool can_split() const {
       std::lock_guard l(shared_blob->get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
-      return bc.writing.empty() &&
+      return get_bc().writing.empty() &&
              used_in_blob.can_split() &&
              get_blob().can_split();
     }
@@ -671,6 +671,13 @@ public:
       blob_bl.clear();
 #endif
       return blob;
+    }
+
+    inline const BufferSpace& get_bc() const {
+      return bc;
+    }
+    inline BufferSpace& dirty_bc() {
+      return bc;
     }
 
     /// discard buffers for unallocated regions
@@ -2827,7 +2834,7 @@ private:
     uint64_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    b->bc.write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+    b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, offset, bl,
 			     flags);
     txc->blobs_written.insert(b);
   }
