@@ -54,6 +54,19 @@ seastar::future<T*> create_sharded(Args... args) {
   });
 }
 
+double get_reactor_utilization() {
+  auto &value_map = seastar::metrics::impl::get_value_map();
+  auto found = value_map.find("reactor_utilization");
+  assert(found != value_map.end());
+  auto &[full_name, metric_family] = *found;
+  std::ignore = full_name;
+  assert(metric_family.size() == 1);
+  const auto& [labels, metric] = *metric_family.begin();
+  std::ignore = labels;
+  auto value = (*metric)();
+  return value.ui();
+}
+
 enum class perf_mode_t {
   both,
   client,
@@ -267,6 +280,7 @@ static seastar::future<> run(
         mono_time finish_time = mono_clock::zero();
         unsigned finish_count = 0u;
         unsigned depth = 0u;
+        double reactor_utilization = 0;
 
         void start_collect(unsigned received_count) {
           start_time = mono_clock::now();
@@ -284,6 +298,7 @@ static seastar::future<> run(
           snapshot.finish_time = mono_clock::now();
           snapshot.finish_count = received_count;
           snapshot.depth = _depth;
+          snapshot.reactor_utilization = get_reactor_utilization();
 
           start_collect(received_count);
         }
@@ -544,7 +559,11 @@ static seastar::future<> run(
                << std::setw(6) << depth
                << std::setw(8) << iops
                << std::setw(8) << iops * bytes_of_block / 1048576
-               << std::setw(8) << (sampled_total_lat_s / sampled_count * 1000);
+               << std::setw(8) << (sampled_total_lat_s / sampled_count * 1000)
+               << " -- ";
+          for (const auto& snap : snaps) {
+            sout << snap.reactor_utilization << ",";
+          }
           std::cout << sout.str() << std::endl;
         }
 
