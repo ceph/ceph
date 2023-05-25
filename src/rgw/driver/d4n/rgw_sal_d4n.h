@@ -21,28 +21,32 @@
 #include "rgw_role.h"
 #include "common/dout.h" 
 
+#include "rgw_redis_driver.h"
 #include "driver/d4n/d4n_directory.h"
-#include "driver/d4n/d4n_datacache.h"
+#include "driver/d4n/d4n_policy.h"
 
 namespace rgw { namespace sal {
 
 class D4NFilterDriver : public FilterDriver {
   private:
-    RGWBlockDirectory* blk_dir;
-    cache_block* c_blk;
-    RGWD4NCache* d4n_cache;
+    rgw::d4n::ObjectDirectory* objDir;
+    rgw::d4n::BlockDirectory* blockDir;
+    rgw::d4n::CacheBlock* cacheBlock;
+    rgw::d4n::PolicyDriver* policyDriver;
 
   public:
     D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
     {
-      blk_dir = new RGWBlockDirectory(); /* Initialize directory address with cct */
-      c_blk = new cache_block();
-      d4n_cache = new RGWD4NCache();
+      objDir = new rgw::d4n::ObjectDirectory();
+      blockDir = new rgw::d4n::BlockDirectory();
+      cacheBlock = new rgw::d4n::CacheBlock();
+      policyDriver = new rgw::d4n::PolicyDriver("lfuda");
     }
     virtual ~D4NFilterDriver() {
-      delete blk_dir; 
-      delete c_blk;
-      delete d4n_cache;
+      delete objDir; 
+      delete blockDir; 
+      delete cacheBlock;
+      delete policyDriver;
     }
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
@@ -57,19 +61,20 @@ class D4NFilterDriver : public FilterDriver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
-    RGWBlockDirectory* get_block_dir() { return blk_dir; }
-    cache_block* get_cache_block() { return c_blk; }
-    RGWD4NCache* get_d4n_cache() { return d4n_cache; }
+    rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
+    rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
+    rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
+    rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver; }
 };
 
 class D4NFilterUser : public FilterUser {
   private:
-    D4NFilterDriver* filter;
+    D4NFilterDriver* driver;
 
   public:
-    D4NFilterUser(std::unique_ptr<User> _next, D4NFilterDriver* _filter) : 
+    D4NFilterUser(std::unique_ptr<User> _next, D4NFilterDriver* _driver) : 
       FilterUser(std::move(_next)),
-      filter(_filter) {}
+      driver(_driver) {}
     virtual ~D4NFilterUser() = default;
 };
 
@@ -91,7 +96,7 @@ class D4NFilterBucket : public FilterBucket {
 
 class D4NFilterObject : public FilterObject {
   private:
-    D4NFilterDriver* filter;
+    D4NFilterDriver* driver;
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -102,6 +107,8 @@ class D4NFilterObject : public FilterObject {
       virtual ~D4NFilterReadOp() = default;
 
       virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
+        RGWGetDataCB* cb, optional_yield y) override;
     };
 
     struct D4NFilterDeleteOp : FilterDeleteOp {
@@ -114,12 +121,12 @@ class D4NFilterObject : public FilterObject {
       virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
     };
 
-    D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _filter) : FilterObject(std::move(_next)),
-									      filter(_filter) {}
-    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterDriver* _filter) : FilterObject(std::move(_next), _bucket),
-											       filter(_filter) {}
-    D4NFilterObject(D4NFilterObject& _o, D4NFilterDriver* _filter) : FilterObject(_o),
-								    filter(_filter) {}
+    D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _driver) : FilterObject(std::move(_next)),
+									      driver(_driver) {}
+    D4NFilterObject(std::unique_ptr<Object> _next, Bucket* _bucket, D4NFilterDriver* _driver) : FilterObject(std::move(_next), _bucket),
+											       driver(_driver) {}
+    D4NFilterObject(D4NFilterObject& _o, D4NFilterDriver* _driver) : FilterObject(_o),
+								    driver(_driver) {}
     virtual ~D4NFilterObject() = default;
 
     virtual int copy_object(User* user,
@@ -153,18 +160,18 @@ class D4NFilterObject : public FilterObject {
 
 class D4NFilterWriter : public FilterWriter {
   private:
-    D4NFilterDriver* filter; 
+    D4NFilterDriver* driver; 
     const DoutPrefixProvider* save_dpp;
     bool atomic;
 
   public:
-    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _filter, Object* _obj, 
+    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
 	const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), _obj),
-					  filter(_filter),
+					  driver(_driver),
 					  save_dpp(_dpp), atomic(false) {}
-    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _filter, Object* _obj, 
+    D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
 	const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), _obj),
-							filter(_filter),
+							driver(_driver),
 							save_dpp(_dpp), atomic(_atomic) {}
     virtual ~D4NFilterWriter() = default;
 
