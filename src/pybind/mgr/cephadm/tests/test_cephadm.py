@@ -17,9 +17,17 @@ try:
 except ImportError:
     pass
 
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, RGWSpec, \
-    NFSServiceSpec, IscsiServiceSpec, HostPlacementSpec, CustomContainerSpec, MDSSpec, \
-    CustomConfig
+from ceph.deployment.service_spec import (
+    CustomConfig,
+    CustomContainerSpec,
+    HostPlacementSpec,
+    IscsiServiceSpec,
+    MDSSpec,
+    NFSServiceSpec,
+    PlacementSpec,
+    RGWSpec,
+    ServiceSpec,
+)
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now

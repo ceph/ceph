@@ -10,7 +10,12 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
-from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec, MONSpec
+from ceph.deployment.service_spec import (
+    CephExporterSpec,
+    MONSpec,
+    RGWSpec,
+    ServiceSpec,
+)
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from mgr_util import build_url, merge_dicts
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
