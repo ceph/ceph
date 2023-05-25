@@ -935,7 +935,7 @@ class CephFSMount(object):
         ))
         p.wait()
 
-    def open_background(self, basename="background_file", write=True):
+    def open_background(self, basename="background_file", write=True, content="content"):
         """
         Open a file for writing, then block such that the client
         will hold a capability.
@@ -952,12 +952,11 @@ class CephFSMount(object):
                 import time
 
                 with open("{path}", 'w') as f:
-                    f.write('content')
+                    f.write("{content}")
                     f.flush()
-                    f.write('content2')
                     while True:
                         time.sleep(1)
-                """).format(path=path)
+                """).format(path=path, content=content)
         else:
             pyscript = dedent("""
                 import time
@@ -973,7 +972,10 @@ class CephFSMount(object):
         # This wait would not be sufficient if the file had already
         # existed, but it's simple and in practice users of open_background
         # are not using it on existing files.
-        self.wait_for_visible(basename)
+        if write:
+            self.wait_for_visible(basename, size=len(content))
+        else:
+            self.wait_for_visible(basename)
 
         return rproc
 
@@ -1011,19 +1013,27 @@ class CephFSMount(object):
                 if nr_links == 2:
                     return
 
-    def wait_for_visible(self, basename="background_file", timeout=30):
+    def wait_for_visible(self, basename="background_file", size=None, timeout=30):
         i = 0
+        args = ['stat']
+        if size is not None:
+            args += ['--printf=%s']
+        args += [os.path.join(self.hostfs_mntpt, basename)]
         while i < timeout:
-            r = self.client_remote.run(args=[
-                'stat', os.path.join(self.hostfs_mntpt, basename)
-            ], check_status=False)
-            if r.exitstatus == 0:
-                log.debug("File {0} became visible from {1} after {2}s".format(
-                    basename, self.client_id, i))
-                return
-            else:
-                time.sleep(1)
-                i += 1
+            p = self.client_remote.run(args=args, stdout=StringIO(), check_status=False)
+            if p.exitstatus == 0:
+                if size is not None:
+                    s = p.stdout.getvalue().strip()
+                    if int(s) == size:
+                        log.info(f"File {basename} became visible with size {size} from {self.client_id} after {i}s")
+                        return
+                    else:
+                        log.error(f"File {basename} became visible but with size {int(s)} not {size}")
+                else:
+                    log.info(f"File {basename} became visible from {self.client_id} after {i}s")
+                    return
+            time.sleep(1)
+            i += 1
 
         raise RuntimeError("Timed out after {0}s waiting for {1} to become visible from {2}".format(
             i, basename, self.client_id))
