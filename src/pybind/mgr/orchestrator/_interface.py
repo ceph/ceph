@@ -30,8 +30,16 @@ except ImportError:
 import yaml
 
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec, TunedProfileSpec
+from ceph.deployment.service_spec import (
+    IngressSpec,
+    IscsiServiceSpec,
+    MDSSpec,
+    NFSServiceSpec,
+    RGWSpec,
+    SNMPGatewaySpec,
+    ServiceSpec,
+    TunedProfileSpec,
+)
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
