@@ -29,6 +29,8 @@ describe('Mirroring page', () => {
     const poolName = 'rbd-mirror';
 
     beforeEach(() => {
+      // login to the second ceph cluster
+      cy.ceph2Login();
       cy.login();
       Cypress.Cookies.preserveOnce('token');
       pools.navigateTo('create');
@@ -44,18 +46,21 @@ describe('Mirroring page', () => {
       mirroring.generateToken(poolName);
       cy.get('@token').then((bootstrapToken) => {
         // pass the token to the origin as an arg
-        const args = { name: poolName, token: String(bootstrapToken) };
-
-        // login to the second ceph cluster
-        cy.ceph2Login();
-
+        const args = { name: poolName, bootstrapToken: String(bootstrapToken) };
         // can't use any imports or functions inside the origin
         // so writing the code to copy the token inside the origin manually
         // rather than using a function call
         // @ts-ignore
-        cy.origin(url, { args }, ({ name, token }: any) => {
+        cy.origin(url, { args }, ({ name, bootstrapToken }) => {
           // Create an rbd pool in the second cluster
+
+          // Login to the second cluster
+          // Somehow its not working with the cypress login function
           cy.visit('#/pool/create').wait(100);
+
+          cy.get('[name=username]').type('admin');
+          cy.get('#password').type('admin');
+          cy.get('[type=submit]').click();
           cy.get('input[name=name]').clear().type(name);
           cy.get(`select[name=poolType]`).select('replicated');
           cy.get(`select[name=poolType] option:checked`).contains('replicated');
@@ -71,7 +76,7 @@ describe('Mirroring page', () => {
           cy.get('[aria-label="Import Bootstrap Token"]').click();
           cy.get('cd-bootstrap-import-modal').within(() => {
             cy.get(`label[for=${name}]`).click();
-            cy.get('textarea[id=token]').wait(100).type(token);
+            cy.get('textarea[id=token]').wait(100).type(bootstrapToken);
             cy.get('button[type=submit]').click();
           });
         });

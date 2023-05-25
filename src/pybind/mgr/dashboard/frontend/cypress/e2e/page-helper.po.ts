@@ -286,7 +286,7 @@ export abstract class PageHelper {
   delete(name: string, columnIndex?: number, section?: string) {
     // Selects row
     const getRow = columnIndex
-      ? this.getTableCell.bind(this, columnIndex)
+      ? this.getTableCell.bind(this, columnIndex, name, true)
       : this.getFirstTableCell.bind(this);
     getRow(name).click();
     let action: string;
