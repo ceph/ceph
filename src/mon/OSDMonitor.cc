@@ -2038,20 +2038,11 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     Metadata m;
     auto mp = p->second.cbegin();
     decode(m, mp);
-    auto it = m.find("osd_objectstore");
-    if (it != m.end()) {
-      if (it->second == "filestore") {
-        filestore_osds.insert(p->first);
-      } else {
-        filestore_osds.erase(p->first);
-      }
-    }
     t->put(OSD_METADATA_PREFIX, stringify(p->first), p->second);
   }
   for (set<int>::iterator p = pending_metadata_rm.begin();
        p != pending_metadata_rm.end();
        ++p) {
-    filestore_osds.erase(*p);
     t->erase(OSD_METADATA_PREFIX, stringify(*p));
   }
   pending_metadata.clear();
@@ -2086,8 +2077,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   health_check_map_t next;
   tmp.check_health(cct, &next);
-  // OSD_FILESTORE
-  check_for_filestore_osds(&next);
   encode_health(next, t);
 }
 
@@ -2163,38 +2152,6 @@ int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
   return 0;
 }
 
-void OSDMonitor::get_filestore_osd_list()
-{
-  for (unsigned osd = 0; osd < osdmap.get_num_osds(); ++osd) {
-    string objectstore_type;
-    int r = get_osd_objectstore_type(osd, &objectstore_type);
-    if (r == 0 && objectstore_type == "filestore") {
-      filestore_osds.insert(osd);
-    }
-  }
-}
-
-void OSDMonitor::check_for_filestore_osds(health_check_map_t *checks)
-{
-  if (g_conf()->mon_warn_on_filestore_osds &&
-      filestore_osds.size() > 0) {
-    ostringstream ss, deprecated_tip;
-    list<string> detail;
-    ss << filestore_osds.size()
-       << " osd(s) "
-       << (filestore_osds.size() == 1 ? "is" : "are")
-       << " running Filestore";
-    deprecated_tip << ss.str();
-    ss << " [Deprecated]";
-    auto& d = checks->add("OSD_FILESTORE", HEALTH_WARN, ss.str(),
-                          filestore_osds.size());
-    deprecated_tip << ", which has been deprecated and"
-                   << " not been optimized for QoS"
-                   << " (Filestore OSDs will use 'osd_op_queue = wpq' strictly)";
-    detail.push_back(deprecated_tip.str());
-    d.detail.swap(detail);
-  }
-}
 
 bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
 						 const pg_pool_t &pool,
@@ -13201,41 +13158,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "'expected_num_objects' must be non-negative";
       err = -EINVAL;
       goto reply;
-    }
-
-    set<int32_t> osds;
-    osdmap.get_all_osds(osds);
-    bool has_filestore_osd = std::any_of(osds.begin(), osds.end(), [this](int osd) {
-      string type;
-      if (!get_osd_objectstore_type(osd, &type)) {
-        return type == "filestore";
-      } else {
-        return false;
-      }
-    });
-
-    if (has_filestore_osd &&
-        expected_num_objects > 0 &&
-        cct->_conf->filestore_merge_threshold > 0) {
-      ss << "'expected_num_objects' requires 'filestore_merge_threshold < 0'";
-      err = -EINVAL;
-      goto reply;
-    }
-
-    if (has_filestore_osd &&
-        expected_num_objects == 0 &&
-        cct->_conf->filestore_merge_threshold < 0) {
-      int osds = osdmap.get_num_osds();
-      bool sure = false;
-      cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
-      if (!sure && osds && (pg_num >= 1024 || pg_num / osds >= 100)) {
-        ss << "For better initial performance on pools expected to store a "
-           << "large number of objects, consider supplying the "
-           << "expected_num_objects parameter when creating the pool."
-           << " Pass --yes-i-really-mean-it to ignore it";
-        err = -EPERM;
-        goto reply;
-      }
     }
 
     int64_t fast_read_param = cmd_getval_or<int64_t>(cmdmap, "fast_read", -1);
