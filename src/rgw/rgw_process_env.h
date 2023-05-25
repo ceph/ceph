@@ -4,6 +4,8 @@
 #pragma once
 
 #include <memory>
+#include "rgw_sal.h"
+#include "rgw_auth.h"
 
 class ActiveRateLimiter;
 class OpsLogSink;

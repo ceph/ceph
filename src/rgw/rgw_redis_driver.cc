@@ -58,11 +58,10 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
   if (client.is_connected())
     return 0;
 
-  /*
   if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
-  }*/
+  }
 
   client.connect("127.0.0.1", 6379, nullptr);
 
@@ -682,5 +681,20 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
 
   return result;
 }
+
+std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp)
+{
+    return std::make_unique<RedisCacheAioRequest>(this);
+}
+
+rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id)
+{
+    rgw_raw_obj r_obj;
+    r_obj.oid = key;
+    return aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, this, ofs, len, key), cost, id);
+}
+
+void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) {}
+void RedisCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) {}
 
 } } // namespace rgw::cal
