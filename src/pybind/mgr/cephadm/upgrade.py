@@ -131,6 +131,7 @@ class CephadmUpgrade:
             self.upgrade_state: Optional[UpgradeState] = UpgradeState.from_json(json.loads(t))
         else:
             self.upgrade_state = None
+        self.upgrade_info_str: str = ''
 
     @property
     def target_image(self) -> str:
@@ -378,8 +379,9 @@ class CephadmUpgrade:
             raise OrchestratorError(
                 'Cannot set values for --daemon-types, --services or --hosts when upgrade already in progress.')
         try:
-            target_id, target_version, target_digests = self.mgr.wait_async(
-                CephadmServe(self.mgr)._get_container_image_info(target_name))
+            with self.mgr.async_timeout_handler('cephadm inspect-image'):
+                target_id, target_version, target_digests = self.mgr.wait_async(
+                    CephadmServe(self.mgr)._get_container_image_info(target_name))
         except OrchestratorError as e:
             raise OrchestratorError(f'Failed to pull {target_name}: {str(e)}')
         # what we need to do here is build a list of daemons that must already be upgraded
@@ -829,17 +831,19 @@ class CephadmUpgrade:
             assert d.hostname is not None
 
             # make sure host has latest container image
-            out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
-                d.hostname, '', 'inspect-image', [],
-                image=target_image, no_fsid=True, error_ok=True))
+            with self.mgr.async_timeout_handler(d.hostname, 'cephadm inspect-image'):
+                out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
+                    d.hostname, '', 'inspect-image', [],
+                    image=target_image, no_fsid=True, error_ok=True))
             if code or not any(d in target_digests for d in json.loads(''.join(out)).get('repo_digests', [])):
                 logger.info('Upgrade: Pulling %s on %s' % (target_image,
                                                            d.hostname))
                 self.upgrade_info_str = 'Pulling %s image on host %s' % (
                     target_image, d.hostname)
-                out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
-                    d.hostname, '', 'pull', [],
-                    image=target_image, no_fsid=True, error_ok=True))
+                with self.mgr.async_timeout_handler(d.hostname, 'cephadm pull'):
+                    out, errs, code = self.mgr.wait_async(CephadmServe(self.mgr)._run_cephadm(
+                        d.hostname, '', 'pull', [],
+                        image=target_image, no_fsid=True, error_ok=True))
                 if code:
                     self._fail_upgrade('UPGRADE_FAILED_PULL', {
                         'severity': 'warning',
@@ -1026,8 +1030,9 @@ class CephadmUpgrade:
             logger.info('Upgrade: First pull of %s' % target_image)
             self.upgrade_info_str = 'Doing first pull of %s image' % (target_image)
             try:
-                target_id, target_version, target_digests = self.mgr.wait_async(CephadmServe(self.mgr)._get_container_image_info(
-                    target_image))
+                with self.mgr.async_timeout_handler(f'cephadm inspect-image (image {target_image})'):
+                    target_id, target_version, target_digests = self.mgr.wait_async(
+                        CephadmServe(self.mgr)._get_container_image_info(target_image))
             except OrchestratorError as e:
                 self._fail_upgrade('UPGRADE_FAILED_PULL', {
                     'severity': 'warning',
