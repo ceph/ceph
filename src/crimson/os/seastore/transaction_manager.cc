@@ -237,21 +237,18 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
     DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
            t, result.refcount, offset, result.length, result.addr);
-    if (result.refcount == 0 &&
-        (result.addr.is_paddr() &&
-         !result.addr.get_paddr().is_zero())) {
-      return cache->retire_extent_addr(
-	t, result.addr.get_paddr(), result.length
-      ).si_then([] {
-	return ref_ret(
-	  interruptible::ready_future_marker{},
-	  0);
-      });
-    } else {
-      return ref_ret(
-	interruptible::ready_future_marker{},
-	result.refcount);
+    auto fut = ref_iertr::now();
+    if (result.refcount == 0) {
+      if (result.addr.is_paddr() &&
+          !result.addr.get_paddr().is_zero()) {
+        fut = cache->retire_extent_addr(
+          t, result.addr.get_paddr(), result.length);
+      }
     }
+
+    return fut.si_then([result=std::move(result)] {
+      return result.refcount;
+    });
   });
 }
 
