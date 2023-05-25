@@ -7366,12 +7366,12 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
       ldpp_dout(dpp, 0) << "ERROR: could not clear olh, r=" << r << dendl;
       return r;
     }
-  }
-
-  r = bucket_index_trim_olh_log(dpp, bucket_info, state, obj, last_ver);
-  if (r < 0 && r != -ECANCELED) {
-    ldpp_dout(dpp, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
-    return r;
+  } else {
+    r = bucket_index_trim_olh_log(dpp, bucket_info, state, obj, last_ver);
+    if (r < 0 && r != -ECANCELED) {
+      ldpp_dout(dpp, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
+      return r;
+    }
   }
 
   return 0;

@@ -261,7 +261,10 @@ struct RGWBucketAdminOpState {
   bool delete_child_objects;
   bool bucket_stored;
   bool sync_bucket;
+  bool dump_keys;
+  bool hide_progress;
   int max_aio = 0;
+  ceph::timespan min_age = std::chrono::hours::zero();
 
   rgw_bucket bucket;
 
@@ -271,8 +274,11 @@ struct RGWBucketAdminOpState {
   void set_check_objects(bool value) { check_objects = value; }
   void set_fix_index(bool value) { fix_index = value; }
   void set_delete_children(bool value) { delete_child_objects = value; }
+  void set_hide_progress(bool value) { hide_progress = value; }
+  void set_dump_keys(bool value) { dump_keys = value; }
 
   void set_max_aio(int value) { max_aio = value; }
+  void set_min_age(ceph::timespan value) { min_age = value; }
 
   void set_user_id(const rgw_user& user_id) {
     if (!user_id.empty())
@@ -326,7 +332,8 @@ struct RGWBucketAdminOpState {
 
   RGWBucketAdminOpState() : list_buckets(false), stat_buckets(false), check_objects(false), 
                             fix_index(false), delete_child_objects(false),
-                            bucket_stored(false), sync_bucket(true)  {}
+                            bucket_stored(false), sync_bucket(true),
+                            dump_keys(false), hide_progress(false)  {}
 };
 
 /*
@@ -361,6 +368,10 @@ public:
                          RGWFormatterFlusher& flusher,
                          optional_yield y,
                          std::string *err_msg = NULL);
+  int check_index_olh(rgw::sal::RGWRadosStore* rados_store, const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state,
+                      RGWFormatterFlusher& flusher);
+  int check_index_unlinked(rgw::sal::RGWRadosStore* rados_store, const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state,
+                           RGWFormatterFlusher& flusher);
 
   int check_index(const DoutPrefixProvider *dpp,
           RGWBucketAdminOpState& op_state,
@@ -401,6 +412,10 @@ public:
 
   static int check_index(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp);
+  static int check_index_olh(rgw::sal::RGWRadosStore* store, RGWBucketAdminOpState& op_state,
+                             RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+  static int check_index_unlinked(rgw::sal::RGWRadosStore* store, RGWBucketAdminOpState& op_state,
+                                  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
 
   static int remove_bucket(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, optional_yield y,
       const DoutPrefixProvider *dpp, bool bypass_gc = false, bool keep_index_consistent = true);
