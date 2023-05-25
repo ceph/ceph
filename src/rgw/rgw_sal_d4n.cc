@@ -483,7 +483,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     
     cb->handle_data(bl, ofs, len);
   } else if (read == "writeback") {
-    // retrieve from write back cache
+    // retrieve from write back cache, which will be stored as a cache driver instance in the filter
 
     /* Cache block locally */
     //ret = source->driver->policyDriver->cacheNode->put(dpp, source->get_obj_name(), bl, len, source->get_attrs()); // May be put_async -Sam
