@@ -31,6 +31,9 @@ import yaml
 
 from ceph.deployment import inventory
 from ceph.deployment.service_spec import (
+    ArgumentList,
+    ArgumentSpec,
+    GeneralArgList,
     IngressSpec,
     IscsiServiceSpec,
     MDSSpec,
@@ -959,8 +962,8 @@ class DaemonDescription(object):
                  deployed_by: Optional[List[str]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -1025,8 +1028,14 @@ class DaemonDescription(object):
 
         self.is_active = is_active
 
-        self.extra_container_args = extra_container_args
-        self.extra_entrypoint_args = extra_entrypoint_args
+        self.extra_container_args: Optional[ArgumentList] = None
+        self.extra_entrypoint_args: Optional[ArgumentList] = None
+        if extra_container_args:
+            self.extra_container_args = ArgumentSpec.from_general_args(
+                extra_container_args)
+        if extra_entrypoint_args:
+            self.extra_entrypoint_args = ArgumentSpec.from_general_args(
+                extra_entrypoint_args)
 
     @property
     def status(self) -> Optional[DaemonDescriptionStatus]:
