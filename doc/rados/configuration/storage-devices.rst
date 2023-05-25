@@ -25,6 +25,7 @@ There are several Ceph daemons in a storage cluster:
   additional monitoring and providing interfaces to external
   monitoring and management systems.
 
+.. _rados_config_storage_devices_osd_backends:
 
 OSD Back Ends
 =============
