@@ -9,7 +9,7 @@ export class DashboardV3PageHelper extends PageHelper {
 
   clickInventoryCardLink(link: string) {
     console.log(link);
-    cy.get(`cd-card[title="Inventory"]`).contains('a', link).click();
+    cy.get(`cd-card[cardTitle="Inventory"]`).contains('a', link).click();
   }
 
   card(indexOrTitle: number) {

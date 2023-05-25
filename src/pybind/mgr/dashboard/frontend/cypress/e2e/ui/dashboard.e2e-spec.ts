@@ -38,7 +38,7 @@ describe('Dashboard Main Page', () => {
         Monitors: 'Monitors',
         OSDs: 'OSDs',
         Hosts: 'Hosts',
-        'Object Gateways': 'Daemons',
+        'Object Gateways': 'Gateways',
         'iSCSI Gateways': 'Overview',
         Pools: 'Pools'
       };
