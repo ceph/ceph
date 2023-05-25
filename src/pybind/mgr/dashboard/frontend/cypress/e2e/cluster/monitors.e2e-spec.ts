@@ -5,7 +5,6 @@ describe('Monitors page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     monitors.navigateTo();
   });
 

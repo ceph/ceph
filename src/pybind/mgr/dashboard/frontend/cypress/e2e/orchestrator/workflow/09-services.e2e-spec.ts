@@ -7,7 +7,6 @@ describe('Services page', () => {
   const mdsDaemonName = 'mds.test';
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     services.navigateTo();
   });
 

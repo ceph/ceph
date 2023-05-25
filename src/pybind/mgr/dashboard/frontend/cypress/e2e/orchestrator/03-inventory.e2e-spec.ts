@@ -5,7 +5,6 @@ describe('Physical Disks page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     inventory.navigateTo();
   });
 

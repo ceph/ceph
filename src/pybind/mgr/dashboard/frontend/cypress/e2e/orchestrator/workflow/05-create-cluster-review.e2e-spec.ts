@@ -11,7 +11,6 @@ describe('Create Cluster Review page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     createCluster.navigateTo();
     createCluster.createCluster();
 

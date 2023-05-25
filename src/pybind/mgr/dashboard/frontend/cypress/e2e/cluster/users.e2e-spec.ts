@@ -5,7 +5,6 @@ describe('Cluster Ceph Users', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     users.navigateTo();
   });
 

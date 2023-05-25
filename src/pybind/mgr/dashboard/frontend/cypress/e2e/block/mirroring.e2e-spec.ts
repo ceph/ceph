@@ -7,7 +7,6 @@ describe('Mirroring page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     mirroring.navigateTo();
   });
 
@@ -32,7 +31,6 @@ describe('Mirroring page', () => {
       // login to the second ceph cluster
       cy.ceph2Login();
       cy.login();
-      Cypress.Cookies.preserveOnce('token');
       pools.navigateTo('create');
       pools.create(poolName, 8, 'rbd');
       pools.navigateTo();
@@ -85,7 +83,6 @@ describe('Mirroring page', () => {
       // login again since origin removes all the cookies
       // sessions, localStorage items etc..
       cy.login();
-      Cypress.Cookies.preserveOnce('token');
       mirroring.navigateTo();
       mirroring.checkPoolHealthStatus(poolName, 'OK');
     });
