@@ -649,6 +649,10 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 				 const rgw::bucket_log_layout_generation& gen,
 				 int shard_id, optional_yield y)
 {
+  if (!zone->log_data) {
+    return 0;
+  }
+
   auto& bucket = bucket_info.bucket;
 
   if (!filter_bucket(dpp, bucket, y)) {
