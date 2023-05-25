@@ -976,7 +976,7 @@ def test_service_spec_validation_error(y, error_match):
     assert err.match(error_match)
 
 
-@pytest.mark.parametrize("y, ec_args, ee_args", [
+@pytest.mark.parametrize("y, ec_args, ee_args, ec_final_args, ee_final_args", [
     pytest.param("""
 service_type: container
 service_id: hello-world
@@ -1011,6 +1011,8 @@ spec:
   volume_mounts:
     foo: /foo
 """,
+    None,
+    None,
     None,
     None,
     id="no_extra_args"),
@@ -1053,6 +1055,8 @@ spec:
 """,
     None,
     ["--lasers=blue", "--enable-confetti"],
+    None,
+    ["--lasers=blue", "--enable-confetti"],
     id="only_extra_entrypoint_args_spec"),
     pytest.param("""
 service_type: container
@@ -1088,11 +1092,13 @@ spec:
   volume_mounts:
     foo: /foo
 extra_entrypoint_args:
-- "--lasers=blue"
+- "--lasers blue"
 - "--enable-confetti"
 """,
     None,
-    ["--lasers=blue", "--enable-confetti"],
+    ["--lasers blue", "--enable-confetti"],
+    None,
+    ["--lasers", "blue", "--enable-confetti"],
     id="only_extra_entrypoint_args_toplevel"),
     pytest.param("""
 service_type: nfs
@@ -1109,6 +1115,8 @@ spec:
 """,
     ["--cap-add=CAP_NET_BIND_SERVICE", "--oom-score-adj=12"],
     ["--lasers=blue", "--title=Custom NFS Options"],
+    ["--cap-add=CAP_NET_BIND_SERVICE", "--oom-score-adj=12"],
+    ["--lasers=blue", "--title=Custom", "NFS", "Options"],
     id="both_kinds_nfs"),
     pytest.param("""
 service_type: container
@@ -1152,6 +1160,11 @@ extra_entrypoint_args:
     [
         {"argument": "--lasers=blue", "split": True},
         {"argument": "--enable-confetti", "split": False},
+    ],
+    None,
+    [
+        "--lasers=blue",
+        "--enable-confetti",
     ],
     id="only_extra_entrypoint_args_obj_toplevel"),
     pytest.param("""
@@ -1197,6 +1210,11 @@ spec:
         {"argument": "--lasers=blue", "split": True},
         {"argument": "--enable-confetti", "split": False},
     ],
+    None,
+    [
+        "--lasers=blue",
+        "--enable-confetti",
+    ],
     id="only_extra_entrypoint_args_obj_indented"),
     pytest.param("""
 service_type: nfs
@@ -1219,11 +1237,33 @@ extra_container_args:
         {"argument": "--lasers=blue", "split": False},
         {"argument": "--title=Custom NFS Options", "split": False},
     ],
+    [
+        "--cap-add=CAP_NET_BIND_SERVICE",
+        "--oom-score-adj=12",
+    ],
+    [
+        "--lasers=blue",
+        "--title=Custom NFS Options",
+    ],
     id="both_kinds_obj_nfs"),
 ])
-def test_extra_args_handling(y, ec_args, ee_args):
+def test_extra_args_handling(y, ec_args, ee_args, ec_final_args, ee_final_args):
     data = yaml.safe_load(y)
     spec_obj = ServiceSpec.from_json(data)
 
     assert ArgumentSpec.map_json(spec_obj.extra_container_args) == ec_args
     assert ArgumentSpec.map_json(spec_obj.extra_entrypoint_args) == ee_args
+    if ec_final_args is None:
+        assert spec_obj.extra_container_args is None
+    else:
+        ec_res = []
+        for args in spec_obj.extra_container_args:
+            ec_res.extend(args.to_args())
+        assert ec_res == ec_final_args
+    if ee_final_args is None:
+        assert spec_obj.extra_entrypoint_args is None
+    else:
+        ee_res = []
+        for args in spec_obj.extra_entrypoint_args:
+            ee_res.extend(args.to_args())
+        assert ee_res == ee_final_args
