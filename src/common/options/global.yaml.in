@@ -3620,6 +3620,12 @@ options:
   desc: Cost for scrub operations in work queue
   default: 50_M
   with_legacy: true
+- name: osd_scrub_event_cost
+  type: size
+  level: advanced
+  desc: Cost for each scrub operation, used when osd_op_queue=mclock_scheduler
+  default: 4_K
+  with_legacy: true
 # set requested scrub priority higher than scrub priority to make the
 # requested scrubs jump the queue of scheduled scrubs
 - name: osd_requested_scrub_priority
