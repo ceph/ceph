@@ -413,7 +413,14 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       mon.send_reply(op, m.detach());
       return true;
     } else {
-      return false;  // not booted yet.
+      /* check if we've already recorded its entry in pending */
+      const auto& pending = get_pending_fsmap();
+      if (pending.gid_exists(gid)) {
+        /* MDS is already booted. */
+        goto ignore;
+      } else {
+        return false;  // not booted yet.
+      }
     }
   }
   dout(10) << __func__ << ": GID exists in map: " << gid << dendl;
@@ -554,7 +561,7 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
     } catch (const bad_cmd_get& e) {
       bufferlist bl;
       mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
-      return true;
+      return false; /* nothing to propose */
     }
 
   case MSG_MDS_OFFLOAD_TARGETS:
@@ -564,7 +571,7 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
     ceph_abort();
   }
 
-  return true;
+  return false; /* nothing to propose! */
 }
 
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
@@ -864,6 +871,7 @@ null:
 bool MDSMonitor::prepare_offload_targets(MonOpRequestRef op)
 {
   auto &pending = get_pending_fsmap_writeable();
+  bool propose = false;
 
   op->mark_mdsmon_event(__func__);
   auto m = op->get_req<MMDSLoadTargets>();
@@ -871,11 +879,12 @@ bool MDSMonitor::prepare_offload_targets(MonOpRequestRef op)
   if (pending.gid_has_rank(gid)) {
     dout(10) << "prepare_offload_targets " << gid << " " << m->targets << dendl;
     pending.update_export_targets(gid, m->targets);
+    propose = true;
   } else {
     dout(10) << "prepare_offload_targets " << gid << " not in map" << dendl;
   }
   mon.no_reply(op);
-  return true;
+  return propose;
 }
 
 bool MDSMonitor::should_propose(double& delay)
@@ -1362,7 +1371,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon.reply_command(op, -EINVAL, rs, rdata, get_last_committed());
-    return true;
+    return false;
   }
 
   string prefix;
@@ -1372,7 +1381,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   MonSession *session = op->get_session();
   if (!session) {
     mon.reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
-    return true;
+    return false;
   }
 
   auto &pending = get_pending_fsmap_writeable();
@@ -1978,7 +1987,6 @@ int MDSMonitor::print_nodes(Formatter *f)
  */
 bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid)
 {
-  auto &current_mds_map = get_fsmap().get_filesystem(fscid)->mds_map;
   auto&& fs = fsmap.get_filesystem(fscid);
   auto &mds_map = fs->mds_map;
 
@@ -1991,7 +1999,8 @@ bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid)
    * current batch of changes in pending. This is important if an MDS is
    * becoming active in the next epoch.
    */
-  if (!current_mds_map.is_resizeable() ||
+  if (!get_fsmap().filesystem_exists(fscid) ||
+      !get_fsmap().get_filesystem(fscid)->mds_map.is_resizeable() ||
       !mds_map.is_resizeable()) {
     dout(5) << __func__ << " mds_map is not currently resizeable" << dendl;
     return false;
