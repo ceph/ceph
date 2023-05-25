@@ -141,5 +141,11 @@ int main(int argc, char** argv)
 
   cct->_conf.set_val("ms_async_op_threads", fmt::format("{}", worker_threads));
 
+  std::cout << "server[" << addr
+            << "](bs=" << bs
+            << ", crc_enabled=" << crc_enabled
+            << ", worker_threads=" << worker_threads
+            << std::endl;
+
   run(cct.get(), target_addr, bs);
 }
