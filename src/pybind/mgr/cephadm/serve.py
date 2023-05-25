@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple,
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.service_spec import (
+    ArgumentList,
+    ArgumentSpec,
     CustomContainerSpec,
     PlacementSpec,
     RGWSpec,
@@ -1289,8 +1291,12 @@ class CephadmServe:
                             deployed_by=self.mgr.get_active_mgr_digests(),
                             rank=daemon_spec.rank,
                             rank_generation=daemon_spec.rank_generation,
-                            extra_container_args=extra_container_args,
-                            extra_entrypoint_args=extra_entrypoint_args,
+                            extra_container_args=ArgumentSpec.map_json(
+                                extra_container_args,
+                            ),
+                            extra_entrypoint_args=ArgumentSpec.map_json(
+                                extra_entrypoint_args,
+                            ),
                         ),
                         config_blobs=daemon_spec.final_config,
                     ).dump_json_str(),
@@ -1338,19 +1344,21 @@ class CephadmServe:
                     self.mgr.cephadm_services[servict_type].post_remove(dd, is_failed_deploy=True)
                 raise
 
-    def _setup_extra_deployment_args(self, daemon_spec: CephadmDaemonDeploySpec, params: Dict[str, Any]) -> Tuple[CephadmDaemonDeploySpec, Optional[List[str]], Optional[List[str]]]:
+    def _setup_extra_deployment_args(
+        self,
+        daemon_spec: CephadmDaemonDeploySpec,
+        params: Dict[str, Any],
+    ) -> Tuple[CephadmDaemonDeploySpec, Optional[ArgumentList], Optional[ArgumentList]]:
         # this function is for handling any potential user specified
         # (in the service spec) extra runtime or entrypoint args for a daemon
         # we are going to deploy. Effectively just adds a set of extra args to
         # pass to the cephadm binary to indicate the daemon being deployed
         # needs extra runtime/entrypoint args. Returns the modified daemon spec
         # as well as what args were added (as those are included in unit.meta file)
-        def _to_args(lst: List[str]) -> List[str]:
+        def _to_args(lst: ArgumentList) -> List[str]:
             out: List[str] = []
-            for value in lst:
-                for arg in value.split(' '):
-                    if arg:
-                        out.append(arg)
+            for argspec in lst:
+                out.extend(argspec.to_args())
             return out
 
         try:
