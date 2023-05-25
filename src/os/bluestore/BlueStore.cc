@@ -2551,6 +2551,16 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
 void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
+  //_dup_writing needs cache lock
+  BufferCacheShard* coll_cache;
+  do {
+    coll_cache = c->cache;
+    coll_cache->lock.lock();
+    if (coll_cache == c->cache) {
+      break;
+    }
+    coll_cache->lock.unlock();
+  } while (true);
 
   auto cct = onode->c->store->cct;
   bool inject_21040 =
@@ -2662,6 +2672,8 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
     newo->onode.size = dstoff + length;
   }
   newo->extent_map.dirty_range(dstoff, length);
+  //_dup_writing needs cache lock
+  coll_cache->lock.unlock();
 }
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
