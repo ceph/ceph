@@ -11011,8 +11011,38 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.unlock();
     r = io_finish_cond->wait();
+
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " bl.length()=" << bl->length() << " bl:" << fscrypt_hex_str(bl->c_str(), bl->length()) << dendl;
+    int block_num = 0;
+    bufferlist newbl;
+    auto len = bl->length();
+    newbl.append_hole(len);
+
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
+  }
+
+  if (r >= 0) {
+    auto len = r;
+    if (fscrypt_denc) {
+      for (uint64_t pos = 0; pos < len; pos += 4096, ++block_num) {
+
+        r = fscrypt_denc->calc_fdata_key(block_num);
+        if (r  < 0) {
+          return r;
+        }
+
+        r = fscrypt_denc->decrypt(bl->c_str() + pos, 4096,
+                                  newbl.c_str() + pos, 4096);
+        if (r < 0) {
+          return r;
+        }
+      }
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " r=" << r << " newbl.length()=" << newbl.length() << " bl:" << fscrypt_hex_str(newbl.c_str(), newbl.length()) << dendl;
+
+      bl->swap(newbl);
+    }
+
     update_read_io_size(bl->length());
   }
 
