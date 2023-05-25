@@ -8,7 +8,6 @@ describe('Notification page', () => {
 
   before(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     pools.navigateTo('create');
     pools.create(poolName, 8);
     pools.edit_pool_pg(poolName, 4, false);
@@ -16,14 +15,12 @@ describe('Notification page', () => {
 
   after(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     pools.navigateTo();
     pools.delete(poolName);
   });
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     pools.navigateTo();
   });
 

@@ -9,7 +9,6 @@ describe('Images page', () => {
 
   before(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     // Need pool for image testing
     pools.navigateTo('create');
     pools.create(poolName, 8, 'rbd');
@@ -26,7 +25,6 @@ describe('Images page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     images.navigateTo();
   });
 
@@ -70,7 +68,6 @@ describe('Images page', () => {
 
     before(() => {
       cy.login();
-      Cypress.Cookies.preserveOnce('token');
       // Need image for trash testing
       images.createImage(imageName, poolName, '1');
       images.getFirstTableCell(imageName).should('exist');

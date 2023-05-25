@@ -6,7 +6,6 @@ describe('RGW buckets page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     buckets.navigateTo();
   });
 

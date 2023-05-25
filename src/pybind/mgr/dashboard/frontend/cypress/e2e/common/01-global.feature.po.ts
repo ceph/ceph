@@ -6,7 +6,6 @@ const urlsCollection = new UrlsCollection();
 
 Given('I am logged in', () => {
   cy.login();
-  Cypress.Cookies.preserveOnce('token');
 });
 
 Given('I am on the {string} page', (page: string) => {
