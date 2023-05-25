@@ -291,6 +291,7 @@ static seastar::future<> run(
       PeriodStats period_stats;
 
       const seastar::shard_id sid;
+      const unsigned id;
       std::string lname;
 
       const unsigned jobs;
@@ -310,13 +311,21 @@ static seastar::future<> run(
 
       Client(unsigned jobs, unsigned msg_len, unsigned depth)
         : sid{seastar::this_shard_id()},
+          id{sid + jobs - seastar::smp::count},
           jobs{jobs},
           msg_len{msg_len},
           nr_depth{depth/jobs},
           depth{nr_depth},
           time_msgs_sent{depth/jobs, mono_clock::zero()} {
-        lname = "client#";
-        lname += std::to_string(sid);
+        if (is_active()) {
+          assert(sid > 0);
+          lname = "client";
+          lname += std::to_string(id);
+          lname += "@";
+          lname += std::to_string(sid);
+        } else {
+          lname = "invalid_client";
+        }
         msg_data.append_zero(msg_len);
       }
 
@@ -359,7 +368,8 @@ static seastar::future<> run(
       // should start messenger at this shard?
       bool is_active() {
         ceph_assert(seastar::this_shard_id() == sid);
-        return sid != 0 && sid <= jobs;
+        ceph_assert(seastar::smp::count > jobs);
+        return sid + jobs >= seastar::smp::count;
       }
 
       seastar::future<> init() {
@@ -394,7 +404,7 @@ static seastar::future<> run(
 
       seastar::future<> connect_wait_verify(const entity_addr_t& peer_addr) {
         return container().invoke_on_all([peer_addr] (auto& client) {
-          // start clients in active cores (#1 ~ #jobs)
+          // start clients in active cores
           if (client.is_active()) {
             client.conn_stats.start_connecting();
             client.active_conn = client.msgr->connect(peer_addr, entity_name_t::TYPE_OSD);
@@ -431,14 +441,12 @@ static seastar::future<> run(
 
         unsigned get_elapsed() const { return elapsed; }
 
-        PeriodStats& get_snap_by_job(seastar::shard_id sid) {
-          ceph_assert(sid >= 1 && sid <= jobs);
-          return snaps[sid - 1];
+        PeriodStats& get_snap_by_job(unsigned client_id) {
+          return snaps[client_id];
         }
 
-        ConnStats& get_summary_by_job(seastar::shard_id sid) {
-          ceph_assert(sid >= 1 && sid <= jobs);
-          return summaries[sid - 1];
+        ConnStats& get_summary_by_job(unsigned client_id) {
+          return summaries[client_id];
         }
 
         bool should_stop() const {
@@ -518,7 +526,7 @@ static seastar::future<> run(
       seastar::future<> report_period(TimerReport& report) {
         return container().invoke_on_all([&report] (auto& client) {
           if (client.is_active()) {
-            PeriodStats& snap = report.get_snap_by_job(client.sid);
+            PeriodStats& snap = report.get_snap_by_job(client.id);
             client.period_stats.reset_period(
                 client.conn_stats.received_count,
                 client.get_current_depth(),
@@ -532,7 +540,7 @@ static seastar::future<> run(
       seastar::future<> report_summary(TimerReport& report) {
         return container().invoke_on_all([&report] (auto& client) {
           if (client.is_active()) {
-            ConnStats& summary = report.get_summary_by_job(client.sid);
+            ConnStats& summary = report.get_summary_by_job(client.id);
             summary.prepare_summary(client.conn_stats);
           }
         }).then([&report] {
@@ -683,13 +691,13 @@ static seastar::future<> run(
     auto fp_server = std::move(std::get<0>(ret).get0());
     auto client = std::move(std::get<1>(ret).get0());
     test_state::Server* server = fp_server.get();
+    // reserve core 0 for potentially better performance
     if (mode == perf_mode_t::both) {
-      logger().info("\nperf settings:\n  {}\n  {}\n",
-                    client_conf.str(), server_conf.str());
-      ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+      logger().info("\nperf settings:\n  smp={}\n  {}\n  {}\n",
+                    seastar::smp::count, client_conf.str(), server_conf.str());
+      ceph_assert(seastar::smp::count > client_conf.jobs);
       ceph_assert(client_conf.jobs > 0);
-      ceph_assert(seastar::smp::count >= 1+server_conf.core);
-      ceph_assert(server_conf.core == 0 || server_conf.core > client_conf.jobs);
+      ceph_assert(seastar::smp::count > server_conf.core + client_conf.jobs);
       return seastar::when_all_succeed(
         server->init(server_conf.addr),
         client->init()
@@ -704,8 +712,9 @@ static seastar::future<> run(
         return server->shutdown().then([cleanup = std::move(fp_server)] {});
       });
     } else if (mode == perf_mode_t::client) {
-      logger().info("\nperf settings:\n  {}\n", client_conf.str());
-      ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+      logger().info("\nperf settings:\n  smp={}\n  {}\n",
+                    seastar::smp::count, client_conf.str());
+      ceph_assert(seastar::smp::count > client_conf.jobs);
       ceph_assert(client_conf.jobs > 0);
       return client->init(
       ).then([client, addr = client_conf.server_addr] {
@@ -717,8 +726,9 @@ static seastar::future<> run(
         return client->shutdown();
       });
     } else { // mode == perf_mode_t::server
-      ceph_assert(seastar::smp::count >= 1+server_conf.core);
-      logger().info("\nperf settings:\n  {}\n", server_conf.str());
+      ceph_assert(seastar::smp::count > server_conf.core);
+      logger().info("\nperf settings:\n  smp={}\n  {}\n",
+                    seastar::smp::count, server_conf.str());
       return server->init(server_conf.addr
       // dispatch ops
       ).then([server] {
@@ -753,7 +763,7 @@ int main(int argc, char** argv)
      "client block size")
     ("depth", bpo::value<unsigned>()->default_value(512),
      "client io depth")
-    ("server-core", bpo::value<unsigned>()->default_value(0),
+    ("server-core", bpo::value<unsigned>()->default_value(1),
      "server running core")
     ("server-bs", bpo::value<unsigned>()->default_value(0),
      "server block size")
