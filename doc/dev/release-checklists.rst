@@ -121,10 +121,16 @@ In the `ceph/ceph-build.git` repo:
 - [x] grep for previous release and add relevant build targets (e.g. for reef https://github.com/ceph/ceph-build/pull/2076 and https://github.com/ceph/ceph-build/pull/2119)
 
 
+After dev freeze
+================
+
+- [x] add release name to redmine (using https://tracker.ceph.com/custom_fields/16/edit)
+- [x] add release name to .github/milestone.yml for github actions to automatically add milestone to backports
+
 First release candidate
 =======================
 
-- [ ] src/ceph_release: change type to `rc`
+- [x] src/ceph_release: change type to `rc`
 - [ ] opt-in to all telemetry channels, generate telemetry reports, and verify no sensitive details (like pools names) are collected
 
 
