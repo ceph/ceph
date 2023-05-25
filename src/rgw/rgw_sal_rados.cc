@@ -905,7 +905,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
       ACLOwner owner(rgw_user(dentry.meta.owner));
       owner.set_name(dentry.meta.owner_display_name);
       uploads.push_back(this->get_multipart_upload(key.name,
-			std::nullopt, std::move(owner)));
+			std::nullopt, std::move(owner), dentry.meta.mtime));
     }
   }
   if (common_prefixes) {
