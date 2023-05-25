@@ -139,7 +139,7 @@ struct server_config {
   }
 };
 
-const unsigned SAMPLE_RATE = 7;
+const unsigned SAMPLE_RATE = 59;
 
 static seastar::future<> run(
     perf_mode_t mode,
