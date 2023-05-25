@@ -5,7 +5,6 @@ describe('Manager modules page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     mgrmodules.navigateTo();
   });
 

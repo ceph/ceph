@@ -15,7 +15,6 @@ describe('Dashboard-v3 Main Page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     dashboard.navigateTo();
   });
 

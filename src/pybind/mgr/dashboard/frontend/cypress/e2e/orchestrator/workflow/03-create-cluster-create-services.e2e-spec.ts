@@ -17,7 +17,6 @@ describe('Create cluster create services page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     createCluster.navigateTo();
     createCluster.createCluster();
     cy.get('.nav-link').contains('Create Services').click();

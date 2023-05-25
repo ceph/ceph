@@ -5,7 +5,6 @@ describe('Dashboard Main Page', { retries: 0 }, () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     dashboard.navigateTo();
   });
 

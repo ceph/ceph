@@ -10,7 +10,6 @@ describe('Create cluster create osds page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     createCluster.navigateTo();
     createCluster.createCluster();
     cy.get('.nav-link').contains('Create OSDs').click();
