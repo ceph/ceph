@@ -1,0 +1,15 @@
+tasks:
+- workunit:
+    clients:
+      cluster1.client.mirror:
+        - rbd/krbd_mirror_compare2.sh
+    env:
+      CEPH_ARGS: ''
+      MIRROR_POOL_MODE: 'image'
+      MIRROR_IMAGE_MODE: 'snapshot'
+      RBD_DEVICE_TYPE: 'krbd'
+      RBD_MIRROR_USE_RBD_MIRROR: '1'
+      RBD_MIRROR_INSTANCES: '1'
+      RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
+      RBD_IMAGE_FEATURES: 'layering,exclusive-lock,object-map,fast-diff'
+    timeout: 3h
