@@ -12,6 +12,7 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/smp.hh>
+#include <seastar/core/thread.hh>
 
 #include "common/ceph_time.h"
 #include "messages/MOSDOp.h"
@@ -22,6 +23,7 @@
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
+#include "crimson/osd/stop_signal.h"
 
 using namespace std;
 using namespace std::chrono_literals;
@@ -224,13 +226,6 @@ static seastar::future<> run(
               return seastar::now();
             }
           });
-        });
-      }
-
-      seastar::future<> wait() {
-        return seastar::smp::submit_to(msgr_sid, [this] {
-          ceph_assert(msgr);
-          return msgr->wait();
         });
       }
 
@@ -870,13 +865,12 @@ static seastar::future<> run(
       ceph_assert(seastar::smp::count > server_conf.core);
       logger().info("\nperf settings:\n  smp={}\n  {}\n",
                     seastar::smp::count, server_conf.str());
-      return server->init(server_conf.addr
-      // dispatch ops
-      ).then([server] {
-        return server->wait();
-      // shutdown
-      }).then([server, fp_server = std::move(fp_server)] () mutable {
-        return server->shutdown().then([cleanup = std::move(fp_server)] {});
+      return seastar::async([server, server_conf, fp_server=std::move(fp_server)] {
+        // FIXME: SIGINT is not received by stop_signal
+        seastar_apps_lib::stop_signal should_stop;
+        server->init(server_conf.addr).get();
+        should_stop.wait().get();
+        server->shutdown().get();
       });
     }
   }).finally([] {
