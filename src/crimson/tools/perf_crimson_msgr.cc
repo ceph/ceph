@@ -158,12 +158,19 @@ static seastar::future<> run(
       unsigned msg_len;
       bufferlist msg_data;
 
-      Server(unsigned msg_len)
+      bool is_stopped = false;
+      std::optional<seastar::future<>> fut_report;
+
+      Server(unsigned msg_len, bool needs_report)
         : msgr_sid{seastar::this_shard_id()},
           msg_len{msg_len} {
         lname = "server#";
         lname += std::to_string(msgr_sid);
         msg_data.append_zero(msg_len);
+
+        if (needs_report) {
+          start_report();
+        }
       }
 
       std::optional<seastar::future<>> ms_dispatch(
@@ -206,11 +213,20 @@ static seastar::future<> run(
       seastar::future<> shutdown() {
         logger().info("{} shutdown...", lname);
         return seastar::smp::submit_to(msgr_sid, [this] {
+          is_stopped = true;
           ceph_assert(msgr);
           msgr->stop();
-          return msgr->shutdown();
+          return msgr->shutdown(
+          ).then([this] {
+            if (fut_report.has_value()) {
+              return std::move(fut_report.value());
+            } else {
+              return seastar::now();
+            }
+          });
         });
       }
+
       seastar::future<> wait() {
         return seastar::smp::submit_to(msgr_sid, [this] {
           ceph_assert(msgr);
@@ -220,12 +236,44 @@ static seastar::future<> run(
 
       static seastar::future<ServerFRef> create(
           seastar::shard_id msgr_sid,
-          unsigned msg_len) {
+          unsigned msg_len,
+          bool needs_report) {
         return seastar::smp::submit_to(
-            msgr_sid, [msg_len] {
+            msgr_sid, [msg_len, needs_report] {
           return seastar::make_foreign(
-              std::make_unique<Server>(msg_len));
+              std::make_unique<Server>(msg_len, needs_report));
         });
+      }
+
+    private:
+      struct TimerReport {
+        unsigned elapsed = 0u;
+
+        seastar::future<> ticktock() {
+          return seastar::sleep(1s).then([this] {
+            ++elapsed;
+            std::ostringstream sout;
+            sout << elapsed
+                 << "s -- server reactor utilization: "
+                 << get_reactor_utilization();
+            std::cout << sout.str() << std::endl;
+          });
+        }
+      };
+
+      void start_report() {
+        seastar::promise<> pr_report;
+        fut_report = pr_report.get_future();
+        seastar::do_with(
+            TimerReport(),
+            [this](auto &report) {
+          return seastar::do_until(
+            [this] { return is_stopped; },
+            [&report] {
+              return report.ticktock();
+            }
+          );
+        }).forward_to(std::move(pr_report));
       }
     };
 
@@ -756,13 +804,17 @@ static seastar::future<> run(
   };
 
   std::optional<unsigned> server_sid;
+  bool server_needs_report = false;
   if (mode == perf_mode_t::both) {
     server_sid = server_conf.core;
+  } else if (mode == perf_mode_t::server) {
+    server_needs_report = true;
   }
   return seastar::when_all(
       test_state::Server::create(
         server_conf.core,
-        server_conf.block_size),
+        server_conf.block_size,
+        server_needs_report),
       create_sharded<test_state::Client>(
         client_conf.jobs,
         client_conf.block_size,
