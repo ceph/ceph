@@ -204,4 +204,4 @@ If you need to allow multiple clusters to exist on the same host, use
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
 .. _Network Configuration Reference: ../network-config-ref
 .. _OSD Config Reference: ../osd-config-ref
-.. _Configuring Monitor/OSD Interaction: ../mon-osd-interactio
+.. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
