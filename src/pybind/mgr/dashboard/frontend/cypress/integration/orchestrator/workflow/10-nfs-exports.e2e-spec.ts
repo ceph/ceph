@@ -9,8 +9,7 @@ describe('nfsExport page', () => {
   const services = new ServicesPageHelper();
   const buckets = new BucketsPageHelper();
   const bucketName = 'e2e.nfs.bucket';
-  // @TODO: uncomment this when a CephFS volume can be created through Dashboard.
-  // const fsPseudo = '/fsPseudo';
+  const fsPseudo = '/fsPseudo';
   const rgwPseudo = '/rgwPseudo';
   const editPseudo = '/editPseudo';
   const backends = ['CephFS', 'Object Gateway'];
@@ -51,14 +50,13 @@ describe('nfsExport page', () => {
       nfsExport.existTableCell(rgwPseudo);
     });
 
-    // @TODO: uncomment this when a CephFS volume can be created through Dashboard.
-    // it('should create a nfs-export with CephFS backend', () => {
-    //   nfsExport.navigateTo();
-    //   nfsExport.existTableCell(fsPseudo, false);
-    //   nfsExport.navigateTo('create');
-    //   nfsExport.create(backends[0], squash, client, fsPseudo);
-    //   nfsExport.existTableCell(fsPseudo);
-    // });
+    it('should create a nfs-export with CephFS backend', () => {
+      nfsExport.navigateTo();
+      nfsExport.existTableCell(fsPseudo, false);
+      nfsExport.navigateTo('create');
+      nfsExport.create(backends[0], squash, client, fsPseudo);
+      nfsExport.existTableCell(fsPseudo);
+    });
 
     it('should show Clients', () => {
       nfsExport.clickTab('cd-nfs-details', rgwPseudo, 'Clients (1)');
