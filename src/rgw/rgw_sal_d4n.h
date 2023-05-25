@@ -29,6 +29,7 @@ namespace rgw { namespace sal {
 
 class D4NFilterDriver : public FilterDriver {
   private:
+    rgw::d4n::ObjectDirectory* objDir;
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* cacheBlock;
     rgw::d4n::D4NDatacache* d4nCache;
@@ -37,12 +38,14 @@ class D4NFilterDriver : public FilterDriver {
   public:
     D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
     {
-      blockDir = new rgw::d4n::BlockDirectory(); /* Initialize directory address with cct */
+      objDir = new rgw::d4n::ObjectDirectory();
+      blockDir = new rgw::d4n::BlockDirectory();
       cacheBlock = new rgw::d4n::CacheBlock();
       d4nCache = new rgw::d4n::D4NDatacache();
       policyDriver = new rgw::d4n::PolicyDriver("lfuda");
     }
     virtual ~D4NFilterDriver() {
+      delete objDir; 
       delete blockDir; 
       delete cacheBlock;
       delete d4nCache;
@@ -63,6 +66,7 @@ class D4NFilterDriver : public FilterDriver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
+    rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
     rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
     rgw::d4n::D4NDatacache* get_d4n_cache() { return d4nCache; }
