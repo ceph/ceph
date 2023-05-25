@@ -6,9 +6,18 @@ import yaml
 
 import pytest
 
-from ceph.deployment.service_spec import HostPlacementSpec, PlacementSpec, \
-    ServiceSpec, RGWSpec, NFSServiceSpec, IscsiServiceSpec, AlertManagerSpec, \
-    CustomContainerSpec, GrafanaSpec, PrometheusSpec
+from ceph.deployment.service_spec import (
+    AlertManagerSpec,
+    CustomContainerSpec,
+    GrafanaSpec,
+    HostPlacementSpec,
+    IscsiServiceSpec,
+    NFSServiceSpec,
+    PlacementSpec,
+    PrometheusSpec,
+    RGWSpec,
+    ServiceSpec,
+)
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
 
