@@ -768,10 +768,13 @@ paths:
           application/json:
             schema:
               properties:
+                mirrorImageSnapshot:
+                  type: string
                 snapshot_name:
                   type: string
               required:
               - snapshot_name
+              - mirrorImageSnapshot
               type: object
       responses:
         '201':
