@@ -20,6 +20,7 @@
 #include "zpp_bits.h"
 #include "notify.h"
 #include <stdint.h>
+#include <time.h> // struct timespec
 #include <xxhash.h>
 
 #include "rgw_common.h"
@@ -343,10 +344,11 @@ public:
 	  auto concat_k = concat_key(bde.key);
 	  std::string ser_data;
 	  zpp::bits::out out(ser_data);
+	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
 	  auto errc =
 	    out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
 		bde.ver.pool, bde.ver.epoch, bde.exists,
-		bde.meta.category, bde.meta.size, /* XXX bde.meta.mtime, */
+		bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
 		bde.meta.owner_display_name, bde.meta.accounted_size,
 		bde.meta.storage_class, bde.meta.appendable);
 	  /*std::cout << fmt::format("fill: bde.key.name: {}", bde.key.name)
@@ -396,15 +398,17 @@ public:
 	std::string_view svv = data.get<string_view>();
 	std::string ser_v{svv};
 	zpp::bits::in in_v(ser_v);
+	struct timespec ts;
 	errc =
 	  in_v(bde.key.name, bde.key.instance, /* bde.key.ns, */
 	       bde.ver.pool, bde.ver.epoch, bde.exists,
-	       bde.meta.category, bde.meta.size, /* XXX bde.meta.mtime, */
+	       bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
 	       bde.meta.owner_display_name, bde.meta.accounted_size,
 	       bde.meta.storage_class, bde.meta.appendable);
 	if (errc.code != std::errc{0}) {
 	  abort();
 	}
+	bde.meta.mtime = ceph::real_clock::from_timespec(ts);
 	(void) each_func(bde);
 	++count;
       };
@@ -471,10 +475,11 @@ public:
 	  rc = driver->mint_listing_entry(b->name, bde);
 	  std::string ser_data;
 	  zpp::bits::out out(ser_data);
+	  struct timespec ts{ceph::real_clock::to_timespec(bde.meta.mtime)};
 	  auto errc =
 	    out(bde.key.name, bde.key.instance, /* XXX bde.key.ns, */
 		bde.ver.pool, bde.ver.epoch, bde.exists,
-		bde.meta.category, bde.meta.size, /* XXX bde.meta.mtime, */
+		bde.meta.category, bde.meta.size, ts.tv_sec, ts.tv_nsec,
 		bde.meta.owner_display_name, bde.meta.accounted_size,
 		bde.meta.storage_class, bde.meta.appendable);
 	  if (errc.code != std::errc{0}) {
