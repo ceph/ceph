@@ -34,7 +34,7 @@ class Directory {
     CephContext* cct;
 };
 
-class ObjectDirectory: public Directory {
+class ObjectDirectory: public Directory { // where else should object directory be called? -Sam
   public:
     ObjectDirectory() {}
     ObjectDirectory(std::string host, int port) {
@@ -51,6 +51,7 @@ class ObjectDirectory: public Directory {
     int find_client(cpp_redis::client* client);
     int exist_key(std::string key);
     Address get_addr() { return addr; }
+
     int set_value(CacheObj* object);
     int get_value(CacheObj* object);
     int copy_value(CacheObj* object, CacheObj* copyObject);
@@ -79,11 +80,13 @@ class BlockDirectory: public Directory {
     int find_client(cpp_redis::client* client);
     int exist_key(std::string key);
     Address get_addr() { return addr; }
+
     int set_value(CacheBlock* block);
     int get_value(CacheBlock* block);
     int copy_value(CacheBlock* block, CacheBlock* copyBlock);
     int del_value(CacheBlock* block);
 
+    int update_field(CacheBlock* block, std::string field, std::string value);
 
   private:
     cpp_redis::client client;
