@@ -165,6 +165,11 @@ class DaemonAction(enum.Enum):
     rotate_key = 'rotate-key'
 
 
+class IngressType(enum.Enum):
+    default = 'default'
+    keepalive_only = 'keepalive-only'
+
+
 def to_format(what: Any, format: Format, many: bool, cls: Any) -> Any:
     def to_json_1(obj: Any) -> Any:
         if hasattr(obj, 'to_json'):

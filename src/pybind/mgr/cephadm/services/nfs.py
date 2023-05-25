@@ -92,6 +92,9 @@ class NFSService(CephService):
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
+        bind_addr = spec.virtual_ip if spec.virtual_ip else (daemon_spec.ip if daemon_spec.ip else '')
+        if not bind_addr:
+            logger.warning(f'Bind address in {daemon_type}.{daemon_id}\'s ganesha conf is defaulting to empty')
 
         # generate the ganesha config
         def get_ganesha_conf() -> str:
@@ -104,7 +107,7 @@ class NFSService(CephService):
                 "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
                 "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
-                "bind_addr": daemon_spec.ip if daemon_spec.ip else '',
+                "bind_addr": bind_addr,
             }
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
