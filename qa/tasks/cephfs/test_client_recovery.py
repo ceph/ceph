@@ -7,7 +7,9 @@ import logging
 from textwrap import dedent
 import time
 import distutils.version as version
+import random
 import re
+import string
 import os
 
 from teuthology.orchestra import run
@@ -217,8 +219,10 @@ class TestClientRecovery(CephFSTestCase):
         # Capability release from stale session
         # =====================================
         if write:
-            cap_holder = self.mount_a.open_background()
+            content = ''.join(random.choices(string.ascii_uppercase + string.digits, k=16))
+            cap_holder = self.mount_a.open_background(content=content)
         else:
+            content = ''
             self.mount_a.run_shell(["touch", "background_file"])
             self.mount_a.umount_wait()
             self.mount_a.mount_wait()
@@ -229,7 +233,7 @@ class TestClientRecovery(CephFSTestCase):
 
         # Wait for the file to be visible from another client, indicating
         # that mount_a has completed its network ops
-        self.mount_b.wait_for_visible()
+        self.mount_b.wait_for_visible(size=len(content))
 
         # Simulate client death
         self.mount_a.suspend_netns()
@@ -260,11 +264,9 @@ class TestClientRecovery(CephFSTestCase):
                             "Capability handover took {0}, expected approx {1}".format(
                                 cap_waited, session_timeout
                             ))
-
-            self.mount_a._kill_background(cap_holder)
         finally:
-            # teardown() doesn't quite handle this case cleanly, so help it out
-            self.mount_a.resume_netns()
+            self.mount_a.resume_netns() # allow the mount to recover otherwise background proc is unkillable
+        self.mount_a._kill_background(cap_holder)
 
     def test_stale_read_caps(self):
         self._test_stale_caps(False)
@@ -315,9 +317,9 @@ class TestClientRecovery(CephFSTestCase):
                                 cap_waited, session_timeout / 2.0
                             ))
 
-            self.mount_a._kill_background(cap_holder)
         finally:
-            self.mount_a.resume_netns()
+            self.mount_a.resume_netns() # allow the mount to recover otherwise background proc is unkillable
+        self.mount_a._kill_background(cap_holder)
 
     def test_trim_caps(self):
         # Trim capability when reconnecting MDS
@@ -383,7 +385,6 @@ class TestClientRecovery(CephFSTestCase):
 
         self.mount_b.check_filelock(do_flock=flockable)
 
-        # Tear down the background process
         self.mount_a._kill_background(lock_holder)
 
     def test_filelock_eviction(self):
@@ -412,7 +413,6 @@ class TestClientRecovery(CephFSTestCase):
             # succeed
             self.wait_until_true(lambda: lock_taker.finished, timeout=10)
         finally:
-            # Tear down the background process
             self.mount_a._kill_background(lock_holder)
 
             # teardown() doesn't quite handle this case cleanly, so help it out
