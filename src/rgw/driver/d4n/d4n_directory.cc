@@ -51,14 +51,11 @@ int ObjectDirectory::exist_key(std::string key) {
 
 int ObjectDirectory::set_value(CacheObj* object) {
   /* Creating the index based on objName */
+  std::string result;
   std::string key = build_index(object);
   if (!client.is_connected()) { 
     find_client(&client);
   }
-
-  std::string result;
-  std::vector<std::string> keys;
-  keys.push_back(key);
 
   /* Every set will be new */
   if (addr.host == "" || addr.port == 0) {
@@ -139,7 +136,7 @@ int ObjectDirectory::get_value(CacheObj* object) {
 
       client.sync_commit(std::chrono::milliseconds(1000));
 
-      if (keyExist < 0 ) {
+      if (keyExist < 0) {
         return keyExist;
       }
 
@@ -161,13 +158,13 @@ int ObjectDirectory::get_value(CacheObj* object) {
   return keyExist;
 }
 
-int ObjectDirectory::del_value(CacheObj* object){
+int ObjectDirectory::del_value(CacheObj* object) {
   int result = 0;
   std::vector<std::string> keys;
   std::string key = build_index(object);
   keys.push_back(key);
   
-  if (!client.is_connected()){
+  if (!client.is_connected()) {
     find_client(&client);
   }
   
@@ -234,14 +231,11 @@ int BlockDirectory::exist_key(std::string key) {
 
 int BlockDirectory::set_value(CacheBlock* block) {
   /* Creating the index based on objName */
+  std::string result;
   std::string key = build_index(block);
   if (!client.is_connected()) { 
     find_client(&client);
   }
-
-  std::string result;
-  std::vector<std::string> keys;
-  keys.push_back(key);
 
   /* Every set will be new */
   if (addr.host == "" || addr.port == 0) {
@@ -324,7 +318,7 @@ int BlockDirectory::get_value(CacheBlock* block) {
         return keyExist;
       }
 
-      /* Currently, there can only be one host */
+      /* Currently, there can only be one host */ // update -Sam
       block->size = std::stoi(size);
       block->cacheObj.bucketName = bucketName;
       block->cacheObj.objName = objName;
@@ -336,13 +330,13 @@ int BlockDirectory::get_value(CacheBlock* block) {
   return keyExist;
 }
 
-int BlockDirectory::del_value(CacheBlock* block){
+int BlockDirectory::del_value(CacheBlock* block) {
   int result = 0;
   std::vector<std::string> keys;
   std::string key = build_index(block);
   keys.push_back(key);
   
-  if (!client.is_connected()){
+  if (!client.is_connected()) {
     find_client(&client);
   }
   
@@ -364,6 +358,68 @@ int BlockDirectory::del_value(CacheBlock* block){
     dout(20) << "RGW D4N Directory: Block is not in directory." << dendl;
     return -2;
   }
+}
+
+int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value) { // represent in cache block too -Sam
+  std::string result;
+  std::string key = build_index(block);
+
+  if (!client.is_connected()) {
+    find_client(&client);
+  }
+  
+  if (exist_key(key)) {
+    if (field == "hostsList") {
+      /* Append rather than overwrite */
+      std::string hosts;
+
+      try {
+        client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
+          if (!reply.is_null()) {
+            hosts = reply.as_string();
+          }
+        });
+
+        client.sync_commit(std::chrono::milliseconds(1000));
+      } catch(std::exception &e) {
+        return -1;
+      }
+      
+      value += "_";
+      value += hosts;
+    }
+
+    /* Update cache block */ // Remove ones that aren't used -Sam
+    if (field == "size")
+      block->size = std::stoi(value);
+    else if (field == "bucketName")
+      block->cacheObj.bucketName = value;
+    else if (field == "objName")
+      block->cacheObj.objName = value;
+    else if (field == "hostsList")
+      block->hostsList.push_back(value);
+
+    std::vector< std::pair<std::string, std::string> > list;
+    list.push_back(std::make_pair(field, value));
+
+    try {
+      client.hmset(key, list, [&result](cpp_redis::reply &reply) {
+	if (!reply.is_null()) {
+	  result = reply.as_string();
+	}
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+
+      if (result != "OK") {
+	return -1;
+      }
+    } catch(std::exception &e) {
+      return -1;
+    }
+  }
+
+  return 0;
 }
 
 } } // namespace rgw::d4n
