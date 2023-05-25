@@ -479,24 +479,35 @@ bool FSCryptKeyValidator::is_valid() const {
   return (handler->get_epoch() == epoch);
 }
 
-FSCryptDenc::FSCryptDenc(): cipher(EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL)),
-                            cipher_ctx(EVP_CIPHER_CTX_new()),
-  cipher_params({ OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
-                                                 OSSL_PARAM_construct_end()} )
+FSCryptDenc::FSCryptDenc(EVP_CIPHER *cipher, std::vector<OSSL_PARAM> params) : cipher(cipher),
+                                                                               cipher_ctx(EVP_CIPHER_CTX_new()),
+                                                                               cipher_params(std::move(params)) {}
+
+FSCryptFNameDenc::FSCryptFNameDenc(): FSCryptDenc(EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL),
+  { OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
+                                                 OSSL_PARAM_construct_end()} ) {}
+
+FSCryptFDataDenc::FSCryptFDataDenc(): FSCryptDenc(EVP_CIPHER_fetch(NULL, "AES-256-XTS", NULL), {} ) {}
+
+void FSCryptDenc::setup(FSCryptContextRef& _ctx,
+                        FSCryptKeyRef& _master_key)
 {
+  ctx = _ctx;
+  master_key = _master_key;
 }
 
-int FSCryptDenc::init(char ctx_identifier,
-                      FSCryptContextRef& ctx,
-                      FSCryptKeyRef& master_key)
+int FSCryptDenc::calc_key(char ctx_identifier,
+                          int key_size,
+                          uint64_t block_num)
 {
+  key.resize(key_size);
   int r = master_key->calc_hkdf(ctx_identifier,
                                 (const char *)ctx->nonce, sizeof(ctx->nonce),
-                                key, sizeof(key));
+                                key.data(), key_size);
   if (r < 0) {
     return r;
   }
-  ctx->generate_iv(0, iv);
+  ctx->generate_iv(block_num, iv);
 
   return 0;
 }
@@ -506,11 +517,13 @@ int FSCryptDenc::decrypt(const char *in_data, int in_len,
 {
     int total_len;
 
-    if (out_len < ((in_len + (FSCRYPT_KEY_SIZE - 1)) & ~(FSCRYPT_KEY_SIZE - 1))) {
+    int key_size = key.size();
+
+    if (out_len < ((in_len + (key_size - 1)) & ~(key_size - 1))) {
       return -ERANGE;
     }
 
-    if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key, iv.raw,
+    if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key.data(), iv.raw,
 			    0, cipher_params.data())) {
       return -EINVAL;
     }
@@ -537,7 +550,8 @@ FSCryptDenc::~FSCryptDenc()
   EVP_CIPHER_CTX_free(cipher_ctx);
 }
 
-FSCryptDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
+FSCryptDencRef FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
+                                  std::function<FSCryptDenc *()> gen_denc)
 {
   if (!ctx) {
     return nullptr;
@@ -566,14 +580,35 @@ FSCryptDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidat
     return nullptr;
   }
 
-  auto fscrypt_denc = std::make_shared<FSCryptDenc>();
+  auto fscrypt_denc = std::shared_ptr<FSCryptDenc>(gen_denc());
 
-  r = fscrypt_denc->init_fname(ctx, master_key);
-  if (r < 0) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to init dencoder: r=" << r << dendl;
+  fscrypt_denc->setup(ctx, master_key);
+
+  return fscrypt_denc;
+}
+
+FSCryptDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key)
+{
+  auto denc = init_denc(ctx, kv,
+                         []() { return new FSCryptFNameDenc(); });
+  if (!denc) {
     return nullptr;
   }
 
-  return fscrypt_denc;
+  if (calc_key) {
+    int r = denc->calc_fname_key();
+    if (r < 0) {
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to init dencoder: r=" << r << dendl;
+      return nullptr;
+    }
+  }
+
+  return denc;
+}
+
+FSCryptDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
+{
+  return init_denc(ctx, kv,
+                   []() { return new FSCryptFDataDenc(); });
 }
 

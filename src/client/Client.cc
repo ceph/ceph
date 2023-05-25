@@ -1401,12 +1401,11 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
     _readdir_drop_dirp_buffer(dirp);
     dirp->buffer.reserve(numdn);
 
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator);
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
 
     string orig_dname;
     string dname;
     LeaseStat dlease;
-    char dec_fname[NAME_MAX + FSCRYPT_KEY_SIZE]; /* some extra just in case */
 
     for (unsigned i=0; i<numdn; i++) {
       decode(orig_dname, p);

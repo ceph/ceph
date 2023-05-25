@@ -147,24 +147,32 @@ struct FSCryptContext : public FSCryptPolicy {
 using FSCryptContextRef = std::shared_ptr<FSCryptContext>;
 
 class FSCryptDenc {
-#define FSCRYPT_KEY_SIZE 32 // FIXME
-  char key[FSCRYPT_KEY_SIZE];
+  FSCryptContextRef ctx;
+  FSCryptKeyRef master_key;
+
+  std::vector<char> key;
   FSCryptIV iv;
 
   EVP_CIPHER *cipher;
   EVP_CIPHER_CTX *cipher_ctx;
   std::vector<OSSL_PARAM> cipher_params;
 
-  int init(char ctx_identifier,
-           FSCryptContextRef& ctx,
-           FSCryptKeyRef& master_key);
+  int calc_key(char ctx_identifier,
+               int key_size,
+               uint64_t block_num);
 public:
-  FSCryptDenc();
+  FSCryptDenc(EVP_CIPHER *cipher, std::vector<OSSL_PARAM> params);
   ~FSCryptDenc();
 
-  int init_fname(FSCryptContextRef& ctx,
-                 FSCryptKeyRef& master_key) {
-    return init(HKDF_CONTEXT_PER_FILE_ENC_KEY, ctx, master_key);
+  void setup(FSCryptContextRef& _ctx,
+             FSCryptKeyRef& _master_key);
+
+  int calc_fname_key() {
+    return calc_key(HKDF_CONTEXT_PER_FILE_ENC_KEY, 32, 0);
+  }
+
+  int calc_fdata_key(uint64_t block_num) {
+    return calc_key(HKDF_CONTEXT_PER_FILE_ENC_KEY, 64, block_num);
   }
 
   int decrypt(const char *in_data, int in_len,
@@ -172,6 +180,16 @@ public:
 };
 
 using FSCryptDencRef = std::shared_ptr<FSCryptDenc>;
+
+class FSCryptFNameDenc : public FSCryptDenc {
+public:
+  FSCryptFNameDenc();
+};
+
+class FSCryptFDataDenc : public FSCryptDenc {
+public:
+  FSCryptFDataDenc();
+};
 
 class FSCryptKeyHandler {
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyHandler");
@@ -219,6 +237,8 @@ using FSCryptKeyValidatorRef = std::shared_ptr<FSCryptKeyValidator>;
 class FSCrypt {
   FSCryptKeyStore key_store;
 
+  FSCryptDencRef init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
+                           std::function<FSCryptDenc *()> gen_denc);
 public:
   FSCrypt() {}
 
@@ -226,5 +246,6 @@ public:
     return key_store;
   }
 
-  FSCryptDencRef get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
+  FSCryptDencRef get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key);
+  FSCryptDencRef get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
 };
