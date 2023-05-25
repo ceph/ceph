@@ -115,12 +115,14 @@ struct client_config {
 struct server_config {
   entity_addr_t addr;
   unsigned block_size;
+  bool is_fixed_cpu;
   unsigned core;
 
   std::string str() const {
     std::ostringstream out;
     out << "server[" << addr
         << "](bs=" << block_size
+        << ", is_fixed_cpu=" << is_fixed_cpu
         << ", core=" << core
         << ")";
     return out.str();
@@ -134,7 +136,10 @@ struct server_config {
 
     conf.addr = addr;
     conf.block_size = options["server-bs"].as<unsigned>();
+    conf.is_fixed_cpu = options["server-fixed-cpu"].as<bool>();
     conf.core = options["server-core"].as<unsigned>();
+    // TODO
+    ceph_assert_always(conf.is_fixed_cpu == false);
     return conf;
   }
 };
@@ -801,6 +806,7 @@ static seastar::future<> run(
   std::optional<unsigned> server_sid;
   bool server_needs_report = false;
   if (mode == perf_mode_t::both) {
+    ceph_assert(server_conf.is_fixed_cpu == true);
     server_sid = server_conf.core;
   } else if (mode == perf_mode_t::server) {
     server_needs_report = true;
@@ -898,6 +904,8 @@ int main(int argc, char** argv)
      "client block size")
     ("depth", bpo::value<unsigned>()->default_value(512),
      "client io depth")
+    ("server-fixed-cpu", bpo::value<bool>()->default_value(true),
+     "server is in the fixed cpu mode, non-fixed doesn't support the mode both")
     ("server-core", bpo::value<unsigned>()->default_value(1),
      "server running core")
     ("server-bs", bpo::value<unsigned>()->default_value(0),
