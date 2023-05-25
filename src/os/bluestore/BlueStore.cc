@@ -632,7 +632,7 @@ void _dump_extent_map(CephContext *cct, const BlueStore::ExtentMap &em)
 		      << dendl;
     }
     std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
-    for (auto& i : e.blob->bc.buffer_map) {
+    for (auto& i : e.blob->get_bc().buffer_map) {
       dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
 		      << "~" << i.second->length << std::dec
 		      << " " << *i.second << dendl;
@@ -2275,7 +2275,7 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
     ceph_assert(discard == all_invalid); // in case of compressed blob all
 				    // or none pextents are invalid.
     if (discard) {
-      bc.discard(shared_blob->get_cache(), 0,
+      dirty_bc().discard(shared_blob->get_cache(), 0,
                               get_blob().get_logical_length());
     }
   } else {
@@ -2285,7 +2285,7 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
 	dout(20) << __func__ << " 0x" << std::hex << pos
 		 << "~" << e.length
 		 << std::dec << dendl;
-	bc.discard(shared_blob->get_cache(), pos, e.length);
+	dirty_bc().discard(shared_blob->get_cache(), pos, e.length);
       }
       pos += e.length;
     }
@@ -2454,7 +2454,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
     &(r->used_in_blob));
 
   lb.split(blob_offset, rb);
-  bc.split(shared_blob->get_cache(), blob_offset, r->bc);
+  dirty_bc().split(shared_blob->get_cache(), blob_offset, r->dirty_bc());
 
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " finish " << *this << dendl;
@@ -11021,7 +11021,7 @@ void BlueStore::_read_cache(
 
     ready_regions_t cache_res;
     interval_set<uint32_t> cache_interval;
-    bptr->bc.read(
+    bptr->dirty_bc().read(
       bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval,
       read_cache_policy);
     dout(20) << __func__ << "  blob " << *bptr << std::hex
@@ -11189,7 +11189,7 @@ int BlueStore::_generate_read_result_bl(
       if (r < 0)
         return r;
       if (buffered) {
-        bptr->bc.did_read(bptr->shared_blob->get_cache(), 0,
+        bptr->dirty_bc().did_read(bptr->shared_blob->get_cache(), 0,
                                        raw_bl);
       }
       for (auto& req : r2r) {
@@ -11206,7 +11206,7 @@ int BlueStore::_generate_read_result_bl(
           return -EIO;
         }
         if (buffered) {
-          bptr->bc.did_read(bptr->shared_blob->get_cache(),
+          bptr->dirty_bc().did_read(bptr->shared_blob->get_cache(),
                                          req.r_off, req.bl);
         }
 
