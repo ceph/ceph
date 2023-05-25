@@ -413,7 +413,14 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
       mon.send_reply(op, m.detach());
       return true;
     } else {
-      return false;  // not booted yet.
+      /* check if we've already recorded its entry in pending */
+      const auto& pending = get_pending_fsmap();
+      if (pending.gid_exists(gid)) {
+        /* MDS is already booted. */
+        goto ignore;
+      } else {
+        return false;  // not booted yet.
+      }
     }
   }
   dout(10) << __func__ << ": GID exists in map: " << gid << dendl;

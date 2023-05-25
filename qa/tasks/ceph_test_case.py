@@ -92,7 +92,7 @@ class CephTestCase(unittest.TestCase):
 
 
     def assert_cluster_log(self, expected_pattern, invert_match=False,
-                           timeout=10, watch_channel=None):
+                           timeout=10, watch_channel=None, present=True):
         """
         Context manager.  Assert that during execution, or up to 5 seconds later,
         the Ceph cluster log emits a message matching the expected pattern.
@@ -102,6 +102,8 @@ class CephTestCase(unittest.TestCase):
         :param watch_channel: Specifies the channel to be watched. This can be
                               'cluster', 'audit', ...
         :type watch_channel: str
+        :param present: Assert the log entry is present (default: True) or not (False).
+        :type present: bool
         """
 
         ceph_manager = self.ceph_cluster.mon_manager
@@ -118,10 +120,13 @@ class CephTestCase(unittest.TestCase):
                 self.watcher_process = ceph_manager.run_ceph_w(watch_channel)
 
             def __exit__(self, exc_type, exc_val, exc_tb):
+                fail = False
                 if not self.watcher_process.finished:
                     # Check if we got an early match, wait a bit if we didn't
-                    if self.match():
+                    if present and self.match():
                         return
+                    elif not present and self.match():
+                        fail = True
                     else:
                         log.debug("No log hits yet, waiting...")
                         # Default monc tick interval is 10s, so wait that long and
@@ -134,9 +139,12 @@ class CephTestCase(unittest.TestCase):
                 except CommandFailedError:
                     pass
 
-                if not self.match():
-                    log.error("Log output: \n{0}\n".format(self.watcher_process.stdout.getvalue()))
-                    raise AssertionError("Expected log message not found: '{0}'".format(expected_pattern))
+                if present and not self.match():
+                    log.error(f"Log output: \n{self.watcher_process.stdout.getvalue()}\n")
+                    raise AssertionError(f"Expected log message found: '{expected_pattern}'")
+                elif fail or (not present and self.match()):
+                    log.error(f"Log output: \n{self.watcher_process.stdout.getvalue()}\n")
+                    raise AssertionError(f"Unexpected log message found: '{expected_pattern}'")
 
         return ContextManager()
 
