@@ -75,7 +75,7 @@ def main():
     execute manual and dynamic resharding commands
     """
     create_user(USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY)
-    
+
     connection = boto_connect(ACCESS_KEY, SECRET_KEY)
 
     # create a bucket
