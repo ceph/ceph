@@ -929,6 +929,41 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
   }
 }
 
+/*
+ * GET on CloudTiered objects is processed only when sent from the sync client.
+ * In all other cases, fail with `ERR_INVALID_OBJECT_STATE`.
+ */
+int handle_cloudtier_obj(rgw::sal::Attrs& attrs, bool sync_cloudtiered) {
+  int op_ret = 0;
+  auto attr_iter = attrs.find(RGW_ATTR_MANIFEST);
+  if (attr_iter != attrs.end()) {
+    RGWObjManifest m;
+    try {
+      decode(m, attr_iter->second);
+      if (m.get_tier_type() == "cloud-s3") {
+        if (!sync_cloudtiered) {
+          /* XXX: Instead send presigned redirect or read-through */
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+        } else { // fetch object for sync and set cloud_tier attrs
+          bufferlist t, t_tier;
+          RGWObjTier tier_config;
+          m.get_tier_config(&tier_config);
+
+          t.append("cloud-s3");
+          attrs[RGW_ATTR_CLOUD_TIER_TYPE] = t;
+          encode(tier_config, t_tier);
+          attrs[RGW_ATTR_CLOUD_TIER_CONFIG] = t_tier;
+        }
+      }
+    } catch (const buffer::end_of_buffer&) {
+      // ignore empty manifest; it's not cloud-tiered
+    } catch (const std::exception& e) {
+    }
+  }
+
+  return op_ret;
+}
+
 void rgw_bucket_object_pre_exec(req_state *s)
 {
   if (s->expect_cont)
@@ -2275,15 +2310,14 @@ void RGWGetObj::execute(optional_yield y)
       filter = &*decompress;
   }
 
-  attr_iter = attrs.find(RGW_ATTR_MANIFEST);
-  if (attr_iter != attrs.end() && get_type() == RGW_OP_GET_OBJ && get_data) {
-    RGWObjManifest m;
-    decode(m, attr_iter->second);
-    if (m.get_tier_type() == "cloud-s3") {
-      /* XXX: Instead send presigned redirect or read-through */
-      op_ret = -ERR_INVALID_OBJECT_STATE;
-      ldpp_dout(this, 0) << "ERROR: Cannot get cloud tiered object. Failing with "
-		       << op_ret << dendl;
+  if (get_type() == RGW_OP_GET_OBJ && get_data) {
+    op_ret = handle_cloudtier_obj(attrs, sync_cloudtiered);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4) << "Cannot get cloud tiered object: " << *s->object
+          <<". Failing with " << op_ret << dendl;
+      if (op_ret == -ERR_INVALID_OBJECT_STATE) {
+        s->err.message = "This object was transitioned to cloud-s3";
+      }
       goto done_err;
     }
   }
@@ -4079,12 +4113,20 @@ void RGWPutObj::execute(optional_yield y)
     bufferlist bl;
     if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
-      decode(m, bl);
-      if (m.get_tier_type() == "cloud-s3") {
-        op_ret = -ERR_INVALID_OBJECT_STATE;
-        ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
-		       << op_ret << dendl;
-        return;
+      try{
+        decode(m, bl);
+        if (m.get_tier_type() == "cloud-s3") {
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+          s->err.message = "This object was transitioned to cloud-s3";
+          ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
+                         << op_ret << dendl;
+          return;
+        }
+      } catch (const buffer::end_of_buffer&) {
+        // ignore empty manifest; it's not cloud-tiered
+      } catch (const std::exception& e) {
+        ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+            << *s->object << ": " << e.what() << dendl;
       }
     }
 
@@ -5529,12 +5571,20 @@ void RGWCopyObj::execute(optional_yield y)
     bufferlist bl;
     if (astate->get_attr(RGW_ATTR_MANIFEST, bl)) {
       RGWObjManifest m;
-      decode(m, bl);
-      if (m.get_tier_type() == "cloud-s3") {
-        op_ret = -ERR_INVALID_OBJECT_STATE;
-        ldpp_dout(this, 0) << "ERROR: Cannot copy cloud tiered object. Failing with "
-		       << op_ret << dendl;
-        return;
+      try{
+        decode(m, bl);
+        if (m.get_tier_type() == "cloud-s3") {
+          op_ret = -ERR_INVALID_OBJECT_STATE;
+          s->err.message = "This object was transitioned to cloud-s3";
+          ldpp_dout(this, 4) << "Cannot copy cloud tiered object. Failing with "
+                         << op_ret << dendl;
+          return;
+        }
+      } catch (const buffer::end_of_buffer&) {
+        // ignore empty manifest; it's not cloud-tiered
+      } catch (const std::exception& e) {
+        ldpp_dout(this, 1) << "WARNING: failed to decode object manifest for "
+            << *s->object << ": " << e.what() << dendl;
       }
     }
 
