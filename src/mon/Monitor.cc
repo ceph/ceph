@@ -3962,8 +3962,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     f->close_section();
 
+    mgrmon()->count_metadata("ceph_version", &mgr);
     if (!mgr.empty()) {
-      mgrmon()->count_metadata("ceph_version", &mgr);
       f->open_object_section("mgr");
       for (auto& p : mgr) {
         f->dump_int(p.first.c_str(), p.second);
@@ -3972,8 +3972,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->close_section();
     }
 
+    osdmon()->count_metadata("ceph_version", &osd);
     if (!osd.empty()) {
-      osdmon()->count_metadata("ceph_version", &osd);
       f->open_object_section("osd");
       for (auto& p : osd) {
         f->dump_int(p.first.c_str(), p.second);
@@ -3982,8 +3982,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->close_section();
     }
 
+    mdsmon()->count_metadata("ceph_version", &mds);
     if (!mds.empty()) {
-      mdsmon()->count_metadata("ceph_version", &mds);
       f->open_object_section("mds");
       for (auto& p : mds) {
         f->dump_int(p.first.c_str(), p.second);
