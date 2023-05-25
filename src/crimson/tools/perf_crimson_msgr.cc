@@ -308,6 +308,7 @@ static seastar::future<> run(
       const seastar::shard_id sid;
       const unsigned id;
       std::string lname;
+      const std::optional<unsigned> server_sid;
 
       const unsigned jobs;
       crimson::net::MessengerRef msgr;
@@ -351,9 +352,10 @@ static seastar::future<> run(
       bool stop_send = false;
       seastar::promise<ClientStats> stopped_send_promise;
 
-      Client(unsigned jobs, unsigned msg_len, unsigned depth)
+      Client(unsigned jobs, unsigned msg_len, unsigned depth, std::optional<unsigned> server_sid)
         : sid{seastar::this_shard_id()},
           id{sid + jobs - seastar::smp::count},
+          server_sid{server_sid},
           jobs{jobs},
           msg_len{msg_len},
           nr_depth{depth/jobs},
@@ -498,6 +500,7 @@ static seastar::future<> run(
         unsigned elapsed = 0u;
         std::vector<PeriodStats> snaps;
         std::vector<ConnStats> summaries;
+        std::optional<double> server_reactor_utilization;
 
        public:
         TimerReport(unsigned jobs, unsigned msgtime, unsigned bs)
@@ -515,6 +518,10 @@ static seastar::future<> run(
 
         ConnStats& get_summary_by_job(unsigned client_id) {
           return summaries[client_id];
+        }
+
+        void set_server_reactor_utilization(double ru) {
+          server_reactor_utilization = ru;
         }
 
         bool should_stop() const {
@@ -561,6 +568,9 @@ static seastar::future<> run(
                << std::setw(8) << iops * bytes_of_block / 1048576
                << std::setw(8) << (sampled_total_lat_s / sampled_count * 1000)
                << " -- ";
+          if (server_reactor_utilization.has_value()) {
+            sout << *server_reactor_utilization << " -- ";
+          }
           for (const auto& snap : snaps) {
             sout << snap.reactor_utilization << ",";
           }
@@ -603,6 +613,11 @@ static seastar::future<> run(
                 client.conn_stats.received_count,
                 client.get_current_depth(),
                 snap);
+          }
+          if (client.server_sid.has_value() &&
+              seastar::this_shard_id() == *client.server_sid) {
+            assert(!client.is_active());
+            report.set_server_reactor_utilization(get_reactor_utilization());
           }
         }).then([&report] {
           report.report_period();
@@ -740,6 +755,10 @@ static seastar::future<> run(
     };
   };
 
+  std::optional<unsigned> server_sid;
+  if (mode == perf_mode_t::both) {
+    server_sid = server_conf.core;
+  }
   return seastar::when_all(
       test_state::Server::create(
         server_conf.core,
@@ -747,7 +766,8 @@ static seastar::future<> run(
       create_sharded<test_state::Client>(
         client_conf.jobs,
         client_conf.block_size,
-        client_conf.depth),
+        client_conf.depth,
+        server_sid),
       crimson::common::sharded_conf().start(
         EntityName{}, std::string_view{"ceph"}
       ).then([] {
