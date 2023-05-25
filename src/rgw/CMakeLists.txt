@@ -150,6 +150,9 @@ set(librgw_common_srcs
   rgw_tracer.cc
   rgw_lua_background.cc
   rgw_data_access.cc
+  driver/d4n/d4n_directory.cc
+  driver/d4n/d4n_policy.cc
+  driver/d4n/rgw_sal_d4n.cc
   driver/rados/cls_fifo_legacy.cc
   driver/rados/rgw_bucket.cc
   driver/rados/rgw_bucket_sync.cc
@@ -198,6 +201,7 @@ set(librgw_common_srcs
   driver/rados/sync_fairness.cc)
 
 list(APPEND librgw_common_srcs
+  driver/d4n/d4n_directory.cc
   driver/immutable_config/store.cc
   driver/json_config/store.cc
   driver/rados/config/impl.cc
@@ -226,7 +230,6 @@ if(WITH_RADOSGW_DAOS)
 endif()
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_common_srcs driver/d4n/d4n_directory.cc)
-  list(APPEND librgw_common_srcs driver/d4n/d4n_datacache.cc)
   list(APPEND librgw_common_srcs driver/d4n/rgw_sal_d4n.cc)
 endif()
 if(WITH_RADOSGW_POSIX)
