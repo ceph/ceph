@@ -1,3 +1,5 @@
+.. _rados_operations_pg_concepts:
+
 ==========================
  Placement Group Concepts
 ==========================
