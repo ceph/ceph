@@ -2146,9 +2146,6 @@ BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
   : coll(_coll), sbid_unloaded(i)
 {
   ceph_assert(sbid_unloaded > 0);
-  if (get_cache()) {
-    get_cache()->add_blob();
-  }
 }
 
 BlueStore::SharedBlob::~SharedBlob()
@@ -4088,16 +4085,17 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
   ceph_assert(!b->shared_blob);
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
-    b->shared_blob = new SharedBlob(this);
+    b->set_shared_blob(new SharedBlob(this));
     return;
   }
 
-  b->shared_blob = shared_blob_set.lookup(sbid);
-  if (b->shared_blob) {
+  SharedBlobRef sb = shared_blob_set.lookup(sbid);
+  if (sb) {
+    b->set_shared_blob(sb);
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " had " << *b->shared_blob << dendl;
   } else {
-    b->shared_blob = new SharedBlob(sbid, this);
+    b->set_shared_blob(new SharedBlob(sbid, this));
     shared_blob_set.add(this, b->shared_blob.get());
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " opened " << *b->shared_blob
@@ -16631,7 +16629,7 @@ int BlueStore::_do_remove(
 	// but now those 2 blobs share it.
 	// This is illegal, as empty shared blobs should be unique.
 	// Fixing by re-creation.
-	e.blob->shared_blob = new SharedBlob(c.get());
+	e.blob->set_shared_blob(new SharedBlob(c.get()));
 	dout(20) << __func__ << " recreated empty shared blob " << e << dendl;
       }
       h->extent_map.dirty_range(e.logical_offset, 1);
