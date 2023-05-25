@@ -1,3 +1,5 @@
+.. _rados_operations_bluestore_migration:
+
 =====================
  BlueStore Migration
 =====================
