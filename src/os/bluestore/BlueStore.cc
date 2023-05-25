@@ -17691,6 +17691,19 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
 void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
+  size_t used = bluefs && bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ?
+    bluefs->get_used(BlueFS::BDEV_SLOW) : 0;
+  if (used > 0) {
+      auto db_used = bluefs->get_used(BlueFS::BDEV_DB);
+      auto db_total = bluefs->get_total(BlueFS::BDEV_DB);
+      ostringstream ss;
+      ss << "spilled over " << byte_u_t(used)
+         << " metadata from 'db' device (" << byte_u_t(db_used)
+         << " used of " << byte_u_t(db_total) << ") to slow device";
+      spillover_alert = ss.str();
+  } else if (!spillover_alert.empty()){
+    spillover_alert.clear();
+  }
 
   if (!spurious_read_errors_alert.empty() &&
       cct->_conf->bluestore_warn_on_spurious_read_errors) {
@@ -18086,11 +18099,8 @@ void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(std::string_view dirname) con
 void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
   auto max_x = per_level_per_dev_usage.get_max_x();
   auto max_y = per_level_per_dev_usage.get_max_y();
-  sout << "RocksDBBlueFSVolumeSelector: wal_total:" << l_totals[LEVEL_WAL - LEVEL_FIRST]
-    << ", db_total:" << l_totals[LEVEL_DB - LEVEL_FIRST]
-    << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
-    << ", db_avail:" << db_avail4slow << std::endl
-    << "Usage matrix:" << std::endl;
+
+  sout << "RocksDBBlueFSVolumeSelector Usage Matrix:" << std::endl;
   constexpr std::array<const char*, 8> names{ {
     "DEV/LEV",
     "WAL",
@@ -18121,7 +18131,7 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     case LEVEL_SLOW:
       sout << "SLOW"; break;
     case LEVEL_MAX:
-      sout << "TOTALS"; break;
+      sout << "TOTAL"; break;
     }
     for (size_t d = 0; d < max_x; d++) {
       sout.setf(std::ios::left, std::ios::adjustfield);
@@ -18148,7 +18158,7 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     case LEVEL_SLOW:
       sout << "SLOW"; break;
     case LEVEL_MAX:
-      sout << "TOTALS"; break;
+      sout << "TOTAL"; break;
     }
     for (size_t d = 0; d < max_x - 1; d++) {
       sout.setf(std::ios::left, std::ios::adjustfield);
@@ -18158,10 +18168,20 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.setf(std::ios::left, std::ios::adjustfield);
     sout.width(width);
     sout << stringify(byte_u_t(per_level_per_dev_max.at(max_x - 1, l)));
-    if (l < max_y - 1) {
-      sout << std::endl;
-    }
+    sout << std::endl;
   }
+  string sizes[] = {
+    ">> SIZE <<",
+    stringify(byte_u_t(l_totals[LEVEL_WAL - LEVEL_FIRST])),
+    stringify(byte_u_t(l_totals[LEVEL_DB - LEVEL_FIRST])),
+    stringify(byte_u_t(l_totals[LEVEL_SLOW - LEVEL_FIRST])),
+  };
+  for (size_t i = 0; i < (sizeof(sizes) / sizeof(sizes[0])); i++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << sizes[i];
+  }
+  sout << std::endl;
 }
 
 BlueFSVolumeSelector* RocksDBBlueFSVolumeSelector::clone_empty() const {
