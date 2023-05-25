@@ -6,7 +6,6 @@ describe('User Management page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     userMgmt.navigateTo();
   });
 

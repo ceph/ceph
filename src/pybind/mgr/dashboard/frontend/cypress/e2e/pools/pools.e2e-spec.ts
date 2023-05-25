@@ -6,7 +6,6 @@ describe('Pools page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     pools.navigateTo();
   });
 
