@@ -11,7 +11,9 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 from mgr_module import HandleCommandResult, MonCommandFailed
 
 from ceph.deployment.service_spec import (
+    ArgumentList,
     CephExporterSpec,
+    GeneralArgList,
     MONSpec,
     RGWSpec,
     ServiceSpec,
@@ -66,8 +68,8 @@ class CephadmDaemonDeploySpec:
                  ports: Optional[List[int]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[ArgumentList] = None,
+                 extra_entrypoint_args: Optional[ArgumentList] = None,
                  ):
         """
         A data struction to encapsulate `cephadm deploy ...
@@ -151,8 +153,8 @@ class CephadmDaemonDeploySpec:
             ports=self.ports,
             rank=self.rank,
             rank_generation=self.rank_generation,
-            extra_container_args=self.extra_container_args,
-            extra_entrypoint_args=self.extra_entrypoint_args,
+            extra_container_args=cast(GeneralArgList, self.extra_container_args),
+            extra_entrypoint_args=cast(GeneralArgList, self.extra_entrypoint_args),
         )
 
     @property
