@@ -497,9 +497,6 @@ public:
     };
 
     SharedBlob(Collection *_coll) : coll(_coll), sbid_unloaded(0) {
-      if (get_cache()) {
-	get_cache()->add_blob();
-      }
     }
     SharedBlob(uint64_t i, Collection *_coll);
     ~SharedBlob();
@@ -601,6 +598,14 @@ public:
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
+
+    void set_shared_blob(SharedBlobRef sb) {
+      ceph_assert((bool)sb);
+      ceph_assert(!shared_blob);
+      shared_blob = sb;
+      ceph_assert(shared_blob->get_cache());
+      shared_blob->get_cache()->add_blob();
+    }
     BufferSpace bc;
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
@@ -651,7 +656,7 @@ public:
 			uint32_t *length0);
 
     void dup(Blob& o) {
-      o.shared_blob = shared_blob;
+      o.set_shared_blob(shared_blob);
       o.blob = blob;
 #ifdef CACHE_BLOB_BL
       o.blob_bl = blob_bl;
@@ -1435,6 +1440,10 @@ private:
 
   public:
     BufferCacheShard(CephContext* cct) : CacheShard(cct) {}
+    virtual ~BufferCacheShard() {
+      ceph_assert(num_blobs == 0);
+      ceph_assert(num_extents == 0);
+    }
     static BufferCacheShard *create(CephContext* cct, std::string type, 
                                     PerfCounters *logger);
     virtual void _add(Buffer *b, int level, Buffer *near) = 0;
@@ -1550,7 +1559,7 @@ private:
 
     BlobRef new_blob() {
       BlobRef b = new Blob();
-      b->shared_blob = new SharedBlob(this);
+      b->set_shared_blob(new SharedBlob(this));
       return b;
     }
 
