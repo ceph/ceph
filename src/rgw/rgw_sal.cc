@@ -20,6 +20,7 @@
 #include <sstream>
 
 #include "common/errno.h"
+//#include "common/dout.h"
 
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
@@ -44,6 +45,7 @@
 #endif
 
 #define dout_subsys ceph_subsys_rgw
+//#define dout_context g_ceph_context
 
 extern "C" {
 extern rgw::sal::Driver* newRadosStore(boost::asio::io_context* io_context);

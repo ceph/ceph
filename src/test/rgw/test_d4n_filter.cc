@@ -6,7 +6,7 @@
 #include <cpp_redis/cpp_redis>
 #include "driver/dbstore/common/dbstore.h"
 #include "rgw_sal_store.h"
-#include "driver/d4n/rgw_sal_d4n.h"
+#include "../../rgw/driver/d4n/rgw_sal_d4n.h" // fix -Sam
 
 #include "rgw_sal.h"
 #include "rgw_auth.h"
@@ -176,7 +176,10 @@ class D4NFilterFixture : public ::testing::Test {
       rgw_zone_set zones_trace;
       bool canceled;
       
-      int ret = testWriter->complete(accounted_size, etag,
+      int ret = testWriter->prepare(null_yield);
+	  
+      if (!ret) {
+	ret = testWriter->complete(accounted_size, etag,
                        &mtime, set_mtime,
                        attrs,
                        delete_at,
@@ -219,7 +222,7 @@ TEST_F(D4NFilterFixture, CreateBucket) {
 TEST_F(D4NFilterFixture, PutObject) {
   cpp_redis::client client;
   vector<string> fields;
-  fields.push_back("test_attrs_key_0");
+  fields.push_back("test_attrs_key_PutObject");
   clientSetUp(&client); 
 
   ASSERT_EQ(createUser(), 0);
@@ -375,7 +378,6 @@ TEST_F(D4NFilterFixture, CopyObjectNone) {
 
 TEST_F(D4NFilterFixture, CopyObjectReplace) {
   cpp_redis::client client;
-  vector<string> fields;
   clientSetUp(&client); 
 
   createUser();
@@ -469,29 +471,52 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
 
   client.sync_commit();
 
+  /* Retrieve original object's redis data for later comparison */
+  std::vector< std::pair<std::string, std::string> > data;
+  
+  client.hgetall("rgw-object:test_object_CopyObjectReplace:cache", [&data](cpp_redis::reply& reply) {
+    auto arr = reply.as_array();
+
+    if (!arr[0].is_null()) {
+      for (int i = 0; i < (int)arr.size() - 1; i += 2) {
+	data.push_back({arr[i].as_string(), arr[i + 1].as_string()});
+      }
+    }
+  });
+
+  client.sync_commit();
+
   /* Check copy */
-  client.hgetall("rgw-object:test_object_copy:cache", [](cpp_redis::reply& reply) {
+  client.hgetall("rgw-object:test_object_copy:cache", [&data](cpp_redis::reply& reply) {
+    bool unexpected = false;
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
       EXPECT_EQ((int)arr.size(), 4 + METADATA_LENGTH); /* With etag */
+
+      for (int i = 0; i < (int)arr.size() - 1; i += 2) {
+        auto it = std::find_if(data.begin(), data.end(),
+ 	  [&](const auto& pair) { return pair.first == arr[i].as_string(); });
+
+	if (it != data.end()) {
+	  if (arr[i].as_string() == "test_attrs_key_CopyObjectReplace")
+	    EXPECT_EQ(arr[i + 1].as_string(), "test_attrs_copy_value");
+	  else if (arr[i].as_string() != "mtime") { /* mtime will be different */
+	    int index = std::distance(data.begin(), it);
+	    EXPECT_EQ(arr[i + 1].as_string(), data[index].second);
+	  }
+	} else if (arr[i].as_string() == "etag") {
+          EXPECT_EQ(arr[i + 1].as_string(), "test_etag_copy");
+	} else
+	  unexpected = true; /* Unexpected field */
+      }
+      
+      EXPECT_EQ(unexpected, false);
     }
   });
 
   client.sync_commit();
   
-  fields.push_back("test_attrs_key_CopyObjectReplace");
-  
-  client.hmget("rgw-object:test_object_copy:cache", fields, [](cpp_redis::reply& reply) {
-    auto arr = reply.as_array();
-
-    if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_copy_value");
-    }
-  });
-
-  client.sync_commit();
-
   clientReset(&client);
 }
 
@@ -594,26 +619,52 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
 
   client.sync_commit();
 
-  /* Check copy */
-  client.hgetall("rgw-object:test_object_copy:cache", [](cpp_redis::reply& reply) {
+  /* Retrieve original object's redis data for later comparison */
+  std::vector< std::pair<std::string, std::string> > data;
+  
+  client.hgetall("rgw-object:test_object_CopyObjectMerge:cache", [&data](cpp_redis::reply& reply) {
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ((int)arr.size(), 6 + METADATA_LENGTH); /* With etag */
+      for (int i = 0; i < (int)arr.size() - 1; i += 2) {
+	data.push_back({arr[i].as_string(), arr[i + 1].as_string()});
+      }
     }
   });
 
   client.sync_commit();
-  
-  fields.push_back("test_attrs_key_CopyObjectMerge");
-  fields.push_back("test_attrs_copy_extra_key");
-  
-  client.hmget("rgw-object:test_object_copy:cache", fields, [](cpp_redis::reply& reply) {
+
+  /* Check copy */
+  client.hgetall("rgw-object:test_object_copy:cache", [&data](cpp_redis::reply& reply) {
+    bool unexpected = false;
+    bool merge = false;
     auto arr = reply.as_array();
 
     if (!arr[0].is_null()) {
-      EXPECT_EQ(arr[0].as_string(), "test_attrs_value_CopyObjectMerge");
-      EXPECT_EQ(arr[1].as_string(), "test_attrs_copy_extra_value");
+      EXPECT_EQ((int)arr.size(), 6 + METADATA_LENGTH); /* With etag */
+
+      for (int i = 0; i < (int)arr.size() - 1; i += 2) {
+        auto it = std::find_if(data.begin(), data.end(),
+ 	  [&](const auto& pair) { return pair.first == arr[i].as_string(); });
+
+	if (it != data.end()) {
+	  if (arr[i].as_string() == "test_attrs_key_CopyObjectMerge")
+	    EXPECT_EQ(arr[i + 1].as_string(), "test_attrs_value_CopyObjectMerge");
+	  else if (arr[i].as_string() != "mtime") { /* mtime will be different */
+	    int index = std::distance(data.begin(), it);
+	    EXPECT_EQ(arr[i + 1].as_string(), data[index].second);
+	  }
+	} else if (arr[i].as_string() == "etag") {
+          EXPECT_EQ(arr[i + 1].as_string(), "test_etag_copy");
+	} else if (arr[i].as_string() == "test_attrs_copy_extra_key") {
+	  merge = true; 
+          EXPECT_EQ(arr[i + 1].as_string(), "test_attrs_copy_extra_value");
+	} else
+	  unexpected = true; /* Unexpected field */
+      }
+      
+      EXPECT_EQ(unexpected, false);
+      EXPECT_EQ(merge, true);
     }
   });
 
@@ -664,6 +715,130 @@ TEST_F(D4NFilterFixture, DelObject) {
 
   client.sync_commit();
 
+  clientReset(&client);
+}
+
+TEST_F(D4NFilterFixture, CachePolicy) {
+  cpp_redis::client client;
+  clientSetUp(&client); 
+
+  createUser();
+  createBucket();
+
+  /* Create multipart object */
+  string object_name = "test_object_CachePolicy";
+  unique_ptr<rgw::sal::Object> obj = testBucket->get_object(rgw_obj_key(object_name));
+  rgw_user owner;
+  rgw_placement_rule ptail_placement_rule;
+  uint64_t olh_epoch = 123;
+  string unique_tag;
+
+  obj->get_obj_attrs(null_yield, dpp);
+
+  testWriter = driver->get_atomic_writer(dpp, 
+	      null_yield,
+	      obj.get(),
+	      owner,
+	      &ptail_placement_rule,
+	      olh_epoch,
+	      unique_tag);
+
+  size_t accounted_size = 15; /* Uploaded as multipart */
+  string etag("test_etag");
+  ceph::real_time mtime; 
+  ceph::real_time set_mtime;
+
+  buffer::list bl;
+  string tmp = "test_attrs_value_CachePolicy";
+  bl.append("test_attrs_value_CachePolicy");
+  map<string, bufferlist> attrs{{"test_attrs_key_CachePolicy", bl}};
+
+  ceph::real_time delete_at;
+  char if_match;
+  char if_nomatch;
+  string user_data;
+  rgw_zone_set zones_trace;
+  bool canceled;
+  
+  ASSERT_EQ(testWriter->complete(accounted_size, etag,
+		   &mtime, set_mtime,
+		   attrs,
+		   delete_at,
+		   &if_match, &if_nomatch,
+		   &user_data,
+		   &zones_trace, &canceled,
+		   null_yield), 0);
+
+
+  unique_ptr<rgw::sal::Object> testObject_CachePolicy = testBucket->get_object(rgw_obj_key("test_object_CachePolicy"));
+
+  ASSERT_NE(testObject_CachePolicy, nullptr);
+
+  /* Copy to new multipart object */
+  unique_ptr<rgw::sal::Writer> testWriterCopy = nullptr;
+  unique_ptr<rgw::sal::Object> obj_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
+  uint64_t olh_epoch_copy = 123;
+
+  obj_copy->get_obj_attrs(null_yield, dpp);
+
+  testWriterCopy = driver->get_atomic_writer(dpp, 
+	      null_yield,
+	      obj_copy.get(),
+	      owner,
+	      &ptail_placement_rule,
+	      olh_epoch_copy,
+	      unique_tag);
+
+  RGWEnv rgw_env;
+  req_info info(get_pointer(env->cct), &rgw_env);
+  rgw_zone_id source_zone;
+  rgw_placement_rule dest_placement; 
+  ceph::real_time src_mtime;
+  ceph::real_time mod_ptr;
+  ceph::real_time unmod_ptr;
+  rgw::sal::AttrsMod attrs_mod = rgw::sal::ATTRSMOD_REPLACE;
+  RGWObjCategory category = RGWObjCategory::Main;
+  string tag;
+  
+  ASSERT_EQ(testWriterCopy->complete(accounted_size, etag,
+		   &mtime, set_mtime,
+		   attrs,
+		   delete_at,
+		   &if_match, &if_nomatch,
+		   &user_data,
+		   &zones_trace, &canceled,
+		   null_yield), 0);
+
+  unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
+
+  EXPECT_EQ(testObject_CachePolicy->copy_object(testUser.get(),
+			      &info, source_zone, testObject_copy.get(),
+			      testBucket.get(), testBucket.get(),
+                              dest_placement, &src_mtime, &mtime,
+			      &mod_ptr, &unmod_ptr, false,
+			      &if_match, &if_nomatch, attrs_mod,
+			      false, attrs, category, olh_epoch,
+			      delete_at, NULL, &tag, &etag,
+			      NULL, NULL, dpp, null_yield), 0);
+
+  /* Ensure data field doesn't exist for original object */
+  client.hexists("rgw-object:test_object_CachePolicy:cache", "data", [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0);
+    }
+  });
+
+  client.sync_commit();
+
+  /* Ensure data field doesn't exist for copy */
+  client.hexists("rgw-object:test_object_CachePolicy:cache", "data", [](cpp_redis::reply& reply) {
+    if (reply.is_integer()) {
+      EXPECT_EQ(reply.as_integer(), 0);
+    }
+  });
+
+  client.sync_commit();
+  
   clientReset(&client);
 }
 
