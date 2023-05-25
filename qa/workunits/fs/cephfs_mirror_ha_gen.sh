@@ -25,6 +25,8 @@ trap cleanup EXIT
 configure_peer()
 {
     ceph mgr module enable mirroring
+    # Ensure mirroring module is loaded
+    while ! ceph fs snapshot mirror daemon status; do sleep 5; done
     ceph fs snapshot mirror enable $PRIMARY_FS
     ceph fs snapshot mirror peer_add $PRIMARY_FS client.mirror_remote@ceph $BACKUP_FS
 
