@@ -927,8 +927,8 @@ class CephIscsi(object):
         # type: () -> CephContainer
         # daemon_id, is used to generated the cid and pid files used by podman but as both tcmu-runner
         # and rbd-target-api have the same daemon_id, it conflits and prevent the second container from
-        # starting. .tcmu runner is appened to the daemon_id to fix that.
-        tcmu_container = get_container(self.ctx, self.fsid, self.daemon_type, str(self.daemon_id) + '.tcmu')
+        # starting. .tcmu runner is appended to the daemon_id to fix that.
+        tcmu_container = get_deployment_container(self.ctx, self.fsid, self.daemon_type, str(self.daemon_id) + '.tcmu')
         tcmu_container.entrypoint = '/usr/bin/tcmu-runner'
         tcmu_container.cname = self.get_container_name(desc='tcmu')
         return tcmu_container
