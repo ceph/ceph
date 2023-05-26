@@ -60,10 +60,16 @@ static inline std::string decode_name(const char* name)
   return url_decode(name);
 }
 
+static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp& xts)
+{
+  struct timespec ts{xts.tv_sec, xts.tv_nsec};
+  return ceph::real_clock::from_timespec(ts);
+}
+
 static inline void bucket_statx_save(struct statx& stx, RGWBucketEnt& ent, ceph::real_time& mtime)
 {
-  mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
-  ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+  mtime = from_statx_timestamp(stx.stx_mtime);
+  ent.creation_time = from_statx_timestamp(stx.stx_btime);
   ent.size = stx.stx_size;
   ent.size_rounded = stx.stx_blocks * 512;
 }
@@ -525,7 +531,7 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
     RGWBucketInfo info;
     info.bucket.name = decode_name(entry->d_name);
     info.owner.id = std::to_string(stx.stx_uid); // TODO convert to owner name
-    info.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+    info.creation_time = from_statx_timestamp(stx.stx_btime);
 
     std::unique_ptr<rgw::sal::Bucket> bucket;
     ret = driver->get_bucket(this, info, &bucket);
@@ -646,7 +652,7 @@ int POSIXBucket::fill_cache(
       bde.exists = true;
       bde.meta.category = RGWObjCategory::Main;
       bde.meta.size = stx.stx_size;
-      bde.meta.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+      bde.meta.mtime = from_statx_timestamp(stx.stx_mtime);
       bde.meta.owner = std::to_string(stx.stx_uid); // TODO convert to owner name
       bde.meta.owner_display_name = std::to_string(stx.stx_uid); // TODO convert to owner name
       bde.meta.accounted_size = stx.stx_blksize * stx.stx_blocks; // TODO Won't work for mpobj
@@ -1453,7 +1459,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
   if (S_ISREG(stx.stx_mode)) {
     /* Normal object */
     state.accounted_size = state.size = stx.stx_size;
-    state.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+    state.mtime = from_statx_timestamp(stx.stx_mtime);
   } else if (S_ISDIR(stx.stx_mode)) {
     /* multipart object */
     /* Get the shadow bucket */
@@ -1464,7 +1470,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
       return ret;
     }
 
-    state.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+    state.mtime = from_statx_timestamp(stx.stx_mtime);
     /* Add up size of parts */
     uint64_t total_size{0};
     int fd = shadow->get_dir_fd(dpp);
