@@ -1196,6 +1196,17 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     op_type_t::TRANSACTION,
     [this](auto &ctx) {
       return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
+#ifndef NDEBUG
+	LOG_PREFIX(SeaStore::Shard::do_transaction_no_callbacks);
+	TRACET(" transaction dump:\n", t);
+	JSONFormatter f(true);
+	f.open_object_section("transaction");
+	ctx.ext_transaction.dump(&f);
+	f.close_section();
+	std::stringstream str;
+	f.flush(str);
+	TRACET("{}", t, str.str());
+#endif
         return seastar::do_with(
 	  std::vector<OnodeRef>(ctx.iter.objects.size()),
           std::vector<OnodeRef>(ctx.iter.objects.size()),
@@ -1415,6 +1426,10 @@ SeaStore::Shard::_do_transaction_step(
       }
       case Transaction::OP_CLONE:
       {
+	TRACET("cloning {} to {}",
+	  *ctx.transaction,
+	  i.get_oid(op->oid),
+	  i.get_oid(op->dest_oid));
 	return _clone(ctx, onodes[op->oid], d_onodes[op->dest_oid]);
       }
       default:
