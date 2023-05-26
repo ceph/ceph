@@ -4920,7 +4920,7 @@ int BlueStore::_set_cache_sizes()
   osd_memory_expected_fragmentation =
       cct->_conf.get_val<double>("osd_memory_expected_fragmentation");
   osd_memory_cache_min = cct->_conf.get_val<Option::size_t>("osd_memory_cache_min");
-  osd_memory_cache_resize_interval = 
+  osd_memory_cache_resize_interval =
       cct->_conf.get_val<double>("osd_memory_cache_resize_interval");
 
   if (cct->_conf->bluestore_cache_size) {
@@ -4955,26 +4955,28 @@ int BlueStore::_set_cache_sizes()
     return -EINVAL;
   }
 
-  if (cache_meta_ratio + cache_kv_ratio > 1.0) {
+  if (cache_meta_ratio + cache_kv_ratio + cache_kv_onode_ratio > 1.0) {
     derr << __func__ << " bluestore_cache_meta_ratio (" << cache_meta_ratio
          << ") + bluestore_cache_kv_ratio (" << cache_kv_ratio
-         << ") = " << cache_meta_ratio + cache_kv_ratio << "; must be <= 1.0"
+         << ") + bluestore_cache_kv_onode_ratio (" << cache_kv_onode_ratio
+         << ") = " << cache_meta_ratio + cache_kv_ratio + cache_kv_onode_ratio << "; must be <= 1.0"
          << dendl;
     return -EINVAL;
   }
 
-  cache_data_ratio = (double)1.0 - 
-                     (double)cache_meta_ratio - 
-                     (double)cache_kv_ratio - 
+  cache_data_ratio = (double)1.0 -
+                     (double)cache_meta_ratio -
+                     (double)cache_kv_ratio -
                      (double)cache_kv_onode_ratio;
   if (cache_data_ratio < 0) {
     // deal with floating point imprecision
     cache_data_ratio = 0;
   }
-    
+
   dout(1) << __func__ << " cache_size " << cache_size
           << " meta " << cache_meta_ratio
 	  << " kv " << cache_kv_ratio
+	  << " kv_onode " << cache_kv_onode_ratio
 	  << " data " << cache_data_ratio
 	  << dendl;
   return 0;
