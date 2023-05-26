@@ -926,7 +926,7 @@ class CephIscsi(object):
 
     def get_tcmu_runner_container(self):
         # type: () -> CephContainer
-        tcmu_container = get_container(self.ctx, self.fsid, self.daemon_type, self.daemon_id)
+        tcmu_container = get_deployment_container(self.ctx, self.fsid, self.daemon_type, self.daemon_id)
         tcmu_container.entrypoint = '/usr/bin/tcmu-runner'
         tcmu_container.cname = self.get_container_name(desc='tcmu')
         # remove extra container args for tcmu container.
