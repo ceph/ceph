@@ -1369,6 +1369,7 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		      current = end;
 		      return seastar::now();
 		    } else {
+		      LOG_PREFIX(ObjectDataHandler::read);
 		      auto key = pin->get_key();
 		      bool is_indirect = pin->is_indirect();
                       extent_len_t off = pin->get_intermediate_offset();
