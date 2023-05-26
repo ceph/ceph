@@ -1895,6 +1895,48 @@ TEST_P(tm_single_device_test_t, find_hole_assert_trigger)
   });
 }
 
+TEST_P(tm_single_device_test_t, remap_lazy_read) 
+{
+  constexpr laddr_t offset = 0;
+  constexpr size_t length = 256 << 10;
+   run_async([this, offset] {
+    {
+      auto t = create_transaction();
+      auto extent = alloc_extent(
+	t,
+	offset,
+	length,
+	'a');
+      ASSERT_EQ(offset, extent->get_laddr());
+      check_mappings(t);
+      submit_transaction(std::move(t));
+      check();
+    }
+    replay();
+    {
+      auto t = create_transaction();
+      auto pin = get_pin(t, offset);
+      auto rpin = remap_pin(t, std::move(pin), 0, 128 << 10);
+      check_mappings(t);
+      submit_transaction(std::move(t));
+      check();
+    }
+    replay();
+    {
+      auto t = create_transaction();
+      auto pin = get_pin(t, offset);
+      bufferlist bl;
+      bl.append(ceph::bufferptr(ceph::buffer::create(64 << 10, 0)));
+      auto [lpin, ext, rpin] = overwrite_pin(
+        t, std::move(pin), 4 << 10 , 64 << 10, bl);
+      check_mappings(t);
+      submit_transaction(std::move(t));
+      check();
+    }
+    replay();
+   });
+}
+
 TEST_P(tm_single_device_test_t, random_writes_concurrent)
 {
   test_random_writes_concurrent();
@@ -1919,18 +1961,22 @@ TEST_P(tm_single_device_test_t, test_remap_pin)
 {
   test_remap_pin();
 }
+
 TEST_P(tm_single_device_test_t, test_overwrite_pin)
 {
   test_overwrite_pin();
 }
+
 TEST_P(tm_single_device_test_t, test_remap_pin_concurrent)
 {
   test_remap_pin_concurrent();
 }
+
 TEST_P(tm_single_device_test_t, test_overwrite_pin_concurrent)
 {
   test_overwrite_pin_concurrent();
 }
+
 INSTANTIATE_TEST_SUITE_P(
   transaction_manager_test,
   tm_single_device_test_t,
