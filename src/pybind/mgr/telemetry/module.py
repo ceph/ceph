@@ -2004,7 +2004,8 @@ Please consider enabling the telemetry module with 'ceph telemetry on'.'''
         return {}
 
     def self_test(self) -> None:
-        report = self.compile_report()
+        self.opt_in_all_collections()
+        report = self.compile_report(channels=ALL_CHANNELS)
         if len(report) == 0:
             raise RuntimeError('Report is empty')
 
