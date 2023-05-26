@@ -2,7 +2,11 @@ import enum
 import yaml
 
 from ceph.deployment.inventory import Device
-from ceph.deployment.service_spec import ServiceSpec, PlacementSpec, CustomConfig
+from ceph.deployment.service_spec import (
+    CustomConfig,
+    PlacementSpec,
+    ServiceSpec,
+)
 from ceph.deployment.hostspec import SpecValidationError
 
 try:
