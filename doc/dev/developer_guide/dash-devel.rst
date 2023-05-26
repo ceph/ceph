@@ -1269,7 +1269,6 @@ Tests can be found under the `a11y folder <./src/pybind/mgr/dashboard/frontend/c
   
     beforeEach(() => {
       cy.login();
-      Cypress.Cookies.preserveOnce('token');
       shared.navigateTo();
     });
   

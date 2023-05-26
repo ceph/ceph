@@ -5,7 +5,6 @@ describe('RGW daemons page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     daemons.navigateTo();
   });
 

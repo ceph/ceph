@@ -5,7 +5,6 @@ describe('Hosts page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     hosts.navigateTo();
   });
 

@@ -5,7 +5,6 @@ describe('File Systems page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     filesystems.navigateTo();
   });
 

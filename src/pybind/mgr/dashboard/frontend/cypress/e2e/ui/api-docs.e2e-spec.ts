@@ -5,7 +5,6 @@ describe('Api Docs Page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     apiDocs.navigateTo();
   });
 

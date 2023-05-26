@@ -6,7 +6,6 @@ describe('Role Management page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     roleMgmt.navigateTo();
   });
 

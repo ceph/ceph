@@ -5,7 +5,6 @@ describe('OSDs page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     osds.navigateTo();
   });
 

@@ -13,7 +13,6 @@ describe('when cluster creation is completed', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
   });
 
   it('should redirect to dashboard landing page after cluster creation', () => {

@@ -15,7 +15,6 @@ describe('Logs page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
   });
 
   describe('breadcrumb and tab tests', () => {

@@ -11,7 +11,6 @@ describe('Host Page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     hosts.navigateTo();
   });
 

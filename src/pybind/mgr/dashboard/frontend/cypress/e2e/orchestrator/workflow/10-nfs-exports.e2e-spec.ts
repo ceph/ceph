@@ -19,7 +19,6 @@ describe('nfsExport page', () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     nfsExport.navigateTo();
   });
 
