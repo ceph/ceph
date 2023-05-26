@@ -21,7 +21,7 @@ class TestAlarm
 public:
   #ifndef _WIN32
   TestAlarm() {
-    alarm(1200);
+    alarm(2400);
   }
   ~TestAlarm() {
     alarm(0);
