@@ -188,7 +188,7 @@ class CircularJournalSpace : public JournalAllocator {
   }
   rbm_abs_addr get_records_start() const {
     assert(device);
-    return device->get_journal_start() + get_block_size();
+    return device->get_shard_journal_start() + get_block_size();
   }
   size_t get_records_available_size() const {
     return get_records_total_size() - get_records_used_size();
@@ -206,7 +206,7 @@ class CircularJournalSpace : public JournalAllocator {
   }
   rbm_abs_addr get_journal_end() const {
     assert(device);
-    return device->get_journal_start() + device->get_journal_size();
+    return device->get_shard_journal_start() + device->get_journal_size();
   }
 
   read_ertr::future<> read(
