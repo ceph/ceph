@@ -8377,12 +8377,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     st->st_blocks = 1;
 #endif
   } else {
-    if (!in->fscrypt_file.empty() &&
-      in->fscrypt_file.size() >= sizeof(ceph_le64)) {
-      st->st_size = *(ceph_le64 *)in->fscrypt_file.data();
-    } else {
-      st->st_size = in->size;
-    }
+    st->st_size = in->effective_size();
 #ifndef _WIN32
     st->st_blocks = (in->size + 511) >> 9;
 #endif
@@ -10128,7 +10123,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     break;
 
   case SEEK_END:
-    pos = in->size + offset;
+    pos = in->effective_size() + offset;
     break;
 
 #ifdef SEEK_DATA
