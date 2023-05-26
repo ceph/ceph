@@ -4062,7 +4062,7 @@ void RGWPutObj::execute(optional_yield y)
     s->dest_placement = *pdest_placement;
     pdest_placement = &s->dest_placement;
     ldpp_dout(this, 20) << "dest_placement for part=" << *pdest_placement << dendl;
-    processor = upload->get_writer(this, s->yield, s->object->clone(),
+    processor = upload->get_writer(this, s->yield, s->object.get(),
 				   s->user->get_id(), pdest_placement,
 				   multipart_part_num, multipart_part_str);
   } else if(append) {
@@ -4070,7 +4070,7 @@ void RGWPutObj::execute(optional_yield y)
       op_ret = -ERR_INVALID_BUCKET_STATE;
       return;
     }
-    processor = driver->get_append_writer(this, s->yield, s->object->clone(),
+    processor = driver->get_append_writer(this, s->yield, s->object.get(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, s->req_id, position,
 					 &cur_accounted_size);
@@ -4083,7 +4083,7 @@ void RGWPutObj::execute(optional_yield y)
         version_id = s->object->get_instance();
       }
     }
-    processor = driver->get_atomic_writer(this, s->yield, s->object->clone(),
+    processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
 					 s->bucket_owner.get_id(),
 					 pdest_placement, olh_epoch, s->req_id);
   }
@@ -4490,7 +4490,7 @@ void RGWPostObj::execute(optional_yield y)
     }
 
     std::unique_ptr<rgw::sal::Writer> processor;
-    processor = driver->get_atomic_writer(this, s->yield, std::move(obj),
+    processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 					 s->bucket_owner.get_id(),
 					 &s->dest_placement, 0, s->req_id);
     op_ret = processor->prepare(s->yield);
@@ -7619,7 +7619,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   dest_placement.inherit_from(bucket->get_placement_rule());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = driver->get_atomic_writer(this, s->yield, std::move(obj),
+  processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 				       bowner.get_id(),
 				       &s->dest_placement, 0, s->req_id);
   op_ret = processor->prepare(s->yield);

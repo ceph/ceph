@@ -323,7 +323,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   string req_id = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = driver->get_atomic_writer(dpp, y, std::move(obj),
+  processor = driver->get_atomic_writer(dpp, y, obj.get(),
 				       owner.get_id(),
 				       nullptr, olh_epoch, req_id);
 
