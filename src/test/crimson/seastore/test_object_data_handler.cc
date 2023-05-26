@@ -34,6 +34,9 @@ public:
     dirty = true;
     return layout;
   }
+  bool is_alive() const {
+    return true;
+  }
   bool is_dirty() const { return dirty; }
   laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
