@@ -5771,6 +5771,53 @@ def save_cluster_config(ctx: CephadmContext, uid: int, gid: int, fsid: str) -> N
         logger.warning(f'Cannot create cluster configuration directory {conf_dir}')
 
 
+def verify_call_home_settings(ctx: CephadmContext) -> None:
+    if ctx.ceph_call_home_config:
+        logger.info('Pulling call home info info from %s.' % ctx.ceph_call_home_config)
+        d = get_parm(ctx.ceph_call_home_config)
+        if d.get('email', None) and d.get('phone', None) and d.get('tenant_id', None):
+            ctx.ceph_call_home_user_email = d.get('email')
+            ctx.ceph_call_home_user_phone = d.get('phone')
+            ctx.ceph_call_home_tenant_id = d.get('tenant_id')
+        else:
+            raise Error('json provided for call home info did not include all necessary fields. '
+                        'Please setup json file as\n'
+                        '{\n'
+                        ' "email": "USER_EMAIL",\n'
+                        ' "phone": "USER_PHONE_NUMBER",\n'
+                        ' "tenant_id": "TENANT_ID"\n'
+                        '}\n')
+    elif ctx.ceph_call_home_user_email and ctx.ceph_call_home_user_phone and ctx.ceph_call_home_tenant_id:
+        # we are okay if all fields were provided
+        return
+    elif not (ctx.ceph_call_home_user_email and ctx.ceph_call_home_user_phone and ctx.ceph_call_home_tenant_id):
+        # we are okay if no fields are provided
+        return
+    else:
+        # if some fields were provided but not others, error out
+        raise Error('Invalid call home settings received. To setup call home integration please provide all 3 of '
+                    '--ceph-call-home-user-email, --ceph-call-home-user-phone and --ceph-call-home-tenant-id '
+                    'options or provide all three settings in a json file specified by --ceph-call-home-config option'
+                    'setup as:\n'
+                    '{\n'
+                    ' "email": "USER_EMAIL",\n'
+                    ' "phone": "USER_PHONE_NUMBER",\n'
+                    ' "tenant_id": "TENANT_ID"\n'
+                    '}\n')
+
+
+def apply_call_home_settings(ctx: CephadmContext, cli: Callable) -> None:
+    if not (ctx.ceph_call_home_user_email and ctx.ceph_call_home_user_phone and ctx.ceph_call_home_tenant_id):
+        # call home credential not provided, skip
+        logger.info('Skipping call home integration. Setup parameters not provided')
+        return
+    # if we got here, attempt to setup call home integration
+    cli(['mgr', 'module', 'enable', 'call_home_agent'])
+    # store user info for call home module to use
+    cli(['config', 'set', 'mgr', 'mgr/call_home_agent/customer_email', ctx.ceph_call_home_user_email])
+    # TODO: Where do the phone number and tenant id go?
+
+
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -5793,6 +5840,8 @@ def command_bootstrap(ctx):
             raise Error(f"A cluster with the same fsid '{ctx.fsid}' already exists.")
         else:
             logger.warning('Specifying an fsid for your cluster offers no advantages and may increase the likelihood of fsid conflicts.')
+
+    verify_call_home_settings(ctx)
 
     # verify output files
     for f in [ctx.output_config, ctx.output_keyring,
@@ -5996,6 +6045,8 @@ def command_bootstrap(ctx):
             logger.info('\nApplying %s to cluster failed!\n' % ctx.apply_spec)
 
     save_cluster_config(ctx, uid, gid, fsid)
+
+    apply_call_home_settings(ctx, cli)
 
     # enable autotune for osd_memory_target
     logger.info('Enabling autotune for osd_memory_target')
@@ -9781,6 +9832,18 @@ def _get_parser():
         '--log-to-file',
         action='store_true',
         help='configure cluster to log to traditional log files in /var/log/ceph/$fsid')
+    parser_bootstrap.add_argument(
+        '--ceph-call-home-user-email',
+        help='')
+    parser_bootstrap.add_argument(
+        '--ceph-call-home-user-phone',
+        help='')
+    parser_bootstrap.add_argument(
+        '--ceph-call-home-tenant-id',
+        help='')
+    parser_bootstrap.add_argument(
+        '--ceph-call-home-config',
+        help='')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
