@@ -832,3 +832,12 @@ lsubdout(client->cct, client, 0) << __func__ << " " << *this << " failed to deco
 
   return ctx;
 }
+
+uint64_t Inode::effective_size() const
+{
+  if (fscrypt_file.size() < sizeof(uint64_t)) {
+    return size;
+  }
+
+  return *(ceph_le64 *)fscrypt_file.data();
+}
