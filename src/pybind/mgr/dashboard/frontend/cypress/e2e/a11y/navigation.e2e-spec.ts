@@ -5,7 +5,6 @@ describe('Navigation accessibility', { retries: 0 }, () => {
 
   beforeEach(() => {
     cy.login();
-    Cypress.Cookies.preserveOnce('token');
     shared.navigateTo();
   });
 
