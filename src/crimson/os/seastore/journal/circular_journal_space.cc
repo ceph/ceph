@@ -174,8 +174,8 @@ CircularJournalSpace::read_header()
   assert(device);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(
 			device->get_block_size()));
-  DEBUG("reading {}", device->get_journal_start());
-  return device->read(device->get_journal_start(), bptr
+  DEBUG("reading {}", device->get_shard_journal_start());
+  return device->read(device->get_shard_journal_start(), bptr
   ).safe_then([bptr, FNAME]() mutable
     -> read_header_ret {
     bufferlist bl;
@@ -222,7 +222,7 @@ CircularJournalSpace::write_header()
   assert(bl.length() < get_block_size());
   bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(get_block_size()));
   iter.copy(bl.length(), bp.c_str());
-  return device->write(device->get_journal_start(), std::move(bp)
+  return device->write(device->get_shard_journal_start(), std::move(bp)
   ).handle_error(
     write_ertr::pass_further{},
     crimson::ct_error::assert_all{ "Invalid error device->write" }

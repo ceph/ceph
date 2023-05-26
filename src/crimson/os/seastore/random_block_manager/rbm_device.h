@@ -84,6 +84,7 @@ public:
   }
 protected:
   rbm_metadata_header_t super;
+  rbm_shard_info_t shard_info;
 public:
   RBMDevice() {}
   virtual ~RBMDevice() = default;
@@ -152,7 +153,12 @@ public:
 
   mkfs_ret do_mkfs(device_config_t);
 
+  // shard 0 mkfs
+  mkfs_ret do_primary_mkfs(device_config_t, int shard_num, size_t journal_size);
+
   mount_ret do_mount();
+
+  mount_ret do_shard_mount();
 
   write_ertr::future<> write_rbm_header();
 
@@ -168,8 +174,20 @@ public:
     return super.journal_size;
   }
 
-  static rbm_abs_addr get_journal_start() {
+  static rbm_abs_addr get_shard_reserved_size() {
     return RBM_SUPERBLOCK_SIZE;
+  }
+
+  rbm_abs_addr get_shard_journal_start() {
+    return shard_info.start_offset + get_shard_reserved_size();
+  }
+
+  uint64_t get_shard_start() const {
+    return shard_info.start_offset;
+  }
+
+  uint64_t get_shard_end() const {
+    return shard_info.start_offset + shard_info.size;
   }
 };
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
@@ -195,14 +213,8 @@ public:
   std::size_t get_available_size() const final { return size; }
   extent_len_t get_block_size() const final { return block_size; }
 
-  mount_ret mount() final {
-    return do_mount();
-  }
-
-  mkfs_ret mkfs(device_config_t config) final {
-    super.journal_size = DEFAULT_TEST_CBJOURNAL_SIZE;
-    return do_mkfs(config);
-  }
+  mount_ret mount() final;
+  mkfs_ret mkfs(device_config_t config) final;
 
   open_ertr::future<> open(
     const std::string &in_path,
