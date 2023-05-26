@@ -209,11 +209,7 @@ public:
 
   mount_ret mount() final;
 
-  mkfs_ret mkfs(device_config_t config) final {
-    using crimson::common::get_conf;
-    super.journal_size = get_conf<Option::size_t>("seastore_cbjournal_size");
-    return do_mkfs(config);
-  }
+  mkfs_ret mkfs(device_config_t config) final;
 
   write_ertr::future<> writev(
     uint64_t offset,
@@ -265,6 +261,18 @@ public:
 
   std::string get_device_path() const final {
     return device_path;
+  }
+
+  seastar::future<> start() final {
+    return shard_devices.start(device_path);
+  }
+
+  seastar::future<> stop() final {
+    return shard_devices.stop();
+  }
+
+  Device& get_sharded_device() final {
+    return shard_devices.local();
   }
 
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
@@ -346,6 +354,7 @@ private:
 
   bool data_protection_enabled = false;
   std::string device_path;
+  seastar::sharded<NVMeBlockDevice> shard_devices;
 };
 
 }
