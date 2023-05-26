@@ -1283,6 +1283,7 @@ class GrafanaSpec(MonitoringSpec):
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
                  initial_admin_password: Optional[str] = None,
+                 anonymous_access: Optional[bool] = True,
                  extra_container_args: Optional[List[str]] = None,
                  extra_entrypoint_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1296,6 +1297,13 @@ class GrafanaSpec(MonitoringSpec):
             custom_configs=custom_configs)
 
         self.initial_admin_password = initial_admin_password
+        self.anonymous_access = anonymous_access
+
+        if not self.anonymous_access and not self.initial_admin_password:
+            err_msg = ('Either initial_admin_password must be set or anonymous_access '
+                       'must be set to true. Otherwise the grafana dashboard will '
+                       'be inaccessible.')
+            raise SpecValidationError(err_msg)
 
 
 yaml.add_representer(GrafanaSpec, ServiceSpec.yaml_representer)

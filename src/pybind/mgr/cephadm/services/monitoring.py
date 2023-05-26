@@ -77,6 +77,7 @@ class GrafanaService(CephadmService):
             GrafanaSpec, self.mgr.spec_store.active_specs[daemon_spec.service_name])
         grafana_ini = self.mgr.template.render(
             'services/grafana/grafana.ini.j2', {
+                'anonymous_access': spec.anonymous_access,
                 'initial_admin_password': spec.initial_admin_password,
                 'http_port': daemon_spec.ports[0] if daemon_spec.ports else self.DEFAULT_SERVICE_PORT,
                 'http_addr': daemon_spec.ip if daemon_spec.ip else ''
