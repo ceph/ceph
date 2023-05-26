@@ -246,37 +246,40 @@ The *checksum algorithm* can be set either via a per-pool
 
    ceph osd pool set <pool-name> csum_type <algorithm>
 
+.. confval:: bluestore_csum_type
+
 Inline Compression
 ==================
 
-BlueStore supports inline compression using `snappy`, `zlib`, or
-`lz4`. Please note that the `lz4` compression plugin is not
-distributed in the official release.
+BlueStore supports inline compression using `snappy`, `zlib`, `lz4`, or `zstd`. 
 
-Whether data in BlueStore is compressed is determined by a combination
-of the *compression mode* and any hints associated with a write
-operation.  The modes are:
+Whether data in BlueStore is compressed is determined by two factors: (1) the
+*compression mode* and (2) any client hints associated with a write operation.
+The compression modes are as follows:
 
 * **none**: Never compress data.
 * **passive**: Do not compress data unless the write operation has a
   *compressible* hint set.
-* **aggressive**: Compress data unless the write operation has an
+* **aggressive**: Do compress data unless the write operation has an
   *incompressible* hint set.
 * **force**: Try to compress data no matter what.
 
-For more information about the *compressible* and *incompressible* IO
-hints, see :c:func:`rados_set_alloc_hint`.
+For more information about the *compressible* and *incompressible* I/O hints,
+see :c:func:`rados_set_alloc_hint`.
 
-Note that regardless of the mode, if the size of the data chunk is not
-reduced sufficiently it will not be used and the original
-(uncompressed) data will be stored.  For example, if the ``bluestore
-compression required ratio`` is set to ``.7`` then the compressed data
-must be 70% of the size of the original (or smaller).
+Note that data in Bluestore will be compressed only if the data chunk will be
+sufficiently reduced in size (as determined by the ``bluestore compression
+required ratio`` setting). No matter which compression modes have been used, if
+the data chunk is too big, then it will be discarded and the original
+(uncompressed) data will be stored instead. For example, if ``bluestore
+compression required ratio`` is set to ``.7``, then data compression will take
+place only if the size of the compressed data is no more than 70% of the size
+of the original data.
 
-The *compression mode*, *compression algorithm*, *compression required
-ratio*, *min blob size*, and *max blob size* can be set either via a
-per-pool property or a global config option.  Pool properties can be
-set with:
+The *compression mode*, *compression algorithm*, *compression required ratio*,
+*min blob size*, and *max blob size* settings can be specified either via a
+per-pool property or via a global config option. To specify pool properties,
+run the following commands:
 
 .. prompt:: bash $
 
@@ -291,188 +294,202 @@ set with:
 RocksDB Sharding
 ================
 
-Internally BlueStore uses multiple types of key-value data,
-stored in RocksDB.  Each data type in BlueStore is assigned a
-unique prefix. Until Pacific all key-value data was stored in
-single RocksDB column family: 'default'.  Since Pacific,
-BlueStore can divide this data into multiple RocksDB column
-families. When keys have similar access frequency, modification
-frequency and lifetime, BlueStore benefits from better caching
-and more precise compaction. This improves performance, and also
-requires less disk space during compaction, since each column
-family is smaller and can compact independent of others.
+BlueStore maintains several types of internal key-value data, all of which are
+stored in RocksDB. Each data type in BlueStore is assigned a unique prefix.
+Prior to the Pacific release, all key-value data was stored in a single RocksDB
+column family: 'default'. In Pacific and later releases, however, BlueStore can
+divide key-value data into several RocksDB column families. BlueStore achieves
+better caching and more precise compaction when keys are similar: specifically,
+when keys have similar access frequency, similar modification frequency, and a
+similar lifetime.  Under such conditions, performance is improved and less disk
+space is required during compaction (because each column family is smaller and
+is able to compact independently of the others).
 
-OSDs deployed in Pacific or later use RocksDB sharding by default.
-If Ceph is upgraded to Pacific from a previous version, sharding is off.
+OSDs deployed in Pacific or later releases use RocksDB sharding by default.
+However, if Ceph has been upgraded to Pacific or a later version from a
+previous version, sharding is disabled on any OSDs that were created before
+Pacific.
 
-To enable sharding and apply the Pacific defaults, stop an OSD and run
+To enable sharding and apply the Pacific defaults to a specific OSD, stop the
+OSD and run the following command:
 
     .. prompt:: bash #
 
-      ceph-bluestore-tool \
+       ceph-bluestore-tool \
         --path <data path> \
         --sharding="m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P" \
         reshard
 
-
-Throttling
+SPDK Usage
 ==========
 
-SPDK Usage
-==================
-
-If you want to use the SPDK driver for NVMe devices, you must prepare your system.
-Refer to `SPDK document`__ for more details.
+To use the SPDK driver for NVMe devices, you must first prepare your system.
+See `SPDK document`__.
 
 .. __: http://www.spdk.io/doc/getting_started.html#getting_started_examples
 
-SPDK offers a script to configure the device automatically. Users can run the
-script as root:
+SPDK offers a script that will configure the device automatically. Run this
+script with root permissions:
 
 .. prompt:: bash $
 
    sudo src/spdk/scripts/setup.sh
 
-You will need to specify the subject NVMe device's device selector with
-the "spdk:" prefix for ``bluestore_block_path``.
+You will need to specify the subject NVMe device's device selector with the
+"spdk:" prefix for ``bluestore_block_path``.
 
-For example, you can find the device selector of an Intel PCIe SSD with:
+In the following example, you first find the device selector of an Intel NVMe
+SSD by running the following command:
 
 .. prompt:: bash $
 
    lspci -mm -n -D -d 8086:0953
 
-The device selector always has the form of ``DDDD:BB:DD.FF`` or ``DDDD.BB.DD.FF``.
+The form of the device selector is either ``DDDD:BB:DD.FF`` or
+``DDDD.BB.DD.FF``.
 
-and then set::
+Next, supposing that ``0000:01:00.0`` is the device selector found in the
+output of the ``lspci`` command, you can specify the device selector by running
+the following command::
 
   bluestore_block_path = "spdk:trtype:PCIe traddr:0000:01:00.0"
 
-Where ``0000:01:00.0`` is the device selector found in the output of ``lspci``
-command above.
-
-You may also specify a remote NVMeoF target over the TCP transport as in the
+You may also specify a remote NVMeoF target over the TCP transport, as in the
 following example::
 
   bluestore_block_path = "spdk:trtype:TCP traddr:10.67.110.197 trsvcid:4420 subnqn:nqn.2019-02.io.spdk:cnode1"
 
-To run multiple SPDK instances per node, you must specify the
-amount of dpdk memory in MB that each instance will use, to make sure each
-instance uses its own DPDK memory.
+To run multiple SPDK instances per node, you must make sure each instance uses
+its own DPDK memory by specifying for each instance the amount of DPDK memory
+(in MB) that the instance will use.
 
-In most cases, a single device can be used for data, DB, and WAL.  We describe
+In most cases, a single device can be used for data, DB, and WAL. We describe
 this strategy as *colocating* these components. Be sure to enter the below
-settings to ensure that all IOs are issued through SPDK.::
+settings to ensure that all I/Os are issued through SPDK::
 
   bluestore_block_db_path = ""
   bluestore_block_db_size = 0
   bluestore_block_wal_path = ""
   bluestore_block_wal_size = 0
 
-Otherwise, the current implementation will populate the SPDK map files with
-kernel file system symbols and will use the kernel driver to issue DB/WAL IO.
+If these settings are not entered, then the current implementation will
+populate the SPDK map files with kernel file system symbols and will use the
+kernel driver to issue DB/WAL I/Os.
 
 Minimum Allocation Size
-========================
+=======================
 
-There is a configured minimum amount of storage that BlueStore will allocate on
-an OSD.  In practice, this is the least amount of capacity that a RADOS object
-can consume.  The value of `bluestore_min_alloc_size` is derived from the
-value of `bluestore_min_alloc_size_hdd` or `bluestore_min_alloc_size_ssd`
-depending on the OSD's ``rotational`` attribute.  This means that when an OSD
-is created on an HDD, BlueStore will be initialized with the current value
-of `bluestore_min_alloc_size_hdd`, and SSD OSDs (including NVMe devices)
-with the value of `bluestore_min_alloc_size_ssd`.
+There is a configured minimum amount of storage that BlueStore allocates on an
+underlying storage device. In practice, this is the least amount of capacity
+that even a tiny RADOS object can consume on each OSD's primary device. The
+configuration option in question--:confval:`bluestore_min_alloc_size`--derives
+its value from the value of either :confval:`bluestore_min_alloc_size_hdd` or
+:confval:`bluestore_min_alloc_size_ssd`, depending on the OSD's ``rotational``
+attribute. Thus if an OSD is created on an HDD, BlueStore is initialized with
+the current value of :confval:`bluestore_min_alloc_size_hdd`; but with SSD OSDs
+(including NVMe devices), Bluestore is initialized with the current value of
+:confval:`bluestore_min_alloc_size_ssd`.
 
-Through the Mimic release, the default values were 64KB and 16KB for rotational
-(HDD) and non-rotational (SSD) media respectively.  Octopus changed the default
-for SSD (non-rotational) media to 4KB, and Pacific changed the default for HDD
-(rotational) media to 4KB as well.
+In Mimic and earlier releases, the default values were 64KB for rotational
+media (HDD) and 16KB for non-rotational media (SSD). The Octopus release
+changed the the default value for non-rotational media (SSD) to 4KB, and the
+Pacific release changed the default value for rotational media (HDD) to 4KB.
 
-These changes were driven by space amplification experienced by Ceph RADOS
-GateWay (RGW) deployments that host large numbers of small files
+These changes were driven by space amplification that was experienced by Ceph
+RADOS GateWay (RGW) deployments that hosted large numbers of small files
 (S3/Swift objects).
 
-For example, when an RGW client stores a 1KB S3 object, it is written to a
-single RADOS object.  With the default `min_alloc_size` value, 4KB of
-underlying drive space is allocated.  This means that roughly
-(4KB - 1KB) == 3KB is allocated but never used, which corresponds to 300%
-overhead or 25% efficiency. Similarly, a 5KB user object will be stored
-as one 4KB and one 1KB RADOS object, again stranding 4KB of device capcity,
-though in this case the overhead is a much smaller percentage.  Think of this
-in terms of the remainder from a modulus operation. The overhead *percentage*
-thus decreases rapidly as user object size increases.
+For example, when an RGW client stores a 1 KB S3 object, that object is written
+to a single RADOS object. In accordance with the default
+:confval:`min_alloc_size` value, 4 KB of underlying drive space is allocated.
+This means that roughly 3 KB (that is, 4 KB minus 1 KB) is allocated but never
+used: this corresponds to 300% overhead or 25% efficiency. Similarly, a 5 KB
+user object will be stored as two RADOS objects, a 4 KB RADOS object and a 1 KB
+RADOS object, with the result that 4KB of device capacity is stranded. In this
+case, however, the overhead percentage is much smaller. Think of this in terms
+of the remainder from a modulus operation. The overhead *percentage* thus
+decreases rapidly as object size increases.
 
-An easily missed additional subtlety is that this
-takes place for *each* replica.  So when using the default three copies of
-data (3R), a 1KB S3 object actually consumes roughly 9KB of storage device
-capacity.  If erasure coding (EC) is used instead of replication, the
-amplification may be even higher: for a ``k=4,m=2`` pool, our 1KB S3 object
-will allocate (6 * 4KB) = 24KB of device capacity.
+There is an additional subtlety that is easily missed: the amplification
+phenomenon just described takes place for *each* replica. For example, when
+using the default of three copies of data (3R), a 1 KB S3 object actually
+strands roughly 9 KB of storage device capacity. If erasure coding (EC) is used
+instead of replication, the amplification might be even higher: for a ``k=4,
+m=2`` pool, our 1 KB S3 object allocates 24 KB (that is, 4 KB multiplied by 6)
+of device capacity.
 
 When an RGW bucket pool contains many relatively large user objects, the effect
-of this phenomenon is often negligible, but should be considered for deployments
-that expect a signficiant fraction of relatively small objects.
+of this phenomenon is often negligible. However, with deployments that can
+expect a significant fraction of relatively small user objects, the effect
+should be taken into consideration.
 
-The 4KB default value aligns well with conventional HDD and SSD devices.  Some
-new coarse-IU (Indirection Unit) QLC SSDs however perform and wear best
-when `bluestore_min_alloc_size_ssd`
-is set at OSD creation to match the device's IU:. 8KB, 16KB, or even 64KB.
-These novel storage drives allow one to achieve read performance competitive
-with conventional TLC SSDs and write performance faster than HDDs, with
-high density and lower cost than TLC SSDs.
+The 4KB default value aligns well with conventional HDD and SSD devices.
+However, certain novel coarse-IU (Indirection Unit) QLC SSDs perform and wear
+best when :confval:`bluestore_min_alloc_size_ssd` is specified at OSD creation
+to match the device's IU: this might be 8KB, 16KB, or even 64KB.  These novel
+storage drives can achieve read performance that is competitive with that of
+conventional TLC SSDs and write performance that is faster than that of HDDs,
+with higher density and lower cost than TLC SSDs.
 
-Note that when creating OSDs on these devices, one must carefully apply the
-non-default value only to appropriate devices, and not to conventional SSD and
-HDD devices.  This may be done through careful ordering of OSD creation, custom
-OSD device classes, and especially by the use of central configuration _masks_.
+Note that when creating OSDs on these novel devices, one must be careful to
+apply the non-default value only to appropriate devices, and not to
+conventional HDD and SSD devices. Error can be avoided through careful ordering
+of OSD creation, with custom OSD device classes, and especially by the use of
+central configuration *masks*.
 
-Quincy and later releases add
-the `bluestore_use_optimal_io_size_for_min_alloc_size`
-option that enables automatic discovery of the appropriate value as each OSD is
-created.  Note that the use of ``bcache``, ``OpenCAS``, ``dmcrypt``,
-``ATA over Ethernet``, `iSCSI`, or other device layering / abstraction
-technologies may confound the determination of appropriate values. OSDs
-deployed on top of VMware storage have been reported to also
-sometimes report a ``rotational`` attribute that does not match the underlying
-hardware.
+In Quincy and later releases, you can use the
+:confval:`bluestore_use_optimal_io_size_for_min_alloc_size` option to allow
+automatic discovery of the correct value as each OSD is created. Note that the
+use of ``bcache``, ``OpenCAS``, ``dmcrypt``, ``ATA over Ethernet``, `iSCSI`, or
+other device-layering and abstraction technologies might confound the
+determination of correct values. Moreover, OSDs deployed on top of VMware
+storage have sometimes been found to report a ``rotational`` attribute that
+does not match the underlying hardware.
 
-We suggest inspecting such OSDs at startup via logs and admin sockets to ensure that
-behavior is appropriate.  Note that this also may not work as desired with
-older kernels.  You can check for this by examining the presence and value
-of ``/sys/block/<drive>/queue/optimal_io_size``.
+We suggest inspecting such OSDs at startup via logs and admin sockets in order
+to ensure that their behavior is correct. Be aware that this kind of inspection
+might not work as expected with older kernels.  To check for this issue,
+examine the presence and value of ``/sys/block/<drive>/queue/optimal_io_size``.
 
-You may also inspect a given OSD:
+.. note:: When running Reef or a later Ceph release, the ``min_alloc_size``
+   baked into each OSD is conveniently reported by ``ceph osd metadata``.
+
+To inspect a specific OSD, run the following command:
 
 .. prompt:: bash #
 
-   ceph osd metadata osd.1701 | grep rotational
+   ceph osd metadata osd.1701 | egrep rotational\|alloc
 
-This space amplification may manifest as an unusually high ratio of raw to
-stored data reported by ``ceph df``.  ``ceph osd df`` may also report
-anomalously high ``%USE`` / ``VAR`` values when
-compared to other, ostensibly identical OSDs.  A pool using OSDs with
-mismatched ``min_alloc_size`` values may experience unexpected balancer
-behavior as well.
+This space amplification might manifest as an unusually high ratio of raw to
+stored data as reported by ``ceph df``. There might also be ``%USE`` / ``VAR``
+values reported by ``ceph osd df`` that are unusually high in comparison to
+other, ostensibly identical, OSDs. Finally, there might be unexpected balancer
+behavior in pools that use OSDs that have mismatched ``min_alloc_size`` values.
 
-Note that this BlueStore attribute takes effect *only* at OSD creation; if
-changed later, a given OSD's behavior will not change unless / until it is
-destroyed and redeployed with the appropriate option value(s).  Upgrading
-to a later Ceph release will *not* change the value used by OSDs deployed
-under older releases or with other settings.
+This BlueStore attribute takes effect *only* at OSD creation; if the attribute
+is changed later, a specific OSD's behavior will not change unless and until
+the OSD is destroyed and redeployed with the appropriate option value(s).
+Upgrading to a later Ceph release will *not* change the value used by OSDs that
+were deployed under older releases or with other settings.
 
-DSA (Data Streaming Accelerator Usage)
+.. confval:: bluestore_min_alloc_size
+.. confval:: bluestore_min_alloc_size_hdd
+.. confval:: bluestore_min_alloc_size_ssd
+.. confval:: bluestore_use_optimal_io_size_for_min_alloc_size
+
+DSA (Data Streaming Accelerator) Usage
 ======================================
 
-If you want to use the DML library to drive DSA device for offloading
-read/write operations on Persist memory in Bluestore. You need to install
-`DML`_ and `idxd-config`_ library in your machine with SPR (Sapphire Rapids) CPU.
+If you want to use the DML library to drive the DSA device for offloading
+read/write operations on persistent memory (PMEM) in BlueStore, you need to
+install `DML`_ and the `idxd-config`_ library. This will work only on machines
+that have a SPR (Sapphire Rapids) CPU.
 
 .. _DML: https://github.com/intel/DML
 .. _idxd-config: https://github.com/intel/idxd-config
 
-After installing the DML software, you need to configure the shared
-work queues (WQs) with the following WQ configuration example via accel-config tool:
+After installing the DML software, configure the shared work queues (WQs) with
+reference to the following WQ configuration example:
 
 .. prompt:: bash $
 
