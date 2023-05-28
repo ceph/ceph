@@ -5,20 +5,11 @@
 
 #include <string>
 #include <functional>
-#include <boost/smart_ptr/intrusive_ptr.hpp>
 #include <boost/optional.hpp>
 
 #include "include/common_fwd.h"
 
 namespace rgw::kafka {
-// forward declaration of connection object
-struct connection_t;
-
-typedef boost::intrusive_ptr<connection_t> connection_ptr_t;
-
-// required interfaces needed so that connection_t could be used inside boost::intrusive_ptr
-void intrusive_ptr_add_ref(const connection_t* p);
-void intrusive_ptr_release(const connection_t* p);
 
 // the reply callback is expected to get an integer parameter
 // indicating the result, and not to return anything
@@ -31,17 +22,17 @@ bool init(CephContext* cct);
 void shutdown();
 
 // connect to a kafka endpoint
-connection_ptr_t connect(const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location, boost::optional<const std::string&> mechanism);
+bool connect(std::string& broker, const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location, boost::optional<const std::string&> mechanism);
 
 // publish a message over a connection that was already created
-int publish(connection_ptr_t& conn,
+int publish(const std::string& conn_name,
     const std::string& topic,
     const std::string& message);
 
 // publish a message over a connection that was already created
 // and pass a callback that will be invoked (async) when broker confirms
 // receiving the message
-int publish_with_confirm(connection_ptr_t& conn,
+int publish_with_confirm(const std::string& conn_name,
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb);
@@ -70,12 +61,6 @@ size_t get_max_inflight();
 
 // maximum number of messages in the queue
 size_t get_max_queue();
-
-// disconnect from a kafka broker
-bool disconnect(connection_ptr_t& conn);
-
-// display connection as string
-std::string to_string(const connection_ptr_t& conn);
 
 }
 
