@@ -482,6 +482,7 @@ private:
         if(conn->timestamp.sec() + max_idle_time < ceph_clock_now()) {
           ldout(conn->cct, 20) << "kafka run: deleting a connection due to idle behaviour: " << ceph_clock_now() << dendl;
           conn->destroy(STATUS_CONNECTION_IDLE);
+          std::lock_guard lock(connections_lock);
           conn_it = connections.erase(conn_it);
           --connection_count; \
           continue;
