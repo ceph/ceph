@@ -707,7 +707,7 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
                                                 m=std::move(m), &dispatched] {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
-      return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
+      return maybe_handle_osd_maps(conn, boost::static_pointer_cast<MOSDMap>(m));
     case CEPH_MSG_OSD_OP:
       return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
     case MSG_OSD_PG_CREATE2:
@@ -853,8 +853,56 @@ bool OSD::require_mon_peer(crimson::net::Connection *conn, Ref<Message> m)
   return true;
 }
 
-seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
-                                      Ref<MOSDMap> m)
+interval_set<epoch_t> OSD::calc_new_osd_maps(
+  epoch_t origin_first,
+  epoch_t origin_last)
+{
+  interval_set<epoch_t> origin_epochs;
+  logger().info("{} first {} last {} handled {}",
+                __func__, origin_first,
+                origin_last, handled_epochs);
+  origin_epochs.insert(origin_first,
+                       origin_last - origin_first + 1);
+  logger().info("{} message's epochs {}", __func__, origin_epochs);
+  interval_set<epoch_t> old_epochs;
+  old_epochs.intersection_of(handled_epochs, origin_epochs);
+  logger().info("{} already handled epochs {}", __func__, old_epochs);
+  // new ones
+  origin_epochs.subtract(old_epochs);
+  logger().info("{} new epochs {}", __func__, origin_epochs);
+  logger().info("{} returning first {} last {} new epochs: {}",
+                __func__, origin_epochs.begin().get_start(),
+                origin_epochs.begin().get_end() - 1,
+                !origin_epochs.empty());
+  return origin_epochs;
+}
+
+seastar::future<> OSD::maybe_handle_osd_maps(crimson::net::ConnectionRef conn,
+                                             Ref<MOSDMap> m)
+{
+  logger().info("{} ", __func__);
+  interval_set<epoch_t> to_handle =
+    calc_new_osd_maps(m->get_first(), m->get_last());
+  logger().info("{} num intervals to handle {}",
+                __func__, to_handle.num_intervals());
+  std::vector<seastar::future<>> futures;
+  for (auto it = to_handle.begin(); it != to_handle.end(); ++it) {
+    logger().info("{} will handle - first: {} last: {}",
+                  __func__, it.get_start(),
+                  it.get_end() - 1);
+    futures.push_back(
+      _handle_osd_map(conn, m, it.get_start(), it.get_end() - 1)
+    );
+  }
+  return seastar::do_with(std::move(futures), [] (auto& futures) {
+    return seastar::when_all_succeed(futures.begin(), futures.end());
+  });
+}
+
+seastar::future<> OSD::_handle_osd_map(crimson::net::ConnectionRef conn,
+                                      Ref<MOSDMap> m,
+                                      epoch_t first,
+                                      epoch_t last)
 {
   logger().info("handle_osd_map {}", *m);
   if (m->fsid != superblock.cluster_fsid) {
@@ -865,9 +913,6 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
     logger().warn("i am still initializing");
     return seastar::now();
   }
-
-  const auto first = m->get_first();
-  const auto last = m->get_last();
   logger().info("handle_osd_map epochs [{}..{}], i have {}, src has [{}..{}]",
                 first, last, superblock.newest_map,
                 m->cluster_osdmap_trim_lower_bound, m->newest_map);
@@ -897,9 +942,16 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
     start = first;
   }
 
+  interval_set<epoch_t> handled;
+  handled.insert(start, last - start + 1);
+  logger().info("handle_osd_map uniting handled {}"
+                " with {}",
+                handled_epochs, handled);
+  handled_epochs.union_of(handled);
+
   return seastar::do_with(ceph::os::Transaction{},
                           [=, this](auto& t) {
-    return pg_shard_manager.store_maps(t, start, m).then([=, this, &t] {
+    return pg_shard_manager.store_maps(t, start, last, m).then([=, this, &t] {
       // even if this map isn't from a mon, we may have satisfied our subscription
       monc->sub_got("osdmap", last);
       if (!superblock.oldest_map || skip_maps) {

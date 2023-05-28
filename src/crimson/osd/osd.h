@@ -88,6 +88,12 @@ class OSD final : public crimson::net::Dispatcher,
   //< since when there is no more pending pg creates from mon
   epoch_t last_pg_create_epoch = 0;
 
+  interval_set<epoch_t> handled_epochs;
+
+  interval_set<epoch_t> calc_new_osd_maps(
+    epoch_t origin_first,
+    epoch_t origin_last);
+
   ceph::mono_time startup_time;
 
   OSDSuperblock superblock;
@@ -166,8 +172,12 @@ private:
 
   bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
 
-  seastar::future<> handle_osd_map(crimson::net::ConnectionRef conn,
-                                   Ref<MOSDMap> m);
+  seastar::future<> maybe_handle_osd_maps(crimson::net::ConnectionRef conn,
+                                         Ref<MOSDMap> m);
+  seastar::future<> _handle_osd_map(crimson::net::ConnectionRef conn,
+                                   Ref<MOSDMap> m,
+                                   epoch_t first,
+                                   epoch_t last);
   seastar::future<> handle_pg_create(crimson::net::ConnectionRef conn,
 				     Ref<MOSDPGCreate2> m);
   seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
