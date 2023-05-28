@@ -246,8 +246,6 @@ The *checksum algorithm* can be set either via a per-pool
 
    ceph osd pool set <pool-name> csum_type <algorithm>
 
-.. confval:: bluestore_csum_type
-
 Inline Compression
 ==================
 
@@ -382,13 +380,13 @@ Minimum Allocation Size
 There is a configured minimum amount of storage that BlueStore allocates on an
 underlying storage device. In practice, this is the least amount of capacity
 that even a tiny RADOS object can consume on each OSD's primary device. The
-configuration option in question--:confval:`bluestore_min_alloc_size`--derives
-its value from the value of either :confval:`bluestore_min_alloc_size_hdd` or
-:confval:`bluestore_min_alloc_size_ssd`, depending on the OSD's ``rotational``
+configuration option in question--``bluestore_min_alloc_size``--derives
+its value from the value of either ``bluestore_min_alloc_size_hdd`` or
+``bluestore_min_alloc_size_ssd``, depending on the OSD's ``rotational``
 attribute. Thus if an OSD is created on an HDD, BlueStore is initialized with
-the current value of :confval:`bluestore_min_alloc_size_hdd`; but with SSD OSDs
+the current value of ``bluestore_min_alloc_size_hdd``; but with SSD OSDs
 (including NVMe devices), Bluestore is initialized with the current value of
-:confval:`bluestore_min_alloc_size_ssd`.
+``bluestore_min_alloc_size_ssd``.
 
 In Mimic and earlier releases, the default values were 64KB for rotational
 media (HDD) and 16KB for non-rotational media (SSD). The Octopus release
@@ -401,7 +399,7 @@ RADOS GateWay (RGW) deployments that hosted large numbers of small files
 
 For example, when an RGW client stores a 1 KB S3 object, that object is written
 to a single RADOS object. In accordance with the default
-:confval:`min_alloc_size` value, 4 KB of underlying drive space is allocated.
+``min_alloc_size`` value, 4 KB of underlying drive space is allocated.
 This means that roughly 3 KB (that is, 4 KB minus 1 KB) is allocated but never
 used: this corresponds to 300% overhead or 25% efficiency. Similarly, a 5 KB
 user object will be stored as two RADOS objects, a 4 KB RADOS object and a 1 KB
@@ -425,7 +423,7 @@ should be taken into consideration.
 
 The 4KB default value aligns well with conventional HDD and SSD devices.
 However, certain novel coarse-IU (Indirection Unit) QLC SSDs perform and wear
-best when :confval:`bluestore_min_alloc_size_ssd` is specified at OSD creation
+best when ``bluestore_min_alloc_size_ssd`` is specified at OSD creation
 to match the device's IU: this might be 8KB, 16KB, or even 64KB.  These novel
 storage drives can achieve read performance that is competitive with that of
 conventional TLC SSDs and write performance that is faster than that of HDDs,
@@ -438,7 +436,7 @@ of OSD creation, with custom OSD device classes, and especially by the use of
 central configuration *masks*.
 
 In Quincy and later releases, you can use the
-:confval:`bluestore_use_optimal_io_size_for_min_alloc_size` option to allow
+``bluestore_use_optimal_io_size_for_min_alloc_size`` option to allow
 automatic discovery of the correct value as each OSD is created. Note that the
 use of ``bcache``, ``OpenCAS``, ``dmcrypt``, ``ATA over Ethernet``, `iSCSI`, or
 other device-layering and abstraction technologies might confound the
@@ -471,11 +469,6 @@ is changed later, a specific OSD's behavior will not change unless and until
 the OSD is destroyed and redeployed with the appropriate option value(s).
 Upgrading to a later Ceph release will *not* change the value used by OSDs that
 were deployed under older releases or with other settings.
-
-.. confval:: bluestore_min_alloc_size
-.. confval:: bluestore_min_alloc_size_hdd
-.. confval:: bluestore_min_alloc_size_ssd
-.. confval:: bluestore_use_optimal_io_size_for_min_alloc_size
 
 DSA (Data Streaming Accelerator) Usage
 ======================================
