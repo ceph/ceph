@@ -54,6 +54,9 @@ seastar::future<epoch_t> OSDMapGate<OSDMapGateTypeV>::wait_for_map(
 
 template <OSDMapGateType OSDMapGateTypeV>
 void OSDMapGate<OSDMapGateTypeV>::got_map(epoch_t epoch) {
+  if (current >= epoch) {
+    return;
+  }
   current = epoch;
   auto first = waiting_peering.begin();
   auto last = waiting_peering.upper_bound(epoch);
