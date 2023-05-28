@@ -314,7 +314,7 @@ private:
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
-                               epoch_t start, Ref<MOSDMap> m);
+                               epoch_t start, epoch_t last, Ref<MOSDMap> m);
 };
 
 /**

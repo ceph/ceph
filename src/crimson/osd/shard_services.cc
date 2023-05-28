@@ -412,11 +412,11 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
 }
 
 seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
-                                  epoch_t start, Ref<MOSDMap> m)
+                                  epoch_t start, epoch_t last, Ref<MOSDMap> m)
 {
   return seastar::do_for_each(
     boost::make_counting_iterator(start),
-    boost::make_counting_iterator(m->get_last() + 1),
+    boost::make_counting_iterator(last + 1),
     [&t, m, this](epoch_t e) {
       if (auto p = m->maps.find(e); p != m->maps.end()) {
 	auto o = std::make_unique<OSDMap>();
