@@ -114,7 +114,7 @@ describe('HostsComponent', () => {
     const spans = fixture.debugElement.nativeElement.querySelectorAll(
       '.datatable-body-cell-label span'
     );
-    expect(spans[0].textContent).toBe(hostname);
+    expect(spans[0].textContent.trim()).toBe(hostname);
   });
 
   it('should show the exact count of the repeating daemons', () => {

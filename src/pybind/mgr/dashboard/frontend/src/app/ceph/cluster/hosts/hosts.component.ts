@@ -56,6 +56,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   orchTmpl: TemplateRef<any>;
   @ViewChild('flashTmpl', { static: true })
   flashTmpl: TemplateRef<any>;
+  @ViewChild('hostNameTpl', { static: true })
+  hostNameTpl: TemplateRef<any>;
 
   @Input()
   hiddenColumns: string[] = [];
@@ -193,7 +195,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Hostname`,
         prop: 'hostname',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTemplate: this.hostNameTpl
       },
       {
         name: $localize`Service Instances`,
@@ -217,7 +220,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            maintenance: { class: 'badge-warning' }
+            maintenance: { class: 'badge-warning' },
+            available: { class: 'badge-success' }
           }
         }
       },
@@ -495,6 +499,11 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       .subscribe(
         (hostList) => {
           this.hosts = hostList;
+          this.hosts.forEach((host: object) => {
+            if (host['status'] === '') {
+              host['status'] = 'available';
+            }
+          });
           this.transformHostsData();
           this.isLoadingHosts = false;
         },

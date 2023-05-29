@@ -24,7 +24,7 @@ export CYPRESS_BASE_URL CYPRESS_LOGIN_USER CYPRESS_LOGIN_PWD
 cypress_run () {
     local specs="$1"
     local timeout="$2"
-    local override_config="ignoreTestFiles=*.po.ts,retries=0,testFiles=${specs},chromeWebSecurity=false"
+    local override_config="excludeSpecPattern=*.po.ts,retries=0,specPattern=${specs},chromeWebSecurity=false"
     if [[ -n "$timeout" ]]; then
         override_config="${override_config},defaultCommandTimeout=${timeout}"
     fi
@@ -53,5 +53,5 @@ kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-prometheus-api-
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-grafana-api-url https://192.168.100.100:3000"'
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --placement 'count:2'"'
 
-cypress_run ["orchestrator/workflow/*.feature, orchestrator/workflow/*-spec.ts"]
-cypress_run "orchestrator/grafana/*.feature"
+cypress_run ["cypress/e2e/orchestrator/workflow/*.feature","cypress/e2e/orchestrator/workflow/*-spec.ts"]
+cypress_run "cypress/e2e/orchestrator/grafana/*.feature"

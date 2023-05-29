@@ -11,6 +11,7 @@
                 columnMode="flex"
                 (fetchData)="getHosts($event)"
                 selectionType="single"
+                [searchableObjects]="true"
                 [hasDetails]="hasTableDetails"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
@@ -57,6 +58,17 @@
     <cd-label [key]="service['type']"
               [value]="service['count']"
               class="me-1"></cd-label>
+  </span>
+</ng-template>
+
+<ng-template #hostNameTpl
+             let-row="row">
+  <span [ngClass]="row">
+    {{ row.hostname }}
+  </span><br>
+  <span class="text-muted fst-italic"
+        *ngIf="row.addr">
+    ({{ row.addr }})
   </span>
 </ng-template>
 
