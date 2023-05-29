@@ -75,7 +75,8 @@ def setup_module():
     RBD().pool_init(ioctx, True)
     global features
     features = os.getenv("RBD_FEATURES")
-    features = int(features) if features is not None else 61
+    if features is not None:
+        features = int(features)
 
 def teardown_module():
     global ioctx
