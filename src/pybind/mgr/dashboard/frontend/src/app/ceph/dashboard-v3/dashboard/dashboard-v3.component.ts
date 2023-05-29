@@ -5,10 +5,7 @@ import { Observable, Subscription, timer } from 'rxjs';
 import { take } from 'rxjs/operators';
 import moment from 'moment';
 
-import { ClusterService } from '~/app/shared/api/cluster.service';
-import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { HealthService } from '~/app/shared/api/health.service';
-import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { Promqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
@@ -25,6 +22,7 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -77,9 +75,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
 
   constructor(
     private summaryService: SummaryService,
-    private configService: ConfigurationService,
-    private mgrModuleService: MgrModuleService,
-    private clusterService: ClusterService,
+    private orchestratorService: OrchestratorService,
     private osdService: OsdService,
     private authStorageService: AuthStorageService,
     private featureToggles: FeatureTogglesService,
@@ -136,12 +132,11 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
 
   getDetailsCardData() {
-    this.configService.get('fsid').subscribe((data) => {
-      this.detailsCardData.fsid = data['value'][0]['value'];
+    this.healthService.getClusterFsid().subscribe((data: string) => {
+      this.detailsCardData.fsid = data;
     });
-    this.mgrModuleService.getConfig('orchestrator').subscribe((data) => {
-      const orchStr = data['orchestrator'];
-      this.detailsCardData.orchestrator = orchStr.charAt(0).toUpperCase() + orchStr.slice(1);
+    this.orchestratorService.getName().subscribe((data: string) => {
+      this.detailsCardData.orchestrator = data;
     });
     this.summaryService.subscribe((summary) => {
       const version = summary.version.replace('ceph version ', '').split(' ');
@@ -157,7 +152,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       .subscribe((data: any) => {
         this.osdSettings = data;
       });
-    this.capacityService = this.clusterService.getCapacity().subscribe((data: any) => {
+    this.capacityService = this.healthService.getClusterCapacity().subscribe((data: any) => {
       this.capacity = data;
     });
   }

@@ -8,9 +8,7 @@ import _ from 'lodash';
 import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
-import { ConfigurationService } from '~/app/shared/api/configuration.service';
 import { HealthService } from '~/app/shared/api/health.service';
-import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { AlertmanagerAlert } from '~/app/shared/models/prometheus-alerts';
@@ -25,6 +23,7 @@ import { CardComponent } from '../card/card.component';
 import { DashboardPieComponent } from '../dashboard-pie/dashboard-pie.component';
 import { PgSummaryPipe } from '../pg-summary.pipe';
 import { DashboardV3Component } from './dashboard-v3.component';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
@@ -42,8 +41,8 @@ export class SummaryServiceMock {
 describe('Dashbord Component', () => {
   let component: DashboardV3Component;
   let fixture: ComponentFixture<DashboardV3Component>;
-  let configurationService: ConfigurationService;
-  let orchestratorService: MgrModuleService;
+  let healthService: HealthService;
+  let orchestratorService: OrchestratorService;
   let getHealthSpy: jasmine.Spy;
   let getAlertsSpy: jasmine.Spy;
   let fakeFeatureTogglesService: jasmine.Spy;
@@ -133,22 +132,9 @@ describe('Dashbord Component', () => {
     }
   ];
 
-  const configValueData: any = {
-    value: [
-      {
-        section: 'mgr',
-        value: 'e90a0d58-658e-4148-8f61-e896c86f0696'
-      }
-    ]
-  };
+  const configValueData: any = 'e90a0d58-658e-4148-8f61-e896c86f0696';
 
-  const orchData: any = {
-    log_level: '',
-    log_to_cluster: false,
-    log_to_cluster_level: 'info',
-    log_to_file: false,
-    orchestrator: 'cephadm'
-  };
+  const orchName: any = 'Cephadm';
 
   configureTestBed({
     imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), SharedModule],
@@ -186,8 +172,8 @@ describe('Dashbord Component', () => {
     );
     fixture = TestBed.createComponent(DashboardV3Component);
     component = fixture.componentInstance;
-    configurationService = TestBed.inject(ConfigurationService);
-    orchestratorService = TestBed.inject(MgrModuleService);
+    healthService = TestBed.inject(HealthService);
+    orchestratorService = TestBed.inject(OrchestratorService);
     getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
     getHealthSpy.and.returnValue(of(healthPayload));
     spyOn(TestBed.inject(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
@@ -206,8 +192,8 @@ describe('Dashbord Component', () => {
   });
 
   it('should get corresponding data into detailsCardData', () => {
-    spyOn(configurationService, 'get').and.returnValue(of(configValueData));
-    spyOn(orchestratorService, 'getConfig').and.returnValue(of(orchData));
+    spyOn(healthService, 'getClusterFsid').and.returnValue(of(configValueData));
+    spyOn(orchestratorService, 'getName').and.returnValue(of(orchName));
     component.ngOnInit();
     expect(component.detailsCardData.fsid).toBe('e90a0d58-658e-4148-8f61-e896c86f0696');
     expect(component.detailsCardData.orchestrator).toBe('Cephadm');
