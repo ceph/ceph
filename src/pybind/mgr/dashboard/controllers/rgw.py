@@ -18,8 +18,8 @@ from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
     CRUDCollectionMethod, CRUDEndpoint, Endpoint, EndpointDoc, ReadPermission, \
     RESTController, UIRouter, allow_empty_body
-from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, TableAction, \
-    Validator, VerticalContainer
+from ._crud import CRUDMeta, Form, FormField, FormTaskInfo, Icon, MethodType, \
+    TableAction, Validator, VerticalContainer
 from ._version import APIVersion
 
 logger = logging.getLogger("controllers.rgw")
@@ -691,18 +691,19 @@ create_container = VerticalContainer('Create Role', 'create_role', fields=[
               field_type='textarea',
               validators=[Validator.JSON]),
 ])
-create_role_form = Form(path='/rgw/user/roles/create',
+create_role_form = Form(path='/rgw/roles/create',
                         root_container=create_container,
                         task_info=FormTaskInfo("IAM RGW Role '{role_name}' created successfully",
-                                               ['role_name']))
+                                               ['role_name']),
+                        method_type=MethodType.POST.value)
 
 
 @CRUDEndpoint(
-    router=APIRouter('/rgw/user/roles', Scope.RGW),
+    router=APIRouter('/rgw/roles', Scope.RGW),
     doc=APIDoc("List of RGW roles", "RGW"),
     actions=[
         TableAction(name='Create', permission='create', icon=Icon.ADD.value,
-                    routerLink='/rgw/user/roles/create')
+                    routerLink='/rgw/roles/create')
     ],
     forms=[create_role_form],
     permissions=[Scope.CONFIG_OPT],
