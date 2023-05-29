@@ -48,7 +48,7 @@ struct D3nCacheAioWriteRequest {
 	CephContext *cct;
 
 	D3nCacheAioWriteRequest(CephContext *_cct) : cct(_cct) {}
-	int d3n_prepare_libaio_write_op(bufferlist& bl, unsigned int len, std::string oid, std::string cache_location);
+	int d3n_libaio_prepare_write_op(bufferlist& bl, unsigned int len, std::string oid, std::string cache_location);
 
   ~D3nCacheAioWriteRequest() {
     ::close(fd);
