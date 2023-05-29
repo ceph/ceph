@@ -14,6 +14,11 @@ class SecretStr(str):
     pass
 
 
+class MethodType(Enum):
+    POST = 'post'
+    PUT = 'put'
+
+
 def isnamedtuple(o):
     return isinstance(o, tuple) and hasattr(o, '_asdict') and hasattr(o, '_fields')
 
