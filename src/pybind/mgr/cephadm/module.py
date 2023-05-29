@@ -842,6 +842,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 ssh_config_fname))
 
     def _process_ls_output(self, host: str, ls: List[Dict[str, Any]]) -> None:
+        def _as_datetime(value: Optional[str]) -> Optional[datetime.datetime]:
+            return str_to_datetime(value) if value is not None else None
+
         dm = {}
         for d in ls:
             if not d['style'].startswith('cephadm'):
@@ -850,51 +853,55 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 continue
             if '.' not in d['name']:
                 continue
-            sd = orchestrator.DaemonDescription()
-            sd.last_refresh = datetime_now()
-            for k in ['created', 'started', 'last_configured', 'last_deployed']:
-                v = d.get(k, None)
-                if v:
-                    setattr(sd, k, str_to_datetime(d[k]))
-            sd.daemon_type = d['name'].split('.')[0]
-            if sd.daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
-                logger.warning(f"Found unknown daemon type {sd.daemon_type} on host {host}")
+            daemon_type = d['name'].split('.')[0]
+            if daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
+                logger.warning(f"Found unknown daemon type {daemon_type} on host {host}")
                 continue
 
-            sd.daemon_id = '.'.join(d['name'].split('.')[1:])
-            sd.hostname = host
-            sd.container_id = d.get('container_id')
-            if sd.container_id:
+            container_id = d.get('container_id')
+            if container_id:
                 # shorten the hash
-                sd.container_id = sd.container_id[0:12]
-            sd.container_image_name = d.get('container_image_name')
-            sd.container_image_id = d.get('container_image_id')
-            sd.container_image_digests = d.get('container_image_digests')
-            sd.memory_usage = d.get('memory_usage')
-            sd.memory_request = d.get('memory_request')
-            sd.memory_limit = d.get('memory_limit')
-            sd.cpu_percentage = d.get('cpu_percentage')
-            sd._service_name = d.get('service_name')
-            sd.deployed_by = d.get('deployed_by')
-            sd.version = d.get('version')
-            sd.ports = d.get('ports')
-            sd.ip = d.get('ip')
-            sd.rank = int(d['rank']) if d.get('rank') is not None else None
-            sd.rank_generation = int(d['rank_generation']) if d.get(
+                container_id = container_id[0:12]
+            rank = int(d['rank']) if d.get('rank') is not None else None
+            rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
-            sd.extra_container_args = d.get('extra_container_args')
-            sd.extra_entrypoint_args = d.get('extra_entrypoint_args')
+            status, status_desc = None, 'unknown'
             if 'state' in d:
-                sd.status_desc = d['state']
-                sd.status = {
+                status_desc = d['state']
+                status = {
                     'running': DaemonDescriptionStatus.running,
                     'stopped': DaemonDescriptionStatus.stopped,
                     'error': DaemonDescriptionStatus.error,
                     'unknown': DaemonDescriptionStatus.error,
                 }[d['state']]
-            else:
-                sd.status_desc = 'unknown'
-                sd.status = None
+            sd = orchestrator.DaemonDescription(
+                daemon_type=daemon_type,
+                daemon_id='.'.join(d['name'].split('.')[1:]),
+                hostname=host,
+                container_id=container_id,
+                container_image_id=d.get('container_image_id'),
+                container_image_name=d.get('container_image_name'),
+                container_image_digests=d.get('container_image_digests'),
+                version=d.get('version'),
+                status=status,
+                status_desc=status_desc,
+                created=_as_datetime(d.get('created')),
+                started=_as_datetime(d.get('started')),
+                last_configured=_as_datetime(d.get('last_configured')),
+                last_deployed=_as_datetime(d.get('last_deployed')),
+                memory_usage=d.get('memory_usage'),
+                memory_request=d.get('memory_request'),
+                memory_limit=d.get('memory_limit'),
+                cpu_percentage=d.get('cpu_percentage'),
+                service_name=d.get('service_name'),
+                ports=d.get('ports'),
+                ip=d.get('ip'),
+                deployed_by=d.get('deployed_by'),
+                rank=rank,
+                rank_generation=rank_generation,
+                extra_container_args=d.get('extra_container_args'),
+                extra_entrypoint_args=d.get('extra_entrypoint_args'),
+            )
             dm[sd.name()] = sd
         self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
         self.cache.update_host_daemons(host, dm)
