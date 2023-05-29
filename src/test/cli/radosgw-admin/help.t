@@ -188,6 +188,9 @@
     script-package add         add a lua package to the scripts allowlist
     script-package rm          remove a lua package from the scripts allowlist
     script-package list        get the lua packages allowlist
+    notification list          list bucket notifications configuration
+    notification get           get a bucket notifications configuration
+    notification rm            remove a bucket notifications configuration
   options:
      --tenant=<tenant>         tenant name
      --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)
@@ -360,6 +363,7 @@
   
   Bucket notifications options:
      --topic                   bucket notifications topic name
+     --notification-id         bucket notifications id
   
   Script options:
      --context                 context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata
