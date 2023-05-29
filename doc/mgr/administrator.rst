@@ -85,6 +85,14 @@ such as an HTTP server, the module may publish its address when it
 is loaded.  To see the addresses of such modules, use the command
 ``ceph mgr services``.
 
+.. note::
+
+   Enabling a module will asynchronously trigger the respawn of the ceph-mgr
+   daemon. The respawned daemon then loads enabled modules one by one. Hence
+   the loading of a (newly enabled) module is not immediate; any command issued
+   against the module before it is finished loading can fail with a transient
+   ENOTSUP error.
+
 Some modules may also implement a special standby mode which runs on
 standby ceph-mgr daemons as well as the active daemon.  This enables
 modules that provide services to redirect their clients to the active
