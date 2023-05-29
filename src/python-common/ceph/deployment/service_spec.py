@@ -737,6 +737,17 @@ class ServiceSpec(object):
                 extra_entrypoint_args)
         self.custom_configs: Optional[List[CustomConfig]] = custom_configs
 
+    def __setattr__(self, name: str, value: Any) -> None:
+        if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
+            for v in value:
+                tname = str(type(v))
+                if 'ArgumentSpec' not in tname:
+                    raise TypeError(
+                        f"{name} is not all ArgumentSpec values:"
+                        f" {v!r}(is {type(v)} in {value!r}")
+
+        super().__setattr__(name, value)
+
     @classmethod
     @handle_type_error
     def from_json(cls: Type[ServiceSpecT], json_spec: Dict) -> ServiceSpecT:
