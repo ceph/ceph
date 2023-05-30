@@ -1577,7 +1577,7 @@ Supported Features
 +---------------------------+---------+
 | Feature                   | Release |
 +===========================+=========+
-| :ref:`feature_resharding` | Quincy  |
+| :ref:`feature_resharding` | Reef    |
 +---------------------------+---------+
 
 .. _feature_resharding:
