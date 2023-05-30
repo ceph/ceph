@@ -204,14 +204,20 @@ struct BucketCache : public Notifiable
     Lmdbs(std::string& database_root, uint8_t lmdb_count)
       : database_root(database_root), lmdb_count(lmdb_count),
         dbp(database_root) {
+
+      /* create a root for lmdb directory partitions (if it doesn't
+       * exist already) */
+      sf::path safe_root_path{dbp / fmt::format("rgw_posix_lmdbs")};
+      sf::create_directory(safe_root_path);
+
       /* purge cache completely */
-      for (const auto& dir_entry : sf::directory_iterator{dbp}) {
+      for (const auto& dir_entry : sf::directory_iterator{safe_root_path}) {
 	sf::remove_all(dir_entry);
       }
 
       /* repopulate cache basis */
       for (int ix = 0; ix < lmdb_count; ++ix) {
-	sf::path env_path{dbp / fmt::format("part_{}", ix)};
+	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
 	auto env = getMDBEnv(env_path.string().c_str(), 0 /* flags? */, 0600);
 	envs.push_back(env);
