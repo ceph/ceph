@@ -36,68 +36,35 @@ Ceph.
 Install cephadm
 ===============
 
-There are two ways to install ``cephadm``:
+When installing cephadm there are two key steps: first you need to acquire
+an initial copy of cephadm, then the second step is to ensure you have an
+up-to-date cephadm. There are two ways to get the initial ``cephadm``:
 
-#. a :ref:`curl-based installation<cephadm_install_curl>` method
 #. :ref:`distribution-specific installation methods<cephadm_install_distros>`
+#. a :ref:`curl-based installation<cephadm_install_curl>` method
 
+Once you have an initial copy of cephadm avaiable, follow the steps to
+:ref:`update to an active release of cephadm<cephadm_update>` to ensure
+that you have the latest fixes for the version of Ceph you'll be managing.
 
-.. _cephadm_install_curl:
+.. important:: The two methods of initially installing ``cephadm`` are mutually
+   exclusive.  Choose either the distribution-specific method or the curl-based
+   method. Do not attempt to use both these methods on one system.
 
-curl-based installation
------------------------
+.. note:: Recent versions of cephadm are based on a compilation of source files.
+   Unlike for earlier versions of Ceph it is no longer sufficient to copy a
+   single source file from Ceph's git tree and run it. If you wish to run
+   cephadm using a development version you should create your own build of
+   cephadm. See :ref:`compiling-cephadm` for details on how to create your own
+   standalone cephadm executable.
 
-* Use ``curl`` to fetch the most recent version of the
-  standalone script.
-
-  .. prompt:: bash #
-     :substitutions:
-
-     curl --silent --remote-name --location https://github.com/ceph/ceph/raw/|stable-release|/src/cephadm/cephadm
-
-  Make the ``cephadm`` script executable:
-
-  .. prompt:: bash #
-
-   chmod +x cephadm
-
-  This script can be run directly from the current directory:
-
-  .. prompt:: bash #
-
-   ./cephadm <arguments...>
-
-* Although the standalone script is sufficient to get a cluster started, it is
-  convenient to have the ``cephadm`` command installed on the host.  To install
-  the packages that provide the ``cephadm`` command, run the following
-  commands:
-
-  .. prompt:: bash #
-     :substitutions:
-
-     ./cephadm add-repo --release |stable-release|
-     ./cephadm install
-
-  Confirm that ``cephadm`` is now in your PATH by running ``which``:
-
-  .. prompt:: bash #
-
-    which cephadm
-
-  A successful ``which cephadm`` command will return this:
-
-  .. code-block:: bash
-
-    /usr/sbin/cephadm
 
 .. _cephadm_install_distros:
 
 distribution-specific installations
 -----------------------------------
 
-.. important:: The methods of installing ``cephadm`` in this section are distinct from the curl-based method above. Use either the curl-based method above or one of the methods in this section, but not both the curl-based method and one of these.
-
-Some Linux distributions  may already include up-to-date Ceph packages.  In
+Some Linux distributions may already include Ceph packages.  In
 that case, you can install cephadm directly. For example:
 
   In Ubuntu:
@@ -126,6 +93,83 @@ that case, you can install cephadm directly. For example:
   .. prompt:: bash #
 
      zypper install -y cephadm
+
+.. _cephadm_install_curl:
+
+curl-based installation
+-----------------------
+
+* First, determine what version of Ceph you will need. You can use the releases
+  page to find the `latest active releases <https://docs.ceph.com/en/latest/releases/#active-releases>`_.
+  For example, we might look at that page and find that ``17.2.6`` is the latest
+  active release.
+
+* Use ``curl`` to fetch a build of cephadm for that release.
+
+  .. prompt:: bash #
+     :substitutions:
+
+     CEPH_RELEASE=17.2.6 # replace this with the active release
+     curl --silent --remote-name --location https://download.ceph.com/rpm-${CEPH_RELEASE}/el9/noarch/cephadm
+
+  Ensure the ``cephadm`` file is executable:
+
+  .. prompt:: bash #
+
+   chmod +x cephadm
+
+  This file can be run directly from the current directory:
+
+  .. prompt:: bash #
+
+   ./cephadm <arguments...>
+
+* If you encounter any issues with running cephadm due to errors including
+  the message ``bad interpreter``, then you may not have Python or
+  the correct version of Python installed. The cephadm tool requires Python 3.6
+  and above. You can manually run cephadm with a particular version of Python by
+  prefixing the command with your installed Python version. For example:
+
+  .. prompt:: bash #
+     :substitutions:
+
+     python3.8 ./cephadm <arguments...>
+
+.. _cephadm_update:
+
+update cephadm
+--------------
+
+The cephadm binary can be used to bootstrap a cluster and for a variety
+of other management and debugging tasks. The Ceph team strongly recommends
+using an actively supported version of cephadm. Additionally, although
+the standalone cephadm is sufficient to get a cluster started, it is
+convenient to have the ``cephadm`` command installed on the host. Older or LTS
+distros may also have ``cephadm`` packages that are out-of-date and
+running the commands below can help install a more recent version
+from the Ceph project's repositories.
+
+To install the packages provided by the Ceph project that provide the
+``cephadm`` command, run the following commands:
+
+.. prompt:: bash #
+   :substitutions:
+
+   ./cephadm add-repo --release |stable-release|
+   ./cephadm install
+
+Confirm that ``cephadm`` is now in your PATH by running ``which`` or
+``command -v``:
+
+.. prompt:: bash #
+
+   which cephadm
+
+A successful ``which cephadm`` command will return this:
+
+.. code-block:: bash
+
+   /usr/sbin/cephadm
 
 
 
