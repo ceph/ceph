@@ -123,13 +123,16 @@ seastar::future<> Watch::notify_ack(
   const ceph::bufferlist& reply_bl)
 {
   logger().info("{}", __func__);
-  return seastar::do_for_each(in_progress_notifies,
-    [this_shared=shared_from_this(), reply_bl] (auto notify) {
-      return notify->complete_watcher(this_shared, reply_bl);
-    }
-  ).then([this] {
-    in_progress_notifies.clear();
-    return seastar::now();
+  return seastar::do_with(shared_from_this(),
+    [this, reply_bl] (auto& this_shared) {
+    return seastar::do_for_each(in_progress_notifies,
+      [&this_shared, reply_bl] (auto notify) {
+        return notify->complete_watcher(this_shared, reply_bl);
+      }
+    ).then([this] {
+      in_progress_notifies.clear();
+      return seastar::now();
+    });
   });
 }
 
@@ -300,19 +303,21 @@ void Notify::do_notify_timeout()
   if (complete) {
     return;
   }
-  // it might be that `this` is kept alive only because of the reference
-  // a watcher stores and which is being removed by `cancel_notify()`.
-  // to avoid use-after-free we bump up the ref counter with `guard_ptr`.
-  [[maybe_unused]] auto guard_ptr = shared_from_this();
-  for (auto& watcher : watchers) {
-    logger().debug("canceling watcher cookie={} gid={} use_count={}",
-      watcher->get_cookie(),
-      watcher->get_watcher_gid(),
-      watcher->use_count());
-    watcher->cancel_notify(ninfo.notify_id);
-  }
-  std::ignore = send_completion(std::move(watchers));
-  watchers.clear();
+  std::ignore = seastar::do_with(shared_from_this(),
+    [this] (auto& this_shared) {
+    for (auto& watcher : watchers) {
+      logger().debug("canceling watcher cookie={} gid={} use_count={}",
+        watcher->get_cookie(),
+        watcher->get_watcher_gid(),
+        watcher->use_count());
+      watcher->cancel_notify(ninfo.notify_id);
+    }
+    return send_completion(std::move(watchers)
+    ).then([this] {
+      watchers.clear();
+      return seastar::now();
+    });
+  });
 }
 
 } // namespace crimson::osd
