@@ -100,7 +100,7 @@
     content. For instance, if encoded[2] (contained **EF**) is missing
     and accessing encoded[3] (the first coding chunk) is more
     expensive than accessing encoded[4] (the second coding chunk),
-    **minimum_to_decode_with_cost** is expected to chose the first
+    **minimum_to_decode_with_cost** is expected to chose the second
     coding chunk.
 
     ~~~~~~~~~~~~~~~~{.c}
