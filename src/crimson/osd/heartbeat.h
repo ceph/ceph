@@ -277,8 +277,8 @@ class Heartbeat::Session {
   void set_epoch_added(epoch_t epoch_) { epoch = epoch_; }
   epoch_t get_epoch_added() const { return epoch; }
 
-  void set_last_epoch_sent(epoch_t epoch_) { last_sent_epoch = epoch_; }
-  epoch_t get_last_epoch_sent() const { return last_sent_epoch; }
+  void set_projected_epoch(epoch_t epoch_) { projected_epoch = epoch_; }
+  epoch_t get_projected_epoch() const { return projected_epoch; }
 
   bool is_started() const { return connected; }
   bool pinged() const {
@@ -389,8 +389,8 @@ class Heartbeat::Session {
   clock::time_point last_rx_back;
   // most recent epoch we wanted this peer
   epoch_t epoch; // rename me to epoch_added
-  // last epoch sent
-  epoch_t last_sent_epoch = 0;
+  // epoch we expect peer to be at once our sent incrementals are processed
+  epoch_t projected_epoch = 0;
 
   struct reply_t {
     clock::time_point deadline;
@@ -414,8 +414,8 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   void set_epoch_added(epoch_t epoch) { session.set_epoch_added(epoch); }
   epoch_t get_epoch_added() const { return session.get_epoch_added(); }
 
-  void set_last_epoch_sent(epoch_t epoch) { session.set_last_epoch_sent(epoch); }
-  epoch_t get_last_epoch_sent() const { return session.get_last_epoch_sent(); }
+  void set_projected_epoch(epoch_t epoch) { session.set_projected_epoch(epoch); }
+  epoch_t get_projected_epoch() const { return session.get_projected_epoch(); }
 
   // if failure, return time_point since last active
   // else, return clock::zero()
