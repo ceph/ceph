@@ -205,7 +205,7 @@ public:
   RGWObjState *get_state(const rgw_obj& obj);
 
   void set_compressed(const rgw_obj& obj);
-  void set_atomic(rgw_obj& obj);
+  void set_atomic(const rgw_obj& obj);
   void set_prefetch_data(const rgw_obj& obj);
   void invalidate(const rgw_obj& obj);
 };
@@ -1230,7 +1230,7 @@ public:
    */
   int set_attr(const DoutPrefixProvider *dpp, void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj, const char *name, bufferlist& bl);
 
-  int set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj,
+  int set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                         std::map<std::string, bufferlist>& attrs,
                         std::map<std::string, bufferlist>* rmattrs,
                         optional_yield y,
@@ -1469,6 +1469,17 @@ public:
                          std::map<RGWObjCategory, RGWStorageStats> *existing_stats,
                          std::map<RGWObjCategory, RGWStorageStats> *calculated_stats);
   int bucket_rebuild_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info);
+
+  // Search the bucket for encrypted multipart uploads, and increase their mtime
+  // slightly to generate a bilog entry to trigger a resync to repair any
+  // corrupted replicas. See https://tracker.ceph.com/issues/46062
+  int bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        rgw::sal::RadosStore* driver,
+                                        RGWBucketInfo& bucket_info,
+                                        const std::string& marker,
+                                        RGWFormatterFlusher& flusher);
+
   int bucket_set_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
   int remove_objs_from_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, std::list<rgw_obj_index_key>& oid_list);
   int move_rados_obj(const DoutPrefixProvider *dpp,
