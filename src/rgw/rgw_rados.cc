@@ -5953,7 +5953,8 @@ int RGWRados::set_attr(const DoutPrefixProvider *dpp, void *ctx, const RGWBucket
 int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& src_obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs,
-                        optional_yield y)
+                        optional_yield y,
+                        ceph::real_time set_mtime /* = zero() */)
 {
   rgw_obj obj = src_obj;
   if (obj.key.instance == "null") {
@@ -6037,6 +6038,9 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
 
 
   real_time mtime = real_clock::now();
+  if (set_mtime != ceph::real_clock::zero()) {
+    mtime = set_mtime;
+  }
   struct timespec mtime_ts = real_clock::to_timespec(mtime);
   op.mtime2(&mtime_ts);
   auto& ioctx = ref.pool.ioctx();
@@ -6084,6 +6088,8 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, void *ctx, const RGWBucke
     if (iter != state->attrset.end()) {
       iter->second = state->obj_tag;
     }
+
+    state->mtime = mtime;
   }
 
   return 0;
