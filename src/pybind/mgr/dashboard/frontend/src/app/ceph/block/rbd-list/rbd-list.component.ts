@@ -214,14 +214,22 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       icon: Icons.edit,
       click: () => this.actionPrimary(true),
       name: this.actionLabels.PROMOTE,
-      visible: () => this.selection.first() != null && !this.selection.first().primary
+      visible: () => this.selection.first() != null && !this.selection.first().primary,
+      disable: () =>
+        this.selection.first().mirror_mode === 'Disabled'
+          ? 'Mirroring needs to be enabled on the image to perform this action'
+          : ''
     };
     const demoteAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
       click: () => this.actionPrimary(false),
       name: this.actionLabels.DEMOTE,
-      visible: () => this.selection.first() != null && this.selection.first().primary
+      visible: () => this.selection.first() != null && this.selection.first().primary,
+      disable: () =>
+        this.selection.first().mirror_mode === 'Disabled'
+          ? 'Mirroring needs to be enabled on the image to perform this action'
+          : ''
     };
     this.tableActions = [
       addAction,
