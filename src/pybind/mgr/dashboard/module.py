@@ -120,6 +120,7 @@ class CherryPyConfig(object):
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
         self.configure_cors()
+        self.allow_embedding()
         cherrypy.tools.plugin_hooks_filter_request = cherrypy.Tool(
             'before_handler',
             lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
@@ -234,6 +235,27 @@ class CherryPyConfig(object):
             }
             self.update_cherrypy_config(config)
 
+    def allow_embedding(self, url: str = ''):
+        """
+        Allow embedding of the dashboard in an iframe if the
+        allow_embedding_url option is set.
+        """
+        allow_embedding_url = mgr.get_module_option('allow_embedding_url', '')
+        config = {}
+        if url:
+            allow_embedding_url = url
+            mgr.set_module_option('allow_embedding_url', url)
+
+        if allow_embedding_url:
+            config = {
+                'response.headers.content-security-policy': f"frame-ancestors 'self' {allow_embedding_url};"  # noqa E501 #pylint: disable=line-too-long
+            }
+        else:
+            config = {
+                'response.headers.content-security-policy': "frame-ancestors 'self';"
+            }
+        self.update_cherrypy_config(config)
+
     def cors_tool(self):
         '''
         Handle both simple and complex CORS requests
@@ -338,6 +360,7 @@ class Module(MgrModule, CherryPyConfig):
                min=400, max=599),
         Option(name='redirect_resolve_ip_addr', type='bool', default=False),
         Option(name='cross_origin_url', type='str', default=''),
+        Option(name='allow_embedding_url', type='str', default='')
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
@@ -518,6 +541,16 @@ class Module(MgrModule, CherryPyConfig):
         '''
         mgr.set_store('custom_login_banner', None)
         return HandleCommandResult(stdout='Login banner removed')
+
+    @CLIWriteCommand("dashboard set-embed-urls")
+    def set_embed_urls(self, value: str):
+        self.allow_embedding(value)
+        return HandleCommandResult(stdout=f'Allowed embedding of dashboard in {value}')
+
+    @CLIWriteCommand("dashboard get-embed-urls")
+    def get_embed_urls(self):
+        allow_embedding_url = mgr.get_module_option('allow_embedding_url', '')
+        return HandleCommandResult(stdout=allow_embedding_url)
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
