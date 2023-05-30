@@ -138,8 +138,7 @@ bool ObjectMap<I>::update_required(const ceph::BitVector<2>::Iterator& it,
   ceph_assert(ceph_mutex_is_locked(m_lock));
   uint8_t state = *it;
   if ((state == new_state) ||
-      (new_state == OBJECT_PENDING && state == OBJECT_NONEXISTENT) ||
-      (new_state == OBJECT_NONEXISTENT && state != OBJECT_PENDING)) {
+      (new_state == OBJECT_PENDING && state == OBJECT_NONEXISTENT)) {
     return false;
   }
   return true;

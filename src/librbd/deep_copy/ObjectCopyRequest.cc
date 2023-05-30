@@ -761,7 +761,8 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
         if (object_extent.offset + object_extent.length >= end_size) {
           // zero interval at the object end
           if ((object_extent.offset == 0 && hide_parent) ||
-              (object_extent.offset < prev_end_size)) {
+              (object_extent.offset < prev_end_size) ||
+              (m_src_snap_id_start != 0 && prev_end_size == 0)) {
             ldout(m_cct, 20) << "truncate " << object_extent.offset
                              << dendl;
             auto length =
@@ -792,8 +793,8 @@ void ObjectCopyRequest<I>::compute_zero_ops() {
       if (fast_diff && m_snapshot_sparse_bufferlist.count(src_snap_seq) == 0) {
         dst_object_map_state = OBJECT_EXISTS_CLEAN;
       }
-      m_dst_object_state[src_snap_seq] = dst_object_map_state;
     }
+    m_dst_object_state[src_snap_seq] = dst_object_map_state;
 
     ldout(m_cct, 20) << "dst_snap_seq=" << dst_snap_seq << ", "
                      << "end_size=" << end_size << ", "
