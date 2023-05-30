@@ -341,6 +341,74 @@ fi
 echo "OK - rename at subdir"
 echo "--------------------------------------------------------------------------------------------------"
 
+#validate reverselinks
+echo "PRIMARY TO SECONDARY LINK VALIDATION"
+echo "remove all files"
+rm -f /mnt/*
+rm -f /mnt/dir1/*
+echo "flush the journal"
+bin/ceph tell mds.a flush journal >/dev/null 2>&1
+echo "create /file1"
+echo "data ..." > /mnt/file1
+echo "ln /file1 /hl_file1"
+ln /mnt/file1 /mnt/hl_file1
+echo "ln /file1 /hl_file2"
+ln /mnt/file1 /mnt/hl_file2
+mkdir /mnt/dir1
+echo "ln /file1 /dir1/hl_file3"
+ln /mnt/file1 /mnt/dir1/hl_file3
+echo "flush the journal"
+bin/ceph tell mds.a flush journal >/dev/null 2>&1
+
+bin/rados -p cephfs.a.meta getomapval 1.00000000 hl_file1_head /tmp/a
+hl_file1_refino=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.ino')
+bin/rados -p cephfs.a.meta getomapval 1.00000000 hl_file2_head /tmp/a
+hl_file2_refino=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.ino')
+bin/rados -p cephfs.a.meta getomapval $dir1_object hl_file3_head /tmp/a
+hl_file3_refino=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.ino')
+bin/rados -p cephfs.a.meta getomapval 1.00000000 file1_head /tmp/a
+refinodes=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.referent_inodes')
+refinode0=$(echo $refinodes | jq '.[0]')
+refinode1=$(echo $refinodes | jq '.[1]')
+refinode2=$(echo $refinodes | jq '.[2]')
+refinode3=$(echo $refinodes | jq '.[3]')
+
+if [ "$refinode3" != "null" ];then
+  echo "FAIL - LINK - referent inodes count from primary to secondary didn't match"
+  exit -1
+fi
+
+if [ "$refinode0" != "$hl_file1_refino" ] || [ "$refinode1" != "$hl_file2_refino" ] || [ "$refinode2" != "$hl_file3_refino" ];then
+  echo "FAIL - LINK - referent inode links from primary to secondary didn't match"
+  exit -1
+else
+  echo "OK - LINK - referent inode links from primary to secondary matches on creation"
+fi
+echo "--------------------------------------------------------------------------------------------------"
+
+#unlink and validate reverselinks
+echo "unlink /dir1/hl_file3"
+rm -f /mnt/dir1/hl_file3
+echo "flush the journal"
+bin/ceph tell mds.a flush journal >/dev/null 2>&1
+bin/rados -p cephfs.a.meta getomapval 1.00000000 file1_head /tmp/a
+refinodes=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.referent_inodes')
+refinode0=$(echo $refinodes | jq '.[0]')
+refinode1=$(echo $refinodes | jq '.[1]')
+refinode2=$(echo $refinodes | jq '.[2]')
+
+if [ "$refinode2" != "null" ];then
+  echo "FAIL - UNLINK - referent inodes count didn't match"
+  exit -1
+fi
+if [ "$refinode0" != "$hl_file1_refino" ] || [ "$refinode1" != "$hl_file2_refino" ];then
+  echo "FAIL - UNLINK - referent inodes count from primary to secondary didn't match"
+  exit -1
+else
+  echo "OK - UNLINK - referent inode links from primary to secondary matches on deletion"
+fi
+echo "--------------------------------------------------------------------------------------------------"
+
 #cleanup
 echo "CLEANUP"
 rm -rf /mnt/*
@@ -354,3 +422,4 @@ else
   echo "FAIL - $data_objcount data objects still present"
   exit -1
 fi
+echo "--------------------------------------------------------------------------------------------------"
