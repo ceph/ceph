@@ -1647,6 +1647,14 @@ public:
         collect_children();
       } while (omapkeys->more && can_adjust_marker);
 
+      mdlog_marker = sync_marker.marker;
+      marker = max_marker = sync_marker.marker;
+      do {
+        yield call(new RGWCloneMetaLogCoroutine(sync_env, mdlog,
+                                                  period, shard_id,
+                                                  mdlog_marker, &mdlog_marker));
+      } while (mdlog_marker <= max_marker);
+
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
       while (num_spawned() > 1) {
