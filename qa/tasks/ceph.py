@@ -31,6 +31,7 @@ from teuthology.orchestra import run
 from tasks import ceph_client as cclient
 from teuthology.orchestra.daemon import DaemonGroup
 from tasks.daemonwatchdog import DaemonWatchdog
+from tasks.watchmempools import WatchMempools
 
 CEPH_ROLE_TYPES = ['mon', 'mgr', 'osd', 'mds', 'rgw']
 DATA_PATH = '/var/lib/ceph/{type_}/{cluster}-{id_}'
@@ -486,6 +487,12 @@ def watchdog_setup(ctx, config):
     ctx.ceph[config['cluster']].thrashers = []
     ctx.ceph[config['cluster']].watchdog = DaemonWatchdog(ctx, config, ctx.ceph[config['cluster']].thrashers)
     ctx.ceph[config['cluster']].watchdog.start()
+    yield
+
+@contextlib.contextmanager
+def watchmempools_setup(ctx, config):
+    ctx.ceph[config['cluster']].watchmempools = WatchMempools(ctx, config)
+    ctx.ceph[config['cluster']].watchmempools.start()
     yield
 
 def get_mons(roles, ips, cluster_name,
@@ -1664,6 +1671,9 @@ def stop(ctx, config):
         ctx.ceph[cluster].watchdog.stop()
         ctx.ceph[cluster].watchdog.join()
 
+        ctx.ceph[cluster].watchmempools.stop()
+        ctx.ceph[cluster].watchmempools.join()
+
     yield
 
 
@@ -1930,6 +1940,7 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
         lambda: cephfs_setup(ctx=ctx, config=config),
         lambda: watchdog_setup(ctx=ctx, config=config),
+        lambda: watchmempools_setup(ctx=ctx, config=config),
     ]
 
     with contextutil.nested(*subtasks):
