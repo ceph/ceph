@@ -354,7 +354,8 @@ class SyntheticWorkload {
                           const uint64_t nonce,
                           const entity_addr_t& addr) {
      crimson::net::MessengerRef msgr =
-       crimson::net::Messenger::create(name, lname, nonce);
+       crimson::net::Messenger::create(
+           name, lname, nonce, true);
      msgr->set_default_policy(server_policy);
      msgr->set_auth_client(&dummy_auth);
      msgr->set_auth_server(&dummy_auth);
@@ -375,7 +376,8 @@ class SyntheticWorkload {
                           const std::string& lname,
                           const uint64_t nonce) {
      crimson::net::MessengerRef msgr =
-       crimson::net::Messenger::create(name, lname, nonce);
+       crimson::net::Messenger::create(
+           name, lname, nonce, true);
      msgr->set_default_policy(client_policy);
      msgr->set_auth_client(&dummy_auth);
      msgr->set_auth_server(&dummy_auth);

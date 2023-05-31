@@ -9,9 +9,11 @@ namespace crimson::net {
 MessengerRef
 Messenger::create(const entity_name_t& name,
                   const std::string& lname,
-                  const uint64_t nonce)
+                  uint64_t nonce,
+                  bool is_fixed_cpu)
 {
-  return seastar::make_shared<SocketMessenger>(name, lname, nonce);
+  return seastar::make_shared<SocketMessenger>(
+      name, lname, nonce, is_fixed_cpu);
 }
 
 } // namespace crimson::net

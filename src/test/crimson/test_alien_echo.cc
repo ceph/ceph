@@ -166,7 +166,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
   if (role == echo_role::as_server) {
     return seastar::do_with(
         seastar_pingpong::Server{crimson::net::Messenger::create(
-            entity_name_t::OSD(0), "server", addr.get_nonce())},
+            entity_name_t::OSD(0), "server", addr.get_nonce(), true)},
         [addr, count](auto& server) mutable {
       std::cout << "server listening at " << addr << std::endl;
       // bind the server
@@ -193,7 +193,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
   } else {
     return seastar::do_with(
         seastar_pingpong::Client{crimson::net::Messenger::create(
-            entity_name_t::OSD(1), "client", addr.get_nonce())},
+            entity_name_t::OSD(1), "client", addr.get_nonce(), true)},
         [addr, count](auto& client) {
       std::cout << "client sending to " << addr << std::endl;
       client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
