@@ -7545,7 +7545,7 @@ def command_rm_cluster(ctx):
             p.unlink()
 
     # cleanup remaining ceph directories
-    ceph_dirs = [f'/run/ceph/{ctx.fsid}', f'/tmp/var/lib/ceph/{ctx.fsid}', f'/var/run/ceph/{ctx.fsid}']
+    ceph_dirs = [f'/run/ceph/{ctx.fsid}', f'/tmp/cephadm-{ctx.fsid}', f'/var/run/ceph/{ctx.fsid}']
     for dd in ceph_dirs:
         shutil.rmtree(dd, ignore_errors=True)
 
