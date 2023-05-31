@@ -391,6 +391,7 @@ if(NOT ALLOCATOR STREQUAL "libc")
     $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-realloc>
     $<$<COMPILE_LANGUAGE:CXX>:-fno-builtin-free>)
 endif()
+message(STATUS "allocator selected: ${ALLOCATOR}")
 
 # Mingw generates incorrect entry points when using "-pie".
 if(WIN32 OR (HAVE_LIBTCMALLOC AND WITH_STATIC_LIBSTDCXX))
