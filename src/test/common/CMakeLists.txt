@@ -412,3 +412,7 @@ add_executable(unittest_async_call test_async_call.cc)
 target_link_libraries(unittest_async_call librados ceph-common Boost::system
   spawn GTest::GTest)
 add_ceph_unittest(unittest_async_call)
+
+add_executable(unittest_async_cond test_async_cond.cc)
+target_link_libraries(unittest_async_cond GTest::GTest)
+add_ceph_unittest(unittest_async_cond)
