@@ -113,7 +113,8 @@ class PerShardState {
   std::map<pg_t, pg_stat_t> get_pg_stats() const;
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
-    epoch_t epoch);
+    epoch_t from,
+    epoch_t to);
 
   Ref<PG> get_pg(spg_t pgid);
   template <typename F>

@@ -37,7 +37,7 @@ protected:
 
 public:
   PGAdvanceMap(
-    ShardServices &shard_services, Ref<PG> pg, epoch_t to,
+    ShardServices &shard_services, Ref<PG> pg, epoch_t from, epoch_t to,
     PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
 
