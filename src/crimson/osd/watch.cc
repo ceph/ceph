@@ -111,7 +111,9 @@ seastar::future<> Watch::send_notify_msg(NotifyRef notify)
 
 seastar::future<> Watch::start_notify(NotifyRef notify)
 {
-  logger().info("{} adding notify(id={})", __func__, notify->ninfo.notify_id);
+  logger().debug("{} gid={} cookie={} starting notify(id={})",
+                 __func__,  get_watcher_gid(), get_cookie(),
+                 notify->ninfo.notify_id);
   auto [ it, emplaced ] = in_progress_notifies.emplace(std::move(notify));
   ceph_assert(emplaced);
   ceph_assert(is_alive());
@@ -149,6 +151,7 @@ seastar::future<> Watch::send_disconnect_msg()
 
 void Watch::discard_state()
 {
+  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
   ceph_assert(obc);
   in_progress_notifies.clear();
   timeout_timer.cancel();
@@ -165,7 +168,7 @@ void Watch::got_ping(utime_t)
 
 seastar::future<> Watch::remove()
 {
-  logger().info("{}", __func__);
+  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
   // in contrast to ceph-osd crimson sends CEPH_WATCH_EVENT_DISCONNECT directly
   // from the timeout handler and _after_ CEPH_WATCH_EVENT_NOTIFY_COMPLETE.
   // this simplifies the Watch::remove() interface as callers aren't obliged
@@ -173,6 +176,10 @@ seastar::future<> Watch::remove()
   // becomes an implementation detail of Watch.
   return seastar::do_for_each(in_progress_notifies,
     [this_shared=shared_from_this()] (auto notify) {
+      logger().debug("Watch::remove gid={} cookie={} notify(id={})",
+                     this_shared->get_watcher_gid(),
+                     this_shared->get_cookie(),
+                     notify->ninfo.notify_id);
       return notify->remove_watcher(this_shared);
     }).then([this] {
       discard_state();
@@ -182,7 +189,9 @@ seastar::future<> Watch::remove()
 
 void Watch::cancel_notify(const uint64_t notify_id)
 {
-  logger().info("{} notify_id={}", __func__, notify_id);
+  logger().debug("{} gid={} cookie={} notify(id={})",
+                 __func__,  get_watcher_gid(), get_cookie(),
+                 notify_id);
   const auto it = in_progress_notifies.find(notify_id);
   assert(it != std::end(in_progress_notifies));
   in_progress_notifies.erase(it);
@@ -228,9 +237,19 @@ Notify::Notify(crimson::net::ConnectionRef conn,
     user_version(user_version)
 {}
 
+Notify::~Notify()
+{
+  logger().debug("{} for notify(id={})", __func__, ninfo.notify_id);
+}
+
 seastar::future<> Notify::remove_watcher(WatchRef watch)
 {
+  logger().debug("{} for notify(id={})", __func__, ninfo.notify_id);
+
   if (discarded || complete) {
+    logger().debug("{} for notify(id={}) discarded/complete already"
+                   " discarded: {} complete: {}", __func__,
+                   ninfo.notify_id, discarded ,complete);
     return seastar::now();
   }
   [[maybe_unused]] const auto num_removed = watchers.erase(watch);
@@ -250,7 +269,12 @@ seastar::future<> Notify::complete_watcher(
   WatchRef watch,
   const ceph::bufferlist& reply_bl)
 {
+  logger().debug("{} for notify(id={})", __func__, ninfo.notify_id);
+
   if (discarded || complete) {
+    logger().debug("{} for notify(id={}) discarded/complete already"
+                   " discarded: {} complete: {}", __func__,
+                   ninfo.notify_id, discarded ,complete);
     return seastar::now();
   }
   notify_replies.emplace(notify_reply_t{
