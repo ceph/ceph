@@ -215,14 +215,15 @@ void IOHandler::mark_down()
     return;
   }
 
-  logger().info("{} mark_down() at {}, send notify_mark_down()",
-                conn, io_stat_printer{*this});
-  set_io_state(io_state_t::drop);
+  auto cc_seq = crosscore.prepare_submit();
+  logger().info("{} mark_down() at {}, send {} notify_mark_down()",
+                conn, io_stat_printer{*this}, cc_seq);
+  do_set_io_state(io_state_t::drop);
   shard_states->dispatch_in_background(
-      "notify_mark_down", conn, [this] {
+      "notify_mark_down", conn, [this, cc_seq] {
     return seastar::smp::submit_to(
-        conn.get_messenger_shard_id(), [this] {
-      handshake_listener->notify_mark_down();
+        conn.get_messenger_shard_id(), [this, cc_seq] {
+      return handshake_listener->notify_mark_down(cc_seq);
     });
   });
 }
@@ -255,16 +256,19 @@ void IOHandler::assign_frame_assembler(FrameAssemblerV2Ref fa)
   ceph_assert_always(frame_assembler->is_socket_valid());
 }
 
-void IOHandler::set_io_state(
+void IOHandler::do_set_io_state(
     io_state_t new_state,
+    std::optional<crosscore_t::seq_t> cc_seq,
     FrameAssemblerV2Ref fa,
     bool set_notify_out)
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
   auto prv_state = get_io_state();
-  logger().debug("{} got set_io_state(): prv_state={}, new_state={}, "
+  logger().debug("{} got {}do_set_io_state(): prv_state={}, new_state={}, "
                  "fa={}, set_notify_out={}, at {}",
-                 conn, prv_state, new_state,
+                 conn,
+                 cc_seq.has_value() ? fmt::format("{} ", *cc_seq) : "",
+                 prv_state, new_state,
                  fa ? "present" : "N/A", set_notify_out,
                  io_stat_printer{*this});
   ceph_assert_always(!(
@@ -331,11 +335,43 @@ void IOHandler::set_io_state(
   }
 }
 
-seastar::future<IOHandler::exit_dispatching_ret>
-IOHandler::wait_io_exit_dispatching()
+seastar::future<> IOHandler::set_io_state(
+    crosscore_t::seq_t cc_seq,
+    io_state_t new_state,
+    FrameAssemblerV2Ref fa,
+    bool set_notify_out)
 {
   assert(seastar::this_shard_id() == get_shard_id());
-  logger().debug("{} got wait_io_exit_dispatching()", conn);
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} set_io_state(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, new_state,
+            fa=std::move(fa), set_notify_out]() mutable {
+      return set_io_state(cc_seq, new_state, std::move(fa), set_notify_out);
+    });
+  }
+
+  do_set_io_state(new_state, cc_seq, std::move(fa), set_notify_out);
+  return seastar::now();
+}
+
+seastar::future<IOHandler::exit_dispatching_ret>
+IOHandler::wait_io_exit_dispatching(
+    crosscore_t::seq_t cc_seq)
+{
+  assert(seastar::this_shard_id() == get_shard_id());
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} wait_io_exit_dispatching(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq] {
+      return wait_io_exit_dispatching(cc_seq);
+    });
+  }
+
+  logger().debug("{} got {} wait_io_exit_dispatching()",
+                 conn, cc_seq);
   ceph_assert_always(get_io_state() != io_state_t::open);
   ceph_assert_always(frame_assembler != nullptr);
   ceph_assert_always(!frame_assembler->is_socket_valid());
@@ -365,31 +401,74 @@ IOHandler::wait_io_exit_dispatching()
   });
 }
 
-void IOHandler::reset_session(bool full)
+seastar::future<> IOHandler::reset_session(
+    crosscore_t::seq_t cc_seq,
+    bool full)
 {
   assert(seastar::this_shard_id() == get_shard_id());
-  logger().debug("{} got reset_session({})", conn, full);
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} reset_session(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, full] {
+      return reset_session(cc_seq, full);
+    });
+  }
+
+  logger().debug("{} got {} reset_session({})",
+                 conn, cc_seq, full);
   assert(get_io_state() != io_state_t::open);
   reset_in();
   if (full) {
     reset_out();
     dispatch_remote_reset();
   }
+  return seastar::now();
 }
 
-void IOHandler::reset_peer_state()
+seastar::future<> IOHandler::reset_peer_state(
+    crosscore_t::seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == get_shard_id());
-  logger().debug("{} got reset_peer_state()", conn);
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} reset_peer_state(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq] {
+      return reset_peer_state(cc_seq);
+    });
+  }
+
+  logger().debug("{} got {} reset_peer_state()",
+                 conn, cc_seq);
   assert(get_io_state() != io_state_t::open);
   reset_in();
-  requeue_out_sent_up_to(0);
+  do_requeue_out_sent_up_to(0);
   discard_out_sent();
+  return seastar::now();
 }
 
-void IOHandler::requeue_out_sent()
+seastar::future<> IOHandler::requeue_out_sent(
+    crosscore_t::seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == get_shard_id());
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} requeue_out_sent(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq] {
+      return requeue_out_sent(cc_seq);
+    });
+  }
+
+  logger().debug("{} got {} requeue_out_sent()",
+                 conn, cc_seq);
+  do_requeue_out_sent();
+  return seastar::now();
+}
+
+void IOHandler::do_requeue_out_sent()
+{
   assert(get_io_state() != io_state_t::open);
   if (out_sent_msgs.empty()) {
     return;
@@ -410,9 +489,28 @@ void IOHandler::requeue_out_sent()
   maybe_notify_out_dispatch();
 }
 
-void IOHandler::requeue_out_sent_up_to(seq_num_t seq)
+seastar::future<> IOHandler::requeue_out_sent_up_to(
+    crosscore_t::seq_t cc_seq,
+    seq_num_t msg_seq)
 {
   assert(seastar::this_shard_id() == get_shard_id());
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} requeue_out_sent_up_to(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, msg_seq] {
+      return requeue_out_sent_up_to(cc_seq, msg_seq);
+    });
+  }
+
+  logger().debug("{} got {} requeue_out_sent_up_to({})",
+                 conn, cc_seq, msg_seq);
+  do_requeue_out_sent_up_to(msg_seq);
+  return seastar::now();
+}
+
+void IOHandler::do_requeue_out_sent_up_to(seq_num_t seq)
+{
   assert(get_io_state() != io_state_t::open);
   if (out_sent_msgs.empty() && out_pending_msgs.empty()) {
     logger().debug("{} nothing to requeue, reset out_seq from {} to seq {}",
@@ -430,7 +528,7 @@ void IOHandler::requeue_out_sent_up_to(seq_num_t seq)
       out_sent_msgs.pop_front();
     }
   }
-  requeue_out_sent();
+  do_requeue_out_sent();
 }
 
 void IOHandler::reset_in()
@@ -458,12 +556,23 @@ void IOHandler::discard_out_sent()
 
 seastar::future<>
 IOHandler::dispatch_accept(
+    crosscore_t::seq_t cc_seq,
     seastar::shard_id new_sid,
     ConnectionFRef conn_fref)
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-  logger().debug("{} got dispatch_accept({}) at {}",
-                 conn, new_sid, io_stat_printer{*this});
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} dispatch_accept(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, new_sid,
+            conn_fref=std::move(conn_fref)]() mutable {
+      return dispatch_accept(cc_seq, new_sid, std::move(conn_fref));
+    });
+  }
+
+  logger().debug("{} got {} dispatch_accept({}) at {}",
+                 conn, cc_seq, new_sid, io_stat_printer{*this});
   if (get_io_state() == io_state_t::drop) {
     assert(!protocol_is_connected);
     // it is possible that both io_handler and protocolv2 are
@@ -485,12 +594,23 @@ IOHandler::dispatch_accept(
 
 seastar::future<>
 IOHandler::dispatch_connect(
+    crosscore_t::seq_t cc_seq,
     seastar::shard_id new_sid,
     ConnectionFRef conn_fref)
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-  logger().debug("{} got dispatch_connect({}) at {}",
-                 conn, new_sid, io_stat_printer{*this});
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} dispatch_connect(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, new_sid,
+            conn_fref=std::move(conn_fref)]() mutable {
+      return dispatch_connect(cc_seq, new_sid, std::move(conn_fref));
+    });
+  }
+
+  logger().debug("{} got {} dispatch_connect({}) at {}",
+                 conn, cc_seq, new_sid, io_stat_printer{*this});
   if (get_io_state() == io_state_t::drop) {
     assert(!protocol_is_connected);
     // it is possible that both io_handler and protocolv2 are
@@ -693,23 +813,24 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
     }
 
     if (io_state == io_state_t::open) {
+      auto cc_seq = crosscore.prepare_submit();
       logger().info("{} do_out_dispatch(): fault at {}, {}, going to delay -- {}, "
-                    "send notify_out_fault()",
-                    conn, io_state, io_stat_printer{*this}, e.what());
+                    "send {} notify_out_fault()",
+                    conn, io_state, io_stat_printer{*this}, e.what(), cc_seq);
       std::exception_ptr eptr;
       try {
         throw e;
       } catch(...) {
         eptr = std::current_exception();
       }
-      set_io_state(io_state_t::delay);
+      do_set_io_state(io_state_t::delay);
       shard_states->dispatch_in_background(
-          "notify_out_fault(out)", conn, [this, eptr] {
+          "notify_out_fault(out)", conn, [this, cc_seq, eptr] {
         auto states = get_states();
         return seastar::smp::submit_to(
-            conn.get_messenger_shard_id(), [this, eptr, states] {
-          handshake_listener->notify_out_fault(
-              "do_out_dispatch", eptr, states);
+            conn.get_messenger_shard_id(), [this, cc_seq, eptr, states] {
+          return handshake_listener->notify_out_fault(
+              cc_seq, "do_out_dispatch", eptr, states);
         });
       });
     } else {
@@ -739,12 +860,14 @@ void IOHandler::notify_out_dispatch()
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
   assert(is_out_queued());
   if (need_notify_out) {
-    logger().debug("{} send notify_out()", conn);
+    auto cc_seq = crosscore.prepare_submit();
+    logger().debug("{} send {} notify_out()",
+                   conn, cc_seq);
     shard_states->dispatch_in_background(
-        "notify_out", conn, [this] {
+        "notify_out", conn, [this, cc_seq] {
       return seastar::smp::submit_to(
-          conn.get_messenger_shard_id(), [this] {
-        handshake_listener->notify_out();
+          conn.get_messenger_shard_id(), [this, cc_seq] {
+        return handshake_listener->notify_out(cc_seq);
       });
     });
   }
@@ -967,17 +1090,18 @@ void IOHandler::do_in_dispatch()
 
       auto io_state = ctx.get_io_state();
       if (io_state == io_state_t::open) {
+        auto cc_seq = crosscore.prepare_submit();
         logger().info("{} do_in_dispatch(): fault at {}, {}, going to delay -- {}, "
-                      "send notify_out_fault()",
-                      conn, io_state, io_stat_printer{*this}, e_what);
-        set_io_state(io_state_t::delay);
+                      "send {} notify_out_fault()",
+                      conn, io_state, io_stat_printer{*this}, e_what, cc_seq);
+        do_set_io_state(io_state_t::delay);
         shard_states->dispatch_in_background(
-            "notify_out_fault(in)", conn, [this, eptr] {
+            "notify_out_fault(in)", conn, [this, cc_seq, eptr] {
           auto states = get_states();
           return seastar::smp::submit_to(
-              conn.get_messenger_shard_id(), [this, eptr, states] {
-            handshake_listener->notify_out_fault(
-                "do_in_dispatch", eptr, states);
+              conn.get_messenger_shard_id(), [this, cc_seq, eptr, states] {
+            return handshake_listener->notify_out_fault(
+                cc_seq, "do_in_dispatch", eptr, states);
           });
         });
       } else {
@@ -996,13 +1120,24 @@ void IOHandler::do_in_dispatch()
 }
 
 seastar::future<>
-IOHandler::close_io(bool is_dispatch_reset, bool is_replace)
+IOHandler::close_io(
+    crosscore_t::seq_t cc_seq,
+    bool is_dispatch_reset,
+    bool is_replace)
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-  ceph_assert_always(get_io_state() == io_state_t::drop);
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} close_io(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, is_dispatch_reset, is_replace] {
+      return close_io(cc_seq, is_dispatch_reset, is_replace);
+    });
+  }
 
-  logger().debug("{} got close_io(reset={}, replace={})",
-                 conn, is_dispatch_reset, is_replace);
+  logger().debug("{} got {} close_io(reset={}, replace={})",
+                 conn, cc_seq, is_dispatch_reset, is_replace);
+  ceph_assert_always(get_io_state() == io_state_t::drop);
 
   if (is_dispatch_reset) {
     dispatch_reset(is_replace);

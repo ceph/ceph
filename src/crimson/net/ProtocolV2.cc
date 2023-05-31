@@ -239,34 +239,40 @@ void ProtocolV2::trigger_state_phase2(
   } else {
     assert(new_io_state != io_state_t::open);
   }
-  logger().debug("{} IOHandler::set_io_state(): new_state={}, new_io_state={}, "
+
+  auto cc_seq = crosscore.prepare_submit();
+  logger().debug("{} send {} IOHandler::set_io_state(): new_state={}, new_io_state={}, "
                  "fa={}, set_notify_out={}",
-                 conn, get_state_name(new_state), new_io_state,
+                 conn, cc_seq, get_state_name(new_state), new_io_state,
                  fa ? fmt::format("(sid={})", fa->get_shard_id()) : "N/A",
                  need_notify_out);
   gate.dispatch_in_background(
       "set_io_state", conn,
-      [this, new_io_state, fa=std::move(fa)]() mutable {
+      [this, cc_seq, new_io_state, fa=std::move(fa)]() mutable {
     return seastar::smp::submit_to(
         io_handler.get_shard_id(),
-        [this, new_io_state, fa=std::move(fa), set_notify_out=need_notify_out]() mutable {
-      io_handler.set_io_state(new_io_state, std::move(fa), set_notify_out);
+        [this, cc_seq, new_io_state,
+         fa=std::move(fa), set_notify_out=need_notify_out]() mutable {
+      return io_handler.set_io_state(
+          cc_seq, new_io_state, std::move(fa), set_notify_out);
     });
   });
 
   if (need_exit_io) {
     // from READY
-    logger().debug("{} IOHandler::wait_io_exit_dispatching() start ...", conn);
+    auto cc_seq = crosscore.prepare_submit();
+    logger().debug("{} send {} IOHandler::wait_io_exit_dispatching() ...",
+                   conn, cc_seq);
     assert(pr_exit_io.has_value());
     assert(new_io_state != io_state_t::open);
     need_exit_io = false;
-    gate.dispatch_in_background("exit_io", conn, [this] {
+    gate.dispatch_in_background("exit_io", conn, [this, cc_seq] {
       return seastar::smp::submit_to(
-          io_handler.get_shard_id(), [this] {
-        return io_handler.wait_io_exit_dispatching();
-      }).then([this](auto ret) {
-        logger().debug("{} IOHandler::wait_io_exit_dispatching() finish, {}",
-                       conn, ret.io_states);
+          io_handler.get_shard_id(), [this, cc_seq] {
+        return io_handler.wait_io_exit_dispatching(cc_seq);
+      }).then([this, cc_seq](auto ret) {
+        logger().debug("{} finish {} IOHandler::wait_io_exit_dispatching(), {}",
+                       conn, cc_seq, ret.io_states);
         frame_assembler = std::move(ret.frame_assembler);
         assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
         ceph_assert_always(
@@ -391,13 +397,15 @@ void ProtocolV2::reset_session(bool full)
     peer_global_seq = 0;
   }
 
-  logger().debug("{} IOHandler::reset_session({})", conn, full);
+  auto cc_seq = crosscore.prepare_submit();
+  logger().debug("{} send {} IOHandler::reset_session({})",
+                 conn, cc_seq, full);
   io_states.reset_session(full);
   gate.dispatch_in_background(
-      "reset_session", conn, [this, full] {
+      "reset_session", conn, [this, cc_seq, full] {
     return seastar::smp::submit_to(
-        io_handler.get_shard_id(), [this, full] {
-      io_handler.reset_session(full);
+        io_handler.get_shard_id(), [this, cc_seq, full] {
+      return io_handler.reset_session(cc_seq, full);
     });
   });
   // user can make changes
@@ -687,13 +695,15 @@ ProtocolV2::client_connect()
           }
 
           // handle_server_ident() logic
-          logger().debug("{} IOHandler::requeue_out_sent()", conn);
+          auto cc_seq = crosscore.prepare_submit();
+          logger().debug("{} send {} IOHandler::requeue_out_sent()",
+                         conn, cc_seq);
           io_states.requeue_out_sent();
           gate.dispatch_in_background(
-              "requeue_out_sent", conn, [this] {
+              "requeue_out_sent", conn, [this, cc_seq] {
             return seastar::smp::submit_to(
-                io_handler.get_shard_id(), [this] {
-              io_handler.requeue_out_sent();
+                io_handler.get_shard_id(), [this, cc_seq] {
+              return io_handler.requeue_out_sent(cc_seq);
             });
           });
 
@@ -834,17 +844,18 @@ ProtocolV2::client_reconnect()
 
           // handle_reconnect_ok() logic
           auto reconnect_ok = ReconnectOkFrame::Decode(payload->back());
+          auto cc_seq = crosscore.prepare_submit();
           logger().debug("{} GOT ReconnectOkFrame: msg_seq={}, "
-                         "IOHandler::requeue_out_sent_up_to()",
-                         conn, reconnect_ok.msg_seq());
+                         "send {} IOHandler::requeue_out_sent_up_to()",
+                         conn, reconnect_ok.msg_seq(), cc_seq);
 
           io_states.requeue_out_sent_up_to();
           auto msg_seq = reconnect_ok.msg_seq();
           gate.dispatch_in_background(
-              "requeue_out_reconnecting", conn, [this, msg_seq] {
+              "requeue_out_reconnecting", conn, [this, cc_seq, msg_seq] {
             return seastar::smp::submit_to(
-                io_handler.get_shard_id(), [this, msg_seq] {
-              io_handler.requeue_out_sent_up_to(msg_seq);
+                io_handler.get_shard_id(), [this, cc_seq, msg_seq] {
+              return io_handler.requeue_out_sent_up_to(cc_seq, msg_seq);
             });
           });
 
@@ -982,12 +993,13 @@ void ProtocolV2::execute_connecting()
               abort_protocol();
             }
 
+            auto cc_seq = crosscore.prepare_submit();
             logger().info("{} connected: gs={}, pgs={}, cs={}, "
                           "client_cookie={}, server_cookie={}, {}, new_sid={}, "
-                          "IOHandler::dispatch_connect()",
+                          "send {} IOHandler::dispatch_connect()",
                           conn, global_seq, peer_global_seq, connect_seq,
                           client_cookie, server_cookie, io_states,
-                          frame_assembler->get_socket_shard_id());
+                          frame_assembler->get_socket_shard_id(), cc_seq);
 
             // set io_handler to a new shard
             auto new_io_shard = frame_assembler->get_socket_shard_id();
@@ -997,9 +1009,10 @@ void ProtocolV2::execute_connecting()
             pr_switch_io_shard = seastar::shared_promise<>();
             return seastar::smp::submit_to(
                 io_handler.get_shard_id(),
-                [this, new_io_shard, conn_fref=std::move(conn_fref)]() mutable {
+                [this, cc_seq, new_io_shard,
+                 conn_fref=std::move(conn_fref)]() mutable {
               return io_handler.dispatch_connect(
-                  new_io_shard, std::move(conn_fref));
+                  cc_seq, new_io_shard, std::move(conn_fref));
             }).then([this, new_io_shard] {
               ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
               pr_switch_io_shard->set_value();
@@ -1771,17 +1784,20 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
     ceph_assert_always(state == state_t::ESTABLISHING);
 
     // set io_handler to a new shard
+    auto cc_seq = crosscore.prepare_submit();
     auto new_io_shard = frame_assembler->get_socket_shard_id();
-    logger().debug("{} IOHandler::dispatch_accept({})", conn, new_io_shard);
+    logger().debug("{} send {} IOHandler::dispatch_accept({})",
+                   conn, cc_seq, new_io_shard);
     ConnectionFRef conn_fref = seastar::make_foreign(
         conn.shared_from_this());
     ceph_assert_always(!pr_switch_io_shard.has_value());
     pr_switch_io_shard = seastar::shared_promise<>();
     return seastar::smp::submit_to(
         io_handler.get_shard_id(),
-        [this, new_io_shard, conn_fref=std::move(conn_fref)]() mutable {
+        [this, cc_seq, new_io_shard,
+         conn_fref=std::move(conn_fref)]() mutable {
       return io_handler.dispatch_accept(
-          new_io_shard, std::move(conn_fref));
+          cc_seq, new_io_shard, std::move(conn_fref));
     }).then([this, new_io_shard] {
       ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
       pr_switch_io_shard->set_value();
@@ -1820,17 +1836,18 @@ ProtocolV2::send_server_ident()
 
   // refered to async-conn v2: not assign gs to global_seq
   global_seq = messenger.get_global_seq();
+  auto cc_seq = crosscore.prepare_submit();
   logger().debug("{} UPDATE: gs={} for server ident, "
-                 "IOHandler::reset_peer_state()",
-                 conn, global_seq);
+                 "send {} IOHandler::reset_peer_state()",
+                 conn, global_seq, cc_seq);
 
   // this is required for the case when this connection is being replaced
   io_states.reset_peer_state();
   gate.dispatch_in_background(
-      "reset_peer_state", conn, [this] {
+      "reset_peer_state", conn, [this, cc_seq] {
     return seastar::smp::submit_to(
-        io_handler.get_shard_id(), [this] {
-      io_handler.reset_peer_state();
+        io_handler.get_shard_id(), [this, cc_seq] {
+      return io_handler.reset_peer_state(cc_seq);
     });
   });
 
@@ -1938,16 +1955,19 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 
       // set io_handler to a new shard
       // we should prevent parallel switching core attemps
-      logger().debug("{} IOHandler::dispatch_accept({})", conn, new_io_shard);
+      auto cc_seq = crosscore.prepare_submit();
+      logger().debug("{} send {} IOHandler::dispatch_accept({})",
+                     conn, cc_seq, new_io_shard);
       ConnectionFRef conn_fref = seastar::make_foreign(
           conn.shared_from_this());
       ceph_assert_always(!pr_switch_io_shard.has_value());
       pr_switch_io_shard = seastar::shared_promise<>();
       return seastar::smp::submit_to(
           io_handler.get_shard_id(),
-          [this, new_io_shard, conn_fref=std::move(conn_fref)]() mutable {
+          [this, cc_seq, new_io_shard,
+           conn_fref=std::move(conn_fref)]() mutable {
         return io_handler.dispatch_accept(
-            new_io_shard, std::move(conn_fref));
+            cc_seq, new_io_shard, std::move(conn_fref));
       }).then([this, new_io_shard] {
         ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
         pr_switch_io_shard->set_value();
@@ -1994,13 +2014,15 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         connect_seq = new_connect_seq;
         // send_reconnect_ok() logic
 
-        logger().debug("{} IOHandler::requeue_out_sent_up_to({})", conn, new_msg_seq);
+        auto cc_seq = crosscore.prepare_submit();
+        logger().debug("{} send {} IOHandler::requeue_out_sent_up_to({})",
+                       conn, cc_seq, new_msg_seq);
         io_states.requeue_out_sent_up_to();
         gate.dispatch_in_background(
-            "requeue_out_replacing", conn, [this, new_msg_seq] {
+            "requeue_out_replacing", conn, [this, cc_seq, new_msg_seq] {
           return seastar::smp::submit_to(
-              io_handler.get_shard_id(), [this, new_msg_seq] {
-            io_handler.requeue_out_sent_up_to(new_msg_seq);
+              io_handler.get_shard_id(), [this, cc_seq, new_msg_seq] {
+            return io_handler.requeue_out_sent_up_to(cc_seq, new_msg_seq);
           });
         });
 
@@ -2041,15 +2063,27 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 
 // READY state
 
-void ProtocolV2::notify_out_fault(
+seastar::future<> ProtocolV2::notify_out_fault(
+    crosscore_t::seq_t cc_seq,
     const char *where,
     std::exception_ptr eptr,
     io_handler_state _io_states)
 {
   assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} notify_out_fault(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, where, eptr, _io_states] {
+      return notify_out_fault(cc_seq, where, eptr, _io_states);
+    });
+  }
+
   io_states = _io_states;
-  logger().debug("{} got notify_out_fault(): io_states={}", conn, io_states);
+  logger().debug("{} got {} notify_out_fault(): io_states={}",
+                 conn, cc_seq, io_states);
   fault(state_t::READY, where, eptr);
+  return seastar::now();
 }
 
 void ProtocolV2::execute_ready()
@@ -2070,16 +2104,28 @@ void ProtocolV2::execute_standby()
   trigger_state(state_t::STANDBY, io_state_t::delay);
 }
 
-void ProtocolV2::notify_out()
+seastar::future<> ProtocolV2::notify_out(
+    crosscore_t::seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
-  logger().debug("{} got notify_out(): at {}", conn, get_state_name(state));
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} notify_out(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq] {
+      return notify_out(cc_seq);
+    });
+  }
+
+  logger().debug("{} got {} notify_out(): at {}",
+                 conn, cc_seq, get_state_name(state));
   io_states.is_out_queued = true;
   if (unlikely(state == state_t::STANDBY && !conn.policy.server)) {
     logger().info("{} notify_out(): at {}, going to CONNECTING",
                   conn, get_state_name(state));
     execute_connecting();
   }
+  return seastar::now();
 }
 
 // WAIT state
@@ -2147,11 +2193,23 @@ void ProtocolV2::execute_server_wait()
 
 // CLOSING state
 
-void ProtocolV2::notify_mark_down()
+seastar::future<> ProtocolV2::notify_mark_down(
+    crosscore_t::seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
-  logger().debug("{} got notify_mark_down()", conn);
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} notify_mark_down(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq] {
+      return notify_mark_down(cc_seq);
+    });
+  }
+
+  logger().debug("{} got {} notify_mark_down()",
+                 conn, cc_seq);
   do_close(false);
+  return seastar::now();
 }
 
 seastar::future<> ProtocolV2::close_clean_yielded()
@@ -2226,8 +2284,9 @@ void ProtocolV2::do_close(
     return wait_switch_io_shard(
     ).then([this, is_dispatch_reset, is_replace] {
       trigger_state_phase2(state_t::CLOSING, io_state_t::drop);
-      logger().debug("{} IOHandler::close_io(reset={}, replace={})",
-                     conn, is_dispatch_reset, is_replace);
+      auto cc_seq = crosscore.prepare_submit();
+      logger().debug("{} send {} IOHandler::close_io(reset={}, replace={})",
+                     conn, cc_seq, is_dispatch_reset, is_replace);
 
       std::ignore = gate.close(
       ).then([this] {
@@ -2262,8 +2321,8 @@ void ProtocolV2::do_close(
 
       return seastar::smp::submit_to(
           io_handler.get_shard_id(),
-          [this, is_dispatch_reset, is_replace] {
-        return io_handler.close_io(is_dispatch_reset, is_replace);
+          [this, cc_seq, is_dispatch_reset, is_replace] {
+        return io_handler.close_io(cc_seq, is_dispatch_reset, is_replace);
       });
       // user can make changes
     });
