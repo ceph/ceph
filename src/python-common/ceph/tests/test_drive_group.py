@@ -35,6 +35,18 @@ data_devices:
   - path: /dev/sda
     crush_device_class: ssd"""
     ),
+    (
+        """service_type: osd
+service_id: testing_drivegroup
+placement:
+  host_pattern: hostname
+spec:
+  osds_per_device: 2
+data_devices:
+  paths:
+  - path: /dev/sda
+    crush_device_class: hdd"""
+    ),
 ])
 def test_DriveGroup(test_input):
 
