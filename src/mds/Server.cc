@@ -9634,6 +9634,12 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
                                                  // & srcdnl->snaprealm
       pi.inode->version = mdr->more()->pvmap[destdn] = destdn->pre_dirty(oldpv);
       pi.inode->update_backtrace();
+      // Remove referent inode from primary link on linkmerge
+      if (linkmerge && destdnl->is_referent()) {
+        CInode *oldrefi = destdnl->get_ref_inode();
+        pi.inode->remove_referent_ino(oldrefi->ino());
+        dout(20) << "_unlink_local referent inodes " << pi.inode->get_referent_inodes() << dendl;
+      }
       spi = pi.inode.get();
     }
     destdn->push_projected_linkage(srci);
