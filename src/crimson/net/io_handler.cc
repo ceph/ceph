@@ -78,7 +78,7 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
   }
 
   if (require_ack && num_msgs == 0u) {
-    auto ack_frame = AckFrame::Encode(get_in_seq());
+    auto ack_frame = AckFrame::Encode(in_seq);
     bl.append(frame_assembler->get_buffer(ack_frame));
   }
 
@@ -101,7 +101,7 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
                              header.type,       header.priority,
                              header.version,
                              ceph_le32(0),      header.data_off,
-                             ceph_le64(get_in_seq()),
+                             ceph_le64(in_seq),
                              footer.flags,      header.compat_version,
                              header.reserved};
 
@@ -172,8 +172,9 @@ void IOHandler::print_io_stat(std::ostream &out) const
 }
 
 void IOHandler::set_io_state(
-    const IOHandler::io_state_t &new_state,
-    FrameAssemblerV2Ref fa)
+    io_state_t new_state,
+    FrameAssemblerV2Ref fa,
+    bool set_notify_out)
 {
   ceph_assert_always(!(
     (new_state == io_state_t::none && io_state != io_state_t::none) ||
@@ -212,6 +213,16 @@ void IOHandler::set_io_state(
     assert(fa == nullptr);
   }
 
+  if (new_state == io_state_t::delay) {
+    need_notify_out = set_notify_out;
+    if (need_notify_out) {
+      maybe_notify_out_dispatch();
+    }
+  } else {
+    assert(set_notify_out == false);
+    need_notify_out = false;
+  }
+
   if (io_state != new_state) {
     io_state = new_state;
     io_state_changed.set_value();
@@ -227,7 +238,8 @@ void IOHandler::set_io_state(
   }
 }
 
-seastar::future<FrameAssemblerV2Ref> IOHandler::wait_io_exit_dispatching()
+seastar::future<IOHandler::exit_dispatching_ret>
+IOHandler::wait_io_exit_dispatching()
 {
   ceph_assert_always(io_state != io_state_t::open);
   ceph_assert_always(frame_assembler != nullptr);
@@ -248,7 +260,9 @@ seastar::future<FrameAssemblerV2Ref> IOHandler::wait_io_exit_dispatching()
       }
     }()
   ).discard_result().then([this] {
-    return std::move(frame_assembler);
+    return exit_dispatching_ret{
+      std::move(frame_assembler),
+      get_states()};
   });
 }
 
@@ -289,7 +303,7 @@ void IOHandler::requeue_out_sent()
       std::make_move_iterator(out_sent_msgs.begin()),
       std::make_move_iterator(out_sent_msgs.end()));
   out_sent_msgs.clear();
-  notify_out_dispatch();
+  maybe_notify_out_dispatch();
 }
 
 void IOHandler::requeue_out_sent_up_to(seq_num_t seq)
@@ -487,7 +501,9 @@ seastar::future<> IOHandler::do_out_dispatch()
         eptr = std::current_exception();
       }
       set_io_state(io_state_t::delay);
-      handshake_listener->notify_out_fault("do_out_dispatch", eptr);
+      auto states = get_states();
+      handshake_listener->notify_out_fault(
+          "do_out_dispatch", eptr, states);
     } else {
       logger().info("{} do_out_dispatch(): fault at {} -- {}",
                     conn, io_state, e.what());
@@ -497,9 +513,18 @@ seastar::future<> IOHandler::do_out_dispatch()
   });
 }
 
+void IOHandler::maybe_notify_out_dispatch()
+{
+  if (is_out_queued()) {
+    notify_out_dispatch();
+  }
+}
+
 void IOHandler::notify_out_dispatch()
 {
-  handshake_listener->notify_out();
+  if (need_notify_out) {
+    handshake_listener->notify_out();
+  }
   if (out_dispatching) {
     // already dispatching
     return;
@@ -587,7 +612,7 @@ IOHandler::read_message(utime_t throttle_stamp, std::size_t msg_size)
     // client side queueing because messages can't be renumbered, but the (kernel)
     // client will occasionally pull a message out of the sent queue to send
     // elsewhere.  in that case it doesn't matter if we "got" it or not.
-    uint64_t cur_seq = get_in_seq();
+    uint64_t cur_seq = in_seq;
     if (message->get_seq() <= cur_seq) {
       logger().error("{} got old message {} <= {} {}, discarding",
                      conn, message->get_seq(), cur_seq, *message);
@@ -726,7 +751,9 @@ void IOHandler::do_in_dispatch()
         logger().info("{} do_in_dispatch(): fault at {}, going to delay -- {}",
                       conn, io_state, e_what);
         set_io_state(io_state_t::delay);
-        handshake_listener->notify_out_fault("do_in_dispatch", eptr);
+        auto states = get_states();
+        handshake_listener->notify_out_fault(
+            "do_in_dispatch", eptr, states);
       } else {
         logger().info("{} do_in_dispatch(): fault at {} -- {}",
                       conn, io_state, e_what);
