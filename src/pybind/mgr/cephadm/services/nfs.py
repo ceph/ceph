@@ -92,9 +92,14 @@ class NFSService(CephService):
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
-        bind_addr = spec.virtual_ip if spec.virtual_ip else (daemon_spec.ip if daemon_spec.ip else '')
+        if spec.virtual_ip:
+            bind_addr = spec.virtual_ip
+        else:
+            bind_addr = daemon_spec.ip if daemon_spec.ip else ''
         if not bind_addr:
             logger.warning(f'Bind address in {daemon_type}.{daemon_id}\'s ganesha conf is defaulting to empty')
+        else:
+            logger.debug("using haproxy bind address: %r", bind_addr)
 
         # generate the ganesha config
         def get_ganesha_conf() -> str:
@@ -108,7 +113,22 @@ class NFSService(CephService):
                 # fall back to default NFS port if not present in daemon_spec
                 "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
                 "bind_addr": bind_addr,
+                "haproxy_hosts": [],
             }
+            if spec.enable_haproxy_protocol:
+                # NB: Ideally, we would limit the list to IPs on hosts running
+                # haproxy/ingress only, but due to the nature of cephadm today
+                # we'd "only know the set of haproxy hosts after they've been
+                # deployed" (quoth @adk7398). As it is today we limit the list
+                # of hosts we know are managed by cephadm. That ought to be
+                # good enough to prevent acceping haproxy protocol messages
+                # from "rouge" systems that are not under our control. At
+                # least until we learn otherwise.
+                context["haproxy_hosts"] = [
+                    self.mgr.inventory.get_addr(h)
+                    for h in self.mgr.inventory.keys()
+                ]
+                logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
         # generate the cephadm config json

@@ -811,6 +811,7 @@ class NFSServiceSpec(ServiceSpec):
                  networks: Optional[List[str]] = None,
                  port: Optional[int] = None,
                  virtual_ip: Optional[str] = None,
+                 enable_haproxy_protocol: bool = False,
                  extra_container_args: Optional[List[str]] = None,
                  extra_entrypoint_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -824,6 +825,7 @@ class NFSServiceSpec(ServiceSpec):
 
         self.port = port
         self.virtual_ip = virtual_ip
+        self.enable_haproxy_protocol = enable_haproxy_protocol
 
     def get_port_start(self) -> List[int]:
         if self.port:
@@ -1054,6 +1056,7 @@ class IngressSpec(ServiceSpec):
                  unmanaged: bool = False,
                  ssl: bool = False,
                  keepalive_only: bool = False,
+                 enable_haproxy_protocol: bool = False,
                  extra_container_args: Optional[List[str]] = None,
                  extra_entrypoint_args: Optional[List[str]] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1085,6 +1088,7 @@ class IngressSpec(ServiceSpec):
         self.unmanaged = unmanaged
         self.ssl = ssl
         self.keepalive_only = keepalive_only
+        self.enable_haproxy_protocol = enable_haproxy_protocol
 
     def get_port_start(self) -> List[int]:
         ports = []
