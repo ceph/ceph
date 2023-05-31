@@ -363,10 +363,6 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Evict a client session by id");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session ls name=cap_dump,type=CephBool,req=false",
-				     asok_hook,
-				     "Enumerate connected CephFS clients");
-  ceph_assert(r == 0);
   r = admin_socket->register_command("session config "
 				     "name=client_id,type=CephInt,req=true "
 				     "name=option,type=CephString,req=true "
