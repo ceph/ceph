@@ -107,7 +107,6 @@ struct client_config {
     conf.msgtime = options["msgtime"].as<unsigned>();
     conf.jobs = options["client-jobs"].as<unsigned>();
     conf.depth = options["depth"].as<unsigned>();
-    ceph_assert(conf.depth % conf.jobs == 0);
     return conf;
   }
 };
@@ -400,15 +399,18 @@ static seastar::future<> run(
       bool stop_send = false;
       seastar::promise<ClientStats> stopped_send_promise;
 
-      Client(unsigned jobs, unsigned msg_len, unsigned depth, std::optional<unsigned> server_sid)
+      Client(unsigned jobs,
+             unsigned msg_len,
+             unsigned _depth,
+             std::optional<unsigned> server_sid)
         : sid{seastar::this_shard_id()},
           id{sid + jobs - seastar::smp::count},
           server_sid{server_sid},
           jobs{jobs},
           msg_len{msg_len},
-          nr_depth{depth/jobs},
-          depth{nr_depth},
-          time_msgs_sent{depth/jobs, mono_clock::zero()} {
+          nr_depth{_depth},
+          depth{_depth},
+          time_msgs_sent{_depth, mono_clock::zero()} {
         if (is_active()) {
           assert(sid > 0);
           lname = "client";
@@ -903,7 +905,7 @@ int main(int argc, char** argv)
     ("client-bs", bpo::value<unsigned>()->default_value(4096),
      "client block size")
     ("depth", bpo::value<unsigned>()->default_value(512),
-     "client io depth")
+     "client io depth per job")
     ("server-fixed-cpu", bpo::value<bool>()->default_value(true),
      "server is in the fixed cpu mode, non-fixed doesn't support the mode both")
     ("server-core", bpo::value<unsigned>()->default_value(1),
