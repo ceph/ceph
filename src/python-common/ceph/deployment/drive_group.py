@@ -284,8 +284,8 @@ class DriveGroupSpec(ServiceSpec):
         # spec: was not mandatory in octopus
         if 'spec' in args:
             args['spec'].update(cls._drive_group_spec_from_json(s_id, args['spec']))
-        else:
-            args.update(cls._drive_group_spec_from_json(s_id, args))
+        args.update(cls._drive_group_spec_from_json(
+                    s_id, {k: v for k, v in args.items() if k != 'spec'}))
 
         return super(DriveGroupSpec, cls)._from_json_impl(args)
 
