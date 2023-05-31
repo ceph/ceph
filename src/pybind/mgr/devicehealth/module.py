@@ -4,7 +4,7 @@ Device health monitoring
 
 import errno
 import json
-from mgr_module import MgrModule, CommandResult, CLICommand, Option, NotifyType
+from mgr_module import MgrModule, CommandResult, CLICommand, Option, NotifyType, MgrDBNotReady
 import operator
 import rados
 from threading import Event
@@ -720,7 +720,10 @@ class Module(MgrModule):
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
 
     def get_recent_device_metrics(self, devid: str, min_sample: str) -> Dict[str, Dict[str, Any]]:
-        return self._get_device_metrics(devid, min_sample=min_sample)
+        try:
+            return self._get_device_metrics(devid, min_sample=min_sample)
+        except MgrDBNotReady:
+            return dict()
 
     def get_time_format(self) -> str:
         return TIME_FORMAT
