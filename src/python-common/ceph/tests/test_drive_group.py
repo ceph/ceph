@@ -33,6 +33,17 @@ data_devices:
   paths:
   - /dev/sda"""
     ),
+    (
+        """service_type: osd
+service_id: testing_drivegroup
+placement:
+  host_pattern: hostname
+spec:
+  osds_per_device: 2
+data_devices:
+  paths:
+  - /dev/sda"""
+    ),
 ])
 def test_DriveGroup(test_input):
     dg = DriveGroupSpec.from_json(yaml.safe_load(test_input))
