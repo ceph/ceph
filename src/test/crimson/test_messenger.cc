@@ -75,7 +75,8 @@ static seastar::future<> test_echo(unsigned rounds,
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        msgr = crimson::net::Messenger::create(name, lname, nonce);
+        msgr = crimson::net::Messenger::create(
+            name, lname, nonce, true);
         msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
@@ -154,7 +155,8 @@ static seastar::future<> test_echo(unsigned rounds,
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        msgr = crimson::net::Messenger::create(name, lname, nonce);
+        msgr = crimson::net::Messenger::create(
+            name, lname, nonce, true);
         msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
@@ -303,7 +305,8 @@ static seastar::future<> test_concurrent_dispatch()
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        msgr = crimson::net::Messenger::create(name, lname, nonce);
+        msgr = crimson::net::Messenger::create(
+            name, lname, nonce, true);
         msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
@@ -331,7 +334,8 @@ static seastar::future<> test_concurrent_dispatch()
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        msgr = crimson::net::Messenger::create(name, lname, nonce);
+        msgr = crimson::net::Messenger::create(
+            name, lname, nonce, true);
         msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
@@ -392,7 +396,8 @@ seastar::future<> test_preemptive_shutdown() {
                              const std::string& lname,
                              const uint64_t nonce,
                              const entity_addr_t& addr) {
-        msgr = crimson::net::Messenger::create(name, lname, nonce);
+        msgr = crimson::net::Messenger::create(
+            name, lname, nonce, true);
         msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
@@ -431,7 +436,8 @@ seastar::future<> test_preemptive_shutdown() {
       seastar::future<> init(const entity_name_t& name,
                              const std::string& lname,
                              const uint64_t nonce) {
-        msgr = crimson::net::Messenger::create(name, lname, nonce);
+        msgr = crimson::net::Messenger::create(
+            name, lname, nonce, true);
         msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
         msgr->set_auth_client(&dummy_auth);
         msgr->set_auth_server(&dummy_auth);
@@ -1120,7 +1126,11 @@ class FailoverSuite : public Dispatcher {
          entity_addr_t test_peer_addr,
          const TestInterceptor& interceptor) {
     auto suite = std::make_unique<FailoverSuite>(
-        Messenger::create(entity_name_t::OSD(TEST_OSD), "Test", TEST_NONCE),
+        Messenger::create(
+          entity_name_t::OSD(TEST_OSD),
+          "Test",
+          TEST_NONCE,
+          true),
         test_peer_addr, interceptor);
     return suite->init(test_addr, test_policy
     ).then([suite = std::move(suite)] () mutable {
@@ -1334,7 +1344,11 @@ class FailoverTest : public Dispatcher {
          entity_addr_t cmd_peer_addr,
          entity_addr_t test_peer_addr) {
     auto test = seastar::make_lw_shared<FailoverTest>(
-        Messenger::create(entity_name_t::OSD(CMD_CLI_OSD), "CmdCli", CMD_CLI_NONCE),
+        Messenger::create(
+          entity_name_t::OSD(CMD_CLI_OSD),
+          "CmdCli",
+          CMD_CLI_NONCE,
+          true),
         test_addr, test_peer_addr);
     return test->init(cmd_peer_addr).then([test] {
       logger().info("CmdCli ready");
@@ -1554,7 +1568,8 @@ class FailoverSuitePeer : public Dispatcher {
       Messenger::create(
         entity_name_t::OSD(TEST_PEER_OSD),
         "TestPeer",
-        TEST_PEER_NONCE),
+        TEST_PEER_NONCE,
+        true),
       op_callback
     );
     return suite->init(test_peer_addr, policy
@@ -1679,7 +1694,11 @@ class FailoverTestPeer : public Dispatcher {
   static seastar::future<std::unique_ptr<FailoverTestPeer>>
   create(entity_addr_t cmd_peer_addr, entity_addr_t test_peer_addr) {
     auto test_peer = std::make_unique<FailoverTestPeer>(
-        Messenger::create(entity_name_t::OSD(CMD_SRV_OSD), "CmdSrv", CMD_SRV_NONCE),
+        Messenger::create(
+          entity_name_t::OSD(CMD_SRV_OSD),
+          "CmdSrv",
+          CMD_SRV_NONCE,
+          true),
         test_peer_addr);
     return test_peer->init(cmd_peer_addr
     ).then([test_peer = std::move(test_peer)] () mutable {
