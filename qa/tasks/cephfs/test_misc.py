@@ -360,6 +360,29 @@ class TestMisc(CephFSTestCase):
         self.mount_a.run_shell(["rm", "-rf", dir_path])
 
 
+    def _session_client_ls(self, cmd):
+        mount_a_client_id = self.mount_a.get_global_id()
+        info = self.fs.rank_asok(cmd)
+        mount_a_mountpoint = self.mount_a.mountpoint
+        mount_b_mountpoint = self.mount_b.mountpoint
+        self.assertIsNotNone(info)
+        for i in range(0, len(info)):
+            self.assertIn(info[i]["client_metadata"]["mount_point"], 
+                             [mount_a_mountpoint, mount_b_mountpoint])        
+        info = self.fs.rank_asok(cmd + [f"id={mount_a_client_id}"])
+        self.assertEqual(len(info), 1)
+        self.assertEqual(info[0]["id"], mount_a_client_id)
+        self.assertEqual(info[0]["client_metadata"]["mount_point"], mount_a_mountpoint)
+        info = self.fs.rank_asok(cmd + ['--cap_dump'])
+        for i in range(0, len(info)):
+            self.assertIn("caps", info[i])
+
+    def test_session_ls(self):
+        self._session_client_ls(['session', 'ls'])
+
+    def test_client_ls(self):
+        self._session_client_ls(['client', 'ls'])
+        
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
