@@ -465,7 +465,7 @@ int D4NDatacache::del_attrs(std::string oid, std::vector<std::string>& baseField
   }
 
   if (exist_key(key)) {
-    /* Find if attribute doesn't exist */
+    /* Find if attribute doesn't exist */ // why use metadata fields? -Sam 
     for (const auto& delField : deleteFields) {
       if (std::find(baseFields.begin(), baseFields.end(), delField) == baseFields.end()) {
         deleteFields.erase(std::find(deleteFields.begin(), deleteFields.end(), delField));
