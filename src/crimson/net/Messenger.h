@@ -108,7 +108,8 @@ public:
   static MessengerRef
   create(const entity_name_t& name,
          const std::string& lname,
-         const uint64_t nonce);
+         uint64_t nonce,
+         bool is_fixed_cpu);
 
 #ifdef UNIT_TESTS_BUILT
   virtual void set_interceptor(Interceptor *) = 0;
