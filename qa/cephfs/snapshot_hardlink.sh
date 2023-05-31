@@ -409,6 +409,93 @@ else
 fi
 echo "--------------------------------------------------------------------------------------------------"
 
+#Validate reverselinks on primary deletion
+echo "PRIMARY TO SECONDARY LINK VALIDATION ON PRIMARY DELETION"
+echo "remove all files"
+rm -f /mnt/*
+rm -f /mnt/dir1/*
+echo "flush the journal"
+bin/ceph tell mds.a flush journal >/dev/null 2>&1
+echo "create /file1"
+echo "data ..." > /mnt/file1
+echo "ln /file1 /hl_file1"
+ln /mnt/file1 /mnt/hl_file1
+echo "ln /file1 /hl_file2"
+ln /mnt/file1 /mnt/hl_file2
+mkdir /mnt/dir1
+echo "ln /file1 /dir1/hl_file3"
+ln /mnt/file1 /mnt/dir1/hl_file3
+echo "flush the journal"
+bin/ceph tell mds.a flush journal >/dev/null 2>&1
+
+echo "unlink /file1"
+rm -f /mnt/file1
+echo "flush the journal"
+bin/ceph tell mds.a flush journal >/dev/null 2>&1
+
+bin/rados -p cephfs.a.meta getomapval 1.00000000 file1_head /tmp/a
+if [ $? -ne 0 ];then
+  echo "/file1 file1_head omap key deleted"
+else
+  echo "FAIL - /file1's omap key still present"
+  exit -1
+fi
+
+#Identify the new primary
+bin/rados -p cephfs.a.meta getomapval 1.00000000 hl_file1_head /tmp/a
+refinode0_hl_file1=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.referent_inodes[0]')
+bin/rados -p cephfs.a.meta getomapval 1.00000000 hl_file2_head /tmp/a
+refinode0_hl_file2=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.referent_inodes[0]')
+if [ "$refinode0_hl_file1" != "null" ];then
+  echo "new primary is /hl_file1"
+  primary="1.00000000 hl_file1_head"
+  sec1="1.00000000 hl_file2_head"
+  sec2="$dir1_object hl_file3_head"
+elif [ "$refinode0_hl_file2" != "null" ];then
+  echo "new primary is /hl_file2"
+  primary="hl_file2_head"
+  sec1="1.00000000 hl_file1_head"
+  sec2="$dir1_object hl_file3_head"
+else
+  echo "new primary is /dir1/hl_file3"
+  primary="$dir1_object hl_file3_head"
+  sec1="1.00000000 hl_file1_head"
+  sec2="1.00000000 hl_file2_head"
+fi
+
+bin/rados -p cephfs.a.meta getomapval $primary /tmp/a
+refinodes=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.referent_inodes')
+echo "$refinodes"
+refinode0=$(echo $refinodes | jq '.[0]')
+refinode1=$(echo $refinodes | jq '.[1]')
+refinode2=$(echo $refinodes | jq '.[2]')
+bin/rados -p cephfs.a.meta getomapval $sec1 /tmp/a
+sec1_refino=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.ino')
+bin/rados -p cephfs.a.meta getomapval $sec2 /tmp/a
+sec2_refino=$(bin/ceph-dencoder type 'inode_t<std::allocator>' skip 25 import /tmp/a decode dump_json | jq '.ino')
+
+if [ "$refinode2" != "null" ];then
+  echo "FAIL - PRIMARY DEL - referent inodes count from primary to secondary after primary deletion didn't match"
+  exit -1
+fi
+
+if [ "$refinode0" == "$sec1_refino" ] || [ "$refinode0" == "$sec2_refino" ];then
+  echo "$refinode0 exists in primary referent inode list"
+else
+  echo "FAIL0 - PRIMARY DEL - referent inode links from primary to secondary after primary deletion didn't match"
+  exit -1
+fi
+
+if [ "$refinode1" == "$sec1_refino" ] || [ "$refinode1" == "$sec2_refino" ];then
+  echo "$refinode1 exists in primary referent inode list"
+else
+  echo "FAIL1 - PRIMARY DEL - referent inode links from primary to secondary after primary deletion didn't match"
+  exit -1
+fi
+
+echo "OK - PRIMARY DEL - referent inode links from primary to secondary matches after primary deletion"
+echo "--------------------------------------------------------------------------------------------------"
+
 #cleanup
 echo "CLEANUP"
 rm -rf /mnt/*
