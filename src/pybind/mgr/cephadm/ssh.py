@@ -123,7 +123,7 @@ class SSHManager:
         except OSError as e:
             self.mgr.offline_hosts.add(host)
             log_content = log_string.getvalue()
-            msg = f"Can't communicate with remote host `{addr}`, possibly because python3 is not installed there or you are missing NOPASSWD in sudoers. {str(e)}"
+            msg = f"Can't communicate with remote host `{addr}`, possibly because the host is not reachable or python3 is not installed on the host. {str(e)}"
             logger.exception(msg)
             raise HostConnectionError(msg, host, addr)
         except asyncssh.Error as e:
@@ -151,31 +151,44 @@ class SSHManager:
 
     async def _execute_command(self,
                                host: str,
-                               cmd: List[str],
+                               cmd_components: List[str],
                                stdin: Optional[str] = None,
                                addr: Optional[str] = None,
                                log_command: Optional[bool] = True,
                                ) -> Tuple[str, str, int]:
+
         conn = await self._remote_connection(host, addr)
         sudo_prefix = "sudo " if self.mgr.ssh_user != 'root' else ""
-        cmd = sudo_prefix + " ".join(quote(x) for x in cmd)
+        cmd = sudo_prefix + " ".join(quote(x) for x in cmd_components)
+        try:
+            address = addr or self.mgr.inventory.get_addr(host)
+        except Exception:
+            address = host
         if log_command:
             logger.debug(f'Running command: {cmd}')
         try:
-            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)
+            r = await conn.run(f'{sudo_prefix}true', check=True, timeout=5)  # host quick check
             r = await conn.run(cmd, input=stdin)
-        # handle these Exceptions otherwise you might get a weird error like TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
-        except (asyncssh.ChannelOpenError, asyncssh.ProcessError, Exception) as e:
+        # handle these Exceptions otherwise you might get a weird error like
+        # TypeError: __init__() missing 1 required positional argument: 'reason' (due to the asyncssh error interacting with raise_if_exception)
+        except asyncssh.ChannelOpenError as e:
             # SSH connection closed or broken, will create new connection next call
             logger.debug(f'Connection to {host} failed. {str(e)}')
             await self._reset_con(host)
             self.mgr.offline_hosts.add(host)
-            if not addr:
-                try:
-                    addr = self.mgr.inventory.get_addr(host)
-                except Exception:
-                    addr = host
-            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, addr)
+            raise HostConnectionError(f'Unable to reach remote host {host}. {str(e)}', host, address)
+        except asyncssh.ProcessError as e:
+            msg = f"Cannot execute the command '{cmd}' on the {host}. {str(e.stderr)}."
+            logger.debug(msg)
+            await self._reset_con(host)
+            self.mgr.offline_hosts.add(host)
+            raise HostConnectionError(msg, host, address)
+        except Exception as e:
+            msg = f"Generic error while executing command '{cmd}' on the host {host}. {str(e)}."
+            logger.debug(msg)
+            await self._reset_con(host)
+            self.mgr.offline_hosts.add(host)
+            raise HostConnectionError(msg, host, address)
 
         def _rstrip(v: Union[bytes, str, None]) -> str:
             if not v:
