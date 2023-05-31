@@ -59,6 +59,11 @@ struct Image {
                        ProgressContext &prog_ctx);
   static int deep_copy(ImageCtxT *src, ImageCtxT *dest, bool flatten,
                        ProgressContext &prog_ctx);
+  static int deep_copy(ImageCtxT *src, ImageCtxT *dest, 
+                       librados::snap_t src_snap_id_start,
+                       librados::snap_t src_snap_id_end,
+                       librados::snap_t dst_snap_id_start, ImageOptions& opts,
+                      ProgressContext &prog_ctx);
 
   static int snap_set(ImageCtxT *ictx,
                       const cls::rbd::SnapshotNamespace &snap_namespace,

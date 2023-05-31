@@ -50,14 +50,43 @@ struct TestDeepCopy : public TestFixture {
   }
 
   void deep_copy() {
-    std::string dst_name = get_temp_image_name();
-    librbd::NoOpProgressContext no_op;
-    EXPECT_EQ(0, api::Io<>::flush(*m_src_ictx));
-    EXPECT_EQ(0, librbd::api::Image<>::deep_copy(m_src_ictx, m_src_ictx->md_ctx,
+    if (m_src_snap_id_start == 0 && 
+        m_src_snap_id_end == CEPH_NOSNAP && 
+        m_dst_snap_id_start == 0) {
+      std::string dst_name = get_temp_image_name();
+      librbd::NoOpProgressContext no_op;
+      EXPECT_EQ(0, api::Io<>::flush(*m_src_ictx));
+      EXPECT_EQ(0, librbd::api::Image<>::deep_copy(m_src_ictx, m_src_ictx->md_ctx,
                                                  dst_name.c_str(), m_opts,
                                                  no_op));
-    EXPECT_EQ(0, open_image(dst_name, &m_dst_ictx));
+      EXPECT_EQ(0, open_image(dst_name, &m_dst_ictx));
+
+    } else {
+      EXPECT_NE(m_dst_ictx, nullptr);
+      librbd::NoOpProgressContext no_op;
+      EXPECT_EQ(0, api::Io<>::flush(*m_src_ictx));
+      EXPECT_EQ(0, librbd::api::Image<>::deep_copy(m_src_ictx, m_dst_ictx,
+                                                 m_src_snap_id_start,
+                                                 m_src_snap_id_end,
+                                                 m_dst_snap_id_start, m_opts,
+                                                 no_op));
+    }
   }
+
+  void deep_copy_with_snap_ids(librados::snap_t src_snap_id_start,
+                               librados::snap_t src_snap_id_end,
+                               librados::snap_t dst_snap_id_start) {
+    //std::string dst_name = get_temp_image_name();
+    EXPECT_NE(m_dst_ictx, nullptr);
+    librbd::NoOpProgressContext no_op;
+    EXPECT_EQ(0, api::Io<>::flush(*m_src_ictx));
+    EXPECT_EQ(0, librbd::api::Image<>::deep_copy(m_src_ictx, m_dst_ictx,
+                                                 src_snap_id_start,
+                                                 src_snap_id_end,
+                                                 dst_snap_id_start, m_opts,
+                                                 no_op));
+  }
+
 
   void compare() {
     std::vector<librbd::snap_info_t> src_snaps, dst_snaps;
@@ -66,6 +95,7 @@ struct TestDeepCopy : public TestFixture {
     EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_src_ictx, src_snaps));
     EXPECT_EQ(0, librbd::api::Snapshot<>::list(m_dst_ictx, dst_snaps));
     EXPECT_EQ(src_snaps.size(), dst_snaps.size());
+
     for (size_t i = 0; i <= src_snaps.size(); i++) {
       const char *src_snap_name = nullptr;
       const char *dst_snap_name = nullptr;
@@ -74,6 +104,7 @@ struct TestDeepCopy : public TestFixture {
         src_snap_name = src_snaps[i].name.c_str();
         dst_snap_name = dst_snaps[i].name.c_str();
       }
+      
       EXPECT_EQ(0, librbd::api::Image<>::snap_set(
                      m_src_ictx, cls::rbd::UserSnapshotNamespace(),
                      src_snap_name));
@@ -118,7 +149,6 @@ struct TestDeepCopy : public TestFixture {
         EXPECT_EQ(read_size, api::Io<>::read(
                     *m_dst_ictx, offset, read_size,
                     librbd::io::ReadResult{dst_result}, 0));
-
         if (!src_bl.contents_equal(dst_bl)) {
           std::cout << "snap: " << (src_snap_name ? src_snap_name : "null")
                     << ", block " << offset << "~" << read_size << " differs"
@@ -147,33 +177,67 @@ struct TestDeepCopy : public TestFixture {
     bufferlist bl;
     bl.append(std::string(((1 << m_src_ictx->order) * 2) + 1, '1'));
     ASSERT_EQ(static_cast<ssize_t>(bl.length()),
-              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl.length(),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl.length(), // Writes 8MB at offset 0
                                bufferlist{bl}, 0));
     ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
 
-    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));    // Creates snap
 
     ASSERT_EQ(static_cast<ssize_t>(bl.length()),
-              api::Io<>::write(*m_src_ictx, 1 * bl.length(), bl.length(),
+              api::Io<>::write(*m_src_ictx, 1 * bl.length(), bl.length(),  // Writes 8 MB at offset 8MB + 1
                                bufferlist{bl}, 0));
     bufferlist bl1;
     bl1.append(std::string(1000, 'X'));
     ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
-              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl1.length(),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl1.length(), // Writes 1000 bytes at offset 0
                                bufferlist{bl1}, 0));
     ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
-              api::Io<>::discard(*m_src_ictx, bl1.length() + 10,
+              api::Io<>::discard(*m_src_ictx, bl1.length() + 10,     // Discards 1000 bytes at offset 1010
                                  bl1.length(), false));
 
     ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
 
     ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
     ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
-              api::Io<>::write(*m_src_ictx, 1 * bl.length(), bl1.length(),
+              api::Io<>::write(*m_src_ictx, 1 * bl.length(), bl1.length(), //Writes 1000 bytes to offset 8MB +
                                bufferlist{bl1}, 0));
     ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
-              api::Io<>::discard(*m_src_ictx, 2 * bl1.length() + 10,
+              api::Io<>::discard(*m_src_ictx, 2 * bl1.length() + 10,   //Discards 1000 bytes at offset 2010
                                  bl1.length(), false));
+  }
+
+  void test_snaps2() {
+    bufferlist bl;
+    bl.append(std::string(((1 << m_src_ictx->order) * 2) + 1, '1'));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl.length(), // Writes 8MB at offset 0
+                               bufferlist{bl}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));    // Creates snap
+
+    deep_copy();
+
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, 1 * bl.length(), bl.length(),  // Writes 8 MB at offset 8MB + 1
+                               bufferlist{bl}, 0));
+    bufferlist bl1;
+    bl1.append(std::string(1000, 'X'));
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl1.length(), // Writes 1000 bytes at offset 0
+                               bufferlist{bl1}, 0));
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::discard(*m_src_ictx, bl1.length() + 10,     // Discards 1000 bytes at offset 1010
+                                 bl1.length(), false));
+
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
+
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap1", &m_src_snap_id_start));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap2", &m_src_snap_id_end));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_dst_ictx, "snap1", &m_dst_snap_id_start));
+
   }
 
   void test_snap_discard() {
@@ -189,6 +253,28 @@ struct TestDeepCopy : public TestFixture {
     ASSERT_EQ(static_cast<ssize_t>(len),
               api::Io<>::discard(*m_src_ictx, 0, len, false));
   }
+
+  void test_snap_discard2() {
+    bufferlist bl;
+    bl.append(std::string((1 << m_src_ictx->order) * 2, '1'));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, 0, bl.length(), bufferlist{bl}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));
+    deep_copy();
+
+    size_t len = (1 << m_src_ictx->order);
+    ASSERT_EQ(static_cast<ssize_t>(len),
+              api::Io<>::discard(*m_src_ictx, 0, len, false));
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
+
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap1", &m_src_snap_id_start));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap2", &m_src_snap_id_end));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_dst_ictx, "snap1", &m_dst_snap_id_start));
+
+  }
+
 
   void test_clone_discard() {
     bufferlist bl;
@@ -240,6 +326,52 @@ struct TestDeepCopy : public TestFixture {
     ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
   }
 
+  void test_clone_shrink2() {
+    bufferlist bl;
+    bl.append(std::string(100, '1'));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, 0, bl.length(), bufferlist{bl}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap"));
+    ASSERT_EQ(0, snap_protect(*m_src_ictx, "snap"));
+
+    std::string clone_name = get_temp_image_name();
+    int order = m_src_ictx->order;
+    uint64_t features;
+    ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
+    ASSERT_EQ(0, librbd::clone(m_ioctx, m_src_ictx->name.c_str(), "snap",
+                               m_ioctx, clone_name.c_str(), features, &order, 0,
+                               0));
+    close_image(m_src_ictx);
+    ASSERT_EQ(0, open_image(clone_name, &m_src_ictx));
+
+    bufferlist bl1;
+    bl1.append(std::string(1000, 'X'));
+
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl1.length(), // Write 1000 bytes at offset 0 (object 0)
+                               bufferlist{bl1}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));
+    
+    deep_copy();
+    compare();
+
+    librbd::NoOpProgressContext no_op;
+    auto new_size = m_src_ictx->size >> 1;
+    ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
+
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
+
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap1", &m_src_snap_id_start));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap2", &m_src_snap_id_end));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_dst_ictx, "snap1", &m_dst_snap_id_start));
+  }
+
+
   void test_clone_expand() {
     bufferlist bl;
     bl.append(std::string(100, '1'));
@@ -263,6 +395,51 @@ struct TestDeepCopy : public TestFixture {
     librbd::NoOpProgressContext no_op;
     auto new_size = m_src_ictx->size << 1;
     ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
+  }
+
+  void test_clone_expand2() {
+    bufferlist bl;
+    bl.append(std::string(100, '1'));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, 0, bl.length(), bufferlist{bl}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap"));
+    ASSERT_EQ(0, snap_protect(*m_src_ictx, "snap"));
+
+    std::string clone_name = get_temp_image_name();
+    int order = m_src_ictx->order;
+    uint64_t features;
+    ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
+    ASSERT_EQ(0, librbd::clone(m_ioctx, m_src_ictx->name.c_str(), "snap",
+                               m_ioctx, clone_name.c_str(), features, &order, 0,
+                               0));
+    close_image(m_src_ictx);
+    ASSERT_EQ(0, open_image(clone_name, &m_src_ictx));
+
+    bufferlist bl1;
+    bl1.append(std::string(1000, 'X'));
+
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl1.length(), // Write 1000 bytes at offset 0 (object 0)
+                               bufferlist{bl1}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));
+    
+    deep_copy();
+    compare();
+
+    librbd::NoOpProgressContext no_op;
+    auto new_size = m_src_ictx->size << 1;
+    ASSERT_EQ(0, m_src_ictx->operations->resize(new_size, true, no_op));
+
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
+
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap1", &m_src_snap_id_start));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap2", &m_src_snap_id_end));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_dst_ictx, "snap1", &m_dst_snap_id_start));
   }
 
   void test_clone_hide_parent() {
@@ -302,6 +479,54 @@ struct TestDeepCopy : public TestFixture {
 
     ASSERT_EQ(0, m_src_ictx->operations->resize(2 * object_size, true, no_op));
   }
+
+
+  void test_clone_hide_parent2() {
+    uint64_t object_size = 1 << m_src_ictx->order;
+    bufferlist bl;
+    bl.append(std::string(100, '1'));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, object_size, bl.length(),
+                               bufferlist{bl}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap"));
+    ASSERT_EQ(0, snap_protect(*m_src_ictx, "snap"));
+
+    std::string clone_name = get_temp_image_name();
+    int order = m_src_ictx->order;
+    uint64_t features;
+    ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
+    ASSERT_EQ(0, librbd::clone(m_ioctx, m_src_ictx->name.c_str(), "snap",
+                               m_ioctx, clone_name.c_str(), features, &order, 0,
+                               0));
+    close_image(m_src_ictx);
+    ASSERT_EQ(0, open_image(clone_name, &m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));
+
+    deep_copy();
+    compare();
+
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::discard(*m_src_ictx, object_size, bl.length(), false));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
+
+    librbd::NoOpProgressContext no_op;
+    ASSERT_EQ(0, m_src_ictx->operations->resize(object_size, true, no_op));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap3"));
+
+    ASSERT_EQ(0, m_src_ictx->operations->resize(2 * object_size, true, no_op));
+
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap1", &m_src_snap_id_start));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap3", &m_src_snap_id_end));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_dst_ictx, "snap1", &m_dst_snap_id_start));
+  }
+
+
 
   void test_clone() {
     bufferlist bl;
@@ -353,6 +578,63 @@ struct TestDeepCopy : public TestFixture {
     ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
               api::Io<>::discard(*m_src_ictx, 2 * bl1.length() + 10,
                                  bl1.length(), false));
+  }
+
+  void test_clone2() {
+    bufferlist bl;
+    bl.append(std::string(((1 << m_src_ictx->order) * 2) + 1, '1')); // 8MB + 1
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl.length(), // Writes 8MB + 1 at offset 0  (objects 0 and 1 and 2)
+                               bufferlist{bl}, 0));
+    ASSERT_EQ(static_cast<ssize_t>(bl.length()),
+              api::Io<>::write(*m_src_ictx, 2 * bl.length(), bl.length(),  // Writes 8MB + 1 at offset 16MB + 2 (object 4 + 5 + 6)
+                               bufferlist{bl}, 0));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap0"));
+    ASSERT_EQ(0, snap_protect(*m_src_ictx, "snap0"));
+
+    std::string clone_name = get_temp_image_name();
+    int order = m_src_ictx->order;
+    uint64_t features;
+    ASSERT_EQ(0, librbd::get_features(m_src_ictx, &features));
+    ASSERT_EQ(0, librbd::clone(m_ioctx, m_src_ictx->name.c_str(), "snap0",
+                               m_ioctx, clone_name.c_str(), features, &order, 0,
+                               0));
+
+    close_image(m_src_ictx);
+    ASSERT_EQ(0, open_image(clone_name, &m_src_ictx));
+
+    bufferlist bl1;
+    bl1.append(std::string(1000, 'X'));
+
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::write(*m_src_ictx, 0 * bl.length(), bl1.length(), // Write 1000 bytes at offset 0 (object 0)
+                               bufferlist{bl1}, 0));
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::discard(*m_src_ictx, bl1.length() + 10,        // Discard 1000 bytes at offset 1010 (oject 0)
+                                 bl1.length(), false));
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap1"));
+    
+    deep_copy();
+    compare();
+
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::write(*m_src_ictx, 1 * bl.length(), bl1.length(),  // Write 1000 bytes at offset 8MB + 1  (object 2)
+                               bufferlist{bl1}, 0));
+    ASSERT_EQ(static_cast<ssize_t>(bl1.length()),
+              api::Io<>::discard(*m_src_ictx, 2 * bl1.length() + 10,        // Discard 1000 bytes at offset 2010  (object 0)
+                                 bl1.length(), false));
+
+    ASSERT_EQ(0, api::Io<>::flush(*m_src_ictx));
+    ASSERT_EQ(0, snap_create(*m_src_ictx, "snap2"));
+
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap1", &m_src_snap_id_start));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_src_ictx, "snap2", &m_src_snap_id_end));
+    ASSERT_EQ(0, librbd::api::Snapshot<>::get_id(m_dst_ictx, "snap1", &m_dst_snap_id_start));
+                                 
   }
 
   void test_stress() {
@@ -440,6 +722,10 @@ struct TestDeepCopy : public TestFixture {
   librbd::ImageCtx *m_src_ictx = nullptr;
   librbd::ImageCtx *m_dst_ictx = nullptr;
   librbd::ImageOptions m_opts;
+  librados::snap_t m_src_snap_id_start = 0;
+  librados::snap_t m_src_snap_id_end = CEPH_NOSNAP;
+  librados::snap_t m_dst_snap_id_start = 0;
+
 };
 
 TEST_F(TestDeepCopy, Empty)
@@ -758,6 +1044,35 @@ TEST_F(TestDeepCopy, Stress_StrippingSmallerDstObjSize)
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_STRIPE_COUNT, stripe_count));
 
   test_stress();
+}
+
+TEST_F(TestDeepCopy, SnapsIncremental)
+{
+  test_snaps2();
+}
+
+TEST_F(TestDeepCopy, SnapDiscardIncremental)
+{
+  test_snap_discard2();
+}
+
+TEST_F(TestDeepCopy, CloneIncremental)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  test_clone2();
+}
+
+TEST_F(TestDeepCopy, CloneShrinkIncremental)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  test_clone_shrink2();
+}
+
+
+TEST_F(TestDeepCopy, CloneExpandIncremental)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  test_clone_expand2();
 }
 
 } // namespace librbd

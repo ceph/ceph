@@ -1660,5 +1660,45 @@ TYPED_TEST(TestImageReplayer, SnapshotLimit) {
   this->stop();
 }
 
+TYPED_TEST(TestImageReplayer, Discard){
+  int io_count = 2;
+  this->bootstrap();
+ // Start replay and write to remote image
+  librbd::ImageCtx *ictx;
+  this->start();
+  this->generate_test_data();
+  this->open_remote_image(&ictx);
+  for (int i = 0; i < io_count; ++i) {
+    this->write_test_data(ictx, this->m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  this->flush(ictx);
+  this->wait_for_replay_complete();
+
+
+  for (int i = io_count; i < 2 * io_count; ++i) {
+    this->write_test_data(ictx, this->m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  this->flush(ictx);
+  this->wait_for_replay_complete();
+
+  ASSERT_EQ(static_cast<ssize_t>(TEST_IO_SIZE * io_count), librbd::api::Io<>::discard(*ictx, 0, TEST_IO_SIZE * io_count, false));
+  this->flush(ictx);
+  this->wait_for_replay_complete();
+  this->close_image(ictx);
+
+  this->open_local_image(&ictx);
+  for (int i = io_count; i < 2 * io_count; ++i) {
+    this->read_test_data(ictx, this->m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+
+  memset(this->m_test_data, 0, TEST_IO_SIZE);
+  for (int i = 0; i < io_count; ++i) {
+    this->read_test_data(ictx, this->m_test_data, TEST_IO_SIZE * i, TEST_IO_SIZE);
+  }
+  this->close_image(ictx);
+  this->stop();
+}
+
+
 } // namespace mirror
 } // namespace rbd
