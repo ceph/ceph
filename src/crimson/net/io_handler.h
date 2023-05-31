@@ -13,9 +13,54 @@
 namespace crimson::net {
 
 /**
+ * io_handler_state
+ *
+ * It is required to populate the states from IOHandler to ProtocolV2
+ * asynchronously.
+ */
+struct io_handler_state {
+  seq_num_t in_seq;
+  bool is_out_queued;
+  bool has_out_sent;
+
+  bool is_out_queued_or_sent() const {
+    return is_out_queued || has_out_sent;
+  }
+
+  /*
+   * should be consistent with the accroding interfaces in IOHandler
+   */
+
+  void reset_session(bool full) {
+    in_seq = 0;
+    if (full) {
+      is_out_queued = false;
+      has_out_sent = false;
+    }
+  }
+
+  void reset_peer_state() {
+    in_seq = 0;
+    is_out_queued = is_out_queued_or_sent();
+    has_out_sent = false;
+  }
+
+  void requeue_out_sent_up_to() {
+    // noop since the information is insufficient
+  }
+
+  void requeue_out_sent() {
+    if (has_out_sent) {
+      has_out_sent = false;
+      is_out_queued = true;
+    }
+  }
+};
+
+/**
  * HandshakeListener
  *
- * The interface class for IOHandler to notify the ProtocolV2 for handshake.
+ * The interface class for IOHandler to notify the ProtocolV2.
  *
  * The notifications may be cross-core and asynchronous.
  */
@@ -30,7 +75,10 @@ public:
 
   virtual void notify_out() = 0;
 
-  virtual void notify_out_fault(const char *where, std::exception_ptr) = 0;
+  virtual void notify_out_fault(
+      const char *where,
+      std::exception_ptr,
+      io_handler_state) = 0;
 
   virtual void notify_mark_down() = 0;
 
@@ -102,6 +150,10 @@ public:
     handshake_listener = &hl;
   }
 
+  io_handler_state get_states() const {
+    return {in_seq, is_out_queued(), has_out_sent()};
+  }
+
   struct io_stat_printer {
     const IOHandler &io_handler;
   };
@@ -137,9 +189,16 @@ public:
   };
   friend class fmt::formatter<io_state_t>;
 
-  void set_io_state(const io_state_t &new_state, FrameAssemblerV2Ref fa=nullptr);
+  void set_io_state(
+      io_state_t new_state,
+      FrameAssemblerV2Ref fa = nullptr,
+      bool set_notify_out = false);
 
-  seastar::future<FrameAssemblerV2Ref> wait_io_exit_dispatching();
+  struct exit_dispatching_ret {
+    FrameAssemblerV2Ref frame_assembler;
+    io_handler_state io_states;
+  };
+  seastar::future<exit_dispatching_ret> wait_io_exit_dispatching();
 
   void reset_session(bool full);
 
@@ -148,14 +207,6 @@ public:
   void requeue_out_sent_up_to(seq_num_t seq);
 
   void requeue_out_sent();
-
-  bool is_out_queued_or_sent() const {
-    return is_out_queued() || !out_sent_msgs.empty();
-  }
-
-  seq_num_t get_in_seq() const {
-    return in_seq;
-  }
 
   void dispatch_accept();
 
@@ -187,6 +238,8 @@ public:
       bool require_keepalive,
       std::optional<utime_t> maybe_keepalive_ack,
       bool require_ack);
+
+  void maybe_notify_out_dispatch();
 
   void notify_out_dispatch();
 
@@ -244,6 +297,8 @@ private:
 
   uint64_t ack_left = 0;
 
+  bool need_notify_out = false;
+
   /*
    * in states for reading
    */
@@ -265,6 +320,23 @@ inline std::ostream& operator<<(
 }
 
 } // namespace crimson::net
+
+template <>
+struct fmt::formatter<crimson::net::io_handler_state> {
+  constexpr auto parse(format_parse_context& ctx) {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(crimson::net::io_handler_state state, FormatContext& ctx) {
+    return fmt::format_to(
+        ctx.out(),
+        "io(in_seq={}, is_out_queued={}, has_out_sent={})",
+        state.in_seq,
+        state.is_out_queued,
+        state.has_out_sent);
+  }
+};
 
 template <>
 struct fmt::formatter<crimson::net::IOHandler::io_state_t>

@@ -23,8 +23,6 @@
 
 using namespace ceph::msgr::v2;
 using crimson::common::local_conf;
-using io_state_t = crimson::net::IOHandler::io_state_t;
-using io_stat_printer = crimson::net::IOHandler::io_stat_printer;
 
 namespace {
 
@@ -148,7 +146,9 @@ ProtocolV2::ProtocolV2(SocketConnection& conn,
     frame_assembler{FrameAssemblerV2::create(conn)},
     auth_meta{seastar::make_lw_shared<AuthConnectionMeta>()},
     protocol_timer{conn}
-{}
+{
+  io_states = io_handler.get_states();
+}
 
 ProtocolV2::~ProtocolV2() {}
 
@@ -207,13 +207,21 @@ void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state, bool 
     ceph_assert_always(!exit_io.has_value());
     exit_io = seastar::shared_promise<>();
   }
+
+  bool need_notify_out;
+  if (new_state == state_t::STANDBY && !conn.policy.server) {
+    need_notify_out = true;
+  } else {
+    need_notify_out = false;
+  }
+
   state = new_state;
   if (new_state == state_t::READY) {
     // I'm not responsible to shutdown the socket at READY
     is_socket_valid = false;
-    io_handler.set_io_state(new_io_state, std::move(frame_assembler));
+    io_handler.set_io_state(new_io_state, std::move(frame_assembler), need_notify_out);
   } else {
-    io_handler.set_io_state(new_io_state, nullptr);
+    io_handler.set_io_state(new_io_state, nullptr, need_notify_out);
   }
 
   /*
@@ -223,9 +231,10 @@ void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state, bool 
   if (pre_state == state_t::READY) {
     gate.dispatch_in_background("exit_io", conn, [this] {
       return io_handler.wait_io_exit_dispatching(
-      ).then([this](FrameAssemblerV2Ref fa) {
-        frame_assembler = std::move(fa);
+      ).then([this](auto ret) {
+        frame_assembler = std::move(ret.frame_assembler);
         ceph_assert_always(!frame_assembler->is_socket_valid());
+        io_states = ret.io_states;
         exit_io->set_value();
         exit_io = std::nullopt;
       });
@@ -295,20 +304,20 @@ void ProtocolV2::fault(
   }
 
   if (conn.policy.server ||
-      (conn.policy.standby && !io_handler.is_out_queued_or_sent())) {
+      (conn.policy.standby && !io_states.is_out_queued_or_sent())) {
     if (conn.policy.server) {
       logger().info("{} protocol {} {} fault as server, going to STANDBY {} -- {}",
                     conn,
                     get_state_name(state),
                     where,
-                    io_stat_printer{io_handler},
+                    io_states,
                     e_what);
     } else {
       logger().info("{} protocol {} {} fault with nothing to send, going to STANDBY {} -- {}",
                     conn,
                     get_state_name(state),
                     where,
-                    io_stat_printer{io_handler},
+                    io_states,
                     e_what);
     }
     execute_standby();
@@ -318,7 +327,7 @@ void ProtocolV2::fault(
                   conn,
                   get_state_name(state),
                   where,
-                  io_stat_printer{io_handler},
+                  io_states,
                   e_what);
     execute_wait(false);
   } else {
@@ -328,7 +337,7 @@ void ProtocolV2::fault(
                   conn,
                   get_state_name(state),
                   where,
-                  io_stat_printer{io_handler},
+                  io_states,
                   e_what);
     execute_connecting();
   }
@@ -342,6 +351,7 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
   }
+  io_states.reset_session(full);
   io_handler.reset_session(full);
 }
 
@@ -623,6 +633,7 @@ ProtocolV2::client_connect()
         return frame_assembler->read_frame_payload(
         ).then([this](auto payload) {
           // handle_server_ident() logic
+          io_states.requeue_out_sent();
           io_handler.requeue_out_sent();
           auto server_ident = ServerIdentFrame::Decode(payload->back());
           logger().debug("{} GOT ServerIdentFrame:"
@@ -699,12 +710,12 @@ ProtocolV2::client_reconnect()
                                           server_cookie,
                                           global_seq,
                                           connect_seq,
-                                          io_handler.get_in_seq());
+                                          io_states.in_seq);
   logger().debug("{} WRITE ReconnectFrame: addrs={}, client_cookie={},"
                  " server_cookie={}, gs={}, cs={}, in_seq={}",
                  conn, messenger.get_myaddrs(),
                  client_cookie, server_cookie,
-                 global_seq, connect_seq, io_handler.get_in_seq());
+                 global_seq, connect_seq, io_states.in_seq);
   return frame_assembler->write_flush_frame(reconnect).then([this] {
     return frame_assembler->read_main_preamble();
   }).then([this](auto ret) {
@@ -754,6 +765,7 @@ ProtocolV2::client_reconnect()
           auto reconnect_ok = ReconnectOkFrame::Decode(payload->back());
           logger().debug("{} GOT ReconnectOkFrame: msg_seq={}",
                          conn, reconnect_ok.msg_seq());
+          io_states.requeue_out_sent_up_to();
           io_handler.requeue_out_sent_up_to(reconnect_ok.msg_seq());
           return seastar::make_ready_future<next_step_t>(next_step_t::ready);
         });
@@ -886,8 +898,7 @@ void ProtocolV2::execute_connecting()
             logger().info("{} connected: gs={}, pgs={}, cs={}, "
                           "client_cookie={}, server_cookie={}, {}",
                           conn, global_seq, peer_global_seq, connect_seq,
-                          client_cookie, server_cookie,
-                          io_stat_printer{io_handler});
+                          client_cookie, server_cookie, io_states);
             io_handler.dispatch_connect();
             if (unlikely(state != state_t::CONNECTING)) {
               logger().debug("{} triggered {} after ms_handle_connect(), abort",
@@ -1653,8 +1664,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
       logger().info("{} established: gs={}, pgs={}, cs={}, "
                     "client_cookie={}, server_cookie={}, {}",
                     conn, global_seq, peer_global_seq, connect_seq,
-                    client_cookie, server_cookie,
-                    io_stat_printer{io_handler});
+                    client_cookie, server_cookie, io_states);
       execute_ready();
     }).handle_exception([this](std::exception_ptr eptr) {
       fault(state_t::ESTABLISHING, "execute_establishing", eptr);
@@ -1674,6 +1684,7 @@ ProtocolV2::send_server_ident()
   logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
   // this is required for the case when this connection is being replaced
+  io_states.reset_peer_state();
   io_handler.reset_peer_state();
 
   if (!conn.policy.lossy) {
@@ -1783,9 +1794,10 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       if (reconnect) {
         connect_seq = new_connect_seq;
         // send_reconnect_ok() logic
+        io_states.requeue_out_sent_up_to();
         io_handler.requeue_out_sent_up_to(new_msg_seq);
-        auto reconnect_ok = ReconnectOkFrame::Encode(io_handler.get_in_seq());
-        logger().debug("{} WRITE ReconnectOkFrame: msg_seq={}", conn, io_handler.get_in_seq());
+        auto reconnect_ok = ReconnectOkFrame::Encode(io_states.in_seq);
+        logger().debug("{} WRITE ReconnectOkFrame: msg_seq={}", conn, io_states.in_seq);
         return frame_assembler->write_flush_frame(reconnect_ok);
       } else {
         client_cookie = new_client_cookie;
@@ -1809,8 +1821,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                     "client_cookie={}, server_cookie={}, {}",
                     conn, reconnect ? "reconnected" : "connected",
                     global_seq, peer_global_seq, connect_seq,
-                    client_cookie, server_cookie,
-                    io_stat_printer{io_handler});
+                    client_cookie, server_cookie, io_states);
       execute_ready();
     }).handle_exception([this](std::exception_ptr eptr) {
       fault(state_t::REPLACING, "trigger_replacing", eptr);
@@ -1820,8 +1831,12 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 
 // READY state
 
-void ProtocolV2::notify_out_fault(const char *where, std::exception_ptr eptr)
+void ProtocolV2::notify_out_fault(
+    const char *where,
+    std::exception_ptr eptr,
+    io_handler_state _io_states)
 {
+  io_states = _io_states;
   fault(state_t::READY, where, eptr);
 }
 
@@ -1843,6 +1858,7 @@ void ProtocolV2::execute_standby()
 
 void ProtocolV2::notify_out()
 {
+  io_states.is_out_queued = true;
   if (unlikely(state == state_t::STANDBY && !conn.policy.server)) {
     logger().info("{} notify_out(): at {}, going to CONNECTING",
                   conn, get_state_name(state));

@@ -30,7 +30,7 @@ public:
 private:
   void notify_out() final;
 
-  void notify_out_fault(const char *, std::exception_ptr) final;
+  void notify_out_fault(const char *where, std::exception_ptr, io_handler_state) final;
 
   void notify_mark_down() final;
 
@@ -57,6 +57,8 @@ public:
 
 #endif
 private:
+  using io_state_t = IOHandler::io_state_t;
+
   seastar::future<> wait_exit_io() {
     if (exit_io.has_value()) {
       return exit_io->get_shared_future();
@@ -92,7 +94,7 @@ private:
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t state, IOHandler::io_state_t io_state, bool reentrant);
+  void trigger_state(state_t state, io_state_t io_state, bool reentrant);
 
   template <typename Func, typename T>
   void gated_execute(const char *what, T &who, Func &&func) {
@@ -214,6 +216,9 @@ private:
   SocketMessenger &messenger;
 
   IOHandler &io_handler;
+
+  // asynchronously populated from io_handler
+  io_handler_state io_states;
 
   bool has_socket = false;
 
