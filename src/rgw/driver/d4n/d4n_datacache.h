@@ -30,7 +30,7 @@ class D4NDatacache {
     Address get_addr() { return addr; }
 
     int copy_data(std::string originalOid, std::string copyOid);
-    int append_data(std::string oid, buffer::list& data);
+    int append_data(std::string oid, buffer::list& data); // done, need get (or iterate) -Sam
     int del_data(std::string oid);
 
     int set_attrs(std::string oid, rgw::sal::Attrs* attrs);
