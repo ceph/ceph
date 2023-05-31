@@ -6735,6 +6735,51 @@ int RGWRados::obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bu
   return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, &outbl, null_yield);
 }
 
+void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+                                       RGWObjState& state, const rgw_obj& olh_obj,
+                                       const std::string& op_tag, optional_yield y)
+{
+  if (cct->_conf->rgw_debug_inject_olh_cancel_modification_err) {
+    // simulate the scenario where we fail to remove the pending xattr
+    return;
+  }
+
+  rgw_rados_ref ref;
+  int r = get_obj_head_ref(dpp, bucket_info, olh_obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " get_obj_head_ref() returned " << r << dendl;
+    return;
+  }
+  string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
+  attr_name.append(op_tag);
+
+  // first remove the relevant pending prefix
+  ObjectWriteOperation op;
+  bucket_index_guard_olh_op(dpp, state, op);
+  op.rmxattr(attr_name.c_str());
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, y);
+  if (r < 0) {
+    if (r != -ENOENT && r != -ECANCELED) {
+      ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " rmxattr rgw_rados_operate() returned " << r << dendl;
+    }
+    return;
+  }
+    
+  if (auto iter = state.attrset.find(RGW_ATTR_OLH_INFO); iter == state.attrset.end()) {
+    // attempt to remove the OLH object if there are no pending ops,
+    // its olh info attr is empty, and its tag hasn't changed
+    ObjectWriteOperation rm_op;
+    bucket_index_guard_olh_op(dpp, state, rm_op);
+    rm_op.cmpxattr(RGW_ATTR_OLH_INFO, CEPH_OSD_CMPXATTR_OP_EQ, bufferlist());
+    cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true);
+    rm_op.remove();
+    r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &rm_op, y);
+  }
+  if (r < 0 && (r != -ENOENT && r != -ECANCELED)) {
+    ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " olh rm rgw_rados_operate() returned " << r << dendl;
+  }
+}
+
 int RGWRados::olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag)
 {
   ObjectWriteOperation op;
@@ -7490,15 +7535,14 @@ int RGWRados::clear_olh(const DoutPrefixProvider *dpp,
   r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &rm_op, y);
   if (r == -ECANCELED) {
     return r; /* someone else made a modification in the meantime */
-  } else {
-    /* 
-     * only clear if was successful, otherwise we might clobber pending operations on this object
-     */
-    r = bucket_index_clear_olh(dpp, bucket_info, tag, obj);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;
-      return r;
-    }
+  }
+  /* 
+   * only clear if was successful, otherwise we might clobber pending operations on this object
+   */
+  r = bucket_index_clear_olh(dpp, bucket_info, tag, obj);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;
+    return r;
   }
   return 0;
 }
@@ -7559,11 +7603,17 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, cons
       }
       return ret;
     }
-    ret = bucket_index_link_olh(dpp, bucket_info, *state, target_obj, delete_marker,
-                                op_tag, meta, olh_epoch, unmod_since, high_precision_time,
-                                zones_trace, log_data_change);
+    if (cct->_conf->rgw_debug_inject_set_olh_err) {
+      // fail here to simulate the scenario of an unlinked object instance
+      ret = -cct->_conf->rgw_debug_inject_set_olh_err;
+    } else {
+      ret = bucket_index_link_olh(dpp, bucket_info, *state, target_obj, delete_marker,
+                                  op_tag, meta, olh_epoch, unmod_since, high_precision_time,
+                                  zones_trace, log_data_change);
+    }
     if (ret < 0) {
       ldpp_dout(dpp, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
+      olh_cancel_modification(dpp, bucket_info, *state, olh_obj, op_tag, y);
       if (ret == -ECANCELED) {
         // the bucket index rejected the link_olh() due to olh tag mismatch;
         // attempt to reconstruct olh head attributes based on the bucket index
@@ -7630,6 +7680,7 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& o
 
     ret = bucket_index_unlink_instance(dpp, bucket_info, target_obj, op_tag, olh_tag, olh_epoch, zones_trace);
     if (ret < 0) {
+      olh_cancel_modification(dpp, bucket_info, *state, olh_obj, op_tag, y);
       ldpp_dout(dpp, 20) << "bucket_index_unlink_instance() target_obj=" << target_obj << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
         continue;
