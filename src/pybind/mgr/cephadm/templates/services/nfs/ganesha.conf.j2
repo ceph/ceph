@@ -7,6 +7,9 @@ NFS_CORE_PARAM {
 {% if bind_addr %}
         Bind_addr = {{ bind_addr }};
 {% endif %}
+{% if haproxy_hosts %}
+        HAProxy_Hosts = {{ haproxy_hosts|join(", ") }};
+{% endif %}
 }
 
 NFSv4 {
