@@ -4872,7 +4872,7 @@ options:
   level: advanced
   desc: Allocator policy
   long_desc: Allocator to use for bluestore.  Stupid should only be used for testing.
-  default: hybrid
+  default: avl
   enum_values:
   - bitmap
   - stupid

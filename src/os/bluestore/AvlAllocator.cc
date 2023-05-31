@@ -32,14 +32,14 @@ namespace {
  */
 uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
 					 uint64_t size,
-					 uint64_t align)
+					 uint64_t min_alloc_size)
 {
   const auto compare = range_tree.key_comp();
   uint32_t search_count = 0;
   uint64_t search_bytes = 0;
   auto rs_start = range_tree.lower_bound(range_t{*cursor, size}, compare);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
-    uint64_t offset = p2roundup(rs->start, align);
+    uint64_t offset = p2roundup(rs->start, (uint64_t)block_size);
     *cursor = offset + size;
     if (offset + size <= rs->end) {
       return offset;
@@ -59,7 +59,7 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
   }
   // If we reached end, start from beginning till cursor.
   for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
-    uint64_t offset = p2roundup(rs->start, align);
+    uint64_t offset = p2roundup(rs->start, (uint64_t)block_size);
     *cursor = offset + size;
     if (offset + size <= rs->end) {
       return offset;
@@ -75,14 +75,14 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
 }
 
 uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
-					uint64_t align)
+					uint64_t min_alloc_size)
 {
   // instead of searching from cursor, just pick the smallest range which fits
   // the needs
   const auto compare = range_size_tree.key_comp();
   auto rs_start = range_size_tree.lower_bound(range_t{0, size}, compare);
   for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
-    uint64_t offset = p2roundup(rs->start, align);
+    uint64_t offset = p2roundup(rs->start, (uint64_t)block_size);
     if (offset + size <= rs->end) {
       return offset;
     }
@@ -214,7 +214,7 @@ void AvlAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
 int64_t AvlAllocator::_allocate(
   uint64_t want,
-  uint64_t unit,
+  uint64_t min_alloc_size,
   uint64_t max_alloc_size,
   int64_t  hint, // unused, for now!
   PExtentVector* extents)
@@ -223,7 +223,7 @@ int64_t AvlAllocator::_allocate(
   while (allocated < want) {
     uint64_t offset, length;
     int r = _allocate(std::min(max_alloc_size, want - allocated),
-      unit, &offset, &length);
+      min_alloc_size, &offset, &length);
     if (r < 0) {
       // Allocation failed.
       break;
@@ -236,7 +236,7 @@ int64_t AvlAllocator::_allocate(
 
 int AvlAllocator::_allocate(
   uint64_t size,
-  uint64_t unit,
+  uint64_t min_alloc_size,
   uint64_t *offset,
   uint64_t *length)
 {
@@ -247,10 +247,10 @@ int AvlAllocator::_allocate(
 
   bool force_range_size_alloc = false;
   if (max_size < size) {
-    if (max_size < unit) {
+    if (max_size < (uint64_t)block_size) {
       return -ENOSPC;
     }
-    size = p2align(max_size, unit);
+    size = p2align(max_size, (uint64_t)block_size);
     ceph_assert(size > 0);
     force_range_size_alloc = true;
   }
@@ -274,20 +274,20 @@ int AvlAllocator::_allocate(
     uint64_t align = size & -size;
     ceph_assert(align != 0);
     uint64_t* cursor = &lbas[cbits(align) - 1];
-    start = _pick_block_after(cursor, size, unit);
+    start = _pick_block_after(cursor, size, min_alloc_size);
     dout(20) << __func__ << " first fit=" << start << " size=" << size << dendl;
   }
   if (start == -1ULL) {
     do {
-      start = _pick_block_fits(size, unit);
+      start = _pick_block_fits(size, min_alloc_size);
       dout(20) << __func__ << " best fit=" << start << " size=" << size << dendl;
       if (start != uint64_t(-1ULL)) {
         break;
       }
       // try to collect smaller extents as we could fail to retrieve
       // that large block due to misaligned extents
-      size = p2align(size >> 1, unit);
-    } while (size >= unit);
+      size = p2align(size >> 1, (uint64_t)block_size);
+    } while (size >= (uint64_t)block_size);
   }
   if (start == -1ULL) {
     return -ENOSPC;
