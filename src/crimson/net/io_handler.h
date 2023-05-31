@@ -143,6 +143,8 @@ public:
 
   void reset_session(bool full);
 
+  void reset_peer_state();
+
   void requeue_out_sent_up_to(seq_num_t seq);
 
   void requeue_out_sent();
@@ -171,7 +173,11 @@ public:
             next_keepalive_ack.has_value());
   }
 
+  void reset_in();
+
   void reset_out();
+
+  void discard_out_sent();
 
   seastar::future<stop_t> try_exit_out_dispatch();
 

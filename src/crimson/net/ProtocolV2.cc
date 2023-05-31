@@ -1674,8 +1674,7 @@ ProtocolV2::send_server_ident()
   logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
   // this is required for the case when this connection is being replaced
-  io_handler.requeue_out_sent_up_to(0);
-  io_handler.reset_session(false);
+  io_handler.reset_peer_state();
 
   if (!conn.policy.lossy) {
     server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
