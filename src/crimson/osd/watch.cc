@@ -222,8 +222,7 @@ bool notify_reply_t::operator<(const notify_reply_t& rhs) const
 std::ostream &operator<<(std::ostream &out, const notify_reply_t &rhs)
 {
   out << "notify_reply_t{watcher_gid=" << rhs.watcher_gid
-      << ", watcher_cookie=" << rhs.watcher_cookie
-      << ", bl=" << rhs.bl << "}";
+      << ", watcher_cookie=" << rhs.watcher_cookie << "}";
   return out;
 }
 
