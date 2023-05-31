@@ -254,12 +254,20 @@ seastar::future<FrameAssemblerV2Ref> IOHandler::wait_io_exit_dispatching()
 
 void IOHandler::reset_session(bool full)
 {
-  // reset in
-  in_seq = 0;
+  assert(io_state != io_state_t::open);
+  reset_in();
   if (full) {
     reset_out();
     dispatch_remote_reset();
   }
+}
+
+void IOHandler::reset_peer_state()
+{
+  assert(io_state != io_state_t::open);
+  reset_in();
+  requeue_out_sent_up_to(0);
+  discard_out_sent();
 }
 
 void IOHandler::requeue_out_sent()
@@ -306,15 +314,27 @@ void IOHandler::requeue_out_sent_up_to(seq_num_t seq)
   requeue_out_sent();
 }
 
+void IOHandler::reset_in()
+{
+  assert(io_state != io_state_t::open);
+  in_seq = 0;
+}
+
 void IOHandler::reset_out()
 {
   assert(io_state != io_state_t::open);
-  out_seq = 0;
+  discard_out_sent();
   out_pending_msgs.clear();
-  out_sent_msgs.clear();
   need_keepalive = false;
   next_keepalive_ack = std::nullopt;
   ack_left = 0;
+}
+
+void IOHandler::discard_out_sent()
+{
+  assert(io_state != io_state_t::open);
+  out_seq = 0;
+  out_sent_msgs.clear();
 }
 
 void IOHandler::dispatch_accept()
