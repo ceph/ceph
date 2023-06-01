@@ -1,5 +1,8 @@
 tasks:
 - install:
+    extra_system_packages:
+      deb: ['python3.9']
+      rpm: ['python3.9']
 - ceph:
 - tox: [ client.0 ]
 - keystone:
