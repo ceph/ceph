@@ -52,7 +52,7 @@ public:
   }
 
   bool is_closed() const {
-    return closed;
+    return state == state_t::CLOSING;
   }
 
 #endif
@@ -60,8 +60,8 @@ private:
   using io_state_t = IOHandler::io_state_t;
 
   seastar::future<> wait_exit_io() {
-    if (exit_io.has_value()) {
-      return exit_io->get_shared_future();
+    if (pr_exit_io.has_value()) {
+      return pr_exit_io->get_shared_future();
     } else {
       return seastar::now();
     }
@@ -94,7 +94,7 @@ private:
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t state, io_state_t io_state, bool reentrant);
+  void trigger_state(state_t new_state, io_state_t new_io_state);
 
   template <typename Func, typename T>
   void gated_execute(const char *what, T &who, Func &&func) {
@@ -227,16 +227,13 @@ private:
 
   FrameAssemblerV2Ref frame_assembler;
 
-  std::optional<seastar::shared_promise<>> exit_io;
+  std::optional<seastar::shared_promise<>> pr_exit_io;
 
   AuthConnectionMetaRef auth_meta;
 
   crimson::common::Gated gate;
 
-  bool closed = false;
-
-  // become valid only after closed == true
-  seastar::shared_future<> closed_clean_fut;
+  seastar::shared_promise<> pr_closed_clean;
 
 #ifdef UNIT_TESTS_BUILT
   bool closed_clean = false;
