@@ -21,8 +21,8 @@
 #include "rgw_role.h"
 #include "common/dout.h" 
 
+#include "rgw_redis_driver.cc"
 #include "driver/d4n/d4n_directory.h"
-#include "driver/d4n/d4n_datacache.h"
 #include "driver/d4n/d4n_policy.h"
 
 namespace rgw { namespace sal {
@@ -32,7 +32,6 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::ObjectDirectory* objDir;
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* cacheBlock;
-    rgw::d4n::D4NDatacache* d4nCache;
     rgw::d4n::PolicyDriver* policyDriver;
 
   public:
@@ -41,16 +40,12 @@ class D4NFilterDriver : public FilterDriver {
       objDir = new rgw::d4n::ObjectDirectory();
       blockDir = new rgw::d4n::BlockDirectory();
       cacheBlock = new rgw::d4n::CacheBlock();
-      d4nCache = new rgw::d4n::D4NDatacache();
       policyDriver = new rgw::d4n::PolicyDriver("lfuda");
     }
     virtual ~D4NFilterDriver() {
       delete objDir; 
       delete blockDir; 
       delete cacheBlock;
-      delete d4nCache;
-
-      policyDriver->delete_policy();
       delete policyDriver;
     }
 
@@ -69,7 +64,6 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
     rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
-    rgw::d4n::D4NDatacache* get_d4n_cache() { return d4nCache; }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver; }
 };
 
