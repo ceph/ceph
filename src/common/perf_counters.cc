@@ -136,11 +136,32 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
 {
   f->open_object_section("perfcounter_collection");
   
-  for (perf_counters_set_t::iterator l = m_loggers.begin();
-       l != m_loggers.end(); ++l) {
-    // Optionally filter on logger name, pass through counter filter
-    if (logger.empty() || (*l)->get_name() == logger) {
-      (*l)->dump_formatted_generic(f, schema, histograms, dump_labeled, counter);
+  if (dump_labeled) {
+    std::string prev_key_name;
+    for (auto l = m_loggers.begin(); l != m_loggers.end(); ++l) {
+      std::string_view key_name = ceph::perf_counters::key_name((*l)->get_name());
+      if (key_name != prev_key_name) {
+        // close previous set of counters before dumping new one
+        if (!prev_key_name.empty()) {
+          f->close_section(); // array section
+        }
+        prev_key_name = key_name;
+
+        f->open_array_section(key_name);
+        (*l)->dump_formatted_generic(f, schema, histograms, true, "");
+      } else {
+        (*l)->dump_formatted_generic(f, schema, histograms, true, "");
+      }
+    }
+    if (!m_loggers.empty()) {
+      f->close_section(); // final array section
+    }
+  } else {
+    for (auto l = m_loggers.begin(); l != m_loggers.end(); ++l) {
+      // Optionally filter on logger name, pass through counter filter
+      if (logger.empty() || (*l)->get_name() == logger) {
+        (*l)->dump_formatted_generic(f, schema, histograms, false, counter);
+      }
     }
   }
   f->close_section();
@@ -359,9 +380,7 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     bool histograms, bool dump_labeled, const std::string &counter) const
 {
   if (dump_labeled) {
-    std::string_view perf_counter_name = ceph::perf_counters::key_name(m_name);
-    f->open_object_section(perf_counter_name);
-
+    f->open_object_section(""); // should be enclosed by array
     f->open_object_section("labels");
     for (auto label : ceph::perf_counters::key_labels(m_name)) {
       // don't dump labels with empty label names
