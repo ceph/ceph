@@ -6324,24 +6324,17 @@ def apply_deploy_config_to_ctx(
         ctx.meta_properties = config_data['meta']
     if 'config_blobs' in config_data:
         ctx.config_blobs = config_data['config_blobs']
-    # this is quite the hack!  this is a workaround for the fact that
-    # cephadm orch module knows about "args" not what they represent
-    # and so this lets us (try to) smooth the transition. Ideally, these
-    # would be set using key-value pairs in 'params' below.
-    parser = argparse.ArgumentParser(add_help=False)
-    _add_deploy_parser_args(parser)
-    try:
-        parsed_args = parser.parse_args(
-            config_data.get('deploy_arguments', []),
-        )
-    except SystemExit:
-        # exit_on_error arg for ArgumentParser is not present on py 3.6.
-        # we need to catch the exception until we can drop this code
-        raise Error('invalid argument encountered')
-    for key, value in vars(parsed_args).items():
-        setattr(ctx, key, value)
-    # prefer to get the values directly from the params JSON object.
+
+    # many functions don't check that an attribute is set on the ctx
+    # (with getattr or the '__contains__' func on ctx).
+    # This reuses the defaults from the CLI options so we don't
+    # have to repeat things and they can stay in sync.
+    facade = ArgumentFacade()
+    _add_deploy_parser_args(facade)
+    facade.apply(ctx)
     for key, value in config_data.get('params', {}).items():
+        if key not in facade.defaults:
+            logger.warning('unexpected parameter: %r=%r', key, value)
         setattr(ctx, key, value)
     update_default_image(ctx)
     logger.debug('Determined image: %r', ctx.image)
@@ -9556,7 +9549,28 @@ def command_maintenance(ctx: CephadmContext) -> str:
 ##################################
 
 
-def _add_deploy_parser_args(parser_deploy: argparse.ArgumentParser) -> None:
+class ArgumentFacade:
+    def __init__(self) -> None:
+        self.defaults: Dict[str, Any] = {}
+
+    def add_argument(self, *args: Any, **kwargs: Any) -> None:
+        if not args:
+            raise ValueError('expected at least one argument')
+        name = args[0]
+        if not name.startswith('--'):
+            raise ValueError(f'expected long option, got: {name!r}')
+        name = name[2:].replace('-', '_')
+        value = kwargs.pop('default', None)
+        self.defaults[name] = value
+
+    def apply(self, ctx: CephadmContext) -> None:
+        for key, value in self.defaults.items():
+            setattr(ctx, key, value)
+
+
+def _add_deploy_parser_args(
+    parser_deploy: Union[argparse.ArgumentParser, ArgumentFacade],
+) -> None:
     parser_deploy.add_argument(
         '--config', '-c',
         help='config file for new daemon')
