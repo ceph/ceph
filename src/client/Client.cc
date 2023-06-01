@@ -5884,7 +5884,7 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
   if (mask & CEPH_SETATTR_GID) {
     if (perms.uid() != 0 && (perms.uid() != in->uid ||
-      	       (!perms.gid_in_groups(stx->stx_gid) && stx->stx_gid != in->gid)))
+        (!perms.gid_in_groups(stx->stx_gid) && stx->stx_gid != in->gid)))
       goto out;
   }
 
@@ -5900,7 +5900,7 @@ int Client::may_setattr(Inode *in, struct ceph_statx *stx, int mask,
 	 *
 	 * Only allow unprivileged users to clear S_ISUID and S_ISUID.
 	 */
-	(m & ~(S_ISUID | S_ISGID)))
+	((m & ~(S_ISUID | S_ISGID)) || !(m & (S_ISUID | S_ISGID))))
       goto out;
 
     gid_t i_gid = (mask & CEPH_SETATTR_GID) ? stx->stx_gid : in->gid;
