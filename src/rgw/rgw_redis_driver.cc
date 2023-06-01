@@ -412,13 +412,14 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return -2;
 }
 
-int RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_value) {
+std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) {
   int exists = -2;
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
+  std::string attrValue;
 
   if (!client.is_connected()) 
-    return ECONNREFUSED;
+    return std::string;
 
   if (key_exists(dpp, entryName)) {
     std::string getValue;
@@ -433,38 +434,38 @@ int RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key,
 
       client.sync_commit(std::chrono::milliseconds(1000));
     } catch(std::exception &e) {
-      return -1;
+      return std::string;
     }
     
     if (!exists) {
       dout(20) << "RGW Redis Cache: Attribute was not set." << dendl;
-      return -1;
+      return std::string;
     }
 
     /* Retrieve existing value from cache */
     try {
-      client.hget(entryName, attr_name, [&exists, &attr_value](cpp_redis::reply &reply) {
+      client.hget(entryName, attr_name, [&exists, &attrValue](cpp_redis::reply &reply) {
 	if (!reply.is_null()) {
 	  exists = 0;
-	  attr_value = reply.as_string();
+	  attrValue = reply.as_string();
 	}
       });
 
       client.sync_commit(std::chrono::milliseconds(1000));
     } catch(std::exception &e) {
-      return -1;
+      return std::string;
     }
 
     if (exists < 0) {
       dout(20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-      return -2;
+      return std::string;
     }
   }
 
-  return 0;
+  return attrValue;
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) {
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) {
   /* Creating the index based on key */
   std::string entryName = "rgw-object:" + key + ":cache";
   int result = -1;
@@ -474,7 +475,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
     
   /* Every set will be treated as new */
   try {
-    client.hset(entryName, attr_name, attr_val, [&result](cpp_redis::reply& reply) {
+    client.hset(entryName, attr_name, attrVal, [&result](cpp_redis::reply& reply) {
       if (!reply.is_null()) {
         result = reply.as_integer();
       }
