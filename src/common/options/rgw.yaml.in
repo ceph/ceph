@@ -1047,6 +1047,9 @@ options:
   default: REMOTE_ADDR
   services:
   - rgw
+  enum_values:
+  - REMOTE_ADDR
+  - HTTP_X_FORWARDED_FOR
   see_also:
   - rgw_enable_ops_log
   with_legacy: true
