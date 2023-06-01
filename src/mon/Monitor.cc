@@ -280,7 +280,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 Monitor::~Monitor()
 {
   op_tracker.on_shutdown();
-
   delete logger;
   ceph_assert(session_map.sessions.empty());
 }
@@ -6532,6 +6531,11 @@ int Monitor::ms_handle_fast_authentication(Connection *con)
   MonSession *s = static_cast<MonSession*>(priv.get());
   if (!s) {
     // must be msgr2, otherwise dispatch would have set up the session.
+    if (state == STATE_SHUTDOWN) {
+      dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
+      con->mark_down();
+      return -EACCES;
+    }
     s = session_map.new_session(
       entity_name_t(con->get_peer_type(), -1),  // we don't know yet
       con->get_peer_addrs(),
