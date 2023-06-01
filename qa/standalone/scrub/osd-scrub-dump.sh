@@ -31,8 +31,8 @@ function run() {
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_max_scrubs=$MAX_SCRUBS "
-    CEPH_ARGS+="--osd_shallow_scrub_chunk_max=$CHUNK_MAX "
-    CEPH_ARGS+="--osd_scrub_sleep=$SCRUB_SLEEP "
+    #CEPH_ARGS+="--osd_shallow_scrub_chunk_max=$CHUNK_MAX "
+    #CEPH_ARGS+="--osd_scrub_sleep=$SCRUB_SLEEP "
     CEPH_ARGS+="--osd_pool_default_size=$POOL_SIZE "
     # Set scheduler to "wpq" until there's a reliable way to query scrub states
     # with "--osd-scrub-sleep" set to 0. The "mclock_scheduler" overrides the
@@ -58,9 +58,17 @@ function TEST_recover_unexpected() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 "
+    ceph_osd_args+="--osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 "
+    ceph_osd_args+="--osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2 "
+    ceph_osd_args+="--osd_shallow_scrub_chunk_max=100 "
+    ceph_osd_args+="--osd_scrub_sleep=$SCRUB_SLEEP "
+
     for o in $(seq 0 $(expr $OSDS - 1))
     do
-        run_osd $dir $o
+        run_osd $dir $o --osd_scrub_during_recovery=false $ceph_osd_args
     done
 
     for i in $(seq 1 $POOLS)
@@ -145,6 +153,9 @@ function TEST_recover_unexpected() {
 	    sleep 0.5
 	fi
     done
+    ceph tell osd.* config set osd_scrub_sleep "0"
+    ceph tell osd.* config set osd_max_scrubs 50
+    sleep 10
 
     # Check that there are no more scrubs
     for i in $(seq 0 5)

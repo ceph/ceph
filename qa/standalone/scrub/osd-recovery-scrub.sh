@@ -34,7 +34,8 @@ function run() {
 }
 
 # Simple test for "not scheduling scrubs due to active recovery"
-# OSD::sched_scrub() called on all OSDs during ticks
+# OSD::sched_scrub() called on all OSDs during ticks, but (starting June 2023) the
+# message will only appear if a scrub is scheduled.
 function TEST_recovery_scrub_1() {
     local dir=$1
     local poolname=test
@@ -49,12 +50,13 @@ function TEST_recovery_scrub_1() {
     run_mon $dir a --osd_pool_default_size=1 --mon_allow_pool_size_one=true || return 1
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 "
+    ceph_osd_args+="--osd-deep-scrub-randomize-ratio=0 "
     ceph_osd_args+="--osd_scrub_backoff_ratio=0 "
     ceph_osd_args+="--osd_stats_update_period_not_scrubbing=3 "
     ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-        run_osd $dir $osd --osd_scrub_during_recovery=false || return 1
+        run_osd $dir $osd --osd_scrub_during_recovery=false $ceph_osd_args || return 1
     done
 
     # Create a pool with $PGS pgs
@@ -94,6 +96,11 @@ function TEST_recovery_scrub_1() {
     set +o pipefail
     ceph pg dump pgs
 
+    # try to initiate a scrub
+    ceph pg scrub $poolid.0
+    sleep 1
+    ceph pg dump pgs
+
     sleep 10
     # Work around for http://tracker.ceph.com/issues/38195
     kill_daemons $dir #|| return 1
@@ -114,14 +121,13 @@ function TEST_recovery_scrub_1() {
             if grep -q "$err_string" $dir/osd.${osd}.log
             then
                 found=true
-		count=$(expr $count + 1)
+		break
             fi
         done
         if [ "$found" = "false" ]; then
             echo "Missing log message '$err_string'"
             ERRORS=$(expr $ERRORS + 1)
         fi
-        [ $count -eq $OSDS ] || return 1
     done
 
     teardown $dir || return 1

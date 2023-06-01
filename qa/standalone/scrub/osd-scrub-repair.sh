@@ -564,6 +564,10 @@ function TEST_auto_repair_bluestore_failed() {
     objectstore_tool $dir $(get_not_primary $poolname SOMETHING) obj2 remove || return 1
     objectstore_tool $dir $(get_primary $poolname SOMETHING) obj2 rm-attr _ || return 1
 
+    ceph tell osd.* config set osd_stats_update_period_scrubbing 2
+    ceph tell osd.* config set osd_stats_update_period_not_scrubbing 3
+
+
     local pgid=$(get_pg $poolname obj1)
     local primary=$(get_primary $poolname obj1)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
@@ -5760,7 +5764,8 @@ function TEST_periodic_scrub_replicated() {
     run_mon $dir a --osd_pool_default_size=2 || return 1
     run_mgr $dir x || return 1
     local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
-    ceph_osd_args+="--osd_scrub_backoff_ratio=0"
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     run_osd $dir 0 $ceph_osd_args || return 1
     run_osd $dir 1 $ceph_osd_args || return 1
     create_rbd_pool || return 1
@@ -5818,7 +5823,7 @@ function TEST_periodic_scrub_replicated() {
     for i in $(seq 14 -1 0)
     do
       sleep 1
-      ! grep -q "Regular scrub skipped due to deep-scrub errors and nodeep-scrub set" $dir/osd.${primary}.log || { found=true ; break; }
+      ! grep -q "Regular scrub skipped due to deep-scrub errors" $dir/osd.${primary}.log || { found=true ; break; }
       echo Time left: $i seconds
     done
     test $found = "true" || return 1
@@ -6244,6 +6249,380 @@ function TEST_request_scrub_priority() {
 
     # Verify that the requested scrub ran first
     grep "log_channel.*scrub ok" $dir/osd.${primary}.log | grep -v purged_snaps | head -1 | sed 's/.*[[]DBG[]]//' | grep -q $pg || return 1
+}
+
+function TEST_ronen1() {
+    local dir=$1
+    local poolname=psr_pool
+    local objname=POBJ
+
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0"
+    run_osd $dir 0 $ceph_osd_args || return 1
+    run_osd $dir 1 $ceph_osd_args || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    local osd=0
+    add_something $dir $poolname $objname scrub || return 1
+    local primary=$(get_primary $poolname $objname)
+    local pg=$(get_pg $poolname $objname)
+
+    # Add deep-scrub only error
+    local payload=UVWXYZ
+    echo $payload > $dir/CORRUPT
+    # Uses $ceph_osd_args for osd restart
+    objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+
+    # No scrub information available, so expect failure
+    set -o pipefail
+    !  rados list-inconsistent-obj $pg | jq '.' || return 1
+    set +o pipefail
+
+    pg_deep_scrub $pg || return 1
+
+    # Make sure bad object found
+    rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
+    rados list-inconsistent-obj $pg > /tmp/inconsistent_0
+
+    flush_pg_stats
+    local last_scrub=$(get_last_scrub_stamp $pg)
+    # Fake a schedule scrub
+    ceph tell $pg scrub || return 1
+    # Wait for schedule regular scrub
+    wait_for_scrub $pg "$last_scrub"
+
+    # It needed to be upgraded
+    grep -q "Deep scrub errors, upgrading scrub to deep-scrub" $dir/osd.${primary}.log || return 1
+
+    # Bad object still known
+    rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
+
+    rados list-inconsistent-obj $pg > /tmp/inconsistent_1
+
+    # Can't upgrade with this set
+    ceph osd set nodeep-scrub
+    # Let map change propagate to OSDs
+    ceph tell osd.0 get_latest_osdmap
+    flush_pg_stats
+    sleep 5
+
+    # Fake a schedule scrub
+    ceph tell $pg scrub || return 1
+    # Wait for schedule regular scrub
+    # to notice scrub and skip it
+    local found=false
+    for i in $(seq 14 -1 0)
+    do
+      sleep 1
+      ! grep -q "Regular scrub skipped due to deep-scrub errors" $dir/osd.${primary}.log || { found=true ; break; }
+      echo Time left: $i seconds
+    done
+    test $found = "true" || return 1
+
+    # Bad object still known
+    rados list-inconsistent-obj $pg | jq '.' | grep -q $objname || return 1
+    rados list-inconsistent-obj $pg > /tmp/inconsistent_2
+
+    flush_pg_stats
+    # Request a regular scrub and it will be done
+    pg_scrub $pg
+    grep -q "Regular scrub request, deep-scrub details will be lost" $dir/osd.${primary}.log || return 1
+
+    # deep-scrub error is no longer present
+    rados list-inconsistent-obj $pg | jq '.' | grep -qv $objname || return 1
+    rados list-inconsistent-obj $pg > /tmp/inconsistent_6
+}
+
+function TEST_ronen_save_corrupted() {
+    local dir=$1
+    local poolname=csr_pool
+    local total_objs=6
+
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 || return 1
+    run_osd $dir 1 || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    create_pool foo 1 || return 1
+    create_pool $poolname 1 1 || return 1
+    wait_for_clean || return 1
+
+    # Add deep-scrub only error
+    local payload=UVWXYZ
+    echo $payload > $dir/CORRUPT
+    # Uses $ceph_osd_args for osd restart
+    #objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+
+    echo XXX > /tmp/oplist1
+    echo XXX > /tmp/oplist2
+    for w in $(seq 3 $total_objs) ; do
+        echo "6364 $w" 
+        objname=ROBJ${w}
+        add_something $dir $poolname $objname || return 1
+
+        rados --pool $poolname setomapheader $objname hdr-$objname || return 1
+        rados --pool $poolname setomapval $objname key-$objname val-$objname || return 1
+        objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+    done
+
+    local pg=$(get_pg $poolname ROBJ0)
+    local primary=$(get_primary $poolname ROBJ0)
+
+    rados -p $poolname mksnap snap1
+    echo -n head_of_snapshot_data > $dir/change
+
+    for iy in $(seq 1 2) ; do
+        echo $iy "   XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+        echo $iy "   XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" >> /tmp/oplist1
+        objname=ROBJ$iy
+        echo $objname "   XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" >> /tmp/oplist1
+
+        # Alternate corruption between osd.0 and osd.1
+        local yy=$(expr $iy)
+        local osd=$(expr $yy % 2)
+        objectstore_tool $dir $osd --op list >> /tmp/oplist1
+        echo $iy "========== $iy  $objname =====" >> /tmp/oplist1
+
+        case $iy in
+        1)
+          rados --pool $poolname put $objname $dir/change
+          objectstore_tool $dir $osd --head $objname clear-snapset corrupt || return 1
+          ;;
+
+        *)
+          rados --pool $poolname put $objname $dir/change
+          objectstore_tool $dir $osd --head $objname clear-snapset corrupt || return 1
+          objectstore_tool $dir $osd --op list >> /tmp/oplist2
+          objectstore_tool $dir $osd $objname set-bytes $dir/CORRUPT || return 1
+          ;;
+
+        esac
+    done
+    rm $dir/change
+
+    pg_deep_scrub $pg
+
+    rados list-inconsistent-pg $poolname > /tmp/rsave_1
+    rados list-inconsistent-pg $poolname > $dir/json || return 1
+    # Check pg count
+    #test $(jq '. | length' $dir/json) = "1" || return 1
+    # Check pgid
+    #test $(jq -r '.[0]' $dir/json) = $pg || return 1
+
+    rados list-inconsistent-obj $pg > /tmp/rsave_2
+    rados list-inconsistent-obj $pg > $dir/json || return 1
+
+    jq "$jqfilter" << EOF | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/checkcsjson
+{
+  "epoch": 34,
+  "inconsistents": [
+    {
+      "object": {
+        "name": "ROBJ1",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 8
+      },
+      "errors": [
+        "snapset_inconsistency"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ1",
+          "key": "",
+          "snapid": -2,
+          "hash": 1454963827,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "24'8",
+        "prior_version": "21'3",
+        "last_reqid": "client.4195.0:1",
+        "user_version": 8,
+        "size": 21,
+        "mtime": "2018-04-05 14:35:43.286117",
+        "local_mtime": "2018-04-05 14:35:43.288990",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x53acb008",
+        "omap_digest": "0xffffffff",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "errors": [],
+          "size": 21,
+          "snapset": {
+            "clones": [
+              {
+                "overlap": "[]",
+                "size": 7,
+                "snap": 1,
+                "snaps": [
+                  1
+                ]
+              }
+            ],
+            "seq": 1
+          }
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "errors": [],
+          "size": 21,
+          "snapset": {
+            "clones": [],
+            "seq": 0
+          }
+        }
+      ]
+    },
+    {
+      "object": {
+        "name": "ROBJ2",
+        "nspace": "",
+        "locator": "",
+        "snap": "head",
+        "version": 10
+      },
+      "errors": [
+        "snapset_inconsistency"
+      ],
+      "union_shard_errors": [],
+      "selected_object_info": {
+        "oid": {
+          "oid": "ROBJ2",
+          "key": "",
+          "snapid": -2,
+          "hash": 2026323607,
+          "max": 0,
+          "pool": 3,
+          "namespace": ""
+        },
+        "version": "28'10",
+        "prior_version": "23'6",
+        "last_reqid": "client.4223.0:1",
+        "user_version": 10,
+        "size": 21,
+        "mtime": "2018-04-05 14:35:48.326856",
+        "local_mtime": "2018-04-05 14:35:48.328097",
+        "lost": 0,
+        "flags": [
+          "dirty",
+          "omap",
+          "data_digest"
+        ],
+        "truncate_seq": 0,
+        "truncate_size": 0,
+        "data_digest": "0x53acb008",
+        "omap_digest": "0xffffffff",
+        "expected_object_size": 0,
+        "expected_write_size": 0,
+        "alloc_hint_flags": 0,
+        "manifest": {
+          "type": 0
+        },
+        "watchers": {}
+      },
+      "shards": [
+        {
+          "osd": 0,
+          "primary": false,
+          "errors": [],
+          "size": 21,
+          "snapset": {
+            "clones": [],
+            "seq": 0
+          }
+        },
+        {
+          "osd": 1,
+          "primary": true,
+          "errors": [],
+          "size": 21,
+          "snapset": {
+            "clones": [
+              {
+                "overlap": "[]",
+                "size": 7,
+                "snap": 1,
+                "snaps": [
+                  1
+                ]
+              }
+            ],
+            "seq": 1
+          }
+        }
+      ]
+    }
+  ]
+}
+EOF
+
+    jq "$jqfilter" $dir/json | jq '.inconsistents' | python3 -c "$sortkeys" > $dir/csjson
+    multidiff $dir/checkcsjson $dir/csjson || test $getjson = "yes" || return 1
+    if test $getjson = "yes"
+    then
+        jq '.' $dir/json > save6.json
+    fi
+
+    if test "$LOCALRUN" = "yes" && which jsonschema > /dev/null;
+    then
+      jsonschema -i $dir/json $CEPH_ROOT/doc/rados/command/list-inconsistent-obj.json || return 1
+    fi
+
+    ERRORS=0
+    declare -a err_strings
+    err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid [0-9]*:.*:::ROBJ1:head : snapset inconsistent"
+    err_strings[1]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 soid [0-9]*:.*:::ROBJ2:head : snapset inconsistent"
+    err_strings[2]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 [0-9]*:.*:::ROBJ1:1 : is an unexpected clone"
+    err_strings[3]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub : stat mismatch, got 3/4 objects, 1/2 clones, 3/4 dirty, 3/4 omap, 0/0 pinned, 0/0 hit_set_archive, 0/0 whiteouts, 49/56 bytes, 0/0 manifest objects, 0/0 hit_set_archive bytes."
+    err_strings[4]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 0 missing, 2 inconsistent objects"
+    err_strings[5]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 4 errors"
+
+    for err_string in "${err_strings[@]}"
+    do
+        if ! grep -q "$err_string" $dir/osd.${primary}.log
+        then
+            echo "Missing log message '$err_string'"
+            ERRORS=$(expr $ERRORS + 1)
+        fi
+    done
+
+    if [ $ERRORS != "0" ];
+    then
+        echo "TEST FAILED WITH $ERRORS ERRORS"
+        return 1
+    fi
+
+    ceph osd pool rm $poolname $poolname --yes-i-really-really-mean-it
 }
 
 

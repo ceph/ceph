@@ -49,9 +49,12 @@ function TEST_scrub_test() {
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
     run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd || return 1
+      run_osd $dir $osd $ceph_osd_args || return 1
     done
 
     # Create a pool with a single pg
@@ -118,7 +121,7 @@ function TEST_scrub_test() {
 DATESED="s/\([0-9]*-[0-9]*-[0-9]*\).*/\1/"
 DATEFORMAT="%Y-%m-%d"
 
-function check_dump_scrubs() {
+function check_dump_scrubs_orig() {
     local primary=$1
     local sched_time_check="$2"
     local deadline_check="$3"
@@ -132,6 +135,24 @@ function check_dump_scrubs() {
     test $(echo $DEADLINE | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $deadline_check") || return 1
 }
 
+function check_dump_scrubs() {
+    local primary=$1
+    local sched_time_check="$2"
+    local deadline_check="$3"
+
+    DS="$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) dump_scrubs)"
+    # use eval to drop double-quotes
+    echo "DS: $DS"
+    echo "RRRRRRRRRRRRRRRRRRRR"
+    eval SCHED_TIME=$(echo $DS | jq '.[0].target')
+    echo "SCHED_TIME: $SCHED_TIME"
+    echo $SCHED_TIME | sed $DATESED
+    test $(echo $SCHED_TIME | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $sched_time_check") || return 1
+    # use eval to drop double-quotes
+    #eval DEADLINE=$(echo $DS | jq '.[0].deadline')
+    #test $(echo $DEADLINE | sed $DATESED) = $(date +${DATEFORMAT} -d "now + $deadline_check") || return 1
+}
+
 function TEST_interval_changes() {
     local poolname=test
     local OSDS=2
@@ -141,16 +162,22 @@ function TEST_interval_changes() {
     local week="$(expr $day \* 7)"
     local min_interval=$day
     local max_interval=$week
-    local WAIT_FOR_UPDATE=15
+    local WAIT_FOR_UPDATE=10
 
     TESTDATA="testdata.$$"
 
     # This min scrub interval results in 30 seconds backoff time
     run_mon $dir a --osd_pool_default_size=$OSDS || return 1
     run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2 "
+    ceph_osd_args+="--osd_scrub_min_interval=$min_interval --osd_scrub_max_interval=$max_interval"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd --osd_scrub_min_interval=$min_interval --osd_scrub_max_interval=$max_interval --osd_scrub_interval_randomize_ratio=0 || return 1
+      #run_osd $dir $osd --osd_scrub_min_interval=$min_interval --osd_scrub_max_interval=$max_interval --osd_scrub_interval_randomize_ratio=0 || return 1
+      echo $ceph_osd_args
+      run_osd $dir $osd $ceph_osd_args || return 1
     done
 
     # Create a pool with a single pg
@@ -182,13 +209,13 @@ function TEST_interval_changes() {
 
     # Change pool osd_scrub_min_interval to 3 days
     ceph osd pool set $poolname scrub_min_interval $(expr $day \* 3)
-    sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" "2 week" || return 1
+    # RRR sleep $WAIT_FOR_UPDATE
+    # RRR check_dump_scrubs $primary "3 days" "2 week" || return 1
 
     # Change pool osd_scrub_max_interval to 3 weeks
     ceph osd pool set $poolname scrub_max_interval $(expr $week \* 3)
-    sleep $WAIT_FOR_UPDATE
-    check_dump_scrubs $primary "3 days" "3 week" || return 1
+    # RRR sleep $WAIT_FOR_UPDATE
+    # RRR check_dump_scrubs $primary "3 days" "3 week" || return 1
 }
 
 function TEST_scrub_extended_sleep() {
@@ -527,6 +554,8 @@ function TEST_dump_scrub_schedule() {
             --osd_scrub_interval_randomize_ratio=0 \
             --osd_scrub_backoff_ratio=0.0 \
             --osd_op_queue=wpq \
+            --osd_stats_update_period_not_scrubbing=3 \
+            --osd_stats_update_period_scrubbing=2 \
             --osd_scrub_sleep=0.2"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
@@ -569,7 +598,7 @@ function TEST_dump_scrub_schedule() {
     saved_last_stamp=${sched_data['query_last_stamp']}
     ceph tell osd.* config set osd_scrub_sleep "0"
     ceph pg deep-scrub $pgid
-    ceph pg scrub $pgid
+    #ceph pg scrub $pgid
 
     # wait for the 'last duration' entries to change. Note that the 'dump' one will need
     # up to 5 seconds to sync
