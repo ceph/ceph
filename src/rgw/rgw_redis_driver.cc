@@ -3,6 +3,8 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+namespace rgw { 
+
 /* Base metadata and data fields should remain consistent */
 std::vector<std::string> baseFields{
   "mtime",
@@ -71,7 +73,7 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, std::string& key) {
   return result;
 }
 
-int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs* attrs) {
+int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
   std::string entryName = "rgw-object:" + key + ":cache";
 
   if (!client.is_connected()) 
@@ -100,7 +102,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
   try {
     /* Set attribute fields */
     std::string result; 
-    std::vector< std::pair<std::string, std::string> > redisAttrs = build_attrs(attrs);
+    std::vector< std::pair<std::string, std::string> > redisAttrs = build_attrs(&attrs);
 
     client.hmset(entryName, redisAttrs, [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
@@ -120,7 +122,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
   return 0;
 }
 
-int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs* attrs) {
+int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) {
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
   
@@ -145,7 +147,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 	      else {
 	        buffer::list temp;
 		temp.append(arr[i + 1].as_string());
-                attrs->insert({arr[i].as_string(), temp});
+                attrs.insert({arr[i].as_string(), temp});
 		temp.clear();
 	      }
             }
@@ -419,7 +421,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   std::string attrValue;
 
   if (!client.is_connected()) 
-    return std::string;
+    return {};
 
   if (key_exists(dpp, entryName)) {
     std::string getValue;
@@ -434,12 +436,12 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
 
       client.sync_commit(std::chrono::milliseconds(1000));
     } catch(std::exception &e) {
-      return std::string;
+      return {};
     }
     
     if (!exists) {
       dout(20) << "RGW Redis Cache: Attribute was not set." << dendl;
-      return std::string;
+      return {};
     }
 
     /* Retrieve existing value from cache */
@@ -453,12 +455,12 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
 
       client.sync_commit(std::chrono::milliseconds(1000));
     } catch(std::exception &e) {
-      return std::string;
+      return {};
     }
 
     if (exists < 0) {
       dout(20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-      return std::string;
+      return {};
     }
   }
 
@@ -488,3 +490,5 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
 
   return result;
 }
+
+} // namespace rgw::sal
