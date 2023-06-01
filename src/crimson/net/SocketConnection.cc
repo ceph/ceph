@@ -70,21 +70,15 @@ bool SocketConnection::peer_wins() const
 
 seastar::future<> SocketConnection::send(MessageURef _msg)
 {
+  // may be invoked from any core
   MessageFRef msg = seastar::make_foreign(std::move(_msg));
-  return seastar::smp::submit_to(
-    io_handler->get_shard_id(),
-    [this, msg=std::move(msg)]() mutable {
-      return io_handler->send(std::move(msg));
-    });
+  return io_handler->send(std::move(msg));
 }
 
 seastar::future<> SocketConnection::send_keepalive()
 {
-  return seastar::smp::submit_to(
-    io_handler->get_shard_id(),
-    [this] {
-      return io_handler->send_keepalive();
-    });
+  // may be invoked from any core
+  return io_handler->send_keepalive();
 }
 
 SocketConnection::clock_t::time_point
