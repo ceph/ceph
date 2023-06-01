@@ -6833,6 +6833,13 @@ void Client::collect_and_send_global_metrics() {
   ldout(cct, 20) << __func__ << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
+  /* Do not send the metrics until the MDS rank is ready */
+  if (!mdsmap->is_active((mds_rank_t)0)) {
+    ldout(cct, 5) << __func__ << " MDS rank 0 is not ready yet -- not sending metric"
+                  << dendl;
+    return;
+  }
+
   if (!have_open_session((mds_rank_t)0)) {
     ldout(cct, 5) << __func__ << ": no session with rank=0 -- not sending metric"
                   << dendl;
