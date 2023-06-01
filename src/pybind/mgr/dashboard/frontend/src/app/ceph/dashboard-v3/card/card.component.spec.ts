@@ -24,7 +24,7 @@ describe('CardComponent', () => {
 
   it('Setting cards title makes title visible', () => {
     const title = 'Card Title';
-    component.title = title;
+    component.cardTitle = title;
     fixture.detectChanges();
     const titleDiv = fixture.debugElement.nativeElement.querySelector('.card-title');
 

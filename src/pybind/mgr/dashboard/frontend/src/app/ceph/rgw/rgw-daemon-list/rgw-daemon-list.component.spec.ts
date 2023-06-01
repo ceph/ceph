@@ -33,7 +33,8 @@ describe('RgwDaemonListComponent', () => {
     realm_name: 'realm1',
     zonegroup_name: 'zg1-realm1',
     zone_name: 'zone1-zg1-realm1',
-    default: true
+    default: true,
+    port: 80
   };
 
   const expectTabsAndHeading = (length: number, heading: string) => {
@@ -83,10 +84,10 @@ describe('RgwDaemonListComponent', () => {
     fixture.destroy();
   }));
 
-  it('should only show Daemons List tab', () => {
+  it('should only show Gateways List tab', () => {
     fixture.detectChanges();
 
-    expectTabsAndHeading(1, 'Daemons List');
+    expectTabsAndHeading(1, 'Gateways List');
   });
 
   it('should show Overall Performance tab', () => {

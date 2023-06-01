@@ -1,0 +1,26 @@
+import { UsersPageHelper } from './users.po';
+
+describe('Cluster Ceph Users', () => {
+  const users = new UsersPageHelper();
+
+  beforeEach(() => {
+    cy.login();
+    users.navigateTo();
+  });
+
+  describe('breadcrumb and tab tests', () => {
+    it('should open and show breadcrumb', () => {
+      users.expectBreadcrumbText('Ceph Users');
+    });
+  });
+
+  describe('Cluster users table', () => {
+    it('should verify the table is not empty', () => {
+      users.checkForUsers();
+    });
+
+    it('should verify the keys are hidden', () => {
+      users.verifyKeysAreHidden();
+    });
+  });
+});
