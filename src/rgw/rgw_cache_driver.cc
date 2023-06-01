@@ -44,8 +44,8 @@ int CacheDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return 0;
 }
 
-int CacheDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_value) {
-  return 0;
+std::string CacheDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) {
+  return std::string;
 }
 
 int CacheDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) {

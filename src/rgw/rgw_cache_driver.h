@@ -5,7 +5,6 @@
 #include <iostream>
 #include "rgw_common.h"
 
-/*
 struct Entry {
   std::string key;
   off_t offset;
@@ -15,9 +14,9 @@ struct Entry {
   int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
   int remove_entry(const DoutPrefixProvider* dpp, std::string key);
   Entry& get_entry(const DoutPrefixProvider* dpp, std::string key);
-  std::unordered_map<std::string key, Entry>& list_entries(const DoutPrefixProvider* dpp);
-  size_t get_num_entries(const DoutPrefixProvider* dpp);
-}*/
+  //std::unordered_map<std::string key, Entry>& list_entries(const DoutPrefixProvider* dpp);
+  size_t get_num_entries(const DoutPrefixProvider* dpp) { return 0; }
+};
 
 struct Partition {
   std::string name;
@@ -55,6 +54,8 @@ struct Partition {
 
 class CacheDriver {
   public:
+    Partition partition_info;
+
     CacheDriver(Partition& _partition_info) : partition_info(_partition_info) {}
     virtual ~CacheDriver() {}
 
@@ -70,11 +71,8 @@ class CacheDriver {
     virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) = 0;
     virtual int update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) = 0;
     virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) = 0;
-    virtual int get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_value) = 0;
+    virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) = 0;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) = 0;
-
-  private:
-    Partition partition_info;
 };
 
 #endif
