@@ -2685,7 +2685,6 @@ Then run the following:
     def _get_candidate_hosts(self, placement: PlacementSpec) -> List[str]:
         """Return a list of candidate hosts according to the placement specification."""
         all_hosts = self.cache.get_schedulable_hosts()
-        draining_hosts = [dh.hostname for dh in self.cache.get_draining_hosts()]
         candidates = []
         if placement.hosts:
             candidates = [h.hostname for h in placement.hosts if h.hostname in placement.hosts]
@@ -2695,7 +2694,7 @@ Then run the following:
             candidates = [x for x in placement.filter_matching_hostspecs(all_hosts)]
         elif (placement.count is not None or placement.count_per_host is not None):
             candidates = [x.hostname for x in all_hosts]
-        return [h for h in candidates if h not in draining_hosts]
+        return [h for h in candidates if not self.cache.is_host_draining(h)]
 
     def _validate_one_shot_placement_spec(self, spec: PlacementSpec) -> None:
         """Validate placement specification for TunedProfileSpec and ClientKeyringSpec."""

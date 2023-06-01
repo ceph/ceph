@@ -209,7 +209,7 @@ class CephadmServe:
 
             if (
                 not self.mgr.use_agent
-                or host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]
+                or self.mgr.cache.is_host_draining(host)
                 or host in agents_down
             ):
                 if self.mgr.cache.host_needs_daemon_refresh(host):
@@ -900,8 +900,7 @@ class CephadmServe:
                 self.mgr.spec_store.mark_configured(spec.service_name())
             if self.mgr.use_agent:
                 # can only send ack to agents if we know for sure port they bound to
-                hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and h in [
-                                    h2.hostname for h2 in self.mgr.cache.get_non_draining_hosts()])])
+                hosts_altered = set([h for h in hosts_altered if (h in self.mgr.agent_cache.agent_ports and not self.mgr.cache.is_host_draining(h))])
                 self.mgr.agent_helpers._request_agent_acks(hosts_altered, increment=True)
 
         if r is None:
@@ -1146,7 +1145,7 @@ class CephadmServe:
                             client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]],
                             host: str) -> None:
         updated_files = False
-        if host in [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]:
+        if self.mgr.cache.is_host_unreachable(host):
             return
         old_files = self.mgr.cache.get_host_client_files(host).copy()
         for path, m in client_files.get(host, {}).items():

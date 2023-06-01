@@ -476,7 +476,7 @@ class CephadmAgentHelpers:
     def _agent_down(self, host: str) -> bool:
         # if host is draining or drained (has _no_schedule label) there should not
         # be an agent deployed there and therefore we should return False
-        if host not in [h.hostname for h in self.mgr.cache.get_non_draining_hosts()]:
+        if self.mgr.cache.is_host_draining(host):
             return False
         # if we haven't deployed an agent on the host yet, don't say an agent is down
         if not self.mgr.cache.get_daemons_by_type('agent', host=host):
