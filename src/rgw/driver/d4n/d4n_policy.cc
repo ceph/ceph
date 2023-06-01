@@ -134,7 +134,7 @@ int LFUDAPolicy::get_global_weight(std::string key) {
   return weight;
 }
 
-int LFUDAPolicy::set_min_avg_weight(int weight, std::string cacheLocation) {
+int LFUDAPolicy::set_min_avg_weight(size_t weight, std::string cacheLocation) {
   int result = -1;
 
   try {
@@ -205,14 +205,7 @@ int LFUDAPolicy::get_min_avg_weight() {
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, CacheDriver* cacheNode) {
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
-  std::string value;
-  int localWeight;
-  int ret = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight", value); // change to block name eventually -Sam
-
-  if (!ret)
-    localWeight = std::stoi(value);
-  else 
-    return -1;
+  int localWeight = std::stoi(cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight")); // change to block name eventually -Sam
 
   if (!client.is_connected()) {
     find_client(&client);
@@ -261,7 +254,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, Cac
     return -1; 
   } 
 
-  ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight));
+  int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight));
   return ret;
 }
 
@@ -270,16 +263,8 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, CacheDriver* cache
   std::string key = "rgw-object:" + victim->cacheObj.objName + ":directory";
   std::string hosts;
   int globalWeight = get_global_weight(key);
+  int localWeight = std::stoi(cacheNode->get_attr(dpp, victim->cacheObj.objName, "localWeight")); // change to block name eventually -Sam
   int avgWeight;
-
-  std::string value;
-  int localWeight;
-  int ret = cacheNode->get_attr(dpp, victim->cacheObj.objName, "localWeight", value); // change to block name eventually -Sam
-
-  if (!ret)
-    localWeight = std::stoi(value);
-  else 
-    return -1;
 
   try {
     client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
@@ -318,10 +303,10 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, CacheDriver* cache
   }
 
   globalWeight += localWeight;
-  ret = cacheNode->delete_data(dpp, victim->cacheObj.objName);
+  int ret = cacheNode->delete_data(dpp, victim->cacheObj.objName);
 
   if (!ret)
-    //ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries())) // Where else must this be set? -Sam
+    ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries(dpp)), ""/*local cache location*/); // Where else must this be set? -Sam
   else
     return -1;
 
@@ -339,7 +324,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, CacheDriver* cache
 }
 
 int PolicyDriver::init() { // Add "none" option? -Sam
-  ::Partition partition_info;
+  CacheDriver::Partition partition_info;
   cacheDriver = new RedisDriver(partition_info, "127.0.0.1", 6379); // hardcoded for now
 
   if (policyName == "lfuda") {

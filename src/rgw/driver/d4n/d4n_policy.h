@@ -43,7 +43,7 @@ class LFUDAPolicy : public CachePolicy {
     int get_age();
     int set_global_weight(std::string key, int weight);
     int get_global_weight(std::string key);
-    int set_min_avg_weight(int weight, std::string cacheLocation);
+    int set_min_avg_weight(size_t weight, std::string cacheLocation);
     int get_min_avg_weight();
 
     int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, CacheDriver* cacheNode);
