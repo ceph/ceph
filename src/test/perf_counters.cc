@@ -68,6 +68,8 @@ TEST(PerfCounters, SimpleTest) {
   std::string message;
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\" }", &message));
   ASSERT_EQ("{}\n", message);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"counter dump\" }", &message));
+  ASSERT_EQ("{}\n", message);
 }
 
 enum {
@@ -275,36 +277,52 @@ TEST(PerfCounters, TestLabeledCountersOnly) {
 )";
   std::string counter_key1 = ceph::perf_counters::key_create("name1", {{"label1", "val1"}});
   std::string counter_key2 = ceph::perf_counters::key_create("name2", {{"label2", "val2"}});
+  std::string counter_key3 = ceph::perf_counters::key_create("name1", {{"label1", "val3"}});
 
   PerfCounters* counters1 = setup_test_perfcounter4(counter_key1, g_ceph_context);
   PerfCounters* counters2 = setup_test_perfcounter4(counter_key2, g_ceph_context);
+  PerfCounters* counters3 = setup_test_perfcounter4(counter_key3, g_ceph_context);
 
   counters1->inc(TEST_PERFCOUNTERS2_ELEMENT_FOO, 3);
   counters1->dec(TEST_PERFCOUNTERS2_ELEMENT_FOO, 1);
   counters2->set(TEST_PERFCOUNTERS2_ELEMENT_FOO, 4);
+  counters3->inc(TEST_PERFCOUNTERS2_ELEMENT_FOO, 3);
 
   AdminSocketClient client(get_rand_socket_path());
   std::string message;
   ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
   ASSERT_EQ(R"({
-    "name1": {
-        "labels": {
-            "label1": "val1"
+    "name1": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 2,
+                "bar": 0.000000000
+            }
         },
-        "counters": {
-            "foo": 2,
-            "bar": 0.000000000
+        {
+            "labels": {
+                "label1": "val3"
+            },
+            "counters": {
+                "foo": 3,
+                "bar": 0.000000000
+            }
         }
-    },
-    "name2": {
-        "labels": {
-            "label2": "val2"
-        },
-        "counters": {
-            "foo": 4,
-            "bar": 0.000000000
+    ],
+    "name2": [
+        {
+            "labels": {
+                "label2": "val2"
+            },
+            "counters": {
+                "foo": 4,
+                "bar": 0.000000000
+            }
         }
-    }
+    ]
 }
 )", message);
 
@@ -314,56 +332,85 @@ TEST(PerfCounters, TestLabeledCountersOnly) {
 
   ASSERT_EQ("", client.do_request(R"({ "prefix": "counter schema", "format": "raw" })", &message));
   ASSERT_EQ(R"({
-    "name1": {
-        "labels": {
-            "label1": "val1"
-        },
-        "counters": {
-            "foo": {
-                "type": 2,
-                "metric_type": "gauge",
-                "value_type": "integer",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+    "name1": [
+        {
+            "labels": {
+                "label1": "val1"
             },
-            "bar": {
-                "type": 1,
-                "metric_type": "gauge",
-                "value_type": "real",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
+            }
+        },
+        {
+            "labels": {
+                "label1": "val3"
+            },
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
             }
         }
-    },
-    "name2": {
-        "labels": {
-            "label2": "val2"
-        },
-        "counters": {
-            "foo": {
-                "type": 2,
-                "metric_type": "gauge",
-                "value_type": "integer",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+    ],
+    "name2": [
+        {
+            "labels": {
+                "label2": "val2"
             },
-            "bar": {
-                "type": 1,
-                "metric_type": "gauge",
-                "value_type": "real",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
             }
         }
-    }
+    ]
 }
 )", message);
 
@@ -412,176 +459,196 @@ TEST(PerfCounters, TestLabelStrings) {
 
   ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
   ASSERT_EQ(R"({
-    "bad_ctrs": {
-        "labels": {
-            "label1": "val1"
-        },
-        "counters": {
-            "foo": 4,
-            "bar": 0.000000000
+    "bad_ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 4,
+                "bar": 0.000000000
+            }
         }
-    },
-    "bad_ctrs2": {
-        "labels": {},
-        "counters": {
-            "foo": 6,
-            "bar": 0.000000000
+    ],
+    "bad_ctrs2": [
+        {
+            "labels": {},
+            "counters": {
+                "foo": 6,
+                "bar": 0.000000000
+            }
         }
-    },
-    "good_ctrs": {
-        "labels": {
-            "label1": "",
-            "label3": "val4"
-        },
-        "counters": {
-            "foo": 2,
-            "bar": 0.000000000
+    ],
+    "good_ctrs": [
+        {
+            "labels": {
+                "label1": "",
+                "label3": "val4"
+            },
+            "counters": {
+                "foo": 2,
+                "bar": 0.000000000
+            }
         }
-    },
-    "only_key": {
-        "labels": {},
-        "counters": {
-            "foo": 4,
-            "bar": 0.000000000
+    ],
+    "only_key": [
+        {
+            "labels": {},
+            "counters": {
+                "foo": 4,
+                "bar": 0.000000000
+            }
         }
-    },
-    "too_many_delimiters": {
-        "labels": {
-            "label1": "val1"
-        },
-        "counters": {
-            "foo": 8,
-            "bar": 0.000000000
+    ],
+    "too_many_delimiters": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 8,
+                "bar": 0.000000000
+            }
         }
-    }
+    ]
 }
 )", message);
 
   // test unlabeled perf counters are in the schema dump with labels and counters sections
   ASSERT_EQ("", client.do_request(R"({ "prefix": "counter schema", "format": "raw" })", &message));
   ASSERT_EQ(R"({
-    "bad_ctrs": {
-        "labels": {
-            "label1": "val1"
-        },
-        "counters": {
-            "foo": {
-                "type": 2,
-                "metric_type": "gauge",
-                "value_type": "integer",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+    "bad_ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
             },
-            "bar": {
-                "type": 1,
-                "metric_type": "gauge",
-                "value_type": "real",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
             }
         }
-    },
-    "bad_ctrs2": {
-        "labels": {},
-        "counters": {
-            "foo": {
-                "type": 2,
-                "metric_type": "gauge",
-                "value_type": "integer",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
-            },
-            "bar": {
-                "type": 1,
-                "metric_type": "gauge",
-                "value_type": "real",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+    ],
+    "bad_ctrs2": [
+        {
+            "labels": {},
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
             }
         }
-    },
-    "good_ctrs": {
-        "labels": {
-            "label1": "",
-            "label3": "val4"
-        },
-        "counters": {
-            "foo": {
-                "type": 2,
-                "metric_type": "gauge",
-                "value_type": "integer",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+    ],
+    "good_ctrs": [
+        {
+            "labels": {
+                "label1": "",
+                "label3": "val4"
             },
-            "bar": {
-                "type": 1,
-                "metric_type": "gauge",
-                "value_type": "real",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
             }
         }
-    },
-    "only_key": {
-        "labels": {},
-        "counters": {
-            "foo": {
-                "type": 2,
-                "metric_type": "gauge",
-                "value_type": "integer",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
-            },
-            "bar": {
-                "type": 1,
-                "metric_type": "gauge",
-                "value_type": "real",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+    ],
+    "only_key": [
+        {
+            "labels": {},
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
             }
         }
-    },
-    "too_many_delimiters": {
-        "labels": {
-            "label1": "val1"
-        },
-        "counters": {
-            "foo": {
-                "type": 2,
-                "metric_type": "gauge",
-                "value_type": "integer",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+    ],
+    "too_many_delimiters": [
+        {
+            "labels": {
+                "label1": "val1"
             },
-            "bar": {
-                "type": 1,
-                "metric_type": "gauge",
-                "value_type": "real",
-                "description": "",
-                "nick": "",
-                "priority": 0,
-                "units": "none"
+            "counters": {
+                "foo": {
+                    "type": 2,
+                    "metric_type": "gauge",
+                    "value_type": "integer",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                },
+                "bar": {
+                    "type": 1,
+                    "metric_type": "gauge",
+                    "value_type": "real",
+                    "description": "",
+                    "nick": "",
+                    "priority": 0,
+                    "units": "none"
+                }
             }
         }
-    }
+    ]
 }
 )", message);
 
