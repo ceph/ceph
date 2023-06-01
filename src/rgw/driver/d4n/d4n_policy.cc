@@ -203,9 +203,16 @@ int LFUDAPolicy::get_min_avg_weight() {
   return weight;
 }
 
-int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
+int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, CacheDriver* cacheNode) {
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
-  int localWeight = 0; //cacheNode->get_attr(block->cacheObj.objName, "localWeight"); // change to block name eventually -Sam
+  std::string value;
+  int localWeight;
+  int ret = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight", value); // change to block name eventually -Sam
+
+  if (!ret)
+    localWeight = std::stoi(value);
+  else 
+    return -1;
 
   if (!client.is_connected()) {
     find_client(&client);
@@ -214,13 +221,13 @@ int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
   if (exist_key(key)) {
     int age = get_age();
 
-    if (0/*cacheNode->key_exists(block->cacheObj.objName)*/) { /* Local copy */
+    if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */
       localWeight += age;
     } else {
-      uint64_t freeSpace = 0; //cacheNode->get_free_space();
+      uint64_t freeSpace = cacheNode->partition_info.get_free_space();
 
       while (freeSpace < block->size) {
-	int newSpace = eviction(/*cacheNode*/);
+	int newSpace = eviction(dpp, cacheNode);
 	
 	if (newSpace > 0)
 	  freeSpace += newSpace;
@@ -254,16 +261,25 @@ int LFUDAPolicy::get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) {
     return -1; 
   } 
 
-  //int ret = cacheNode->set_attr(block->cacheObj.objName, "localWeight", localWeight);
-  return 0; // return ret
+  ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight));
+  return ret;
 }
 
-uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
+uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, CacheDriver* cacheNode) {
   CacheBlock* victim = NULL; // find victim
   std::string key = "rgw-object:" + victim->cacheObj.objName + ":directory";
   std::string hosts;
   int globalWeight = get_global_weight(key);
-  int localWeight = 0;//cacheNode->get_attr(victim->cacheObj.objName, "localWeight"); ;
+  int avgWeight;
+
+  std::string value;
+  int localWeight;
+  int ret = cacheNode->get_attr(dpp, victim->cacheObj.objName, "localWeight", value); // change to block name eventually -Sam
+
+  if (!ret)
+    localWeight = std::stoi(value);
+  else 
+    return -1;
 
   try {
     client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
@@ -280,14 +296,18 @@ uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
   if (!hosts.length()) { /* Last copy */
     if (globalWeight > 0) {
       localWeight += globalWeight;
-      //int ret = cacheNode->set_attr(victim->cacheObj.objName, "localWeight", localWeight);
-      int ret = set_global_weight(key, 0);
+      int ret = cacheNode->set_attr(dpp, victim->cacheObj.objName, "localWeight", std::to_string(localWeight));
+
+      if (!ret) // check return value -Sam
+        ret = set_global_weight(key, 0);
+      else
+        return -1;
 
       if (ret)
 	return -2;
     }
 
-    int avgWeight = get_min_avg_weight();
+    avgWeight = get_min_avg_weight();
 
     if (avgWeight < 0)
       return -2;
@@ -298,12 +318,19 @@ uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
   }
 
   globalWeight += localWeight;
-  // cacheNode->delete_data(dpp, victim->cacheObj.objName);
-  //int ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries())) // Where else must this be set? -Sam
+  ret = cacheNode->delete_data(dpp, victim->cacheObj.objName);
+
+  if (!ret)
+    //ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries())) // Where else must this be set? -Sam
+  else
+    return -1;
+
+  if (ret)
+    return -2;
 
   int age = get_age();
   age = std::max(localWeight, age);
-  int ret = set_age(age);
+  ret = set_age(age);
   
   if (ret)
     return -2;
@@ -311,17 +338,15 @@ uint64_t LFUDAPolicy::eviction(/*CacheDriver* cacheNode*/) {
   return victim->size;
 }
 
-int PolicyDriver::set_policy() { // Add "none" option? -Sam
+int PolicyDriver::init() { // Add "none" option? -Sam
+  ::Partition partition_info;
+  cacheDriver = new RedisDriver(partition_info, "127.0.0.1", 6379); // hardcoded for now
+
   if (policyName == "lfuda") {
     cachePolicy = new LFUDAPolicy();
     return 0;
   } else
     return -1;
-}
-
-int PolicyDriver::delete_policy() {
-  delete cachePolicy;
-  return 0;
 }
 
 } } // namespace rgw::d4n

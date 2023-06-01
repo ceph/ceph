@@ -6,10 +6,15 @@
 #include <cpp_redis/cpp_redis>
 #include "rgw_common.h"
 #include "d4n_directory.h"
+#include "../../rgw_redis_driver.h"
 
 namespace rgw { namespace d4n {
 
 class CachePolicy {
+  private:
+    cpp_redis::client client;
+    Address addr;
+
   public:
     CephContext* cct;
 
@@ -23,15 +28,14 @@ class CachePolicy {
     int find_client(cpp_redis::client *client);
     int exist_key(std::string key);
     Address get_addr() { return addr; }
-    int get_block(CacheBlock* block/*, CacheDriver* cacheNode*/) { return 0; }
-    uint64_t eviction(/*CacheDriver* cacheNode*/) { return 0; }
-
-  private:
-    cpp_redis::client client;
-    Address addr;
+    int get_block(CacheBlock* block, CacheDriver* cacheNode) { return 0; }
+    uint64_t eviction(CacheDriver* cacheNode) { return 0; }
 };
 
 class LFUDAPolicy : public CachePolicy {
+  private:
+    cpp_redis::client client;
+
   public:
     LFUDAPolicy() : CachePolicy() {}
 
@@ -42,25 +46,25 @@ class LFUDAPolicy : public CachePolicy {
     int set_min_avg_weight(int weight, std::string cacheLocation);
     int get_min_avg_weight();
 
-    int get_block(CacheBlock* block/*, CacheDriver* cacheNode*/);
-    uint64_t eviction(/*CacheDriver* cacheNode*/);
-
-  private:
-    cpp_redis::client client;
+    int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, CacheDriver* cacheNode);
+    uint64_t eviction(const DoutPrefixProvider* dpp, CacheDriver* cacheNode);
 };
 
 class PolicyDriver {
-  public:
-    CachePolicy* cachePolicy;
-    //CacheDriver* cacheDriver; // might place elsewhere -Sam
-
-    PolicyDriver(std::string _policyName) : policyName(_policyName) {}
-
-    int set_policy();
-    int delete_policy();
-
   private:
     std::string policyName;
+
+  public:
+    CachePolicy* cachePolicy;
+    CacheDriver* cacheDriver; // might place elsewhere -Sam
+
+    PolicyDriver(std::string _policyName) : policyName(_policyName) {}
+    ~PolicyDriver() {
+      delete cachePolicy;
+      delete cacheDriver;
+    }
+
+    int init();
 };
 
 } } // namespace rgw::d4n
