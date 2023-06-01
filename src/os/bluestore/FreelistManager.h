@@ -37,6 +37,7 @@ public:
   virtual void sync(KeyValueDB* kvdb) = 0;
   virtual void shutdown() = 0;
 
+  virtual int init_alloc(bool read_only) = 0;
   virtual void dump(KeyValueDB *kvdb) = 0;
 
   virtual void enumerate_reset() = 0;

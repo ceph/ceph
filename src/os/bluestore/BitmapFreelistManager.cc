@@ -2,7 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "BitmapFreelistManager.h"
-
+#include "BlueStore.h"
+#include "Allocator.h"
 #include <bit>
 #include "kv/KeyValueDB.h"
 #include "os/kv.h"
@@ -179,6 +180,30 @@ void BitmapFreelistManager::_init_misc()
 void BitmapFreelistManager::sync(KeyValueDB* kvdb)
 {
 }
+
+int BitmapFreelistManager::init_alloc(bool read_only)
+{
+  BlueStore* bs = dynamic_cast<BlueStore*>(store);
+  ceph_assert(bs);
+  ceph_assert(bs->alloc);
+  ceph_assert(bs->db);
+  if (read_only) {
+    uint64_t num = 0, bytes = 0;
+    utime_t start_time = ceph_clock_now();
+    auto next_extent = [&](uint64_t offset, uint64_t length) -> bool {
+      bs->alloc->init_add_free(offset, length);
+      ++num;
+      bytes += length;
+      return true;
+    };
+    enumerate(bs->db, next_extent);
+    utime_t duration = ceph_clock_now() - start_time;
+    dout(5) << __func__ << "::num_entries=" << num << " free_size=" << bytes << " alloc_size="
+	    << bs->alloc->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;
+  }
+  return 0;
+}
+
 
 void BitmapFreelistManager::shutdown()
 {

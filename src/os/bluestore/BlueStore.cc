@@ -5792,129 +5792,30 @@ int BlueStore::_create_alloc()
   return 0;
 }
 
-int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
+int BlueStore::_init_alloc(bool read_only)
 {
-  int r = _create_alloc();
-  if (r < 0) {
-    return r;
-  }
-  ceph_assert(alloc != NULL);
-
-#ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
-    auto a = dynamic_cast<ZonedAllocator*>(alloc);
-    ceph_assert(a);
-    auto f = dynamic_cast<ZonedFreelistManager*>(fm);
-    ceph_assert(f);
-    vector<uint64_t> wp = bdev->get_zones();
-    vector<zone_state_t> zones = f->get_zone_states(db);
-    ceph_assert(wp.size() == zones.size());
-
-    // reconcile zone state
-    auto num_zones = bdev->get_size() / zone_size;
-    for (unsigned i = first_sequential_zone; i < num_zones; ++i) {
-      ceph_assert(wp[i] >= i * zone_size);
-      ceph_assert(wp[i] <= (i + 1) * zone_size); // pos might be at start of next zone
-      uint64_t p = wp[i] - i * zone_size;
-      if (zones[i].write_pointer > p) {
-	derr << __func__ << " zone 0x" << std::hex << i
-	     << " bluestore write pointer 0x" << zones[i].write_pointer
-	     << " > device write pointer 0x" << p
-	     << std::dec << " -- VERY SUSPICIOUS!" << dendl;
-      } else if (zones[i].write_pointer < p) {
-	// this is "normal" in that it can happen after any crash (if we have a
-	// write in flight but did not manage to commit the transaction)
-	auto delta = p - zones[i].write_pointer;
-	dout(1) << __func__ << " zone 0x" << std::hex << i
-		 << " device write pointer 0x" << p
-		 << " > bluestore pointer 0x" << zones[i].write_pointer
-		 << ", advancing 0x" << delta << std::dec << dendl;
-	(*zone_adjustments)[zones[i].write_pointer] = delta;
-	zones[i].num_dead_bytes += delta;
-	zones[i].write_pointer = p;
-      }
+  int r;
+  if (read_only) {
+    r = _create_alloc();
+    if (r < 0) {
+      return r;
     }
-
-    // start with conventional zone "free" (bluefs may adjust this when it starts up)
-    auto reserved = _get_ondisk_reserved();
-    // for now we require a conventional zone
-    ceph_assert(bdev->get_conventional_region_size());
-    ceph_assert(shared_alloc.a != alloc);  // zoned allocator doesn't use conventional region
-    shared_alloc.a->init_add_free(
-      reserved,
-      p2align(bdev->get_conventional_region_size(), min_alloc_size) - reserved);
-
-    // init sequential zone based on the device's write pointers
-    a->init_from_zone_pointers(std::move(zones));
+    ceph_assert(alloc);
+    ceph_assert(fm);
+    r = fm->init_alloc(true);
     dout(1) << __func__
-	    << " loaded zone pointers: "
-	    << std::hex
-	    << ", allocator type " << alloc->get_type()
+	    << " allocator type " << alloc->get_type()
 	    << ", capacity 0x" << alloc->get_capacity()
 	    << ", block size 0x" << alloc->get_block_size()
 	    << ", free 0x" << alloc->get_free()
 	    << ", fragmentation " << alloc->get_fragmentation()
 	    << std::dec << dendl;
-
-    return 0;
   }
-#endif
-
-  uint64_t num = 0, bytes = 0;
-  utime_t start_time = ceph_clock_now();
-  auto next_extent = [&](uint64_t offset, uint64_t length) -> bool {
-    alloc->init_add_free(offset, length);
-    ++num;
-    bytes += length;
-    return true;
-  };
-  fm->enumerate(db, next_extent);
-  utime_t duration = ceph_clock_now() - start_time;
-  dout(5) << __func__ << "::num_entries=" << num << " free_size=" << bytes << " alloc_size="
-	  << alloc->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;
-
-  dout(1) << __func__
-          << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
-          << std::hex
-          << ", allocator type " << alloc->get_type()
-          << ", capacity 0x" << alloc->get_capacity()
-          << ", block size 0x" << alloc->get_block_size()
-          << ", free 0x" << alloc->get_free()
-          << ", fragmentation " << alloc->get_fragmentation()
-          << std::dec << dendl;
-
-  return 0;
-}
-
-void BlueStore::_post_init_alloc(const std::map<uint64_t, uint64_t>& zone_adjustments)
-{
-  int r = 0;
-#ifdef HAVE_LIBZBD
-  if (bdev->is_smr()) {
-    if (zone_adjustments.empty()) {
-      return;
-    }
-    dout(1) << __func__ << " adjusting freelist based on device write pointers" << dendl;
-    auto f = dynamic_cast<ZonedFreelistManager*>(fm);
-    ceph_assert(f);
-    KeyValueDB::Transaction t = db->get_transaction();
-    for (auto& i : zone_adjustments) {
-      // allocate AND release since this gap is now dead space
-      // note that the offset is imprecise, but only need to select the zone
-      f->allocate(i.first, i.second, t);
-      f->release(i.first, i.second, t);
-    }
-    r = db->submit_transaction_sync(t);
-  } else
-#endif
-  if (fm->is_null_manager()) {
-    // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
-    // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
-    // This means that we should not use the existing file on failure case (unplanned shutdown) and must resort
-    //  to recovery from RocksDB::ONodes
-    r = invalidate_allocation_file_on_bluefs();
+  else
+  {
+    r = fm->init_alloc(false);
   }
-  ceph_assert(r >= 0);
+  return r;
 }
 
 void BlueStore::_close_alloc()
@@ -6591,7 +6492,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   if (r < 0)
     goto out_db;
 
-  r = _init_alloc(&zone_adjustments);
+  r = _init_alloc(true /*read-only*/);
   if (r < 0)
     goto out_fm;
 
@@ -6618,7 +6519,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
   _setup_settings();
 
   if (!read_only) {
-    _post_init_alloc(zone_adjustments);
+    fm->init_alloc(false);
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()

@@ -15,7 +15,8 @@
 #include "kv/KeyValueDB.h"
 #include "os/kv.h"
 #include "zoned_types.h"
-
+#include "BlueStore.h"
+#include "ZonedAllocator.h"
 #include "common/debug.h"
 
 #define dout_context cct
@@ -154,6 +155,100 @@ int ZonedFreelistManager::init(
 
 void ZonedFreelistManager::sync(KeyValueDB* kvdb)
 {
+}
+
+int ZonedFreelistManager::init_alloc(bool read_only)
+{
+  BlueStore* bs = dynamic_cast<BlueStore*>(store);
+  ceph_assert(bs);
+  //#ifdef HAVE_LIBZBD
+  //if (bdev->is_smr())
+  auto bdev = bs->bdev;
+  auto alloc = bs->alloc;
+  ceph_assert(alloc);
+  ceph_assert(bs->db);
+  ceph_assert(bs->bdev->is_smr());
+  if (read_only)
+  {
+    // first stage of init_alloc
+    auto a = dynamic_cast<ZonedAllocator*>(alloc);
+    ceph_assert(a);
+    //auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+    //ceph_assert(f);
+    std::vector<uint64_t> wp = bdev->get_zones();
+    std::vector<zone_state_t> zones = get_zone_states(bs->db);
+    ceph_assert(wp.size() == zones.size());
+
+    // reconcile zone state
+    auto num_zones = bdev->get_size() / zone_size;
+    for (unsigned i = bs->first_sequential_zone; i < num_zones; ++i) {
+      ceph_assert(wp[i] >= i * zone_size);
+      ceph_assert(wp[i] <= (i + 1) * zone_size); // pos might be at start of next zone
+      uint64_t p = wp[i] - i * zone_size;
+      if (zones[i].write_pointer > p) {
+	derr << __func__ << " zone 0x" << std::hex << i
+	     << " bluestore write pointer 0x" << zones[i].write_pointer
+	     << " > device write pointer 0x" << p
+	     << std::dec << " -- VERY SUSPICIOUS!" << dendl;
+      } else if (zones[i].write_pointer < p) {
+	// this is "normal" in that it can happen after any crash (if we have a
+	// write in flight but did not manage to commit the transaction)
+	auto delta = p - zones[i].write_pointer;
+	dout(1) << __func__ << " zone 0x" << std::hex << i
+		 << " device write pointer 0x" << p
+		 << " > bluestore pointer 0x" << zones[i].write_pointer
+		 << ", advancing 0x" << delta << std::dec << dendl;
+	zone_adjustments[zones[i].write_pointer] = delta;
+	zones[i].num_dead_bytes += delta;
+	zones[i].write_pointer = p;
+      }
+    }
+
+    // start with conventional zone "free" (bluefs may adjust this when it starts up)
+    auto reserved = bs->_get_ondisk_reserved();
+    // for now we require a conventional zone
+    ceph_assert(bdev->get_conventional_region_size());
+    ceph_assert(bs->shared_alloc.a != alloc);  // zoned allocator doesn't use conventional region
+    bs->shared_alloc.a->init_add_free(
+      reserved,
+      p2align(bdev->get_conventional_region_size(), bs->min_alloc_size) - reserved);
+
+    // init sequential zone based on the device's write pointers
+    a->init_from_zone_pointers(std::move(zones));
+    dout(1) << __func__
+	    << " loaded zone pointers: "
+	    << std::hex
+	    << ", allocator type " << alloc->get_type()
+	    << ", capacity 0x" << alloc->get_capacity()
+	    << ", block size 0x" << alloc->get_block_size()
+	    << ", free 0x" << alloc->get_free()
+	    << ", fragmentation " << alloc->get_fragmentation()
+	    << std::dec << dendl;
+
+    return 0;
+  }
+  else
+  {
+    //second part, when we go read-write
+    int r;
+    if (zone_adjustments.empty()) {
+      return 0;
+    }
+    dout(1) << __func__ << " adjusting freelist based on device write pointers" << dendl;
+    //auto f = dynamic_cast<ZonedFreelistManager*>(fm);
+    //ceph_assert(f);
+    auto db = bs->db;
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (auto& i : zone_adjustments) {
+      // allocate AND release since this gap is now dead space
+      // note that the offset is imprecise, but only need to select the zone
+      this->allocate(i.first, i.second, t);
+      this->release(i.first, i.second, t);
+    }
+    r = db->submit_transaction_sync(t);
+    ceph_assert(r >= 0);
+  }
+  return 0;
 }
 
 void ZonedFreelistManager::shutdown()

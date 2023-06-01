@@ -35,6 +35,7 @@ class ZonedFreelistManager : public FreelistManager {
 
   KeyValueDB::Iterator enumerate_p;
   uint64_t enumerate_zone_num;
+  std::map<uint64_t, uint64_t> zone_adjustments;
 
   void write_zone_state_delta_to_db(uint64_t zone_num,
 				    const zone_state_t &zone_state,
@@ -71,7 +72,7 @@ public:
   int init(KeyValueDB *kvdb,
 	   bool db_in_read_only,
 	   cfg_reader_t cfg_reader) override;
-
+  int init_alloc(bool read_only) override;
   void shutdown() override;
   void sync(KeyValueDB* kvdb) override;
   void dump(KeyValueDB *kvdb) override;

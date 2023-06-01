@@ -221,9 +221,13 @@ enum {
 using bptr_c_it_t = buffer::ptr::const_iterator;
 
 class FileFreelistManager;
+class BitmapFreelistManager;
+class ZonedFreelistManager;
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   friend class FileFreelistManager;
+  friend class BitmapFreelistManager;
+  friend class ZonedFreelistManager;
   // -----------------------------------------------------
   // types
 public:
@@ -2691,8 +2695,7 @@ private:
   void _close_fm();
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
-  int _init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments);
-  void _post_init_alloc(const std::map<uint64_t, uint64_t>& zone_adjustments);
+  int _init_alloc(bool read_only);
   void _close_alloc();
   int _open_collections();
   void _fsck_collections(int64_t* errors);

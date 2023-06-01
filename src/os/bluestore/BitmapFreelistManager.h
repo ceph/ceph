@@ -61,7 +61,7 @@ public:
 
   int init(KeyValueDB *kvdb, bool db_in_read_only,
     std::function<int(const std::string&, std::string*)> cfg_reader) override;
-
+  int init_alloc(bool read_only) override;
   void shutdown() override;
   void sync(KeyValueDB* kvdb) override;
 
