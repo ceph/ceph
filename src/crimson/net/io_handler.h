@@ -159,21 +159,7 @@ public:
   };
   void print_io_stat(std::ostream &out) const;
 
-  seastar::future<> close_io(
-      bool is_dispatch_reset,
-      bool is_replace) {
-    ceph_assert_always(io_state == io_state_t::drop);
-
-    if (is_dispatch_reset) {
-      dispatch_reset(is_replace);
-    }
-
-    ceph_assert_always(conn_ref);
-    conn_ref.reset();
-
-    assert(!gate.is_closed());
-    return gate.close();
-  }
+  seastar::future<> close_io(bool is_dispatch_reset, bool is_replace);
 
   /**
    * io_state_t
@@ -213,6 +199,10 @@ public:
   void dispatch_connect();
 
  private:
+  seastar::future<> do_send(MessageFRef msg);
+
+  seastar::future<> do_send_keepalive();
+
   void dispatch_reset(bool is_replace);
 
   void dispatch_remote_reset();
@@ -224,13 +214,15 @@ public:
             next_keepalive_ack.has_value());
   }
 
+  bool has_out_sent() const {
+    return !out_sent_msgs.empty();
+  }
+
   void reset_in();
 
   void reset_out();
 
   void discard_out_sent();
-
-  seastar::future<stop_t> try_exit_out_dispatch();
 
   seastar::future<> do_out_dispatch();
 
@@ -245,7 +237,9 @@ public:
 
   void ack_out_sent(seq_num_t seq);
 
-  seastar::future<> read_message(utime_t throttle_stamp, std::size_t msg_size);
+  seastar::future<> read_message(
+      utime_t throttle_stamp,
+      std::size_t msg_size);
 
   void do_in_dispatch();
 
