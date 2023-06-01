@@ -8,6 +8,8 @@
 #include "rgw_cache_driver.h"
 #include "driver/d4n/d4n_directory.h"
 
+namespace rgw {
+
 class RedisDriver : public CacheDriver {
   private:
     cpp_redis::client client;
@@ -21,8 +23,8 @@ class RedisDriver : public CacheDriver {
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
     virtual bool key_exists(const DoutPrefixProvider* dpp, std::string& key) override;
-    virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs* attrs) override;
-    virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs* attrs) override;
+    virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
+    virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) override;
     virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) override;
     virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key) override;
     virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
@@ -32,4 +34,6 @@ class RedisDriver : public CacheDriver {
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) override;
 };
 
+} // namespace rgw::sal
+    
 #endif
