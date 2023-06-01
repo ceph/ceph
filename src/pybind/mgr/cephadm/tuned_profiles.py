@@ -67,7 +67,7 @@ class TunedProfileUtils():
         SHOULD be on the host. Then if we see any file names that don't match this, but
         DO include "-cephadm-tuned-profile.conf" (implying they're from us), remove them.
         """
-        if host in [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]:
+        if self.mgr.cache.is_host_unreachable(host):
             return
         cmd = ['ls', SYSCTL_DIR]
         found_files = self.mgr.ssh.check_execute_command(host, cmd, log_command=self.mgr.log_refresh_metadata).split('\n')
@@ -88,7 +88,7 @@ class TunedProfileUtils():
             self.mgr.ssh.check_execute_command(host, ['sysctl', '--system'])
 
     def _write_tuned_profiles(self, host: str, profiles: List[Dict[str, str]]) -> None:
-        if host in [h.hostname for h in self.mgr.cache.get_unreachable_hosts()]:
+        if self.mgr.cache.is_host_unreachable(host):
             return
         updated = False
         for p in profiles:
