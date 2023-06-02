@@ -168,10 +168,12 @@ public:
    * io behavior accordingly.
    */
   enum class io_state_t : uint8_t {
-    none,  // no IO is possible as the connection is not available to the user yet.
-    delay, // IO is delayed until open.
-    open,  // Dispatch In and Out concurrently.
-    drop   // Drop IO as the connection is closed.
+    none,    // no IO is possible as the connection is not available to the user yet.
+    delay,   // IO is delayed until open.
+    open,    // Dispatch In and Out concurrently.
+    drop,    // Drop IO as the connection is closed.
+    switched // IO is switched to a different core
+             // (is moved to maybe_prv_shard_states)
   };
   friend class fmt::formatter<io_state_t>;
 
@@ -272,6 +274,8 @@ public:
         out_dispatching = true;
         return true;
       case io_state_t::drop:
+        [[fallthrough]];
+      case io_state_t::switched:
         // do not dispatch out
         return false;
       default:
@@ -301,7 +305,8 @@ public:
     bool assert_closed_and_exit() const {
       assert(seastar::this_shard_id() == sid);
       if (gate.is_closed()) {
-        ceph_assert_always(io_state == io_state_t::drop);
+        ceph_assert_always(io_state == io_state_t::drop ||
+                           io_state == io_state_t::switched);
         ceph_assert_always(!out_dispatching);
         ceph_assert_always(!out_exit_dispatching);
         ceph_assert_always(!in_exit_dispatching);
@@ -315,6 +320,9 @@ public:
         seastar::shard_id sid, io_state_t state) {
       return std::make_unique<shard_states_t>(sid, state);
     }
+
+    static shard_states_ref_t create_from_previous(
+        shard_states_t &prv_states, seastar::shard_id new_sid);
 
   private:
     const seastar::shard_id sid;
@@ -475,6 +483,9 @@ struct fmt::formatter<crimson::net::IOHandler::io_state_t>
       break;
     case drop:
       name = "drop";
+      break;
+    case switched:
+      name = "switched";
       break;
     }
     return formatter<string_view>::format(name, ctx);
