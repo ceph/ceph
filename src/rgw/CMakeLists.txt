@@ -116,7 +116,6 @@ set(librgw_common_srcs
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_filter.cc
-  rgw_cache_driver.cc
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
