@@ -559,7 +559,55 @@ FSCryptDenc::~FSCryptDenc()
   EVP_CIPHER_CTX_free(cipher_ctx);
 }
 
-FSCryptDencRef FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
+int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted)
+{
+  auto plain_size = plain.size();
+  int dec_size = (plain.size() + 31) & ~31; // FIXME, need to be based on policy
+
+  char orig[dec_size];
+  memcpy(orig, plain.c_str(), plain_size);
+  memset(orig + plain_size, 0, dec_size - plain_size);
+
+  char enc_name[NAME_MAX + 64]; /* some extra just in case */
+  int r = encrypt(orig, dec_size,
+                  enc_name, sizeof(enc_name));
+
+  if (r < 0) {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+    return r;
+  }
+
+  int enc_len = r;
+
+  int b64_len = NAME_MAX * 2; // name.size() * 2;
+  char b64_name[b64_len]; // large enough
+  int len = fscrypt_fname_armor(enc_name, enc_len, b64_name, b64_len);
+
+  *encrypted = std::string(b64_name, len);
+
+  return len;
+}
+
+int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, std::string *decrypted)
+{
+  char enc[NAME_MAX];
+  int len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
+                                  enc, sizeof(enc));
+
+  char dec_fname[NAME_MAX + 64]; /* some extra just in case */
+  int r = decrypt(enc, len, dec_fname, sizeof(dec_fname));
+
+  if (r >= 0) {
+    dec_fname[r] = '\0';
+    *decrypted = dec_fname;
+  } else {
+    return r;
+  }
+
+  return r;
+}
+
+FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
                                   std::function<FSCryptDenc *()> gen_denc)
 {
   if (!ctx) {
@@ -589,20 +637,22 @@ FSCryptDencRef FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef
     return nullptr;
   }
 
-  auto fscrypt_denc = std::shared_ptr<FSCryptDenc>(gen_denc());
+  auto fscrypt_denc = gen_denc();
 
   fscrypt_denc->setup(ctx, master_key);
 
   return fscrypt_denc;
 }
 
-FSCryptDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key)
+FSCryptFNameDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key)
 {
-  auto denc = init_denc(ctx, kv,
+  auto pdenc = init_denc(ctx, kv,
                          []() { return new FSCryptFNameDenc(); });
-  if (!denc) {
+  if (!pdenc) {
     return nullptr;
   }
+
+  auto denc = std::shared_ptr<FSCryptFNameDenc>((FSCryptFNameDenc *)pdenc);
 
   if (calc_key) {
     int r = denc->calc_fname_key();
@@ -618,7 +668,12 @@ FSCryptDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidat
 FSCryptDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
 {
 
-  return init_denc(ctx, kv,
-                   []() { return new FSCryptFDataDenc(); });
+  auto pdenc = init_denc(ctx, kv,
+                         []() { return new FSCryptFDataDenc(); });
+  if (!pdenc) {
+    return nullptr;
+  }
+
+  return std::shared_ptr<FSCryptDenc>(pdenc);
 }
 

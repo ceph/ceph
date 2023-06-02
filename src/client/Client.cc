@@ -1391,18 +1391,10 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       ldout(cct, 15) << "" << i << ": '" << orig_dname << "'" << dendl;
 
       if (fscrypt_denc) {
-        char enc[NAME_MAX];
-        int len = fscrypt_fname_unarmor(orig_dname.c_str(), orig_dname.size(),
-                                        enc, sizeof(enc));
-        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": base64 decoded fname orig len=" << orig_dname.size() << " dest len=" << len << dendl;
-
-        int r = fscrypt_denc->decrypt(enc, len,
-                                      dec_fname, sizeof(dec_fname));
-
-        if (r >= 0) {
-          dname = dec_fname;
-        } else {
-          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename" << dendl;
+        int r = fscrypt_denc->get_decrypted_fname(orig_dname, &dname);
+        if (r < 0) {
+          ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
+          dname = orig_dname;
         }
       } else {
         dname = orig_dname;
@@ -7029,28 +7021,15 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
 
   auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
   if (fscrypt_denc) {
-    int dec_size = (name.size() + 31) & ~31; // FIXME, need to be based on policy
-
-    char orig[dec_size];
-    memcpy(orig, name.c_str(), name.size());
-    memset(orig + name.size(), 0, dec_size - name.size());
-
-    char enc_name[NAME_MAX + 64]; /* some extra just in case */
-    int r = fscrypt_denc->encrypt(orig, dec_size,
-                                  enc_name, sizeof(enc_name));
+    string enc_name;
+    int r = fscrypt_denc->get_encrypted_fname(name, &enc_name);
 
     if (r < 0) {
       ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
       return r;
     }
 
-    int enc_len = r;
-
-    int b64_len = NAME_MAX * 2; // name.size() * 2;
-    char b64_name[b64_len]; // large enough
-    fscrypt_fname_armor(enc_name, enc_len, b64_name, b64_len);
-
-    path.push_dentry(string(b64_name));
+    path.push_dentry(enc_name);
   } else {
     path.push_dentry(name);
   }
