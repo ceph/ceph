@@ -74,6 +74,27 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
 }
 
 uint64_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
+  if (!client.is_connected()) 
+    return ECONNREFUSED;
+
+  try {
+    int result; 
+
+    client.keys(":cache", [&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_integer();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != 0) {
+      return -1;
+    }
+  } catch(std::exception &e) {
+    return -1;
+  }
+
   return 0; // Implement -Sam
 }
 
@@ -296,7 +317,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
       }
     }
 
-    getFields.pop_back(); /* Do not query for data field */
+    getFields.erase(std::find(getFields.begin(), getFields.end(), "data")); /* Do not query for data field */
     
     /* Get attributes from cache */
     try {
