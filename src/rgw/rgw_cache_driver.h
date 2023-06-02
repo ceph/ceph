@@ -18,25 +18,6 @@ struct Entry {
 };
 
 class CacheDriver {
-  /*struct CacheAioRequest {*/
-    /* This will be invoked from rgw_aio.cc, to asynchronously read from / write to the cache backend. We will also need to define ops like the following in rgw_aio.h
-    Aio::OpFunc Aio::cache_read_op(const DoutPrefixProvider* dpp, optional_yield y, off_t ofs, uint64_t len)
-    Aio::OpFunc Aio::cache_write_op(const DoutPrefixProvider* dpp, optional_yield y, bufferlist& bl, uint64_t len)*/
-
-    /*void cache_aio_read_abstract(const DoutPrefixProvider* dpp, boost::asio::io_context& context, yield_context yield, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult r);
-    void cache_aio_write_abstract(const DoutPrefixProvider* dpp, boost::asio::io_context& context, yield_context yield, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult r);
-  };*/
-
-  /* For Write-back cache*/
-  /*struct DirtyObjectsState {
-    std::string key;
-    ceph::real _time creation_time;
-    ceph::real lifetime; // time after which it will be written out to the store
-			       
-    std::queue<DirtyObjectState> dirty_obs_queue;
-    void write_to_store();
-  };*/
-
   public:
     CacheDriver(Partition& _partition_info) {}
     virtual ~CacheDriver() = default;
