@@ -291,11 +291,14 @@ int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char*
                                optional_yield y) 
 {
   buffer::list bl;
-  Attrs delattr(attr_name, bl);
+  Attrs delattr;
+  delattr.insert({attr_name, bl});
   Attrs currentattrs = this->get_attrs();
+  rgw::sal::Attrs::iterator attr = delattr.begin();
 
   /* Ensure delAttr exists */
-  if (std::find(currentattrs.begin(), currentattrs.end(), delattr) != currentattrs.end()) {
+  if (std::find_if(currentattrs.begin(), currentattrs.end(),
+        [&](const auto& pair) { return pair.first == attr->first; }) != currentattrs.end()) {
     int delAttrReturn = driver->get_policy_driver()->cacheDriver->delete_attrs(dpp, this->get_key().get_oid(), delattr);
 
     if (delAttrReturn < 0) {
