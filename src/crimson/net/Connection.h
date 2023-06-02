@@ -40,6 +40,15 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 
   virtual ~Connection() {}
 
+  /**
+   * get_shard_id
+   *
+   * The shard id where the Connection is dispatching events and handling I/O.
+   *
+   * May be changed with the accept/connect events.
+   */
+  virtual const seastar::shard_id get_shard_id() const = 0;
+
   virtual const entity_name_t &get_peer_name() const = 0;
 
   entity_type_t get_peer_type() const { return get_peer_name().type(); }
