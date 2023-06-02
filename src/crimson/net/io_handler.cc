@@ -509,6 +509,9 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
      case io_state_t::drop:
       ctx.exit_out_dispatching("dropped", conn);
       return seastar::make_ready_future<stop_t>(stop_t::yes);
+     case io_state_t::switched:
+      ctx.exit_out_dispatching("switched", conn);
+      return seastar::make_ready_future<stop_t>(stop_t::yes);
      default:
       ceph_abort("impossible");
     }
@@ -536,8 +539,13 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
       handshake_listener->notify_out_fault(
           "do_out_dispatch", eptr, states);
     } else {
-      logger().info("{} do_out_dispatch(): fault at {} -- {}",
-                    conn, io_state, e.what());
+      if (io_state != io_state_t::switched) {
+        logger().info("{} do_out_dispatch(): fault at {}, {} -- {}",
+                      conn, io_state, io_stat_printer{*this}, e.what());
+      } else {
+        logger().info("{} do_out_dispatch(): fault at {} -- {}",
+                      conn, io_state, e.what());
+      }
     }
 
     return do_out_dispatch(ctx);
@@ -781,8 +789,13 @@ void IOHandler::do_in_dispatch()
         handshake_listener->notify_out_fault(
             "do_in_dispatch", eptr, states);
       } else {
-        logger().info("{} do_in_dispatch(): fault at {} -- {}",
-                      conn, io_state, e_what);
+        if (io_state != io_state_t::switched) {
+          logger().info("{} do_in_dispatch(): fault at {}, {} -- {}",
+                        conn, io_state, io_stat_printer{*this}, e_what);
+        } else {
+          logger().info("{} do_in_dispatch(): fault at {} -- {}",
+                        conn, io_state, e_what);
+        }
       }
     }).finally([&ctx] {
       ctx.exit_in_dispatching();
@@ -852,6 +865,23 @@ IOHandler::shard_states_t::wait_io_exit_dispatching()
       }
     }()
   ).discard_result();
+}
+
+IOHandler::shard_states_ref_t
+IOHandler::shard_states_t::create_from_previous(
+    shard_states_t &prv_states,
+    seastar::shard_id new_sid)
+{
+  auto io_state = prv_states.io_state;
+  assert(io_state != io_state_t::open);
+  auto ret = shard_states_t::create(new_sid, io_state);
+  if (io_state == io_state_t::drop) {
+    // the new gate should not never be used
+    auto fut = ret->gate.close();
+    ceph_assert_always(fut.available());
+  }
+  prv_states.set_io_state(io_state_t::switched);
+  return ret;
 }
 
 } // namespace crimson::net
