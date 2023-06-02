@@ -110,11 +110,11 @@ public:
  */
 private:
   seastar::shard_id get_shard_id() const final {
-    return sid;
+    return shard_states->get_shard_id();
   }
 
   bool is_connected() const final {
-    ceph_assert_always(seastar::this_shard_id() == sid);
+    ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     return protocol_is_connected;
   }
 
@@ -123,17 +123,17 @@ private:
   seastar::future<> send_keepalive() final;
 
   clock_t::time_point get_last_keepalive() const final {
-    ceph_assert_always(seastar::this_shard_id() == sid);
+    ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     return last_keepalive;
   }
 
   clock_t::time_point get_last_keepalive_ack() const final {
-    ceph_assert_always(seastar::this_shard_id() == sid);
+    ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     return last_keepalive_ack;
   }
 
   void set_last_keepalive_ack(clock_t::time_point when) final {
-    ceph_assert_always(seastar::this_shard_id() == sid);
+    ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     last_keepalive_ack = when;
   }
 
@@ -199,6 +199,138 @@ public:
   void dispatch_connect();
 
  private:
+  class shard_states_t;
+  using shard_states_ref_t = std::unique_ptr<shard_states_t>;
+
+  class shard_states_t {
+  public:
+    shard_states_t(seastar::shard_id _sid, io_state_t state)
+      : sid{_sid}, io_state{state} {}
+
+    seastar::shard_id get_shard_id() const {
+      return sid;
+    }
+
+    io_state_t get_io_state() const {
+      assert(seastar::this_shard_id() == sid);
+      return io_state;
+    }
+
+    void set_io_state(io_state_t new_state) {
+      assert(seastar::this_shard_id() == sid);
+      assert(io_state != new_state);
+      pr_io_state_changed.set_value();
+      pr_io_state_changed = seastar::promise<>();
+      if (io_state == io_state_t::open) {
+        // from open
+        if (out_dispatching) {
+          ceph_assert_always(!out_exit_dispatching.has_value());
+          out_exit_dispatching = seastar::promise<>();
+        }
+      }
+      io_state = new_state;
+    }
+
+    seastar::future<> wait_state_change() {
+      assert(seastar::this_shard_id() == sid);
+      return pr_io_state_changed.get_future();
+    }
+
+    template <typename Func>
+    void dispatch_in_background(
+        const char *what, SocketConnection &who, Func &&func) {
+      assert(seastar::this_shard_id() == sid);
+      ceph_assert_always(!gate.is_closed());
+      gate.dispatch_in_background(what, who, std::move(func));
+    }
+
+    void enter_in_dispatching() {
+      assert(seastar::this_shard_id() == sid);
+      assert(io_state == io_state_t::open);
+      ceph_assert_always(!in_exit_dispatching.has_value());
+      in_exit_dispatching = seastar::promise<>();
+    }
+
+    void exit_in_dispatching() {
+      assert(seastar::this_shard_id() == sid);
+      assert(io_state != io_state_t::open);
+      ceph_assert_always(in_exit_dispatching.has_value());
+      in_exit_dispatching->set_value();
+      in_exit_dispatching = std::nullopt;
+    }
+
+    bool try_enter_out_dispatching() {
+      assert(seastar::this_shard_id() == sid);
+      if (out_dispatching) {
+        // already dispatching out
+        return false;
+      }
+      switch (io_state) {
+      case io_state_t::open:
+        [[fallthrough]];
+      case io_state_t::delay:
+        out_dispatching = true;
+        return true;
+      case io_state_t::drop:
+        // do not dispatch out
+        return false;
+      default:
+        ceph_abort("impossible");
+      }
+    }
+
+    void notify_out_dispatching_stopped(
+        const char *what, SocketConnection &conn);
+
+    void exit_out_dispatching(
+        const char *what, SocketConnection &conn) {
+      assert(seastar::this_shard_id() == sid);
+      ceph_assert_always(out_dispatching);
+      out_dispatching = false;
+      notify_out_dispatching_stopped(what, conn);
+    }
+
+    seastar::future<> wait_io_exit_dispatching();
+
+    seastar::future<> close() {
+      assert(seastar::this_shard_id() == sid);
+      assert(!gate.is_closed());
+      return gate.close();
+    }
+
+    bool assert_closed_and_exit() const {
+      assert(seastar::this_shard_id() == sid);
+      if (gate.is_closed()) {
+        ceph_assert_always(io_state == io_state_t::drop);
+        ceph_assert_always(!out_dispatching);
+        ceph_assert_always(!out_exit_dispatching);
+        ceph_assert_always(!in_exit_dispatching);
+        return true;
+      } else {
+        return false;
+      }
+    }
+
+    static shard_states_ref_t create(
+        seastar::shard_id sid, io_state_t state) {
+      return std::make_unique<shard_states_t>(sid, state);
+    }
+
+  private:
+    const seastar::shard_id sid;
+    io_state_t io_state;
+
+    crimson::common::Gated gate;
+    seastar::promise<> pr_io_state_changed;
+    bool out_dispatching = false;
+    std::optional<seastar::promise<>> out_exit_dispatching;
+    std::optional<seastar::promise<>> in_exit_dispatching;
+  };
+
+  io_state_t get_io_state() const {
+    return shard_states->get_io_state();
+  }
+
   seastar::future<> do_send(MessageFRef msg);
 
   seastar::future<> do_send_keepalive();
@@ -244,7 +376,7 @@ public:
   void do_in_dispatch();
 
 private:
-  seastar::shard_id sid;
+  shard_states_ref_t shard_states;
 
   ChainedDispatchers &dispatchers;
 
@@ -255,26 +387,15 @@ private:
 
   HandshakeListener *handshake_listener = nullptr;
 
-  crimson::common::Gated gate;
-
   FrameAssemblerV2Ref frame_assembler;
 
   bool protocol_is_connected = false;
 
   bool need_dispatch_reset = true;
 
-  io_state_t io_state = io_state_t::none;
-
-  // wait until current io_state changed
-  seastar::promise<> io_state_changed;
-
   /*
    * out states for writing
    */
-
-  bool out_dispatching = false;
-
-  std::optional<seastar::promise<>> out_exit_dispatching;
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
@@ -296,8 +417,6 @@ private:
   /*
    * in states for reading
    */
-
-  std::optional<seastar::promise<>> in_exit_dispatching;
 
   /// the seq num of the last received message
   seq_num_t in_seq = 0;
