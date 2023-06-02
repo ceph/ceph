@@ -3,7 +3,7 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
-namespace rgw { 
+namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
 
 /* Base metadata and data fields should remain consistent */
 std::vector<std::string> baseFields{
@@ -52,7 +52,7 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
   return 0;
 }
 
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, std::string& key) {
+bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) {
   int result = -1;
   std::vector<std::string> keys;
   keys.push_back(key);
@@ -71,6 +71,19 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, std::string& key) {
   } catch(std::exception &e) {}
 
   return result;
+}
+
+uint64_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
+  return 0; // Implement -Sam
+}
+
+CacheDriver::Partition RedisDriver::get_current_partition_info() {
+  Partition part;
+  return part; // Implement -Sam
+}
+
+uint64_t RedisDriver::get_free_space() {
+  return 0; // Implement -Sam
 }
 
 int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
@@ -318,6 +331,40 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
+int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) {
+  /* Creating the index based on oid */
+  std::string entryName = "rgw-object:" + key + ":cache";
+  std::string result;
+
+  if (!client.is_connected()) 
+    return ECONNREFUSED;
+
+  /* Every set will be treated as new */
+  try {
+    std::vector< std::pair<std::string, std::string> > redisAttrs = build_attrs(&attrs);
+      
+    if (redisAttrs.empty()) {
+      return -1;
+    } 
+      
+    client.hmset(entryName, redisAttrs, [&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_string();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != "OK") {
+      return -1;
+    }
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return 0;
+}
+
 int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) {
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
@@ -491,4 +538,4 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   return result;
 }
 
-} // namespace rgw::sal
+} } // namespace rgw::cal
