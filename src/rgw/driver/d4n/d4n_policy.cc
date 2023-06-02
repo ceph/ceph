@@ -203,7 +203,7 @@ int LFUDAPolicy::get_min_avg_weight() {
   return weight;
 }
 
-int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, CacheDriver* cacheNode) {
+int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) {
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
   int localWeight = std::stoi(cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight")); // change to block name eventually -Sam
 
@@ -217,7 +217,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, Cac
     if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */
       localWeight += age;
     } else {
-      uint64_t freeSpace = cacheNode->partition_info.get_free_space();
+      uint64_t freeSpace = cacheNode->get_free_space();
 
       while (freeSpace < block->size) {
 	int newSpace = eviction(dpp, cacheNode);
@@ -258,7 +258,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, Cac
   return ret;
 }
 
-uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, CacheDriver* cacheNode) {
+uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
   CacheBlock* victim = NULL; // find victim
   std::string key = "rgw-object:" + victim->cacheObj.objName + ":directory";
   std::string hosts;
@@ -324,8 +324,8 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, CacheDriver* cache
 }
 
 int PolicyDriver::init() { // Add "none" option? -Sam
-  CacheDriver::Partition partition_info;
-  cacheDriver = new RedisDriver(partition_info, "127.0.0.1", 6379); // hardcoded for now -Sam
+  rgw::cal::CacheDriver::Partition partition_info;
+  cacheDriver = new rgw::cal::RedisDriver(partition_info, "127.0.0.1", 6379); // hardcoded for now -Sam
 
   if (policyName == "lfuda") {
     cachePolicy = new LFUDAPolicy();

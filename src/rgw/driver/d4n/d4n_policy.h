@@ -28,8 +28,8 @@ class CachePolicy {
     int find_client(cpp_redis::client *client);
     int exist_key(std::string key);
     Address get_addr() { return addr; }
-    int get_block(CacheBlock* block, CacheDriver* cacheNode) { return 0; }
-    uint64_t eviction(CacheDriver* cacheNode) { return 0; }
+    int get_block(CacheBlock* block, rgw::cal::CacheDriver* cacheNode) { return 0; }
+    uint64_t eviction(rgw::cal::CacheDriver* cacheNode) { return 0; }
 };
 
 class LFUDAPolicy : public CachePolicy {
@@ -46,8 +46,8 @@ class LFUDAPolicy : public CachePolicy {
     int set_min_avg_weight(size_t weight, std::string cacheLocation);
     int get_min_avg_weight();
 
-    int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, CacheDriver* cacheNode);
-    uint64_t eviction(const DoutPrefixProvider* dpp, CacheDriver* cacheNode);
+    int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode);
+    uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode);
 };
 
 class PolicyDriver {
@@ -56,7 +56,7 @@ class PolicyDriver {
 
   public:
     CachePolicy* cachePolicy;
-    CacheDriver* cacheDriver; // might place elsewhere -Sam
+    rgw::cal::CacheDriver* cacheDriver; // might place elsewhere -Sam
 
     PolicyDriver(std::string _policyName) : policyName(_policyName) {}
     ~PolicyDriver() {
