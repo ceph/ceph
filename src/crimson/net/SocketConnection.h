@@ -36,6 +36,8 @@ class Interceptor;
  * ConnectionHandler
  *
  * The interface class to implement Connection, called by SocketConnection.
+ *
+ * The operations must be done in get_shard_id().
  */
 class ConnectionHandler {
 public:
@@ -69,12 +71,19 @@ protected:
 };
 
 class SocketConnection : public Connection {
- // Connection interfaces, public to users
+ /*
+  * Connection interfaces, public to users
+  * Working in ConnectionHandler::get_shard_id()
+  */
  public:
   SocketConnection(SocketMessenger& messenger,
                    ChainedDispatchers& dispatchers);
 
   ~SocketConnection() override;
+
+  const seastar::shard_id get_shard_id() const override {
+    return io_handler->get_shard_id();
+  }
 
   const entity_name_t &get_peer_name() const override {
     return peer_name;
