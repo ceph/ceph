@@ -206,7 +206,12 @@ using FSCryptDencRef = std::shared_ptr<FSCryptDenc>;
 class FSCryptFNameDenc : public FSCryptDenc {
 public:
   FSCryptFNameDenc();
+
+  int get_encrypted_fname(const std::string& plain, std::string *encrypted);
+  int get_decrypted_fname(const std::string& b64enc, std::string *decrypted);
 };
+
+using FSCryptFNameDencRef = std::shared_ptr<FSCryptFNameDenc>;
 
 class FSCryptFDataDenc : public FSCryptDenc {
 public:
@@ -259,8 +264,8 @@ using FSCryptKeyValidatorRef = std::shared_ptr<FSCryptKeyValidator>;
 class FSCrypt {
   FSCryptKeyStore key_store;
 
-  FSCryptDencRef init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
-                           std::function<FSCryptDenc *()> gen_denc);
+  FSCryptDenc *init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
+                         std::function<FSCryptDenc *()> gen_denc);
 public:
   FSCrypt() {}
 
@@ -268,6 +273,6 @@ public:
     return key_store;
   }
 
-  FSCryptDencRef get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key);
+  FSCryptFNameDencRef get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key);
   FSCryptDencRef get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
 };
