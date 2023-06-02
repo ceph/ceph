@@ -107,12 +107,9 @@ static int b64_encode(char *dst, char * const dst_end, const char *src, const ch
 				SET_DST(encode_bits(c & 63));
 			} else {
 				SET_DST(encode_bits((b & 15) << 2));
-				SET_DST('=');
 			}
 		} else {
 			SET_DST(encode_bits(((a & 3) << 4)));
-			SET_DST('=');
-			SET_DST('=');
 		}
 		olen += 4;
 		line += 4;
