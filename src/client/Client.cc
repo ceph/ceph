@@ -7026,7 +7026,35 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
   MetaRequest *req = new MetaRequest(op);
   filepath path;
   dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
+
+  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
+  if (fscrypt_denc) {
+    int dec_size = (name.size() + 31) & ~31; // FIXME, need to be based on policy
+
+    char orig[dec_size];
+    memcpy(orig, name.c_str(), name.size());
+    memset(orig + name.size(), 0, dec_size - name.size());
+
+    char enc_name[NAME_MAX + 64]; /* some extra just in case */
+    int r = fscrypt_denc->encrypt(orig, dec_size,
+                                  enc_name, sizeof(enc_name));
+
+    if (r < 0) {
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+      return r;
+    }
+
+    int enc_len = r;
+
+    int b64_len = NAME_MAX * 2; // name.size() * 2;
+    char b64_name[b64_len]; // large enough
+    fscrypt_fname_armor(enc_name, enc_len, b64_name, b64_len);
+
+    path.push_dentry(string(b64_name));
+  } else {
+    path.push_dentry(name);
+  }
+
   req->set_filepath(path);
   req->set_inode(dir);
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
