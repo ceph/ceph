@@ -360,7 +360,7 @@ public:
 
   void discard_out_sent();
 
-  seastar::future<> do_out_dispatch();
+  seastar::future<> do_out_dispatch(shard_states_t &ctx);
 
   ceph::bufferlist sweep_out_pending_msgs_to_sent(
       bool require_keepalive,
@@ -374,6 +374,7 @@ public:
   void ack_out_sent(seq_num_t seq);
 
   seastar::future<> read_message(
+      shard_states_t &ctx,
       utime_t throttle_stamp,
       std::size_t msg_size);
 
