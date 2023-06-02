@@ -47,6 +47,8 @@ static inline std::string fscrypt_hex_str(const void *p, int len)
   return ss.str();
 }
 
+int fscrypt_fname_armor(const char *src, int src_len,
+                        char *result, int max_len);
 int fscrypt_fname_unarmor(const char *src, int src_len,
                           char *result, int max_len);
 
@@ -190,6 +192,8 @@ public:
   }
 
   int decrypt(const char *in_data, int in_len,
+              char *out_data, int out_len);
+  int encrypt(const char *in_data, int in_len,
               char *out_data, int out_len);
 };
 
