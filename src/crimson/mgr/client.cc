@@ -65,8 +65,11 @@ Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
   return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
-void Client::ms_handle_connect(crimson::net::ConnectionRef c)
+void Client::ms_handle_connect(
+    crimson::net::ConnectionRef c,
+    seastar::shard_id new_shard)
 {
+  ceph_assert_always(new_shard == seastar::this_shard_id());
   gate.dispatch_in_background(__func__, *this, [this, c] {
     if (conn == c) {
       // ask for the mgrconfigure message

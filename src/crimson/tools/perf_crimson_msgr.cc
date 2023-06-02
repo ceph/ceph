@@ -301,7 +301,10 @@ static seastar::future<> run(
         return nr_depth - depth.current();
       }
 
-      void ms_handle_connect(crimson::net::ConnectionRef conn) override {
+      void ms_handle_connect(
+          crimson::net::ConnectionRef conn,
+          seastar::shard_id new_shard) override {
+        ceph_assert_always(new_shard == seastar::this_shard_id());
         conn_stats.connected_time = mono_clock::now();
       }
       std::optional<seastar::future<>> ms_dispatch(

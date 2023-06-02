@@ -52,8 +52,8 @@ public:
   std::optional<seastar::future<>> ms_dispatch(
       crimson::net::ConnectionRef conn, MessageRef m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
-  void ms_handle_connect(crimson::net::ConnectionRef conn) override;
-  void ms_handle_accept(crimson::net::ConnectionRef conn) override;
+  void ms_handle_connect(crimson::net::ConnectionRef conn, seastar::shard_id) override;
+  void ms_handle_accept(crimson::net::ConnectionRef conn, seastar::shard_id) override;
 
   void print(std::ostream&) const;
 private:
