@@ -229,46 +229,7 @@ int fscrypt_fname_unarmor(const char *src, int src_len,
                     src, src + src_len);
 }
 
-int fscrypt_decrypt_fname(const uint8_t *enc, int enc_len,
-                          uint8_t *key, uint8_t *iv,
-                          uint8_t *result)
 {
-    EVP_CIPHER *cipher = EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL);
-    EVP_CIPHER_CTX *ctx;
-    OSSL_PARAM params[2] = {
-	    OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
-	    OSSL_PARAM_construct_end()
-    };
-
-    int total_len;
-
-    if(!(ctx = EVP_CIPHER_CTX_new())) {
-      return -EIO;
-    }
-
-    if (!EVP_CipherInit_ex2(ctx, cipher, key, iv,
-			    0, params)) {
-      return -EINVAL;
-    }
-
-    int len;
-
-    if (EVP_DecryptUpdate(ctx, result, &len, enc, enc_len) != 1) {
-      return -EINVAL;
-    }
-
-    total_len = len;
-
-    if(EVP_DecryptFinal_ex(ctx, result + len, &len) != 1) {
-      return -EINVAL;
-    }
-
-    total_len += len;
-
-    /* Clean up */
-    EVP_CIPHER_CTX_free(ctx);
-
-    return total_len;
 }
 
 int fscrypt_calc_hkdf(char hkdf_context,

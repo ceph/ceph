@@ -53,9 +53,6 @@ static inline std::string fscrypt_hex_str(const void *p, int len)
 
 int fscrypt_fname_unarmor(const char *src, int src_len,
                           char *result, int max_len);
-int fscrypt_decrypt_fname(const uint8_t *enc, int enc_len,
-                          uint8_t *key, uint8_t *iv,
-                          uint8_t *result);
 
 int fscrypt_calc_hkdf(char hkdf_context,
                       const char *nonce, int nonce_len,
