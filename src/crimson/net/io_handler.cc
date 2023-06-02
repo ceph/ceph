@@ -408,7 +408,7 @@ void IOHandler::dispatch_accept()
   // happening to a connected connection.
   protocol_is_connected = true;
   ceph_assert_always(conn_ref);
-  dispatchers.ms_handle_accept(conn_ref);
+  dispatchers.ms_handle_accept(conn_ref, get_shard_id());
 }
 
 void IOHandler::dispatch_connect()
@@ -419,7 +419,7 @@ void IOHandler::dispatch_connect()
   ceph_assert_always(protocol_is_connected == false);
   protocol_is_connected = true;
   ceph_assert_always(conn_ref);
-  dispatchers.ms_handle_connect(conn_ref);
+  dispatchers.ms_handle_connect(conn_ref, get_shard_id());
 }
 
 void IOHandler::dispatch_reset(bool is_replace)

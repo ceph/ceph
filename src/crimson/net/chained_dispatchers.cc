@@ -39,10 +39,12 @@ ChainedDispatchers::ms_dispatch(crimson::net::ConnectionRef conn,
 }
 
 void
-ChainedDispatchers::ms_handle_accept(crimson::net::ConnectionRef conn) {
+ChainedDispatchers::ms_handle_accept(
+    crimson::net::ConnectionRef conn,
+    seastar::shard_id new_shard) {
   try {
     for (auto& dispatcher : dispatchers) {
-      dispatcher->ms_handle_accept(conn);
+      dispatcher->ms_handle_accept(conn, new_shard);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_accept() {}",
@@ -52,10 +54,12 @@ ChainedDispatchers::ms_handle_accept(crimson::net::ConnectionRef conn) {
 }
 
 void
-ChainedDispatchers::ms_handle_connect(crimson::net::ConnectionRef conn) {
+ChainedDispatchers::ms_handle_connect(
+    crimson::net::ConnectionRef conn,
+    seastar::shard_id new_shard) {
   try {
     for(auto& dispatcher : dispatchers) {
-      dispatcher->ms_handle_connect(conn);
+      dispatcher->ms_handle_connect(conn, new_shard);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_connect() {}",

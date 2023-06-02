@@ -123,7 +123,10 @@ static seastar::future<> test_echo(unsigned rounds,
         return found->second;
       }
 
-      void ms_handle_connect(crimson::net::ConnectionRef conn) override {
+      void ms_handle_connect(
+          crimson::net::ConnectionRef conn,
+          seastar::shard_id new_shard) override {
+        assert(new_shard == seastar::this_shard_id());
         auto session = seastar::make_shared<PingSession>();
         auto [i, added] = sessions.emplace(conn, session);
         std::ignore = i;
@@ -851,7 +854,10 @@ class FailoverSuite : public Dispatcher {
     return {seastar::now()};
   }
 
-  void ms_handle_accept(ConnectionRef conn) override {
+  void ms_handle_accept(
+      ConnectionRef conn,
+      seastar::shard_id new_shard) override {
+    assert(new_shard == seastar::this_shard_id());
     auto result = interceptor.find_result(conn);
     if (result == nullptr) {
       logger().error("Untracked accepted connection: {}", *conn);
@@ -874,7 +880,10 @@ class FailoverSuite : public Dispatcher {
     std::ignore = flush_pending_send();
   }
 
-  void ms_handle_connect(ConnectionRef conn) override {
+  void ms_handle_connect(
+      ConnectionRef conn,
+      seastar::shard_id new_shard) override {
+    assert(new_shard == seastar::this_shard_id());
     auto result = interceptor.find_result(conn);
     if (result == nullptr) {
       logger().error("Untracked connected connection: {}", *conn);
@@ -1432,7 +1441,10 @@ class FailoverSuitePeer : public Dispatcher {
     return {seastar::now()};
   }
 
-  void ms_handle_accept(ConnectionRef conn) override {
+  void ms_handle_accept(
+      ConnectionRef conn,
+      seastar::shard_id new_shard) override {
+    assert(new_shard == seastar::this_shard_id());
     logger().info("[TestPeer] got accept from Test");
     ceph_assert(!tracked_conn ||
                 tracked_conn->is_closed() ||
@@ -1587,7 +1599,10 @@ class FailoverTestPeer : public Dispatcher {
     return {seastar::now()};
   }
 
-  void ms_handle_accept(ConnectionRef conn) override {
+  void ms_handle_accept(
+      ConnectionRef conn,
+      seastar::shard_id new_shard) override {
+    assert(new_shard == seastar::this_shard_id());
     cmd_conn = conn;
   }
 

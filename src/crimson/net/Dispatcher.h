@@ -30,9 +30,13 @@ class Dispatcher {
   // used to throttle the connection if it's too busy.
   virtual std::optional<seastar::future<>> ms_dispatch(ConnectionRef, MessageRef) = 0;
 
-  virtual void ms_handle_accept(ConnectionRef conn) {}
+  // The connection is accepted or recoverred(lossless), all the followup
+  // events and messages will be dispatched to the new_shard.
+  virtual void ms_handle_accept(ConnectionRef conn, seastar::shard_id new_shard) {}
 
-  virtual void ms_handle_connect(ConnectionRef conn) {}
+  // The connection is (re)connected, all the followup events and messages will
+  // be dispatched to the new_shard.
+  virtual void ms_handle_connect(ConnectionRef conn, seastar::shard_id new_shard) {}
 
   // a reset event is dispatched when the connection is closed unexpectedly.
   // is_replace=true means the reset connection is going to be replaced by

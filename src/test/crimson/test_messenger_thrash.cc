@@ -134,12 +134,18 @@ class SyntheticDispatcher final
     }
   }
 
-  void ms_handle_accept(crimson::net::ConnectionRef conn) {
+  void ms_handle_accept(
+      crimson::net::ConnectionRef conn,
+      seastar::shard_id new_shard) {
     logger().info("{} - Connection:{}", __func__, *conn);
+    assert(new_shard == seastar::this_shard_id());
   }
 
-  void ms_handle_connect(crimson::net::ConnectionRef conn) {
+  void ms_handle_connect(
+      crimson::net::ConnectionRef conn,
+      seastar::shard_id new_shard) {
     logger().info("{} - Connection:{}", __func__, *conn);
+    assert(new_shard == seastar::this_shard_id());
   }
 
   void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace);
