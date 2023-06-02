@@ -43,13 +43,9 @@ up-to-date cephadm. There are two ways to get the initial ``cephadm``:
 #. :ref:`distribution-specific installation methods<cephadm_install_distros>`
 #. a :ref:`curl-based installation<cephadm_install_curl>` method
 
-Once you have an initial copy of cephadm avaiable, follow the steps to
-:ref:`update to an active release of cephadm<cephadm_update>` to ensure
-that you have the latest fixes for the version of Ceph you'll be managing.
-
-.. important:: The two methods of initially installing ``cephadm`` are mutually
-   exclusive.  Choose either the distribution-specific method or the curl-based
-   method. Do not attempt to use both these methods on one system.
+.. important:: These methods of installing ``cephadm`` are mutually exclusive.
+   Choose either the distribution-specific method or the curl-based method. Do
+   not attempt to use both these methods on one system.
 
 .. note:: Recent versions of cephadm are based on a compilation of source files.
    Unlike for earlier versions of Ceph it is no longer sufficient to copy a
@@ -58,13 +54,12 @@ that you have the latest fixes for the version of Ceph you'll be managing.
    cephadm. See :ref:`compiling-cephadm` for details on how to create your own
    standalone cephadm executable.
 
-
 .. _cephadm_install_distros:
 
 distribution-specific installations
 -----------------------------------
 
-Some Linux distributions may already include Ceph packages.  In
+Some Linux distributions may already include up-to-date Ceph packages.  In
 that case, you can install cephadm directly. For example:
 
   In Ubuntu:
@@ -135,42 +130,28 @@ curl-based installation
 
      python3.8 ./cephadm <arguments...>
 
-.. _cephadm_update:
+* Although the standalone cephadm is sufficient to get a cluster started, it is
+  convenient to have the ``cephadm`` command installed on the host.  To install
+  the packages that provide the ``cephadm`` command, run the following
+  commands:
 
-update cephadm
---------------
+  .. prompt:: bash #
+     :substitutions:
 
-The cephadm binary can be used to bootstrap a cluster and for a variety
-of other management and debugging tasks. The Ceph team strongly recommends
-using an actively supported version of cephadm. Additionally, although
-the standalone cephadm is sufficient to get a cluster started, it is
-convenient to have the ``cephadm`` command installed on the host. Older or LTS
-distros may also have ``cephadm`` packages that are out-of-date and
-running the commands below can help install a more recent version
-from the Ceph project's repositories.
+     ./cephadm add-repo --release |stable-release|
+     ./cephadm install
 
-To install the packages provided by the Ceph project that provide the
-``cephadm`` command, run the following commands:
+  Confirm that ``cephadm`` is now in your PATH by running ``which``:
 
-.. prompt:: bash #
-   :substitutions:
+  .. prompt:: bash #
 
-   ./cephadm add-repo --release |stable-release|
-   ./cephadm install
+    which cephadm
 
-Confirm that ``cephadm`` is now in your PATH by running ``which`` or
-``command -v``:
+  A successful ``which cephadm`` command will return this:
 
-.. prompt:: bash #
+  .. code-block:: bash
 
-   which cephadm
-
-A successful ``which cephadm`` command will return this:
-
-.. code-block:: bash
-
-   /usr/sbin/cephadm
-
+    /usr/sbin/cephadm
 
 Bootstrap a new cluster
 =======================
