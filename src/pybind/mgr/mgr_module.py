@@ -2001,24 +2001,32 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         return cast(OSDMap, self._ceph_get_osdmap())
 
     @API.expose
-    def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
+    def get_valid_latest(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, bool]:
         data = self.get_latest_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
-            return data[1]
+            return data[1], True
         else:
-            return 0
+            return 0, False
 
     @API.expose
-    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
+    def get_valid_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int, bool]:
         data = self.get_latest_counter(
             daemon_type, daemon_name, counter)[counter]
         if data:
             # https://github.com/python/mypy/issues/1178
             _, value, count = cast(Tuple[float, int, int], data)
-            return value, count
+            return value, count, True
         else:
-            return 0, 0
+            return 0, 0, False
+
+    @API.expose
+    def get_latest(self, daemon_type: str, daemon_name: str, counter: str) -> int:
+        return self.get_valid_latest(daemon_type, daemon_name, counter)[0]
+
+    @API.expose
+    def get_latest_avg(self, daemon_type: str, daemon_name: str, counter: str) -> Tuple[int, int]:
+        return self.get_valid_latest_avg(daemon_type, daemon_name, counter)[0:2]
 
     @API.expose
     @profile_method()
@@ -2073,21 +2081,28 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                     counter_info = dict(counter_schema)
                     # Also populate count for the long running avgs
                     if tp & self.PERFCOUNTER_LONGRUNAVG:
-                        v, c = self.get_latest_avg(
+                        v, c, valid = self.get_valid_latest_avg(
                             service['type'],
                             service['id'],
                             counter_path
                         )
-                        counter_info['value'], counter_info['count'] = v, c
+                        if valid:
+                            counter_info['value'], counter_info['count'] = v, c
+                    else:
+                        v, valid = self.get_valid_latest(
+                            service['type'],
+                            service['id'],
+                            counter_path
+                        )
+                        if valid:
+                            counter_info['value'] = v
+
+                    if valid:
                         result[svc_full_name][counter_path] = counter_info
                     else:
-                        counter_info['value'] = self.get_latest(
-                            service['type'],
-                            service['id'],
-                            counter_path
-                        )
-
-                    result[svc_full_name][counter_path] = counter_info
+                        self.log.warning("No perf counter {0} for {1}.{2}".format(
+                            counter_path, service['type'], service['id']
+                        ))
 
         self.log.debug("returning {0} counter".format(len(result)))
 
