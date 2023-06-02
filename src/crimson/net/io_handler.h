@@ -331,7 +331,11 @@ public:
     return shard_states->get_io_state();
   }
 
+  seastar::future<> send_redirected(MessageFRef msg);
+
   seastar::future<> do_send(MessageFRef msg);
+
+  seastar::future<> send_keepalive_redirected();
 
   seastar::future<> do_send_keepalive();
 
