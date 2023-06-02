@@ -21,7 +21,7 @@
 #include "rgw_role.h"
 #include "common/dout.h" 
 
-#include "rgw_redis_driver.cc"
+#include "rgw_redis_driver.h"
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
 

@@ -391,7 +391,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
     /* Only delete attributes that have been stored */
     for (const auto& it : redisFields) {
       if (std::find(getFields.begin(), getFields.end(), it) == getFields.end()) {
-        redisFields.erase(std::find(redisFields.begin(), redisFields.end(), it)); // Should I return here instead? -Sam
+        redisFields.erase(std::find(redisFields.begin(), redisFields.end(), it));
       }
     }
 

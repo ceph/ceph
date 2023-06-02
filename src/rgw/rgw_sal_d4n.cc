@@ -224,30 +224,23 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
   }
 
   if (delattrs != NULL) {
-    std::vector<std::string> delFields;
-    Attrs::iterator attrs;
-
-    /* Extract fields from delattrs */
-    for (attrs = delattrs->begin(); attrs != delattrs->end(); ++attrs) {
-      delFields.push_back(attrs->first);
-    }
-
+    Attrs::iterator attr;
     Attrs currentattrs = this->get_attrs();
-    std::vector<std::string> currentFields;
-    
-    /* Extract fields from current attrs */
-    for (attrs = currentattrs.begin(); attrs != currentattrs.end(); ++attrs) {
-      currentFields.push_back(attrs->first);
+
+    /* Ensure all delAttrs exist */
+    for (const auto& attr : *delattrs) {
+      if (std::find(currentattrs.begin(), currentattrs.end(), attr) == currentattrs.end()) {
+	delattrs->erase(std::find(delattrs->begin(), delattrs->end(), attr));
+      }
     }
-    
-    /*
-    int del_attrsReturn = driver->get_policy_driver()->cacheDriver->del_attrs(this->get_key().get_oid(), currentFields, delFields);
+
+    int del_attrsReturn = driver->get_policy_driver()->cacheDriver->delete_attrs(dpp, this->get_key().get_oid(), *delattrs);
 
     if (del_attrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attributes operation failed." << dendl;
     } else {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attributes operation succeeded." << dendl;
-    }*/
+    }
   }
 
   return next->set_obj_attrs(dpp, setattrs, delattrs, y);  
@@ -256,18 +249,15 @@ int D4NFilterObject::set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattr
 int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
                                 rgw_obj* target_obj)
 {
-  rgw::sal::Attrs newAttrs;
-  std::vector< std::pair<std::string, std::string> > newMetadata;
-/*  int get_attrsReturn = driver->get_policy_driver()->cacheDriver->get_attrs(this->get_key().get_oid(), 
-			  			 		      &newAttrs, 
-						  		      &newMetadata);
+  rgw::sal::Attrs attrs;
+  int get_attrsReturn = driver->get_policy_driver()->cacheDriver->get_attrs(dpp, this->get_key().get_oid(), attrs);
 
   if (get_attrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation failed." << dendl;
 
     return next->get_obj_attrs(y, dpp, target_obj);
-  } else {*/
-    int set_attrsReturn = this->set_attrs(newAttrs);
+  } else {
+    int set_attrsReturn = this->set_attrs(attrs);
     
     if (set_attrsReturn < 0) {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object attributes operation failed." << dendl;
@@ -278,7 +268,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
   
       return 0;
     }
-  //}
+  }
 }
 
 int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val,
@@ -286,13 +276,13 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 {
   Attrs update;
   update[(std::string)attr_name] = attr_val;
- /* int update_attrsReturn = driver->get_policy_driver()->cacheDriver->update_attr(this->get_key().get_oid(), &update);
+  int update_attrsReturn = driver->get_policy_driver()->cacheDriver->update_attrs(dpp, this->get_key().get_oid(), update);
 
   if (update_attrsReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache modify object attribute operation failed." << dendl;
   } else {
     ldpp_dout(dpp, 20) << "D4N Filter: Cache modify object attribute operation succeeded." << dendl;
-  }*/
+  }
 
   return next->modify_obj_attrs(attr_name, attr_val, y, dpp);  
 }
@@ -300,28 +290,21 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
                                optional_yield y) 
 {
-  std::vector<std::string> delFields;
-  delFields.push_back((std::string)attr_name);
-  
-  Attrs::iterator attrs;
+  buffer::list bl;
+  Attrs delattr(attr_name, bl);
   Attrs currentattrs = this->get_attrs();
-  std::vector<std::string> currentFields;
-  
-  /* Extract fields from current attrs */
-  for (attrs = currentattrs.begin(); attrs != currentattrs.end(); ++attrs) {
-    currentFields.push_back(attrs->first);
-  }
-  
-  /*
-  int delAttrReturn = driver->get_policy_driver()->cacheDriver->del_attrs(this->get_key().get_oid(), currentFields, delFields);
 
-  if (delAttrReturn < 0) {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation failed." << dendl;
-  } else {
-    ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation succeeded." << dendl;
-  }*/
-  
-  return next->delete_obj_attrs(dpp, attr_name, y);  
+  /* Ensure delAttr exists */
+  if (std::find(currentattrs.begin(), currentattrs.end(), delattr) != currentattrs.end()) {
+    int delAttrReturn = driver->get_policy_driver()->cacheDriver->delete_attrs(dpp, this->get_key().get_oid(), delattr);
+
+    if (delAttrReturn < 0) {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation failed." << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache delete object attribute operation succeeded." << dendl;
+    }
+  } else 
+    return next->delete_obj_attrs(dpp, attr_name, y);  
 }
 
 std::unique_ptr<Object> D4NFilterDriver::get_object(const rgw_obj_key& k)
