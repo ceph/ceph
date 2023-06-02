@@ -82,8 +82,24 @@ public:
     using ceph::decode;
     auto p = payload.cbegin();
     decode(fsid, p);
+
     decode(incremental_maps, p);
+    for (auto iter = incremental_maps.begin();
+         iter != incremental_maps.end(); ++iter) {
+      bufferlist& bl = iter->second;
+      if (!bl.is_page_aligned()) {
+        bl.rebuild_page_aligned();
+      }
+    }
+
     decode(maps, p);
+    for (auto iter = maps.begin(); iter != maps.end(); ++iter) {
+      bufferlist& bl = iter->second;
+      if (!bl.is_page_aligned()) {
+        bl.rebuild_page_aligned();
+      }
+    }
+
     if (header.version >= 2) {
       decode(cluster_osdmap_trim_lower_bound, p);
       decode(newest_map, p);
