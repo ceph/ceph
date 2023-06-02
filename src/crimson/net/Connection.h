@@ -71,7 +71,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
    * send
    *
    * Send a message over a connection that has completed its handshake.
-   * May be invoked from any core.
+   *
+   * May be invoked from any core, but that requires to chain the returned
+   * future to preserve ordering.
    */
   virtual seastar::future<> send(MessageURef msg) = 0;
 
@@ -81,7 +83,8 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
    * Send a keepalive message over a connection that has completed its
    * handshake.
    *
-   * May be invoked from any core.
+   * May be invoked from any core, but that requires to chain the returned
+   * future to preserve ordering.
    */
   virtual seastar::future<> send_keepalive() = 0;
 
