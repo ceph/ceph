@@ -229,7 +229,11 @@ int fscrypt_fname_unarmor(const char *src, int src_len,
                     src, src + src_len);
 }
 
+int fscrypt_fname_armor(const char *src, int src_len,
+                        char *result, int max_len)
 {
+  return b64_encode(result, result + max_len,
+                    src, src + src_len);
 }
 
 int fscrypt_calc_hkdf(char hkdf_context,
@@ -495,6 +499,39 @@ int FSCryptDenc::decrypt(const char *in_data, int in_len,
     total_len = len;
 
     if (EVP_DecryptFinal_ex(cipher_ctx, (uint8_t *)out_data + len, &len) != 1) {
+      return -EINVAL;
+    }
+
+    total_len += len;
+
+    return total_len;
+}
+
+int FSCryptDenc::encrypt(const char *in_data, int in_len,
+                         char *out_data, int out_len)
+{
+    int total_len;
+
+    int key_size = key.size();
+
+    if (out_len < (fscrypt_align_ofs(in_len))) {
+      return -ERANGE;
+    }
+
+    if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key.data(), iv.raw,
+			    1, cipher_params.data())) {
+      return -EINVAL;
+    }
+
+    int len;
+
+    if (EVP_EncryptUpdate(cipher_ctx, (uint8_t *)out_data, &len, (const uint8_t *)in_data, in_len) != 1) {
+      return -EINVAL;
+    }
+
+    total_len = len;
+
+    if (EVP_EncryptFinal_ex(cipher_ctx, (uint8_t *)out_data + len, &len) != 1) {
       return -EINVAL;
     }
 
