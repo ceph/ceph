@@ -115,7 +115,6 @@ class D4NFilterObject : public FilterObject {
   public:
     struct D4NFilterReadOp : FilterReadOp {
       D4NFilterObject* source;
-      std::string read;
 
       D4NFilterReadOp(std::unique_ptr<ReadOp> _next, D4NFilterObject* _source) : FilterReadOp(std::move(_next)),
 										 source(_source) {}
