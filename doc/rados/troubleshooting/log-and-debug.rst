@@ -207,7 +207,6 @@ The following table provides a list of Ceph subsystems and their default log and
 memory levels. Once you complete your logging efforts, restore the subsystems
 to their default level or to a level suitable for normal operations.
 
-
 +--------------------------+-----------+--------------+
 | Subsystem                | Log Level | Memory Level |
 +==========================+===========+==============+
@@ -382,10 +381,9 @@ to their default level or to a level suitable for normal operations.
 Logging Settings
 ----------------
 
-Logging and debugging settings are not required in a Ceph configuration file,
-but you may override default settings as needed. Ceph supports the following
-settings:
-
+It is not necessary to specify logging and debugging settings in the Ceph
+configuration file, but you may override default settings when needed. Ceph
+supports the following settings:
 
 .. confval:: log_file
 .. confval:: log_max_new
@@ -430,4 +428,3 @@ RADOS Gateway
 - :confval:`rgw_enable_usage_log`
 - :confval:`rgw_usage_log_flush_threshold`
 - :confval:`rgw_usage_log_tick_interval`
-
