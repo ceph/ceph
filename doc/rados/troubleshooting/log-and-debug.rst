@@ -150,7 +150,7 @@ Each subsystem has a logging level for its output logs, and for its logs
 in-memory. You may set different values for each of these subsystems by setting
 a log file level and a memory level for debug logging. Ceph's logging levels
 operate on a scale of ``1`` to ``20``, where ``1`` is terse and ``20`` is
-verbose [#]_ . In general, the logs in-memory are not sent to the output log unless:
+verbose. In general, the logs in-memory are not sent to the output log unless:
 
 - a fatal signal is raised or
 - an ``assert`` in source code is triggered or
@@ -173,11 +173,9 @@ as ``debug ms = 1/5``. For example:
 	#for example
 	debug mds balancer = 1/20
 
-
-The following table provides a list of Ceph subsystems and their default log and
-memory levels. Once you complete your logging efforts, restore the subsystems
-to their default level or to a level suitable for normal operations.
-
+The following table provides a list of Ceph subsystems and their default log levels and
+memory levels. Use this table to restore each subsystem
+to its default level or to a level that is suitable for normal operations when you have completed your examination of the logs.
 
 +--------------------------+-----------+--------------+
 | Subsystem                | Log Level | Memory Level |
@@ -353,10 +351,9 @@ to their default level or to a level suitable for normal operations.
 Logging Settings
 ----------------
 
-Logging and debugging settings are not required in a Ceph configuration file,
-but you may override default settings as needed. Ceph supports the following
-settings:
-
+It is not necessary to specify logging and debugging settings in the Ceph
+configuration file, but you may override default settings when needed. Ceph
+supports the following settings:
 
 .. confval:: log_file
 .. confval:: log_max_new
@@ -401,5 +398,3 @@ RADOS Gateway
 - :confval:`rgw_enable_usage_log`
 - :confval:`rgw_usage_log_flush_threshold`
 - :confval:`rgw_usage_log_tick_interval`
-
-.. [#] there are levels >20 in some rare cases and that they are extremely verbose.
