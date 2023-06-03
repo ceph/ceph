@@ -42,6 +42,9 @@ public:
   // Returns true iff there are no ops scheduled
   virtual bool empty() const = 0;
 
+  // Returns the number of queued items
+  virtual uint32_t size() const = 0;
+
   // Return next op to be processed
   virtual WorkItem dequeue() = 0;
 
@@ -76,6 +79,7 @@ OpSchedulerRef make_scheduler(
 template <typename T>
 class ClassedOpQueueScheduler final : public OpScheduler {
   unsigned cutoff;
+  uint32_t _size;
   T queue;
 
   static unsigned int get_io_prio_cut(CephContext *cct) {
@@ -93,6 +97,7 @@ public:
   template <typename... Args>
   ClassedOpQueueScheduler(CephContext *cct, Args&&... args) :
     cutoff(get_io_prio_cut(cct)),
+    _size(0),
     queue(std::forward<Args>(args)...)
   {}
 
@@ -106,6 +111,7 @@ public:
     else
       queue.enqueue(
 	item.get_owner(), priority, cost, std::move(item));
+    _size++;
   }
 
   void enqueue_front(OpSchedulerItem &&item) final {
@@ -119,13 +125,19 @@ public:
       queue.enqueue_front(
 	item.get_owner(),
 	priority, cost, std::move(item));
+    _size++;
   }
 
   bool empty() const final {
     return queue.empty();
   }
 
+  uint32_t size() const final {
+    return _size;
+  }
+
   WorkItem dequeue() final {
+    _size--;
     return queue.dequeue();
   }
 

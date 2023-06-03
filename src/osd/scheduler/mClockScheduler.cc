@@ -406,7 +406,6 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
       id,
       cost);
   }
-
  dout(20) << __func__ << " client_count: " << scheduler.client_count()
           << " queue_sizes: [ "
 	  << " high_priority_queue: " << high_priority.size()

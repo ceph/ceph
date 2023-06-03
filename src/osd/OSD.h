@@ -979,6 +979,72 @@ struct OSDShard {
   std::string sdata_wait_lock_name;
   ceph::mutex sdata_wait_lock;
   ceph::condition_variable sdata_cond;
+
+  struct WaitGroup {
+    virtual bool wait_continue(heartbeat_handle_d *hb) = 0;
+    virtual void wakeup(uint32_t qsize) = 0;
+    virtual void forcewake() = 0;
+    virtual ~WaitGroup() = 0;
+  };
+
+  struct WaitGroup_P : WaitGroup {
+    const unsigned id;
+    CephContext *cct;
+    OSD *osd;
+    OSDShard *sdata;
+    std::string name;
+
+  public:
+    WaitGroup_P(int id, CephContext *cct, OSD *osd, OSDShard *sdata);
+
+    bool wait_continue(heartbeat_handle_d *hb);
+    void wakeup(uint32_t qsize) {
+      if (qsize == 0) {
+        std::lock_guard l{sdata->sdata_wait_lock};
+        sdata->sdata_cond.notify_one();
+      }
+    }
+    void forcewake() {
+      std::lock_guard l{sdata->sdata_wait_lock};
+      sdata->sdata_cond.notify_one();
+    }
+  };
+
+  struct WaitGroup_S : WaitGroup {
+    const unsigned id;
+    CephContext *cct;
+    OSD *osd;
+    OSDShard *sdata;
+    std::string name;
+    std::string lock_name;
+    ceph::mutex lock;
+    ceph::condition_variable cond;
+    uint32_t qt_l;
+    uint32_t qt_h;
+
+  public:
+    WaitGroup_S(
+      int id,
+      CephContext *cct,
+      OSD *osd,
+      OSDShard *sdata,
+      uint32_t qt_l,
+      uint32_t qt_h);
+
+    bool wait_continue(heartbeat_handle_d *hb);
+    void wakeup(uint32_t qsize) {
+      if (qsize > qt_h) {
+        std::lock_guard l{lock};
+        cond.notify_one();
+      }
+    }
+    void forcewake() {
+      std::lock_guard l{lock};
+      cond.notify_one();
+    }
+  };
+  std::vector<std::shared_ptr<WaitGroup>> wgv;
+
   int waiting_threads = 0;
 
   ceph::mutex osdmap_lock;  ///< protect shard_osdmap updates vs users w/o shard_lock
@@ -1605,6 +1671,9 @@ protected:
 	std::scoped_lock l{sdata->sdata_wait_lock};
 	sdata->stop_waiting = true;
 	sdata->sdata_cond.notify_all();
+        for (auto wg : sdata->wgv) {
+          wg->forcewake();
+        }
       }
     }
 
@@ -1732,7 +1801,7 @@ public:
   // -- shards --
   std::vector<OSDShard*> shards;
   uint32_t num_shards = 0;
-
+  uint32_t num_threads_per_shard = 0;
   void inc_num_pgs() {
     ++num_pgs;
   }

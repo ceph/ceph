@@ -19,6 +19,7 @@
 #include <ostream>
 #include <map>
 #include <vector>
+#include <atomic>
 
 #include "boost/variant.hpp"
 
@@ -239,6 +240,10 @@ public:
   // Returns if the queue is empty
   bool empty() const final {
     return scheduler.empty() && high_priority.empty();
+  }
+
+  uint32_t size() const final {
+    return scheduler.request_count() + high_priority.size();
   }
 
   // Formatted output of the queue
