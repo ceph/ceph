@@ -5228,6 +5228,15 @@ def prepare_ssh(
         cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
         cli(['cephadm', 'set-pub-key', '-i', '/tmp/cephadm-ssh-key.pub'], extra_mounts=mounts)
         ssh_pub = cli(['cephadm', 'get-pub-key'])
+        authorize_ssh_key(ssh_pub, ctx.ssh_user)
+    elif ctx.ssh_private_key and ctx.ssh_signed_cert:
+        logger.info('Using provided ssh private key and signed cert ...')
+        mounts = {
+            pathify(ctx.ssh_private_key.name): '/tmp/cephadm-ssh-key:z',
+            pathify(ctx.ssh_signed_cert.name): '/tmp/cephadm-ssh-key-cert.pub:z'
+        }
+        cli(['cephadm', 'set-priv-key', '-i', '/tmp/cephadm-ssh-key'], extra_mounts=mounts)
+        cli(['cephadm', 'set-signed-cert', '-i', '/tmp/cephadm-ssh-key-cert.pub'], extra_mounts=mounts)
     else:
         logger.info('Generating ssh key...')
         cli(['cephadm', 'generate-key'])
@@ -5235,8 +5244,7 @@ def prepare_ssh(
         with open(ctx.output_pub_ssh_key, 'w') as f:
             f.write(ssh_pub)
         logger.info('Wrote public SSH key to %s' % ctx.output_pub_ssh_key)
-
-    authorize_ssh_key(ssh_pub, ctx.ssh_user)
+        authorize_ssh_key(ssh_pub, ctx.ssh_user)
 
     host = get_hostname()
     logger.info('Adding host %s...' % host)
@@ -5600,8 +5608,19 @@ def command_bootstrap(ctx):
     if not ctx.output_pub_ssh_key:
         ctx.output_pub_ssh_key = os.path.join(ctx.output_dir, CEPH_PUBKEY)
 
-    if bool(ctx.ssh_private_key) is not bool(ctx.ssh_public_key):
-        raise Error('--ssh-private-key and --ssh-public-key must be provided together or not at all.')
+    if (
+        (bool(ctx.ssh_private_key) is not bool(ctx.ssh_public_key))
+        and (bool(ctx.ssh_private_key) is not bool(ctx.ssh_signed_cert))
+    ):
+        raise Error('--ssh-private-key must be passed with either --ssh-public-key in the case of standard pubkey '
+                    'authentication or with --ssh-signed-cert in the case of CA signed signed keys or not provided at all.')
+
+    if (bool(ctx.ssh_public_key) and bool(ctx.ssh_signed_cert)):
+        raise Error('--ssh-public-key and --ssh-signed-cert are mututally exclusive. --ssh-public-key is intended '
+                    'for standard pubkey encryption where the public key is set as an authorized key on cluster hosts. '
+                    '--ssh-signed-cert is intended for the CA signed keys use case where cluster hosts are configured to trust '
+                    'a CA pub key and authentication during SSH is done by authenticating the signed cert, requiring no '
+                    'public key to be installed on the cluster hosts.')
 
     if ctx.fsid:
         data_dir_base = os.path.join(ctx.data_dir, ctx.fsid)
@@ -5800,7 +5819,10 @@ def command_bootstrap(ctx):
         with open(ctx.apply_spec) as f:
             host_dicts = _extract_host_info_from_applied_spec(f)
             for h in host_dicts:
-                _distribute_ssh_keys(ctx, h, hostname)
+                if ctx.ssh_signed_cert:
+                    logger.info('Key distribution is not supported for signed CA key setups. Skipping ...')
+                else:
+                    _distribute_ssh_keys(ctx, h, hostname)
 
         mounts = {}
         mounts[pathify(ctx.apply_spec)] = '/tmp/spec.yml:ro'
@@ -7507,11 +7529,17 @@ def check_ssh_connectivity(ctx: CephadmContext) -> None:
         logger.warning('Cannot check ssh connectivity. Skipping...')
         return
 
-    logger.info('Verifying ssh connectivity ...')
+    ssh_priv_key_path = ''
+    ssh_pub_key_path = ''
+    ssh_signed_cert_path = ''
     if ctx.ssh_private_key and ctx.ssh_public_key:
         # let's use the keys provided by the user
         ssh_priv_key_path = pathify(ctx.ssh_private_key.name)
         ssh_pub_key_path = pathify(ctx.ssh_public_key.name)
+    elif ctx.ssh_private_key and ctx.ssh_signed_cert:
+        # CA signed keys use case
+        ssh_priv_key_path = pathify(ctx.ssh_private_key.name)
+        ssh_signed_cert_path = pathify(ctx.ssh_signed_cert.name)
     else:
         # no custom keys, let's generate some random keys just for this check
         ssh_priv_key_path = f'/tmp/ssh_key_{uuid.uuid1()}'
@@ -7522,31 +7550,35 @@ def check_ssh_connectivity(ctx: CephadmContext) -> None:
             logger.warning('Cannot generate keys to check ssh connectivity.')
             return
 
-    with open(ssh_pub_key_path, 'r') as f:
-        key = f.read().strip()
-    new_key = authorize_ssh_key(key, ctx.ssh_user)
-    ssh_cfg_file_arg = ['-F', pathify(ctx.ssh_config.name)] if ctx.ssh_config else []
-    _, _, code = call(ctx, ['ssh', '-o StrictHostKeyChecking=no',
-                            *ssh_cfg_file_arg, '-i', ssh_priv_key_path,
-                            '-o PasswordAuthentication=no',
-                            f'{ctx.ssh_user}@{get_hostname()}',
-                            'sudo echo'])
+    if ssh_signed_cert_path:
+        logger.info('Verification for CA signed keys authentication not implemented. Skipping ...')
+    elif ssh_pub_key_path:
+        logger.info('Verifying ssh connectivity using standard pubkey authentication ...')
+        with open(ssh_pub_key_path, 'r') as f:
+            key = f.read().strip()
+        new_key = authorize_ssh_key(key, ctx.ssh_user)
+        ssh_cfg_file_arg = ['-F', pathify(ctx.ssh_config.name)] if ctx.ssh_config else []
+        _, _, code = call(ctx, ['ssh', '-o StrictHostKeyChecking=no',
+                                *ssh_cfg_file_arg, '-i', ssh_priv_key_path,
+                                '-o PasswordAuthentication=no',
+                                f'{ctx.ssh_user}@{get_hostname()}',
+                                'sudo echo'])
 
-    # we only remove the key if it's a new one. In case the user has provided
-    # some already existing key then we don't alter authorized_keys file
-    if new_key:
-        revoke_ssh_key(key, ctx.ssh_user)
+        # we only remove the key if it's a new one. In case the user has provided
+        # some already existing key then we don't alter authorized_keys file
+        if new_key:
+            revoke_ssh_key(key, ctx.ssh_user)
 
-    pub_key_msg = '- The public key file configured by --ssh-public-key is valid\n' if ctx.ssh_public_key else ''
-    prv_key_msg = '- The private key file configured by --ssh-private-key is valid\n' if ctx.ssh_private_key else ''
-    ssh_cfg_msg = '- The ssh configuration file configured by --ssh-config is valid\n' if ctx.ssh_config else ''
-    err_msg = f"""
+        pub_key_msg = '- The public key file configured by --ssh-public-key is valid\n' if ctx.ssh_public_key else ''
+        prv_key_msg = '- The private key file configured by --ssh-private-key is valid\n' if ctx.ssh_private_key else ''
+        ssh_cfg_msg = '- The ssh configuration file configured by --ssh-config is valid\n' if ctx.ssh_config else ''
+        err_msg = f"""
 ** Please verify your user's ssh configuration and make sure:
 - User {ctx.ssh_user} must have passwordless sudo access
 {pub_key_msg}{prv_key_msg}{ssh_cfg_msg}
 """
-    if code != 0:
-        raise Error(err_msg)
+        if code != 0:
+            raise Error(err_msg)
 
 
 def command_prepare_host(ctx: CephadmContext) -> None:
@@ -9304,6 +9336,10 @@ def _get_parser():
         '--ssh-public-key',
         type=argparse.FileType('r'),
         help='SSH public key')
+    parser_bootstrap.add_argument(
+        '--ssh-signed-cert',
+        type=argparse.FileType('r'),
+        help='Signed cert for setups using CA signed SSH keys')
     parser_bootstrap.add_argument(
         '--ssh-user',
         default='root',
