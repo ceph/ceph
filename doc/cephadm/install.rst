@@ -205,6 +205,8 @@ This command will:
   with this label will (also) get a copy of ``/etc/ceph/ceph.conf`` and
   ``/etc/ceph/ceph.client.admin.keyring``.
 
+.. _cephadm-bootstrap-further-info:
+
 Further information about cephadm bootstrap
 -------------------------------------------
 
@@ -478,3 +480,27 @@ have access to all hosts that you plan to add to the cluster.
       cephadm --image *<hostname>*:5000/ceph/ceph bootstrap --mon-ip *<mon-ip>*
 
 .. _cluster network: ../rados/configuration/network-config-ref#cluster-network
+
+.. _cephadm-bootstrap-custom-ssh-keys:
+
+Deployment with custom SSH keys
+-------------------------------
+
+Bootstrap allows users to create their own private/public SSH key pair
+rather than having cephadm generate them automatically.
+
+To use custom SSH keys, pass the ``--ssh-private-key`` and ``--ssh-public-key``
+fields to bootstrap. Both parameters require a path to the file where the
+keys are stored:
+
+.. prompt:: bash #
+
+  cephadm bootstrap --mon-ip <ip-addr> --ssh-private-key <private-key-filepath> --ssh-public-key <public-key-filepath>
+
+This setup allows users to use a key that has already been distributed to hosts
+the user wants in the cluster before bootstrap.
+
+.. note:: In order for cephadm to connect to other hosts you'd like to add
+   to the cluster, make sure the public key of the key pair provided is setup
+   as an authorized key for the ssh user being used, typically root. If you'd
+   like more info on using a non-root user as the ssh user, see :ref:`cephadm-bootstrap-further-info`
