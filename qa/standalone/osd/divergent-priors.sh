@@ -650,13 +650,28 @@ function TEST_divergent_3() {
     # reproduce https://tracker.ceph.com/issues/41816
     ceph osd pool set $poolname pg_autoscale_mode on
 
-    flush_pg_stats || return 1
-    wait_for_clean || return 1
+    divergent=-1
+    start_time=$(date +%s)
+    max_duration=300
 
-    # determine primary
-    local divergent="$(ceph pg dump pgs --format=json | jq '.pg_stats[0].up_primary')"
-    echo "primary and soon to be divergent is $divergent"
-    ceph pg dump pgs
+    while [ "$divergent" -le -1 ]
+      do
+        flush_pg_stats || return 1
+        wait_for_clean || return 1
+
+        # determine primary
+        divergent="$(ceph pg dump pgs --format=json | jq '.pg_stats[0].up_primary')"
+        echo "primary and soon to be divergent is $divergent"
+        ceph pg dump pgs
+
+        current_time=$(date +%s)
+        elapsed_time=$(expr $current_time - $start_time)
+        if [ "$elapsed_time" -gt "$max_duration" ]; then
+          echo "timed out waiting for divergent"
+          return 1
+        fi
+    done
+
     local non_divergent=""
     for i in $osds
     do
