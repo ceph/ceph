@@ -9,22 +9,24 @@ Pools provide:
 
 - **Resilience**: It is possible to set the number of OSDs that are allowed to
   fail without any data being lost. If your cluster uses replicated pools, the
-  number of OSDs that can fail without data loss is the number of replicas.
-  For example: a typical configuration stores an object and two additional
-  copies (that is: ``size = 3``), but you can configure the number of replicas
-  on a per-pool basis. For `erasure coded pools <../erasure-code>`_, resilience
-  is defined as the number of coding chunks (for example, ``m = 2`` in the
-  **erasure code profile**).
+  number of OSDs that can fail without data loss is equal to the number of
+  replicas.
+  
+  For example: a typical configuration stores an object and two replicas
+  (copies) of each RADOS object (that is: ``size = 3``), but you can configure
+  the number of replicas on a per-pool basis. For `erasure-coded pools
+  <../erasure-code>`_, resilience is defined as the number of coding chunks
+  (for example, ``m = 2`` in the default **erasure code profile**).
 
-- **Placement Groups**: You can set the number of placement groups for the
-  pool. A typical configuration targets approximately 100 placement groups per
-  OSD, providing optimal balancing without consuming many computing resources.
-  When setting up multiple pools, be careful to set a reasonable number of
-  placement groups for each pool and for the cluster as a whole. Note that each
-  PG belongs to a specific pool: when multiple pools use the same OSDs, make
-  sure that the **sum** of PG replicas per OSD is in the desired PG per OSD
-  target range. Use the `pgcalc`_ tool to calculate the number of placement
-  groups to set for your pool.
+- **Placement Groups**: You can set the number of placement groups (PGs) for
+  the pool. In a typical configuration, the target number of PGs is
+  approximately one hundred PGs per OSD. This provides reasonable balancing
+  without consuming excessive computing resources.  When setting up multiple
+  pools, be careful to set an appropriate number of PGs for each pool and for
+  the cluster as a whole. Each PG belongs to a specific pool: when multiple
+  pools use the same OSDs, make sure that the **sum** of PG replicas per OSD is
+  in the desired PG-per-OSD target range. To calculate an appropriate number of
+  PGs for your pools, use the `pgcalc`_ tool.
 
 - **CRUSH Rules**: When data is stored in a pool, the placement of the object
   and its replicas (or chunks, in the case of erasure-coded pools) in your
@@ -32,19 +34,19 @@ Pools provide:
   pool if the default rule does not fit your use case.
 
 - **Snapshots**: The command ``ceph osd pool mksnap`` creates a snapshot of a
-  pool. 
+  pool.
 
 Pool Names
 ==========
 
 Pool names beginning with ``.`` are reserved for use by Ceph's internal
-operations. Please do not create or manipulate pools with these names.
+operations. Do not create or manipulate pools with these names.
 
 
 List Pools
 ==========
 
-To list your cluster's pools, execute:
+To list your cluster's pools, run the following command:
 
 .. prompt:: bash $
 
@@ -52,40 +54,43 @@ To list your cluster's pools, execute:
 
 .. _createpool:
 
-Create a Pool
-=============
+Creating a Pool
+===============
 
-If you are not using the PG autoscaler you may wish to explicitly set a value
-for :confval:osd_pool_default_pg_num, as the default is small and not ideal for
-many production-scale deployments. Refer to the `Pool, PG and CRUSH Config
-Reference`_. Be careful, though, to not set a very high value as auto-deployed
-pools, notably certain RGW pools, will not hold much data and thus should not
-have a gratuitous number of PGs. When the PG autoscaler is not actively
-managing placement group numbers, best practice is to explicitly provide pg_num
-and pgp_num when creating each pool.
-
-.. note:: Starting with Luminous, all pools need to be associated to the
-   application using the pool. See `Associate Pool to Application`_ below for
-   more information.
+Before creating a pool, consult `Pool, PG and CRUSH Config Reference`_.  Your
+Ceph configuration file contains a setting (namely, ``pg_num``) that determines
+the number of PGs.  However, this setting's default value is NOT appropriate
+for most systems.  In most cases, you should override this default value when
+creating your pool.  For details on PG numbers, see `setting the number of
+placement groups`_
 
 For example:
 
-.. code-block:: ini
+.. prompt:: bash $
 
-	[global]
-	osd_pool_default_pg_autoscale_mode = off
-	osd_pool_default_pg_num = 128
+    osd_pool_default_pg_num = 128
+    osd_pool_default_pgp_num = 128
 
-To create a pool, execute:
+.. note:: In Luminous and later releases, each pool must be associated with the
+   application that will be using the pool. For more information, see
+   `Associating a Pool to an Application`_ below.
+
+To create a pool, run one of the following commands:
 
 .. prompt:: bash $
 
-	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
+    ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]] [replicated] \
              [crush-rule-name] [expected-num-objects]
-	ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]]   erasure \
+
+or:
+
+.. prompt:: bash $
+
+    ceph osd pool create {pool-name} [{pg-num} [{pgp-num}]]   erasure \
              [erasure-code-profile] [crush-rule-name] [expected_num_objects] [--autoscale-mode=<on,off,warn>]
 
-Where:
+For a brief description of the elements of the above commands, consult the
+following:
 
 .. describe:: {pool-name}
 
@@ -96,38 +101,32 @@ Where:
 
 .. describe:: {pg-num}
 
-   The total number of placement groups for the pool. See :ref:`placement
-   groups` for details on calculating a suitable number. The default value of
-   :confval:`osd_pool_default_pg_num` is likely too small for production pools
-   used for bulk data, including RBD and RGW data and bucket pools
-   respectively.
+   The total number of PGs in the pool. For details on calculating an
+   appropriate number, see :ref:`placement groups`. The default value ``8`` is
+   NOT suitable for most systems.
 
   :Type: Integer
-  :Required: No. Set to ``1`` if autoscaling is enabled, otherwise picks up Ceph
-         configuration value :confval:`osd_pool_default_pg_num`
-  :Default: Value of :confval:`osd_pool_default_pg_num`
+  :Required: Yes.
+  :Default: 8
 
 .. describe:: {pgp-num}
 
-   The total number of placement groups for placement purposes. This
-   **should be equal to the total number of placement groups**, except
-   for placement group splitting scenarios.
+   The total number of PGs for placement purposes. This **should be equal to
+   the total number of PGs**, except briefly while ``pg_num`` is being
+   increased or decreaesed. 
 
   :Type: Integer
-  :Required: No. Picks up Ceph configuration value :confval:`osd_pool_default_pgp_num`
-         if not specified. If that is not set, defaults to value of ``pg-num``.
-  :Default: Value of ``pg-num`` 
+  :Required: Yes. If no value has been specified in the command, then the default value is used (unless a different value has been set in Ceph configuration).
+  :Default: 8
 
 .. describe:: {replicated|erasure}
 
-   The pool type which may either be **replicated** to
-   recover from lost OSDs by keeping multiple copies of the
-   objects or **erasure** to get a kind of
-   `generalized RAID5 <../erasure-code>`_ capability.
-   The **replicated** pools require more
-   raw storage but implement all Ceph operations. The
-   **erasure** pools require less raw storage but only
-   implement a subset of the available operations.
+   The pool type. This can be either **replicated** (to recover from lost OSDs
+   by keeping multiple copies of the objects) or **erasure** (to achieve a kind
+   of `generalized parity RAID <../erasure-code>`_ capability).  The
+   **replicated** pools require more raw storage but can implement all Ceph
+   operations. The **erasure** pools require less raw storage but can perform
+   only some Ceph tasks and may provide decreased performance.
 
   :Type: String
   :Required: No.
@@ -135,23 +134,18 @@ Where:
 
 .. describe:: [crush-rule-name]
 
-   The name of a CRUSH rule to use for this pool.  The specified
-   rule must exist.
+   The name of the CRUSH rule to use for this pool. The specified rule must
+   exist; otherwise the command will fail.
 
    :Type: String
    :Required: No.
-   :Default: For **replicated** pools it is the rule specified by the
-          :confval:`osd_pool_default_crush_rule` config variable.  This rule must exist.
-          For **erasure** pools it is ``erasure-code`` if the ``default``
-          `erasure code profile`_ is used or ``{pool-name}`` otherwise.  This
-          rule will be created implicitly if it doesn't exist already.
-
+   :Default: For **replicated** pools, it is the rule specified by the :confval:`osd_pool_default_crush_rule` configuration variable. This rule must exist.  For **erasure** pools, it is the ``erasure-code`` rule if the ``default`` `erasure code profile`_ is used or the ``{pool-name}`` rule  if not. This rule will be created implicitly if it doesn't already exist.
 
 .. describe:: [erasure-code-profile=profile]
 
-   For **erasure** pools only. Use the `erasure code profile`_. It
-   must be an existing profile as defined by
-   **osd erasure-code-profile set**.
+   For **erasure** pools only. Instructs Ceph to use the specified `erasure
+   code profile`_. This profile must be an existing profile as defined by **osd
+   erasure-code-profile set**.
 
   :Type: String
   :Required: No.
@@ -160,30 +154,29 @@ Where:
 
 .. describe:: --autoscale-mode=<on,off,warn>
 
-   If you set the autoscale mode to ``on`` or ``warn``, you can let the system
-   autotune or recommend changes to the number of placement groups in your pool
-   based on actual usage.  If you leave it off, then you should refer to
-   :ref:`placement groups` for more information.
+   - ``on``: the Ceph cluster will autotune or recommend changes to the number of PGs in your pool based on actual usage.
+   - ``warn``: the Ceph cluster will autotune or recommend changes to the number of PGs in your pool based on actual usage.
+   - ``off``: refer to :ref:`placement groups` for more information.
 
   :Type: String
   :Required: No.
-  :Default:  The default behavior is controlled by the :confval:`osd_pool_default_pg_autoscale_mode` option.
+  :Default: The default behavior is determined by the :confval:`osd_pool_default_pg_autoscale_mode` option.
 
 .. describe:: [expected-num-objects]
 
-   The expected number of objects for this pool. By setting this value (
-   together with a negative **filestore merge threshold**), the PG folder
-   splitting would happen at the pool creation time, to avoid the latency
-   impact to do a runtime folder splitting.
+   The expected number of RADOS objects for this pool. By setting this value and
+   assigning a negative value to **filestore merge threshold**, you arrange
+   for the PG folder splitting to occur at the time of pool creation and
+   avoid the latency impact that accompanies runtime folder splitting.
 
    :Type: Integer
    :Required: No.
-   :Default: 0, no splitting at the pool creation time.
+   :Default: 0, no splitting at the time of pool creation.
 
 .. _associate-pool-to-application:
 
-Associate Pool to Application
-=============================
+Associating a Pool to an Application
+====================================
 
 Pools need to be associated with an application before use. Pools that will be
 used with CephFS or pools that are automatically created by RGW are
