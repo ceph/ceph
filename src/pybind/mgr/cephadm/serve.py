@@ -1259,6 +1259,7 @@ class CephadmServe:
                     daemon_params['allow_ptrace'] = True
 
                 daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
+                init_containers = self._setup_init_containers(daemon_spec, daemon_params)
 
                 if daemon_spec.service_name in self.mgr.spec_store:
                     configs = self.mgr.spec_store[daemon_spec.service_name].spec.custom_configs
@@ -1296,6 +1297,7 @@ class CephadmServe:
                             extra_entrypoint_args=ArgumentSpec.map_json(
                                 extra_entrypoint_args,
                             ),
+                            init_containers=init_containers,
                         ),
                         config_blobs=daemon_spec.final_config,
                     ).dump_json_str(),
@@ -1373,6 +1375,25 @@ class CephadmServe:
         except AttributeError:
             eea = None
         return daemon_spec, eca, eea
+
+    def _setup_init_containers(
+        self,
+        daemon_spec: CephadmDaemonDeploySpec,
+        params: Dict[str, Any],
+    ) -> List[Dict[str, Any]]:
+        """Handle any init containers - containers that run before a daemon (detached)
+        container that are expected to run for a short time and then exit.
+        """
+        # does the daemon_spec provide init_containers?
+        ics = getattr(daemon_spec, 'init_containers', None)
+        if not ics:
+            return []
+        ic_meta = []
+        ic_params = params['init_containers'] = []
+        for ic in ics:
+            ic_meta.append(ic.to_json())
+            ic_params.append(ic.to_json(flatten_args=True))
+        return ic_meta
 
     def _remove_daemon(self, name: str, host: str, no_post_remove: bool = False) -> str:
         """
