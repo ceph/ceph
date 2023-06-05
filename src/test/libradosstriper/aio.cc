@@ -307,6 +307,7 @@ TEST_F(StriperTest, IsSafe) {
 	break;
     }
   }
+  test_data.wait();
   char buf2[128];
   memset(buf2, 0, sizeof(buf2));
   rados_completion_t my_completion2;
@@ -318,8 +319,8 @@ TEST_F(StriperTest, IsSafe) {
     TestAlarm alarm;
     rados_aio_wait_for_complete(my_completion2);
   }
-  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   test_data.wait();
+  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
   rados_aio_release(my_completion);
   rados_aio_release(my_completion2);
 }
@@ -337,6 +338,7 @@ TEST_F(StriperTest, RoundTripAppend) {
     TestAlarm alarm;
     rados_aio_wait_for_complete(my_completion);
   }
+  test_data.wait();
   char buf2[128];
   memset(buf2, 0xdd, sizeof(buf2));
   ASSERT_EQ(0, rados_aio_create_completion2(&test_data,
@@ -347,6 +349,7 @@ TEST_F(StriperTest, RoundTripAppend) {
     TestAlarm alarm;
     rados_aio_wait_for_complete(my_completion2);
   }
+  test_data.wait();
   char buf3[sizeof(buf) + sizeof(buf2)];
   memset(buf3, 0, sizeof(buf3));
   ASSERT_EQ(0, rados_aio_create_completion2(&test_data,
@@ -379,6 +382,7 @@ TEST_F(StriperTestPP, RoundTripAppendPP) {
     TestAlarm alarm;
     my_completion->wait_for_complete();
   }
+  test_data.wait();
   char buf2[128];
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
@@ -390,6 +394,7 @@ TEST_F(StriperTestPP, RoundTripAppendPP) {
     TestAlarm alarm;
     my_completion2->wait_for_complete();
   }
+  test_data.wait();
   bufferlist bl3;
   AioCompletion *my_completion3 =
     librados::Rados::aio_create_completion(&test_data, set_completion_complete);
@@ -398,10 +403,11 @@ TEST_F(StriperTestPP, RoundTripAppendPP) {
     TestAlarm alarm;
     my_completion3->wait_for_complete();
   }
+  test_data.wait();
   ASSERT_EQ(sizeof(buf) + sizeof(buf2), (unsigned)my_completion3->get_return_value());
   ASSERT_EQ(0, memcmp(bl3.c_str(), buf, sizeof(buf)));
   ASSERT_EQ(0, memcmp(bl3.c_str() + sizeof(buf), buf2, sizeof(buf2)));
-  test_data.wait();
+
   my_completion->release();
   my_completion2->release();
   my_completion3->release();
@@ -417,6 +423,7 @@ TEST_F(StriperTest, Flush) {
   memset(buf, 0xee, sizeof(buf));
   ASSERT_EQ(0, rados_striper_aio_write(striper, "Flush", my_completion, buf, sizeof(buf), 0));
   rados_striper_aio_flush(striper);
+  test_data.wait();
   char buf2[128];
   memset(buf2, 0, sizeof(buf2));
   rados_completion_t my_completion2;
@@ -444,6 +451,7 @@ TEST_F(StriperTestPP, FlushPP) {
   bl1.append(buf, sizeof(buf));
   ASSERT_EQ(0, striper.aio_write("FlushPP", my_completion, bl1, sizeof(buf), 0));
   striper.aio_flush();
+  test_data.wait();
   bufferlist bl2;
   AioCompletion *my_completion2 =
     librados::Rados::aio_create_completion(&test_data, set_completion_complete);
@@ -471,6 +479,7 @@ TEST_F(StriperTest, RoundTripWriteFull) {
     TestAlarm alarm;
     rados_aio_wait_for_complete(my_completion);
   }
+  test_data.wait();
   char buf2[64];
   memset(buf2, 0xdd, sizeof(buf2));
   ASSERT_EQ(0, rados_aio_create_completion2(&test_data,
@@ -481,6 +490,7 @@ TEST_F(StriperTest, RoundTripWriteFull) {
     TestAlarm alarm;
     rados_aio_wait_for_complete(my_completion2);
   }
+  test_data.wait();
   char buf3[sizeof(buf) + sizeof(buf2)];
   memset(buf3, 0, sizeof(buf3));
   ASSERT_EQ(0, rados_aio_create_completion2(&test_data,
@@ -512,6 +522,7 @@ TEST_F(StriperTestPP, RoundTripWriteFullPP) {
     TestAlarm alarm;
     my_completion->wait_for_complete();
   }
+  test_data.wait();
   char buf2[64];
   memset(buf2, 0xdd, sizeof(buf2));
   bufferlist bl2;
@@ -523,6 +534,7 @@ TEST_F(StriperTestPP, RoundTripWriteFullPP) {
     TestAlarm alarm;
     my_completion2->wait_for_complete();
   }
+  test_data.wait();
   bufferlist bl3;
   AioCompletion *my_completion3 =
     librados::Rados::aio_create_completion(&test_data, set_completion_complete);
@@ -556,6 +568,7 @@ TEST_F(StriperTest, RemoveTest) {
     TestAlarm alarm;
     ASSERT_EQ(0, rados_aio_wait_for_complete(my_completion));
   }
+  test_data.wait();
   ASSERT_EQ(0, rados_aio_get_return_value(my_completion));
   rados_aio_release(my_completion);
   // check we get ENOENT on reading
