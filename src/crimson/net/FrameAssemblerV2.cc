@@ -151,6 +151,14 @@ bool FrameAssemblerV2::is_socket_valid() const
   return has_socket() && !is_socket_shutdown;
 }
 
+seastar::shard_id
+FrameAssemblerV2::get_socket_shard_id() const
+{
+  assert(seastar::this_shard_id() == sid);
+  assert(is_socket_valid());
+  return socket->get_shard_id();
+}
+
 SocketFRef FrameAssemblerV2::move_socket()
 {
   assert(has_socket());

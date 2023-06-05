@@ -26,6 +26,16 @@ public:
 
   FrameAssemblerV2(FrameAssemblerV2 &&) = delete;
 
+  void set_shard_id(seastar::shard_id _sid) {
+    assert(seastar::this_shard_id() == sid);
+    clear();
+    sid = _sid;
+  }
+
+  seastar::shard_id get_shard_id() const {
+    return sid;
+  }
+
   void set_is_rev1(bool is_rev1);
 
   void create_session_stream_handlers(
@@ -66,6 +76,8 @@ public:
 
   // the socket exists and not shutdown
   bool is_socket_valid() const;
+
+  seastar::shard_id get_socket_shard_id() const;
 
   void set_socket(SocketFRef &&);
 
