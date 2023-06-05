@@ -270,6 +270,14 @@ CMAKE_DEPENDENT_OPTION(WITH_RBD_SSD_CACHE "Enable librbd persistent write back c
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
   "WITH_RBD_RWL OR WITH_BLUESTORE_PMEM" OFF)
 
+CMAKE_DEPENDENT_OPTION(WITH_RBD_UBBD "Enable ubbd support for rbd device utility" OFF
+    "WITH_RBD" OFF)
+
+if(WITH_RBD_UBBD)
+  include(BuildUBBD)
+  build_ubbd()
+endif()
+
 if(WITH_BLUESTORE_PMEM)
   set(HAVE_BLUESTORE_PMEM ON)
 endif()
