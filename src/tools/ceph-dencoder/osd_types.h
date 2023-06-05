@@ -126,7 +126,7 @@ TYPE(MonCap)
 TYPE_FEATUREFUL(MgrMap)
 
 #include "mon/mon_types.h"
-TYPE(LevelDBStoreStats)
+TYPE(MonitorDBStoreStats)
 TYPE(ScrubResult)
 
 #include "mon/CreatingPGs.h"

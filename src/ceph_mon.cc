@@ -272,25 +272,14 @@ int main(int argc, const char **argv)
 
   // We need to specify some default values that may be overridden by the
   // user, that are specific to the monitor.  The options we are overriding
-  // are also used on the OSD (or in any other component that uses leveldb),
-  // so changing the global defaults is not an option.
+  // are also used on the OSD, so changing the global defaults is not an option.
   // This is not the prettiest way of doing this, especially since it has us
   // having a different place defining default values, but it's not horribly
   // wrong enough to prevent us from doing it :)
   //
   // NOTE: user-defined options will take precedence over ours.
-  //
-  //  leveldb_write_buffer_size = 32*1024*1024  = 33554432  // 32MB
-  //  leveldb_cache_size        = 512*1024*1204 = 536870912 // 512MB
-  //  leveldb_block_size        = 64*1024       = 65536     // 64KB
-  //  leveldb_compression       = false
-  //  leveldb_log               = ""
+
   map<string,string> defaults = {
-    { "leveldb_write_buffer_size", "33554432" },
-    { "leveldb_cache_size", "536870912" },
-    { "leveldb_block_size", "65536" },
-    { "leveldb_compression", "false"},
-    { "leveldb_log", "" },
     { "keyring", "$mon_data/keyring" },
   };
 
@@ -589,8 +578,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  // we fork early to prevent leveldb's environment static state from
-  // screwing us over
   Preforker prefork;
   if (!(flags & CINIT_FLAG_NO_DAEMON_ACTIONS)) {
     if (global_init_prefork(g_ceph_context) >= 0) {
