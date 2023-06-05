@@ -112,11 +112,13 @@ namespace PriorityCache
   {
     size_t heap_size = 0;
     size_t unmapped = 0;
+    size_t current_allocated_bytes = 0;
     uint64_t mapped = 0;
 
     ceph_heap_release_free_memory();
     ceph_heap_get_numeric_property("generic.heap_size", &heap_size);
     ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped);
+    ceph_heap_get_numeric_property("generic.current_allocated_bytes", &current_allocated_bytes);
     mapped = heap_size - unmapped;
 
     uint64_t new_size = tuned_mem;
@@ -124,11 +126,11 @@ namespace PriorityCache
     new_size = (new_size > min_mem) ? new_size : min_mem;
 
     // Approach the min/max slowly, but bounce away quickly.
-    if ((uint64_t) mapped < target_mem) {
-      double ratio = 1 - ((double) mapped / target_mem);
+    if ((uint64_t) current_allocated_bytes < target_mem) {
+      double ratio = 1 - ((double) current_allocated_bytes / target_mem);
       new_size += ratio * (max_mem - new_size);
     } else { 
-      double ratio = 1 - ((double) target_mem / mapped);
+      double ratio = 1 - ((double) target_mem / current_allocated_bytes);
       new_size -= ratio * (new_size - min_mem);
     }
 
@@ -136,6 +138,7 @@ namespace PriorityCache
                   << " target: " << target_mem
                   << " mapped: " << mapped  
                   << " unmapped: " << unmapped
+                  << " current_allocated_bytes: " << current_allocated_bytes	
                   << " heap: " << heap_size
                   << " old mem: " << tuned_mem
                   << " new mem: " << new_size << dendl;
