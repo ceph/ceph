@@ -2517,7 +2517,7 @@ public:
         }
       }
 
-      notify_stack.get()->cancel();
+      notify_stack->cancel();
 
       return set_cr_done();
     }
@@ -3210,7 +3210,9 @@ int RGWRemoteDataLog::run_sync(const DoutPrefixProvider *dpp, int num_shards)
 {
   // construct and start bid manager for data sync fairness
   const auto& control_pool = sc.env->driver->svc()->zone->get_zone_params().control_pool;
-  auto control_obj = rgw_raw_obj{control_pool, data_sync_bids_oid};
+  char buf[data_sync_bids_oid.size() + sc.source_zone.id.size() + 16];
+  snprintf(buf, sizeof(buf), "%s.%s", data_sync_bids_oid.c_str(), sc.source_zone.id.c_str());
+  auto control_obj = rgw_raw_obj{control_pool, string(buf)};
 
   auto bid_manager = rgw::sync_fairness::create_rados_bid_manager(
       driver, control_obj, num_shards);
