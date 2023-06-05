@@ -59,10 +59,19 @@ public:
 private:
   using io_state_t = IOHandler::io_state_t;
 
+  seastar::future<> wait_switch_io_shard() {
+    if (pr_switch_io_shard.has_value()) {
+      return pr_switch_io_shard->get_shared_future();
+    } else {
+      return seastar::now();
+    }
+  }
+
   seastar::future<> wait_exit_io() {
     if (pr_exit_io.has_value()) {
       return pr_exit_io->get_shared_future();
     } else {
+      assert(!need_exit_io);
       return seastar::now();
     }
   }
@@ -94,7 +103,15 @@ private:
     return statenames[static_cast<int>(state)];
   }
 
-  void trigger_state(state_t new_state, io_state_t new_io_state);
+  void trigger_state_phase1(state_t new_state);
+
+  void trigger_state_phase2(state_t new_state, io_state_t new_io_state);
+
+  void trigger_state(state_t new_state, io_state_t new_io_state) {
+    ceph_assert_always(!pr_switch_io_shard.has_value());
+    trigger_state_phase1(new_state);
+    trigger_state_phase2(new_state, new_io_state);
+  }
 
   template <typename Func, typename T>
   void gated_execute(const char *what, T &who, Func &&func) {
@@ -227,7 +244,11 @@ private:
 
   FrameAssemblerV2Ref frame_assembler;
 
+  bool need_notify_out = false;
+
   std::optional<seastar::shared_promise<>> pr_switch_io_shard;
+
+  bool need_exit_io = false;
 
   std::optional<seastar::shared_promise<>> pr_exit_io;
 
