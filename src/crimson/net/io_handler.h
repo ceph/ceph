@@ -62,7 +62,8 @@ struct io_handler_state {
  *
  * The interface class for IOHandler to notify the ProtocolV2.
  *
- * The notifications may be cross-core and asynchronous.
+ * The notifications may be cross-core and must be sent to
+ * SocketConnection::get_messenger_shard_id()
  */
 class HandshakeListener {
 public:
@@ -145,6 +146,10 @@ public:
  * The calls may be cross-core and asynchronous
  */
 public:
+  /*
+   * should not be called cross-core
+   */
+
   void set_handshake_listener(HandshakeListener &hl) {
     ceph_assert_always(handshake_listener == nullptr);
     handshake_listener = &hl;
@@ -158,6 +163,10 @@ public:
     const IOHandler &io_handler;
   };
   void print_io_stat(std::ostream &out) const;
+
+  /*
+   * may be called cross-core
+   */
 
   seastar::future<> close_io(bool is_dispatch_reset, bool is_replace);
 
