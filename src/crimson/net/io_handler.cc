@@ -367,6 +367,8 @@ IOHandler::wait_io_exit_dispatching()
 
 void IOHandler::reset_session(bool full)
 {
+  assert(seastar::this_shard_id() == get_shard_id());
+  logger().debug("{} got reset_session({})", conn, full);
   assert(get_io_state() != io_state_t::open);
   reset_in();
   if (full) {
@@ -377,6 +379,8 @@ void IOHandler::reset_session(bool full)
 
 void IOHandler::reset_peer_state()
 {
+  assert(seastar::this_shard_id() == get_shard_id());
+  logger().debug("{} got reset_peer_state()", conn);
   assert(get_io_state() != io_state_t::open);
   reset_in();
   requeue_out_sent_up_to(0);
@@ -385,6 +389,7 @@ void IOHandler::reset_peer_state()
 
 void IOHandler::requeue_out_sent()
 {
+  assert(seastar::this_shard_id() == get_shard_id());
   assert(get_io_state() != io_state_t::open);
   if (out_sent_msgs.empty()) {
     return;
@@ -407,6 +412,7 @@ void IOHandler::requeue_out_sent()
 
 void IOHandler::requeue_out_sent_up_to(seq_num_t seq)
 {
+  assert(seastar::this_shard_id() == get_shard_id());
   assert(get_io_state() != io_state_t::open);
   if (out_sent_msgs.empty() && out_pending_msgs.empty()) {
     logger().debug("{} nothing to requeue, reset out_seq from {} to seq {}",
@@ -470,7 +476,10 @@ IOHandler::dispatch_accept(
   ceph_assert_always(conn_ref);
   auto _conn_ref = conn_ref;
   auto fut = to_new_sid(new_sid, std::move(conn_fref));
+
   dispatchers.ms_handle_accept(_conn_ref, new_sid);
+  // user can make changes
+
   return fut;
 }
 
@@ -493,7 +502,10 @@ IOHandler::dispatch_connect(
   ceph_assert_always(conn_ref);
   auto _conn_ref = conn_ref;
   auto fut = to_new_sid(new_sid, std::move(conn_fref));
+
   dispatchers.ms_handle_connect(_conn_ref, new_sid);
+  // user can make changes
+
   return fut;
 }
 
@@ -581,7 +593,9 @@ void IOHandler::dispatch_reset(bool is_replace)
   }
   need_dispatch_reset = false;
   ceph_assert_always(conn_ref);
+
   dispatchers.ms_handle_reset(conn_ref, is_replace);
+  // user can make changes
 }
 
 void IOHandler::dispatch_remote_reset()
@@ -590,7 +604,9 @@ void IOHandler::dispatch_remote_reset()
     return;
   }
   ceph_assert_always(conn_ref);
+
   dispatchers.ms_handle_remote_reset(conn_ref);
+  // user can make changes
 }
 
 void IOHandler::ack_out_sent(seq_num_t seq)
@@ -712,6 +728,7 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
 
 void IOHandler::maybe_notify_out_dispatch()
 {
+  ceph_assert_always(seastar::this_shard_id() == get_shard_id());
   if (is_out_queued()) {
     notify_out_dispatch();
   }
@@ -719,6 +736,7 @@ void IOHandler::maybe_notify_out_dispatch()
 
 void IOHandler::notify_out_dispatch()
 {
+  ceph_assert_always(seastar::this_shard_id() == get_shard_id());
   assert(is_out_queued());
   if (need_notify_out) {
     logger().debug("{} send notify_out()", conn);
@@ -853,8 +871,10 @@ IOHandler::read_message(
     assert(ctx.get_io_state() == io_state_t::open);
     assert(get_io_state() == io_state_t::open);
     ceph_assert_always(conn_ref);
+
     // throttle the reading process by the returned future
     return dispatchers.ms_dispatch(conn_ref, std::move(msg_ref));
+    // user can make changes
   });
 }
 
