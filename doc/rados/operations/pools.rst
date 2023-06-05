@@ -73,7 +73,7 @@ For example:
 
 .. note:: In Luminous and later releases, each pool must be associated with the
    application that will be using the pool. For more information, see
-   `Associating a Pool to an Application`_ below.
+   `Associating a Pool with an Application`_ below.
 
 To create a pool, run one of the following commands:
 
@@ -175,17 +175,17 @@ following:
 
 .. _associate-pool-to-application:
 
-Associating a Pool to an Application
-====================================
+Associating a Pool with an Application
+======================================
 
-Pools need to be associated with an application before use. Pools that will be
-used with CephFS or pools that are automatically created by RGW are
-automatically associated. Pools that are intended for use with RBD should be
-initialized using the ``rbd`` tool (see `Block Device Commands`_ for more
-information).
+Pools need to be associated with an application before they can be used. Pools
+that are intended for use with CephFS and pools that are created automatically
+by RGW are associated automatically. Pools that are intended for use with RBD
+should be initialized with the ``rbd`` tool (see `Block Device Commands`_ for
+more information).
 
-For other cases, you can manually associate a free-form application name to
-a pool.:
+For other cases, you can manually associate a free-form application name to a
+pool by running the following command.:
 
 .. prompt:: bash $
 
@@ -194,11 +194,11 @@ a pool.:
 .. note:: CephFS uses the application name ``cephfs``, RBD uses the
    application name ``rbd``, and RGW uses the application name ``rgw``.
 
-Set Pool Quotas
-===============
+Setting Pool Quotas
+===================
 
-You can set pool quotas for the maximum number of bytes and/or the maximum
-number of objects per pool:
+To set pool quotas for the maximum number of bytes and/or the maximum number of
+RADOS objects per pool, run the following command:
 
 .. prompt:: bash $
 
@@ -213,91 +213,93 @@ For example:
 To remove a quota, set its value to ``0``.
 
 
-Delete a Pool
-=============
+Deleting a Pool
+===============
 
-To delete a pool, execute:
+To delete a pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool delete {pool-name} [{pool-name} --yes-i-really-really-mean-it]
 
+To remove a pool, you must set the ``mon_allow_pool_delete`` flag to ``true``
+in the monitor's configuration. Otherwise, monitors will refuse to remove
+pools.
 
-To remove a pool the mon_allow_pool_delete flag must be set to true in the Monitor's
-configuration. Otherwise they will refuse to remove a pool.
-
-See `Monitor Configuration`_ for more information.
+For more information, see `Monitor Configuration`_.
 
 .. _Monitor Configuration: ../../configuration/mon-config-ref
 
-If you created your own rules for a pool you created, you should consider
-removing them when you no longer need your pool:
+If there are custom rules for a pool that is no longer needed, consider
+deleting those rules.
 
 .. prompt:: bash $
 
    ceph osd pool get {pool-name} crush_rule
 
-If the rule was "123", for example, you can check the other pools like so:
+For example, if the custom rule is "123", check all pools to see whether they
+use the rule by running the following command:
 
 .. prompt:: bash $
 
-	ceph osd dump | grep "^pool" | grep "crush_rule 123"
+    ceph osd dump | grep "^pool" | grep "crush_rule 123"
 
-If no other pools use that custom rule, then it's safe to delete that
-rule from the cluster.
+If no pools use this custom rule, then it is safe to delete the rule from the
+cluster.
 
-If you created users with permissions strictly for a pool that no longer
-exists, you should consider deleting those users too:
-
+Similarly, if there are users with permissions restricted to a pool that no
+longer exists, consider deleting those users by running commands of the
+following forms:
 
 .. prompt:: bash $
 
-	ceph auth ls | grep -C 5 {pool-name}
-	ceph auth del {user}
+    ceph auth ls | grep -C 5 {pool-name}
+    ceph auth del {user}
 
 
-Rename a Pool
-=============
+Renaming a Pool
+===============
 
-To rename a pool, execute:
+To rename a pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool rename {current-pool-name} {new-pool-name}
 
-If you rename a pool and you have per-pool capabilities for an authenticated
-user, you must update the user's capabilities (i.e., caps) with the new pool
-name.
+If you rename a pool for which an authenticated user has per-pool capabilities,
+you must update the user's capabilities ("caps") to refer to the new pool name.
 
-Show Pool Statistics
-====================
 
-To show a pool's utilization statistics, execute:
+Showing Pool Statistics
+=======================
+
+To show a pool's utilization statistics, run the following command:
 
 .. prompt:: bash $
 
    rados df
 
-Additionally, to obtain I/O information for a specific pool or all, execute:
+To obtain I/O information for a specific pool or for all pools, run a command
+of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool stats [{pool-name}]
 
 
-Make a Snapshot of a Pool
-=========================
+Making a Snapshot of a Pool
+===========================
 
-To make a snapshot of a pool, execute:
+To make a snapshot of a pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool mksnap {pool-name} {snap-name}
 
-Remove a Snapshot of a Pool
-===========================
+Removing a Snapshot of a Pool
+=============================
 
-To remove a snapshot of a pool, execute:
+To remove a snapshot of a pool, run a command of the following form:
 
 .. prompt:: bash $
 
@@ -305,11 +307,11 @@ To remove a snapshot of a pool, execute:
 
 .. _setpoolvalues:
 
+Setting Pool Values
+===================
 
-Set Pool Values
-===============
-
-To set a value to a pool, execute the following:
+To assign values to a pool's configuration keys, run a command of the following
+form:
 
 .. prompt:: bash $
 
@@ -320,103 +322,81 @@ You may set values for the following keys:
 .. _compression_algorithm:
 
 .. describe:: compression_algorithm
-
-   Sets inline compression algorithm to use for underlying BlueStore. This setting overrides the global setting
-   :confval:`bluestore_compression_algorithm`.
-
+   
+   :Description: Sets the inline compression algorithm used in storing data on the underlying BlueStore back end. This key's setting overrides the global setting :confval:`bluestore_compression_algorithm`.
    :Type: String
    :Valid Settings: ``lz4``, ``snappy``, ``zlib``, ``zstd``
 
 .. describe:: compression_mode
-
-   Sets the policy for the inline compression algorithm for underlying BlueStore. This setting overrides the
-   global setting :confval:`bluestore_compression_mode`.
-
+   
+   :Description: Sets the policy for the inline compression algorithm used in storing data on the underlying BlueStore back end. This key's setting overrides the global setting :confval:`bluestore_compression_mode`.
    :Type: String
    :Valid Settings: ``none``, ``passive``, ``aggressive``, ``force``
 
 .. describe:: compression_min_blob_size
 
-   Chunks smaller than this are never compressed. This setting overrides the global settings of
-   :confval:`bluestore_compression_min_blob_size`, :confval:`bluestore_compression_min_blob_size_hdd` and
-   :confval:`bluestore_compression_min_blob_size_ssd`
+   
+   :Description: Sets the minimum size for the compression of chunks: that is, chunks smaller than this are not compressed.  This key's setting overrides the following global settings:
+   
+   * :confval:`bluestore_compression_min_blob_size` 
+   * :confval:`bluestore_compression_min_blob_size_hdd`
+   * :confval:`bluestore_compression_min_blob_size_ssd`
 
    :Type: Unsigned Integer
 
+
 .. describe:: compression_max_blob_size
-
-   Chunks larger than this are broken into smaller blobs sizing
-   ``compression_max_blob_size`` before being compressed.
-
+   
+   :Description: Sets the maximum size for chunks: that is, chunks larger than this are broken into smaller blobs of this size before compression is performed.
    :Type: Unsigned Integer
 
 .. _size:
 
 .. describe:: size
-
-   Sets the number of replicas for objects in the pool.
-   See `Set the Number of Object Replicas`_ for further details.
-   Replicated pools only.
-
+   
+   :Description: Sets the number of replicas for objects in the pool. For further details, see `Setting the Number of RADOS Object Replicas`_. Replicated pools only.
    :Type: Integer
 
 .. _min_size:
 
 .. describe:: min_size
-
-   Sets the minimum number of replicas required for I/O.
-   See `Set the Number of Object Replicas`_ for further details.
-   In the case of Erasure Coded pools this should be set to a value
-   greater than 'k' since if we allow IO at the value 'k' there is no
-   redundancy and data will be lost in the event of a permanent OSD
-   failure. For more information see `Erasure Code <../erasure-code>`_
-
+   
+   :Description: Sets the minimum number of replicas required for I/O.  For further details, see `Setting the Number of RADOS Object Replicas`_.  For erasure-coded pools, this should be set to a value greater than 'k'. If I/O is allowed at the value 'k', then there is no redundancy and data will be lost in the event of a permanent OSD failure. For more information, see `Erasure Code <../erasure-code>`_
    :Type: Integer
    :Version: ``0.54`` and above
 
 .. _pg_num:
 
 .. describe:: pg_num
-
-   The effective number of placement groups to use when calculating
-   data placement.
-
+   
+   :Description: Sets the effective number of PGs to use when calculating data placement.
    :Type: Integer
-   :Valid Range: Superior to ``pg_num`` current value.
+   :Valid Range: ``0`` to ``mon_max_pool_pg_num``. If set to ``0``, the value of ``osd_pool_default_pg_num`` will be used. 
 
 .. _pgp_num:
 
 .. describe:: pgp_num
-
-   The effective number of placement groups for placement to use
-   when calculating data placement.
-
+   
+   :Description: Sets the effective number of PGs to use when calculating data placement.
    :Type: Integer
-   :Valid Range: Equal to or less than ``pg_num``.
+   :Valid Range: Between ``1`` and the current value of ``pg_num``.
 
 .. _crush_rule:
 
 .. describe:: crush_rule
-
-   The rule to use for mapping object placement in the cluster.
-
+   
+   :Description: Sets the CRUSH rule that Ceph uses to map object placement within the pool.
    :Type: String
 
 .. _allow_ec_overwrites:
 
 .. describe:: allow_ec_overwrites
-
-
-   Whether writes to an erasure coded pool can update part
-   of an object, so cephfs and rbd can use it. See
-   `Erasure Coding with Overwrites`_ for more details.
-
+   
+   :Description: Determines whether writes to an erasure-coded pool are allowed to update only part of a RADOS object. This allows CephFS and RBD to use an EC (erasure-coded) pool for user data (but not for metadata). For more details, see `Erasure Coding with Overwrites`_.
    :Type: Boolean
 
    .. versionadded:: 12.2.0
-
-.. _hashpspool:
-
+   
 .. describe:: hashpspool
 
    Set/Unset HASHPSPOOL flag on a given pool.
@@ -862,8 +842,8 @@ You may get values for the following keys:
 :Type: Integer
 
 
-Set the Number of Object Replicas
-=================================
+Setting the Number of RADOS Object Replicas
+===========================================
 
 To set the number of object replicas on a replicated pool, execute the following:
 
