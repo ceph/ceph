@@ -522,7 +522,6 @@ OpsExecuter::flush_changes_n_do_ops_effects(
       txn
     ).then_interruptible([mut_func=std::move(mut_func),
                           this](auto&& log_entries) mutable {
-      apply_stats();
       auto [submitted, all_completed] =
         std::forward<MutFunc>(mut_func)(std::move(txn),
                                         std::move(obc),
