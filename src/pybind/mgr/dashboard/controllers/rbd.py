@@ -122,8 +122,18 @@ class Rbd(RESTController):
 
     @handle_rbd_error()
     @handle_rados_error('pool')
-    def get(self, image_spec):
-        return RbdService.get_image(image_spec)
+    @EndpointDoc("Get Rbd Image Info",
+                 parameters={
+                     'image_spec': (str, 'URL-encoded "pool/rbd_name". e.g. "rbd%2Ffoo"'),
+                     'omit_usage': (bool, 'When true, usage information is not returned'),
+                 },
+                 responses={200: RBD_SCHEMA})
+    def get(self, image_spec, omit_usage=False):
+        try:
+            omit_usage_bool = str_to_bool(omit_usage)
+        except ValueError:
+            omit_usage_bool = False
+        return RbdService.get_image(image_spec, omit_usage_bool)
 
     @RbdTask('create',
              {'pool_name': '{pool_name}', 'namespace': '{namespace}', 'image_name': '{name}'}, 2.0)
