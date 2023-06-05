@@ -970,6 +970,8 @@ struct OSDShardPGSlot {
 };
 
 struct OSDShard {
+  using OpSchedulerItem = ceph::osd::scheduler::OpSchedulerItem;
+
   const unsigned shard_id;
   CephContext *cct;
   OSD *osd;
@@ -980,10 +982,16 @@ struct OSDShard {
   ceph::mutex sdata_wait_lock;
   ceph::condition_variable sdata_cond;
 
+  std::queue<OpSchedulerItem> buffer;
+  std::string buffer_lock_name;
+  ceph::mutex buffer_lock;
+  ceph::condition_variable buffer_cond;
+
   struct WaitGroup {
     virtual bool wait_continue(heartbeat_handle_d *hb) = 0;
-    virtual void wakeup(uint32_t qsize) = 0;
+    virtual void wakeup(uint32_t size) = 0;
     virtual void forcewake() = 0;
+    virtual uint32_t low_threshold() = 0;
     virtual ~WaitGroup() = 0;
   };
 
@@ -998,8 +1006,8 @@ struct OSDShard {
     WaitGroup_P(int id, CephContext *cct, OSD *osd, OSDShard *sdata);
 
     bool wait_continue(heartbeat_handle_d *hb);
-    void wakeup(uint32_t qsize) {
-      if (qsize == 0) {
+    void wakeup(uint32_t size) {
+      if (size == 0) {
         std::lock_guard l{sdata->sdata_wait_lock};
         sdata->sdata_cond.notify_one();
       }
@@ -1007,6 +1015,9 @@ struct OSDShard {
     void forcewake() {
       std::lock_guard l{sdata->sdata_wait_lock};
       sdata->sdata_cond.notify_one();
+    }
+    uint32_t low_threshold() {
+      return 1;
     }
   };
 
@@ -1032,8 +1043,8 @@ struct OSDShard {
       uint32_t qt_h);
 
     bool wait_continue(heartbeat_handle_d *hb);
-    void wakeup(uint32_t qsize) {
-      if (qsize > qt_h) {
+    void wakeup(uint32_t size) {
+      if (size > qt_h) {
         std::lock_guard l{lock};
         cond.notify_one();
       }
@@ -1041,6 +1052,9 @@ struct OSDShard {
     void forcewake() {
       std::lock_guard l{lock};
       cond.notify_one();
+    }
+    uint32_t low_threshold() {
+      return qt_l;
     }
   };
   std::vector<std::shared_ptr<WaitGroup>> wgv;
@@ -1655,7 +1669,6 @@ protected:
 
     /// try to do some work
     void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb) override;
-
     void stop_for_fast_shutdown();
 
     /// enqueue a new item

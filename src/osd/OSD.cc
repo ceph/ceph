@@ -10723,6 +10723,9 @@ OSDShard::OSDShard(
     shard_name(string("OSDShard.") + stringify(id)),
     sdata_wait_lock_name(shard_name + "::sdata_wait_lock"),
     sdata_wait_lock{make_mutex(sdata_wait_lock_name)},
+    buffer(),
+    buffer_lock_name(shard_name + "::buffer_lock"),
+    buffer_lock{make_mutex(buffer_lock_name)},
     wgv(),
     osdmap_lock{make_mutex(shard_name + "::osdmap_lock")},
     shard_lock_name(shard_name + "::shard_lock"),
@@ -11209,14 +11212,14 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
 
   dout(20) << __func__ << " " << item << dendl;
 
-  uint32_t qsize = 0;
+  uint32_t size = 0;
   {
-    std::lock_guard l{sdata->shard_lock};
-    qsize = sdata->scheduler->qsize();
-    sdata->scheduler->enqueue(std::move(item));
+    std::lock_guard l{sdata->buffer_lock};
+    size = sdata->buffer.size();
+    sdata->buffer.push(std::move(item));
   }
   for(auto wg : sdata->wgv) {
-    wg->wakeup(qsize);
+    wg->wakeup(size);
   }
   {
     std::lock_guard l{sdata->sdata_wait_lock};
