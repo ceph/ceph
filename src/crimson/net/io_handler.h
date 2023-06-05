@@ -108,7 +108,7 @@ public:
 /*
  * as ConnectionHandler
  */
-private:
+public:
   seastar::shard_id get_shard_id() const final {
     return shard_states->get_shard_id();
   }
@@ -196,9 +196,11 @@ public:
 
   void requeue_out_sent();
 
-  void dispatch_accept();
+  seastar::future<> dispatch_accept(
+      seastar::shard_id new_sid, ConnectionFRef);
 
-  void dispatch_connect();
+  seastar::future<> dispatch_connect(
+      seastar::shard_id new_sid, ConnectionFRef);
 
  private:
   class shard_states_t;
@@ -339,6 +341,8 @@ public:
     return shard_states->get_io_state();
   }
 
+  void assign_frame_assembler(FrameAssemblerV2Ref);
+
   seastar::future<> send_redirected(MessageFRef msg);
 
   seastar::future<> do_send(MessageFRef msg);
@@ -346,6 +350,9 @@ public:
   seastar::future<> send_keepalive_redirected();
 
   seastar::future<> do_send_keepalive();
+
+  seastar::future<> to_new_sid(
+      seastar::shard_id new_sid, ConnectionFRef);
 
   void dispatch_reset(bool is_replace);
 
@@ -388,8 +395,16 @@ public:
 
   void do_in_dispatch();
 
+  seastar::future<> cleanup_prv_shard(seastar::shard_id prv_sid);
+
 private:
   shard_states_ref_t shard_states;
+
+  // drop was happening in the previous sid
+  std::optional<seastar::shard_id> maybe_dropped_sid;
+
+  // the remaining states in the previous sid for cleanup, see to_new_sid()
+  shard_states_ref_t maybe_prv_shard_states;
 
   ChainedDispatchers &dispatchers;
 

@@ -222,6 +222,9 @@ void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state)
   FrameAssemblerV2Ref fa;
   if (new_state == state_t::READY) {
     assert(new_io_state == io_state_t::open);
+    assert(io_handler.get_shard_id() ==
+           frame_assembler->get_socket_shard_id());
+    frame_assembler->set_shard_id(io_handler.get_shard_id());
     fa = std::move(frame_assembler);
   } else {
     assert(new_io_state != io_state_t::open);
@@ -229,11 +232,19 @@ void ProtocolV2::trigger_state(state_t new_state, io_state_t new_io_state)
   io_handler.set_io_state(new_io_state, std::move(fa), need_notify_out);
 
   if (pre_state == state_t::READY) {
+    logger().debug("{} IOHandler::wait_io_exit_dispatching() start ...", conn);
     assert(new_io_state != io_state_t::open);
     gate.dispatch_in_background("exit_io", conn, [this] {
-      return io_handler.wait_io_exit_dispatching(
-      ).then([this](auto ret) {
+      return seastar::smp::submit_to(
+          io_handler.get_shard_id(), [this] {
+        return io_handler.wait_io_exit_dispatching();
+      }).then([this](auto ret) {
+        logger().debug("{} IOHandler::wait_io_exit_dispatching() finish, {}",
+                       conn, ret.io_states);
         frame_assembler = std::move(ret.frame_assembler);
+        assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+        ceph_assert_always(
+            seastar::this_shard_id() == frame_assembler->get_shard_id());
         ceph_assert_always(!frame_assembler->is_socket_valid());
         io_states = ret.io_states;
         pr_exit_io->set_value();
@@ -896,18 +907,43 @@ void ProtocolV2::execute_connecting()
           }
           switch (next) {
            case next_step_t::ready: {
-            logger().info("{} connected: gs={}, pgs={}, cs={}, "
-                          "client_cookie={}, server_cookie={}, {}",
-                          conn, global_seq, peer_global_seq, connect_seq,
-                          client_cookie, server_cookie, io_states);
-            io_handler.dispatch_connect();
             if (unlikely(state != state_t::CONNECTING)) {
-              logger().debug("{} triggered {} after ms_handle_connect(), abort",
+              logger().debug("{} triggered {} before dispatch_connect(), abort",
                              conn, get_state_name(state));
               abort_protocol();
             }
-            execute_ready();
-            break;
+
+            logger().info("{} connected: gs={}, pgs={}, cs={}, "
+                          "client_cookie={}, server_cookie={}, {}, new_sid={}, "
+                          "IOHandler::dispatch_connect()",
+                          conn, global_seq, peer_global_seq, connect_seq,
+                          client_cookie, server_cookie, io_states,
+                          frame_assembler->get_socket_shard_id());
+
+            // set io_handler to a new shard
+            auto new_io_shard = frame_assembler->get_socket_shard_id();
+            ConnectionFRef conn_fref = seastar::make_foreign(
+                conn.shared_from_this());
+            ceph_assert_always(!pr_switch_io_shard.has_value());
+            pr_switch_io_shard = seastar::shared_promise<>();
+            return seastar::smp::submit_to(
+                io_handler.get_shard_id(),
+                [this, new_io_shard, conn_fref=std::move(conn_fref)]() mutable {
+              return io_handler.dispatch_connect(
+                  new_io_shard, std::move(conn_fref));
+            }).then([this, new_io_shard] {
+              ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
+              pr_switch_io_shard->set_value();
+              pr_switch_io_shard = std::nullopt;
+              // user can make changes
+
+              if (unlikely(state != state_t::CONNECTING)) {
+                logger().debug("{} triggered {} after dispatch_connect(), abort",
+                               conn, get_state_name(state));
+                abort_protocol();
+              }
+              execute_ready();
+            });
            }
            case next_step_t::wait: {
             logger().info("{} execute_connecting(): going to WAIT(max-backoff)", conn);
@@ -915,7 +951,7 @@ void ProtocolV2::execute_connecting()
             frame_assembler->shutdown_socket<true>(&gate);
             is_socket_valid = false;
             execute_wait(true);
-            break;
+            return seastar::now();
            }
            default: {
             ceph_abort("impossible next step");
@@ -1634,6 +1670,13 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
   ceph_assert_always(is_socket_valid);
   trigger_state(state_t::ESTABLISHING, io_state_t::delay);
   if (existing_conn) {
+    logger().info("{} start establishing: gs={}, pgs={}, cs={}, "
+                  "client_cookie={}, server_cookie={}, {}, new_sid={}, "
+                  "close existing {}",
+                  conn, global_seq, peer_global_seq, connect_seq,
+                  client_cookie, server_cookie,
+                  io_states, frame_assembler->get_socket_shard_id(),
+                  *existing_conn);
     ProtocolV2 *existing_proto = dynamic_cast<ProtocolV2*>(
         existing_conn->protocol.get());
     existing_proto->do_close(
@@ -1646,19 +1689,42 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
       abort_protocol();
     }
   } else {
+    logger().info("{} start establishing: gs={}, pgs={}, cs={}, "
+                  "client_cookie={}, server_cookie={}, {}, new_sid={}, "
+                  "no existing",
+                  conn, global_seq, peer_global_seq, connect_seq,
+                  client_cookie, server_cookie, io_states,
+                  frame_assembler->get_socket_shard_id());
     accept_me();
-  }
-
-  io_handler.dispatch_accept();
-  if (unlikely(state != state_t::ESTABLISHING)) {
-    logger().debug("{} triggered {} after ms_handle_accept() during execute_establishing()",
-                   conn, get_state_name(state));
-    abort_protocol();
   }
 
   gated_execute("execute_establishing", conn, [this] {
     ceph_assert_always(state == state_t::ESTABLISHING);
-    return seastar::futurize_invoke([this] {
+
+    // set io_handler to a new shard
+    auto new_io_shard = frame_assembler->get_socket_shard_id();
+    logger().debug("{} IOHandler::dispatch_accept({})", conn, new_io_shard);
+    ConnectionFRef conn_fref = seastar::make_foreign(
+        conn.shared_from_this());
+    ceph_assert_always(!pr_switch_io_shard.has_value());
+    pr_switch_io_shard = seastar::shared_promise<>();
+    return seastar::smp::submit_to(
+        io_handler.get_shard_id(),
+        [this, new_io_shard, conn_fref=std::move(conn_fref)]() mutable {
+      return io_handler.dispatch_accept(
+          new_io_shard, std::move(conn_fref));
+    }).then([this, new_io_shard] {
+      ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
+      pr_switch_io_shard->set_value();
+      pr_switch_io_shard = std::nullopt;
+      // user can make changes
+
+      if (unlikely(state != state_t::ESTABLISHING)) {
+        logger().debug("{} triggered {} after dispatch_accept() during execute_establishing()",
+                       conn, get_state_name(state));
+        abort_protocol();
+      }
+
       return send_server_ident();
     }).then([this] {
       if (unlikely(state != state_t::ESTABLISHING)) {
@@ -1666,10 +1732,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
                        conn, get_state_name(state));
         abort_protocol();
       }
-      logger().info("{} established: gs={}, pgs={}, cs={}, "
-                    "client_cookie={}, server_cookie={}, {}",
-                    conn, global_seq, peer_global_seq, connect_seq,
-                    client_cookie, server_cookie, io_states);
+      logger().info("{} established, going to ready", conn);
       execute_ready();
     }).handle_exception([this](std::exception_ptr eptr) {
       fault(state_t::ESTABLISHING, "execute_establishing", eptr);
@@ -1741,6 +1804,12 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   ceph_assert_always(state <= state_t::WAIT);
   ceph_assert_always(has_socket || state == state_t::CONNECTING);
   ceph_assert_always(!mover.socket->is_shutdown());
+
+  logger().info("{} start replacing ({}): pgs was {}, cs was {}, "
+                "client_cookie was {}, {}, new_sid={}",
+                conn, reconnect ? "reconnected" : "connected",
+                peer_global_seq, connect_seq, client_cookie,
+                io_states, mover.socket->get_shard_id());
   trigger_state(state_t::REPLACING, io_state_t::delay);
   if (is_socket_valid) {
     frame_assembler->shutdown_socket<true>(&gate);
@@ -1759,15 +1828,46 @@ void ProtocolV2::trigger_replacing(bool reconnect,
        new_peer_global_seq,
        new_connect_seq, new_msg_seq] () mutable {
     ceph_assert_always(state == state_t::REPLACING);
-    io_handler.dispatch_accept();
-    // state may become CLOSING, close mover.socket and abort later
+    auto new_io_shard = mover.socket->get_shard_id();
+    // state may become CLOSING below, but we cannot abort the chain until
+    // mover.socket is correctly handled (closed or replaced).
+
     return wait_exit_io(
     ).then([this] {
+      if (unlikely(state != state_t::REPLACING)) {
+        ceph_assert_always(state == state_t::CLOSING);
+        return seastar::now();
+      }
+
       ceph_assert_always(frame_assembler);
       protocol_timer.cancel();
       auto done = std::move(execution_done);
       execution_done = seastar::now();
       return done;
+    }).then([this, new_io_shard] {
+      if (unlikely(state != state_t::REPLACING)) {
+        ceph_assert_always(state == state_t::CLOSING);
+        return seastar::now();
+      }
+
+      // set io_handler to a new shard
+      // we should prevent parallel switching core attemps
+      logger().debug("{} IOHandler::dispatch_accept({})", conn, new_io_shard);
+      ConnectionFRef conn_fref = seastar::make_foreign(
+          conn.shared_from_this());
+      ceph_assert_always(!pr_switch_io_shard.has_value());
+      pr_switch_io_shard = seastar::shared_promise<>();
+      return seastar::smp::submit_to(
+          io_handler.get_shard_id(),
+          [this, new_io_shard, conn_fref=std::move(conn_fref)]() mutable {
+        return io_handler.dispatch_accept(
+            new_io_shard, std::move(conn_fref));
+      }).then([this, new_io_shard] {
+        ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
+        pr_switch_io_shard->set_value();
+        pr_switch_io_shard = std::nullopt;
+        // user can make changes
+      });
     }).then([this,
              reconnect,
              do_reset,

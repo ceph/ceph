@@ -227,6 +227,8 @@ private:
 
   FrameAssemblerV2Ref frame_assembler;
 
+  std::optional<seastar::shared_promise<>> pr_switch_io_shard;
+
   std::optional<seastar::shared_promise<>> pr_exit_io;
 
   AuthConnectionMetaRef auth_meta;
