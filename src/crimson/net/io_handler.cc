@@ -215,10 +215,16 @@ void IOHandler::mark_down()
     return;
   }
 
-  logger().info("{} mark_down() with {}",
+  logger().info("{} mark_down() at {}, send notify_mark_down()",
                 conn, io_stat_printer{*this});
   set_io_state(io_state_t::drop);
-  handshake_listener->notify_mark_down();
+  shard_states->dispatch_in_background(
+      "notify_mark_down", conn, [this] {
+    return seastar::smp::submit_to(
+        conn.get_messenger_shard_id(), [this] {
+      handshake_listener->notify_mark_down();
+    });
+  });
 }
 
 void IOHandler::print_io_stat(std::ostream &out) const
@@ -671,8 +677,9 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
     }
 
     if (io_state == io_state_t::open) {
-      logger().info("{} do_out_dispatch(): fault at {}, going to delay -- {}",
-                    conn, io_state, e.what());
+      logger().info("{} do_out_dispatch(): fault at {}, {}, going to delay -- {}, "
+                    "send notify_out_fault()",
+                    conn, io_state, io_stat_printer{*this}, e.what());
       std::exception_ptr eptr;
       try {
         throw e;
@@ -680,9 +687,15 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
         eptr = std::current_exception();
       }
       set_io_state(io_state_t::delay);
-      auto states = get_states();
-      handshake_listener->notify_out_fault(
-          "do_out_dispatch", eptr, states);
+      shard_states->dispatch_in_background(
+          "notify_out_fault(out)", conn, [this, eptr] {
+        auto states = get_states();
+        return seastar::smp::submit_to(
+            conn.get_messenger_shard_id(), [this, eptr, states] {
+          handshake_listener->notify_out_fault(
+              "do_out_dispatch", eptr, states);
+        });
+      });
     } else {
       if (io_state != io_state_t::switched) {
         logger().info("{} do_out_dispatch(): fault at {}, {} -- {}",
@@ -708,7 +721,14 @@ void IOHandler::notify_out_dispatch()
 {
   assert(is_out_queued());
   if (need_notify_out) {
-    handshake_listener->notify_out();
+    logger().debug("{} send notify_out()", conn);
+    shard_states->dispatch_in_background(
+        "notify_out", conn, [this] {
+      return seastar::smp::submit_to(
+          conn.get_messenger_shard_id(), [this] {
+        handshake_listener->notify_out();
+      });
+    });
   }
   if (shard_states->try_enter_out_dispatching()) {
     shard_states->dispatch_in_background(
@@ -927,12 +947,19 @@ void IOHandler::do_in_dispatch()
 
       auto io_state = ctx.get_io_state();
       if (io_state == io_state_t::open) {
-        logger().info("{} do_in_dispatch(): fault at {}, going to delay -- {}",
-                      conn, io_state, e_what);
+        logger().info("{} do_in_dispatch(): fault at {}, {}, going to delay -- {}, "
+                      "send notify_out_fault()",
+                      conn, io_state, io_stat_printer{*this}, e_what);
         set_io_state(io_state_t::delay);
-        auto states = get_states();
-        handshake_listener->notify_out_fault(
-            "do_in_dispatch", eptr, states);
+        shard_states->dispatch_in_background(
+            "notify_out_fault(in)", conn, [this, eptr] {
+          auto states = get_states();
+          return seastar::smp::submit_to(
+              conn.get_messenger_shard_id(), [this, eptr, states] {
+            handshake_listener->notify_out_fault(
+                "do_in_dispatch", eptr, states);
+          });
+        });
       } else {
         if (io_state != io_state_t::switched) {
           logger().info("{} do_in_dispatch(): fault at {}, {} -- {}",
