@@ -132,6 +132,14 @@ progress of the OSD removal operation with the following command:
 
 See :ref:`cephadm-osd-removal` for more details about OSD removal.
 
+The ``orch host drain`` command also supports a ``--zap-osd-devices``
+flag. Setting this flag while draining a host will cause cephadm to zap
+the devices of the OSDs it is removing as part of the drain process
+
+.. prompt:: bash #
+
+   ceph orch host drain *<host>* --zap-osd-devices
+
 Use the following command to determine whether any daemons are still on the
 host:
 
