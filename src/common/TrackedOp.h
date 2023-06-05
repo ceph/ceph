@@ -206,8 +206,8 @@ public:
     typename T::Ref retval(new T(params, this));
     retval->tracking_start();
     if (is_tracking()) {
-      retval->mark_event("throttled", params->get_throttle_stamp());
       retval->mark_event("header_read", params->get_recv_stamp());
+      retval->mark_event("throttled", params->get_throttle_stamp());
       retval->mark_event("all_read", params->get_recv_complete_stamp());
       retval->mark_event("dispatched", params->get_dispatch_stamp());
     }
