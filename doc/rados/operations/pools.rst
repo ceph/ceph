@@ -113,7 +113,7 @@ following:
 
    The total number of PGs for placement purposes. This **should be equal to
    the total number of PGs**, except briefly while ``pg_num`` is being
-   increased or decreaesed. 
+   increased or decreased. 
 
   :Type: Integer
   :Required: Yes. If no value has been specified in the command, then the default value is used (unless a different value has been set in Ceph configuration).
