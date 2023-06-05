@@ -1895,6 +1895,7 @@ fi
 %{_datadir}/ceph/mgr/stats
 %{_datadir}/ceph/mgr/status
 %{_datadir}/ceph/mgr/telegraf
+%{_datadir}/ceph/mgr/heartbeat_webhook
 %{_datadir}/ceph/mgr/telemetry
 %{_datadir}/ceph/mgr/test_orchestrator
 %{_datadir}/ceph/mgr/volumes
