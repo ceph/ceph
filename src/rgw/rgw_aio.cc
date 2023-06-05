@@ -19,6 +19,7 @@
 
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
+#include "rgw_cache_driver.h"
 
 namespace rgw {
 
@@ -143,6 +144,16 @@ Aio::OpFunc Aio::librados_op(librados::IoCtx ctx,
 Aio::OpFunc Aio::d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
                               off_t read_ofs, off_t read_len, std::string& cache_location) {
   return d3n_cache_aio_abstract(dpp, y, read_ofs, read_len, cache_location);
+}
+
+Aio::OpFunc Aio::cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,
+                                off_t read_ofs, off_t read_len, const std::string& key) {
+  return [dpp, y, cache_driver, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
+    ceph_assert(y);
+    auto c = cache_driver->get_cache_aio_request_ptr(dpp);
+    ldpp_dout(dpp, 20) << "Cache: cache_read_op(): Read From Cache, oid=" << r.obj.oid << dendl;
+    c->cache_aio_read(dpp, y, key, read_ofs, read_len, aio, r);
+  };
 }
 
 } // namespace rgw
