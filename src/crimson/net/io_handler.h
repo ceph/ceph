@@ -151,11 +151,13 @@ public:
    */
 
   void set_handshake_listener(HandshakeListener &hl) {
+    assert(seastar::this_shard_id() == get_shard_id());
     ceph_assert_always(handshake_listener == nullptr);
     handshake_listener = &hl;
   }
 
   io_handler_state get_states() const {
+    assert(seastar::this_shard_id() == get_shard_id());
     return {in_seq, is_out_queued(), has_out_sent()};
   }
 

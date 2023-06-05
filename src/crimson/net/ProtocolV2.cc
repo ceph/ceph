@@ -155,6 +155,7 @@ ProtocolV2::~ProtocolV2() {}
 void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
                                const entity_name_t& _peer_name)
 {
+  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   ceph_assert(state == state_t::NONE);
   ceph_assert(!gate.is_closed());
   conn.peer_addr = _peer_addr;
@@ -175,6 +176,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
 void ProtocolV2::start_accept(SocketFRef&& new_socket,
                               const entity_addr_t& _peer_addr)
 {
+  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   ceph_assert(state == state_t::NONE);
   // until we know better
   conn.target_addr = _peer_addr;
@@ -813,7 +815,10 @@ ProtocolV2::client_reconnect()
           // handle_session_reset() logic
           auto reset = ResetFrame::Decode(payload->back());
           logger().warn("{} GOT ResetFrame: full={}", conn, reset.full());
+
           reset_session(reset.full());
+          // user can make changes
+
           return client_connect();
         });
       case Tag::WAIT:
@@ -1960,9 +1965,12 @@ void ProtocolV2::trigger_replacing(bool reconnect,
              new_connect_seq, new_msg_seq] () mutable {
       if (state == state_t::REPLACING && do_reset) {
         reset_session(true);
+        // user can make changes
       }
 
       if (unlikely(state != state_t::REPLACING)) {
+        logger().debug("{} triggered {} in the middle of trigger_replacing(), abort",
+                       conn, get_state_name(state));
         ceph_assert_always(state == state_t::CLOSING);
         return mover.socket->close(
         ).then([sock = std::move(mover.socket)] {
@@ -2038,7 +2046,9 @@ void ProtocolV2::notify_out_fault(
     std::exception_ptr eptr,
     io_handler_state _io_states)
 {
+  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   io_states = _io_states;
+  logger().debug("{} got notify_out_fault(): io_states={}", conn, io_states);
   fault(state_t::READY, where, eptr);
 }
 
@@ -2062,6 +2072,8 @@ void ProtocolV2::execute_standby()
 
 void ProtocolV2::notify_out()
 {
+  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  logger().debug("{} got notify_out(): at {}", conn, get_state_name(state));
   io_states.is_out_queued = true;
   if (unlikely(state == state_t::STANDBY && !conn.policy.server)) {
     logger().info("{} notify_out(): at {}, going to CONNECTING",
@@ -2137,6 +2149,8 @@ void ProtocolV2::execute_server_wait()
 
 void ProtocolV2::notify_mark_down()
 {
+  assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
+  logger().debug("{} got notify_mark_down()", conn);
   do_close(false);
 }
 
