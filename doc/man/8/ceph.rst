@@ -161,7 +161,7 @@ Usage::
 compact
 -------
 
-Causes compaction of monitor's leveldb storage.
+Causes compaction of monitor's RocksDB storage.
 
 Usage::
 

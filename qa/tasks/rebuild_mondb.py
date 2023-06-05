@@ -1,6 +1,6 @@
 """
-Test if we can recover the leveldb from OSD after where all leveldbs are
-corrupted
+Test that we can rebuild the mon RocksDB from OSD data if all mon DBs are
+corrupted or lost
 """
 
 import logging
@@ -90,14 +90,14 @@ def _rebuild_db(ctx, manager, cluster_name, mon, mon_id, keyring_path):
             log.info('collecting maps from {cluster}:osd.{osd}'.format(
                 cluster=cluster,
                 osd=osd_id))
-            # push leveldb to OSD
+            # push RocksDB to OSD
             osd_mstore = os.path.join(teuthology.get_testdir(ctx), 'mon-store')
             osd.run(args=['sudo', 'mkdir', '-m', 'o+x', '-p', osd_mstore])
 
             _push_directory(local_mstore, osd, osd_mstore)
             log.info('rm -rf {0}'.format(local_mstore))
             shutil.rmtree(local_mstore)
-            # update leveldb with OSD data
+            # update RocksDB with OSD data
             options = '--no-mon-config --op update-mon-db --mon-store-path {0}'
             log.info('cot {0}'.format(osd_mstore))
             manager.objectstore_tool(pool=None,
@@ -113,7 +113,7 @@ def _rebuild_db(ctx, manager, cluster_name, mon, mon_id, keyring_path):
             osd.run(args=['sudo', 'rm', '-fr', osd_mstore])
 
     # recover the first_mon with re-built mon db
-    # pull from recovered leveldb from client
+    # pull from recovered RocksDB from client
     mon_store_dir = os.path.join('/var/lib/ceph/mon',
                                  '{0}-{1}'.format(cluster_name, mon_id))
     _push_directory(local_mstore, mon, mon_store_dir)

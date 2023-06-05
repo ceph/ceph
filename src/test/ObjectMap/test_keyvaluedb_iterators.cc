@@ -35,7 +35,7 @@ public:
   void SetUp() override {
     ceph_assert(!store_path.empty());
 
-    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "leveldb", store_path);
+    KeyValueDB *db_ptr = KeyValueDB::create(g_ceph_context, "rocksdb", store_path);
     ceph_assert(!db_ptr->create_and_open(std::cerr));
     db.reset(db_ptr);
     mock.reset(new KeyValueDBMemory());
@@ -396,7 +396,7 @@ public:
   }
 
   /**
-   * Test how the leveldb's whole-space iterator behaves when we remove
+   * Test how the RocksDB's whole-space iterator behaves when we remove
    * keys from the store while iterating over them.
    */
   void RmKeysWhileIteratingSnapshot(KeyValueDB *store,
@@ -470,9 +470,9 @@ public:
   }
 };
 
-TEST_F(RmKeysTest, RmKeysByPrefixLevelDB)
+TEST_F(RmKeysTest, RmKeysByPrefixRocksDB)
 {
-  SCOPED_TRACE("LevelDB");
+  SCOPED_TRACE("RocksDB");
   RmKeysByPrefix(db.get());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -494,24 +494,24 @@ TEST_F(RmKeysTest, RmKeysByPrefixMockDB)
  * from the store, the iterator would get invalid, or cause some sort of
  * unexpected mess.
  *
- * Instead, the current version of leveldb handles it perfectly, by making
+ * Instead, the current version of RocksDB handles it perfectly, by making
  * the iterator to use a snapshot instead of the store's real state. This
- * way, LevelDBStore's whole-space iterator will behave much like its own
+ * way, RocksDBStore's whole-space iterator will behave much like its own
  * whole-space snapshot iterator.
  *
  * However, this particular behavior of the iterator hasn't been documented
- * on leveldb, and we should assume that it can be changed at any point in
+ * on RocksDB, and we should assume that it can be changed at any point in
  * time.
  *
  * Therefore, we keep this test, being exactly the same as the one for the
  * whole-space snapshot iterator, as we currently assume they should behave
  * identically. If this test fails, at some point, and the whole-space
- * snapshot iterator passes, then it probably means that leveldb changed
+ * snapshot iterator passes, then it probably means that RocksDB changed
  * how its iterator behaves.
  */
-TEST_F(RmKeysTest, RmKeysWhileIteratingLevelDB)
+TEST_F(RmKeysTest, RmKeysWhileIteratingRocksDB)
 {
-  SCOPED_TRACE("LevelDB -- WholeSpaceIterator");
+  SCOPED_TRACE("RocksDB -- WholeSpaceIterator");
   RmKeysWhileIteratingSnapshot(db.get(), db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -734,9 +734,9 @@ public:
 
 };
 
-TEST_F(SetKeysTest, DISABLED_SetKeysWhileIteratingLevelDB)
+TEST_F(SetKeysTest, DISABLED_SetKeysWhileIteratingRocksDB)
 {
-  SCOPED_TRACE("LevelDB: SetKeysWhileIteratingLevelDB");
+  SCOPED_TRACE("RocksDB: SetKeysWhileIteratingRocksDB");
   SetKeysWhileIterating(db.get(), db->get_wholespace_iterator());
   ASSERT_TRUE(HasFatalFailure());
 }
@@ -748,9 +748,9 @@ TEST_F(SetKeysTest, SetKeysWhileIteratingMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(SetKeysTest, DISABLED_UpdateValuesWhileIteratingLevelDB)
+TEST_F(SetKeysTest, DISABLED_UpdateValuesWhileIteratingRocksDB)
 {
-  SCOPED_TRACE("LevelDB: UpdateValuesWhileIteratingLevelDB");
+  SCOPED_TRACE("RocksDB: UpdateValuesWhileIteratingRocksDB");
   UpdateValuesWhileIterating(db.get(), db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1145,9 +1145,9 @@ public:
   }
 };
 
-TEST_F(BoundsTest, LowerBoundWithEmptyKeyOnWholeSpaceIteratorLevelDB)
+TEST_F(BoundsTest, LowerBoundWithEmptyKeyOnWholeSpaceIteratorRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Lower Bound, Empty Key, Whole-Space Iterator");
+  SCOPED_TRACE("RocksDB: Lower Bound, Empty Key, Whole-Space Iterator");
   LowerBoundWithEmptyKeyOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1159,9 +1159,9 @@ TEST_F(BoundsTest, LowerBoundWithEmptyKeyOnWholeSpaceIteratorMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(BoundsTest, LowerBoundWithEmptyPrefixOnWholeSpaceIteratorLevelDB)
+TEST_F(BoundsTest, LowerBoundWithEmptyPrefixOnWholeSpaceIteratorRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Lower Bound, Empty Prefix, Whole-Space Iterator");
+  SCOPED_TRACE("RocksDB: Lower Bound, Empty Prefix, Whole-Space Iterator");
   LowerBoundWithEmptyPrefixOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1173,9 +1173,9 @@ TEST_F(BoundsTest, LowerBoundWithEmptyPrefixOnWholeSpaceIteratorMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(BoundsTest, LowerBoundOnWholeSpaceIteratorLevelDB)
+TEST_F(BoundsTest, LowerBoundOnWholeSpaceIteratorRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Lower Bound, Whole-Space Iterator");
+  SCOPED_TRACE("RocksDB: Lower Bound, Whole-Space Iterator");
   LowerBoundOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1187,9 +1187,9 @@ TEST_F(BoundsTest, LowerBoundOnWholeSpaceIteratorMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(BoundsTest, UpperBoundWithEmptyKeyOnWholeSpaceIteratorLevelDB)
+TEST_F(BoundsTest, UpperBoundWithEmptyKeyOnWholeSpaceIteratorRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Upper Bound, Empty Key, Whole-Space Iterator");
+  SCOPED_TRACE("RocksDB: Upper Bound, Empty Key, Whole-Space Iterator");
   UpperBoundWithEmptyKeyOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1201,9 +1201,9 @@ TEST_F(BoundsTest, UpperBoundWithEmptyKeyOnWholeSpaceIteratorMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(BoundsTest, UpperBoundWithEmptyPrefixOnWholeSpaceIteratorLevelDB)
+TEST_F(BoundsTest, UpperBoundWithEmptyPrefixOnWholeSpaceIteratorRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Upper Bound, Empty Prefix, Whole-Space Iterator");
+  SCOPED_TRACE("RocksDB: Upper Bound, Empty Prefix, Whole-Space Iterator");
   UpperBoundWithEmptyPrefixOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1215,9 +1215,9 @@ TEST_F(BoundsTest, UpperBoundWithEmptyPrefixOnWholeSpaceIteratorMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(BoundsTest, UpperBoundOnWholeSpaceIteratorLevelDB)
+TEST_F(BoundsTest, UpperBoundOnWholeSpaceIteratorRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Upper Bound, Whole-Space Iterator");
+  SCOPED_TRACE("RocksDB: Upper Bound, Whole-Space Iterator");
   UpperBoundOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1455,8 +1455,8 @@ public:
   }
 };
 
-TEST_F(SeeksTest, SeekToFirstOnWholeSpaceIteratorLevelDB) {
-  SCOPED_TRACE("LevelDB: Seek To First, Whole Space Iterator");
+TEST_F(SeeksTest, SeekToFirstOnWholeSpaceIteratorRocksDB) {
+  SCOPED_TRACE("RocksDB: Seek To First, Whole Space Iterator");
   SeekToFirstOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1467,8 +1467,8 @@ TEST_F(SeeksTest, SeekToFirstOnWholeSpaceIteratorMockDB) {
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(SeeksTest, SeekToFirstWithPrefixOnWholeSpaceIteratorLevelDB) {
-  SCOPED_TRACE("LevelDB: Seek To First, With Prefix, Whole Space Iterator");
+TEST_F(SeeksTest, SeekToFirstWithPrefixOnWholeSpaceIteratorRocksDB) {
+  SCOPED_TRACE("RocksDB: Seek To First, With Prefix, Whole Space Iterator");
   SeekToFirstWithPrefixOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1479,8 +1479,8 @@ TEST_F(SeeksTest, SeekToFirstWithPrefixOnWholeSpaceIteratorMockDB) {
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(SeeksTest, SeekToLastOnWholeSpaceIteratorLevelDB) {
-  SCOPED_TRACE("LevelDB: Seek To Last, Whole Space Iterator");
+TEST_F(SeeksTest, SeekToLastOnWholeSpaceIteratorRocksDB) {
+  SCOPED_TRACE("RocksDB: Seek To Last, Whole Space Iterator");
   SeekToLastOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1491,8 +1491,8 @@ TEST_F(SeeksTest, SeekToLastOnWholeSpaceIteratorMockDB) {
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(SeeksTest, SeekToLastWithPrefixOnWholeSpaceIteratorLevelDB) {
-  SCOPED_TRACE("LevelDB: Seek To Last, With Prefix, Whole Space Iterator");
+TEST_F(SeeksTest, SeekToLastWithPrefixOnWholeSpaceIteratorRocksDB) {
+  SCOPED_TRACE("RocksDB: Seek To Last, With Prefix, Whole Space Iterator");
   SeekToLastWithPrefixOnWholeSpaceIterator(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1561,9 +1561,9 @@ public:
   }
 };
 
-TEST_F(KeySpaceIteration, ForwardIterationLevelDB)
+TEST_F(KeySpaceIteration, ForwardIterationRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Forward Iteration, Whole Space Iterator");
+  SCOPED_TRACE("RocksDB: Forward Iteration, Whole Space Iterator");
   ForwardIteration(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1574,9 +1574,9 @@ TEST_F(KeySpaceIteration, ForwardIterationMockDB) {
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(KeySpaceIteration, BackwardIterationLevelDB)
+TEST_F(KeySpaceIteration, BackwardIterationRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Backward Iteration, Whole Space Iterator");
+  SCOPED_TRACE("RocksDB: Backward Iteration, Whole Space Iterator");
   BackwardIteration(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1652,9 +1652,9 @@ public:
   }
 };
 
-TEST_F(EmptyStore, SeekToFirstLevelDB)
+TEST_F(EmptyStore, SeekToFirstRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Empty Store, Seek To First");
+  SCOPED_TRACE("RocksDB: Empty Store, Seek To First");
   SeekToFirst(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1666,9 +1666,9 @@ TEST_F(EmptyStore, SeekToFirstMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(EmptyStore, SeekToFirstWithPrefixLevelDB)
+TEST_F(EmptyStore, SeekToFirstWithPrefixRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Empty Store, Seek To First With Prefix");
+  SCOPED_TRACE("RocksDB: Empty Store, Seek To First With Prefix");
   SeekToFirstWithPrefix(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1680,9 +1680,9 @@ TEST_F(EmptyStore, SeekToFirstWithPrefixMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(EmptyStore, SeekToLastLevelDB)
+TEST_F(EmptyStore, SeekToLastRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Empty Store, Seek To Last");
+  SCOPED_TRACE("RocksDB: Empty Store, Seek To Last");
   SeekToLast(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1694,9 +1694,9 @@ TEST_F(EmptyStore, SeekToLastMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(EmptyStore, SeekToLastWithPrefixLevelDB)
+TEST_F(EmptyStore, SeekToLastWithPrefixRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Empty Store, Seek To Last With Prefix");
+  SCOPED_TRACE("RocksDB: Empty Store, Seek To Last With Prefix");
   SeekToLastWithPrefix(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1708,9 +1708,9 @@ TEST_F(EmptyStore, SeekToLastWithPrefixMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(EmptyStore, LowerBoundLevelDB)
+TEST_F(EmptyStore, LowerBoundRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Empty Store, Lower Bound");
+  SCOPED_TRACE("RocksDB: Empty Store, Lower Bound");
   LowerBound(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }
@@ -1722,9 +1722,9 @@ TEST_F(EmptyStore, LowerBoundMockDB)
   ASSERT_FALSE(HasFatalFailure());
 }
 
-TEST_F(EmptyStore, UpperBoundLevelDB)
+TEST_F(EmptyStore, UpperBoundRocksDB)
 {
-  SCOPED_TRACE("LevelDB: Empty Store, Upper Bound");
+  SCOPED_TRACE("RocksDB: Empty Store, Upper Bound");
   UpperBound(db->get_wholespace_iterator());
   ASSERT_FALSE(HasFatalFailure());
 }

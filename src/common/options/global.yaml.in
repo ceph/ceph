@@ -2058,7 +2058,6 @@ options:
   services:
   - mon
   enum_values:
-  - leveldb
   - rocksdb
   flags:
   - create
@@ -3360,56 +3359,6 @@ options:
   type: int
   level: advanced
   default: 2
-  with_legacy: true
-- name: leveldb_log_to_ceph_log
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_write_buffer_size
-  type: size
-  level: advanced
-  default: 8_M
-  with_legacy: true
-- name: leveldb_cache_size
-  type: size
-  level: advanced
-  default: 128_M
-  with_legacy: true
-- name: leveldb_block_size
-  type: size
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_bloom_size
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_max_open_files
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_compression
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_paranoid
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-- name: leveldb_log
-  type: str
-  level: advanced
-  default: /dev/null
-  with_legacy: true
-- name: leveldb_compact_on_mount
-  type: bool
-  level: advanced
-  default: false
   with_legacy: true
 - name: rocksdb_log_to_ceph_log
   type: bool

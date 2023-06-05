@@ -82,7 +82,7 @@ protected:
   health_check_map_t health_checks;
 protected:
   /**
-   * format of our state in leveldb, 0 for default
+   * format of our state in RocksDB, 0 for default
    */
   version_t format_version;
 

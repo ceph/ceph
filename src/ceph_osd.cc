@@ -129,13 +129,8 @@ int main(int argc, const char **argv)
     exit(0);
   }
 
-  map<string,string> defaults = {
-    // We want to enable leveldb's log, while allowing users to override this
-    // option, therefore we will pass it as a default argument to global_init().
-    { "leveldb_log", "" }
-  };
   auto cct = global_init(
-    &defaults,
+    nullptr,
     args, CEPH_ENTITY_TYPE_OSD,
     CODE_ENVIRONMENT_DAEMON, 0);
   ceph_heap_profiler_init();

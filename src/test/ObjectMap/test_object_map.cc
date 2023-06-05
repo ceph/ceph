@@ -641,7 +641,7 @@ public:
     string strpath(path);
 
     cerr << "using path " << strpath << std::endl;
-    KeyValueDB *store = KeyValueDB::create(g_ceph_context, "leveldb", strpath);
+    KeyValueDB *store = KeyValueDB::create(g_ceph_context, "rocksdb", strpath);
     ceph_assert(!store->create_and_open(cerr));
 
     db.reset(new DBObjectMap(g_ceph_context, store));

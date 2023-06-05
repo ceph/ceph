@@ -132,8 +132,6 @@ Footnotes
 to how Extended Attributes associate with a POSIX file. An object's omap
 is not physically located in the object's storage, but its precise
 implementation is invisible and immaterial to RADOS Gateway.
-In Hammer, LevelDB is used to store omap data within each OSD; later releases
-default to RocksDB but can be configured to use LevelDB.
 
 [2] Before the Dumpling release, the 'bucket.instance' metadata did not
 exist and the 'bucket' metadata contained its information. It is possible
