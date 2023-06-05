@@ -53,6 +53,8 @@
 #include "BlueFS.h"
 #include "common/EventTrace.h"
 
+#include "BlueStoreSlowFastCoDel.h"
+
 #ifdef WITH_BLKIN
 #include "common/zipkin_trace.h"
 #endif
@@ -1876,6 +1878,7 @@ private:
     uint64_t seq = 0;
     ceph::mono_clock::time_point start;
     ceph::mono_clock::time_point last_stamp;
+    ceph::mono_clock::time_point txc_state_proc_start;
 
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
@@ -2052,9 +2055,17 @@ private:
       trace_period_mcs = rate > 0 ? std::floor((1/rate) * 1000000.0) : 0;
 #endif
     }
+    int64_t get_kv_throttle_current() {
+      return throttle_bytes.get_current();
+    }
+    void reset_kv_throttle_max(int64_t m) {
+      throttle_bytes.reset_max(m);
+    }
   } throttle;
 
-  typedef boost::intrusive::list<
+    std::unique_ptr<BlueStoreSlowFastCoDel> codel;
+
+    typedef boost::intrusive::list<
     TransContext,
     boost::intrusive::member_hook<
       TransContext,
