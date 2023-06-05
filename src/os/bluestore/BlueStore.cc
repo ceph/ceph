@@ -11803,7 +11803,7 @@ int BlueStore::_collection_list(
     [&, start_time = mono_clock::now(), func_name = __func__] {
     log_latency_fn(
       func_name,
-      l_bluestore_remove_lat,
+      l_bluestore_clist_lat,
       mono_clock::now() - start_time,
       cct->_conf->bluestore_log_collection_list_age,
       [&](const ceph::timespan& lat) {
