@@ -4,21 +4,21 @@
 
 namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
 
+struct Partition {
+    std::string name;
+    std::string type;
+    std::string location;
+    uint64_t size;
+};
+
+struct Entry {
+  std::string key;
+  off_t offset;
+  uint64_t len;
+};
+
 class CacheDriver {
   public:
-    struct Partition {
-      std::string name;
-      std::string type;
-      std::string location;
-      uint64_t size;
-    };
-
-    struct Entry {
-      std::string key;
-      off_t offset;
-      uint64_t len;
-    };
-
     CacheDriver(Partition& _partition_info) {}
     virtual ~CacheDriver() = default;
 
@@ -39,8 +39,8 @@ class CacheDriver {
     virtual size_t get_num_entries(const DoutPrefixProvider* dpp) = 0;
 
     /* Partition */
-    virtual Partition get_current_partition_info() = 0;
-    virtual uint64_t get_free_space() = 0;
+    virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) = 0;
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) = 0;
 };
 
 } } // namespace rgw::cal
