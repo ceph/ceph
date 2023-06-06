@@ -511,7 +511,7 @@ class SNMPGateway:
 
     def create_daemon_conf(self) -> None:
         """Creates the environment file holding 'secrets' passed to the snmp-notifier daemon"""
-        with open(os.open(self.conf_file_path, os.O_CREAT | os.O_WRONLY, 0o600), 'w') as f:
+        with write_new(self.conf_file_path, perms=0o600) as f:
             if self.snmp_version == 'V2c':
                 f.write(f'SNMP_NOTIFIER_COMMUNITY={self.snmp_community}\n')
             else:
