@@ -15268,7 +15268,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
     req->set_old_dentry(oldde);
-    req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
+    req->old_dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_LINK_EXCL;
     req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
 
     de->is_renaming = true;
@@ -15389,7 +15389,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
   req->set_filepath2(existing);
 
   req->set_inode(dir);
-  req->inode_drop = CEPH_CAP_FILE_SHARED;
+  req->inode_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_LINK_EXCL;
   req->inode_unless = CEPH_CAP_FILE_EXCL;
 
   Dentry *de = get_or_create(dir, newname);
