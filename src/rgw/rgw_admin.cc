@@ -8293,6 +8293,10 @@ next:
         // TODO: decode torrent info for display as json?
         formatter->dump_string("torrent", "<contains binary data>");
         handled = true;
+      } else if (iter->first == RGW_ATTR_PG_VER) {
+        handled = decode_dump<uint64_t>("pg_ver", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_SOURCE_ZONE) {
+        handled = decode_dump<uint32_t>("source_zone", bl, formatter.get());
       }
 
       if (!handled)

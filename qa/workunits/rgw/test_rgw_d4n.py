@@ -127,11 +127,9 @@ def test_cache_methods(r, client, obj):
     attrs = json.loads(output.decode('latin-1'))
 
     assert((data.get(b'user.rgw.tail_tag')) == attrs.get('attrs').get('user.rgw.tail_tag').encode("latin-1") + b'\x00')
-    assert((data.get(b'user.rgw.pg_ver')) == attrs.get('attrs').get('user.rgw.pg_ver').encode("latin-1") + b'\x00\x00\x00\x00\x00\x00\x00')
     assert((data.get(b'user.rgw.idtag')) == attrs.get('tag').encode("latin-1") + b'\x00')
     assert((data.get(b'user.rgw.etag')) == attrs.get('etag').encode("latin-1"))
     assert((data.get(b'user.rgw.x-amz-content-sha256')) == attrs.get('attrs').get('user.rgw.x-amz-content-sha256').encode("latin-1") + b'\x00')
-    assert((data.get(b'user.rgw.source_zone')) == attrs.get('attrs').get('user.rgw.source_zone').encode("latin-1") + b'\x00\x00\x00\x00')
     assert((data.get(b'user.rgw.x-amz-date')) == attrs.get('attrs').get('user.rgw.x-amz-date').encode("latin-1") + b'\x00')
 
     tmp1 = '\x08\x06L\x01\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x06\x06\x84\x00\x00\x00\n\nj\x00\x00\x00\x03\x00\x00\x00bkt+\x00\x00\x00'
