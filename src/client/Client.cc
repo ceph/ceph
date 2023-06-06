@@ -14625,7 +14625,7 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   req->set_filepath(path);
   req->set_inode(dir);
   req->head.args.mknod.rdev = rdev;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED  | CEPH_CAP_AUTH_EXCL;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED  | CEPH_CAP_AUTH_EXCL | CEPH_CAP_XATTR_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   bufferlist xattrs_bl;
@@ -14781,7 +14781,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   else
     req->head.args.open.mask = 0;
   req->head.args.open.pool = pool_id;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL | CEPH_CAP_XATTR_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   mode |= S_IFREG;
@@ -14850,7 +14850,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL | CEPH_CAP_XATTR_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->set_alternate_name(std::move(alternate_name));
 
@@ -14992,7 +14992,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   req->set_alternate_name(std::move(alternate_name));
   req->set_inode(dir);
   req->set_string2(target);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL | CEPH_CAP_XATTR_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   Dentry *de = get_or_create(dir, name);
@@ -15114,7 +15114,7 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   in = otherin.get();
   req->set_other_inode(in);
   in->break_all_delegs();
-  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+  req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL | CEPH_CAP_XATTR_EXCL;
 
   req->set_inode(dir);
 
@@ -15165,7 +15165,7 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
   req->set_filepath(path);
   req->set_inode(dir);
 
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_XATTR_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
@@ -15268,12 +15268,12 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
     req->set_old_dentry(oldde);
-    req->old_dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_LINK_EXCL;
+    req->old_dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_LINK_EXCL | CEPH_CAP_XATTR_EXCL;
     req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
 
     de->is_renaming = true;
     req->set_dentry(de);
-    req->dentry_drop = CEPH_CAP_FILE_SHARED;
+    req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_XATTR_EXCL;
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
