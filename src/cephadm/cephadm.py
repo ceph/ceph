@@ -2964,9 +2964,7 @@ def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: s
     for ccf in config_json['custom_config_files']:
         if all(k in ccf for k in mandatory_keys):
             file_path = os.path.join(custom_config_dir, os.path.basename(ccf['mount_path']))
-            with open(file_path, 'w+', encoding='utf-8') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
+            with write_new(file_path, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
                 f.write(ccf['content'])
 
 
