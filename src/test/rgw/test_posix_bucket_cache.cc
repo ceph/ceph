@@ -34,6 +34,7 @@ namespace {
 
   DoutPrefixProvider* dpp{nullptr};
   std::string tdir1{"tdir1"};
+  std::string tdir2{"tdir2"};
   std::uniform_int_distribution<> dist_1m(1, 1000000);
   std::vector<std::string> bvec;
 
@@ -130,17 +131,20 @@ TEST(BucketCache, ListTDir1)
   (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
 }
 
-TEST(BucketCache, ListTDir2)
-{
-  MockSalBucket sb{tdir1};
-  rgw::sal::Bucket::ListParams params{};
-  params.marker.name = bucket1_marker;
-  (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
-}
 
-TEST(BucketCache, ListTDir3)
+TEST(BucketCache, SetupEmpty)
 {
-  MockSalBucket sb{tdir1};
+  sf::path tp{sf::path{bucket_root} / tdir2};
+  sf::remove_all(tp);
+  sf::create_directory(tp);
+
+  /* generate no objects in tdir2 */
+
+} /* SetupEmpty */
+
+TEST(BucketCache, ListEmpty)
+{
+  MockSalBucket sb{tdir2};
   rgw::sal::Bucket::ListParams params{};
   params.marker.name = bucket1_marker;
   (void) bucket_cache->list_bucket(dpp, &sb, params, 9999999 /* XXXX */, func);
