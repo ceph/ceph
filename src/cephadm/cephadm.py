@@ -26,13 +26,13 @@ import errno
 import struct
 import ssl
 from enum import Enum
-from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable, TextIO
+from typing import Dict, List, Tuple, Optional, Union, Any, NoReturn, Callable, IO, Sequence, TypeVar, cast, Set, Iterable, TextIO, Generator
 
 import re
 import uuid
 
 from configparser import ConfigParser
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, contextmanager
 from functools import wraps
 from glob import glob
 from io import StringIO
@@ -655,6 +655,42 @@ class Monitoring(object):
         return version
 
 ##################################
+
+
+@contextmanager
+def write_new(
+    destination: Union[str, Path],
+    *,
+    owner: Optional[Tuple[int, int]] = None,
+    perms: Optional[int] = None,
+    encoding: Optional[str] = None,
+) -> Generator[IO, None, None]:
+    """Write a new file in a robust manner, optionally specifying the owner,
+    permissions, or encoding. This function takes care to never leave a file in
+    a partially-written state due to a crash or power outage by writing to
+    temporary file and then renaming that temp file over to the final
+    destination once all data is written.  Note that the temporary files can be
+    leaked but only for a "crash" or power outage - regular exceptions will
+    clean up the temporary file.
+    """
+    destination = os.path.abspath(destination)
+    tempname = f'{destination}.new'
+    open_kwargs: Dict[str, Any] = {}
+    if encoding:
+        open_kwargs['encoding'] = encoding
+    try:
+        with open(tempname, 'w', **open_kwargs) as fh:
+            yield fh
+            fh.flush()
+            os.fsync(fh.fileno())
+            if owner is not None:
+                os.fchown(fh.fileno(), *owner)
+            if perms is not None:
+                os.fchmod(fh.fileno(), perms)
+    except Exception:
+        os.unlink(tempname)
+        raise
+    os.rename(tempname, destination)
 
 
 def populate_files(config_dir, config_files, uid, gid):
