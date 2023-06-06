@@ -123,14 +123,21 @@ seastar::future<> Watch::notify_ack(
   const ceph::bufferlist& reply_bl)
 {
   logger().info("{}", __func__);
-  return seastar::do_for_each(in_progress_notifies,
-    [this_shared=shared_from_this(), reply_bl] (auto notify) {
-      return notify->complete_watcher(this_shared, reply_bl);
+  return seastar::do_until(
+    [this, reply_bl] { return in_progress_notifies.empty(); },
+    [this, reply_bl] {
+      auto notify_iter = in_progress_notifies.begin();
+      auto notify = notify_iter->get();
+      logger().debug("Watch::notify_ack gid={} cookie={} notify(id={})",
+                     get_watcher_gid(),
+                     get_cookie(),
+                     notify->ninfo.notify_id);
+      return notify->complete_watcher(shared_from_this(), reply_bl
+      ).then([this, notify_iter] {
+        in_progress_notifies.erase(notify_iter);
+      });
     }
-  ).then([this] {
-    in_progress_notifies.clear();
-    return seastar::now();
-  });
+  );
 }
 
 seastar::future<> Watch::send_disconnect_msg()
