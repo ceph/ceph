@@ -6120,7 +6120,7 @@ def registry_login(ctx: CephadmContext, url: Optional[str], username: Optional[s
             cmd.append('--authfile=/etc/ceph/podman-auth.json')
         out, _, _ = call_throws(ctx, cmd)
         if isinstance(engine, Podman):
-            os.chmod('/etc/ceph/podman-auth.json', 0o600)
+            os.chmod('/etc/ceph/podman-auth.json', DEFAULT_MODE)
     except Exception:
         raise Error('Failed to login to custom registry @ %s as %s with given password' % (ctx.registry_url, ctx.registry_username))
 
@@ -7714,7 +7714,7 @@ def authorize_ssh_key(ssh_pub_key: str, ssh_user: str) -> bool:
 
     with open(auth_keys_file, 'a') as f:
         os.fchown(f.fileno(), ssh_uid, ssh_gid)  # just in case we created it
-        os.fchmod(f.fileno(), 0o600)  # just in case we created it
+        os.fchmod(f.fileno(), DEFAULT_MODE)  # just in case we created it
         if add_newline:
             f.write('\n')
         f.write(ssh_pub_key + '\n')
@@ -7733,7 +7733,7 @@ def revoke_ssh_key(key: str, ssh_user: str) -> None:
         _, filename = tempfile.mkstemp()
         with open(filename, 'w') as f:
             os.fchown(f.fileno(), ssh_uid, ssh_gid)
-            os.fchmod(f.fileno(), 0o600)  # secure access to the keys file
+            os.fchmod(f.fileno(), DEFAULT_MODE)  # secure access to the keys file
             for line in lines:
                 if line.strip() == key.strip():
                     deleted = True
