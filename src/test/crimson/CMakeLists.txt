@@ -41,7 +41,8 @@ add_executable(test-async-echo
 target_link_libraries(test-async-echo ceph-common global)
 
 add_executable(unittest-seastar-alienstore-thread-pool
-  test_alienstore_thread_pool.cc)
+  test_alienstore_thread_pool.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/lsan_suppressions.cc)
 add_ceph_unittest(unittest-seastar-alienstore-thread-pool
   --memory 256M --smp 1)
 target_link_libraries(unittest-seastar-alienstore-thread-pool

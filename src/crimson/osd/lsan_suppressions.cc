@@ -10,7 +10,8 @@
   __attribute__((used))
 
 static char kLSanDefaultSuppressions[] =
-  "leak:InitModule\n";
+  "leak:InitModule\n"
+  "leak:MallocExtension::Initialize\n";
 
 SANITIZER_HOOK_ATTRIBUTE const char *__lsan_default_suppressions() {
   return kLSanDefaultSuppressions;
