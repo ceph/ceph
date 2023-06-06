@@ -399,8 +399,7 @@ You may set values for the following keys:
    
 .. describe:: hashpspool
 
-   Set/Unset HASHPSPOOL flag on a given pool.
-
+   :Description: Sets and unsets the HASHPSPOOL flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
 
@@ -408,8 +407,7 @@ You may set values for the following keys:
 
 .. describe:: nodelete
 
-   Set/Unset NODELETE flag on a given pool.
-
+   :Description: Sets and unsets the NODELETE flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
@@ -418,7 +416,7 @@ You may set values for the following keys:
 
 .. describe:: nopgchange
 
-   :Description: Set/Unset NOPGCHANGE flag on a given pool.
+   :Description: Sets and unsets the NOPGCHANGE flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
@@ -427,8 +425,7 @@ You may set values for the following keys:
 
 .. describe:: nosizechange
 
-   Set/Unset NOSIZECHANGE flag on a given pool.
-
+   :Description: Sets and unsets the NOSIZECHANGE flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
    :Version: Version ``FIXME``
@@ -437,8 +434,7 @@ You may set values for the following keys:
 
 .. describe:: bulk
 
-   Set/Unset bulk flag on a given pool.
-
+   :Description: Sets and unsets the bulk flag on a given pool.
    :Type: Boolean
    :Valid Range: true/1 sets flag, false/0 unsets flag
 
@@ -446,8 +442,7 @@ You may set values for the following keys:
 
 .. describe:: write_fadvise_dontneed
 
-   Set/Unset WRITE_FADVISE_DONTNEED flag on a given pool.
-
+   :Description: Sets and unsets the WRITE_FADVISE_DONTNEED flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
 
@@ -455,8 +450,7 @@ You may set values for the following keys:
 
 .. describe:: noscrub
 
-   Set/Unset NOSCRUB flag on a given pool.
-
+   :Description: Sets and unsets the NOSCRUB flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
 
@@ -464,8 +458,7 @@ You may set values for the following keys:
 
 .. describe:: nodeep-scrub
 
-   Set/Unset NODEEP_SCRUB flag on a given pool.
-
+   :Description: Sets and unsets the NODEEP_SCRUB flag on a given pool.
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
 
@@ -473,9 +466,8 @@ You may set values for the following keys:
 
 .. describe:: hit_set_type
 
-   Enables hit set tracking for cache pools.
-   See `Bloom Filter`_ for additional information.
-
+   :Description: Enables HitSet tracking for cache pools.
+                 For additional information, see `Bloom Filter`_.
    :Type: String
    :Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
    :Default: ``bloom``. Other values are for testing.
@@ -484,9 +476,9 @@ You may set values for the following keys:
 
 .. describe:: hit_set_count
 
-   The number of hit sets to store for cache pools. The higher
-   the number, the more RAM consumed by the ``ceph-osd`` daemon.
-
+   :Description: Determines the number of HitSets to store for cache pools. The
+                 higher the value, the more RAM is consumed by the ``ceph-osd``
+                 daemon.
    :Type: Integer
    :Valid Range: ``1``. Agent doesn't handle > 1 yet.
 
@@ -494,20 +486,19 @@ You may set values for the following keys:
 
 .. describe:: hit_set_period
 
-   The duration of a hit set period in seconds for cache pools.
-   The higher the number, the more RAM consumed by the
-   ``ceph-osd`` daemon.
-
+   :Description: Determines the duration of a HitSet period (in seconds) for
+                 cache pools. The higher the value, the more RAM is consumed
+                 by the ``ceph-osd`` daemon.
    :Type: Integer
-   :Example: ``3600`` 1hr
+   :Example: ``3600`` (3600 seconds: one hour)
 
 .. _hit_set_fpp:
 
 .. describe:: hit_set_fpp
 
-   The false positive probability for the ``bloom`` hit set type.
-   See `Bloom Filter`_ for additional information.
-
+   :Description: Determines the probability of false positives for the
+                 ``bloom`` HitSet type. For additional information, see `Bloom
+                 Filter`_.
    :Type: Double
    :Valid Range: 0.0 - 1.0
    :Default: ``0.05``
@@ -516,31 +507,33 @@ You may set values for the following keys:
 
 .. describe:: cache_target_dirty_ratio
 
-   The percentage of the cache pool containing modified (dirty)
-   objects before the cache tiering agent will flush them to the
-   backing storage pool.
-
+   :Description: Sets a flush threshold for the percentage of the cache pool
+                 containing modified (dirty) objects. When this threshold is
+                 reached, the cache-tiering agent will flush these objects to
+                 the backing storage pool.
    :Type: Double
    :Default: ``.4``
 
 .. _cache_target_dirty_high_ratio:
 
 .. describe:: cache_target_dirty_high_ratio
-
-   The percentage of the cache pool containing modified (dirty)
-   objects before the cache tiering agent will flush them to the
-   backing storage pool with a higher speed.
-
+   
+   :Description: Sets a flush threshold for the percentage of the cache pool
+                 containing modified (dirty) objects. When this threshold is
+                 reached, the cache-tiering agent will flush these objects to
+                 the backing storage pool with a higher speed (as compared with
+                 ``cache_target_dirty_ratio``).
    :Type: Double
    :Default: ``.6``
 
 .. _cache_target_full_ratio:
 
 .. describe:: cache_target_full_ratio
-
-   The percentage of the cache pool containing unmodified (clean)
-   objects before the cache tiering agent will evict them from the
-   cache pool.
+   
+   :Description: Sets an eviction threshold for the percentage of the cache
+                 pool containing unmodified (clean) objects. When this
+                 threshold is reached, the cache-tiering agent will evict 
+                 these objects from the cache pool.
 
    :Type: Double
    :Default: ``.8``
@@ -548,36 +541,34 @@ You may set values for the following keys:
 .. _target_max_bytes:
 
 .. describe:: target_max_bytes
-
-   Ceph will begin flushing or evicting objects when the
-   ``max_bytes`` threshold is triggered.
-
+   
+   :Description: Ceph will begin flushing or evicting objects when the
+                 ``max_bytes`` threshold is triggered.
    :Type: Integer
    :Example: ``1000000000000``  #1-TB
 
 .. _target_max_objects:
 
 .. describe:: target_max_objects
-
-   Ceph will begin flushing or evicting objects when the
-   ``max_objects`` threshold is triggered.
-
+   
+   :Description: Ceph will begin flushing or evicting objects when the
+                 ``max_objects`` threshold is triggered.
    :Type: Integer
    :Example: ``1000000`` #1M objects
 
 
 .. describe:: hit_set_grade_decay_rate
-
-   Temperature decay rate between two successive hit_sets
-
+   
+   :Description: Sets the temperature decay rate between two successive 
+                 HitSets.
    :Type: Integer
    :Valid Range: 0 - 100
    :Default: ``20``
 
 .. describe:: hit_set_search_last_n
-
-   Count at most N appearance in hit_sets for temperature calculation
-
+   
+   :Description: Count at most N appearances in HitSets. Used for temperature 
+                 calculation.
    :Type: Integer
    :Valid Range: 0 - hit_set_count
    :Default: ``1``
@@ -585,37 +576,34 @@ You may set values for the following keys:
 .. _cache_min_flush_age:
 
 .. describe:: cache_min_flush_age
-
-   The time (in seconds) before the cache tiering agent will flush
-   an object from the cache pool to the storage pool.
-
+   
+   :Description: Sets the time (in seconds) before the cache-tiering agent
+                 flushes an object from the cache pool to the storage pool.
    :Type: Integer
-   :Example: ``600`` 10min
+   :Example: ``600`` (600 seconds: ten minutes)
 
 .. _cache_min_evict_age:
 
 .. describe:: cache_min_evict_age
-
-   The time (in seconds) before the cache tiering agent will evict
-   an object from the cache pool.
-
+   
+   :Description: Sets the time (in seconds) before the cache-tiering agent
+                 evicts an object from the cache pool.
    :Type: Integer
-   :Example: ``1800`` 30min
+   :Example: ``1800`` (1800 seconds: thirty minutes)
 
 .. _fast_read:
 
 .. describe:: fast_read
-
-   On Erasure Coding pool, if this flag is turned on, the read request
-   would issue sub reads to all shards, and waits until it receives enough
-   shards to decode to serve the client. In the case of jerasure and isa
-   erasure plugins, once the first K replies return, client's request is
-   served immediately using the data decoded from these replies. This
-   helps to tradeoff some resources for better performance. Currently this
-   flag is only supported for Erasure Coding pool.
-
-   :Type: Boolean
-   :Defaults: ``0``
+   
+   :Description: For erasure-coded pools, if this flag is turned ``on``, the
+                 read request issues "sub reads" to all shards, and then waits
+                 until it receives enough shards to decode before it serves 
+                 the client. If *jerasure* or *isa* erasure plugins are in 
+                 use, then after the first *K* replies have returned, the 
+                 client's request is served immediately using the data decoded 
+                 from these replies. This approach sacrifices resources in 
+                 exchange for better performance. This flag is supported only 
+                 for erasure-coded pools.  :Type: Boolean :Defaults: ``0``
 
 .. _scrub_min_interval:
 
