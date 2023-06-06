@@ -133,7 +133,7 @@ There are two supported balancer modes:
    distribution is nearly perfect: that is, there is an equal number of PGs on
    each OSD (±1 PG, since the total number might not divide evenly).
 
-   To use``upmap``, all clients must be Luminous or newer.
+   To use ``upmap``, all clients must be Luminous or newer.
 
 The default mode is ``upmap``. The mode can be changed to ``crush-compat`` by
 running the following command:
