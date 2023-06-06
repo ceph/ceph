@@ -3764,30 +3764,59 @@ def deploy_daemon(
                           get_unit_name(fsid, daemon_type, daemon_id)])
 
 
-def _write_container_cmd_to_bash(ctx, file_obj, container, comment=None, background=False):
-    # type: (CephadmContext, IO[str], CephContainer, Optional[str], Optional[bool]) -> None
+def _bash_cmd(
+    fh: IO[str],
+    cmd: List[str],
+    check: bool = True,
+    background: bool = False,
+    stderr: bool = True,
+) -> None:
+    line = ' '.join(shlex.quote(arg) for arg in cmd)
+    if not check:
+        line = f'! {line}'
+    if not stderr:
+        line = f'{line} 2> /dev/null'
+    if background:
+        line = f'{line} &'
+    fh.write(line)
+    fh.write('\n')
+
+
+def _write_container_cmd_to_bash(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    container: 'CephContainer',
+    comment: Optional[str] = None,
+    background: Optional[bool] = False,
+) -> None:
     if comment:
         # Sometimes adding a comment, especially if there are multiple containers in one
         # unit file, makes it easier to read and grok.
+        assert '\n' not in comment
         file_obj.write('# ' + comment + '\n')
     # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
-    file_obj.write('! ' + ' '.join(container.rm_cmd(old_cname=True)) + ' 2> /dev/null\n')
-    file_obj.write('! ' + ' '.join(container.rm_cmd()) + ' 2> /dev/null\n')
+    _bash_cmd(
+        file_obj, container.rm_cmd(old_cname=True), check=False, stderr=False
+    )
+    _bash_cmd(file_obj, container.rm_cmd(), check=False, stderr=False)
+
     # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
     if isinstance(ctx.container_engine, Podman):
-        file_obj.write(
-            '! '
-            + ' '.join([shlex.quote(a) for a in container.rm_cmd(storage=True)])
-            + ' 2> /dev/null\n')
-        file_obj.write(
-            '! '
-            + ' '.join([shlex.quote(a) for a in container.rm_cmd(old_cname=True, storage=True)])
-            + ' 2> /dev/null\n')
+        _bash_cmd(
+            file_obj,
+            container.rm_cmd(storage=True),
+            check=False,
+            stderr=False,
+        )
+        _bash_cmd(
+            file_obj,
+            container.rm_cmd(old_cname=True, storage=True),
+            check=False,
+            stderr=False,
+        )
 
     # container run command
-    file_obj.write(
-        ' '.join([shlex.quote(a) for a in container.run_cmd()])
-        + (' &' if background else '') + '\n')
+    _bash_cmd(file_obj, container.run_cmd(), background=bool(background))
 
 
 def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
