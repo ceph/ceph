@@ -122,15 +122,19 @@ seastar::future<> Watch::notify_ack(
   const uint64_t notify_id,
   const ceph::bufferlist& reply_bl)
 {
-  logger().info("{}", __func__);
-  return seastar::do_for_each(in_progress_notifies,
-    [this_shared=shared_from_this(), reply_bl] (auto notify) {
-      return notify->complete_watcher(this_shared, reply_bl);
-    }
-  ).then([this] {
-    in_progress_notifies.clear();
-    return seastar::now();
-  });
+  logger().debug("{} gid={} cookie={} notify_id={}",
+                 __func__,  get_watcher_gid(), get_cookie(), notify_id);
+  const auto it = in_progress_notifies.find(notify_id);
+  assert(it != std::end(in_progress_notifies));
+  auto notify = *it;
+  logger().debug("Watch::notify_ack gid={} cookie={} found notify(id={})",
+    get_watcher_gid(),
+    get_cookie(),
+    notify->get_id());
+  // let's ensure we're extending the life-time till end of this method
+  static_assert(std::is_same_v<decltype(notify), NotifyRef>);
+  in_progress_notifies.erase(it);
+  return notify->complete_watcher(shared_from_this(), reply_bl);
 }
 
 seastar::future<> Watch::send_disconnect_msg()
