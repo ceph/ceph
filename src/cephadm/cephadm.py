@@ -3822,7 +3822,7 @@ def deploy_daemon_units(
     gid: int,
     daemon_type: str,
     daemon_id: Union[int, str],
-    c: 'CephContainer',
+    container: 'CephContainer',
     enable: bool = True,
     start: bool = True,
     osd_fsid: Optional[str] = None,
@@ -3835,8 +3835,8 @@ def deploy_daemon_units(
         # before stopping it. Exit code will be success either if it doesn't
         # exist or if it exists and is stopped successfully.
         container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
-        f.write(f'! {container_exists % c.old_cname} || {" ".join(c.stop_cmd(old_cname=True, timeout=timeout))} \n')
-        f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd(timeout=timeout))} \n')
+        f.write(f'! {container_exists % container.old_cname} || {" ".join(container.stop_cmd(old_cname=True, timeout=timeout))} \n')
+        f.write(f'! {container_exists % container.cname} || {" ".join(container.stop_cmd(timeout=timeout))} \n')
 
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     run_file_path = data_dir + '/unit.run'
@@ -3903,7 +3903,7 @@ def deploy_daemon_units(
             tcmu_container = ceph_iscsi.get_tcmu_runner_container()
             _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runner container', background=True)
 
-        _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
+        _write_container_cmd_to_bash(ctx, f, container, '%s.%s' % (daemon_type, str(daemon_id)))
 
         # some metadata about the deploy
         meta: Dict[str, Any] = fetch_meta(ctx)
@@ -3949,9 +3949,9 @@ def deploy_daemon_units(
     with write_new(data_dir + '/unit.stop') as f:
         add_stop_actions(cast(TextIO, f), timeout)
 
-    if c:
+    if container:
         with write_new(data_dir + '/unit.image') as f:
-            f.write(c.image + '\n')
+            f.write(container.image + '\n')
 
     # sysctl
     install_sysctl(ctx, fsid, daemon_type)
