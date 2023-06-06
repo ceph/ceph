@@ -136,4 +136,26 @@ struct cls_queue_get_capacity_ret {
 };
 WRITE_CLASS_ENCODER(cls_queue_get_capacity_ret)
 
+struct cls_queue_get_stats_ret {
+  uint64_t queue_size;
+  uint32_t queue_entries;
+
+  cls_queue_get_stats_ret() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(queue_size, bl);
+    encode(queue_entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(queue_size, bl);
+    decode(queue_entries, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_queue_get_stats_ret)
+
 #endif /* CEPH_CLS_QUEUE_OPS_H */
