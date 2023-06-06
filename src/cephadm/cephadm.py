@@ -700,9 +700,7 @@ def populate_files(config_dir, config_files, uid, gid):
         config_file = os.path.join(config_dir, fname)
         config_content = dict_get_join(config_files, fname)
         logger.info('Write file: %s' % (config_file))
-        with open(config_file, 'w', encoding='utf-8') as f:
-            os.fchown(f.fileno(), uid, gid)
-            os.fchmod(f.fileno(), 0o600)
+        with write_new(config_file, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
             f.write(config_content)
 
 
@@ -837,9 +835,7 @@ class NFSGanesha(object):
         # write the RGW keyring
         if self.rgw:
             keyring_path = os.path.join(data_dir, 'keyring.rgw')
-            with open(keyring_path, 'w') as f:
-                os.fchmod(f.fileno(), 0o600)
-                os.fchown(f.fileno(), uid, gid)
+            with write_new(keyring_path, owner=(uid, gid), perms=0o600) as f:
                 f.write(self.rgw.get('keyring', ''))
 
 ##################################
@@ -1305,9 +1301,7 @@ class CustomContainer(object):
             logger.info('Creating file: {}'.format(file_path))
             content = dict_get_join(self.files, file_path)
             file_path = os.path.join(data_dir, file_path.strip('/'))
-            with open(file_path, 'w', encoding='utf-8') as f:
-                os.fchown(f.fileno(), uid, gid)
-                os.fchmod(f.fileno(), 0o600)
+            with write_new(file_path, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
                 f.write(content)
 
     def get_daemon_args(self) -> List[str]:
@@ -2861,16 +2855,12 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
 
     if config:
         config_path = os.path.join(data_dir, 'config')
-        with open(config_path, 'w') as f:
-            os.fchown(f.fileno(), uid, gid)
-            os.fchmod(f.fileno(), 0o600)
+        with write_new(config_path, owner=(uid, gid), perms=0o600) as f:
             f.write(config)
 
     if keyring:
         keyring_path = os.path.join(data_dir, 'keyring')
-        with open(keyring_path, 'w') as f:
-            os.fchmod(f.fileno(), 0o600)
-            os.fchown(f.fileno(), uid, gid)
+        with write_new(keyring_path, owner=(uid, gid), perms=0o600) as f:
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
@@ -2932,9 +2922,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
                     fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
                 else:
                     fpath = os.path.join(data_dir_root, config_dir, fname)
-                with open(fpath, 'w', encoding='utf-8') as f:
-                    os.fchown(f.fileno(), uid, gid)
-                    os.fchmod(f.fileno(), 0o600)
+                with write_new(fpath, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
                     f.write(content)
 
     elif daemon_type == NFSGanesha.daemon_type:
@@ -3474,9 +3462,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         ).run()
 
         # write conf
-        with open(mon_dir + '/config', 'w') as f:
-            os.fchown(f.fileno(), uid, gid)
-            os.fchmod(f.fileno(), 0o600)
+        with write_new(mon_dir + '/config', owner=(uid, gid), perms=0o600) as f:
             f.write(config)
     else:
         # dirs, conf, keyring
@@ -3504,15 +3490,11 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
                 raise RuntimeError('attempting to deploy a daemon without a container image')
 
     if not os.path.exists(data_dir + '/unit.created'):
-        with open(data_dir + '/unit.created', 'w') as f:
-            os.fchmod(f.fileno(), 0o600)
-            os.fchown(f.fileno(), uid, gid)
+        with write_new(data_dir + '/unit.created', owner=(uid, gid), perms=0o600) as f:
             f.write('mtime is time the daemon deployment was created\n')
 
-    with open(data_dir + '/unit.configured', 'w') as f:
+    with write_new(data_dir + '/unit.configured', owner=(uid, gid), perms=0o600) as f:
         f.write('mtime is time we were last configured\n')
-        os.fchmod(f.fileno(), 0o600)
-        os.fchown(f.fileno(), uid, gid)
 
     update_firewalld(ctx, daemon_type)
 
@@ -3606,8 +3588,11 @@ def deploy_daemon_units(
         f.write(f'! {container_exists % c.cname} || {" ".join(c.stop_cmd(timeout=timeout))} \n')
 
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
-    with open(data_dir + '/unit.run.new', 'w') as f, \
-            open(data_dir + '/unit.meta.new', 'w') as metaf:
+    run_file_path = data_dir + '/unit.run'
+    meta_file_path = data_dir + '/unit.meta'
+    with write_new(run_file_path, perms=0o600) as f, \
+         write_new(meta_file_path, perms=0o600) as metaf:
+
         f.write('set -e\n')
 
         if daemon_type in Ceph.daemons:
@@ -3682,19 +3667,12 @@ def deploy_daemon_units(
             meta['ports'] = ports
         metaf.write(json.dumps(meta, indent=4) + '\n')
 
-        os.fchmod(f.fileno(), 0o600)
-        os.fchmod(metaf.fileno(), 0o600)
-        os.rename(data_dir + '/unit.run.new',
-                  data_dir + '/unit.run')
-        os.rename(data_dir + '/unit.meta.new',
-                  data_dir + '/unit.meta')
-
     timeout = 30 if daemon_type == 'osd' else None
     # post-stop command(s)
-    with open(data_dir + '/unit.poststop.new', 'w') as f:
+    with write_new(data_dir + '/unit.poststop', perms=0o600) as f:
         # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
         # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
-        add_stop_actions(f, timeout)
+        add_stop_actions(cast(TextIO, f), timeout)
         if daemon_type == 'osd':
             assert osd_fsid
             poststop = get_ceph_volume_container(
@@ -3718,23 +3696,14 @@ def deploy_daemon_units(
             f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
             f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
-        os.fchmod(f.fileno(), 0o600)
-        os.rename(data_dir + '/unit.poststop.new',
-                  data_dir + '/unit.poststop')
 
     # post-stop command(s)
-    with open(data_dir + '/unit.stop.new', 'w') as f:
-        add_stop_actions(f, timeout)
-        os.fchmod(f.fileno(), 0o600)
-        os.rename(data_dir + '/unit.stop.new',
-                  data_dir + '/unit.stop')
+    with write_new(data_dir + '/unit.stop', perms=0o600) as f:
+        add_stop_actions(cast(TextIO, f), timeout)
 
     if c:
-        with open(data_dir + '/unit.image.new', 'w') as f:
+        with write_new(data_dir + '/unit.image', perms=0o600) as f:
             f.write(c.image + '\n')
-            os.fchmod(f.fileno(), 0o600)
-            os.rename(data_dir + '/unit.image.new',
-                      data_dir + '/unit.image')
 
     # sysctl
     install_sysctl(ctx, fsid, daemon_type)
@@ -3743,10 +3712,8 @@ def deploy_daemon_units(
     install_base_units(ctx, fsid)
     unit = get_unit_file(ctx, fsid)
     unit_file = 'ceph-%s@.service' % (fsid)
-    with open(ctx.unit_dir + '/' + unit_file + '.new', 'w') as f:
+    with write_new(ctx.unit_dir + '/' + unit_file, perms=None) as f:
         f.write(unit)
-        os.rename(ctx.unit_dir + '/' + unit_file + '.new',
-                  ctx.unit_dir + '/' + unit_file)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(fsid, daemon_type, daemon_id)
@@ -3898,7 +3865,7 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
             *lines,
             '',
         ]
-        with open(conf, 'w') as f:
+        with write_new(conf, owner=None, perms=None) as f:
             f.write('\n'.join(lines))
 
     conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
@@ -3996,14 +3963,12 @@ def install_base_units(ctx, fsid):
     """
     # global unit
     existed = os.path.exists(ctx.unit_dir + '/ceph.target')
-    with open(ctx.unit_dir + '/ceph.target.new', 'w') as f:
+    with write_new(ctx.unit_dir + '/ceph.target', perms=None) as f:
         f.write('[Unit]\n'
                 'Description=All Ceph clusters and services\n'
                 '\n'
                 '[Install]\n'
                 'WantedBy=multi-user.target\n')
-        os.rename(ctx.unit_dir + '/ceph.target.new',
-                  ctx.unit_dir + '/ceph.target')
     if not existed:
         # we disable before enable in case a different ceph.target
         # (from the traditional package) is present; while newer
@@ -4016,7 +3981,7 @@ def install_base_units(ctx, fsid):
 
     # cluster unit
     existed = os.path.exists(ctx.unit_dir + '/ceph-%s.target' % fsid)
-    with open(ctx.unit_dir + '/ceph-%s.target.new' % fsid, 'w') as f:
+    with write_new(ctx.unit_dir + f'/ceph-{fsid}.target', perms=None) as f:
         f.write(
             '[Unit]\n'
             'Description=Ceph cluster {fsid}\n'
@@ -4027,8 +3992,6 @@ def install_base_units(ctx, fsid):
             'WantedBy=multi-user.target ceph.target\n'.format(
                 fsid=fsid)
         )
-        os.rename(ctx.unit_dir + '/ceph-%s.target.new' % fsid,
-                  ctx.unit_dir + '/ceph-%s.target' % fsid)
     if not existed:
         call_throws(ctx, ['systemctl', 'enable', 'ceph-%s.target' % fsid])
         call_throws(ctx, ['systemctl', 'start', 'ceph-%s.target' % fsid])
@@ -4038,7 +4001,7 @@ def install_base_units(ctx, fsid):
         return
 
     # logrotate for the cluster
-    with open(ctx.logrotate_dir + '/ceph-%s' % fsid, 'w') as f:
+    with write_new(ctx.logrotate_dir + f'/ceph-{fsid}', perms=None) as f:
         """
         This is a bit sloppy in that the killall/pkill will touch all ceph daemons
         in all containers, but I don't see an elegant way to send SIGHUP *just* to
@@ -5975,9 +5938,7 @@ def command_bootstrap(ctx):
     (mon_dir, log_dir) = prepare_create_mon(ctx, uid, gid, fsid, mon_id,
                                             bootstrap_keyring.name, monmap.name)
 
-    with open(mon_dir + '/config', 'w') as f:
-        os.fchown(f.fileno(), uid, gid)
-        os.fchmod(f.fileno(), 0o600)
+    with write_new(mon_dir + '/config', owner=(uid, gid), perms=0o600) as f:
         f.write(config)
 
     make_var_run(ctx, fsid, uid, gid)
@@ -6012,8 +5973,7 @@ def command_bootstrap(ctx):
                             cluster_network, ipv6_cluster_network)
 
     # output files
-    with open(ctx.output_keyring, 'w') as f:
-        os.fchmod(f.fileno(), 0o600)
+    with write_new(ctx.output_keyring, perms=0o600) as f:
         f.write('[client.admin]\n'
                 '\tkey = ' + admin_key + '\n')
     logger.info('Wrote keyring to %s' % ctx.output_keyring)
@@ -7416,7 +7376,7 @@ def _adjust_grafana_ini(filename):
     try:
         with open(filename, 'r') as grafana_ini:
             lines = grafana_ini.readlines()
-        with open('{}.new'.format(filename), 'w') as grafana_ini:
+        with write_new(filename, perms=None) as grafana_ini:
             server_section = False
             for line in lines:
                 if line.startswith('['):
@@ -7429,7 +7389,6 @@ def _adjust_grafana_ini(filename):
                     line = re.sub(r'^cert_key.*',
                                   'cert_key = /etc/grafana/certs/cert_key', line)
                 grafana_ini.write(line)
-        os.rename('{}.new'.format(filename), filename)
     except OSError as err:
         raise Error('Cannot update {}: {}'.format(filename, err))
 
