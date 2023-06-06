@@ -217,7 +217,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */
       localWeight += age;
     } else {
-      uint64_t freeSpace = cacheNode->get_free_space();
+      uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
       while (freeSpace < block->size) {
 	int newSpace = eviction(dpp, cacheNode);
@@ -324,7 +324,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDri
 }
 
 int PolicyDriver::init() { // Add "none" option? -Sam
-  rgw::cal::CacheDriver::Partition partition_info;
+  rgw::cal::Partition partition_info;
   cacheDriver = new rgw::cal::RedisDriver(partition_info, "127.0.0.1", 6379); // hardcoded for now -Sam
 
   if (policyName == "lfuda") {

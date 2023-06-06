@@ -35,11 +35,11 @@ class RedisDriver : public CacheDriver {
 
     /* Entry */
     virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) override;
-    virtual uint64_t get_num_entries(const DoutPrefixProvider* dpp) override;
+    virtual size_t get_num_entries(const DoutPrefixProvider* dpp) override;
 
     /* Partition */
-    virtual CacheDriver::Partition get_current_partition_info() override;
-    virtual uint64_t get_free_space() override;
+    virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override;
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override;
 };
 
 } } // namespace rgw::cal

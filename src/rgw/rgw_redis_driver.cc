@@ -73,7 +73,7 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
   return result;
 }
 
-uint64_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
+size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
@@ -82,7 +82,9 @@ uint64_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
 
     client.keys(":cache", [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
-        result = reply.as_integer();
+        dout(5) << "Sam: " << reply.as_integer() << dendl;
+        dout(5) << "Sam: " << reply.as_string() << dendl;
+        //result = reply.as_integer();
       }
     });
 
@@ -98,12 +100,12 @@ uint64_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
   return 0; // Implement -Sam
 }
 
-CacheDriver::Partition RedisDriver::get_current_partition_info() {
+Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp) {
   Partition part;
   return part; // Implement -Sam
 }
 
-uint64_t RedisDriver::get_free_space() {
+uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) {
   return 0; // Implement -Sam
 }
 
