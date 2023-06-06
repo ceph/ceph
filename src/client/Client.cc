@@ -2160,16 +2160,26 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
   if (it != in->caps.end()) {
     Cap &cap = it->second;
     drop &= ~(in->dirty_caps | get_caps_used(in));
-    if ((drop & cap.issued) &&
-	!(unless & cap.issued)) {
-      ldout(cct, 25) << "dropping caps " << ccap_string(drop) << dendl;
-      cap.issued &= ~drop;
-      cap.implemented &= ~drop;
-      released = 1;
-    } else {
-      released = force;
+
+    unless &= cap.issued;
+    if (unless) {
+      if (unless & CEPH_CAP_AUTH_EXCL)
+	drop &= ~CEPH_CAP_AUTH_SHARED;
+      if (unless & CEPH_CAP_LINK_EXCL)
+	drop &= ~CEPH_CAP_LINK_SHARED;
+      if (unless & CEPH_CAP_XATTR_EXCL)
+	drop &= ~CEPH_CAP_XATTR_SHARED;
+      if (unless & CEPH_CAP_FILE_EXCL)
+	drop &= ~CEPH_CAP_FILE_SHARED;
     }
-    if (released) {
+
+    if (force || (drop & cap.issued)) {
+      if (drop & cap.issued) {
+        ldout(cct, 20) << "dropping caps " << ccap_string(drop) << dendl;
+        cap.issued &= ~drop;
+        cap.implemented &= ~drop;
+      }
+
       cap.wanted = in->caps_wanted();
       if (&cap == in->auth_cap &&
 	  !(cap.wanted & CEPH_CAP_ANY_FILE_WR)) {
@@ -14612,10 +14622,10 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   filepath path;
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
-  req->set_filepath(path); 
+  req->set_filepath(path);
   req->set_inode(dir);
   req->head.args.mknod.rdev = rdev;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED  | CEPH_CAP_AUTH_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   bufferlist xattrs_bl;
@@ -14771,7 +14781,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   else
     req->head.args.open.mask = 0;
   req->head.args.open.pool = pool_id;
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   mode |= S_IFREG;
@@ -14840,7 +14850,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   path.push_dentry(name);
   req->set_filepath(path);
   req->set_inode(dir);
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->set_alternate_name(std::move(alternate_name));
 
@@ -14981,8 +14991,8 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   req->set_filepath(path);
   req->set_alternate_name(std::move(alternate_name));
   req->set_inode(dir);
-  req->set_string2(target); 
-  req->dentry_drop = CEPH_CAP_FILE_SHARED;
+  req->set_string2(target);
+  req->dentry_drop = CEPH_CAP_FILE_SHARED | CEPH_CAP_AUTH_EXCL;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
   Dentry *de = get_or_create(dir, name);
