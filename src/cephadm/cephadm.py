@@ -3648,13 +3648,20 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
     raise RuntimeError('uid/gid not found')
 
 
-def deploy_daemon(ctx: CephadmContext, fsid: str, daemon_type: str,
-                  daemon_id: Union[int, str], c: Optional['CephContainer'],
-                  uid: int, gid: int, config: Optional[str] = None,
-                  keyring: Optional[str] = None, osd_fsid: Optional[str] = None,
-                  deployment_type: DeploymentType = DeploymentType.DEFAULT,
-                  ports: Optional[List[int]] = None) -> None:
-
+def deploy_daemon(
+    ctx: CephadmContext,
+    fsid: str,
+    daemon_type: str,
+    daemon_id: Union[int, str],
+    c: Optional['CephContainer'],
+    uid: int,
+    gid: int,
+    config: Optional[str] = None,
+    keyring: Optional[str] = None,
+    osd_fsid: Optional[str] = None,
+    deployment_type: DeploymentType = DeploymentType.DEFAULT,
+    ports: Optional[List[int]] = None,
+) -> None:
     ports = ports or []
     # only check port in use if fresh deployment since service
     # we are redeploying/reconfiguring will already be using the port
