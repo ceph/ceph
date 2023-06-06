@@ -4,6 +4,7 @@
 #pragma once
 
 #include <iostream>
+#include <lmdb.h>
 #include <memory>
 #include <tuple>
 #include <vector>
@@ -430,10 +431,12 @@ public:
 	proc_result();
       } else {
 	/* position at start of index */
-	cursor.get(key, data, MDB_FIRST);
-	proc_result();
+	auto rc = cursor.get(key, data, MDB_FIRST);
+	if (rc == MDB_SUCCESS) {
+	  proc_result();
+	}
       }
-      while(! cursor.get(key, data, MDB_NEXT)) {
+      while(cursor.get(key, data, MDB_NEXT) == MDB_SUCCESS) {
 	if (count >= max) {
 	  return -EAGAIN;
 	  break;
