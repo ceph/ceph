@@ -79,6 +79,7 @@ CEPH_DEFAULT_KEYRING = f'/etc/ceph/{CEPH_KEYRING}'
 CEPH_DEFAULT_PUBKEY = f'/etc/ceph/{CEPH_PUBKEY}'
 LOG_DIR_MODE = 0o770
 DATA_DIR_MODE = 0o700
+DEFAULT_MODE = 0o600
 CONTAINER_INIT = True
 MIN_PODMAN_VERSION = (2, 0, 2)
 CGROUPS_SPLIT_PODMAN_VERSION = (2, 1, 0)
@@ -511,7 +512,7 @@ class SNMPGateway:
 
     def create_daemon_conf(self) -> None:
         """Creates the environment file holding 'secrets' passed to the snmp-notifier daemon"""
-        with write_new(self.conf_file_path, perms=0o600) as f:
+        with write_new(self.conf_file_path) as f:
             if self.snmp_version == 'V2c':
                 f.write(f'SNMP_NOTIFIER_COMMUNITY={self.snmp_community}\n')
             else:
@@ -662,7 +663,7 @@ def write_new(
     destination: Union[str, Path],
     *,
     owner: Optional[Tuple[int, int]] = None,
-    perms: Optional[int] = None,
+    perms: Optional[int] = DEFAULT_MODE,
     encoding: Optional[str] = None,
 ) -> Generator[IO, None, None]:
     """Write a new file in a robust manner, optionally specifying the owner,
@@ -700,7 +701,7 @@ def populate_files(config_dir, config_files, uid, gid):
         config_file = os.path.join(config_dir, fname)
         config_content = dict_get_join(config_files, fname)
         logger.info('Write file: %s' % (config_file))
-        with write_new(config_file, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
+        with write_new(config_file, owner=(uid, gid), encoding='utf-8') as f:
             f.write(config_content)
 
 
@@ -835,7 +836,7 @@ class NFSGanesha(object):
         # write the RGW keyring
         if self.rgw:
             keyring_path = os.path.join(data_dir, 'keyring.rgw')
-            with write_new(keyring_path, owner=(uid, gid), perms=0o600) as f:
+            with write_new(keyring_path, owner=(uid, gid)) as f:
                 f.write(self.rgw.get('keyring', ''))
 
 ##################################
@@ -1301,7 +1302,7 @@ class CustomContainer(object):
             logger.info('Creating file: {}'.format(file_path))
             content = dict_get_join(self.files, file_path)
             file_path = os.path.join(data_dir, file_path.strip('/'))
-            with write_new(file_path, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
+            with write_new(file_path, owner=(uid, gid), encoding='utf-8') as f:
                 f.write(content)
 
     def get_daemon_args(self) -> List[str]:
@@ -2855,12 +2856,12 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
 
     if config:
         config_path = os.path.join(data_dir, 'config')
-        with write_new(config_path, owner=(uid, gid), perms=0o600) as f:
+        with write_new(config_path, owner=(uid, gid)) as f:
             f.write(config)
 
     if keyring:
         keyring_path = os.path.join(data_dir, 'keyring')
-        with write_new(keyring_path, owner=(uid, gid), perms=0o600) as f:
+        with write_new(keyring_path, owner=(uid, gid)) as f:
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
@@ -2922,7 +2923,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
                     fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
                 else:
                     fpath = os.path.join(data_dir_root, config_dir, fname)
-                with write_new(fpath, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
+                with write_new(fpath, owner=(uid, gid), encoding='utf-8') as f:
                     f.write(content)
 
     elif daemon_type == NFSGanesha.daemon_type:
@@ -2964,7 +2965,7 @@ def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: s
     for ccf in config_json['custom_config_files']:
         if all(k in ccf for k in mandatory_keys):
             file_path = os.path.join(custom_config_dir, os.path.basename(ccf['mount_path']))
-            with write_new(file_path, owner=(uid, gid), perms=0o600, encoding='utf-8') as f:
+            with write_new(file_path, owner=(uid, gid), encoding='utf-8') as f:
                 f.write(ccf['content'])
 
 
@@ -3460,7 +3461,7 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
         ).run()
 
         # write conf
-        with write_new(mon_dir + '/config', owner=(uid, gid), perms=0o600) as f:
+        with write_new(mon_dir + '/config', owner=(uid, gid)) as f:
             f.write(config)
     else:
         # dirs, conf, keyring
@@ -3488,10 +3489,10 @@ def deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
                 raise RuntimeError('attempting to deploy a daemon without a container image')
 
     if not os.path.exists(data_dir + '/unit.created'):
-        with write_new(data_dir + '/unit.created', owner=(uid, gid), perms=0o600) as f:
+        with write_new(data_dir + '/unit.created', owner=(uid, gid)) as f:
             f.write('mtime is time the daemon deployment was created\n')
 
-    with write_new(data_dir + '/unit.configured', owner=(uid, gid), perms=0o600) as f:
+    with write_new(data_dir + '/unit.configured', owner=(uid, gid)) as f:
         f.write('mtime is time we were last configured\n')
 
     update_firewalld(ctx, daemon_type)
@@ -3588,8 +3589,7 @@ def deploy_daemon_units(
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     run_file_path = data_dir + '/unit.run'
     meta_file_path = data_dir + '/unit.meta'
-    with write_new(run_file_path, perms=0o600) as f, \
-         write_new(meta_file_path, perms=0o600) as metaf:
+    with write_new(run_file_path) as f, write_new(meta_file_path) as metaf:
 
         f.write('set -e\n')
 
@@ -3667,7 +3667,7 @@ def deploy_daemon_units(
 
     timeout = 30 if daemon_type == 'osd' else None
     # post-stop command(s)
-    with write_new(data_dir + '/unit.poststop', perms=0o600) as f:
+    with write_new(data_dir + '/unit.poststop') as f:
         # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
         # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
         add_stop_actions(cast(TextIO, f), timeout)
@@ -3696,11 +3696,11 @@ def deploy_daemon_units(
             f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
 
     # post-stop command(s)
-    with write_new(data_dir + '/unit.stop', perms=0o600) as f:
+    with write_new(data_dir + '/unit.stop') as f:
         add_stop_actions(cast(TextIO, f), timeout)
 
     if c:
-        with write_new(data_dir + '/unit.image', perms=0o600) as f:
+        with write_new(data_dir + '/unit.image') as f:
             f.write(c.image + '\n')
 
     # sysctl
@@ -4410,7 +4410,7 @@ class MgrListener(Thread):
             for filename in config:
                 if filename in self.agent.required_files:
                     file_path = os.path.join(self.agent.daemon_dir, filename)
-                    with write_new(file_path, perms=0o600) as f:
+                    with write_new(file_path) as f:
                         f.write(config[filename])
             self.agent.pull_conf_settings()
             self.agent.wakeup()
@@ -4472,22 +4472,22 @@ class CephadmAgent():
         for filename in config:
             if filename in self.required_files:
                 file_path = os.path.join(self.daemon_dir, filename)
-                with write_new(file_path, perms=0o600) as f:
+                with write_new(file_path) as f:
                     f.write(config[filename])
 
         unit_run_path = os.path.join(self.daemon_dir, 'unit.run')
-        with write_new(unit_run_path, perms=0o600) as f:
+        with write_new(unit_run_path) as f:
             f.write(self.unit_run())
 
         meta: Dict[str, Any] = {}
         meta_file_path = os.path.join(self.daemon_dir, 'unit.meta')
         if 'meta_json' in self.ctx and self.ctx.meta_json:
             meta = json.loads(self.ctx.meta_json) or {}
-        with write_new(meta_file_path, perms=0o600) as f:
+        with write_new(meta_file_path) as f:
             f.write(json.dumps(meta, indent=4) + '\n')
 
         unit_file_path = os.path.join(self.ctx.unit_dir, self.unit_name())
-        with write_new(unit_file_path, perms=0o600) as f:
+        with write_new(unit_file_path) as f:
             f.write(self.unit_file())
 
         call_throws(self.ctx, ['systemctl', 'daemon-reload'])
@@ -5931,7 +5931,7 @@ def command_bootstrap(ctx):
     (mon_dir, log_dir) = prepare_create_mon(ctx, uid, gid, fsid, mon_id,
                                             bootstrap_keyring.name, monmap.name)
 
-    with write_new(mon_dir + '/config', owner=(uid, gid), perms=0o600) as f:
+    with write_new(mon_dir + '/config', owner=(uid, gid)) as f:
         f.write(config)
 
     make_var_run(ctx, fsid, uid, gid)
@@ -5966,7 +5966,7 @@ def command_bootstrap(ctx):
                             cluster_network, ipv6_cluster_network)
 
     # output files
-    with write_new(ctx.output_keyring, perms=0o600) as f:
+    with write_new(ctx.output_keyring) as f:
         f.write('[client.admin]\n'
                 '\tkey = ' + admin_key + '\n')
     logger.info('Wrote keyring to %s' % ctx.output_keyring)
