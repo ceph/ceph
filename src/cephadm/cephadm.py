@@ -3859,14 +3859,6 @@ def deploy_daemon_units(
 ) -> None:
     # cmd
 
-    def add_stop_actions(f: TextIO, timeout: Optional[int]) -> None:
-        # following generated script basically checks if the container exists
-        # before stopping it. Exit code will be success either if it doesn't
-        # exist or if it exists and is stopped successfully.
-        container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
-        f.write(f'! {container_exists % container.old_cname} || {" ".join(container.stop_cmd(old_cname=True, timeout=timeout))} \n')
-        f.write(f'! {container_exists % container.cname} || {" ".join(container.stop_cmd(timeout=timeout))} \n')
-
     data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
     run_file_path = data_dir + '/unit.run'
     meta_file_path = data_dir + '/unit.meta'
@@ -3880,57 +3872,10 @@ def deploy_daemon_units(
 
         # pre-start cmd(s)
         if daemon_type == 'osd':
-            # osds have a pre-start step
             assert osd_fsid
-            simple_fn = os.path.join('/etc/ceph/osd',
-                                     '%s-%s.json.adopted-by-cephadm' % (daemon_id, osd_fsid))
-            if os.path.exists(simple_fn):
-                f.write('# Simple OSDs need chown on startup:\n')
-                for n in ['block', 'block.db', 'block.wal']:
-                    p = os.path.join(data_dir, n)
-                    f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
-            else:
-                # if ceph-volume does not support 'ceph-volume activate', we must
-                # do 'ceph-volume lvm activate'.
-                test_cv = get_ceph_volume_container(
-                    ctx,
-                    args=['activate', '--bad-option'],
-                    volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
-                    bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
-                    cname='ceph-%s-%s.%s-activate-test' % (fsid, daemon_type, daemon_id),
-                )
-                out, err, ret = call(ctx, test_cv.run_cmd(), verbosity=CallVerbosity.SILENT)
-                #  bad: ceph-volume: error: unrecognized arguments: activate --bad-option
-                # good: ceph-volume: error: unrecognized arguments: --bad-option
-                if 'unrecognized arguments: activate' in err:
-                    # older ceph-volume without top-level activate or --no-tmpfs
-                    cmd = [
-                        'lvm', 'activate',
-                        str(daemon_id), osd_fsid,
-                        '--no-systemd',
-                    ]
-                else:
-                    cmd = [
-                        'activate',
-                        '--osd-id', str(daemon_id),
-                        '--osd-uuid', osd_fsid,
-                        '--no-systemd',
-                        '--no-tmpfs',
-                    ]
-
-                prestart = get_ceph_volume_container(
-                    ctx,
-                    args=cmd,
-                    volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
-                    bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
-                    cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
-                )
-                _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
+            _write_osd_unit_run_commands(ctx, f, daemon_type, str(daemon_id), fsid, osd_fsid, data_dir, uid, gid)
         elif daemon_type == CephIscsi.daemon_type:
-            f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
-            ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
-            tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-            _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runner container', background=True)
+            _write_iscsi_unit_run_commands(ctx, f, daemon_type, str(daemon_id), fsid, data_dir)
 
         _write_container_cmd_to_bash(ctx, f, container, '%s.%s' % (daemon_type, str(daemon_id)))
 
@@ -3949,34 +3894,16 @@ def deploy_daemon_units(
     with write_new(data_dir + '/unit.poststop') as f:
         # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
         # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
-        add_stop_actions(cast(TextIO, f), timeout)
+        _write_stop_actions(ctx, cast(TextIO, f), container, timeout)
         if daemon_type == 'osd':
             assert osd_fsid
-            poststop = get_ceph_volume_container(
-                ctx,
-                args=[
-                    'lvm', 'deactivate',
-                    str(daemon_id), osd_fsid,
-                ],
-                volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
-                bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
-                cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
-                                                    daemon_id),
-            )
-            _write_container_cmd_to_bash(ctx, f, poststop, 'deactivate osd')
+            _write_osd_unit_poststop_commands(ctx, f, daemon_type, str(daemon_id), fsid, osd_fsid)
         elif daemon_type == CephIscsi.daemon_type:
-            # make sure we also stop the tcmu container
-            runtime_dir = '/run'
-            ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
-            tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-            f.write('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
-            f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
-            f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
-            f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
+            _write_iscsi_unit_poststop_commands(ctx, f, daemon_type, str(daemon_id), fsid, data_dir)
 
     # post-stop command(s)
     with write_new(data_dir + '/unit.stop') as f:
-        add_stop_actions(cast(TextIO, f), timeout)
+        _write_stop_actions(ctx, cast(TextIO, f), container, timeout)
 
     if container:
         with write_new(data_dir + '/unit.image') as f:
@@ -4003,6 +3930,114 @@ def deploy_daemon_units(
     if start:
         clean_cgroup(ctx, fsid, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
+
+
+def _write_stop_actions(
+    ctx: CephadmContext, f: TextIO, container: 'CephContainer', timeout: Optional[int]
+) -> None:
+    # following generated script basically checks if the container exists
+    # before stopping it. Exit code will be success either if it doesn't
+    # exist or if it exists and is stopped successfully.
+    container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
+    f.write(f'! {container_exists % container.old_cname} || {" ".join(container.stop_cmd(old_cname=True, timeout=timeout))} \n')
+    f.write(f'! {container_exists % container.cname} || {" ".join(container.stop_cmd(timeout=timeout))} \n')
+
+
+def _write_osd_unit_run_commands(
+    ctx: CephadmContext,
+    f: IO,
+    daemon_type: str,
+    daemon_id: str,
+    fsid: str,
+    osd_fsid: str,
+    data_dir: str,
+    uid: int,
+    gid: int,
+) -> None:
+    # osds have a pre-start step
+    simple_fn = os.path.join('/etc/ceph/osd',
+                             '%s-%s.json.adopted-by-cephadm' % (daemon_id, osd_fsid))
+    if os.path.exists(simple_fn):
+        f.write('# Simple OSDs need chown on startup:\n')
+        for n in ['block', 'block.db', 'block.wal']:
+            p = os.path.join(data_dir, n)
+            f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
+    else:
+        # if ceph-volume does not support 'ceph-volume activate', we must
+        # do 'ceph-volume lvm activate'.
+        test_cv = get_ceph_volume_container(
+            ctx,
+            args=['activate', '--bad-option'],
+            volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+            bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+            cname='ceph-%s-%s.%s-activate-test' % (fsid, daemon_type, daemon_id),
+        )
+        out, err, ret = call(ctx, test_cv.run_cmd(), verbosity=CallVerbosity.SILENT)
+        #  bad: ceph-volume: error: unrecognized arguments: activate --bad-option
+        # good: ceph-volume: error: unrecognized arguments: --bad-option
+        if 'unrecognized arguments: activate' in err:
+            # older ceph-volume without top-level activate or --no-tmpfs
+            cmd = [
+                'lvm', 'activate',
+                str(daemon_id), osd_fsid,
+                '--no-systemd',
+            ]
+        else:
+            cmd = [
+                'activate',
+                '--osd-id', str(daemon_id),
+                '--osd-uuid', osd_fsid,
+                '--no-systemd',
+                '--no-tmpfs',
+            ]
+
+        prestart = get_ceph_volume_container(
+            ctx,
+            args=cmd,
+            volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+            bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+            cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
+        )
+        _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
+
+
+def _write_iscsi_unit_run_commands(
+    ctx: CephadmContext, f: IO, daemon_type: str, daemon_id: str, fsid: str, data_dir: str
+) -> None:
+    f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
+    ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
+    tcmu_container = ceph_iscsi.get_tcmu_runner_container()
+    _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runner container', background=True)
+
+
+def _write_osd_unit_poststop_commands(
+    ctx: CephadmContext, f: IO, daemon_type: str, daemon_id: str, fsid: str, osd_fsid: str
+) -> None:
+    poststop = get_ceph_volume_container(
+        ctx,
+        args=[
+            'lvm', 'deactivate',
+            str(daemon_id), osd_fsid,
+        ],
+        volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+        bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+        cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
+                                            daemon_id),
+    )
+    _write_container_cmd_to_bash(ctx, f, poststop, 'deactivate osd')
+
+
+def _write_iscsi_unit_poststop_commands(
+    ctx: CephadmContext, f: IO, daemon_type: str, daemon_id: str, fsid: str, data_dir: str
+) -> None:
+    # make sure we also stop the tcmu container
+    runtime_dir = '/run'
+    ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
+    tcmu_container = ceph_iscsi.get_tcmu_runner_container()
+    f.write('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
+    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
+    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
+    f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
 
 
 class Firewalld(object):
