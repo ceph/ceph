@@ -3087,6 +3087,90 @@ def test_ps_s3_persistent_cleanup():
     http_server.close()
 
 
+@attr('basic_test')
+def test_ps_s3_persistent_topic_stats():
+    """ test persistent topic stats """
+    conn = connection()
+    zonegroup = 'default'
+
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+    assert_equal(result[1], 0)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
+    assert_equal(result[1], 0)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    count = 0
+    for key in bucket.list():
+        count += 1
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+        if count%100 == 0:
+            [thr.join() for thr in client_threads]
+            time_diff = time.time() - start_time
+            print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+            client_threads = []
+            start_time = time.time()
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 2*number_of_objects)
+    assert_equal(result[1], 0)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+
 @attr('manual_test')
 def test_ps_s3_persistent_notification_pushback():
     """ test pushing persistent notification pushback """
