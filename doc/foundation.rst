@@ -96,7 +96,7 @@ Members
 * Anjaneya "Reddy" Chagam (Intel)
 * Alex Marangone (DigitalOcean)
 * Carlos Maltzahn (UCSC) - Associate member representative
-* Dan van der Ster (CERN) - Ceph Council representative
+* Dan van der Ster (Clyso) - Ceph Council representative
 * Joachim Kraftmayer (Clyso)
 * Josh Durgin (IBM) - Ceph Council representative
 * Matias Bjorling (Western Digital)

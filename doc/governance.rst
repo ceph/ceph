@@ -80,7 +80,7 @@ Current Members
 
  * Adam King <adking@redhat.com>
  * Casey Bodley <cbodley@redhat.com>
- * Dan van der Ster <daniel.vanderster@cern.ch>
+ * Dan van der Ster <dan.vanderster@clyso.com>
  * David Orman <ormandj@iland.com>
  * Ernesto Puerta <epuerta@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
