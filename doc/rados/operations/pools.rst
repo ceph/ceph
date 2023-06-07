@@ -436,7 +436,7 @@ You may set values for the following keys:
 
    :Description: Sets and unsets the bulk flag on a given pool.
    :Type: Boolean
-   :Valid Range: true/1 sets flag, false/0 unsets flag
+   :Valid Range: ``true``/``1`` sets flag, ``false``/``0`` unsets flag
 
 .. _write_fadvise_dontneed:
 
@@ -444,7 +444,7 @@ You may set values for the following keys:
 
    :Description: Sets and unsets the WRITE_FADVISE_DONTNEED flag on a given pool.
    :Type: Integer
-   :Valid Range: 1 sets flag, 0 unsets flag
+   :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
 .. _noscrub:
 
@@ -452,7 +452,7 @@ You may set values for the following keys:
 
    :Description: Sets and unsets the NOSCRUB flag on a given pool.
    :Type: Integer
-   :Valid Range: 1 sets flag, 0 unsets flag
+   :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
 .. _nodeep-scrub:
 
@@ -460,7 +460,7 @@ You may set values for the following keys:
 
    :Description: Sets and unsets the NODEEP_SCRUB flag on a given pool.
    :Type: Integer
-   :Valid Range: 1 sets flag, 0 unsets flag
+   :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
 .. _hit_set_type:
 
@@ -480,7 +480,7 @@ You may set values for the following keys:
                  higher the value, the more RAM is consumed by the ``ceph-osd``
                  daemon.
    :Type: Integer
-   :Valid Range: ``1``. Agent doesn't handle > 1 yet.
+   :Valid Range: ``1``. Agent doesn't handle > ``1`` yet.
 
 .. _hit_set_period:
 
@@ -500,7 +500,7 @@ You may set values for the following keys:
                  ``bloom`` HitSet type. For additional information, see `Bloom
                  Filter`_.
    :Type: Double
-   :Valid Range: 0.0 - 1.0
+   :Valid Range: ``0.0`` - ``1.0``
    :Default: ``0.05``
 
 .. _cache_target_dirty_ratio:
@@ -603,15 +603,15 @@ You may set values for the following keys:
                  client's request is served immediately using the data decoded 
                  from these replies. This approach sacrifices resources in 
                  exchange for better performance. This flag is supported only 
-                 for erasure-coded pools.  :Type: Boolean :Defaults: ``0``
+                 for erasure-coded pools.
+   :Type: Boolean 
+   :Defaults: ``0``
 
 .. _scrub_min_interval:
 
 .. describe:: scrub_min_interval
-
-   The minimum interval in seconds for pool scrubbing when
-   load is low. If it is 0, the value osd_scrub_min_interval
-   from config is used.
+   
+   :Description: Sets the minimum interval (in seconds) for successive scrubs of the pool's PGs when the load is low. If the default value of ``0`` is in effect, then the value of ``osd_scrub_min_interval`` from central config is used.
 
    :Type: Double
    :Default: ``0``
@@ -619,10 +619,8 @@ You may set values for the following keys:
 .. _scrub_max_interval:
 
 .. describe:: scrub_max_interval
-
-   The maximum interval in seconds for pool scrubbing
-   irrespective of cluster load. If it is 0, the value
-   osd_scrub_max_interval from config is used.
+   
+   :Description: Sets the maximum interval (in seconds) for scrubs of the pool's PGs regardless of cluster load. If the value of ``scrub_max_interval`` is ``0``, then the value ``osd_scrub_max_interval`` from central config is used.
 
    :Type: Double
    :Default: ``0``
@@ -630,9 +628,8 @@ You may set values for the following keys:
 .. _deep_scrub_interval:
 
 .. describe:: deep_scrub_interval
-
-   The interval in seconds for pool “deep” scrubbing. If it
-   is 0, the value osd_deep_scrub_interval from config is used.
+   
+   :Description: Sets the interval (in seconds) for pool “deep” scrubs of the pool's PGs. If the value of ``deep_scrub_interval`` is ``0``, the value ``osd_deep_scrub_interval`` from central config is used.
 
    :Type: Double
    :Default: ``0``
@@ -640,11 +637,8 @@ You may set values for the following keys:
 .. _recovery_priority:
 
 .. describe:: recovery_priority
-
-   When a value is set it will increase or decrease the computed
-   reservation priority. This value must be in the range -10 to
-   10.  Use a negative priority for less important pools so they
-   have lower priority than any new pools.
+   
+   :Description: Setting this value adjusts a pool's computed reservation priority. This value must be in the range ``-10`` to ``10``. Any pool assigned a negative value will be given a lower priority than any new pools, so users are directed to assign negative values to low-priority pools.
 
    :Type: Integer
    :Default: ``0``
@@ -653,47 +647,51 @@ You may set values for the following keys:
 .. _recovery_op_priority:
 
 .. describe:: recovery_op_priority
-
-   Specify the recovery operation priority for this pool instead of :confval:`osd_recovery_op_priority`.
+   
+   :Description: Sets the recovery operation priority for a specific pool's PGs. This overrides the general priority determined by :confval:`osd_recovery_op_priority`.
 
    :Type: Integer
    :Default: ``0``
 
 
-Get Pool Values
-===============
+Getting Pool Values
+===================
 
-To get a value from a pool, execute the following:
+To get a value from a pool's key, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd pool get {pool-name} {key}
 
-You may get values for the following keys:
+
+You may get values from the following keys:
+
 
 ``size``
 
-:Description: see size_
+:Description: See size_.
 
 :Type: Integer
 
+
 ``min_size``
 
-:Description: see min_size_
+:Description: See min_size_.
 
 :Type: Integer
 :Version: ``0.54`` and above
 
+
 ``pg_num``
 
-:Description: see pg_num_
+:Description: See pg_num_.
 
 :Type: Integer
 
 
 ``pgp_num``
 
-:Description: see pgp_num_
+:Description: See pgp_num_.
 
 :Type: Integer
 :Valid Range: Equal to or less than ``pg_num``.
@@ -701,131 +699,132 @@ You may get values for the following keys:
 
 ``crush_rule``
 
-:Description: see crush_rule_
+:Description: See crush_rule_.
 
 
 ``hit_set_type``
 
-:Description: see hit_set_type_
+:Description: See hit_set_type_.
 
 :Type: String
 :Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
 
+
 ``hit_set_count``
 
-:Description: see hit_set_count_
+:Description: See hit_set_count_.
 
 :Type: Integer
 
 
 ``hit_set_period``
 
-:Description: see hit_set_period_
+:Description: See hit_set_period_.
 
 :Type: Integer
 
 
 ``hit_set_fpp``
 
-:Description: see hit_set_fpp_
+:Description: See hit_set_fpp_.
 
 :Type: Double
 
 
 ``cache_target_dirty_ratio``
 
-:Description: see cache_target_dirty_ratio_
+:Description: See cache_target_dirty_ratio_.
 
 :Type: Double
 
 
 ``cache_target_dirty_high_ratio``
 
-:Description: see cache_target_dirty_high_ratio_
+:Description: See cache_target_dirty_high_ratio_.
 
 :Type: Double
 
 
 ``cache_target_full_ratio``
 
-:Description: see cache_target_full_ratio_
+:Description: See cache_target_full_ratio_.
 
 :Type: Double
 
 
 ``target_max_bytes``
 
-:Description: see target_max_bytes_
+:Description: See target_max_bytes_.
 
 :Type: Integer
 
 
 ``target_max_objects``
 
-:Description: see target_max_objects_
+:Description: See target_max_objects_.
 
 :Type: Integer
 
 
 ``cache_min_flush_age``
 
-:Description: see cache_min_flush_age_
+:Description: See cache_min_flush_age_.
 
 :Type: Integer
 
 
 ``cache_min_evict_age``
 
-:Description: see cache_min_evict_age_
+:Description: See cache_min_evict_age_.
 
 :Type: Integer
 
 
 ``fast_read``
 
-:Description: see fast_read_
+:Description: See fast_read_.
 
 :Type: Boolean
 
 
 ``scrub_min_interval``
 
-:Description: see scrub_min_interval_
+:Description: See scrub_min_interval_.
 
 :Type: Double
 
 
 ``scrub_max_interval``
 
-:Description: see scrub_max_interval_
+:Description: See scrub_max_interval_.
 
 :Type: Double
 
 
 ``deep_scrub_interval``
 
-:Description: see deep_scrub_interval_
+:Description: See deep_scrub_interval_.
 
 :Type: Double
 
 
 ``allow_ec_overwrites``
 
-:Description: see allow_ec_overwrites_
+:Description: See allow_ec_overwrites_.
 
 :Type: Boolean
 
 
 ``recovery_priority``
 
-:Description: see recovery_priority_
+:Description: See recovery_priority_.
 
 :Type: Integer
 
 
 ``recovery_op_priority``
 
-:Description: see recovery_op_priority_
+:Description: See recovery_op_priority_.
 
 :Type: Integer
 
@@ -833,47 +832,49 @@ You may get values for the following keys:
 Setting the Number of RADOS Object Replicas
 ===========================================
 
-To set the number of object replicas on a replicated pool, execute the following:
+To set the number of data replicas on a replicated pool, run a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph osd pool set {poolname} size {num-replicas}
 
-.. important:: The ``{num-replicas}`` includes the object itself.
-   If you want the object and two copies of the object for a total of
-   three instances of the object, specify ``3``.
-
-For example:
+.. important:: The ``{num-replicas}`` argument includes the primary object
+   itself.  For example, if you want there to be two replicas of the object in
+   addition to the original object (for a total of three instances of the
+   object) specify ``3`` by running the following command:
 
 .. prompt:: bash $
 
    ceph osd pool set data size 3
 
-You may execute this command for each pool. **Note:** An object might accept
-I/Os in degraded mode with fewer than ``pool size`` replicas.  To set a minimum
-number of required replicas for I/O, you should use the ``min_size`` setting.
-For example:
+You may run the above command for each pool. 
+
+.. Note:: An object might accept I/Os in degraded mode with fewer than ``pool
+   size`` replicas. To set a minimum number of replicas required for I/O, you
+   should use the ``min_size`` setting.  For example, you might run the
+   following command:
 
 .. prompt:: bash $
 
    ceph osd pool set data min_size 2
 
-This ensures that no object in the data pool will receive I/O with fewer than
-``min_size`` replicas.
+This command ensures that no object in the data pool will receive I/O if it has
+fewer than ``min_size`` (in this case, two) replicas.
 
 
-Get the Number of Object Replicas
-=================================
+Getting the Number of Object Replicas
+=====================================
 
-To get the number of object replicas, execute the following:
+To get the number of object replicas, run the following command:
 
 .. prompt:: bash $
 
    ceph osd dump | grep 'replicated size'
 
-Ceph will list the pools, with the ``replicated size`` attribute highlighted.
-By default, ceph creates two replicas of an object (a total of three copies, or
-a size of 3).
+Ceph will list pools and highlight the ``replicated size`` attribute.  By
+default, Ceph creates two replicas of an object (a total of three copies, for a
+size of ``3``).
 
 
 .. _pgcalc: https://old.ceph.com/pgcalc/
