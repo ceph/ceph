@@ -251,6 +251,14 @@ public:
   virtual void prepare_write() {}
 
   /**
+   * prepare_commit
+   *
+   * Called prior to committing the transaction in which this extent
+   * is living.
+   */
+  virtual void prepare_commit() {}
+
+  /**
    * on_initial_write
    *
    * Called after commit of extent.  State will be CLEAN.
