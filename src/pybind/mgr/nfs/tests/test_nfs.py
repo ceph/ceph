@@ -11,7 +11,7 @@ from mgr_module import MgrModule, NFS_POOL_NAME
 from rados import ObjectNotFound
 
 from ceph.deployment.service_spec import NFSServiceSpec
-from nfs import Module
+from nfs.module import Module
 from nfs.export import ExportMgr, normalize_path
 from nfs.ganesha_conf import GaneshaConfParser, Export, RawBlock
 from nfs.cluster import NFSCluster
