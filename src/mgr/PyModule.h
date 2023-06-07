@@ -54,6 +54,11 @@ private:
   std::string get_site_packages();
   int load_subclass_of(const char* class_name, PyObject** py_class);
 
+  int load_dynamic_class_from(
+      const char* fn_name,
+      const char* assert_subclass_of,
+      PyObject** py_class);
+
   // Did the MgrMap identify this module as one that should run?
   bool enabled = false;
 

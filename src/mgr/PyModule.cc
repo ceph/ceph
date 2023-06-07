@@ -375,9 +375,18 @@ int PyModule::load(PyThreadState *pMainThreadState)
     Gil gil(pMyThreadState);
 
     int r;
-    r = load_subclass_of("MgrModule", &pClass);
+    r = load_dynamic_class_from("_get_ceph_mgr_module_class",
+      "MgrModule", &pClass);
+    if (r == -ENOENT) {
+      // fall back to earlier method
+      r = load_subclass_of("MgrModule", &pClass);
+      if (r) {
+        derr << "Class not found in module '" << module_name << "'" << dendl;
+        return r;
+      }
+    }
     if (r) {
-      derr << "Class not found in module '" << module_name << "'" << dendl;
+      derr << "Class not loaded from module '" << module_name << "'" << dendl;
       return r;
     }
 
@@ -405,7 +414,11 @@ int PyModule::load(PyThreadState *pMainThreadState)
     // runnable though, can_run populated later...
     loaded = true;
 
-    r = load_subclass_of("MgrStandbyModule", &pStandbyClass);
+    r = load_dynamic_class_from("_get_ceph_mgr_standby_module_class",
+      "MgrStandbyModule", &pStandbyClass);
+    if (r == -ENOENT) {
+      r = load_subclass_of("MgrStandbyModule", &pStandbyClass);
+    }
     if (!r) {
       dout(4) << "Standby mode available in module '" << module_name
               << "'" << dendl;
@@ -699,6 +712,69 @@ PyObject *PyModule::get_typed_option_value(const std::string& name,
     return get_python_typed_option_value((Option::type_t)p->second.type, value);
   }
   return PyUnicode_FromString(value.c_str());
+}
+
+int PyModule::load_dynamic_class_from(
+    const char* fn_name,
+    const char* assert_subclass_of,
+    PyObject** py_class)
+{
+  PyObject *plugin_module = PyImport_ImportModule(module_name.c_str());
+  if (!plugin_module) {
+    error_string = peek_pyerror();
+    dout(8) << "Module not found: '" << module_name << "'" << dendl;
+    dout(10) << handle_pyerror(true, module_name, "PyModule::load_dynamic_class_from") << dendl;
+    return -ENOENT;
+  }
+  auto fn = PyObject_GetAttrString(plugin_module, fn_name);
+  Py_DECREF(plugin_module);
+  if (!fn) {
+    dout(8) << "Function not found: '" << module_name << "." << fn_name << "'" << dendl;
+    dout(10) << handle_pyerror(true, module_name, "PyModule::load_dynamic_class_from") << dendl;
+    return -ENOENT;
+  }
+  auto res_cls = PyObject_CallFunction(fn,
+    const_cast<char*>("(s)"), const_cast<char*>(module_name.c_str()));
+  Py_DECREF(fn);
+  if (!fn) {
+    derr << "Function failed: '" << module_name << "." << fn_name << "'" << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_dynamic_class_from") << dendl;
+    return -EINVAL;  /* EINVAL because we had a function to call but it didn't work */
+  }
+  if (!PyType_Check(res_cls)) {
+    derr << "Returned value is not a type: '" << module_name << "'" << dendl;
+    return -EINVAL;
+  }
+
+  *py_class = res_cls;
+  if (assert_subclass_of == NULL) {
+    return 0;
+  }
+
+  // load the base class
+  PyObject *mgr_module = PyImport_ImportModule("mgr_module");
+  if (!mgr_module) {
+    error_string = peek_pyerror();
+    derr << "Module not found: 'mgr_module'" << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_dynamic_class_from") << dendl;
+    return -EINVAL;
+  }
+  auto mgr_module_type = PyObject_GetAttrString(mgr_module, assert_subclass_of);
+  Py_DECREF(mgr_module);
+  if (!mgr_module_type) {
+    error_string = peek_pyerror();
+    derr << "Unable to import MgrModule from mgr_module" << dendl;
+    derr << handle_pyerror(true, module_name, "PyModule::load_dynamic_class_from") << dendl;
+    return -EINVAL;
+  }
+  if (!(PyObject_IsSubclass(res_cls, mgr_module_type) ||
+        PyObject_RichCompareBool(res_cls, mgr_module_type, Py_EQ))) {
+    Py_DECREF(mgr_module_type);
+    derr << "Returned value in " << module_name << " is not a subclass of: '" << assert_subclass_of << "'" << dendl;
+    return -EINVAL;
+  }
+  Py_DECREF(mgr_module_type);
+  return 0;
 }
 
 int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
