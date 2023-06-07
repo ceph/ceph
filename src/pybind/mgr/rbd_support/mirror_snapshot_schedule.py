@@ -8,9 +8,8 @@ from datetime import datetime, timedelta
 from threading import Condition, Lock, Thread
 from typing import Any, Dict, List, NamedTuple, Optional, Set, Tuple, Union
 
-from .common import get_rbd_pools, get_image_timestamps
+from .common import get_rbd_pools
 from .schedule import LevelSpec, Schedules, Interval
-
 
 def namespace_validator(ioctx: rados.Ioctx) -> None:
     mode = rbd.RBD().mirror_mode_get(ioctx)
@@ -394,80 +393,66 @@ class MirrorSnapshotScheduleHandler:
         slow_status_images = []
         total_image_count = 0
 
-        for pool_id in self.images:
+        for pool_id, namespaces in self.images.items():
             with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
-                for namespace in self.images[pool_id]:
+                for namespace in namespaces:
                     ioctx.set_namespace(namespace)
                     try:
                         statuses = list(rbd.RBD().mirror_image_status_list(ioctx))
                     except Exception as e:
-                        self.log.error(
-                            "error getting image statuses from {}/{}: {}".format(
-                                pool_id, namespace, e
-                            )
-                        )
+                        self.log.error(f"error getting image statuses from {pool_id}/{namespace}: {e}")
                         continue
 
-                    for image_id in self.images[pool_id][namespace]:
-                        schedule = self.schedules.find(pool_id, namespace, image_id)
+                    for status in statuses:
+                        schedule = self.schedules.find(pool_id, namespace, status.get("id"))
                         if not schedule:
                             continue
+                        
                         total_image_count += 1
-                        timestamps = get_image_timestamps(statuses, image_id)
-                        if not timestamps:
+                        min_interval_minutes = min(schedule.items, key=lambda x: x[0].minutes)[0].minutes
+                        remote_statuses = status.get("remote_statuses", [])
+                        if not remote_statuses:
+                            continue
+                        
+                        desc = remote_statuses[0].get("description")
+                        if desc:
+                            local_ts = int(desc.split('"local_snapshot_timestamp":')[1].split(",")[0])
+                            remote_ts = int(desc.split('"remote_snapshot_timestamp":')[1].split(",")[0])
+                        else:
                             continue
 
-                        min_interval_minutes = min(
-                            schedule.items, key=lambda x: x[0].minutes
-                        )[0].minutes
-                        next_snapshot_timestamp = self.get_queue_timestamp(
-                            pool_id, namespace, image_id
-                        )
+                        next_snapshot_timestamp = self.get_queue_timestamp(pool_id, namespace, status.get("id"))
                         if not next_snapshot_timestamp:
                             continue
-                        expected_snapshot_timestamp = (
-                            next_snapshot_timestamp.timestamp()
-                            - (min_interval_minutes * 60)
-                        )
-                        unsynced_images += [
-                            image_id
-                            for local_ts, remote_ts in timestamps
-                            if (remote_ts - local_ts) > min_interval_minutes * 60
-                        ]
-                        slow_status_images += [
-                            image_id
-                            for local_ts, remote_ts in timestamps
-                            if (expected_snapshot_timestamp - remote_ts)
-                            > min_interval_minutes * 60 * 5
-                        ]
+                        
+                        expected_snapshot_timestamp = (next_snapshot_timestamp.timestamp() - (min_interval_minutes * 60))
+                        name = status.get("name")
+                        if (remote_ts - local_ts) > min_interval_minutes * 60:
+                            unsynced_images.append(name)
+                        if (expected_snapshot_timestamp - remote_ts) > min_interval_minutes * 60 * 5:
+                            slow_status_images.append(name)
 
         health_checks = {}
-
         unsynced_count = len(unsynced_images)
         slow_count = len(slow_status_images)
+
         if total_image_count > 0 and (unsynced_count / total_image_count) > 0.1:
             health_checks["unsynced_images"] = {
                 "severity": "warning",
-                "summary": "More than 10% of images are not synced according to their schedule {}".format(
-                    {unsynced_count} / {total_image_count}
-                ),
-                "detail": [
-                    "List of unsynced images: {}".format(", ".join(unsynced_images))
-                ],
+                "summary": f"More than 10% of images are not synced according to their schedule: {unsynced_count}/{total_image_count}",
+                "detail": [f"List of unsynced images: {', '.join(unsynced_images)}"],
             }
 
         if slow_count > 0:
-            return {
-                "rbd_mirror_status_not_updated": {
-                    "severity": "critical",
-                    "summary": "remote RBD mirror is not updating image statuses",
-                    "count": slow_count,
-                    "detail": [
-                        "list of slow images: {}".format(", ".join(slow_status_images))
-                    ],
-                }
+            health_checks["rbd_mirror_status_not_updated"] = {
+                "severity": "critical",
+                "summary": "Remote RBD mirror is not updating image statuses",
+                "count": slow_count,
+                "detail": [f"List of slow images: {', '.join(slow_status_images)}"],
             }
+
         return health_checks
+
     def init_schedule_queue(self) -> None:
         # schedule_time => image_spec
         self.queue: Dict[str, List[ImageSpec]] = {}

@@ -46,26 +46,3 @@ def get_rbd_pools(module: 'Module') -> Dict[int, str]:
     osd_map = module.get('osd_map')
     return {pool['pool']: pool['pool_name'] for pool in osd_map['pools']
             if 'rbd' in pool.get('application_metadata', {})}
-
-def get_image_timestamps(
-    status_list: List[dict], image_id: str
-) -> Optional[List[Tuple[int, int]]]:
-    try:
-        matches = [
-            item["remote_statuses"] for item in status_list if item.get("id") == image_id
-        ]
-        timestamps = []
-        for match in matches:
-            for status in match:
-                desc = status.get("description")
-                if desc:
-                    local_ts = int(
-                        desc.split('"local_snapshot_timestamp":')[1].split(",")[0]
-                    )
-                    remote_ts = int(
-                        desc.split('"remote_snapshot_timestamp":')[1].split(",")[0]
-                    )
-                    timestamps.append((local_ts, remote_ts))
-        return timestamps if timestamps else None
-    except Exception as e:
-        raise ValueError(f"Error getting timestamps for image {image_id}: {e}")
