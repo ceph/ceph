@@ -54,8 +54,9 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
 
 bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) {
   int result = -1;
+  std::string entryName = "rgw-object:" + key + ":cache";
   std::vector<std::string> keys;
-  keys.push_back(key);
+  keys.push_back(entryName);
 
   if (!client.is_connected()) 
     return ECONNREFUSED;
@@ -74,30 +75,28 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
 }
 
 size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
+  int result = -1;
+
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
   try {
-    int result; 
-
     client.keys(":cache", [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
-        dout(5) << "Sam: " << reply.as_integer() << dendl;
-        dout(5) << "Sam: " << reply.as_string() << dendl;
-        //result = reply.as_integer();
+        result = reply.as_integer();
       }
     });
 
     client.sync_commit(std::chrono::milliseconds(1000));
 
-    if (result != 0) {
+    if (result < 0) {
       return -1;
     }
   } catch(std::exception &e) {
     return -1;
   }
 
-  return 0; // Implement -Sam
+  return result;
 }
 
 Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp) {
@@ -106,6 +105,29 @@ Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp)
 }
 
 uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) {
+  int result = -1;
+
+  if (!client.is_connected()) 
+    return ECONNREFUSED;
+
+  try {
+    client.info([&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_integer();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result < 0) {
+      return -1;
+    }
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  //return max memory (needs to be configured) - used memory
+
   return 0; // Implement -Sam
 }
 
@@ -165,7 +187,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   if (!client.is_connected()) 
     return ECONNREFUSED;
     
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key)) {
     rgw::sal::Attrs::iterator it;
     std::vector< std::pair<std::string, std::string> > redisAttrs;
     std::vector<std::string> getFields;
@@ -211,7 +233,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key)) {
     try {
       client.hget(entryName, "data", [&value](cpp_redis::reply &reply) {
         if (!reply.is_null()) {
@@ -258,7 +280,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key)) {
     try {
     client.hdel(entryName, deleteField, [&result](cpp_redis::reply &reply) {
       if (reply.is_integer()) {
@@ -285,7 +307,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key)) {
     rgw::sal::Attrs::iterator it;
     std::vector< std::pair<std::string, std::string> > redisAttrs;
     std::vector<std::string> getFields;
@@ -395,7 +417,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key)) {
     try {
       std::vector< std::pair<std::string, std::string> > redisAttrs;
       for (const auto& it : attrs) {
@@ -430,7 +452,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key)) {
     std::vector<std::string> getFields;
 
     /* Retrieve existing values from cache */
@@ -493,7 +515,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   if (!client.is_connected()) 
     return {};
 
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key)) {
     std::string getValue;
 
     /* Ensure field was set */
