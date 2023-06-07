@@ -214,6 +214,7 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
 
   int ret = store->gc_aio_operate(obj_names[i], state->completion, &op);
   if (ret == 0) {
+    // coverity[RESOURCE_LEAK:FALSE]
     state.release(); // release ownership until async_defer_callback()
   }
   return ret;
