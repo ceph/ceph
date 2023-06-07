@@ -4808,6 +4808,64 @@ class CephContainer(BasicContainer):
         return out
 
 
+class InitContainer(BasicContainer):
+    @classmethod
+    def from_primary_and_opts(
+        cls,
+        ctx: CephadmContext,
+        primary: 'CephContainer',
+        opts: Dict[str, Any],
+        data_dir: str = '',
+    ) -> 'InitContainer':
+        if not opts:
+            raise Error('no init container values provided')
+        # volume mounts are specified relative to a dir in custom container
+        # if we are going to inherit the dirs from the primary then we
+        # just copy it. If not, we have to convert the relative paths
+        # into absolute paths.
+        assert primary.identity
+        vmounts = opts.get('volume_mounts')
+        if not vmounts:
+            vmounts = primary.volume_mounts
+        else:
+            data_dir = data_dir or get_data_dir(
+                primary.identity.fsid,
+                ctx.data_dir,
+                primary.identity.daemon_type,
+                primary.identity.daemon_id,
+            )
+            vmounts = {
+                os.path.join(data_dir, src): dst
+                for src, dst in vmounts.items()
+            }
+        return cls(
+            ctx,
+            identity=primary.identity._replace(subcomponent='init'),
+            image=opts.get('image', primary.image),
+            entrypoint=opts.get('entrypoint', primary.entrypoint),
+            # note: args is not inherited from primary container
+            args=opts.get('entrypoint_args', []),
+            volume_mounts=vmounts,
+            envs=opts.get('envs', primary.envs),
+            # note: privileged is not inherited from primary container
+            # we really ought to minimize running stuff as privileged
+            privileged=opts.get('privileged', False),
+            init=False,
+            ptrace=primary.ptrace,
+            remove=False,
+            memory_request=primary.memory_request,
+            memory_limit=primary.memory_limit,
+        )
+        # Things we are currently not handling:
+        #  container_args, bind_mounts, network, ipc
+
+    def run_cmd(self) -> List[str]:
+        return self.build_run_cmd()
+
+    def rm_cmd(self, storage: bool = False) -> List[str]:
+        return self.build_rm_cmd(storage=storage)
+
+
 #####################################
 
 class MgrListener(Thread):
