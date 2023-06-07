@@ -28,17 +28,21 @@ class Reporter:
             # dense clusters
             if self.system.data_ready:
                 log.debug("waiting for a lock.")
-                try:
-                    self.system.lock.acquire()
-                    log.debug("lock acquired.")
-                    if not self.system.get_system() == self.system.previous_data:
-                        self.system.previous_data = self.system.get_system()
-                        log.info('data has changed since last iteration.')
-                        d = self.system.get_system()
+                self.system.lock.acquire()
+                log.debug("lock acquired.")
+                if not self.system.get_system() == self.system.previous_data:
+                    log.info('data has changed since last iteration.')
+                    d = self.system.get_system()
+                    try:
                         requests.post(f"{self.observer_url}/fake_endpoint", json=d)
+                    except requests.exceptions.RequestException as e:
+                        log.error(f"The reporter couldn't send data to the mgr: {e}")
+                        # Need to add a new parameter 'max_retries' to the reporter if it can't
+                        # send the data for more than x times, maybe the daemon should stop altogether
                     else:
-                        log.info('no diff, not sending data to the mgr.')
-                finally:
-                    self.system.lock.release()
-                    log.debug("lock released.")
-            time.sleep(20)
+                        self.system.previous_data = self.system.get_system()
+                else:
+                    log.info('no diff, not sending data to the mgr.')
+                self.system.lock.release()
+                log.debug("lock released.")
+            time.sleep(5)
