@@ -247,6 +247,8 @@ void BlueFS::_init_logger()
 	    "jlen", PerfCountersBuilder::PRIO_INTERESTING, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluefs_log_compactions, "log_compactions",
 		    "Compactions of the metadata log");
+  b.add_u64_counter(l_bluefs_log_write_count, "log_write_count",
+		    "Write op count to the metadata log");
   b.add_u64_counter(l_bluefs_logged_bytes, "logged_bytes",
 		    "Bytes written to the metadata log",
 		    "j",
@@ -255,6 +257,10 @@ void BlueFS::_init_logger()
 		    "Files written to WAL");
   b.add_u64_counter(l_bluefs_files_written_sst, "files_written_sst",
 		    "Files written to SSTs");
+  b.add_u64_counter(l_bluefs_write_count_wal, "write_count_wal",
+		    "Write op count to WAL");
+  b.add_u64_counter(l_bluefs_write_count_sst, "write_count_sst",
+		    "Write op count to SSTs");
   b.add_u64_counter(l_bluefs_bytes_written_wal, "bytes_written_wal",
 		    "Bytes written to WAL",
 		    "walb",
@@ -370,6 +376,13 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_read_prefetch_bytes, "read_prefetch_bytes",
 		    "Bytes requested in prefetch read mode",
 		     NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_write_count, "write_count",
+		    "Write requests processed");
+  b.add_u64_counter(l_bluefs_write_disk_count, "write_disk_count",
+		    "Write requests sent to disk");
+  b.add_u64_counter(l_bluefs_write_bytes, "write_bytes",
+		    "Bytes written", NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
  b.add_time_avg     (l_bluefs_compaction_lat, "compact_lat",
                     "Average bluefs log compaction latency",
@@ -3097,6 +3110,7 @@ void BlueFS::_flush_and_sync_log_core(int64_t runway)
   if (realign && realign != super.block_size)
     bl.append_zero(realign);
 
+  logger->inc(l_bluefs_log_write_count, 1);
   logger->inc(l_bluefs_logged_bytes, bl.length());
 
   if (true) {
@@ -3427,11 +3441,16 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
   h->pos = offset + length;
   length = bl.length();
 
+  logger->inc(l_bluefs_write_count, 1);
+  logger->inc(l_bluefs_write_bytes, length);
+
   switch (h->writer_type) {
   case WRITER_WAL:
+    logger->inc(l_bluefs_write_count_wal, 1);
     logger->inc(l_bluefs_bytes_written_wal, length);
     break;
   case WRITER_SST:
+    logger->inc(l_bluefs_write_count_sst, 1);
     logger->inc(l_bluefs_bytes_written_sst, length);
     break;
   }
@@ -3443,6 +3462,8 @@ int BlueFS::_flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool bu
   uint64_t bloff = 0;
   uint64_t bytes_written_slow = 0;
   while (length > 0) {
+    logger->inc(l_bluefs_write_disk_count, 1);
+
     uint64_t x_len = std::min(p->length - x_off, length);
     bufferlist t;
     t.substr_of(bl, bloff, x_len);
