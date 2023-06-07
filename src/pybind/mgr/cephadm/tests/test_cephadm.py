@@ -2088,7 +2088,7 @@ class TestCephadm(object):
 
         # mark host2 as maintenance and host3 as offline
         cephadm_module.inventory._inventory['host2']['status'] = 'maintenance'
-        cephadm_module.offline_hosts.add('host3')
+        cephadm_module.mark_host_offline('host3')
 
         # verify host2 and host3 are correctly marked as unreachable but host1 is not
         assert not cephadm_module.cache.is_host_unreachable('host1')
