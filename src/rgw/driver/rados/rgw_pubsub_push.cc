@@ -285,8 +285,8 @@ private:
   };
   CephContext* const cct;
   const std::string topic;
-  kafka::connection_ptr_t conn;
   const ack_level_t ack_level;
+  std::string conn_name;
 
 
   ack_level_t get_ack_level(const RGWHTTPArgs& args) {
@@ -309,9 +309,9 @@ public:
       CephContext* _cct) : 
         cct(_cct),
         topic(_topic),
-        conn(kafka::connect(_endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), args.get_optional("ca-location"), args.get_optional("mechanism"))) ,
         ack_level(get_ack_level(args)) {
-    if (!conn) { 
+    if (!kafka::connect(conn_name, _endpoint, get_bool(args, "use-ssl", false), get_bool(args, "verify-ssl", true), 
+          args.get_optional("ca-location"), args.get_optional("mechanism"))) {
       throw configuration_error("Kafka: failed to create connection to: " + _endpoint);
     }
   }
@@ -371,13 +371,12 @@ public:
   };
 
   int send_to_completion_async(CephContext* cct, const rgw_pubsub_s3_event& event, optional_yield y) override {
-    ceph_assert(conn);
     if (ack_level == ack_level_t::None) {
-      return kafka::publish(conn, topic, json_format_pubsub_event(event));
+      return kafka::publish(conn_name, topic, json_format_pubsub_event(event));
     } else {
       // note: dynamic allocation of Waiter is needed when this is invoked from a beast coroutine
       auto w = std::unique_ptr<Waiter>(new Waiter);
-      const auto rc = kafka::publish_with_confirm(conn, 
+      const auto rc = kafka::publish_with_confirm(conn_name, 
         topic,
         json_format_pubsub_event(event),
         std::bind(&Waiter::finish, w.get(), std::placeholders::_1));
@@ -391,7 +390,7 @@ public:
 
   std::string to_str() const override {
     std::string str("Kafka Endpoint");
-    str += kafka::to_string(conn);
+    str += "\nBroker: " + conn_name;
     str += "\nTopic: " + topic;
     return str;
   }
