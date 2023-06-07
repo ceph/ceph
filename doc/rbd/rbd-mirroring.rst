@@ -304,11 +304,10 @@ For example::
 
 .. tip:: ``rbd-mirror`` tunables are set by default to values suitable for
    mirroring an entire pool.  When using ``rbd-mirror`` to migrate single
-   volumes been clusters you may achieve substantial performance gains
-   by setting ``rbd_mirror_journal_max_fetch_bytes=33554432`` and
-   ``rbd_journal_max_payload_bytes=8388608`` within the ``[client]`` config
-   section of the local or centralized configuration.  Note that these
-   settings may allow ``rbd-mirror`` to present a substantial write workload
+   volumes between clusters you may achieve substantial performance gains
+   by setting ``rbd_journal_max_payload_bytes=8388608`` within the ``[client]``
+   config section of the local or centralized configuration.  Note that this
+   setting may allow ``rbd-mirror`` to present a substantial write workload
    to the destination cluster:  monitor cluster performance closely during
    migrations and test carefully before running multiple migrations in parallel.
 
