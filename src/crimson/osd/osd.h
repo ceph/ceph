@@ -90,6 +90,8 @@ class OSD final : public crimson::net::Dispatcher,
 
   ceph::mono_time startup_time;
 
+  seastar::shared_mutex handle_osd_map_lock;
+
   OSDSuperblock superblock;
 
   // Dispatcher methods
@@ -168,6 +170,8 @@ private:
 
   seastar::future<> handle_osd_map(crimson::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
+  seastar::future<> _handle_osd_map(crimson::net::ConnectionRef conn,
+                                    Ref<MOSDMap> m);
   seastar::future<> handle_pg_create(crimson::net::ConnectionRef conn,
 				     Ref<MOSDPGCreate2> m);
   seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,

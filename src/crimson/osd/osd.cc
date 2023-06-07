@@ -856,6 +856,25 @@ bool OSD::require_mon_peer(crimson::net::Connection *conn, Ref<Message> m)
 seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
                                       Ref<MOSDMap> m)
 {
+  /* Ensure that only one MOSDMap is processed at a time.  Allowing concurrent
+  * processing may eventually be worthwhile, but such an implementation would
+  * need to ensure (among other things)
+  * 1. any particular map is only processed once
+  * 2. PGAdvanceMap operations are processed in order for each PG
+  * As map handling is not presently a bottleneck, we stick to this
+  * simpler invariant for now.
+  * See https://tracker.ceph.com/issues/59165
+  */
+  return handle_osd_map_lock.lock().then([=, this] {
+    return _handle_osd_map(conn, m);
+  }).finally([=, this] {
+    return handle_osd_map_lock.unlock();
+  });
+}
+
+seastar::future<> OSD::_handle_osd_map(crimson::net::ConnectionRef conn,
+                                      Ref<MOSDMap> m)
+{
   logger().info("handle_osd_map {}", *m);
   if (m->fsid != superblock.cluster_fsid) {
     logger().warn("fsid mismatched");
