@@ -440,10 +440,14 @@ bs::error_code DataLogBackends::handle_init(entries_t e) noexcept {
     try {
       switch (gen.type) {
       case log_type::omap:
-	emplace(gen_id, new RGWDataChangesOmap(ioctx, datalog, gen_id, shards));
+	emplace(gen_id,
+    boost::intrusive_ptr<RGWDataChangesBE>(new RGWDataChangesOmap(ioctx, datalog, gen_id, shards))
+  );
 	break;
       case log_type::fifo:
-	emplace(gen_id, new RGWDataChangesFIFO(ioctx, datalog, gen_id, shards));
+	emplace(gen_id,
+    boost::intrusive_ptr<RGWDataChangesBE>(new RGWDataChangesFIFO(ioctx, datalog, gen_id, shards))
+  );
 	break;
       default:
 	lderr(datalog.cct)
