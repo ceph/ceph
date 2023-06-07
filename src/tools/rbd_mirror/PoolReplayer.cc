@@ -554,6 +554,18 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
     }
   }
 
+  if (is_remote) {
+    auto seconds = cct->_conf.get_val<std::chrono::seconds>(
+        "rbd_mirror_remote_osd_op_timeout").count();
+    r = cct->_conf.set_val("rados_osd_op_timeout", std::to_string(seconds));
+    if (r < 0) {
+      derr << "failed to set rados_osd_op_timeout: " << seconds
+           << ", r=" << r << dendl;
+      return r;
+    }
+    dout(10) << "setting rados_osd_op_timeout: " << seconds << dendl;
+  }
+
   // disable unnecessary librbd cache
   cct->_conf.set_val_or_die("rbd_cache", "false");
   cct->_conf.apply_changes(nullptr);
