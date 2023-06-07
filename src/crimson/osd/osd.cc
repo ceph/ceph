@@ -707,7 +707,7 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
                                                 m=std::move(m), &dispatched] {
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
-      return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
+      return handle_osd_map(boost::static_pointer_cast<MOSDMap>(m));
     case CEPH_MSG_OSD_OP:
       return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
     case MSG_OSD_PG_CREATE2:
@@ -853,8 +853,7 @@ bool OSD::require_mon_peer(crimson::net::Connection *conn, Ref<Message> m)
   return true;
 }
 
-seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
-                                      Ref<MOSDMap> m)
+seastar::future<> OSD::handle_osd_map(Ref<MOSDMap> m)
 {
   /* Ensure that only one MOSDMap is processed at a time.  Allowing concurrent
   * processing may eventually be worthwhile, but such an implementation would
@@ -865,15 +864,14 @@ seastar::future<> OSD::handle_osd_map(crimson::net::ConnectionRef conn,
   * simpler invariant for now.
   * See https://tracker.ceph.com/issues/59165
   */
-  return handle_osd_map_lock.lock().then([=, this] {
-    return _handle_osd_map(conn, m);
-  }).finally([=, this] {
+  return handle_osd_map_lock.lock().then([this, m] {
+    return _handle_osd_map(m);
+  }).finally([this] {
     return handle_osd_map_lock.unlock();
   });
 }
 
-seastar::future<> OSD::_handle_osd_map(crimson::net::ConnectionRef conn,
-                                      Ref<MOSDMap> m)
+seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 {
   logger().info("handle_osd_map {}", *m);
   if (m->fsid != superblock.cluster_fsid) {
