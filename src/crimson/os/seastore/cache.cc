@@ -1098,6 +1098,7 @@ record_t Cache::prepare_record(
 
     i->prepare_write();
     i->set_io_wait();
+    i->prepare_commit();
 
     assert(i->get_version() > 0);
     auto final_crc = i->get_crc32c();
@@ -1200,6 +1201,7 @@ record_t Cache::prepare_record(
 
     bufferlist bl;
     i->prepare_write();
+    i->prepare_commit();
     bl.append(i->get_bptr());
     if (i->get_type() == extent_types_t::ROOT) {
       ceph_assert(0 == "ROOT never gets written as a fresh block");
@@ -1240,6 +1242,7 @@ record_t Cache::prepare_record(
     assert(!i->is_inline());
     get_by_ext(efforts.fresh_ool_by_ext,
                i->get_type()).increment(i->get_length());
+    i->prepare_commit();
     if (is_backref_mapped_extent_node(i)) {
       alloc_delta.alloc_blk_ranges.emplace_back(
 	i->get_paddr(),
