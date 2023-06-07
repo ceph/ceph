@@ -108,8 +108,9 @@ class Device(object):
         if os.path.islink(self.path):
             self.symlink = self.path
             real_path = os.path.realpath(self.path)
-            # check if we are not a device mapper
-            if "dm-" not in real_path:
+            lv = lvm.get_single_lv(filters={'lv_path': self.path})
+            # check if we are not a device mapper and not a lv
+            if "dm-" not in real_path and not lv:
                 self.path = real_path
         if not sys_info.devices:
             if self.path:

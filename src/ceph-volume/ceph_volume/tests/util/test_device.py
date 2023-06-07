@@ -311,6 +311,22 @@ class TestDevice(object):
         assert disk.available
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
+    @patch('ceph_volume.util.device.os.path.realpath')
+    @patch('ceph_volume.util.device.os.path.islink')
+    def test_reject_lv_symlink_to_device(self,
+                                         m_os_path_islink,
+                                         m_os_path_realpath,
+                                         device_info,
+                                         fake_call):
+        m_os_path_islink.return_value = True
+        m_os_path_realpath.return_value = '/dev/mapper/vg-lv'
+        lv = {"lv_path": "/dev/vg/lv", "vg_name": "vg", "name": "lv"}
+        lsblk = {"TYPE": "lvm", "NAME": "vg-lv"}
+        device_info(lv=lv,lsblk=lsblk)
+        disk = device.Device("/dev/vg/lv")
+        assert disk.path == '/dev/vg/lv'
+
+    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_readonly_device(self, fake_call, device_info):
         data = {"/dev/cdrom": {"ro": 1}}
         lsblk = {"TYPE": "disk", "NAME": "cdrom"}
