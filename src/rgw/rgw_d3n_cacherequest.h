@@ -114,6 +114,7 @@ struct D3nL1CacheRequest {
       auto ec = boost::system::error_code{-ret, boost::system::system_category()};
       ceph::async::post(std::move(p), ec, bufferlist{});
     } else {
+      // coverity[RESOURCE_LEAK:FALSE]
       (void)p.release();
     }
     return init.result.get();
