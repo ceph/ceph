@@ -1,5 +1,8 @@
-from redfish.rest.v1 import ServerDownOrUnreachableError
+from redfish.rest.v1 import ServerDownOrUnreachableError, \
+    SessionCreationError, \
+    InvalidCredentialsError
 import redfish
+import sys
 from util import logger
 
 log = logger(__name__, level=10)
@@ -23,8 +26,12 @@ class RedFishClient:
         try:
             self.redfish_obj.login(auth="session")
             log.info(f"Logging to redfish api at {self.host} with user: {self.username}")
-        except ServerDownOrUnreachableError as e:
-            log.error(f"Server not reachable or does not support RedFish {e}", e)
+            return self.redfish_obj
+        except InvalidCredentialsError as e:
+            log.error(f"Invalid credentials for {self.username} at {self.host}:\n{e}")
+        except (SessionCreationError, ServerDownOrUnreachableError) as e:
+            log.error(f"Server not reachable or does not support RedFish:\n{e}")
+        sys.exit(1)
 
     def get_path(self, path):
         try:
