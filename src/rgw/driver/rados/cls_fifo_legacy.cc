@@ -114,8 +114,8 @@ void update_meta(lr::ObjectWriteOperation* op, const fifo::objv& objv,
   um.head_part_num = update.head_part_num();
   um.min_push_part_num = update.min_push_part_num();
   um.max_push_part_num = update.max_push_part_num();
-  um.journal_entries_add = std::move(update).journal_entries_add();
-  um.journal_entries_rm = std::move(update).journal_entries_rm();
+  um.journal_entries_add = update.journal_entries_add();
+  um.journal_entries_rm = update.journal_entries_rm();
 
   cb::list in;
   encode(um, in);
