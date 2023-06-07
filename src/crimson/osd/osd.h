@@ -168,10 +168,8 @@ private:
 
   bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
 
-  seastar::future<> handle_osd_map(crimson::net::ConnectionRef conn,
-                                   Ref<MOSDMap> m);
-  seastar::future<> _handle_osd_map(crimson::net::ConnectionRef conn,
-                                    Ref<MOSDMap> m);
+  seastar::future<> handle_osd_map(Ref<MOSDMap> m);
+  seastar::future<> _handle_osd_map(Ref<MOSDMap> m);
   seastar::future<> handle_pg_create(crimson::net::ConnectionRef conn,
 				     Ref<MOSDPGCreate2> m);
   seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
