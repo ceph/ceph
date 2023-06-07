@@ -1,5 +1,6 @@
 #pragma once
 
+#include <aio.h>
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
 
@@ -10,11 +11,11 @@ public:
     SSDDriver(Partition& _partition_info);
     virtual ~SSDDriver();
 
-    virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) = 0;
+    virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
-    virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) = 0;
+    virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) override;
     virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) = 0;
-    virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key) = 0;
+    virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key) override;
     virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) = 0;
     virtual int set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) = 0;
     virtual int update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) = 0;
@@ -37,6 +38,8 @@ protected:
     std::unordered_map<std::string, Entry> entries;
     Partition partition_info;
     uint64_t free_space;
+    uint64_t outstanding_write_size;
+    CephContext* cct;
 
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
