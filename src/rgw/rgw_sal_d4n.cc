@@ -438,7 +438,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   /* Local cache check */
   if (source->driver->get_policy_driver()->cacheDriver->key_exists(dpp, oid)) { // Entire object for now -Sam
     ret = source->driver->get_policy_driver()->cacheDriver->get(dpp, source->get_key().get_oid(), ofs, len, bl, source->get_attrs());
-    //cb->handle_data(bl, ofs, len);
+    cb->handle_data(bl, ofs, len);
   } else {
     /* Block directory check */
     int getDirReturn = source->driver->get_block_dir()->get_value(source->driver->get_cache_block()); 
@@ -464,7 +464,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 	  ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation succeeded." << dendl;
 	}
 	
-	//cb->handle_data(bl, ofs, len);
+	cb->handle_data(bl, ofs, len);
       }
     } else {
       /* Write tier retrieval */
@@ -492,7 +492,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 	    ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation succeeded." << dendl;
 	  }
 	  
-	  //cb->handle_data(bl, ofs, len);
+	  cb->handle_data(bl, ofs, len);
 	}
       } else {
 	/* Backend store retrieval */
