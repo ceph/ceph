@@ -5,6 +5,7 @@ from util import Logger
 
 log = Logger(__name__)
 
+
 class Reporter:
     def __init__(self, system, observer_url):
         self.system = system
