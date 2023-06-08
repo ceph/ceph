@@ -1,9 +1,7 @@
-from util import Config
-
 class System:
     def __init__(self, **kw):
         self._system = {}
-        self.config: Config = kw['config']
+        self.config = kw['config']
 
     def get_system(self):
         raise NotImplementedError()

@@ -2,19 +2,21 @@ from system import System
 from redfish_client import RedFishClient
 from threading import Thread, Lock
 from time import sleep
-from util import logger
+from util import Logger
 
-log = logger(__name__)
+log = Logger(__name__)
 
 
 class RedfishSystem(System):
     def __init__(self, **kw):
+        super().__init__(**kw)
         self.host = kw.get('host')
         self.username = kw.get('username')
         self.password = kw.get('password')
         self.system_endpoint = kw.get('system_endpoint', '/Systems/1')
-        log.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
+        log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
         self.client = RedFishClient(self.host, self.username, self.password)
+
         self._system = {}
         self.run = False
         self.thread = None
@@ -24,7 +26,7 @@ class RedfishSystem(System):
         self.lock = Lock()
 
     def start_client(self):
-        log.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
+        log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
         self.client = RedFishClient(self.host, self.username, self.password)
         self.client.login()
 
@@ -93,9 +95,9 @@ class RedfishSystem(System):
         #  - caching logic
         try:
             while self.run:
-                log.debug("waiting for a lock.")
+                log.logger.debug("waiting for a lock.")
                 self.lock.acquire()
-                log.debug("lock acquired.")
+                log.logger.debug("lock acquired.")
                 try:
                     self._update_system()
                     # following calls in theory can be done in parallel
@@ -109,9 +111,9 @@ class RedfishSystem(System):
                     sleep(5)
                 finally:
                     self.lock.release()
-                    log.debug("lock released.")
+                    log.logger.debug("lock released.")
         # Catching 'Exception' is probably not a good idea (devel only)
         except Exception as e:
-            log.error(f"Error detected, logging out from redfish api.\n{e}")
+            log.logger.error(f"Error detected, logging out from redfish api.\n{e}")
             self.client.logout()
             raise

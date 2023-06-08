@@ -1,7 +1,7 @@
 import cherrypy
 from redfish_dell import RedfishDell
 from reporter import Reporter
-from util import logger
+from util import Config, Logger
 import sys
 
 # for devel purposes
@@ -9,21 +9,43 @@ import os
 DEVEL_ENV_VARS = ['REDFISH_HOST',
                   'REDFISH_USERNAME',
                   'REDFISH_PASSWORD']
+
+DEFAULT_CONFIG = {
+    'reporter': {
+        'check_interval': 5,
+        'push_data_max_retries': 30,
+    },
+    'system': {
+        'refresh_interval': 5
+    },
+    'server': {
+        'port': 8080,
+    },
+    'logging': {
+        'level': 20,
+    }
+}
+
 for env_var in DEVEL_ENV_VARS:
     if os.environ.get(env_var) is None:
         print(f"{env_var} environment variable must be set.")
         sys.exit(1)
 
-log = logger(__name__)
+config = Config(default_config=DEFAULT_CONFIG)
 
+log = Logger(__name__, level=config.logging['level'])
 # must be passed as arguments
 host = os.environ.get('REDFISH_HOST')
 username = os.environ.get('REDFISH_USERNAME')
 password = os.environ.get('REDFISH_PASSWORD')
 
 # create the redfish system and the obsever
-log.info("Server initialization...")
-system = RedfishDell(host=host, username=username, password=password, system_endpoint='/Systems/System.Embedded.1')
+log.logger.info("Server initialization...")
+system = RedfishDell(host=host,
+                     username=username,
+                     password=password,
+                     system_endpoint='/Systems/System.Embedded.1',
+                     config=config)
 reporter_agent = Reporter(system, "http://127.0.0.1:8000")
 
 
@@ -111,6 +133,17 @@ class Stop:
         return 'node-proxy daemon stopped'
 
 
+class ConfigReload:
+    exposed = True
+
+    def __init__(self, config):
+        self.config = config
+
+    def POST(self):
+        self.config['node_proxy'].reload()
+        return 'node-proxy config reloaded'
+
+
 class API:
     exposed = True
 
@@ -118,6 +151,7 @@ class API:
     shutdown = Shutdown()
     start = Start()
     stop = Stop()
+    config_reload = ConfigReload(cherrypy.config)
 
     def GET(self):
         return 'use /system'
@@ -125,12 +159,13 @@ class API:
 
 if __name__ == '__main__':
     cherrypy.config.update({
-        'server.socket_port': 8080
+        'node_proxy': config,
+        'server.socket_port': config.server['port']
     })
-    config = {'/': {
+    c = {'/': {
         'request.methods_with_bodies': ('POST', 'PUT', 'PATCH'),
         'request.dispatch': cherrypy.dispatch.MethodDispatcher()
     }}
     system.start_update_loop()
     reporter_agent.run()
-    cherrypy.quickstart(API(), config=config)
+    cherrypy.quickstart(API(), config=c)

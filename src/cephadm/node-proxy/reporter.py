@@ -1,9 +1,9 @@
 from threading import Thread
 import requests
 import time
-from util import logger
+from util import Logger
 
-log = logger(__name__, level=10)
+log = Logger(__name__)
 
 class Reporter:
     def __init__(self, system, observer_url):
@@ -27,22 +27,22 @@ class Reporter:
             # that have changed to minimize the traffic in
             # dense clusters
             if self.system.data_ready:
-                log.debug("waiting for a lock.")
+                log.logger.debug("waiting for a lock.")
                 self.system.lock.acquire()
-                log.debug("lock acquired.")
+                log.logger.debug("lock acquired.")
                 if not self.system.get_system() == self.system.previous_data:
-                    log.info('data has changed since last iteration.')
+                    log.logger.info('data has changed since last iteration.')
                     d = self.system.get_system()
                     try:
                         requests.post(f"{self.observer_url}/fake_endpoint", json=d)
                     except requests.exceptions.RequestException as e:
-                        log.error(f"The reporter couldn't send data to the mgr: {e}")
+                        log.logger.error(f"The reporter couldn't send data to the mgr: {e}")
                         # Need to add a new parameter 'max_retries' to the reporter if it can't
                         # send the data for more than x times, maybe the daemon should stop altogether
                     else:
                         self.system.previous_data = self.system.get_system()
                 else:
-                    log.info('no diff, not sending data to the mgr.')
+                    log.logger.info('no diff, not sending data to the mgr.')
                 self.system.lock.release()
-                log.debug("lock released.")
+                log.logger.debug("lock released.")
             time.sleep(5)

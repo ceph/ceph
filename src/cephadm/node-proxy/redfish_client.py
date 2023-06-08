@@ -3,16 +3,16 @@ from redfish.rest.v1 import ServerDownOrUnreachableError, \
     InvalidCredentialsError
 import redfish
 import sys
-from util import logger
+from util import Logger
 
-log = logger(__name__, level=10)
+log = Logger(__name__)
 
 class RedFishClient:
 
     PREFIX = '/redfish/v1'
 
     def __init__(self, host, username, password):
-        log.info(f"redfish client initialization...")
+        log.logger.info("redfish client initialization...")
         self.host = host
         self.username = username
         self.password = password
@@ -24,27 +24,28 @@ class RedFishClient:
                                                   password=self.password,
                                                   default_prefix=self.PREFIX)
         try:
+            # TODO: add a retry? check for a timeout setting
             self.redfish_obj.login(auth="session")
-            log.info(f"Logging to redfish api at {self.host} with user: {self.username}")
+            log.logger.info(f"Logging to redfish api at {self.host} with user: {self.username}")
             return self.redfish_obj
         except InvalidCredentialsError as e:
-            log.error(f"Invalid credentials for {self.username} at {self.host}:\n{e}")
+            log.logger.error(f"Invalid credentials for {self.username} at {self.host}:\n{e}")
         except (SessionCreationError, ServerDownOrUnreachableError) as e:
-            log.error(f"Server not reachable or does not support RedFish:\n{e}")
+            log.logger.error(f"Server not reachable or does not support RedFish:\n{e}")
         sys.exit(1)
 
     def get_path(self, path):
         try:
             if self.PREFIX not in path:
                 path = f"{self.PREFIX}{path}"
-            log.debug(f"getting: {path}")
+            log.logger.debug(f"getting: {path}")
             response = self.redfish_obj.get(path)
             return response.dict
         except Exception as e:
             #TODO
-            log.error(f"Error detected.\n{e}")
+            log.logger.error(f"Error detected.\n{e}")
             pass
 
     def logout(self):
-        log.info('logging out...')
+        log.logger.info('logging out...')
         self.redfish_obj.logout()
