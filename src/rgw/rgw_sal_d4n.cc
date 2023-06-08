@@ -421,7 +421,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
                         RGWGetDataCB* cb, optional_yield y) 
 {
   /* Execute cache replacement policy */
-  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(source->driver->get_cache_block(), 
+  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(dpp, source->driver->get_cache_block(), 
 		    source->driver->get_policy_driver()->cacheDriver);
   
   if (policyRet < 0) {
