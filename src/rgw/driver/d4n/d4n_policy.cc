@@ -203,12 +203,47 @@ int LFUDAPolicy::get_min_avg_weight() {
   return weight;
 }
 
+int LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
+  std::unordered_map<string key, Entry> entries = cacheNode->list_entries(dpp);
+  int minWeight = INT_MAX;
+  int localWeight = -1;
+
+  for (auto it = map.begin(); it != map.end(); ++it) { // make faster by caching for future? -Sam
+    std::string localWeightStr = cacheNode->get_attr(dpp, it->second.key, "localWeight"); // change to block name eventually -Sam
+    int localWeight = -1;
+
+    if (localWeightStr.empty()) { // maybe do this in some sort of initialization procedure instead of here? -Sam
+      /* Local weight hasn't been set */
+      int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(0)); // not the correct default value -Sam
+
+      if (ret < 0)
+	return -1;
+    } else if (localWeight < minWeight) {
+      minWeight = std::stoi(localWeightStr);
+    }
+  }
+
+  return minWeight;
+}
+
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) {
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
-  int localWeight = std::stoi(cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight")); // change to block name eventually -Sam
+  std::string localWeightStr = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight"); // change to block name eventually -Sam
+  int localWeight = -1;
 
   if (!client.is_connected()) {
     find_client(&client);
+  }
+
+  if (localWeightStr.empty()) {
+    /* Local weight hasn't been set */
+    int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(0)); // not the correct default value -Sam
+    localWeight = 0;
+
+    if (ret < 0)
+      return -1;
+  } else {
+    localWeight = std::stoi(localWeightStr);
   }
 
   if (exist_key(key)) {
@@ -216,15 +251,15 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 
     if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */
       localWeight += age;
-    } else {
+    //} else {
       uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
-      while (freeSpace < block->size) {
+      //while (freeSpace < block->size) {
 	int newSpace = eviction(dpp, cacheNode);
 	
 	if (newSpace > 0)
 	  freeSpace += newSpace;
-      }
+      //}
 
       std::string hosts;
 
