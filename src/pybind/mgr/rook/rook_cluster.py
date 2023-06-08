@@ -28,7 +28,6 @@ from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, P
 from ceph.utils import datetime_now
 from ceph.deployment.drive_selection.matchers import SizeMatcher
 from nfs.cluster import create_ganesha_pool
-from nfs.module import Module
 from nfs.export import NFSRados
 from mgr_module import NFS_POOL_NAME
 from mgr_util import merge_dicts
@@ -1092,7 +1091,6 @@ class RookCluster(object):
         #      PlacementSpec.
         assert spec.service_id, "service id in NFS service spec cannot be an empty string or None " # for mypy typing
         service_id = spec.service_id
-        mgr_module = cast(Module, mgr)
         count = spec.placement.count or 1
         def _update_nfs(new: cnfs.CephNFS) -> cnfs.CephNFS:
             new.spec.server.active = count
@@ -1120,7 +1118,7 @@ class RookCluster(object):
             return rook_nfsgw
 
         create_ganesha_pool(mgr)
-        NFSRados(mgr_module.rados, service_id).write_obj('', f'conf-nfs.{spec.service_id}')
+        NFSRados(mgr.rados, service_id).write_obj('', f'conf-nfs.{spec.service_id}')
         return self._create_or_patch(cnfs.CephNFS, 'cephnfses', service_id,
                 _update_nfs, _create_nfs)
 
