@@ -593,6 +593,51 @@ int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, std::string
   return r;
 }
 
+int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, bufferlist *bl)
+{
+  auto data_len = bl->length();
+
+  auto target_end = off + len;
+
+  bufferlist newbl;
+
+  uint64_t end = off + data_len;
+  uint64_t cur_block = fscrypt_block_from_ofs(pos);
+  uint64_t block_off = fscrypt_block_start(pos);
+
+  while (pos < target_end) {
+    uint64_t read_end = std::min(end, block_off + FSCRYPT_BLOCK_SIZE);
+    uint64_t read_end_aligned = fscrypt_align_ofs(read_end);
+    auto chunk_len = read_end_aligned - block_off;
+
+    int r = calc_fdata_key(cur_block);
+    if (r  < 0) {
+      break;
+    }
+
+    bufferlist chunk;
+    chunk.append_hole(chunk_len);
+
+    r = decrypt(bl->c_str() + pos - off, chunk_len,
+                chunk.c_str(), chunk_len);
+    if (r < 0) {
+      return r;
+    }
+
+    uint64_t needed_end = std::min(target_end, read_end);
+    int needed_len = needed_end - needed_pos;
+    chunk.splice(fscrypt_ofs_in_block(needed_pos), needed_len, &newbl);
+
+    pos = read_end;
+    ++cur_block;
+    block_off += FSCRYPT_BLOCK_SIZE;
+  }
+
+  bl->swap(newbl);
+
+  return 0;
+}
+
 FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
                                   std::function<FSCryptDenc *()> gen_denc)
 {
@@ -651,7 +696,7 @@ FSCryptFNameDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyVa
   return denc;
 }
 
-FSCryptDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
+FSCryptFDataDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
 {
   auto pdenc = init_denc(ctx, kv,
                          []() { return new FSCryptFDataDenc(); });
@@ -659,6 +704,26 @@ FSCryptDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidat
     return nullptr;
   }
 
-  return std::shared_ptr<FSCryptDenc>(pdenc);
+  return std::shared_ptr<FSCryptFDataDenc>((FSCryptFDataDenc *)pdenc);
 }
 
+void FSCrypt::prepare_data_read(FSCryptContextRef& ctx,
+                                FSCryptKeyValidatorRef *kv,
+                                uint64_t off,
+                                uint64_t len,
+                                uint64_t file_raw_size,
+                                uint64_t *read_start,
+                                uint64_t *read_len,
+                                FSCryptFDataDencRef *denc)
+{
+  *denc = get_fdata_denc(ctx, kv);
+
+  auto& fscrypt_denc = *denc;
+
+  *read_start = (!fscrypt_denc ? off : fscrypt_block_start(off));
+  uint64_t end = off + len;
+  if (fscrypt_denc) {
+    end = fscrypt_align_ofs(end);
+  }
+  *read_len = end - *read_start;
+}

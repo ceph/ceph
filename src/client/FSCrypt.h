@@ -216,7 +216,11 @@ using FSCryptFNameDencRef = std::shared_ptr<FSCryptFNameDenc>;
 class FSCryptFDataDenc : public FSCryptDenc {
 public:
   FSCryptFDataDenc();
+
+  int decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, bufferlist *bl);
 };
+
+using FSCryptFDataDencRef = std::shared_ptr<FSCryptFDataDenc>;
 
 class FSCryptKeyHandler {
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyHandler");
@@ -274,5 +278,14 @@ public:
   }
 
   FSCryptFNameDencRef get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key);
-  FSCryptDencRef get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
+  FSCryptFDataDencRef get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv);
+
+  void prepare_data_read(FSCryptContextRef& ctx,
+                         FSCryptKeyValidatorRef *kv,
+                         uint64_t off,
+                         uint64_t len,
+                         uint64_t file_raw_size,
+                         uint64_t *read_start,
+                         uint64_t *read_len,
+                         FSCryptFDataDencRef *denc);
 };

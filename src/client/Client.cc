@@ -10972,15 +10972,26 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     return 0;
   if (len == 0)
     return 0;
+
   if (off + len > in->size) {
     len = in->size - off;    
   }
 
-  auto dest_len = std::min(len, effective_size - off);
+  auto target_len = std::min(len, effective_size - off);
 
   ldout(cct, 10) << " min_bytes=" << f->readahead.get_min_readahead_size()
                  << " max_bytes=" << f->readahead.get_max_readahead_size()
                  << " max_periods=" << conf->client_readahead_max_periods << dendl;
+
+  uint64_t read_start;
+  uint64_t read_len;
+
+  FSCryptFDataDencRef fscrypt_denc;
+  fscrypt->prepare_data_read(in->fscrypt_ctx,
+                             &in->fscrypt_key_validator,
+                             off, len, in->size,
+                             &read_start, &read_len,
+                             &fscrypt_denc);
 
   // read (and possibly block)
   int r = 0;
@@ -10995,8 +11006,8 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   }
 
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-			      off, len, bl, 0, io_finish.get());
-
+			      read_start, read_len, bl, 0, io_finish.get());
+ 
   if (onfinish != nullptr) {
     // Release C_Read_Async_Finisher from managed pointer, either
     // file_read will result in non-blocking complete, or we need to complete
@@ -11026,41 +11037,10 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   if (r >= 0) {
     auto len = r;
     if (fscrypt_denc) {
-      bufferlist newbl;
-
-      uint64_t pos = off;
-      uint64_t end = off + len;
-      uint64_t dest_end = off + dest_len;
-
-      while (pos < off + len) {
-        uint64_t cur_block = fscrypt_block_from_ofs(pos);
-        uint64_t block_off = fscrypt_block_start(pos);
-        uint64_t read_end = std::min(end, block_off + FSCRYPT_BLOCK_SIZE);
-        uint64_t read_end_aligned = fscrypt_align_ofs(read_end);
-        int read_len = read_end_aligned - block_off;
-
-        r = fscrypt_denc->calc_fdata_key(cur_block);
-        if (r  < 0) {
-          break;
-        }
-
-        bufferlist chunk;
-        chunk.append_hole(read_len);
-
-        r = fscrypt_denc->decrypt(bl->c_str() + pos, read_len,
-                                  chunk.c_str(), read_len);
-        if (r < 0) {
-          break;
-        }
-
-        uint64_t needed_end = std::min(dest_end, read_end);
-        int needed_len = needed_end - pos;
-        chunk.splice(fscrypt_ofs_in_block(pos), needed_len, &newbl);
-
-        pos = read_end;
+      r = fscrypt_denc->decrypt_bl(off, target_len, read_start, bl);
+      if (r < 0) {
+        ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       }
-
-      bl->swap(newbl);
     }
 
     update_read_io_size(bl->length());
