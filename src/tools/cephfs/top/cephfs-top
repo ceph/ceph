@@ -265,7 +265,7 @@ class FSTop(FSTopBase):
         super(FSTop, self).__init__()
         self.rados = None
         self.stdscr = None  # curses instance
-        self.current_screen = ""
+        self.active_screen = ""
         self.client_name = args.id
         self.cluster_name = args.cluster
         self.conffile = args.conffile
@@ -383,7 +383,7 @@ class FSTop(FSTopBase):
         stdscr.clear()
         h, w = stdscr.getmaxyx()
         title = ['No filesystem available',
-                 'Press "q" to go back to home (all filesystem info) screen']
+                 'Press "q" to go back to home (All Filesystem Info) screen']
         pos_x1 = w // 2 - len(title[0]) // 2
         pos_x2 = w // 2 - len(title[1]) // 2
         stdscr.addstr(1, pos_x1, title[0], curses.A_STANDOUT | curses.A_BOLD)
@@ -411,10 +411,10 @@ class FSTop(FSTopBase):
                 endmenu = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if isinstance(current_states['last_fs'], list):
-                    self.run_all_display()
-                else:
+                if fs_list and self.active_screen == FS_TOP_FS_SELECTED_APP:
                     self.run_display()
+                else:
+                    self.run_all_display()
                 endmenu = True
 
             try:
@@ -451,19 +451,19 @@ class FSTop(FSTopBase):
                 curr_row1 += 1
             elif key == curses.KEY_ENTER or key in [10, 13]:
                 self.stdscr.erase()
-                last_fs = current_states["last_fs"]
                 if curr_row1 != len(field_menu) - 1:
                     current_states["last_field"] = (field_menu[curr_row1].split('='))[0]
                 else:
                     current_states["last_field"] = 'chit'
-                if isinstance(last_fs, list):
+                self.header.erase()  # erase the previous text
+                if self.active_screen == FS_TOP_ALL_FS_APP:
                     self.run_all_display()
                 else:
                     self.run_display()
                 endwhile = True
             elif key == ord('q'):
                 self.stdscr.erase()
-                if isinstance(current_states['last_fs'], list):
+                if self.active_screen == FS_TOP_ALL_FS_APP:
                     self.run_all_display()
                 else:
                     self.run_display()
@@ -557,7 +557,8 @@ class FSTop(FSTopBase):
                     elif int(key) != 0:
                         current_states["limit"] = key[:-1]
                 self.stdscr.erase()
-                if isinstance(current_states['last_fs'], list):
+                self.header.erase()  # erase the previous text
+                if self.active_screen == FS_TOP_ALL_FS_APP:
                     self.run_all_display()
                 else:
                     self.run_display()
@@ -885,7 +886,9 @@ class FSTop(FSTopBase):
                                                                  num_mounts=num_mounts,
                                                                  num_kclients=num_kclients,
                                                                  num_libs=num_libs), curses.A_DIM)
-        self.header.addstr(4, 0, help, curses.A_DIM)
+        self.header.addstr(4, 0, f"Filters: Sort - {current_states['last_field']}, "
+                           f"Limit - {current_states['limit']}", curses.A_DIM)
+        self.header.addstr(5, 0, help, curses.A_DIM)
         return True
 
     def run_display(self):
@@ -893,7 +896,7 @@ class FSTop(FSTopBase):
         self.header.erase()
         self.fsstats.erase()
 
-        self.current_screen = FS_TOP_FS_SELECTED_APP
+        self.active_screen = FS_TOP_FS_SELECTED_APP
         screen_title = "Selected Filesystem Info"
         help_commands = "m - select a filesystem | s - sort menu | l - limit number of clients"\
                         " | r - reset to default | q - home (All Filesystem Info) screen"
@@ -1016,10 +1019,10 @@ class FSTop(FSTopBase):
 
     def run_all_display(self):
         # clear text from the previous screen
-        if self.current_screen == FS_TOP_FS_SELECTED_APP:
+        if self.active_screen == FS_TOP_FS_SELECTED_APP:
             self.header.erase()
 
-        self.current_screen = FS_TOP_ALL_FS_APP
+        self.active_screen = FS_TOP_ALL_FS_APP
         screen_title = "All Filesystem Info"
         curses.init_pair(2, curses.COLOR_CYAN, -1)
 
