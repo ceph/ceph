@@ -19,17 +19,18 @@ class CachePolicy {
     CephContext* cct;
 
     CachePolicy() : addr() {}
+    virtual ~CachePolicy() = default;
 
-    void init(CephContext *_cct) {
+    virtual void init(CephContext *_cct) {
       cct = _cct;
       addr.host = cct->_conf->rgw_d4n_host;
       addr.port = cct->_conf->rgw_d4n_port;
     }
-    int find_client(cpp_redis::client *client);
-    int exist_key(std::string key);
-    Address get_addr() { return addr; }
-    int get_block(CacheBlock* block, rgw::cal::CacheDriver* cacheNode) { return 0; }
-    uint64_t eviction(rgw::cal::CacheDriver* cacheNode) { return 0; }
+    virtual int find_client(cpp_redis::client *client) = 0;
+    virtual int exist_key(std::string key) = 0;
+    virtual Address get_addr() { return addr; }
+    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) = 0;
+    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) = 0;
 };
 
 class LFUDAPolicy : public CachePolicy {
@@ -39,15 +40,19 @@ class LFUDAPolicy : public CachePolicy {
   public:
     LFUDAPolicy() : CachePolicy() {}
 
+    // maybe collapse these setters and getters into one? -Sam
     int set_age(int age);
     int get_age();
     int set_global_weight(std::string key, int weight);
     int get_global_weight(std::string key);
     int set_min_avg_weight(size_t weight, std::string cacheLocation);
     int get_min_avg_weight();
+    int find_victim(cpp_redis::client *client);
 
-    int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode);
-    uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode);
+    virtual int find_client(cpp_redis::client *client) override { return CachePolicy::find_client(client); }
+    virtual int exist_key(std::string key) override { return CachePolicy::exist_key(key); }
+    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) override;
+    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) override;
 };
 
 class PolicyDriver {
