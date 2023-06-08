@@ -31,6 +31,7 @@ class RedisDriver : public CacheDriver {
 
     /* Entry */
     virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) override;
+    virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) override;
     virtual size_t get_num_entries(const DoutPrefixProvider* dpp) override;
 
     /* Partition */
