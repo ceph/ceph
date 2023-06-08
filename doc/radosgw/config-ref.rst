@@ -296,3 +296,16 @@ implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
 .. _Barbican: ../barbican
 .. _Encryption: ../encryption
 .. _HTTP Frontends: ../frontends
+
+D4N Settings
+============
+
+D4N is a caching architecture that utilizes Redis to speed up S3 object storage 
+operations by establishing shared databases between different RGW access points.
+
+Currently, the architecture can only function on one Redis instance at a time. 
+The address is configurable and can be changed by accessing the parameters 
+below.
+
+.. confval:: rgw_d4n_host
+.. confval:: rgw_d4n_port
