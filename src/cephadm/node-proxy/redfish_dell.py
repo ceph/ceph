@@ -1,21 +1,22 @@
 from redfish_system import RedfishSystem
 from util import Logger, normalize_dict
+from typing import Dict, Any
 
 log = Logger(__name__)
 
 
 class RedfishDell(RedfishSystem):
-    def __init__(self, **kw):
+    def __init__(self, **kw: Any) -> None:
         if kw.get('system_endpoint') is None:
             kw['system_endpoint'] = '/Systems/System.Embedded.1'
         super().__init__(**kw)
 
-    def _update_network(self):
+    def _update_network(self) -> None:
         net_path = self._system['EthernetInterfaces']['@odata.id']
         log.logger.info("Updating network")
         network_info = self.client.get_path(net_path)
         self._system['network'] = {}
-        result = dict()
+        result: Dict[str, Dict[str, Dict]] = dict()
         for interface in network_info['Members']:
             interface_path = interface['@odata.id']
             interface_info = self.client.get_path(interface_path)
@@ -27,12 +28,12 @@ class RedfishDell(RedfishSystem):
             result[interface_id]['status'] = interface_info['Status']
         self._system['network'] = normalize_dict(result)
 
-    def _update_processors(self):
+    def _update_processors(self) -> None:
         cpus_path = self._system['Processors']['@odata.id']
         log.logger.info("Updating processors")
         cpus_info = self.client.get_path(cpus_path)
         self._system['processors'] = {}
-        result = dict()
+        result: Dict[str, Dict[str, Dict]] = dict()
         for cpu in cpus_info['Members']:
             cpu_path = cpu['@odata.id']
             cpu_info = self.client.get_path(cpu_path)
@@ -47,11 +48,11 @@ class RedfishDell(RedfishSystem):
             result[cpu_id]['manufacturer'] = cpu_info['Manufacturer']
         self._system['processors'] = normalize_dict(result)
 
-    def _update_storage(self):
+    def _update_storage(self) -> None:
         storage_path = self._system['Storage']['@odata.id']
         log.logger.info("Updating storage")
         storage_info = self.client.get_path(storage_path)
-        result = dict()
+        result: Dict[str, Dict[str, Dict]] = dict()
         for storage in storage_info['Members']:
             entity_path = storage['@odata.id']
             entity_info = self.client.get_path(entity_path)
@@ -69,14 +70,14 @@ class RedfishDell(RedfishSystem):
                 result[drive_id]['location'] = drive_info['PhysicalLocation']
         self._system['storage'] = normalize_dict(result)
 
-    def _update_metadata(self):
+    def _update_metadata(self) -> None:
         log.logger.info("Updating metadata")
         pass
 
-    def _update_memory(self):
+    def _update_memory(self) -> None:
         log.logger.info("Updating memory")
         pass
 
-    def _update_power(self):
+    def _update_power(self) -> None:
         log.logger.info("Updating power")
         pass

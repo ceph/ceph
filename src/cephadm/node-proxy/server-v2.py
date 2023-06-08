@@ -2,6 +2,7 @@ import cherrypy
 from redfish_dell import RedfishDell
 from reporter import Reporter
 from util import Config, Logger
+from typing import Dict
 import sys
 
 # for devel purposes
@@ -53,7 +54,7 @@ class Memory:
     exposed = True
 
     @cherrypy.tools.json_out()
-    def GET(self):
+    def GET(self) -> Dict[str, Dict[str, Dict]]:
         return {'memory': system.get_memory()}
 
 
@@ -61,7 +62,7 @@ class Network:
     exposed = True
 
     @cherrypy.tools.json_out()
-    def GET(self):
+    def GET(self) -> Dict[str, Dict[str, Dict]]:
         return {'network': system.get_network()}
 
 
@@ -69,7 +70,7 @@ class Processors:
     exposed = True
 
     @cherrypy.tools.json_out()
-    def GET(self):
+    def GET(self) -> Dict[str, Dict[str, Dict]]:
         return {'processors': system.get_processors()}
 
 
@@ -77,7 +78,7 @@ class Storage:
     exposed = True
 
     @cherrypy.tools.json_out()
-    def GET(self):
+    def GET(self) -> Dict[str, Dict[str, Dict]]:
         return {'storage': system.get_storage()}
 
 
@@ -85,7 +86,7 @@ class Status:
     exposed = True
 
     @cherrypy.tools.json_out()
-    def GET(self):
+    def GET(self) -> Dict[str, Dict[str, Dict]]:
         return {'status': system.get_status()}
 
 
@@ -103,13 +104,13 @@ class System:
 class Shutdown:
     exposed = True
 
-    def POST(self):
+    def POST(self) -> str:
         _stop()
         cherrypy.engine.exit()
         return 'Server shutdown...'
 
 
-def _stop():
+def _stop() -> None:
     system.stop_update_loop()
     system.client.logout()
     reporter_agent.stop()
@@ -118,7 +119,7 @@ def _stop():
 class Start:
     exposed = True
 
-    def POST(self):
+    def POST(self) -> str:
         system.start_client()
         system.start_update_loop()
         reporter_agent.run()
@@ -128,7 +129,7 @@ class Start:
 class Stop:
     exposed = True
 
-    def POST(self):
+    def POST(self) -> str:
         _stop()
         return 'node-proxy daemon stopped'
 
@@ -136,10 +137,10 @@ class Stop:
 class ConfigReload:
     exposed = True
 
-    def __init__(self, config):
+    def __init__(self, config: cherrypy.config) -> None:
         self.config = config
 
-    def POST(self):
+    def POST(self) -> str:
         self.config['node_proxy'].reload()
         return 'node-proxy config reloaded'
 
@@ -153,14 +154,14 @@ class API:
     stop = Stop()
     config_reload = ConfigReload(cherrypy.config)
 
-    def GET(self):
+    def GET(self) -> str:
         return 'use /system'
 
 
 if __name__ == '__main__':
     cherrypy.config.update({
         'node_proxy': config,
-        'server.socket_port': config.server['port']
+        'server.socket_port': config.__dict__['server']['port']
     })
     c = {'/': {
         'request.methods_with_bodies': ('POST', 'PUT', 'PATCH'),
