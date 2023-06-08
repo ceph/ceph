@@ -1,7 +1,7 @@
 from redfish_system import RedfishSystem
-from util import logger, normalize_dict
+from util import Logger, normalize_dict
 
-log = logger(__name__)
+log = Logger(__name__)
 
 
 class RedfishDell(RedfishSystem):
@@ -12,7 +12,7 @@ class RedfishDell(RedfishSystem):
 
     def _update_network(self):
         net_path = self._system['EthernetInterfaces']['@odata.id']
-        log.info("Updating network")
+        log.logger.info("Updating network")
         network_info = self.client.get_path(net_path)
         self._system['network'] = {}
         result = dict()
@@ -29,7 +29,7 @@ class RedfishDell(RedfishSystem):
 
     def _update_processors(self):
         cpus_path = self._system['Processors']['@odata.id']
-        log.info("Updating processors")
+        log.logger.info("Updating processors")
         cpus_info = self.client.get_path(cpus_path)
         self._system['processors'] = {}
         result = dict()
@@ -49,7 +49,7 @@ class RedfishDell(RedfishSystem):
 
     def _update_storage(self):
         storage_path = self._system['Storage']['@odata.id']
-        log.info("Updating storage")
+        log.logger.info("Updating storage")
         storage_info = self.client.get_path(storage_path)
         result = dict()
         for storage in storage_info['Members']:
@@ -70,13 +70,13 @@ class RedfishDell(RedfishSystem):
         self._system['storage'] = normalize_dict(result)
 
     def _update_metadata(self):
-        log.info("Updating metadata")
+        log.logger.info("Updating metadata")
         pass
 
     def _update_memory(self):
-        log.info("Updating memory")
+        log.logger.info("Updating memory")
         pass
 
     def _update_power(self):
-        log.info("Updating power")
+        log.logger.info("Updating power")
         pass
