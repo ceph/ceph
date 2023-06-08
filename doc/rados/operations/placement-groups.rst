@@ -9,51 +9,58 @@
 Autoscaling placement groups
 ============================
 
-Placement groups (PGs) are an internal implementation detail of how
-Ceph distributes data.  You may enable *pg-autoscaling* to allow the cluster to
-make recommendations or automatically adjust the numbers of PGs (``pgp_num``)
-for each pool based on expected cluster and pool utilization.
+Placement groups (PGs) are an internal implementation detail of how Ceph
+distributes data. Autoscaling provides a way to manage PGs, and especially to
+manage the number of PGs present in different pools.  When *pg-autoscaling* is
+enabled, the cluster is allowed to make recommendations or automatic
+adjustments with respect to the number of PGs for each pool (``pgp_num``) in
+accordance with expected cluster utilization and expected pool utilization.
 
-Each pool has a ``pg_autoscale_mode`` property that can be set to ``off``, ``on``, or ``warn``.
+Each pool has a ``pg_autoscale_mode`` property that can be set to ``off``,
+``on``, or ``warn``:
 
-* ``off``: Disable autoscaling for this pool.  It is up to the administrator to choose an appropriate ``pgp_num`` for each pool.  Please refer to :ref:`choosing-number-of-placement-groups` for more information.
+* ``off``: Disable autoscaling for this pool. It is up to the administrator to
+  choose an appropriate ``pgp_num`` for each pool. For more information, see
+  :ref:`choosing-number-of-placement-groups`.
 * ``on``: Enable automated adjustments of the PG count for the given pool.
-* ``warn``: Raise health alerts when the PG count should be adjusted
+* ``warn``: Raise health checks when the PG count is in need of adjustment.
 
-To set the autoscaling mode for an existing pool:
+To set the autoscaling mode for an existing pool, run a command of the
+following form:
 
 .. prompt:: bash #
 
    ceph osd pool set <pool-name> pg_autoscale_mode <mode>
 
-For example to enable autoscaling on pool ``foo``:
+For example, to enable autoscaling on pool ``foo``, run the following command:
 
 .. prompt:: bash #
 
    ceph osd pool set foo pg_autoscale_mode on
 
-You can also configure the default ``pg_autoscale_mode`` that is
-set on any pools that are subsequently created:
+There is also a ``pg_autoscale_mode`` setting for any pools that are created
+after the initial setup of the cluster. To change this setting, run a command
+of the following form:
 
 .. prompt:: bash #
 
    ceph config set global osd_pool_default_pg_autoscale_mode <mode>
 
-You can disable or enable the autoscaler for all pools with
-the ``noautoscale`` flag. By default this flag is set to  be ``off``,
-but you can turn it ``on`` by using the command:
+You can disable or enable the autoscaler for all pools with the ``noautoscale``
+flag. By default, this flag is set to ``off``, but you can set it to ``on`` by
+running the following command:
 
-.. prompt:: bash $
+.. prompt:: bash #
 
    ceph osd pool set noautoscale
 
-You can turn it ``off`` using the command:
+To set the ``noautoscale`` flag to ``off``, run the following command:
 
 .. prompt:: bash #
 
    ceph osd pool unset noautoscale
 
-To ``get`` the value of the flag use the command:
+To get the value of the flag, run the following command:
 
 .. prompt:: bash #
 
@@ -62,154 +69,167 @@ To ``get`` the value of the flag use the command:
 Viewing PG scaling recommendations
 ----------------------------------
 
-You can view each pool, its relative utilization, and any suggested changes to
-the PG count with this command:
+To view each pool, its relative utilization, and any recommended changes to the
+PG count, run the following command:
 
 .. prompt:: bash #
 
    ceph osd pool autoscale-status
 
-Output will be something like::
+The output will resemble the following::
 
    POOL    SIZE  TARGET SIZE  RATE  RAW CAPACITY   RATIO  TARGET RATIO  EFFECTIVE RATIO BIAS PG_NUM  NEW PG_NUM  AUTOSCALE BULK
    a     12900M                3.0        82431M  0.4695                                          8         128  warn      True
    c         0                 3.0        82431M  0.0000        0.2000           0.9884  1.0      1          64  warn      True
    b         0        953.6M   3.0        82431M  0.0347                                          8              warn      False
 
-**SIZE** is the amount of data stored in the pool. **TARGET SIZE**, if
-present, is the amount of data the administrator has specified that
-they expect to eventually be stored in this pool.  The system uses
-the larger of the two values for its calculation.
+- **POOL** is the name of the pool. 
 
-**RATE** is the multiplier for the pool that determines how much raw
-storage capacity is consumed.  For example, a 3 replica pool will
-have a ratio of 3.0, while a k=4,m=2 erasure coded pool will have a
-ratio of 1.5.
+- **SIZE** is the amount of data stored in the pool. 
+  
+- **TARGET SIZE** (if present) is the amount of data that is expected to be
+  stored in the pool, as specified by the administrator. The system uses the
+  greater of the two values for its calculation.
 
-**RAW CAPACITY** is the total amount of raw storage capacity on the
-OSDs that are responsible for storing this pool's (and perhaps other
-pools') data.  **RATIO** is the ratio of that total capacity that
-this pool is consuming (i.e., ratio = size * rate / raw capacity).
+- **RATE** is the multiplier for the pool that determines how much raw storage
+  capacity is consumed. For example, a three-replica pool will have a ratio of
+  3.0, and a ``k=4 m=2`` erasure-coded pool will have a ratio of 1.5.
 
-**TARGET RATIO**, if present, is the ratio of storage that the
-administrator has specified that they expect this pool to consume
-relative to other pools with target ratios set.
-If both target size bytes and ratio are specified, the
-ratio takes precedence.
+- **RAW CAPACITY** is the total amount of raw storage capacity on the specific
+  OSDs that are responsible for storing the data of the pool (and perhaps the
+  data of other pools). 
 
-**EFFECTIVE RATIO** is the target ratio after adjusting in two ways:
+- **RATIO** is the ratio of (1) the storage consumed by the pool to (2) the
+  total raw storage capacity. In order words, RATIO is defined as (SIZE * RATE)
+  / RAW CAPACITY.
 
-1. Subtracting any capacity expected to be used by pools with target size set
-2. Normalizing the target ratios among pools with target ratio set so
-   they collectively target the rest of the space. For example, 4
-   pools with target_ratio 1.0 would have an effective ratio of 0.25.
+- **TARGET RATIO** (if present) is the ratio of the expected storage of this
+  pool (that is, the amount of storage that this pool is expected to consume,
+  as specified by the administrator) to the expected storage of all other pools
+  that have target ratios set.  If both ``target_size_bytes`` and
+  ``target_size_ratio`` are specified, then ``target_size_ratio`` takes
+  precedence.
 
-The system uses the larger of the actual ratio and the effective ratio
-for its calculation.
+- **EFFECTIVE RATIO** is the result of making two adjustments to the target
+  ratio:
 
-**BIAS** is used as a multiplier to manually adjust a pool's PG based
-on prior information about how much PGs a specific pool is expected
-to have.
+  #. Subtracting any capacity expected to be used by pools that have target
+     size set.
 
-**PG_NUM** is the current number of PGs for the pool (or the current
-number of PGs that the pool is working towards, if a ``pg_num``
-change is in progress).  **NEW PG_NUM**, if present, is what the
-system believes the pool's ``pg_num`` should be changed to.  It is
-always a power of 2, and will only be present if the "ideal" value
-varies from the current value by more than a factor of 3 by default.
-This factor can be be adjusted with:
+  #. Normalizing the target ratios among pools that have target ratio set so
+     that collectively they target cluster capacity. For example, four pools
+     with target_ratio 1.0 would have an effective ratio of 0.25.
 
-.. prompt:: bash #
+  The system's calculations use whichever of these two ratios (that is, the 
+  target ratio and the effective ratio) is greater.
 
-  ceph osd pool set threshold 2.0
+- **BIAS** is used as a multiplier to manually adjust a pool's PG in accordance
+  with prior information about how many PGs a specific pool is expected to
+  have.
 
-**AUTOSCALE**, is the pool ``pg_autoscale_mode``
-and will be either ``on``, ``off``, or ``warn``.
+- **PG_NUM** is either the current number of PGs associated with the pool or,
+  if a ``pg_num`` change is in progress, the current number of PGs that the
+  pool is working towards. 
 
-The final column, **BULK** determines if the pool is ``bulk``
-and will be either ``True`` or ``False``. A ``bulk`` pool
-means that the pool is expected to be large and should start out
-with large amount of PGs for performance purposes. On the other hand,
-pools without the ``bulk`` flag are expected to be smaller e.g.,
-.mgr or meta pools.
+- **NEW PG_NUM** (if present) is the value that the system is recommending the
+  ``pg_num`` of the pool to be changed to. It is always a power of 2, and it is
+  present only if the recommended value varies from the current value by more
+  than the default factor of ``3``. To adjust this factor (in the following
+  example, it is changed to ``2``), run the following command:
+
+  .. prompt:: bash #
+
+     ceph osd pool set threshold 2.0
+
+- **AUTOSCALE** is the pool's ``pg_autoscale_mode`` and is set to ``on``,
+  ``off``, or ``warn``.
+
+- **BULK** determines whether the pool is ``bulk``. It has a value of ``True``
+  or ``False``. A ``bulk`` pool is expected to be large and should initially
+  have a large number of PGs so that performance does not suffer]. On the other
+  hand, a pool that is not ``bulk`` is expected to be small (for example, a
+  ``.mgr`` pool or a meta pool).
 
 .. note::
 
-   If ``ceph osd pool autoscale-status`` returns no output at all, most likely
-   you have at least one pool that spans multiple CRUSH roots.  One scenario is
-   when a new deployment auto-creates the ``.mgr`` pool on the ``default`` CRUSH
-   root, then subsequent pools are created with rules that constrain them to a
-   specific shadow CRUSH tree.  If one, for example, creates an RBD metadata pool
-   constrained to ``deviceclass = ssd`` and an RBD data pool constrained to
-   ``deviceclass = hdd``, this will occur.  This may be remedied by simply
-   constraining the spanning pool to one device class.  In the above scenario
-   most likely there is a ``replicated-ssd`` CRUSH rule defined, so one would
-   run the below if the ``.mgr`` pool should be constrained to ``ssd`` devices:
+   If the ``ceph osd pool autoscale-status`` command returns no output at all,
+   there is probably at least one pool that spans multiple CRUSH roots.  This
+   'spanning pool' issue can happen in scenarios like the following:
+   when a new deployment auto-creates the ``.mgr`` pool on the ``default``
+   CRUSH root, subsequent pools are created with rules that constrain them to a
+   specific shadow CRUSH tree. For example, if you create an RBD metadata pool
+   that is constrained to ``deviceclass = ssd`` and an RBD data pool that is
+   constrained to ``deviceclass = hdd``, you will encounter this issue. To
+   remedy this issue, constrain the spanning pool to only one device class. In
+   the above scenario, there is likely to be a ``replicated-ssd`` CRUSH rule in
+   effect, and the ``.mgr`` pool can be constrained to ``ssd`` devices by
+   running the following commands:
 
-.. code-block:: bash
+   .. prompt:: bash #
 
-   root# ceph osd pool set .mgr crush_rule replicated-ssd
-   set pool 1 crush_rule to replicated-ssd
+      ceph osd pool set .mgr crush_rule replicated-ssd
+      ceph osd pool set pool 1 crush_rule to replicated-ssd
 
-This will result in a small amount of backfill traffic that should complete
-quickly.
+   This intervention will result in a small amount of backfill, but
+   typically this traffic completes quickly.
 
 
 Automated scaling
 -----------------
 
-Allowing the cluster to automatically scale ``pgp_num`` based on usage is the
-simplest approach.  Ceph will look at the total available storage and
-target number of PGs for the whole system, look at how much data is
-stored in each pool, and try to apportion PGs accordingly.  The
-system is relatively conservative with its approach, only making
-changes to a pool when the current number of PGs (``pg_num``) is more
-than a factor of 3 off from what it thinks it should be.
+In the simplest approach to automated scaling, the cluster is allowed to
+automatically scale ``pgp_num`` in accordance with usage. Ceph considers the
+total available storage and the target number of PGs for the whole system,
+considers how much data is stored in each pool, and apportions PGs accordingly.
+The system is conservative with its approach, making changes to a pool only
+when the current number of PGs (``pg_num``) varies by more than a factor of 3
+from the recommended number.
 
-The target number of PGs per OSD is based on the
-``mon_target_pg_per_osd`` configurable (default: 100), which can be
-adjusted with:
+The target number of PGs per OSD is determined by the ``mon_target_pg_per_osd``
+parameter (default: 100), which can be adjusted by running the following
+command:
 
 .. prompt:: bash #
 
    ceph config set global mon_target_pg_per_osd 100
 
-The autoscaler analyzes pools and adjusts on a per-subtree basis.
-Because each pool may map to a different CRUSH rule, and each rule may
-distribute data across different devices, Ceph will consider
-utilization of each subtree of the hierarchy independently.  For
-example, a pool that maps to OSDs of class `ssd` and a pool that maps
-to OSDs of class `hdd` will each have optimal PG counts that depend on
-the number of those respective device types.
+The autoscaler analyzes pools and adjusts on a per-subtree basis.  Because each
+pool might map to a different CRUSH rule, and each rule might distribute data
+across different devices, Ceph will consider the utilization of each subtree of
+the hierarchy independently. For example, a pool that maps to OSDs of class
+``ssd`` and a pool that maps to OSDs of class ``hdd`` will each have optimal PG
+counts that are determined by how many of these two different device types
+there are.
 
-In the case where a pool uses OSDs under two or more CRUSH roots, e.g., (shadow
-trees with both `ssd` and `hdd` devices), the autoscaler will
-issue a warning to the user in the manager log stating the name of the pool
-and the set of roots that overlap each other. The autoscaler will not
-scale any pools with overlapping roots because this can cause problems
-with the scaling process. We recommend making each pool belong to only
-one root (one OSD class) to get rid of the warning and ensure a successful
+If a pool uses OSDs under two or more CRUSH roots (for example, shadow trees
+with both ``ssd`` and ``hdd`` devices), the autoscaler issues a warning to the
+user in the manager log. The warning states the name of the pool and the set of
+roots that overlap each other. The autoscaler does not scale any pools with
+overlapping roots because this condition can cause problems with the scaling
+process. We recommend constraining each pool so that it belongs to only one
+root (that is, one OSD class) to silence the warning and ensure a successful
 scaling process.
 
-The autoscaler uses the `bulk` flag to determine which pool
-should start out with a full complement of PGs and only
-scales down when the usage ratio across the pool is not even.
-However, if the pool doesn't have the `bulk` flag, the pool will
-start out with minimal PGs and only when there is more usage in the pool.
+If a pool is flagged ``bulk``, then the autoscaler starts the pool with a full
+complement of PGs and then scales down the number of PGs only if the usage
+ratio across the pool is uneven.  However, if a pool is not flagged ``bulk``,
+then the autoscaler starts the pool with minimal PGs and creates additional PGs
+only if there is more usage in the pool.
 
-To create pool with `bulk` flag:
+To create a pool that will be flagged ``bulk``, run the following command:
 
 .. prompt:: bash #
 
    ceph osd pool create <pool-name> --bulk
 
-To set/unset `bulk` flag of existing pool:
+To set or unset the ``bulk`` flag of an existing pool, run the following
+command:
 
 .. prompt:: bash #
 
    ceph osd pool set <pool-name> bulk <true/false/1/0>
 
-To get `bulk` flag of existing pool:
+To get the ``bulk`` flag of an existing pool, run the following command:
 
 .. prompt:: bash #
 
@@ -220,48 +240,51 @@ To get `bulk` flag of existing pool:
 Specifying expected pool size
 -----------------------------
 
-When a cluster or pool is first created, it will consume a small
-fraction of the total cluster capacity and will appear to the system
-as if it should only need a small number of placement groups.
-However, in most cases cluster administrators have a good idea which
-pools are expected to consume most of the system capacity over time.
-By providing this information to Ceph, a more appropriate number of
-PGs can be used from the beginning, preventing subsequent changes in
-``pg_num`` and the overhead associated with moving data around when
-those adjustments are made.
+When a cluster or pool is first created, it consumes only a small fraction of
+the total cluster capacity and appears to the system as if it should need only
+a small number of PGs. However, in some cases, cluster administrators know
+which pools are likely to consume most of the system capacity in the long run.
+When Ceph is provided with this information, a more appropriate number of PGs
+can be used from the beginning, obviating subsequent changes in ``pg_num`` and
+the associated overhead cost of relocating data.
 
-The *target size* of a pool can be specified in two ways: either in
-terms of the absolute size of the pool (i.e., bytes), or as a weight
-relative to other pools with a ``target_size_ratio`` set.
+The *target size* of a pool can be specified in two ways: either in relation to
+the absolute size (in bytes) of the pool, or as a weight relative to all other
+pools that have ``target_size_ratio`` set.
 
-For example:
+For example, to tell the system that ``mypool`` is expected to consume 100 TB,
+run the following command:
 
 .. prompt:: bash #
 
    ceph osd pool set mypool target_size_bytes 100T
 
-will tell the system that `mypool` is expected to consume 100 TiB of
-space.  Alternatively:
+Alternatively, to tell the system that ``mypool`` is expected to consume a
+ratio of 1.0 relative to other pools that have ``target_size_ratio`` set,
+adjust the ``target_size_ratio`` setting of ``my pool`` by running the
+following command:
 
 .. prompt:: bash # 
 
    ceph osd pool set mypool target_size_ratio 1.0
 
-will tell the system that `mypool` is expected to consume 1.0 relative
-to the other pools with ``target_size_ratio`` set. If `mypool` is the
-only pool in the cluster, this means an expected use of 100% of the
-total capacity. If there is a second pool with ``target_size_ratio``
-1.0, both pools would expect to use 50% of the cluster capacity.
+If `mypool` is the only pool in the cluster, then it is expected to use 100% of
+the total cluster capacity. However, if the cluster contains a second pool that
+has ``target_size_ratio`` set to 1.0, then both pools are expected to use 50%
+of the total cluster capacity.
 
-You can also set the target size of a pool at creation time with the optional ``--target-size-bytes <bytes>`` or ``--target-size-ratio <ratio>`` arguments to the ``ceph osd pool create`` command.
+The ``ceph osd pool create`` command has two command-line options that can be
+used to set the target size of a pool at creation time: ``--target-size-bytes
+<bytes>`` and ``--target-size-ratio <ratio>``.
 
-Note that if impossible target size values are specified (for example,
-a capacity larger than the total cluster) then a health warning
+Note that if the target-size values that have been specified are impossible
+(for example, a capacity larger than the total cluster), then a health check
 (``POOL_TARGET_SIZE_BYTES_OVERCOMMITTED``) will be raised.
 
-If both ``target_size_ratio`` and ``target_size_bytes`` are specified
-for a pool, only the ratio will be considered, and a health warning
-(``POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO``) will be issued.
+If both ``target_size_ratio`` and ``target_size_bytes`` are specified for a
+pool, then the latter will be ignored, the former will be used in system
+calculations, and a health check (``POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO``)
+will be raised.
 
 Specifying bounds on a pool's PGs
 ---------------------------------
