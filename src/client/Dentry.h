@@ -82,6 +82,7 @@ public:
 
   Dir	   *dir;
   const std::string name;
+  std::optional<std::string> enc_name;
   InodeRef inode;
   int	   ref = 1; // 1 if there's a dir beneath me.
   int64_t offset = 0;

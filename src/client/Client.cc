@@ -1210,7 +1210,8 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     }
     Inode *diri = dir->parent_inode;
     clear_dir_complete_and_ordered(diri, false);
-    dn = link(dir, dname, in, dn);
+#warning revisit nullopt here
+    dn = link(dir, dname, std::nullopt, in, dn);
   }
 
   update_dentry_lease(dn, dlease, from, session);
@@ -1380,6 +1381,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
 
     string orig_dname;
+    std::optional<string> enc_name;
     string dname;
     LeaseStat dlease;
 
@@ -1391,6 +1393,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
       ldout(cct, 15) << "" << i << ": '" << orig_dname << "'" << dendl;
 
       if (fscrypt_denc) {
+        enc_name = orig_dname;
         int r = fscrypt_denc->get_decrypted_fname(orig_dname, &dname);
         if (r < 0) {
           ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
@@ -1408,7 +1411,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	if (olddn->inode != in) {
 	  // replace incorrect dentry
 	  unlink(olddn, true, true);  // keep dir, dentry
-	  dn = link(dir, dname, in, olddn);
+	  dn = link(dir, dname, enc_name, in, olddn);
 	  ceph_assert(dn == olddn);
 	} else {
 	  // keep existing dn
@@ -1417,7 +1420,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
 	}
       } else {
 	// new dn
-	dn = link(dir, dname, in, NULL);
+	dn = link(dir, dname, enc_name, in, NULL);
       }
       dn->alternate_name = std::move(dlease.alternate_name);
 
@@ -1590,7 +1593,8 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
       if (dlease.duration_ms > 0) {
 	if (!dn) {
 	  Dir *dir = diri->open_dir();
-	  dn = link(dir, dname, NULL, NULL);
+#warning revisit nullopt here
+	  dn = link(dir, dname, std::nullopt, NULL, NULL);
 	}
 	update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       }
@@ -3429,11 +3433,12 @@ void Client::close_dir(Dir *dir)
    * leave dn set to default NULL unless you're trying to add
    * a new inode to a pre-created Dentry
    */
-Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
+Dentry* Client::link(Dir *dir, const string& name, std::optional<std::string> enc_name, Inode *in, Dentry *dn)
 {
   if (!dn) {
     // create a new Dentry
     dn = new Dentry(dir, name);
+    dn->enc_name = enc_name;
 
     lru.lru_insert_mid(dn);    // mid or top?
 
@@ -7190,15 +7195,20 @@ relookup:
   return r;
 }
 
-Dentry *Client::get_or_create(Inode *dir, const char* name)
+Dentry *Client::get_or_create(Inode *dir, const char* plain_name, std::optional<std::string> enc_name)
 {
   // lookup
-  ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
+  ldout(cct, 20) << __func__ << " " << *dir << " plain_name " << plain_name << " enc_name=" << enc_name.value_or(string()) << dendl;
   dir->open_dir();
-  if (dir->dir->dentries.count(name))
-    return dir->dir->dentries[name];
-  else // otherwise link up a new one
-    return link(dir->dir, name, NULL, NULL);
+  if (dir->dir->dentries.count(plain_name)) {
+    auto dn = dir->dir->dentries[plain_name];
+    if (!dn->enc_name && enc_name) {
+      dn->enc_name = enc_name;
+    }
+    return dn;
+  } else { // otherwise link up a new one
+    return link(dir->dir, plain_name, enc_name, NULL, NULL);
+  }
 }
 
 int Client::walk(std::string_view path, walk_dentry_result* wdr, const UserPerm& perms, bool followsym)
@@ -13624,7 +13634,8 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   if (xattrs_bl.length() > 0)
     req->set_data(xattrs_bl);
 
-  Dentry *de = get_or_create(dir, name);
+#warning revisit nullopt here
+  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
 
   res = make_request(req, perms, inp);
@@ -13747,6 +13758,20 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
       return -CEPHFS_ERANGE;  // bummer!
   }
 
+  std::optional<string> enc_name;
+  const char *plain_name = name;
+  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
+  if (fscrypt_denc) {
+    string _enc_name;
+    int r = fscrypt_denc->get_encrypted_fname(name, &_enc_name);
+    if (r < 0) {
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+      return r;
+    }
+    enc_name = std::move(_enc_name);
+    name = enc_name->c_str();
+  }
+
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
   filepath path;
@@ -13779,7 +13804,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   if (xattrs_bl.length() > 0)
     req->set_data(xattrs_bl);
 
-  Dentry *de = get_or_create(dir, name);
+  Dentry *de = get_or_create(dir, plain_name, enc_name);
   req->set_dentry(de);
 
   res = make_request(req, perms, inp, created);
@@ -13856,7 +13881,8 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
     req->set_data(bl);
   }
 
-  Dentry *de = get_or_create(dir, name);
+#warning revisit nullopt here
+  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
 
   ldout(cct, 10) << "_mkdir: making request" << dendl;
@@ -13974,7 +14000,8 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-  Dentry *de = get_or_create(dir, name);
+#warning revisit nullopt here
+  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
 
   int res = make_request(req, perms, inp);
@@ -14079,7 +14106,8 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
 
   InodeRef otherin;
   Inode *in;
-  Dentry *de = get_or_create(dir, name);
+#warning revisit nullopt here
+  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
@@ -14150,7 +14178,8 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 
   InodeRef in;
 
-  Dentry *de = get_or_create(dir, name);
+#warning revisit nullopt here
+  Dentry *de = get_or_create(dir, name, std::nullopt);
   if (op == CEPH_MDS_OP_RMDIR)
     req->set_dentry(de);
   else
@@ -14241,8 +14270,10 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   req->set_filepath2(from);
   req->set_alternate_name(std::move(alternate_name));
 
-  Dentry *oldde = get_or_create(fromdir, fromname);
-  Dentry *de = get_or_create(todir, toname);
+#warning revisit nullopt here
+  Dentry *oldde = get_or_create(fromdir, fromname, std::nullopt);
+#warning revisit nullopt here
+  Dentry *de = get_or_create(todir, toname, std::nullopt);
 
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
@@ -14351,6 +14382,17 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
     return -CEPHFS_EDQUOT;
   }
 
+  string enc_name;
+  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
+  if (fscrypt_denc) {
+    int r = fscrypt_denc->get_encrypted_fname(newname, &enc_name);
+    if (r < 0) {
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+      return r;
+    }
+    newname = enc_name.c_str();
+  }
+
   in->break_all_delegs();
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
@@ -14364,7 +14406,8 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
   req->inode_drop = CEPH_CAP_FILE_SHARED;
   req->inode_unless = CEPH_CAP_FILE_EXCL;
 
-  Dentry *de = get_or_create(dir, newname);
+#warning revisit nullopt here
+  Dentry *de = get_or_create(dir, newname, std::nullopt);
   req->set_dentry(de);
 
   int res = make_request(req, perm, inp);

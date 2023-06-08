@@ -1040,7 +1040,7 @@ protected:
    * leave dn set to default NULL unless you're trying to add
    * a new inode to a pre-created Dentry
    */
-  Dentry* link(Dir *dir, const std::string& name, Inode *in, Dentry *dn);
+  Dentry* link(Dir *dir, const std::string& name, std::optional<std::string> enc_name, Inode *in, Dentry *dn);
   void unlink(Dentry *dn, bool keepdir, bool keepdentry);
 
   int fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat=0, nest_info_t *rstat=0);
@@ -1399,7 +1399,7 @@ private:
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
 
-  Dentry *get_or_create(Inode *dir, const char* name);
+  Dentry *get_or_create(Inode *dir, const char* plain_name, std::optional<std::string> enc_name);
 
   int xattr_permission(Inode *in, const char *name, unsigned want,
 		       const UserPerm& perms);
