@@ -4,6 +4,7 @@ from redfish.rest.v1 import ServerDownOrUnreachableError, \
 import redfish
 import sys
 from util import Logger
+from typing import Dict
 
 log = Logger(__name__)
 
@@ -12,14 +13,17 @@ class RedFishClient:
 
     PREFIX = '/redfish/v1'
 
-    def __init__(self, host, username, password):
+    def __init__(self,
+                 host: str,
+                 username: str,
+                 password: str) -> None:
         log.logger.info("redfish client initialization...")
         self.host = host
         self.username = username
         self.password = password
-        self.redfish_obj = None
+        self.redfish_obj: 'redfish.redfish_client' = None
 
-    def login(self):
+    def login(self) -> 'redfish.redfish_client':
         self.redfish_obj = redfish.redfish_client(base_url=self.host,
                                                   username=self.username,
                                                   password=self.password,
@@ -35,7 +39,7 @@ class RedFishClient:
             log.logger.error(f"Server not reachable or does not support RedFish:\n{e}")
         sys.exit(1)
 
-    def get_path(self, path):
+    def get_path(self, path: str) -> Dict:
         try:
             if self.PREFIX not in path:
                 path = f"{self.PREFIX}{path}"
@@ -47,6 +51,6 @@ class RedFishClient:
             log.logger.error(f"Error detected.\n{e}")
             pass
 
-    def logout(self):
+    def logout(self) -> None:
         log.logger.info('logging out...')
         self.redfish_obj.logout()

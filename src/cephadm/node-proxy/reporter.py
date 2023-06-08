@@ -2,25 +2,26 @@ from threading import Thread
 import requests
 import time
 from util import Logger
+from typing import Any
 
 log = Logger(__name__)
 
 
 class Reporter:
-    def __init__(self, system, observer_url):
+    def __init__(self, system: Any, observer_url: str) -> None:
         self.system = system
         self.observer_url = observer_url
         self.finish = False
 
-    def stop(self):
+    def stop(self) -> None:
         self.finish = True
         self.thread.join()
 
-    def run(self):
+    def run(self) -> None:
         self.thread = Thread(target=self.loop)
         self.thread.start()
 
-    def loop(self):
+    def loop(self) -> None:
         while not self.finish:
             # Any logic to avoid sending the all the system
             # information every loop can go here. In a real
