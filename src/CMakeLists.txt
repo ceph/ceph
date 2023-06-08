@@ -295,6 +295,10 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
+if(WITH_RADOSGW_D4N)
+  add_subdirectory(cpp_redis)
+endif()
+
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)

@@ -58,12 +58,20 @@ class StoreUser : public User {
     virtual const rgw_user& get_id() const override { return info.user_id; }
     virtual uint32_t get_type() const override { return info.type; }
     virtual int32_t get_max_buckets() const override { return info.max_buckets; }
+    virtual void set_max_buckets(int32_t _max_buckets) override {
+      info.max_buckets = _max_buckets;
+    }
     virtual const RGWUserCaps& get_caps() const override { return info.caps; }
     virtual RGWObjVersionTracker& get_version_tracker() override { return objv_tracker; }
     virtual Attrs& get_attrs() override { return attrs; }
     virtual void set_attrs(Attrs& _attrs) override { attrs = _attrs; }
     virtual bool empty() const override { return info.user_id.id.empty(); }
     virtual RGWUserInfo& get_info() override { return info; }
+    virtual void set_info(RGWQuotaInfo& _quota) override {
+      info.quota.user_quota.max_size = _quota.max_size;
+      info.quota.user_quota.max_objects = _quota.max_objects;
+    }
+
     virtual void print(std::ostream& out) const override { out << info.user_id; }
 
     friend class StoreBucket;
@@ -112,6 +120,12 @@ class StoreBucket : public Bucket {
     virtual int set_attrs(Attrs a) override { attrs = a; return 0; }
     virtual void set_owner(rgw::sal::User* _owner) override {
       owner = _owner;
+    }
+    virtual void set_count(uint64_t _count) override {
+      ent.count = _count;
+    }
+    virtual void set_size(uint64_t _size) override {
+      ent.size = _size;
     }
     virtual User* get_owner(void) override { return owner; };
     virtual ACLOwner get_acl_owner(void) override { return ACLOwner(info.owner); };
@@ -204,6 +218,9 @@ class StoreObject : public Object {
 
     virtual bool empty() const override { return state.obj.empty(); }
     virtual const std::string &get_name() const override { return state.obj.key.name; }
+    virtual void set_obj_state(RGWObjState& _state) override {
+      state = _state;
+    }
     virtual Attrs& get_attrs(void) override { return state.attrset; }
     virtual const Attrs& get_attrs(void) const override { return state.attrset; }
     virtual int set_attrs(Attrs a) override { state.attrset = a; state.has_attrs = true; return 0; }
