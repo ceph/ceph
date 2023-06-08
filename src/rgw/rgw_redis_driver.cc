@@ -1,3 +1,4 @@
+#include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -113,22 +114,30 @@ uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) {
   try {
     client.info([&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
-        result = reply.as_integer();
+        int usedMem = -1;
+	int maxMem = -1;
+
+        std::istringstream iss(reply.as_string());
+	std::string line;    
+        while (std::getline(iss, line)) {
+	  if (line.substr(0, line.find(':')) == "used_memory") {
+	    usedMem = std::stoi(line);
+	  } else if (line.substr(0, line.find(':')) == "maxmemory") {
+	    maxMem = std::stoi(line);
+	  } 
+        }
+
+	if (usedMem > -1 && maxMem > -1)
+	  result = maxMem - usedMem;
       }
     });
 
     client.sync_commit(std::chrono::milliseconds(1000));
-
-    if (result < 0) {
-      return -1;
-    }
   } catch(std::exception &e) {
     return -1;
   }
 
-  //return max memory (needs to be configured) - used memory
-
-  return 0; // Implement -Sam
+  return result;
 }
 
 int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
