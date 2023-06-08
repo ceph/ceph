@@ -7,6 +7,7 @@ from util import Logger
 
 log = Logger(__name__)
 
+
 class RedFishClient:
 
     PREFIX = '/redfish/v1'
@@ -42,7 +43,7 @@ class RedFishClient:
             response = self.redfish_obj.get(path)
             return response.dict
         except Exception as e:
-            #TODO
+            # TODO
             log.logger.error(f"Error detected.\n{e}")
             pass
 
