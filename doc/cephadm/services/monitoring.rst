@@ -140,6 +140,15 @@ configuration first.  The following configuration options are available.
 - ``container_image_grafana``
 - ``container_image_alertmanager``
 - ``container_image_node_exporter``
+- ``container_image_loki``
+- ``container_image_promtail``
+- ``container_image_haproxy``
+- ``container_image_keepalived``
+- ``container_image_snmp_gateway``
+- ``container_image_elasticsearch``
+- ``container_image_jaeger_agent``
+- ``container_image_jaeger_collector``
+- ``container_image_jaeger_query``
 
 Custom images can be set with the ``ceph config`` command
 
