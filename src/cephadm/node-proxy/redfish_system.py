@@ -3,34 +3,35 @@ from redfish_client import RedFishClient
 from threading import Thread, Lock
 from time import sleep
 from util import Logger
+from typing import Dict, Any
 
 log = Logger(__name__)
 
 
 class RedfishSystem(System):
-    def __init__(self, **kw):
+    def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
-        self.host = kw.get('host')
-        self.username = kw.get('username')
-        self.password = kw.get('password')
+        self.host: str = kw['host']
+        self.username: str = kw['username']
+        self.password: str = kw['password']
         self.system_endpoint = kw.get('system_endpoint', '/Systems/1')
         log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
         self.client = RedFishClient(self.host, self.username, self.password)
 
-        self._system = {}
-        self.run = False
-        self.thread = None
+        self._system: Dict[str, Dict[str, Any]] = {}
+        self.run: bool = False
+        self.thread: Thread
         self.start_client()
-        self.data_ready = False
-        self.previous_data = {}
-        self.lock = Lock()
+        self.data_ready: bool = False
+        self.previous_data: Dict = {}
+        self.lock: Lock = Lock()
 
-    def start_client(self):
+    def start_client(self) -> None:
         log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
         self.client = RedFishClient(self.host, self.username, self.password)
         self.client.login()
 
-    def get_system(self):
+    def get_system(self) -> Dict[str, Dict[str, Dict]]:
         result = {
             'storage': self.get_storage(),
             'processors': self.get_processors(),
@@ -38,59 +39,59 @@ class RedfishSystem(System):
         }
         return result
 
-    def get_status(self):
+    def get_status(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['status']
 
-    def get_metadata(self):
+    def get_metadata(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['metadata']
 
-    def get_memory(self):
+    def get_memory(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['memory']
 
-    def get_power(self):
+    def get_power(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['power']
 
-    def get_processors(self):
+    def get_processors(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['processors']
 
-    def get_network(self):
+    def get_network(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['network']
 
-    def get_storage(self):
+    def get_storage(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['storage']
 
-    def _update_system(self):
+    def _update_system(self) -> None:
         redfish_system = self.client.get_path(self.system_endpoint)
         self._system = {**redfish_system, **self._system}
 
-    def _update_metadata(self):
+    def _update_metadata(self) -> None:
         raise NotImplementedError()
 
-    def _update_memory(self):
+    def _update_memory(self) -> None:
         raise NotImplementedError()
 
-    def _update_power(self):
+    def _update_power(self) -> None:
         raise NotImplementedError()
 
-    def _update_network(self):
+    def _update_network(self) -> None:
         raise NotImplementedError()
 
-    def _update_processors(self):
+    def _update_processors(self) -> None:
         raise NotImplementedError()
 
-    def _update_storage(self):
+    def _update_storage(self) -> None:
         raise NotImplementedError()
 
-    def start_update_loop(self):
+    def start_update_loop(self) -> None:
         self.run = True
         self.thread = Thread(target=self.update)
         self.thread.start()
 
-    def stop_update_loop(self):
+    def stop_update_loop(self) -> None:
         self.run = False
         self.thread.join()
 
-    def update(self):
+    def update(self) -> None:
         #  this loop can have:
         #  - caching logic
         try:
