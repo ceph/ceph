@@ -48,14 +48,6 @@ static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
   return true;
 }
 
-static inline User* nextUser(User* t)
-{
-  if (!t)
-    return nullptr;
-
-  return static_cast<FilterUser*>(t)->get_next();
-}
-
 static inline std::string decode_name(const char* name)
 {
   return url_decode(name);
@@ -173,73 +165,70 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
 {
   int ret;
   int dir_fd = -1;
+  DIR *dir;
+  struct dirent *entry;
 
-  //if (delete_children) {
-    DIR* dir;
-    struct dirent* entry;
+  dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
+  if (dir_fd < 0) {
+    dir_fd = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not open subdir " << dname << ": "
+                      << cpp_strerror(dir_fd) << dendl;
+    return -dir_fd;
+  }
 
-    dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-    if (dir_fd < 0) {
-      dir_fd = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open subdir " << dname << ": "
-	<< cpp_strerror(dir_fd) << dendl;
-      return -dir_fd;
+  dir = fdopendir(dir_fd);
+  if (dir == NULL) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << dname
+                      << " for listing: " << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  errno = 0;
+  while ((entry = readdir(dir)) != NULL) {
+    struct statx stx;
+
+    if ((entry->d_name[0] == '.' && entry->d_name[1] == '\0') ||
+        (entry->d_name[0] == '.' && entry->d_name[1] == '.' &&
+         entry->d_name[2] == '\0')) {
+      /* Skip . and .. */
+      errno = 0;
+      continue;
     }
 
-    dir = fdopendir(dir_fd);
-    if (dir == NULL) {
+    std::string_view d_name = entry->d_name;
+    bool is_mp = d_name.starts_with("." + mp_ns);
+    if (!is_mp && !delete_children) {
+      return -ENOTEMPTY;
+    }
+
+    ret = statx(dir_fd, entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
+    if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << dname << " for listing: "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name
+                        << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     }
 
-    errno = 0;
-    while ((entry = readdir(dir)) != NULL) {
-      struct statx stx;
-
-      if ((entry->d_name[0] == '.' && entry->d_name[1] == '\0')
-	  || (entry->d_name[0] == '.' && entry->d_name[1] == '.'
-	      && entry->d_name[2] == '\0')) {
-	/* Skip . and .. */
-	errno = 0;
-	continue;
-      }
-
-      std::string_view d_name = entry->d_name;
-      bool is_mp = d_name.starts_with("." + mp_ns);
-      if (!is_mp && !delete_children) {
-	return -ENOTEMPTY;
-      }
-
-      ret = statx(dir_fd, entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
+    if (S_ISDIR(stx.stx_mode)) {
+      /* Recurse */
+      ret = delete_directory(dir_fd, entry->d_name, true, dpp);
       if (ret < 0) {
-	ret = errno;
-	ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
-	  << cpp_strerror(ret) << dendl;
-	return -ret;
+        return ret;
       }
 
-      if (S_ISDIR(stx.stx_mode)) {
-	/* Recurse */
-	ret = delete_directory(dir_fd, entry->d_name, true, dpp);
-	if (ret < 0) {
-	  return ret;
-	}
-
-	continue;
-      }
-
-      /* Otherwise, unlink */
-      ret = unlinkat(dir_fd, entry->d_name, 0);
-      if (ret < 0) {
-	ret = errno;
-	ldpp_dout(dpp, 0) << "ERROR: could not remove file " << entry->d_name << ": "
-	  << cpp_strerror(ret) << dendl;
-	return -ret;
-      }
+      continue;
     }
-  //}
+
+    /* Otherwise, unlink */
+    ret = unlinkat(dir_fd, entry->d_name, 0);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not remove file " << entry->d_name
+                        << ": " << cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+  }
 
   ret = unlinkat(parent_fd, dname, AT_REMOVEDIR);
   if (ret < 0) {
@@ -846,6 +835,34 @@ int POSIXBucket::update_container_stats(const DoutPrefixProvider* dpp)
 
   bucket_statx_save(stx, ent, mtime);
   info.creation_time = ent.creation_time;
+  ent.count = 0;
+  ent.size = 0;
+
+  // TODO dang: store size/count in attributes
+  ret = for_each(dpp, [this, &dpp](const char* name) {
+    int ret;
+    struct statx lstx;
+
+    if (name[0] == '.') {
+      /* Skip dotfiles */
+      return 0;
+    }
+
+    ret = statx(dir_fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &lstx);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+
+    if (S_ISREG(lstx.stx_mode) || S_ISDIR(lstx.stx_mode)) {
+      ent.count++;
+      ent.size += lstx.stx_size;
+    }
+
+    return 0;
+  });
 
   return 0;
 }
@@ -1223,26 +1240,11 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
       return -EINVAL;
   }
 
-  int ret = stat(dpp);
-  if (ret < 0) {
-    ret = errno;
-    if (errno != ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: could not remove object " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-    // ENOENT is success
-    return 0;
+  if (shadow) {
+      return shadow->remove_bucket(dpp, true, false, nullptr, y);
   }
 
-  ldpp_dout(dpp, 0) << "delete_object name: " << get_name() << " fname: " << get_fname() << dendl;
-  if (S_ISDIR(stx.stx_mode)) {
-    // Was a mulitpart upload.
-    ret = delete_directory(b->get_dir_fd(dpp), get_fname().c_str(), true, dpp);
-    return ret;
-  }
-
-  ret = unlinkat(b->get_dir_fd(dpp), get_fname().c_str(), 0);
+  int ret = unlinkat(b->get_dir_fd(dpp), get_fname().c_str(), 0);
   if (ret < 0) {
     ret = errno;
     if (errno != ENOENT) {
@@ -1614,10 +1616,12 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp)
     return 0;
   }
 
+  ldpp_dout(dpp, 0) << "dang 1" << dendl;
   char temp_file_path[PATH_MAX];
   // Only works on Linux - Non-portable
   snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", obj_fd);
 
+  ldpp_dout(dpp, 0) << "dang 2 temp_file_path: " << temp_file_path << dendl;
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
 
   if (!b) {
@@ -1625,6 +1629,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp)
       return -EINVAL;
   }
 
+  ldpp_dout(dpp, 0) << "dang 3 temp_fname: " << get_temp_fname() << dendl;
   int ret = linkat(AT_FDCWD, temp_file_path, b->get_dir_fd(dpp), get_temp_fname().c_str(), AT_SYMLINK_FOLLOW);
   if(ret < 0) {
     ret = errno;
@@ -1633,6 +1638,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp)
     return -ret;
   }
 
+  ldpp_dout(dpp, 0) << "dang 4 fname: " << get_fname() << dendl;
   ret = renameat(b->get_dir_fd(dpp), get_temp_fname().c_str(), b->get_dir_fd(dpp), get_fname().c_str());
   if(ret < 0) {
     ret = errno;
@@ -1642,6 +1648,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp)
   }
 
 
+  ldpp_dout(dpp, 0) << "dang 5" << dendl;
   return 0;
 }
 
