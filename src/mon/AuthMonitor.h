@@ -133,7 +133,8 @@ private:
     }
     return valid_caps(type, v, out);
   }
-  bool valid_caps(const std::vector<std::string>& caps, std::ostream *out);
+  bool valid_caps(const std::map<std::string, std::string>& caps,
+		  std::ostream *out);
 
   void on_active() override;
   bool should_propose(double& delay) override;
