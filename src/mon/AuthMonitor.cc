@@ -1361,15 +1361,10 @@ bool AuthMonitor::valid_caps(
   return true;
 }
 
-bool AuthMonitor::valid_caps(const vector<string>& caps, ostream *out)
+bool AuthMonitor::valid_caps(const map<string, string>& caps, ostream *out)
 {
-  for (vector<string>::const_iterator p = caps.begin();
-       p != caps.end(); p += 2) {
-    if ((p+1) == caps.end()) {
-      *out << "cap '" << *p << "' has no value";
-      return false;
-    }
-    if (!valid_caps(*p, *(p+1), out)) {
+  for (const auto& kv : caps) {
+    if (!valid_caps(kv.first, kv.second, out)) {
       return false;
     }
   }
@@ -1393,7 +1388,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   }
 
   string prefix;
-  vector<string>caps_vec;
+  vector<string> caps_vec;
+  map<string, string> ceph_caps;
   string entity_name;
   EntityName entity;
 
@@ -1410,10 +1406,16 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 
   cmd_getval(cmdmap, "caps", caps_vec);
   // fs authorize command's can have odd number of caps arguments
-  if ((prefix != "fs authorize") && (caps_vec.size() % 2) != 0) {
-    ss << "bad capabilities request; odd number of arguments";
-    err = -EINVAL;
-    goto done;
+  if (prefix != "fs authorize") {
+    if ((caps_vec.size() % 2) != 0) {
+      ss << "bad capabilities request; odd number of arguments";
+      err = -EINVAL;
+      goto done;
+    } else {
+      for (size_t i = 0; i < caps_vec.size(); i += 2) {
+	ceph_caps.insert({caps_vec[i], caps_vec[i + 1]});
+      }
+    }
   }
 
   cmd_getval(cmdmap, "entity", entity_name);
@@ -1475,7 +1477,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    if (!valid_caps(caps_vec, &ss)) {
+    if (!valid_caps(ceph_caps, &ss)) {
       err = -EINVAL;
       goto done;
     }
@@ -1488,12 +1490,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     }
 
     // build new caps from provided arguments (if available)
-    for (vector<string>::iterator it = caps_vec.begin();
-	 it != caps_vec.end() && (it + 1) != caps_vec.end();
-	 it += 2) {
-      string sys = *it;
+    for (const auto& kv : ceph_caps) {
+      string sys = kv.first;
       bufferlist cap;
-      encode(*(it+1), cap);
+      encode((kv.second, cap);
       new_caps[sys] = cap;
     }
 
@@ -1636,20 +1636,16 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	     !entity_name.empty()) {
     // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
 
-    if (!valid_caps(caps_vec, &ss)) {
+    if (!valid_caps(ceph_caps, &ss)) {
       err = -EINVAL;
       goto done;
     }
 
-    // Parse the list of caps into a map
-    std::map<std::string, bufferlist> wanted_caps;
-    for (vector<string>::const_iterator it = caps_vec.begin();
-	 it != caps_vec.end() && (it + 1) != caps_vec.end();
-	 it += 2) {
-      const std::string &sys = *it;
+    map<string, bufferlist> wanted_caps;
+    for (const auto& kv : ceph_caps) {
       bufferlist cap;
-      encode(*(it+1), cap);
-      wanted_caps[sys] = cap;
+      encode(kv.second, cap);
+      encoded_caps[kv.first] = cap;
     }
 
     // do we have it?
@@ -1744,9 +1740,9 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	 it != caps_vec.end() && (it + 1) != caps_vec.end();
 	 it += 2) {
       const string &path = *it;
-      const string &cap = *(it+1);
+      const string &cap = *(it + 1);
       bool root_squash = false;
-      if ((it + 2) != caps_vec.end() && *(it+2) == "root_squash") {
+      if ((it + 2) != caps_vec.end() && *(it + 2) == "root_squash") {
 	root_squash = true;
 	++it;
       }
@@ -1857,15 +1853,14 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    if (!valid_caps(caps_vec, &ss)) {
+    if (!valid_caps(ceph_caps, &ss)) {
       err = -EINVAL;
       goto done;
     }
 
     map<string,bufferlist> newcaps;
-    for (vector<string>::iterator it = caps_vec.begin();
-	 it != caps_vec.end(); it += 2)
-      encode(*(it+1), newcaps[*it]);
+    for (const auto& kv : ceph_caps)
+      encode(kv.second, newcaps[kv.first]);
 
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.auth.caps = newcaps;
