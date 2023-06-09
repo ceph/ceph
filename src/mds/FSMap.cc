@@ -448,9 +448,9 @@ mds_gid_t Filesystem::get_standby_replay(mds_gid_t who) const
   return MDS_GID_NONE;
 }
 
-const Filesystem& FSMap::create_filesystem(std::string_view name,
+Filesystem FSMap::create_filesystem(std::string_view name,
     int64_t metadata_pool, int64_t data_pool, uint64_t features,
-    fs_cluster_id_t fscid, bool recover)
+    bool recover)
 {
   auto fs = Filesystem();
   fs.mds_map.epoch = epoch;
@@ -472,6 +472,11 @@ const Filesystem& FSMap::create_filesystem(std::string_view name,
     fs.mds_map.set_flag(CEPH_MDSMAP_NOT_JOINABLE);
   }
 
+  return fs;
+}
+
+const Filesystem& FSMap::commit_filesystem(fs_cluster_id_t fscid, Filesystem fs)
+{
   if (fscid == FS_CLUSTER_ID_NONE) {
     fs.fscid = next_filesystem_id++;
   } else {
