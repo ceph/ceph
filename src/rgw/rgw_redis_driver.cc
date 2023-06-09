@@ -39,11 +39,10 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
   if (client.is_connected())
     return 0;
 
-  /*
   if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
-  }*/
+  }
 
   client.connect("127.0.0.1", 6379, nullptr);
 
@@ -72,6 +71,36 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
     client.sync_commit(std::chrono::milliseconds(1000));
   } catch(std::exception &e) {}
 
+  return result;
+}
+
+std::unordered_map<std::string, Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) {
+  std::unordered_map<std::string, Entry> result;
+
+  if (!client.is_connected()) 
+    return {};
+
+//  try {
+    size_t cursor = 0;
+    const std::string pattern = "*:cache";
+
+  /*  client.scan(cursor, pattern, [](cpp_redis::reply &reply) {
+      dout(0) << "Sam" << dendl;
+      if (!reply.is_null()) {
+        //result = reply.as_array();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+*/
+/*    if (result.empty()) {
+      return {};
+    }
+  } catch(std::exception &e) {
+    return {};
+  }
+*/
+  dout(0) << "Sam: " << client.is_connected() << dendl;
   return result;
 }
 
