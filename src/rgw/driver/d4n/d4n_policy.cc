@@ -203,27 +203,37 @@ int LFUDAPolicy::get_min_avg_weight() {
   return weight;
 }
 
-int LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
-  std::unordered_map<string key, Entry> entries = cacheNode->list_entries(dpp);
+CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
+  unordered_map<std::string, rgw::cal::Entry> entries = cacheNode->list_entries(dpp);
+  std::string victimName;
   int minWeight = INT_MAX;
-  int localWeight = -1;
 
-  for (auto it = map.begin(); it != map.end(); ++it) { // make faster by caching for future? -Sam
-    std::string localWeightStr = cacheNode->get_attr(dpp, it->second.key, "localWeight"); // change to block name eventually -Sam
-    int localWeight = -1;
+  for (auto it = entries.begin(); it != entries.end(); ++it) { // make faster by caching for future? -Sam
+    std::string localWeight = cacheNode->get_attr(dpp, it->second.key, "localWeight"); // change to block name eventually -Sam
 
-    if (localWeightStr.empty()) { // maybe do this in some sort of initialization procedure instead of here? -Sam
+    if (localWeight.empty()) { // maybe do this in some sort of initialization procedure instead of here? -Sam
       /* Local weight hasn't been set */
-      int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(0)); // not the correct default value -Sam
+      int ret = cacheNode->set_attr(dpp, it->second.key, "localWeight", std::to_string(0)); // not the correct default value -Sam
 
       if (ret < 0)
-	return -1;
-    } else if (localWeight < minWeight) {
-      minWeight = std::stoi(localWeightStr);
+	return {};
+    } else if (std::stoi(localWeight) < minWeight) {
+      minWeight = std::stoi(localWeight);
+      victimName = it->second.key; // are entries = blocks? -Sam
     }
   }
 
-  return minWeight;
+  /* Get victim cache block */
+  CacheBlock victimBlock;
+  victimBlock.cacheObj.objName = victimName;
+  BlockDirectory blockDir;
+
+  int ret = blockDir.get_value(&victimBlock);
+
+  if (ret < 0)
+    return {};
+
+  return victimBlock;
 }
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) {
@@ -255,6 +265,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
       uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
       //while (freeSpace < block->size) {
+        dout(0) << "Eviction being called" << dendl; 
 	int newSpace = eviction(dpp, cacheNode);
 	
 	if (newSpace > 0)
@@ -294,11 +305,17 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 }
 
 uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
-  CacheBlock* victim = NULL; // find victim
-  std::string key = "rgw-object:" + victim->cacheObj.objName + ":directory";
+  CacheBlock victim = find_victim(dpp, cacheNode);
+
+  if (victim == {}) {
+    dout(0) << "Could not find victim block"
+    return -1;
+  }
+
+  std::string key = "rgw-object:" + victim.cacheObj.objName + ":directory";
   std::string hosts;
   int globalWeight = get_global_weight(key);
-  int localWeight = std::stoi(cacheNode->get_attr(dpp, victim->cacheObj.objName, "localWeight")); // change to block name eventually -Sam
+  int localWeight = std::stoi(cacheNode->get_attr(dpp, victim.cacheObj.objName, "localWeight")); // change to block name eventually -Sam
   int avgWeight;
 
   try {
@@ -316,7 +333,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDri
   if (!hosts.length()) { /* Last copy */
     if (globalWeight > 0) {
       localWeight += globalWeight;
-      int ret = cacheNode->set_attr(dpp, victim->cacheObj.objName, "localWeight", std::to_string(localWeight));
+      int ret = cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight));
 
       if (!ret) // check return value -Sam
         ret = set_global_weight(key, 0);
@@ -338,7 +355,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDri
   }
 
   globalWeight += localWeight;
-  int ret = cacheNode->delete_data(dpp, victim->cacheObj.objName);
+  int ret = cacheNode->delete_data(dpp, victim.cacheObj.objName);
 
   if (!ret)
     ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries(dpp)), ""/*local cache location*/); // Where else must this be set? -Sam
@@ -355,7 +372,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDri
   if (ret)
     return -2;
 
-  return victim->size;
+  return victim.size;
 }
 
 int PolicyDriver::init() { // Add "none" option? -Sam
