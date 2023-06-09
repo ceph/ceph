@@ -1994,7 +1994,7 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     return ret;
   }
 
-  bool olh_found;
+  bool olh_found = false;
   ret = olh.init(&olh_found);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: olh.init() returned ret=%d", ret);
