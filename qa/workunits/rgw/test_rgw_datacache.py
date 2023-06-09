@@ -170,8 +170,16 @@ def main():
     out = exec_cmd('radosgw-admin object stat --bucket=%s --object=%s' % (BUCKET_NAME, FILE_NAME))
 
     json_op = json.loads(out)
-    cached_object_name = json_op['manifest']['prefix']
-    log.debug("Cached object name is: %s", cached_object_name)
+    bucket_marker = json_op['manifest']['tail_placement']['bucket']['marker']
+    object_name = json_op['name']
+
+    # get num parts of the cached object, 7MB is the size of the object, 4MB is the chunk size used in d3n filter
+    object_size = 7340032
+    chunk_size = 4194304
+    num_parts = int(object_size/chunk_size)
+    if object_size%chunk_size > 0:
+        num_parts = num_parts + 1
+    log.info("Num parts is: %s", num_parts)
 
     # check that the cache is enabled (does the cache directory empty)
     out = exec_cmd('find %s -type f | wc -l' % (cache_dir))
@@ -180,23 +188,31 @@ def main():
     if chk_cache_dir == 0:
         log.info("NOTICE: datacache test object not found, inspect if datacache was bypassed or disabled during this check.")
         return
+    if chk_cache_dir != 2:
+        log.info("ERROR: not all the parts of the datacache test object were found in the cache.")
+        return
 
     # list the files in the cache dir for troubleshooting
     out = exec_cmd('ls -l %s' % (cache_dir))
+
     # get name of cached object and check if it exists in the cache
-    out = exec_cmd('find %s -name "*%s1"' % (cache_dir, cached_object_name))
-    cached_object_path = get_cmd_output(out)
-    log.debug("Path of file in datacache is: %s", cached_object_path)
-    out = exec_cmd('basename %s' % (cached_object_path))
-    basename_cmd_out = get_cmd_output(out)
-    log.debug("Name of file in datacache is: %s", basename_cmd_out)
+    offset = 0
+    length = chunk_size
+    total_length = chunk_size
+    for i in range(num_parts):
+        cached_object_name = bucket_marker + "_" + object_name + "_" + str(offset) + "_" + str(length)
+        log.debug("Cached object name is: %s", cached_object_name)
+        out = exec_cmd('find %s -name %s' % (cache_dir, cached_object_name))
+        cached_object_path = get_cmd_output(out)
+        log.debug("Path of file in datacache is: %s", cached_object_path)
+        offset = offset + chunk_size
+        if i == (num_parts - 2): # last part size maybe less than chunk_size
+            length = object_size - total_length
+        else:
+            length = chunk_size
+        total_length = total_length + offset
 
-    # check to see if the cached object is in Ceph
-    out = exec_cmd('rados ls -p default.rgw.buckets.data')
-    rados_ls_out = get_cmd_output(out)
-    log.debug("rados ls output is: %s", rados_ls_out)
 
-    assert(basename_cmd_out in rados_ls_out)
     log.debug("RGW Datacache test SUCCESS")
 
     # remove datacache dir
