@@ -90,7 +90,6 @@
     "@angular/compiler-cli": "14.3.0",
     "@angular/language-service": "14.3.0",
     "@applitools/eyes-cypress": "3.22.5",
-    "@apteco/ngth": "1.5.0",
     "@compodoc/compodoc": "1.1.18",
     "@cypress/browserify-preprocessor": "3.0.2",
     "@types/brace-expansion": "1.1.0",
