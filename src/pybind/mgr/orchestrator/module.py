@@ -883,13 +883,33 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             return HandleCommandResult(stdout=table.get_string())
 
-    @_cli_write_command('orch prometheus access info')
+    @_cli_write_command('orch prometheus set-credentials')
+    def _set_prometheus_access_info(self, user: str, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
+        _password = password or inbuf
+        if not (user and _password):
+            return HandleCommandResult(-errno.EINVAL, "", ("Invalid arguments. Please provide arguments <user> <password> "
+                                                           "or -i <password_text_file>"))
+        completion = self.set_prometheus_access_info(user, _password)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
+    @_cli_write_command('orch alertmanager set-credentials')
+    def _set_alertmanager_access_info(self, user: str, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
+        _password = password or inbuf
+        if not (user and _password):
+            return HandleCommandResult(-errno.EINVAL, "", ("Invalid arguments. Please provide arguments <user> <password> "
+                                                           "or -i <password_text_file>"))
+        completion = self.set_alertmanager_access_info(user, _password)
+        result = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(result))
+
+    @_cli_write_command('orch prometheus get-credentials')
     def _get_prometheus_access_info(self) -> HandleCommandResult:
         completion = self.get_prometheus_access_info()
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
 
-    @_cli_write_command('orch alertmanager access info')
+    @_cli_write_command('orch alertmanager get-credentials')
     def _get_alertmanager_access_info(self) -> HandleCommandResult:
         completion = self.get_alertmanager_access_info()
         access_info = raise_if_exception(completion)

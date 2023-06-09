@@ -2982,7 +2982,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         if daemon_type == 'node-exporter':
             config = fetch_configs(ctx)
             try:
-                r += [f'--web.config={config["web_config"]}']
+                r += [f'--web.config.file={config["web_config"]}']
             except KeyError:
                 pass
             r += ['--path.procfs=/host/proc',
