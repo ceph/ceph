@@ -274,7 +274,6 @@
       "cli": {}
     }
   },
-  "defaultProject": "ceph-dashboard",
   "schematics": {
     "@schematics/angular:component": {
       "prefix": "cd",
@@ -286,6 +285,8 @@
   },
   "cli": {
     "analytics": false,
-    "defaultCollection": "@angular-eslint/schematics"
+    "schematicCollections": [
+      "@angular-eslint/schematics"
+    ]
   }
 }

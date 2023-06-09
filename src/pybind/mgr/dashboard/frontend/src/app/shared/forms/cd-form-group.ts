@@ -2,7 +2,7 @@ import {
   AbstractControl,
   AbstractControlOptions,
   AsyncValidatorFn,
-  FormGroup,
+  UntypedFormGroup,
   NgForm,
   ValidatorFn
 } from '@angular/forms';
@@ -10,7 +10,7 @@ import {
 /**
  * CdFormGroup extends FormGroup with a few new methods that will help form development.
  */
-export class CdFormGroup extends FormGroup {
+export class CdFormGroup extends UntypedFormGroup {
   constructor(
     public controls: { [key: string]: AbstractControl },
     validatorOrOpts?: ValidatorFn | ValidatorFn[] | AbstractControlOptions | null,

@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -37,8 +37,8 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     this.permissions = this.authStorageService.getPermissions();
     this.priorities = this.osdService.osdRecvSpeedModalPriorities.KNOWN_PRIORITIES;
     this.osdRecvSpeedForm = new CdFormGroup({
-      priority: new FormControl(null, { validators: [Validators.required] }),
-      customizePriority: new FormControl(false)
+      priority: new UntypedFormControl(null, { validators: [Validators.required] }),
+      customizePriority: new UntypedFormControl(false)
     });
     this.priorityAttrs = {
       osd_max_backfills: {
@@ -74,7 +74,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     Object.keys(this.priorityAttrs).forEach((configOptionName) => {
       this.osdRecvSpeedForm.addControl(
         configOptionName,
-        new FormControl(null, { validators: [Validators.required] })
+        new UntypedFormControl(null, { validators: [Validators.required] })
       );
     });
   }
