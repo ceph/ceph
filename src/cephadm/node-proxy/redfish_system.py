@@ -2,7 +2,7 @@ from system import System
 from redfish_client import RedFishClient
 from threading import Thread, Lock
 from time import sleep
-from util import Logger
+from util import Logger, retry
 from typing import Dict, Any
 
 log = Logger(__name__)
@@ -25,6 +25,14 @@ class RedfishSystem(System):
         self.data_ready: bool = False
         self.previous_data: Dict = {}
         self.lock: Lock = Lock()
+
+    @retry(retries=10, delay=2)
+    def _get_path(self, path: str) -> Dict:
+        result = self.client.get_path(path)
+        if result is None:
+            log.logger.error(f"The client reported an error when getting path: {path}")
+            raise RuntimeError(f"Could not get path: {path}")
+        return result
 
     def start_client(self) -> None:
         log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")

@@ -14,12 +14,12 @@ class RedfishDell(RedfishSystem):
     def _update_network(self) -> None:
         net_path = self._system['EthernetInterfaces']['@odata.id']
         log.logger.info("Updating network")
-        network_info = self.client.get_path(net_path)
+        network_info = self._get_path(net_path)
         self._system['network'] = {}
         result: Dict[str, Dict[str, Dict]] = dict()
         for interface in network_info['Members']:
             interface_path = interface['@odata.id']
-            interface_info = self.client.get_path(interface_path)
+            interface_info = self._get_path(interface_path)
             interface_id = interface_info['Id']
             result[interface_id] = dict()
             result[interface_id]['description'] = interface_info['Description']
@@ -31,12 +31,12 @@ class RedfishDell(RedfishSystem):
     def _update_processors(self) -> None:
         cpus_path = self._system['Processors']['@odata.id']
         log.logger.info("Updating processors")
-        cpus_info = self.client.get_path(cpus_path)
+        cpus_info = self._get_path(cpus_path)
         self._system['processors'] = {}
         result: Dict[str, Dict[str, Dict]] = dict()
         for cpu in cpus_info['Members']:
             cpu_path = cpu['@odata.id']
-            cpu_info = self.client.get_path(cpu_path)
+            cpu_info = self._get_path(cpu_path)
             cpu_id = cpu_info['Id']
             result[cpu_id] = dict()
             result[cpu_id]['description'] = cpu_info['Description']
@@ -51,14 +51,14 @@ class RedfishDell(RedfishSystem):
     def _update_storage(self) -> None:
         storage_path = self._system['Storage']['@odata.id']
         log.logger.info("Updating storage")
-        storage_info = self.client.get_path(storage_path)
+        storage_info = self._get_path(storage_path)
         result: Dict[str, Dict[str, Dict]] = dict()
         for storage in storage_info['Members']:
             entity_path = storage['@odata.id']
-            entity_info = self.client.get_path(entity_path)
+            entity_info = self._get_path(entity_path)
             for drive in entity_info['Drives']:
                 drive_path = drive['@odata.id']
-                drive_info = self.client.get_path(drive_path)
+                drive_info = self._get_path(drive_path)
                 drive_id = drive_info['Id']
                 result[drive_id] = dict()
                 result[drive_id]['description'] = drive_info['Description']

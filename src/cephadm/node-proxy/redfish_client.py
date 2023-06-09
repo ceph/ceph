@@ -47,9 +47,8 @@ class RedFishClient:
             response = self.redfish_obj.get(path)
             return response.dict
         except Exception as e:
-            # TODO
-            log.logger.error(f"Error detected.\n{e}")
-            pass
+            log.logger.error(f"Error getting path:\n{e}")
+            return {}
 
     def logout(self) -> None:
         log.logger.info('logging out...')
