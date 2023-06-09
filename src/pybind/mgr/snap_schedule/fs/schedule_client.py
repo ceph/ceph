@@ -112,8 +112,8 @@ def get_prune_set(candidates: Set[Tuple[cephfs.DirEntry, datetime]],
                                    f'{period_count}{period}'))
                         break
     if len(keep) > max_snaps_to_retain:
-        log.info((f'Would keep more then {max_snaps_to_retain}, '
-                  'pruning keep set'))
+        log.info(f'Pruning keep set; would retain first {max_snaps_to_retain}'
+                 f' out of {len(keep)} snaps')
         keep = keep[:max_snaps_to_retain]
     return candidates - set(keep)
 
