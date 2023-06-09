@@ -674,6 +674,14 @@ class Orchestrator(object):
         """get prometheus access information"""
         raise NotImplementedError()
 
+    def set_alertmanager_access_info(self, user: str, password: str) -> OrchResult[str]:
+        """set alertmanager access information"""
+        raise NotImplementedError()
+
+    def set_prometheus_access_info(self, user: str, password: str) -> OrchResult[str]:
+        """set prometheus access information"""
+        raise NotImplementedError()
+
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:
         """get alertmanager access information"""
         raise NotImplementedError()
