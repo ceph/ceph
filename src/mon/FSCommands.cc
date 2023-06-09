@@ -237,6 +237,25 @@ class FsNewHandler : public FileSystemCommandHandler
       }
     }
 
+    vector<string> fsops_vec;
+    cmd_getval(cmdmap, "set", fsops_vec);
+    if(!fsops_vec.empty()) {
+      if(fsops_vec[0] != "set") {
+        ss << "invalid command";
+        return -EINVAL;
+      }
+      if(fsops_vec.size() % 2 == 0 || fsops_vec.size() < 2) {
+      /* since "set" is part of fs options vector, if size of vec is divisble
+      by 2, it indicates that the fsops key-value pairs are incomplete e.g.
+      ["set", "max_mds", "2"]   # valid
+      ["set", "max_mds"]        # invalid 
+      */  
+        ss << "incomplete list of key-val pairs provided "
+           << fsops_vec.size() - 1;
+        return -EINVAL;
+      }
+    }
+
     pg_pool_t const *data_pool = mon->osdmon()->osdmap.get_pg_pool(data);
     ceph_assert(data_pool != NULL);  // Checked it existed above
     pg_pool_t const *metadata_pool = mon->osdmon()->osdmap.get_pg_pool(metadata);
@@ -257,41 +276,66 @@ class FsNewHandler : public FileSystemCommandHandler
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
-    mon->osdmon()->do_application_enable(data, APP_NAME_CEPHFS, "data",
-					 fs_name, true);
-    mon->osdmon()->do_application_enable(metadata, APP_NAME_CEPHFS,
-					 "metadata", fs_name, true);
-    mon->osdmon()->do_set_pool_opt(metadata,
-				   pool_opts_t::RECOVERY_PRIORITY,
-				   static_cast<int64_t>(5));
-    mon->osdmon()->do_set_pool_opt(metadata,
-				   pool_opts_t::PG_NUM_MIN,
-				   static_cast<int64_t>(16));
-    mon->osdmon()->do_set_pool_opt(metadata,
-				   pool_opts_t::PG_AUTOSCALE_BIAS,
-				   static_cast<double>(4.0));
-    mon->osdmon()->propose_pending();
 
     bool recover = false;
     cmd_getval(cmdmap, "recover", recover);
 
-    // All checks passed, go ahead and create.
-    auto&& fs = fsmap.create_filesystem(fs_name, metadata, data,
-        mon->get_quorum_con_features(), fscid, recover);
+    auto fs = fsmap.create_filesystem(fs_name, metadata, data, mon->get_quorum_con_features(), recover);
 
-    ss << "new fs with metadata pool " << metadata << " and data pool " << data;
-
-    if (recover) {
-      return 0;
+    // set fs options
+    string set_fsops_info;
+    for (size_t i = 1 ; i < fsops_vec.size() ; i+=2) {
+      std::ostringstream oss;
+      int ret = set_val(mon, fsmap, op, cmdmap, oss, &fs, fsops_vec[i], fsops_vec[i+1]);
+      if (ret < 0) {
+        ss << oss.str();
+        return ret;
+      }
+      if ((i + 2) <= fsops_vec.size()) {
+        set_fsops_info.append("; ");
+      }
+      set_fsops_info.append(oss.str());
     }
 
-    // assign a standby to rank 0 to avoid health warnings
-    auto info = fsmap.find_replacement_for({fs.get_fscid(), 0});
+    {
+      auto& cfs = fsmap.commit_filesystem(fscid, std::move(fs));
 
-    if (info) {
-      mon->clog->info() << info->human_name() << " assigned to filesystem "
-          << fs_name << " as rank 0";
-      fsmap.promote(info->global_id, fs.get_fscid(), 0);
+      ss << "new fs with metadata pool " << metadata << " and data pool " << data;
+      ss << set_fsops_info;
+
+      mon->osdmon()->do_application_enable(data,
+					   pg_pool_t::APPLICATION_NAME_CEPHFS,
+					   "data", fs_name, true);
+      mon->osdmon()->do_application_enable(metadata,
+					   pg_pool_t::APPLICATION_NAME_CEPHFS,
+					   "metadata", fs_name, true);
+      mon->osdmon()->do_set_pool_opt(metadata,
+				     pool_opts_t::RECOVERY_PRIORITY,
+				     static_cast<int64_t>(5));
+      mon->osdmon()->do_set_pool_opt(metadata,
+				     pool_opts_t::PG_NUM_MIN,
+				     static_cast<int64_t>(16));
+      mon->osdmon()->do_set_pool_opt(metadata,
+				     pool_opts_t::PG_AUTOSCALE_BIAS,
+				     static_cast<double>(4.0));
+      mon->osdmon()->propose_pending();
+
+      if (recover) {
+        return 0;
+      }
+
+      // assign a standby to all the ranks to avoid health warnings
+      for (int i = 0 ; i < cfs.get_mds_map().get_max_mds() ; ++i) {
+        auto info = fsmap.find_replacement_for({cfs.get_fscid(), i});
+
+        if (info) {
+          mon->clog->info() << info->human_name() << " assigned to filesystem "
+                            << cfs.get_mds_map().get_fs_name() << " as rank " << i;
+          fsmap.promote(info->global_id, cfs.get_fscid(), i);
+        } else {
+          break;
+        }
+      }
     }
 
     return 0;
@@ -332,14 +376,30 @@ public:
       return -EINVAL;
     }
 
-    return set_val(mon, fsmap, op, cmdmap, ss, fsp, var, val);
+    return set_val(mon, fsmap, op, cmdmap, ss, fsp->get_fscid(), var, val);
   }
 };
 
+static void modify_filesystem(FSMap& fsmap, auto&& fsv, auto&& fn)
+{
+  if (std::holds_alternative<Filesystem*>(fsv)) {
+    fn(*std::get<Filesystem*>(fsv));
+  } else if (std::holds_alternative<fs_cluster_id_t>(fsv)) {
+    fsmap.modify_filesystem(std::get<fs_cluster_id_t>(fsv), std::move(fn));
+  } else ceph_assert(0);
+}
+
 int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRef op,
-            const cmdmap_t& cmdmap, std::ostream &ss, Filesystem const* fsp,
+            const cmdmap_t& cmdmap, std::ostream &ss, fs_or_fscid fsv,
             std::string var, std::string val)
 {
+  const Filesystem* fsp;
+  if (std::holds_alternative<Filesystem*>(fsv)) {
+    fsp = std::get<Filesystem*>(fsv);
+  } else if (std::holds_alternative<fs_cluster_id_t>(fsv)) {
+    fsp = &fsmap.get_filesystem(std::get<fs_cluster_id_t>(fsv));
+  } else ceph_assert(0);
+
   {
     std::string interr;
     // we got a string.  see if it contains an int.
@@ -368,8 +428,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
         return -EINVAL;
       }
 
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [n](auto&& fs)
       {
 	fs.get_mds_map().clear_flag(CEPH_MDSMAP_NOT_JOINABLE);
@@ -392,16 +451,14 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 	}
 	ss << "inline data enabled";
 
-        fsmap.modify_filesystem(
-            fsp->get_fscid(),
+        modify_filesystem(fsmap, fsv,
             [](auto&& fs)
         {
           fs.get_mds_map().set_inline_data_enabled(true);
         });
       } else {
 	ss << "inline data disabled";
-        fsmap.modify_filesystem(
-            fsp->get_fscid(),
+        modify_filesystem(fsmap, fsv,
             [](auto&& fs)
         {
           fs.get_mds_map().set_inline_data_enabled(false);
@@ -413,8 +470,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
       } else {
         ss << "setting the metadata load balancer to " << val;
       }
-      fsmap.modify_filesystem(
-	fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
 	[val](auto&& fs)
         {
           fs.get_mds_map().set_balancer(val);
@@ -435,8 +491,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
       }
       ss << "setting the metadata balancer rank mask to " << val;
 
-      fsmap.modify_filesystem(
-	fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
 	[val](auto&& fs)
         {
           fs.get_mds_map().set_bal_rank_mask(val);
@@ -451,8 +506,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 	ss << var << " must at least " << CEPH_MIN_STRIPE_UNIT;
 	return -ERANGE;
       }
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [n](auto&& fs)
       {
         fs.get_mds_map().set_max_filesize(n);
@@ -462,8 +516,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 	ss << var << " requires an integer value";
 	return -EINVAL;
       }
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [n](auto&& fs)
       {
         fs.get_mds_map().set_max_xattr_size(n);
@@ -476,16 +529,14 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
       }
 
       if (!enable_snaps) {
-        fsmap.modify_filesystem(
-            fsp->get_fscid(),
+        modify_filesystem(fsmap, fsv,
             [](auto&& fs)
         {
           fs.get_mds_map().clear_snaps_allowed();
         });
 	ss << "disabled new snapshots";
       } else {
-        fsmap.modify_filesystem(
-            fsp->get_fscid(),
+        modify_filesystem(fsmap, fsv,
             [](auto&& fs)
         {
           fs.get_mds_map().set_snaps_allowed();
@@ -513,16 +564,14 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 
       if (enable) {
 	ss << "enabled multimds with snapshot";
-        fsmap.modify_filesystem(
-            fsp->get_fscid(),
+        modify_filesystem(fsmap, fsv,
             [](auto&& fs)
         {
 	  fs.get_mds_map().set_multimds_snaps_allowed();
         });
       } else {
 	ss << "disabled multimds with snapshot";
-        fsmap.modify_filesystem(
-            fsp->get_fscid(),
+        modify_filesystem(fsmap, fsv,
             [](auto&& fs)
         {
 	  fs.get_mds_map().clear_multimds_snaps_allowed();
@@ -540,8 +589,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 
       ss << fsp->get_mds_map().get_fs_name();
 
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [is_down](auto&& fs)
       {
 	if (is_down) {
@@ -572,8 +620,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 
       ss << fsp->get_mds_map().get_fs_name();
 
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [joinable](auto&& fs)
       {
 	if (joinable) {
@@ -602,8 +649,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
        ss << var << " must be non-negative";
        return -ERANGE;
       }
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [n](auto&& fs)
       {
         fs.get_mds_map().set_standby_count_wanted(n);
@@ -617,8 +663,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
        ss << var << " must be at least 30s";
        return -ERANGE;
       }
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [n](auto&& fs)
       {
         fs.get_mds_map().set_session_timeout((uint32_t)n);
@@ -632,8 +677,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
        ss << var << " must be at least 30s";
        return -ERANGE;
       }
-      fsmap.modify_filesystem(
-          fsp->get_fscid(),
+      modify_filesystem(fsmap, fsv,
           [n](auto&& fs)
       {
         fs.get_mds_map().set_session_autoclose((uint32_t)n);
@@ -702,7 +746,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
       auto f = [vno](auto&& fs) {
         fs.get_mds_map().set_min_compat_client(vno);
       };
-      fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
+      modify_filesystem(fsmap, fsv, std::move(f));
     } else if (var == "refuse_client_session") {
       bool refuse_session = false;
       int r = parse_bool(val, &refuse_session, ss);
@@ -712,8 +756,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
 
       if (refuse_session) {
         if (!(fsp->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION))) {
-          fsmap.modify_filesystem(
-            fsp->get_fscid(),
+          modify_filesystem(fsmap, fsv,
             [](auto&& fs)
           {
             fs.get_mds_map().set_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);
@@ -724,8 +767,7 @@ int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRe
         }     
       } else {
           if (fsp->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION)) {
-            fsmap.modify_filesystem(
-              fsp->get_fscid(),
+            modify_filesystem(fsmap, fsv,
               [](auto&& fs)
             {
               fs.get_mds_map().clear_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);

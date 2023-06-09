@@ -454,9 +454,15 @@ public:
    * Caller must already have validated all arguments vs. the existing
    * FSMap and OSDMap contents.
    */
-  const Filesystem& create_filesystem(
+  Filesystem create_filesystem(
       std::string_view name, int64_t metadata_pool, int64_t data_pool,
-      uint64_t features, fs_cluster_id_t fscid, bool recover);
+      uint64_t features, bool recover);
+
+  /**
+   * Commit the created filesystem to the FSMap.
+   *
+   */
+  const Filesystem& commit_filesystem(fs_cluster_id_t fscid, Filesystem fs);
 
   /**
    * Remove the filesystem (it must exist).  Caller should already
