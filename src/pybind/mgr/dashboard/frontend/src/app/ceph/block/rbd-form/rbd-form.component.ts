@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, ValidatorFn, Validators } from '@angular/forms';
+import { UntypedFormControl, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -174,33 +174,33 @@ export class RbdFormComponent extends CdForm implements OnInit {
   createForm() {
     this.rbdForm = new CdFormGroup(
       {
-        parent: new FormControl(''),
-        name: new FormControl('', {
+        parent: new UntypedFormControl(''),
+        name: new UntypedFormControl('', {
           validators: [Validators.required, Validators.pattern(/^[^@/]+?$/)]
         }),
-        pool: new FormControl(null, {
+        pool: new UntypedFormControl(null, {
           validators: [Validators.required]
         }),
-        namespace: new FormControl(null),
-        useDataPool: new FormControl(false),
-        dataPool: new FormControl(null),
-        size: new FormControl(null, {
+        namespace: new UntypedFormControl(null),
+        useDataPool: new UntypedFormControl(false),
+        dataPool: new UntypedFormControl(null),
+        size: new UntypedFormControl(null, {
           updateOn: 'blur'
         }),
-        obj_size: new FormControl(this.defaultObjectSize),
+        obj_size: new UntypedFormControl(this.defaultObjectSize),
         features: new CdFormGroup(
           this.featuresList.reduce((acc: object, e) => {
-            acc[e.key] = new FormControl({ value: false, disabled: !!e.initDisabled });
+            acc[e.key] = new UntypedFormControl({ value: false, disabled: !!e.initDisabled });
             return acc;
           }, {})
         ),
-        mirroring: new FormControl(''),
-        schedule: new FormControl('', {
+        mirroring: new UntypedFormControl(''),
+        schedule: new UntypedFormControl('', {
           validators: [Validators.pattern(/^([0-9]+)d|([0-9]+)h|([0-9]+)m$/)] // check schedule interval to be in format - 1d or 1h or 1m
         }),
-        mirroringMode: new FormControl(''),
-        stripingUnit: new FormControl(this.defaultStripingUnit),
-        stripingCount: new FormControl(this.defaultStripingCount, {
+        mirroringMode: new UntypedFormControl(''),
+        stripingUnit: new UntypedFormControl(this.defaultStripingUnit),
+        stripingCount: new UntypedFormControl(this.defaultStripingCount, {
           updateOn: 'blur'
         })
       },

@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { AbstractControlOptions, FormBuilder } from '@angular/forms';
+import { AbstractControlOptions, UntypedFormBuilder } from '@angular/forms';
 
 import { CdFormGroup } from './cd-form-group';
 
@@ -9,7 +9,7 @@ import { CdFormGroup } from './cd-form-group';
 @Injectable({
   providedIn: 'root'
 })
-export class CdFormBuilder extends FormBuilder {
+export class CdFormBuilder extends UntypedFormBuilder {
   group(
     controlsConfig: { [key: string]: any },
     extra: AbstractControlOptions | null = null

@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { AbstractControl, FormControl } from '@angular/forms';
+import { AbstractControl, UntypedFormControl } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -31,15 +31,15 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    const fg: Record<string, FormControl> = {
-      backstore: new FormControl(this.imagesSettings[this.image]['backstore']),
-      lun: new FormControl(this.imagesSettings[this.image]['lun']),
-      wwn: new FormControl(this.imagesSettings[this.image]['wwn'])
+    const fg: Record<string, UntypedFormControl> = {
+      backstore: new UntypedFormControl(this.imagesSettings[this.image]['backstore']),
+      lun: new UntypedFormControl(this.imagesSettings[this.image]['lun']),
+      wwn: new UntypedFormControl(this.imagesSettings[this.image]['wwn'])
     };
     _.forEach(this.backstores, (backstore) => {
       const model = this.imagesSettings[this.image][backstore] || {};
       _.forIn(this.disk_default_controls[backstore], (_value, key) => {
-        fg[key] = new FormControl(model[key]);
+        fg[key] = new UntypedFormControl(model[key]);
       });
     });
 

@@ -1,5 +1,5 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal, NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
@@ -60,7 +60,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
 
   createForm() {
     this.multisiteMigrateForm = new CdFormGroup({
-      realmName: new FormControl(null, {
+      realmName: new UntypedFormControl(null, {
         validators: [
           Validators.required,
           CdValidators.custom('uniqueName', (realmName: string) => {
@@ -68,7 +68,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           })
         ]
       }),
-      zonegroupName: new FormControl(null, {
+      zonegroupName: new UntypedFormControl(null, {
         validators: [
           Validators.required,
           CdValidators.custom('uniqueName', (zonegroupName: string) => {
@@ -76,7 +76,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           })
         ]
       }),
-      zoneName: new FormControl(null, {
+      zoneName: new UntypedFormControl(null, {
         validators: [
           Validators.required,
           CdValidators.custom('uniqueName', (zoneName: string) => {
@@ -84,7 +84,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           })
         ]
       }),
-      zone_endpoints: new FormControl([], {
+      zone_endpoints: new UntypedFormControl([], {
         validators: [
           CdValidators.custom('endpoint', (value: string) => {
             if (_.isEmpty(value)) {
@@ -109,7 +109,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           Validators.required
         ]
       }),
-      zonegroup_endpoints: new FormControl(
+      zonegroup_endpoints: new UntypedFormControl(
         [],
         [
           CdValidators.custom('endpoint', (value: string) => {
@@ -135,8 +135,8 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           Validators.required
         ]
       ),
-      access_key: new FormControl(null),
-      secret_key: new FormControl(null)
+      access_key: new UntypedFormControl(null),
+      secret_key: new UntypedFormControl(null)
     });
   }
 

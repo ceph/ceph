@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -82,7 +82,7 @@ export class HostFormComponent extends CdForm implements OnInit {
 
   private createForm() {
     this.hostForm = new CdFormGroup({
-      hostname: new FormControl('', {
+      hostname: new UntypedFormControl('', {
         validators: [
           Validators.required,
           CdValidators.custom('uniqueName', (hostname: string) => {
@@ -90,11 +90,11 @@ export class HostFormComponent extends CdForm implements OnInit {
           })
         ]
       }),
-      addr: new FormControl('', {
+      addr: new UntypedFormControl('', {
         validators: [CdValidators.ip()]
       }),
-      labels: new FormControl([]),
-      maintenance: new FormControl(false)
+      labels: new UntypedFormControl([]),
+      maintenance: new UntypedFormControl(false)
     });
   }
 
