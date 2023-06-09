@@ -80,21 +80,20 @@ void RemotePoolPoller<I>::get_mirror_uuid() {
 template <typename I>
 void RemotePoolPoller<I>::handle_get_mirror_uuid(int r) {
   dout(10) << "r=" << r << dendl;
-  std::string remote_mirror_uuid;
+  std::string mirror_uuid;
   if (r >= 0) {
     auto it = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_uuid_get_finish(&it, &remote_mirror_uuid);
-    if (r >= 0 && remote_mirror_uuid.empty()) {
+    r = librbd::cls_client::mirror_uuid_get_finish(&it, &mirror_uuid);
+    if (r >= 0 && mirror_uuid.empty()) {
       r = -ENOENT;
     }
   }
 
   if (r < 0) {
     if (r == -ENOENT) {
-      dout(5) << "remote mirror uuid missing" << dendl;
+      dout(5) << "mirror uuid missing" << dendl;
     } else {
-      derr << "failed to retrieve remote mirror uuid: " << cpp_strerror(r)
-           << dendl;
+      derr << "failed to retrieve mirror uuid: " << cpp_strerror(r) << dendl;
     }
 
     m_remote_pool_meta.mirror_uuid = "";
@@ -110,9 +109,9 @@ void RemotePoolPoller<I>::handle_get_mirror_uuid(int r) {
     m_state = STATE_POLLING;
   }
 
-  dout(10) << "remote_mirror_uuid=" << remote_mirror_uuid << dendl;
-  if (m_remote_pool_meta.mirror_uuid != remote_mirror_uuid) {
-    m_remote_pool_meta.mirror_uuid = remote_mirror_uuid;
+  dout(10) << "mirror_uuid=" << mirror_uuid << dendl;
+  if (m_remote_pool_meta.mirror_uuid != mirror_uuid) {
+    m_remote_pool_meta.mirror_uuid = mirror_uuid;
     m_updated = true;
   }
 
