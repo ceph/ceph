@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -53,12 +53,12 @@ export class RoleFormComponent extends CdForm implements OnInit {
 
   createForm() {
     this.roleForm = new CdFormGroup({
-      name: new FormControl('', {
+      name: new UntypedFormControl('', {
         validators: [Validators.required],
         asyncValidators: [CdValidators.unique(this.roleService.exists, this.roleService)]
       }),
-      description: new FormControl(''),
-      scopes_permissions: new FormControl({})
+      description: new UntypedFormControl(''),
+      scopes_permissions: new UntypedFormControl({})
     });
   }
 

@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 
 import { NgbActiveModal, NgbModal } from '@ng-bootstrap/ng-bootstrap';
@@ -63,11 +63,11 @@ export class FeedbackComponent implements OnInit, OnDestroy {
 
   private createForm() {
     this.feedbackForm = new CdFormGroup({
-      project: new FormControl('', Validators.required),
-      tracker: new FormControl('', Validators.required),
-      subject: new FormControl('', Validators.required),
-      description: new FormControl('', Validators.required),
-      api_key: new FormControl('', Validators.required)
+      project: new UntypedFormControl('', Validators.required),
+      tracker: new UntypedFormControl('', Validators.required),
+      subject: new UntypedFormControl('', Validators.required),
+      description: new UntypedFormControl('', Validators.required),
+      api_key: new UntypedFormControl('', Validators.required)
     });
   }
 
