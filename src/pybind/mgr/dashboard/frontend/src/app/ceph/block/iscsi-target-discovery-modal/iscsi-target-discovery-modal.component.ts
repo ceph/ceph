@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -45,10 +45,10 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
 
   createForm() {
     this.discoveryForm = new CdFormGroup({
-      user: new FormControl({ value: '', disabled: !this.hasPermission }),
-      password: new FormControl({ value: '', disabled: !this.hasPermission }),
-      mutual_user: new FormControl({ value: '', disabled: !this.hasPermission }),
-      mutual_password: new FormControl({ value: '', disabled: !this.hasPermission })
+      user: new UntypedFormControl({ value: '', disabled: !this.hasPermission }),
+      password: new UntypedFormControl({ value: '', disabled: !this.hasPermission }),
+      mutual_user: new UntypedFormControl({ value: '', disabled: !this.hasPermission }),
+      mutual_password: new UntypedFormControl({ value: '', disabled: !this.hasPermission })
     });
 
     CdValidators.validateIf(
