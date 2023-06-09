@@ -506,28 +506,7 @@ public:
         }
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
-        if (child_node->is_mutation_pending()) {
-          auto &prior = (child_node_t &)*child_node->prior_instance;
-          assert(prior.is_valid());
-          assert(prior.is_parent_valid());
-          if (node->is_mutation_pending()) {
-            auto &n = node->get_stable_for_key(i->get_key());
-            assert(prior.get_parent_node().get() == &n);
-            auto pos = n.lower_bound_offset(i->get_key());
-            assert(pos < n.get_node_size());
-            assert(n.children[pos] == &prior);
-          } else {
-            assert(prior.get_parent_node().get() == node.get());
-            assert(node->children[i->get_offset()] == &prior);
-          }
-        } else if (child_node->is_initial_pending()) {
-          auto cnode = child_node->template cast<child_node_t>();
-          auto pos = node->find(i->get_key()).get_offset();
-          auto child = node->children[pos];
-          assert(child);
-          assert(child == cnode.get());
-          assert(cnode->is_parent_valid());
-        } else {
+        if (child_node->is_stable()) {
           assert(child_node->is_valid());
           auto cnode = child_node->template cast<child_node_t>();
           assert(cnode->has_parent_tracker());
@@ -541,6 +520,32 @@ public:
             assert(cnode->get_parent_node().get() == node.get());
             assert(node->children[i->get_offset()] == cnode.get());
           }
+        } else if (child_node->is_pending()) {
+          if (child_node->is_mutation_pending()) {
+            auto &prior = (child_node_t &)*child_node->prior_instance;
+            assert(prior.is_valid());
+            assert(prior.is_parent_valid());
+            if (node->is_mutation_pending()) {
+              auto &n = node->get_stable_for_key(i->get_key());
+              assert(prior.get_parent_node().get() == &n);
+              auto pos = n.lower_bound_offset(i->get_key());
+              assert(pos < n.get_node_size());
+              assert(n.children[pos] == &prior);
+            } else {
+              assert(prior.get_parent_node().get() == node.get());
+              assert(node->children[i->get_offset()] == &prior);
+            }
+          } else {
+            auto cnode = child_node->template cast<child_node_t>();
+            auto pos = node->find(i->get_key()).get_offset();
+            auto child = node->children[pos];
+            assert(child);
+            assert(child == cnode.get());
+            assert(cnode->is_parent_valid());
+          }
+        } else {
+          ceph_assert(!child_node->is_valid());
+          ceph_abort("impossible");
         }
       } else if (ret == Transaction::get_extent_ret::ABSENT) {
         ChildableCachedExtent* child = nullptr;
