@@ -30,11 +30,13 @@ class FileSystemCommandHandler : protected CommandHandler
 protected:
   std::string prefix;
 
+  using fs_or_fscid = std::variant<Filesystem*, fs_cluster_id_t>;
   enum {
     POOL_METADATA,
     POOL_DATA_DEFAULT,
     POOL_DATA_EXTRA,
   };
+
   /**
    * Return 0 if the pool is suitable for use with CephFS, or
    * in case of errors return a negative error code, and populate
@@ -52,7 +54,7 @@ protected:
 
   virtual std::string const &get_prefix() const {return prefix;}
 
-  int set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRef op, const cmdmap_t& cmdmap, std::ostream &ss, Filesystem const* fsp, std::string var, std::string val);
+  int set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRef op, const cmdmap_t& cmdmap, std::ostream &ss, fs_or_fscid fs, std::string var, std::string val);
 
 public:
   FileSystemCommandHandler(const std::string &prefix_)
