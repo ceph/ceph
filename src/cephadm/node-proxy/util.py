@@ -1,7 +1,8 @@
 import logging
 import yaml
 import os
-from typing import Dict, List
+import time
+from typing import Dict, List, Callable, Any
 
 
 def normalize_dict(test_dict: Dict) -> Dict:
@@ -69,3 +70,20 @@ class Logger:
         logger.addHandler(handler)
 
         return logger
+
+
+def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Callable:
+    def decorator(f: Callable) -> Callable:
+        def _retry(*args: str, **kwargs: Any) -> Callable:
+            _tries = retries
+            while _tries > 1:
+                try:
+                    print("{}".format(_tries))
+                    return f(*args, **kwargs)
+                except exceptions:
+                    time.sleep(delay)
+                    _tries -= 1
+            print("{} has failed after {} tries".format(f, retries))
+            return f(*args, **kwargs)
+        return _retry
+    return decorator
