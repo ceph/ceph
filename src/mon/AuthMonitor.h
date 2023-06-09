@@ -177,6 +177,9 @@ private:
     bufferlist& rdata, Formatter* fmtr, bool pending_key=false,
     std::map<std::string, bufferlist>* caps=nullptr);
 
+  int _check_and_encode_caps(const std::map<std::string, std::string>& caps,
+    std::map<std::string, bufferlist>& encoded_caps, std::stringstream& ss);
+
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);
 

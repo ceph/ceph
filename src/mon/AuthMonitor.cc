@@ -1463,7 +1463,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     auth_inc.name = entity;
     bufferlist bl = m->get_data();
     bool has_keyring = (bl.length() > 0);
-    map<string,bufferlist> new_caps;
 
     KeyRing new_keyring;
     if (has_keyring) {
@@ -1477,8 +1476,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    if (!valid_caps(ceph_caps, &ss)) {
-      err = -EINVAL;
+    map<string, bufferlist> encoded_caps;
+    if (err = _check_and_encode_caps(ceph_caps, encoded_caps, ss); err < 0) {
       goto done;
     }
 
@@ -1487,14 +1486,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       wait_for_finished_proposal(op,
           new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
       return true;
-    }
-
-    // build new caps from provided arguments (if available)
-    for (const auto& kv : ceph_caps) {
-      string sys = kv.first;
-      bufferlist cap;
-      encode((kv.second, cap);
-      new_caps[sys] = cap;
     }
 
     // pull info out of provided keyring
@@ -1506,18 +1497,18 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	err = -EINVAL;
 	goto done;
       }
-      if (!new_caps.empty() && !new_inc.caps.empty()) {
+      if (!encoded_caps.empty() && !new_inc.caps.empty()) {
 	ss << "caps cannot be specified both in keyring and in command";
 	err = -EINVAL;
 	goto done;
       }
-      if (new_caps.empty()) {
-	new_caps = new_inc.caps;
+      if (encoded_caps.empty()) {
+	encoded_caps = new_inc.caps;
       }
     }
 
     err = exists_and_matches_entity(auth_inc.name, new_inc,
-                                    new_caps, has_keyring, ss);
+                                    encoded_caps, has_keyring, ss);
     // if entity/key/caps do not exist in the keyring, just fall through
     // and add the entity; otherwise, make sure everything matches (in
     // which case it's a no-op), because if not we must fail.
@@ -1537,7 +1528,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
         << auth_inc.name << dendl;
       new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES);
     }
-    new_inc.caps = new_caps;
+    new_inc.caps = encoded_caps;
 
     err = add_entity(auth_inc.name, new_inc);
     ceph_assert(err == 0);
@@ -1636,16 +1627,9 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	     !entity_name.empty()) {
     // auth get-or-create <name> [mon osdcapa osd osdcapb ...]
 
-    if (!valid_caps(ceph_caps, &ss)) {
-      err = -EINVAL;
-      goto done;
-    }
-
     map<string, bufferlist> wanted_caps;
-    for (const auto& kv : ceph_caps) {
-      bufferlist cap;
-      encode(kv.second, cap);
-      encoded_caps[kv.first] = cap;
+    if (err = _check_and_encode_caps(ceph_caps, wanted_caps, ss); err < 0) {
+      goto done;
     }
 
     // do we have it?
@@ -1796,22 +1780,19 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS
       + " data=" + filesystem;
 
-    std::map<string, bufferlist> wanted_caps = {
-      { "mon", _encode_cap(mon_cap_string) },
-      { "osd", _encode_cap(osd_cap_string) },
-      { "mds", _encode_cap(mds_cap_string) }
+    map<string, bufferlist> encoded_caps;
+    map<string, string> wanted_caps = {
+      {"mon", mon_cap_string},
+      {"osd", osd_cap_string},
+      {"mds", mds_cap_string}
     };
-
-    if (!valid_caps("mon", mon_cap_string, &ss) ||
-        !valid_caps("osd", osd_cap_string, &ss) ||
-	!valid_caps("mds", mds_cap_string, &ss)) {
-      err = -EINVAL;
+    if (err = _check_and_encode_caps(wanted_caps, encoded_caps, ss); err < 0) {
       goto done;
     }
 
     EntityAuth entity_auth;
     if (mon.key_server.get_auth(entity, entity_auth)) {
-      for (const auto &sys_cap : wanted_caps) {
+      for (const auto &sys_cap : encoded_caps) {
 	if (entity_auth.caps.count(sys_cap.first) == 0 ||
 	    !entity_auth.caps[sys_cap.first].contents_equal(sys_cap.second)) {
 	  ss << entity << " already has fs capabilities that differ from "
@@ -1824,7 +1805,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	}
       }
 
-      _encode_key(entity, entity_auth, rdata, f.get(), false, &wanted_caps);
+      _encode_key(entity, entity_auth, rdata, f.get(), false, &encoded_caps);
       err = 0;
       goto done;
     }
@@ -1853,14 +1834,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    if (!valid_caps(ceph_caps, &ss)) {
-      err = -EINVAL;
+    map<string, bufferlist> newcaps;
+    if (err = _check_and_encode_caps(ceph_caps, newcaps, ss); err < 0) {
       goto done;
     }
-
-    map<string,bufferlist> newcaps;
-    for (const auto& kv : ceph_caps)
-      encode(kv.second, newcaps[kv.first]);
 
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.auth.caps = newcaps;
@@ -1934,6 +1911,22 @@ void AuthMonitor::_encode_key(const EntityName& entity,
   }
 
   _encode_keyring(kr, entity, rdata, fmtr, caps);
+}
+
+int AuthMonitor::_check_and_encode_caps(const map<string, string>& caps,
+  map<string, bufferlist>& encoded_caps, stringstream& ss)
+{
+  if (!valid_caps(caps, &ss)) {
+    return -EINVAL;
+  }
+
+  for (const auto& kv : caps) {
+    bufferlist cap;
+    encode(kv.second, cap);
+    encoded_caps[kv.first] = cap;
+  }
+
+  return 0;
 }
 
 bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
