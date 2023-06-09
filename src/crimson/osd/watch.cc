@@ -125,7 +125,12 @@ seastar::future<> Watch::notify_ack(
   logger().debug("{} gid={} cookie={} notify_id={}",
                  __func__,  get_watcher_gid(), get_cookie(), notify_id);
   const auto it = in_progress_notifies.find(notify_id);
-  assert(it != std::end(in_progress_notifies));
+  if (it == std::end(in_progress_notifies)) {
+    logger().error("{} notify_id={} not found on the in-progess list."
+                   " Supressing but this should not happen.",
+                   __func__, notify_id);
+    return seastar::now();
+  }
   auto notify = *it;
   logger().debug("Watch::notify_ack gid={} cookie={} found notify(id={})",
     get_watcher_gid(),
