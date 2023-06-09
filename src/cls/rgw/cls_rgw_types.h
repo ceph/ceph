@@ -38,6 +38,10 @@ struct rgw_zone_set_entry {
     return (location_key < e.location_key);
   }
 
+  bool operator==(const rgw_zone_set_entry& e) const {
+    return zone == e.zone && location_key == e.location_key;
+  }
+
   rgw_zone_set_entry() {}
   rgw_zone_set_entry(const std::string& _zone,
                      std::optional<std::string> _location_key) : zone(_zone),

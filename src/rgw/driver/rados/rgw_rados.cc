@@ -3792,7 +3792,7 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
   int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, sync_cloudtiered,
+                      sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
                       true, &cb, &in_stream_req);
   if (ret < 0) {
     return ret;
@@ -3989,6 +3989,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   const real_time *pmod = mod_ptr;
 
   obj_time_weight dest_mtime_weight;
+  rgw_zone_set_entry dst_zone_trace(svc.zone->get_zone().id, dest_bucket_info.bucket.get_key());
 
   if (copy_if_newer) {
     /* need to get mtime for destination */
@@ -4011,8 +4012,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
                       dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
                       prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, sync_cloudtiered,
-                      true,
+                      sync_manifest, skip_decrypt, &dst_zone_trace,
+                      sync_cloudtiered, true,
                       &cb, &in_stream_req);
   if (ret < 0) {
     goto set_err_state;

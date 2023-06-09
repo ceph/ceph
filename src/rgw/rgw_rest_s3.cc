@@ -302,6 +302,7 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   // multisite sync requests should fetch cloudtiered objects
   sync_cloudtiered = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-cloudtiered");
 
+  dst_zone_trace = s->info.args.get(RGW_SYS_PARAM_PREFIX "if-not-replicated-to");
   get_torrent = s->info.args.exists("torrent");
 
   return RGWGetObj_ObjStore::get_params(y);

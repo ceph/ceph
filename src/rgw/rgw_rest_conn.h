@@ -162,6 +162,7 @@ public:
     bool range_is_set{false};
     uint64_t range_start{0};
     uint64_t range_end{0};
+    rgw_zone_set_entry *dst_zone_trace{nullptr};
   };
 
   int get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, const get_obj_params& params, bool send, RGWRESTStreamRWRequest **req);
@@ -170,7 +171,7 @@ public:
               const ceph::real_time *mod_ptr, const ceph::real_time *unmod_ptr,
               uint32_t mod_zone_id, uint64_t mod_pg_ver,
               bool prepend_metadata, bool get_op, bool rgwx_stat, bool sync_manifest,
-              bool skip_decrypt, bool sync_cloudtiered,
+              bool skip_decrypt, rgw_zone_set_entry *dst_zone_trace, bool sync_cloudtiered,
               bool send, RGWHTTPStreamRWRequest::ReceiveCB *cb, RGWRESTStreamRWRequest **req);
   int complete_request(RGWRESTStreamRWRequest *req,
                        std::string *etag,
