@@ -363,10 +363,15 @@ bool MDSAuthCaps::parse(std::string_view str, ostream *err)
     // Make sure no grants are kept after parsing failed!
     grants.clear();
 
-    if (err)
-      *err << "mds capability parse failed, stopped at '"
-	   << std::string(iter, end)
-           << "' of '" << str << "'";
+    if (err) {
+      if (string(iter, end).find("allow") != string::npos) {
+       *err << "Permission flags in MDS caps must start with 'r' or " <<
+	       "'rw' or be '*' or 'all'";
+      } else {
+       *err << "mds capability parse failed, stopped at '"
+            << string(iter, end) << "' of '" << str << "'";
+      }
+    }
     return false; 
   }
 }
