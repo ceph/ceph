@@ -64,14 +64,14 @@ const get_phy_tree_root_node_ret get_phy_tree_root_node<
     } else {
       return {false,
 	      trans_intr::make_interruptible(
-		seastar::make_ready_future<
-		  CachedExtentRef>(CachedExtentRef()))};
+		Cache::get_extent_ertr::make_ready_future<
+		  CachedExtentRef>())};
     }
   } else {
     return {false,
 	    trans_intr::make_interruptible(
-	      seastar::make_ready_future<
-		CachedExtentRef>(CachedExtentRef()))};
+	      Cache::get_extent_ertr::make_ready_future<
+		CachedExtentRef>())};
   }
 }
 

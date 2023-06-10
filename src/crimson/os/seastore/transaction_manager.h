@@ -178,7 +178,7 @@ public:
   {
     auto v = pin->get_logical_extent(t);
     if (v.has_child()) {
-      return v.get_child_fut().then([](auto extent) {
+      return v.get_child_fut().safe_then([](auto extent) {
 	return extent->template cast<T>();
       });
     } else {
@@ -635,6 +635,7 @@ private:
       }
     ).si_then([FNAME, &t](auto ref) mutable -> ret {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+      assert(ref->is_fully_loaded());
       return pin_to_extent_ret<T>(
 	interruptible::ready_future_marker{},
 	std::move(ref));
@@ -675,6 +676,7 @@ private:
       }
     ).si_then([FNAME, &t](auto ref) {
       SUBTRACET(seastore_tm, "got extent -- {}", t, *ref);
+      assert(ref->is_fully_loaded());
       return pin_to_extent_by_type_ret(
 	interruptible::ready_future_marker{},
 	std::move(ref->template cast<LogicalCachedExtent>()));
