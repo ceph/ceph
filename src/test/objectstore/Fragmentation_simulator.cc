@@ -5,7 +5,6 @@
  * Author: Tri Dao, tri.dao@uwaterloo.ca
  */
 
-#include "common/TrackedOp.h"
 #include "common/ceph_mutex.h"
 #include "common/common_init.h"
 #include "global/global_context.h"
@@ -14,8 +13,6 @@
 #include "include/ceph_assert.h"
 #include "include/interval_set.h"
 #include "include/mempool.h"
-#include "include/msgr.h"
-#include "libkmip/kmip.h"
 #include "os/ObjectStore.h"
 #include "os/bluestore/Allocator.h"
 #include <asm-generic/errno-base.h>
@@ -50,7 +47,7 @@
  * much as possible.
  *
  * #Note: This is an allocation simulator not a data consistency simulator so
- * object's data is not stored.
+ * any object data is not stored.
  */
 class FragmentationSimulator : ObjectStore {
 public:
@@ -118,9 +115,6 @@ private:
       STATE_PREPARE,
       STATE_AIO_WAIT,
       STATE_IO_DONE,
-      STATE_KV_QUEUED,    // queued for kv_sync_thread submission
-      STATE_KV_SUBMITTED, // submitted to kv; not yet synced
-      STATE_KV_DONE,
       STATE_FINISHING,
       STATE_DONE,
     } state_t;
@@ -152,8 +146,6 @@ private:
     }
     ~TransContext() {}
 
-    void aio_finish(FragmentationSimulator *sim) { sim->txc_aio_finish(this); }
-
   private:
     state_t state = STATE_PREPARE;
   };
@@ -174,10 +166,6 @@ private:
     coll_t cid;
 
     uint64_t last_seq = 0;
-
-    std::atomic_int kv_committing_serially = {0};
-
-    std::atomic_int kv_submitted_waiters = {0};
 
     std::atomic_bool zombie = {
         false}; ///< in zombie_osr std::set (collection going away)
@@ -200,29 +188,10 @@ private:
         qcond.wait(l);
     }
 
-    bool _is_all_kv_submitted() {
-      // caller must hold qlock & q.empty() must not empty
-      ceph_assert(!q.empty());
-      TransContext *txc = &q.back();
-      if (txc->get_state() >= TransContext::STATE_KV_SUBMITTED) {
-        return true;
-      }
-      return false;
-    }
-
     void flush() {
       std::unique_lock l(qlock);
       while (true) {
-        // std::set flag before the check because the condition
-        // may become true outside qlock, and we need to make
-        // sure those threads see waiters and signal qcond.
-        ++kv_submitted_waiters;
-        if (q.empty() || _is_all_kv_submitted()) {
-          --kv_submitted_waiters;
-          return;
-        }
         qcond.wait(l);
-        --kv_submitted_waiters;
       }
     }
 
@@ -230,23 +199,17 @@ private:
       std::unique_lock l(qlock);
       ceph_assert(q.size() >= 1);
       while (true) {
-        // std::set flag before the check because the condition
-        // may become true outside qlock, and we need to make
-        // sure those threads see waiters and signal qcond.
-        ++kv_submitted_waiters;
         if (q.size() <= 1) {
-          --kv_submitted_waiters;
           return;
         } else {
           auto it = q.rbegin();
           it++;
-          if (it->get_state() >= TransContext::STATE_KV_SUBMITTED) {
-            --kv_submitted_waiters;
+          if (it->get_state() >= TransContext::STATE_FINISHING) {
             return;
           }
         }
+
         qcond.wait(l);
-        --kv_submitted_waiters;
       }
     }
 
@@ -255,10 +218,12 @@ private:
       if (q.empty()) {
         return true;
       }
+
       TransContext *txc = &q.back();
-      if (txc->get_state() >= TransContext::STATE_KV_DONE) {
+      if (txc->get_state() >= TransContext::STATE_FINISHING) {
         return true;
       }
+
       txc->oncommits.push_back(c);
       return false;
     }
@@ -357,8 +322,6 @@ private:
                          CollectionRef *c);
 
   // Transactions
-  void txc_aio_finish(TransContext *txc) { _txc_state_proc(txc); }
-
   TransContext *_txc_create(Collection *c, OpSequencer *osr,
                             std::list<Context *> *on_commits,
                             TrackedOpRef osd_op = TrackedOpRef());
@@ -447,7 +410,6 @@ private:
   // Members
 
   boost::scoped_ptr<Allocator> alloc;
-  std::atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
 
   ceph::mutex zombie_osr_lock =
       ceph::make_mutex("FragmentationSimulator::zombie_osr_lock");
@@ -503,8 +465,12 @@ private:
   bool collections_had_errors = false;
   std::unordered_map<coll_t, CollectionRef> new_coll_map;
 
+  Finisher finisher;
+
   FragmentationSimulator(CephContext *cct, const std::string &path_)
-      : ObjectStore(cct, path_), alloc(nullptr) {}
+      : ObjectStore(cct, path_), alloc(nullptr),
+        finisher(cct, "commit_finisher", "cfin") {}
+
   ~FragmentationSimulator() = default;
 
   void init_alloc(const std::string &alloc_type, int64_t size,
@@ -519,8 +485,8 @@ private:
   std::string get_type() override { return "FragmentationSimulator"; }
 
   bool test_mount_in_use() override { return false; }
-  int mount() override { return 0; }
-  int umount() override { return 0; }
+  int mount() override;
+  int umount() override;
 
   int validate_hobject_key(const hobject_t &obj) const override { return 0; }
   unsigned get_max_attr_name_length() override { return 256; }
@@ -615,18 +581,6 @@ private:
                       ) override {
     return 0;
   }
-
-#ifdef WITH_SEASTAR
-  int omap_get_values(
-      CollectionHandle &c,   ///< [in] Collection containing oid
-      const ghobject_t &oid, ///< [in] Object containing omap
-      const std::optional<std::string> &start_after, ///< [in] Keys to get
-      std::map<std::string, ceph::buffer::list>
-          *out ///< [out] Returned keys and values
-      ) override {
-    return 0;
-  }
-#endif
 
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
@@ -773,6 +727,8 @@ int FragmentationSimulator::queue_transactions(CollectionHandle &ch,
   if (!on_applied.empty()) {
     if (c->commit_queue) {
       c->commit_queue->queue(on_applied);
+    } else {
+      finisher.queue(on_applied);
     }
   }
 
@@ -1077,45 +1033,25 @@ void FragmentationSimulator::_txc_state_proc(TransContext *txc) {
   while (true) {
     switch (txc->get_state()) {
     case TransContext::STATE_PREPARE:
+      // In BLueStore this is where we submitted IO ops to BlockDevice
       // ** fall-thru **
 
-    case TransContext::STATE_AIO_WAIT: {
-    }
-
+    case TransContext::STATE_AIO_WAIT:
       _txc_finish_io(txc); // may trigger blocked txc's too
       return;
 
     case TransContext::STATE_IO_DONE:
-      ceph_assert(ceph_mutex_is_locked(txc->osr->qlock)); // see _txc_finish_io
-      txc->set_state(TransContext::STATE_KV_QUEUED);
-      if (cct->_conf->bluestore_sync_submit_transaction) {
-        txc->set_state(TransContext::STATE_KV_SUBMITTED);
-        if (txc->osr->kv_submitted_waiters) {
-          std::lock_guard l(txc->osr->qlock);
-          txc->osr->qcond.notify_all();
-        }
-      }
-      {
-        if (txc->get_state() != TransContext::STATE_KV_SUBMITTED) {
-          ++txc->osr->kv_committing_serially;
-        }
-      }
-      return;
-    case TransContext::STATE_KV_SUBMITTED: {
-      std::lock_guard l(txc->osr->qlock);
-      txc->set_state(TransContext::STATE_KV_DONE);
-      if (txc->ch->commit_queue) {
-        txc->ch->commit_queue->queue(txc->oncommits);
-      }
-    }
-      // ** fall-thru **
-
-    case TransContext::STATE_KV_DONE:
       txc->set_state(TransContext::STATE_FINISHING);
-      break;
+      return;
 
     case TransContext::STATE_FINISHING:
       _txc_finish(txc);
+      if (txc->ch->commit_queue) {
+        txc->ch->commit_queue->queue(txc->oncommits);
+      } else {
+        finisher.queue(txc->oncommits);
+      }
+
       return;
 
     default:
@@ -1145,9 +1081,7 @@ void FragmentationSimulator::_txc_finish_io(TransContext *txc) {
     _txc_state_proc(&*p++);
   } while (p != osr->q.end() && p->get_state() == TransContext::STATE_IO_DONE);
 
-  if (osr->kv_submitted_waiters) {
-    osr->qcond.notify_all();
-  }
+  osr->qcond.notify_all();
 }
 
 void FragmentationSimulator::_txc_finish(TransContext *txc) {
@@ -1163,8 +1097,7 @@ void FragmentationSimulator::_txc_finish(TransContext *txc) {
     while (!osr->q.empty()) {
       TransContext *txc = &osr->q.front();
       if (txc->get_state() != TransContext::STATE_DONE) {
-        if (txc->get_state() == TransContext::STATE_PREPARE &&
-            deferred_aggressive) {
+        if (txc->get_state() == TransContext::STATE_PREPARE) {
           // for _osr_drain_preceding()
           notify = true;
         }
@@ -1198,12 +1131,7 @@ void FragmentationSimulator::_txc_finish(TransContext *txc) {
 
   if (empty && osr->zombie) {
     std::lock_guard l(zombie_osr_lock);
-    if (zombie_osr_set.erase(osr->cid)) {
-      dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
-    } else {
-      dout(10) << __func__ << " empty zombie osr " << osr << " already reaped"
-               << dendl;
-    }
+    zombie_osr_set.erase(osr->cid);
   }
 }
 
@@ -1901,20 +1829,14 @@ void FragmentationSimulator::_osr_attach(Collection *c) {
   auto q = coll_map.find(c->cid);
   if (q != coll_map.end()) {
     c->osr = q->second->osr;
-    ldout(cct, 10) << __func__ << " " << c->cid << " reusing osr " << c->osr
-                   << " from existing coll " << q->second << dendl;
   } else {
     std::lock_guard l(zombie_osr_lock);
     auto p = zombie_osr_set.find(c->cid);
     if (p == zombie_osr_set.end()) {
       c->osr = ceph::make_ref<OpSequencer>(this, next_sequencer_id++, c->cid);
-      ldout(cct, 10) << __func__ << " " << c->cid << " fresh osr " << c->osr
-                     << dendl;
     } else {
       c->osr = p->second;
       zombie_osr_set.erase(p);
-      ldout(cct, 10) << __func__ << " " << c->cid << " resurrecting zombie osr "
-                     << c->osr << dendl;
       c->osr->zombie = false;
     }
   }
@@ -1922,20 +1844,25 @@ void FragmentationSimulator::_osr_attach(Collection *c) {
 
 void FragmentationSimulator::_osr_register_zombie(OpSequencer *osr) {
   std::lock_guard l(zombie_osr_lock);
-  dout(10) << __func__ << " " << osr << " " << osr->cid << dendl;
   osr->zombie = true;
   auto i = zombie_osr_set.emplace(osr->cid, osr);
-  // this is either a new insertion or the same osr is already there
   ceph_assert(i.second || i.first->second == osr);
 }
-void FragmentationSimulator::_osr_drain(OpSequencer *osr) {
-  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
-  osr->drain();
-  --deferred_aggressive;
-}
+void FragmentationSimulator::_osr_drain(OpSequencer *osr) { osr->drain(); }
 void FragmentationSimulator::_osr_drain_preceding(TransContext *txc) {
   OpSequencer *osr = txc->osr.get();
-  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
   osr->drain_preceding(txc);
-  --deferred_aggressive;
+}
+
+// -------- Mount --------
+
+int FragmentationSimulator::mount() {
+  finisher.start();
+  return 0;
+}
+
+int FragmentationSimulator::umount() {
+  finisher.wait_for_empty();
+  finisher.stop();
+  return 0;
 }
