@@ -569,100 +569,110 @@ For this reason, minimizing the number of PGs saves significant resources.
 
 .. _choosing-number-of-placement-groups:
 
-Choosing the number of Placement Groups
-=======================================
+Choosing the Number of PGs
+==========================
 
-.. note: It is rarely necessary to do this math by hand.  Instead, use the ``ceph osd pool autoscale-status`` command in combination with the ``target_size_bytes`` or ``target_size_ratio`` pool properties.  See :ref:`pg-autoscaler` for more information.
+.. note: It is rarely necessary to do the math in this section by hand.
+   Instead, use the ``ceph osd pool autoscale-status`` command in combination
+   with the ``target_size_bytes`` or ``target_size_ratio`` pool properties. For
+   more information, see :ref:`pg-autoscaler`.
 
-If you have more than 50 OSDs, we recommend approximately 50-100
-placement groups per OSD to balance out resource usage, data
-durability and distribution. If you have less than 50 OSDs, choosing
-among the `preselection`_ above is best. For a single pool of objects,
-you can use the following formula to get a baseline
+If you have more than 50 OSDs, we recommend approximately 50-100 PGs per OSD in
+order to balance resource usage, data durability, and data distribution. If you
+have fewer than 50 OSDs, follow the guidance in the `preselection`_ section.
+For a single pool, use the following formula to get a baseline value:
 
   Total PGs = :math:`\frac{OSDs \times 100}{pool \: size}`
 
-Where **pool size** is either the number of replicas for replicated
-pools or the K+M sum for erasure coded pools (as returned by **ceph
-osd erasure-code-profile get**).
+Here **pool size** is either the number of replicas for replicated pools or the
+K+M sum for erasure-coded pools. To retrieve this sum, run the command ``ceph
+osd erasure-code-profile get``.
 
-You should then check if the result makes sense with the way you
-designed your Ceph cluster to maximize `data durability`_,
-`object distribution`_ and minimize `resource usage`_.
+Next, check whether the resulting baseline value is consistent with the way you
+designed your Ceph cluster to maximize `data durability`_ and `object
+distribution`_ and to minimize `resource usage`_.
 
-The result should always be **rounded up to the nearest power of two**.
+This value should be **rounded up to the nearest power of two**.
 
-Only a power of two will evenly balance the number of objects among
-placement groups. Other values will result in an uneven distribution of
-data across your OSDs. Their use should be limited to incrementally
-stepping from one power of two to another.
+Each pool's ``pg_num`` should be a power of two. Other values are likely to
+result in uneven distribution of data across OSDs. It is best to increase
+``pg_num`` for a pool only when it is feasible and desirable to set the next
+highest power of two. Note that this power of two rule is per-pool; it is
+neither necessary nor easy to align the sum of all pools' ``pg_num`` to a power
+of two.
 
-As an example, for a cluster with 200 OSDs and a pool size of 3
-replicas, you would estimate your number of PGs as follows
+For example, if you have a cluster with 200 OSDs and a single pool with a size
+of 3 replicas, estimate the number of PGs as follows:
 
-  :math:`\frac{200 \times 100}{3} = 6667`. Nearest power of 2: 8192
+  :math:`\frac{200 \times 100}{3} = 6667`. Rounded up to the nearest power of 2: 8192.
 
-When using multiple data pools for storing objects, you need to ensure
-that you balance the number of placement groups per pool with the
-number of placement groups per OSD so that you arrive at a reasonable
-total number of placement groups that provides reasonably low variance
-per OSD without taxing system resources or making the peering process
-too slow.
+When using multiple data pools to store objects, make sure that you balance the
+number of PGs per pool against the number of PGs per OSD so that you arrive at
+a reasonable total number of PGs. It is important to find a number that
+provides reasonably low variance per OSD without taxing system resources or
+making the peering process too slow.
 
-For instance a cluster of 10 pools each with 512 placement groups on
-ten OSDs is a total of 5,120 placement groups spread over ten OSDs,
-that is 512 placement groups per OSD. That does not use too many
-resources. However, if 1,000 pools were created with 512 placement
-groups each, the OSDs will handle ~50,000 placement groups each and it
-would require significantly more resources and time for peering.
+For example, suppose you have a cluster of 10 pools, each with 512 PGs on 10
+OSDs. That amounts to 5,120 PGs distributed across 10 OSDs, or 512 PGs per OSD.
+This cluster will not use too many resources. However, in a cluster of 1,000
+pools, each with 512 PGs on 10 OSDs, the OSDs will have to handle ~50,000 PGs
+each. This cluster will require significantly more resources and significantly
+more time for peering.
 
-You may find the `PGCalc`_ tool helpful.
+For determining the optimal number of PGs per OSD, we recommend the `PGCalc`_
+tool.
 
 
 .. _setting the number of placement groups:
 
-Set the Number of Placement Groups
-==================================
+Setting the Number of PGs
+=========================
 
-To set the number of placement groups in a pool, you must specify the
-number of placement groups at the time you create the pool.
-See `Create a Pool`_ for details.  Even after a pool is created you can also change the number of placement groups with:
+Setting the initial number of PGs in a pool must be done at the time you create
+the pool. See `Create a Pool`_ for details. 
+
+However, even after a pool is created, if the ``pg_autoscaler`` is not being
+used to manage ``pg_num`` values, you can change the number of PGs by running a
+command of the following form:
 
 .. prompt:: bash # 
 
    ceph osd pool set {pool-name} pg_num {pg_num}
 
-After you increase the number of placement groups, you must also
-increase the number of placement groups for placement (``pgp_num``)
-before your cluster will rebalance. The ``pgp_num`` will be the number of
-placement groups that will be considered for placement by the CRUSH
-algorithm. Increasing ``pg_num`` splits the placement groups but data
-will not be migrated to the newer placement groups until placement
-groups for placement, ie. ``pgp_num`` is increased. The ``pgp_num``
-should be equal to the ``pg_num``.  To increase the number of
-placement groups for placement, execute the following:
+If you increase the number of PGs, your cluster will not rebalance until you
+increase the number of PGs for placement (``pgp_num``). The ``pgp_num``
+parameter specifies the number of PGs that are to be considered for placement
+by the CRUSH algorithm. Increasing ``pg_num`` splits the PGs in your cluster,
+but data will not be migrated to the newer PGs until ``pgp_num`` is increased.
+The ``pgp_num`` parameter should be equal to the ``pg_num`` parameter. To
+increase the number of PGs for placement, run a command of the following form:
 
 .. prompt:: bash #
 
    ceph osd pool set {pool-name} pgp_num {pgp_num}
 
-When decreasing the number of PGs, ``pgp_num`` is adjusted
-automatically for you.
+If you decrease the number of PGs, then ``pgp_num`` is adjusted automatically.
+In releases of Ceph that are Nautilus and later (inclusive), when the
+``pg_autoscaler`` is not used, ``pgp_num`` is automatically stepped to match
+``pg_num``. This process manifests as periods of remapping of PGs and of
+backfill, and is expected behavior and normal.
 
-Get the Number of Placement Groups
-==================================
 
-To get the number of placement groups in a pool, execute the following:
+Get the Number of PGs
+=====================
+
+To get the number of PGs in a pool, run a command of the following form:
 
 .. prompt:: bash #
-   
+
    ceph osd pool get {pool-name} pg_num
 
 
 Get a Cluster's PG Statistics
 =============================
 
-To get the statistics for the placement groups in your cluster, execute the following:
+To see the details of the PGs in your cluster, run a command of the following
+form:
 
 .. prompt:: bash #
 
@@ -674,31 +684,33 @@ Valid formats are ``plain`` (default) and ``json``.
 Get Statistics for Stuck PGs
 ============================
 
-To get the statistics for all placement groups stuck in a specified state,
-execute the following:
+To see the statistics for all PGs that are stuck in a specified state, run a
+command of the following form:
 
 .. prompt:: bash #
 
    ceph pg dump_stuck inactive|unclean|stale|undersized|degraded [--format <format>] [-t|--threshold <seconds>]
 
-**Inactive** Placement groups cannot process reads or writes because they are waiting for an OSD
-with the most up-to-date data to come up and in.
+- **Inactive** PGs cannot process reads or writes because they are waiting for
+  enough OSDs with the most up-to-date data to come ``up`` and ``in``.
 
-**Unclean** Placement groups contain objects that are not replicated the desired number
-of times. They should be recovering.
+- **Undersized** PGs contain objects that have not been replicated the desired
+  number of times. Under normal conditions, it can be assumed that these PGs
+  are recovering.
 
-**Stale** Placement groups are in an unknown state - the OSDs that host them have not
-reported to the monitor cluster in a while (configured by ``mon_osd_report_timeout``).
+- **Stale** PGs are in an unknown state -- the OSDs that host them have not
+  reported to the monitor cluster for a certain period of time (determined by
+  ``mon_osd_report_timeout``).
 
-Valid formats are ``plain`` (default) and ``json``. The threshold defines the minimum number
-of seconds the placement group is stuck before including it in the returned statistics
-(default 300 seconds).
+Valid formats are ``plain`` (default) and ``json``. The threshold defines the
+minimum number of seconds the PG is stuck before it is included in the returned
+statistics (default: 300).
 
 
 Get a PG Map
 ============
 
-To get the placement group map for a particular placement group, execute the following:
+To get the PG map for a particular PG, run a command of the following form:
 
 .. prompt:: bash #
 
@@ -710,134 +722,159 @@ For example:
 
    ceph pg map 1.6c
 
-Ceph will return the placement group map, the placement group, and the OSD status:
+Ceph will return the PG map, the PG, and the OSD status. The output resembles
+the following:
 
 .. prompt:: bash #
 
    osdmap e13 pg 1.6c (1.6c) -> up [1,0] acting [1,0]
 
 
-Get a PGs Statistics
-====================
+Get a PG's Statistics
+=====================
 
-To retrieve statistics for a particular placement group, execute the following:
+To see statistics for a particular PG, run a command of the following form:
 
 .. prompt:: bash #
 
    ceph pg {pg-id} query
 
 
-Scrub a Placement Group
-=======================
+Scrub a PG
+==========
 
-To scrub a placement group, execute the following:
+To scrub a PG, run a command of the following form:
 
 .. prompt:: bash #
 
    ceph pg scrub {pg-id}
 
-Ceph checks the primary and any replica nodes, generates a catalog of all objects
-in the placement group and compares them to ensure that no objects are missing
-or mismatched, and their contents are consistent.  Assuming the replicas all
-match, a final semantic sweep ensures that all of the snapshot-related object
-metadata is consistent. Errors are reported via logs.
+Ceph checks the primary and replica OSDs, generates a catalog of all objects in
+the PG, and compares the objects against each other in order to ensure that no
+objects are missing or mismatched and that their contents are consistent. If
+the replicas all match, then a final semantic sweep takes place to ensure that
+all snapshot-related object metadata is consistent.  Errors are reported in
+logs.
 
-To scrub all placement groups from a specific pool, execute the following:
+To scrub all PGs from a specific pool, run a command of the following form:
 
 .. prompt:: bash #
 
    ceph osd pool scrub {pool-name}
 
-Prioritize backfill/recovery of a Placement Group(s)
-====================================================
 
-You may run into a situation where a bunch of placement groups will require
-recovery and/or backfill, and some particular groups hold data more important
-than others (for example, those PGs may hold data for images used by running
-machines and other PGs may be used by inactive machines/less relevant data).
-In that case, you may want to prioritize recovery of those groups so
-performance and/or availability of data stored on those groups is restored
-earlier. To do this (mark particular placement group(s) as prioritized during
-backfill or recovery), execute the following:
+Prioritize backfill/recovery of PG(s)
+=====================================
+
+You might encounter a situation in which multiple PGs require recovery or
+backfill, but the data in some PGs is more important than the data in others
+(for example, some PGs hold data for images that are used by running machines
+and other PGs are used by inactive machines and hold data that is less
+relevant). In that case, you might want to prioritize recovery or backfill of
+the PGs with especially important data so that the performance of the cluster
+and the availability of their data are restored sooner. To designate specific
+PG(s) as prioritized during recovery, run a command of the following form:
 
 .. prompt:: bash #
 
    ceph pg force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
+
+To mark specific PG(s) as prioritized during backfill, run a command of the
+following form:
+
+.. prompt:: bash #
+
    ceph pg force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
 
-This will cause Ceph to perform recovery or backfill on specified placement
-groups first, before other placement groups. This does not interrupt currently
-ongoing backfills or recovery, but causes specified PGs to be processed
-as soon as possible. If you change your mind or prioritize wrong groups,
-use:
+These commands instruct Ceph to perform recovery or backfill on the specified
+PGs before processing the other PGs. Prioritization does not interrupt current
+backfills or recovery, but places the specified PGs at the top of the queue so
+that they will be acted upon next.  If you change your mind or realize that you
+have prioritized the wrong PGs, run one or both of the following commands:
 
 .. prompt:: bash #
 
    ceph pg cancel-force-recovery {pg-id} [{pg-id #2}] [{pg-id #3} ...]
    ceph pg cancel-force-backfill {pg-id} [{pg-id #2}] [{pg-id #3} ...]
 
-This will remove "force" flag from those PGs and they will be processed
-in default order. Again, this doesn't affect currently processed placement
-group, only those that are still queued.
+These commands remove the ``force`` flag from the specified PGs, so that the
+PGs will be processed in their usual order. As in the case of adding the
+``force`` flag, this affects only those PGs that are still queued but does not
+affect PGs currently undergoing recovery.
 
-The "force" flag is cleared automatically after recovery or backfill of group
-is done.
+The ``force`` flag is cleared automatically after recovery or backfill of the
+PGs is complete.
 
-Similarly, you may use the following commands to force Ceph to perform recovery
-or backfill on all placement groups from a specified pool first:
+Similarly, to instruct Ceph to prioritize all PGs from a specified pool (that
+is, to perform recovery or backfill on those PGs first), run one or both of the
+following commands:
 
 .. prompt:: bash #
 
    ceph osd pool force-recovery {pool-name}
    ceph osd pool force-backfill {pool-name}
 
-or:
+These commands can also be cancelled. To revert to the default order, run one
+or both of the following commands:
 
 .. prompt:: bash #
 
    ceph osd pool cancel-force-recovery {pool-name}
    ceph osd pool cancel-force-backfill {pool-name}
 
-to restore to the default recovery or backfill priority if you change your mind.
-
-Note that these commands could possibly break the ordering of Ceph's internal
-priority computations, so use them with caution!
-Especially, if you have multiple pools that are currently sharing the same
-underlying OSDs, and some particular pools hold data more important than others,
-we recommend you use the following command to re-arrange all pools's
-recovery/backfill priority in a better order:
+.. warning:: These commands can break the order of Ceph's internal priority
+   computations, so use them with caution! If you have multiple pools that are
+   currently sharing the same underlying OSDs, and if the data held by certain
+   pools is more important than the data held by other pools, then we recommend
+   that you run a command of the following form to arrange a custom
+   recovery/backfill priority for all pools:
 
 .. prompt:: bash #
 
    ceph osd pool set {pool-name} recovery_priority {value}
 
-For example, if you have 10 pools you could make the most important one priority 10,
-next 9, etc. Or you could leave most pools alone and have say 3 important pools
-all priority 1 or priorities 3, 2, 1 respectively.
+For example, if you have twenty pools, you could make the most important pool  
+priority ``20``, and the next most important pool priority ``19``, and so on.  
 
-Revert Lost
-===========
+Another option is to set the recovery/backfill priority for only a proper
+subset of pools. In such a scenario, three important pools might (all) be
+assigned priority ``1`` and all other pools would be left without an assigned
+recovery/backfill priority.  Another possibility is to select three important
+pools and set their recovery/backfill priorities to ``3``, ``2``, and ``1``
+respectively.
 
-If the cluster has lost one or more objects, and you have decided to
+.. important:: Numbers of greater value have higher priority than numbers of
+   lesser value when using ``ceph osd pool set {pool-name} recovery_priority
+   {value}`` to set their recovery/backfill priority. For example, a pool with
+   the recovery/backfill priority ``30`` has a higher priority than a pool with
+   the recovery/backfill priority ``15``.
+
+Reverting Lost RADOS Objects
+============================
+
+If the cluster has lost one or more RADOS objects and you have decided to
 abandon the search for the lost data, you must mark the unfound objects
-as ``lost``.
+``lost``.
 
-If all possible locations have been queried and objects are still
-lost, you may have to give up on the lost objects. This is
-possible given unusual combinations of failures that allow the cluster
-to learn about writes that were performed before the writes themselves
-are recovered.
+If every possible location has been queried and all OSDs are ``up`` and ``in``,
+but certain RADOS objects are still lost, you might have to give up on those
+objects. This situation can arise when rare and unusual combinations of
+failures allow the cluster to learn about writes that were performed before the
+writes themselves were recovered.
 
-Currently the only supported option is "revert", which will either roll back to
-a previous version of the object or (if it was a new object) forget about it
-entirely. To mark the "unfound" objects as "lost", execute the following:
+The command to mark a RADOS object ``lost`` has only one supported option:
+``revert``. The ``revert`` option will either roll back to a previous version
+of the RADOS object (if it is old enough to have a previous version) or forget
+about it entirely (if it is too new to have a previous version). To mark the
+"unfound" objects ``lost``, run a command of the following form:
+
 
 .. prompt:: bash #
 
    ceph pg {pg-id} mark_unfound_lost revert|delete
 
-.. important:: Use this feature with caution, because it may confuse
-   applications that expect the object(s) to exist.
+.. important:: Use this feature with caution. It might confuse applications
+   that expect the object(s) to exist.
 
 
 .. toctree::
