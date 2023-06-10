@@ -173,8 +173,6 @@ The output will resemble the following::
    This intervention will result in a small amount of backfill, but
    typically this traffic completes quickly.
 
->>>>>>> d6e1116d0df (doc/rados: edit placement-groups.rst (1 of x))
-
 Automated scaling
 -----------------
 
