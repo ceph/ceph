@@ -616,6 +616,11 @@ private:
     return extent_index_hook.is_linked();
   }
 
+  /// set bufferptr
+  void set_bptr(ceph::bufferptr &&nptr) {
+    ptr = nptr;
+  }
+
   /// Returns true if the extent part of the open transaction
   bool is_pending_in_trans(transaction_id_t id) const {
     return is_pending() && pending_for_transaction == id;
@@ -966,12 +971,14 @@ private:
   uint16_t pos = std::numeric_limits<uint16_t>::max();
 };
 
+using get_child_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
 template <typename T>
 struct get_child_ret_t {
-  std::variant<child_pos_t, seastar::future<TCachedExtentRef<T>>> ret;
+  std::variant<child_pos_t, get_child_ertr::future<TCachedExtentRef<T>>> ret;
   get_child_ret_t(child_pos_t pos)
     : ret(std::move(pos)) {}
-  get_child_ret_t(seastar::future<TCachedExtentRef<T>> child)
+  get_child_ret_t(get_child_ertr::future<TCachedExtentRef<T>> child)
     : ret(std::move(child)) {}
 
   bool has_child() const {
@@ -983,7 +990,7 @@ struct get_child_ret_t {
     return std::get<0>(ret);
   }
 
-  seastar::future<TCachedExtentRef<T>> &get_child_fut() {
+  get_child_ertr::future<TCachedExtentRef<T>> &get_child_fut() {
     ceph_assert(ret.index() == 1);
     return std::get<1>(ret);
   }

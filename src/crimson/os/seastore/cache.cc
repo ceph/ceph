@@ -1003,6 +1003,8 @@ CachedExtentRef Cache::duplicate_for_write(
   Transaction &t,
   CachedExtentRef i) {
   LOG_PREFIX(Cache::duplicate_for_write);
+  assert(i->is_fully_loaded());
+
   if (i->is_mutable())
     return i;
 
@@ -1838,6 +1840,8 @@ Cache::get_next_dirty_extents_ret Cache::get_next_dirty_extents(
        i != dirty.end() && bytes_so_far < max_bytes;
        ++i) {
     auto dirty_from = i->get_dirty_from();
+    //dirty extents must be fully loaded
+    assert(i->is_fully_loaded());
     if (unlikely(dirty_from == JOURNAL_SEQ_NULL)) {
       ERRORT("got dirty extent with JOURNAL_SEQ_NULL -- {}", t, *i);
       ceph_abort();
