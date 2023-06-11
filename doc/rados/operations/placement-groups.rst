@@ -289,62 +289,81 @@ will be raised.
 Specifying bounds on a pool's PGs
 ---------------------------------
 
-It is also possible to specify a minimum number of PGs for a pool.
-This is useful for establishing a lower bound on the amount of
-parallelism client will see when doing IO, even when a pool is mostly
-empty.  Setting the lower bound prevents Ceph from reducing (or
-recommending you reduce) the PG number below the configured number.
+It is possible to specify both the minimum number and the maximum number of PGs
+for a pool. 
 
-You can set the minimum or maximum number of PGs for a pool with:
+Setting a Minimum Number of PGs and a Maximum Number of PGs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If a minimum is set, then Ceph will not itself reduce (nor recommend that you
+reduce) the number of PGs to a value below the configured value. Setting a
+minimum serves to establish a lower bound on the amount of parallelism enjoyed
+by a client during I/O, even if a pool is mostly empty. 
+
+If a maximum is set, then Ceph will not itself increase (or recommend that you
+increase) the number of PGs to a value above the configured value.
+
+To set the minimum number of PGs for a pool, run a command of the following
+form:
 
 .. prompt:: bash #
 
    ceph osd pool set <pool-name> pg_num_min <num>
+
+To set the maximum number of PGs for a pool, run a command of the following
+form:
+
+.. prompt:: bash #
+
    ceph osd pool set <pool-name> pg_num_max <num>
 
-You can also specify the minimum or maximum PG count at pool creation
-time with the optional ``--pg-num-min <num>`` or ``--pg-num-max
-<num>`` arguments to the ``ceph osd pool create`` command.
+In addition, the ``ceph osd pool create`` command has two command-line options
+that can be used to specify the minimum or maximum PG count of a pool at
+creation time: ``--pg-num-min <num>`` and ``--pg-num-max <num>``.
 
 .. _preselection:
 
-A preselection of pg_num
-========================
+Preselecting pg_num
+===================
 
-When creating a new pool with:
+When creating a pool with the following command, you have the option to
+preselect the value of the ``pg_num`` parameter:
 
 .. prompt:: bash #
 
    ceph osd pool create {pool-name} [pg_num]
 
-it is optional to choose the value of ``pg_num``.  If you do not
-specify ``pg_num``, the cluster can (by default) automatically tune it
-for you based on how much data is stored in the pool (see above, :ref:`pg-autoscaler`).
+If you opt not to specify ``pg_num`` in this command, the cluster uses the PG
+autoscaler to automatically configure the parameter in accordance with the
+amount of data that is stored in the pool (see :ref:`pg-autoscaler` above).
 
-Alternatively, ``pg_num`` can be explicitly provided.  However,
-whether you specify a ``pg_num`` value or not does not affect whether
-the value is automatically tuned by the cluster after the fact.  To
-enable or disable auto-tuning:
+However, your decision of whether or not to specify ``pg_num`` at creation time
+has no effect on whether the parameter will be automatically tuned by the
+cluster afterwards. As seen above, autoscaling of PGs is enabled or disabled by
+running a command of the following form:
+    
+.. prompt:: bash #
 
-  ceph osd pool set {pool-name} pg_autoscale_mode (on|off|warn)
+   ceph osd pool set {pool-name} pg_autoscale_mode (on|off|warn)
 
-The "rule of thumb" for PGs per OSD has traditionally be 100.  With
-the additional of the balancer (which is also enabled by default), a
-value of more like 50 PGs per OSD is probably reasonable.  The
-challenge (which the autoscaler normally does for you), is to:
+Without the balancer, the suggested target is approximately 100 PG replicas on
+each OSD. With the balancer, an initial target of 50 PG replicas on each OSD is
+reasonable.
 
-- have the PGs per pool proportional to the data in the pool, and
-- end up with 50-100 PGs per OSDs, after the replication or
-  erasuring-coding fan-out of each PG across OSDs is taken into
-  consideration
+The autoscaler attempts to satisfy the following conditions:
 
-How are Placement Groups used ?
-===============================
+- the number of PGs per OSD should be proportional to the amount of data in the
+  pool
+- there should be 50-100 PGs per pool, taking into account the replication
+  overhead or erasure-coding fan-out of each PG's replicas across OSDs
 
-A placement group (PG) aggregates objects within a pool because
-tracking object placement and object metadata on a per-object basis is
-computationally expensive--i.e., a system with millions of objects
-cannot realistically track placement on a per-object basis.
+Use of Placement Groups
+=======================
+
+A placement group aggregates objects within a pool. The tracking of RADOS
+object placement and object metadata on a per-object basis is computationally
+expensive. It would be infeasible for a system with millions of RADOS
+objects to efficiently track placement on a per-object basis.
 
 .. ditaa::
            /-----\  /-----\  /-----\  /-----\  /-----\
@@ -367,14 +386,14 @@ cannot realistically track placement on a per-object basis.
                   |                       |
                   +-----------------------+
 
-The Ceph client will calculate which placement group an object should
-be in. It does this by hashing the object ID and applying an operation
-based on the number of PGs in the defined pool and the ID of the pool.
-See `Mapping PGs to OSDs`_ for details.
+The Ceph client calculates which PG a RADOS object should be in. As part of
+this calculation, the client hashes the object ID and performs an operation
+involving both the number of PGs in the specified pool and the pool ID. For
+details, see `Mapping PGs to OSDs`_.
 
-The object's contents within a placement group are stored in a set of
-OSDs. For instance, in a replicated pool of size two, each placement
-group will store objects on two OSDs, as shown below.
+The contents of a RADOS object belonging to a PG are stored in a set of OSDs.
+For example, in a replicated pool of size two, each PG will store objects on
+two OSDs, as shown below:
 
 .. ditaa::
    +-----------------------+      +-----------------------+
@@ -390,172 +409,163 @@ group will store objects on two OSDs, as shown below.
    \----------/  \----------/    \----------/  \----------/
 
 
-Should OSD #2 fail, another will be assigned to Placement Group #1 and
-will be filled with copies of all objects in OSD #1. If the pool size
-is changed from two to three, an additional OSD will be assigned to
-the placement group and will receive copies of all objects in the
-placement group.
+If OSD #2 fails, another OSD will be assigned to Placement Group #1 and then
+filled with copies of all objects in OSD #1. If the pool size is changed from
+two to three, an additional OSD will be assigned to the PG and will receive
+copies of all objects in the PG.
 
-Placement groups do not own the OSD; they share it with other
-placement groups from the same pool or even other pools. If OSD #2
-fails, the Placement Group #2 will also have to restore copies of
-objects, using OSD #3.
+An OSD assigned to a PG is not owned exclusively by that PG; rather, the OSD is
+shared with other PGs either from the same pool or from other pools. In our
+example, OSD #2 is shared by Placement Group #1 and Placement Group #2. If OSD
+#2 fails, then Placement Group #2 must restore copies of objects (by making use
+of OSD #3).
 
-When the number of placement groups increases, the new placement
-groups will be assigned OSDs. The result of the CRUSH function will
-also change and some objects from the former placement groups will be
-copied over to the new Placement Groups and removed from the old ones.
+When the number of PGs increases, several consequences ensue. The new PGs are
+assigned OSDs. The result of the CRUSH function changes, which means that some
+objects from the already-existing PGs are copied to the new PGs and removed
+from the old ones.
 
-Placement Groups Tradeoffs
-==========================
+Factors Relevant To Specifying pg_num
+=====================================
 
-Data durability and even distribution among all OSDs call for more
-placement groups but their number should be reduced to the minimum to
-save CPU and memory.
+On the one hand, the criteria of data durability and even distribution across
+OSDs weigh in favor of a high number of PGs. On the other hand, the criteria of
+saving CPU resources and minimizing memory usage weigh in favor of a low number
+of PGs.
 
 .. _data durability:
 
 Data durability
 ---------------
 
-After an OSD fails, the risk of data loss increases until the data it
-contained is fully recovered. Let's imagine a scenario that causes
-permanent data loss in a single placement group:
+When an OSD fails, the risk of data loss is increased until replication of the
+data it hosted is restored to the configured level. To illustrate this point,
+let's imagine a scenario that results in permanent data loss in a single PG:
 
-- The OSD fails and all copies of the object it contains are lost.
-  For all objects within the placement group the number of replica
-  suddenly drops from three to two.
+#. The OSD fails and all copies of the object that it contains are lost.  For
+   each object within the PG, the number of its replicas suddenly drops from
+   three to two.
 
-- Ceph starts recovery for this placement group by choosing a new OSD
-  to re-create the third copy of all objects.
+#. Ceph starts recovery for this PG by choosing a new OSD on which to re-create
+   the third copy of each object.
 
-- Another OSD, within the same placement group, fails before the new
-  OSD is fully populated with the third copy. Some objects will then
-  only have one surviving copies.
+#. Another OSD within the same PG fails before the new OSD is fully populated
+   with the third copy. Some objects will then only have one surviving copy.
 
-- Ceph picks yet another OSD and keeps copying objects to restore the
-  desired number of copies.
+#. Ceph selects yet another OSD and continues copying objects in order to
+   restore the desired number of copies.
 
-- A third OSD, within the same placement group, fails before recovery
-  is complete. If this OSD contained the only remaining copy of an
-  object, it is permanently lost.
+#. A third OSD within the same PG fails before recovery is complete. If this
+   OSD happened to contain the only remaining copy of an object, the object is
+   permanently lost.
 
-In a cluster containing 10 OSDs with 512 placement groups in a three
-replica pool, CRUSH will give each placement groups three OSDs. In the
-end, each OSDs will end up hosting (512 * 3) / 10 = ~150 Placement
-Groups. When the first OSD fails, the above scenario will therefore
-start recovery for all 150 placement groups at the same time.
+In a cluster containing 10 OSDs with 512 PGs in a three- replica pool, CRUSH
+will give each PG three OSDs.  Ultimately, each OSD hosts (512 * 3) / 10 = ~150
+PGs.  So when the first OSD fails in the above scenario, recovery will begin
+for all 150 PGs at the same time.
 
-The 150 placement groups being recovered are likely to be
-homogeneously spread over the 9 remaining OSDs. Each remaining OSD is
-therefore likely to send copies of objects to all others and also
-receive some new objects to be stored because they became part of a
-new placement group.
+The 150 PGs that are being recovered are likely to be homogeneously distributed
+across the 9 remaining OSDs. Each remaining OSD is therefore likely to send
+copies of objects to all other OSDs and also likely to receive some new objects
+to be stored because it has become part of a new PG.
 
-The amount of time it takes for this recovery to complete entirely
-depends on the architecture of the Ceph cluster. Let say each OSD is
-hosted by a 1TB SSD on a single machine and all of them are connected
-to a 10Gb/s switch and the recovery for a single OSD completes within
-M minutes. If there are two OSDs per machine using spinners with no
-SSD journal and a 1Gb/s switch, it will at least be an order of
+The amount of time it takes for this recovery to complete depends on the
+architecture of the Ceph cluster. Compare two setups: (1) Each OSD is hosted by
+a 1 TB SSD on a single machine, all of the OSDs are connected to a 10 Gb/s
+switch, and the recovery of a single OSD completes within a certain number of
+minutes. (2) There are two OSDs per machine using HDDs with no SSD WAL+DB and
+a 1 Gb/s switch. In the second setup, recovery will be at least one order of
 magnitude slower.
 
-In a cluster of this size, the number of placement groups has almost
-no influence on data durability. It could be 128 or 8192 and the
-recovery would not be slower or faster.
+In such a cluster, the number of PGs has almost no effect on data durability.
+Whether there are 128 PGs per OSD or 8192 PGs per OSD, the recovery will be no
+slower or faster.
 
-However, growing the same Ceph cluster to 20 OSDs instead of 10 OSDs
-is likely to speed up recovery and therefore improve data durability
-significantly. Each OSD now participates in only ~75 placement groups
-instead of ~150 when there were only 10 OSDs and it will still require
-all 19 remaining OSDs to perform the same amount of object copies in
-order to recover. But where 10 OSDs had to copy approximately 100GB
-each, they now have to copy 50GB each instead. If the network was the
-bottleneck, recovery will happen twice as fast. In other words,
-recovery goes faster when the number of OSDs increases.
+However, an increase in the number of OSDs can increase the speed of recovery.
+Suppose our Ceph cluster is expanded from 10 OSDs to 20 OSDs.  Each OSD now
+participates in only ~75 PGs rather than ~150 PGs. All 19 remaining OSDs will
+still be required to replicate the same number of objects in order to recover.
+But instead of there being only 10 OSDs that have to copy ~100 GB each, there
+are now 20 OSDs that have to copy only 50 GB each. If the network had
+previously been a bottleneck, recovery now happens twice as fast.
 
-If this cluster grows to 40 OSDs, each of them will only host ~35
-placement groups. If an OSD dies, recovery will keep going faster
-unless it is blocked by another bottleneck. However, if this cluster
-grows to 200 OSDs, each of them will only host ~7 placement groups. If
-an OSD dies, recovery will happen between at most of ~21 (7 * 3) OSDs
-in these placement groups: recovery will take longer than when there
-were 40 OSDs, meaning the number of placement groups should be
-increased.
+Similarly, suppose that our cluster grows to 40 OSDs. Each OSD will host only
+~38 PGs. And if an OSD dies, recovery will take place faster than before unless
+it is blocked by another bottleneck. Now, however, suppose that our cluster
+grows to 200 OSDs. Each OSD will host only ~7 PGs. And if an OSD dies, recovery
+will happen across at most ~21 (7 * 3) OSDs associated with these PGs. This
+means that recovery will take longer than when there were only 40 OSDs. For
+this reason, the number of PGs should be increased.
 
-No matter how short the recovery time is, there is a chance for a
-second OSD to fail while it is in progress. In the 10 OSDs cluster
-described above, if any of them fail, then ~17 placement groups
-(i.e. ~150 / 9 placement groups being recovered) will only have one
-surviving copy. And if any of the 8 remaining OSD fail, the last
-objects of two placement groups are likely to be lost (i.e. ~17 / 8
-placement groups with only one remaining copy being recovered).
+No matter how brief the recovery time is, there is always a chance that an
+additional OSD will fail while recovery is in progress.  Consider the cluster
+with 10 OSDs described above: if any of the OSDs fail, then ~17 (approximately
+150 divided by 9) PGs will have only one remaining copy. And if any of the 8
+remaining OSDs fail, then 2 (approximately 17 divided by 8) PGs are likely to
+lose their remaining objects. This is one reason why setting ``size=2`` is
+risky.
 
-When the size of the cluster grows to 20 OSDs, the number of Placement
-Groups damaged by the loss of three OSDs drops. The second OSD lost
-will degrade ~4 (i.e. ~75 / 19 placement groups being recovered)
-instead of ~17 and the third OSD lost will only lose data if it is one
-of the four OSDs containing the surviving copy. In other words, if the
-probability of losing one OSD is 0.0001% during the recovery time
-frame, it goes from 17 * 10 * 0.0001% in the cluster with 10 OSDs to 4 * 20 *
-0.0001% in the cluster with 20 OSDs.
+When the number of OSDs in the cluster increases to 20, the number of PGs that
+would be damaged by the loss of three OSDs significantly decreases. The loss of
+a second OSD degrades only ~4 (approximately 75 divided by 19) PGs rather than
+~17 PGs, and the loss of a third OSD results in data loss only if it is one of
+the 4 OSDs that contains the remaining copy. This means -- assuming that the
+probability of losing one OSD during recovery is 0.0001% -- that the
+probability of data loss when three OSDs are lost is ~17 * 10 * 0.0001% in the
+cluster with 10 OSDs, and only ~4 * 20 * 0.0001% in the cluster with 20 OSDs.
 
-In a nutshell, more OSDs mean faster recovery and a lower risk of
-cascading failures leading to the permanent loss of a Placement
-Group. Having 512 or 4096 Placement Groups is roughly equivalent in a
-cluster with less than 50 OSDs as far as data durability is concerned.
+In summary, the greater the number of OSDs, the faster the recovery and the
+lower the risk of permanently losing a PG due to cascading failures. As far as
+data durability is concerned, in a cluster with fewer than 50 OSDs, it doesn't
+much matter whether there are 512 or 4096 PGs.
 
-Note: It may take a long time for a new OSD added to the cluster to be
-populated with placement groups that were assigned to it. However
-there is no degradation of any object and it has no impact on the
-durability of the data contained in the Cluster.
+.. note::  It can take a long time for an OSD that has been recently added to
+   the cluster to be populated with the PGs assigned to it.  However, no object
+   degradation or impact on data durability will result from the slowness of
+   this process since Ceph populates data into the new PGs before removing it
+   from the old PGs.
 
 .. _object distribution:
 
 Object distribution within a pool
 ---------------------------------
 
-Ideally objects are evenly distributed in each placement group. Since
-CRUSH computes the placement group for each object, but does not
-actually know how much data is stored in each OSD within this
-placement group, the ratio between the number of placement groups and
-the number of OSDs may influence the distribution of the data
-significantly.
+Under ideal conditions, objects are evenly distributed across PGs. Because
+CRUSH computes the PG for each object but does not know how much data is stored
+in each OSD associated with the PG, the ratio between the number of PGs and the
+number of OSDs can have a significant influence on data distribution.
 
-For instance, if there was a single placement group for ten OSDs in a
-three replica pool, only three OSD would be used because CRUSH would
-have no other choice. When more placement groups are available,
-objects are more likely to be evenly spread among them. CRUSH also
-makes every effort to evenly spread OSDs among all existing Placement
-Groups.
+For example, suppose that there is only a single PG for ten OSDs in a
+three-replica pool. In that case, only three OSDs would be used because CRUSH
+would have no other option. However, if more PGs are available, RADOS objects are
+more likely to be evenly distributed across OSDs.  CRUSH makes every effort to
+distribute OSDs evenly across all existing PGs.
 
-As long as there are one or two orders of magnitude more Placement
-Groups than OSDs, the distribution should be even. For instance, 256
-placement groups for 3 OSDs, 512 or 1024 placement groups for 10 OSDs
-etc.
+As long as there are one or two orders of magnitude more PGs than OSDs, the
+distribution is likely to be even. For example: 256 PGs for 3 OSDs, 512 PGs for
+10 OSDs, or 1024 PGs for 10 OSDs.
 
-Uneven data distribution can be caused by factors other than the ratio
-between OSDs and placement groups. Since CRUSH does not take into
-account the size of the objects, a few very large objects may create
-an imbalance. Let say one million 4K objects totaling 4GB are evenly
-spread among 1024 placement groups on 10 OSDs. They will use 4GB / 10
-= 400MB on each OSD. If one 400MB object is added to the pool, the
-three OSDs supporting the placement group in which the object has been
-placed will be filled with 400MB + 400MB = 800MB while the seven
-others will remain occupied with only 400MB.
+However, uneven data distribution can emerge due to factors other than the
+ratio of PGs to OSDs. For example, since CRUSH does not take into account the
+size of the RADOS objects, the presence of a few very large RADOS objects can
+create an imbalance. Suppose that one million 4 KB RADOS objects totaling 4 GB
+are evenly distributed among 1024 PGs on 10 OSDs. These RADOS objects will
+consume 4 GB / 10 = 400 MB on each OSD. If a single 400 MB RADOS object is then
+added to the pool, the three OSDs supporting the PG in which the RADOS object
+has been placed will each be filled with 400 MB + 400 MB = 800 MB but the seven
+other OSDs will still contain only 400 MB.
 
 .. _resource usage:
 
 Memory, CPU and network usage
 -----------------------------
 
-For each placement group, OSDs and MONs need memory, network and CPU
-at all times and even more during recovery. Sharing this overhead by
-clustering objects within a placement group is one of the main reasons
-they exist.
+Every PG in the cluster imposes memory, network, and CPU demands upon OSDs and
+MONs. These needs must be met at all times and are increased during recovery.
+Indeed, one of the main reasons PGs were developed was to share this overhead
+by clustering objects together.
 
-Minimizing the number of placement groups saves significant amounts of
-resources.
+For this reason, minimizing the number of PGs saves significant resources.
 
 .. _choosing-number-of-placement-groups:
 
