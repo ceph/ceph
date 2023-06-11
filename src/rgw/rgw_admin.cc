@@ -3021,6 +3021,9 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
                              nullptr,
                              pins[0].c_str());
     if (rc != OATH_INVALID_OTP) {
+      // oath_totp_validate2 is an external library function, cannot fix internally
+      // Further, step_size is a small number and unlikely to overflow
+      // coverity[Y2K38_SAFETY:FALSE]
       rc = oath_totp_validate2(totp.seed_bin.c_str(), totp.seed_bin.length(),
                                start_time, 
                                step_size,
@@ -10364,6 +10367,8 @@ next:
       return -ret;
     }
 
+    // time offset is a small number and unlikely to overflow
+    // coverity[Y2K38_SAFETY:FALSE]
     config.time_ofs = time_ofs;
 
     /* now update the backend */
