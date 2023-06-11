@@ -49,8 +49,7 @@
  * #Note: This is an allocation simulator not a data consistency simulator so
  * any object data is not stored.
  */
-class FragmentationSimulator : ObjectStore {
-public:
+class FragmentationSimulator : public ObjectStore {
 private:
   class Collection;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
@@ -407,6 +406,7 @@ private:
   // _wctx_finish will empty out old_extents
   void _wctx_finish(TransContext *txc, CollectionRef &c, ObjectRef &o,
                     WriteContext *wctx);
+
   // Members
 
   boost::scoped_ptr<Allocator> alloc;
@@ -467,6 +467,7 @@ private:
 
   Finisher finisher;
 
+public:
   FragmentationSimulator(CephContext *cct, const std::string &path_)
       : ObjectStore(cct, path_), alloc(nullptr),
         finisher(cct, "commit_finisher", "cfin") {}
