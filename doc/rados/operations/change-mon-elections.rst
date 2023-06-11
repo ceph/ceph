@@ -1,88 +1,100 @@
 .. _changing_monitor_elections:
 
-=====================================
-Configure Monitor Election Strategies
-=====================================
+=======================================
+Configuring Monitor Election Strategies
+=======================================
 
-By default, the monitors will use the ``classic`` mode. We
-recommend that you stay in this mode unless you have a very specific reason.
+By default, the monitors are in ``classic`` mode. We recommend staying in this
+mode unless you have a very specific reason.
 
-If you want to switch modes BEFORE constructing the cluster, change
-the ``mon election default strategy`` option. This option is an integer value:
+If you want to switch modes BEFORE constructing the cluster, change the ``mon
+election default strategy`` option. This option takes an integer value:
 
-* 1 for "classic"
-* 2 for "disallow"
-* 3 for "connectivity"
+* ``1`` for ``classic``
+* ``2`` for ``disallow``
+* ``3`` for ``connectivity``
 
-Once your cluster is running, you can change strategies by running ::
+After your cluster has started running, you can change strategies by running a
+command of the following form:
 
   $ ceph mon set election_strategy {classic|disallow|connectivity}
 
 Choosing a mode
 ===============
-The modes other than classic provide different features. We recommend
-you stay in classic mode if you don't need the extra features as it is
-the simplest mode.
 
-The disallow Mode
-=================
-This mode lets you mark monitors as disallowed, in which case they will
-participate in the quorum and serve clients, but cannot be elected leader. You
-may wish to use this if you have some monitors which are known to be far away
-from clients.
-You can disallow a leader by running:
+The modes other than ``classic`` provide specific features. We recommend staying
+in ``classic`` mode if you don't need these extra features because it is the
+simplest mode.
+
+.. _rados_operations_disallow_mode:
+
+Disallow Mode
+=============
+
+The ``disallow`` mode allows you to mark monitors as disallowed. Disallowed
+monitors participate in the quorum and serve clients, but cannot be elected
+leader. You might want to use this mode for monitors that are far away from
+clients.
+
+To disallow a monitor from being elected leader, run a command of the following
+form:
 
 .. prompt:: bash $
 
    ceph mon add disallowed_leader {name}
 
-You can remove a monitor from the disallowed list, and allow it to become
-a leader again, by running:
+To remove a monitor from the disallowed list and allow it to be elected leader,
+run a command of the following form:
 
 .. prompt:: bash $
 
    ceph mon rm disallowed_leader {name}
 
-The list of disallowed_leaders is included when you run:
+To see the list of disallowed leaders, examine the output of the following
+command:
 
 .. prompt:: bash $
 
    ceph mon dump
 
-The connectivity Mode
-=====================
-This mode evaluates connection scores provided by each monitor for its
-peers and elects the monitor with the highest score. This mode is designed
-to handle network partitioning or *net-splits*, which may happen if your cluster
-is stretched across multiple data centers or otherwise has a non-uniform
-or unbalanced network topology.
+Connectivity Mode
+=================
 
-This mode also supports disallowing monitors from being the leader
-using the same commands as above in disallow.
+The ``connectivity`` mode evaluates connection scores that are provided by each
+monitor for its peers and elects the monitor with the highest score. This mode
+is designed to handle network partitioning (also called *net-splits*): network
+partitioning might occur if your cluster is stretched across multiple data
+centers or otherwise has a non-uniform or unbalanced network topology.
+
+The ``connectivity`` mode also supports disallowing monitors from being elected
+leader by using the same commands that were presented in :ref:`Disallow Mode <rados_operations_disallow_mode>`.
 
 Examining connectivity scores
 =============================
-The monitors maintain connection scores even if they aren't in
-the connectivity election mode. You can examine the scores a monitor
-has by running:
+
+The monitors maintain connection scores even if they aren't in ``connectivity``
+mode. To examine a specific monitor's connection scores, run a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph daemon mon.{name} connection scores dump
 
-Scores for individual connections range from 0-1 inclusive, and also
-include whether the connection is considered alive or dead (determined by
-whether it returned its latest ping within the timeout).
+Scores for an individual connection range from ``0`` to ``1`` inclusive and
+include whether the connection is considered alive or dead (as determined by
+whether it returned its latest ping before timeout).
 
-While this would be an unexpected occurrence, if for some reason you experience
-problems and troubleshooting makes you think your scores have become invalid,
-you can forget history and reset them by running:
+Connectivity scores are expected to remain valid. However, if during
+troubleshooting you determine that these scores have for some reason become
+invalid, drop the history and reset the scores by running a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph daemon mon.{name} connection scores reset
 
-While resetting scores has low risk (monitors will still quickly determine
-if a connection is alive or dead, and trend back to the previous scores if they
-were accurate!), it should also not be needed and is not recommended unless
-requested by your support team or a developer.
+Resetting connectivity scores carries little risk: monitors will still quickly
+determine whether a connection is alive or dead and trend back to the previous
+scores if those scores were accurate. Nevertheless, resetting scores ought to
+be unnecessary and it is not recommended unless advised by your support team
+or by a developer.
