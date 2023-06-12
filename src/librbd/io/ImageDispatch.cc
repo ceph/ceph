@@ -75,8 +75,7 @@ bool ImageDispatch<I>::write(
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_write(m_image_ctx, aio_comp, std::move(image_extents),
-                             area, std::move(bl), io_context, op_flags,
-                             parent_trace);
+                             area, std::move(bl), op_flags, parent_trace);
   return true;
 }
 
@@ -97,8 +96,7 @@ bool ImageDispatch<I>::discard(
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_discard(m_image_ctx, aio_comp, std::move(image_extents),
-                               area, discard_granularity_bytes, io_context,
-                               parent_trace);
+                               area, discard_granularity_bytes, parent_trace);
   return true;
 }
 
@@ -119,7 +117,7 @@ bool ImageDispatch<I>::write_same(
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
   ImageRequest<I>::aio_writesame(m_image_ctx, aio_comp,
                                  std::move(image_extents), area, std::move(bl),
-                                 io_context, op_flags, parent_trace);
+                                 op_flags, parent_trace);
   return true;
 }
 
@@ -142,7 +140,7 @@ bool ImageDispatch<I>::compare_and_write(
   ImageRequest<I>::aio_compare_and_write(m_image_ctx, aio_comp,
                                          std::move(image_extents), area,
                                          std::move(cmp_bl), std::move(bl),
-                                         mismatch_offset, io_context, op_flags,
+                                         mismatch_offset, op_flags,
                                          parent_trace);
   return true;
 }
