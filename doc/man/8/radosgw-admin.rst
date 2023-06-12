@@ -146,6 +146,9 @@ which are as follows:
 :command:`object rewrite`
   Rewrite the specified object.
 
+:command:`object reindex`
+  Add an object to its bucket's index. Used rarely for emergency repairs.
+
 :command:`objects expire`
   Run expired objects cleanup.
 
