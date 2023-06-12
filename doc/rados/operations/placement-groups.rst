@@ -100,8 +100,8 @@ The output will resemble the following::
   data of other pools). 
 
 - **RATIO** is the ratio of (1) the storage consumed by the pool to (2) the
-  total raw storage capacity. In order words, RATIO is defined as (SIZE * RATE)
-  / RAW CAPACITY.
+  total raw storage capacity. In order words, RATIO is defined as 
+  (SIZE * RATE) / RAW CAPACITY.
 
 - **TARGET RATIO** (if present) is the ratio of the expected storage of this
   pool (that is, the amount of storage that this pool is expected to consume,
@@ -459,10 +459,10 @@ let's imagine a scenario that results in permanent data loss in a single PG:
    OSD happened to contain the only remaining copy of an object, the object is
    permanently lost.
 
-In a cluster containing 10 OSDs with 512 PGs in a three- replica pool, CRUSH
-will give each PG three OSDs.  Ultimately, each OSD hosts (512 * 3) / 10 = ~150
-PGs.  So when the first OSD fails in the above scenario, recovery will begin
-for all 150 PGs at the same time.
+In a cluster containing 10 OSDs with 512 PGs in a three-replica pool, CRUSH
+will give each PG three OSDs.  Ultimately, each OSD hosts :math:`\frac{(512 *
+3)}{10} = ~150` PGs. So when the first OSD fails in the above scenario,
+recovery will begin for all 150 PGs at the same time.
 
 The 150 PGs that are being recovered are likely to be homogeneously distributed
 across the 9 remaining OSDs. Each remaining OSD is therefore likely to send
@@ -493,26 +493,28 @@ Similarly, suppose that our cluster grows to 40 OSDs. Each OSD will host only
 ~38 PGs. And if an OSD dies, recovery will take place faster than before unless
 it is blocked by another bottleneck. Now, however, suppose that our cluster
 grows to 200 OSDs. Each OSD will host only ~7 PGs. And if an OSD dies, recovery
-will happen across at most ~21 (7 * 3) OSDs associated with these PGs. This
-means that recovery will take longer than when there were only 40 OSDs. For
-this reason, the number of PGs should be increased.
+will happen across at most :math:`\approx 21 = (7 \times 3)` OSDs
+associated with these PGs. This means that recovery will take longer than when
+there were only 40 OSDs. For this reason, the number of PGs should be
+increased.
 
 No matter how brief the recovery time is, there is always a chance that an
 additional OSD will fail while recovery is in progress.  Consider the cluster
-with 10 OSDs described above: if any of the OSDs fail, then ~17 (approximately
-150 divided by 9) PGs will have only one remaining copy. And if any of the 8
-remaining OSDs fail, then 2 (approximately 17 divided by 8) PGs are likely to
-lose their remaining objects. This is one reason why setting ``size=2`` is
-risky.
+with 10 OSDs described above: if any of the OSDs fail, then :math:`\approx 17`
+(approximately 150 divided by 9) PGs will have only one remaining copy. And if
+any of the 8 remaining OSDs fail, then 2 (approximately 17 divided by 8) PGs
+are likely to lose their remaining objects. This is one reason why setting
+``size=2`` is risky.
 
 When the number of OSDs in the cluster increases to 20, the number of PGs that
 would be damaged by the loss of three OSDs significantly decreases. The loss of
-a second OSD degrades only ~4 (approximately 75 divided by 19) PGs rather than
-~17 PGs, and the loss of a third OSD results in data loss only if it is one of
-the 4 OSDs that contains the remaining copy. This means -- assuming that the
-probability of losing one OSD during recovery is 0.0001% -- that the
-probability of data loss when three OSDs are lost is ~17 * 10 * 0.0001% in the
-cluster with 10 OSDs, and only ~4 * 20 * 0.0001% in the cluster with 20 OSDs.
+a second OSD degrades only approximately :math:`4` or (:math:`\frac{75}{19}`)
+PGs rather than :math:`\approx 17` PGs, and the loss of a third OSD results in
+data loss only if it is one of the 4 OSDs that contains the remaining copy.
+This means -- assuming that the probability of losing one OSD during recovery
+is 0.0001% -- that the probability of data loss when three OSDs are lost is
+:math:`\approx 17 \times 10 \times 0.0001%` in the cluster with 10 OSDs, and
+only :math:`\approx 4 \times 20 \times 0.0001%` in the cluster with 20 OSDs.
 
 In summary, the greater the number of OSDs, the faster the recovery and the
 lower the risk of permanently losing a PG due to cascading failures. As far as
