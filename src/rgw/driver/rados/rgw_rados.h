@@ -767,9 +767,11 @@ public:
         uint64_t *obj_size;
         std::map<std::string, bufferlist> *attrs;
         rgw_obj *target_obj;
+	uint64_t *epoch;
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
-		 target_obj(nullptr) {}
+		   target_obj(nullptr), epoch(nullptr)
+	{}
       } params;
 
       explicit Read(RGWRados::Object *_source) : source(_source) {}
