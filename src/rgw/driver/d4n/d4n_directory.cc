@@ -219,7 +219,7 @@ int BlockDirectory::exist_key(std::string key) {
   try {
     client.exists(keys, [&result](cpp_redis::reply &reply) {
       if (reply.is_integer()) {
-        result = reply.as_integer(); /* Returns 1 upon success */
+        result = reply.as_integer();
       }
     });
     
@@ -240,7 +240,7 @@ int BlockDirectory::set_value(CacheBlock* block) {
   /* Every set will be new */
   if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW D4N Directory: Directory endpoint not configured correctly" << dendl;
-    return -1;
+    return -2;
   }
     
   std::string endpoint = addr.host + ":" + std::to_string(addr.port);
@@ -281,9 +281,7 @@ int BlockDirectory::get_value(CacheBlock* block) {
     find_client(&client);
   }
 
-  if (existKey(key)) {
-    int field_exist = -1;
-    
+  if (exist_key(key)) {
     std::string hosts;
     std::string size;
     std::string bucketName;
@@ -344,18 +342,16 @@ int BlockDirectory::del_value(CacheBlock* block) {
     try {
       client.del(keys, [&result](cpp_redis::reply &reply) {
         if (reply.is_integer()) {
-          result = reply.as_integer(); /* Returns 1 upon success */
+          result = reply.as_integer();
         }
       });
 	
       client.sync_commit(std::chrono::milliseconds(1000));	
-
       return result - 1;
     } catch(std::exception &e) {
       return -1;
     }
   } else {
-    dout(20) << "RGW D4N Directory: Block is not in directory." << dendl;
     return -2;
   }
 }

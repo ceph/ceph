@@ -204,7 +204,7 @@ int LFUDAPolicy::get_min_avg_weight() {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
-  unordered_map<std::string, rgw::cal::Entry> entries = cacheNode->list_entries(dpp);
+  unordered_map<std::string, rgw::cal::Entry> entries;// = cacheNode->list_entries(dpp);
   std::string victimName;
   int minWeight = INT_MAX;
 
@@ -262,6 +262,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */
       localWeight += age;
     //} else {
+// list_entries works here -Sam
       uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
       //while (freeSpace < block->size) {
@@ -307,8 +308,8 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
   CacheBlock victim = find_victim(dpp, cacheNode);
 
-  if (victim == {}) {
-    dout(0) << "Could not find victim block"
+  if (victim.cacheObj.objName.empty()) {
+    dout(0) << "Could not find victim block" << dendl;
     return -1;
   }
 
