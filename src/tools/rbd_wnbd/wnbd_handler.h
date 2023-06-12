@@ -27,8 +27,6 @@
 // TODO: make this configurable.
 #define RBD_WNBD_MAX_TRANSFER 2 * 1024 * 1024
 #define SOFT_REMOVE_RETRY_INTERVAL 2
-#define DEFAULT_SOFT_REMOVE_TIMEOUT 15
-#define DEFAULT_IO_WORKER_COUNT 4
 
 // Not defined by mingw.
 #ifndef SCSI_ADSENSE_UNRECOVERED_ERROR
