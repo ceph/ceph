@@ -758,7 +758,7 @@ EOF
         COSDSHORT="        osd max object name len = 460
         osd max object namespace len = 64"
     fi
-    if [ "$objectstore" == "bluestore" -o "$objectstore" == "bluestore-rdr"]; then
+    if [ "$objectstore" == "bluestore" -o "$objectstore" == "bluestore-rdr" ]; then
         if [ "$spdk_enabled" -eq 1 ] || [ "$pmem_enabled" -eq 1 ]; then
             BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
@@ -1033,7 +1033,7 @@ EOF
                     ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
                 fi
             fi
-            if [ "$objectstore" == "bluestore" -o "$objectstore" == "bluestore-rdr"]; then
+            if [ "$objectstore" == "bluestore" -o "$objectstore" == "bluestore-rdr" ]; then
                 wconf <<EOF
         bluestore fsck on mount = false
 EOF
