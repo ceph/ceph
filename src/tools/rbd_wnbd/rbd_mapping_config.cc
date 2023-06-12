@@ -52,7 +52,7 @@ int construct_devpath_if_missing(Config* cfg)
   return 0;
 }
 
-int save_config_to_registry(Config* cfg, std::string command_line)
+int save_config_to_registry(Config* cfg)
 {
   std::string strKey{ SERVICE_REG_KEY };
   strKey.append("\\");
@@ -73,7 +73,7 @@ int save_config_to_registry(Config* cfg, std::string command_line)
       reg_key.set("nsname", cfg->nsname) ||
       reg_key.set("imgname", cfg->imgname) ||
       reg_key.set("snapname", cfg->snapname) ||
-      reg_key.set("command_line", command_line) ||
+      reg_key.set("command_line", cfg->command_line) ||
       reg_key.set("persistent", cfg->persistent) ||
       reg_key.set("admin_sock_path", g_conf()->admin_socket) ||
       reg_key.flush()) {

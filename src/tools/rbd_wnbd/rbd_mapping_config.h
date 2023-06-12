@@ -31,7 +31,8 @@ struct Config {
   bool exclusive = false;
   bool readonly = false;
 
-  std::string parent_pipe;
+  std::string cluster_name;
+  std::string entity_name;
 
   std::string poolname;
   std::string nsname;
@@ -72,6 +73,6 @@ struct Config {
 };
 
 int construct_devpath_if_missing(Config* cfg);
-int save_config_to_registry(Config* cfg, std::string command_line);
+int save_config_to_registry(Config* cfg);
 int remove_config_from_registry(Config* cfg);
 int load_mapping_config_from_registry(std::string devpath, Config* cfg);

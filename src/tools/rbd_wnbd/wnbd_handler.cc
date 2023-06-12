@@ -50,12 +50,15 @@ int WnbdHandler::wait()
 {
   int err = 0;
   if (started && wnbd_disk) {
-    dout(10) << __func__ << ": waiting" << dendl;
+    dout(10) << "waiting for WNBD mapping: " << instance_name << dendl;
 
     err = WnbdWaitDispatcher(wnbd_disk);
     if (err) {
-      derr << __func__ << " failed waiting for dispatcher to stop: "
-           << err << dendl;
+      derr << __func__ << ": failed waiting for dispatcher to stop: "
+           << instance_name
+           << ". Error: " << err << dendl;
+    } else {
+      dout(10) << "WNBD mapping disconnected: " << instance_name << dendl;
     }
   }
 
