@@ -74,8 +74,8 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
   return result;
 }
 
-std::unordered_map<std::string, Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) {
-  std::unordered_map<std::string, Entry> result;
+std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) {
+  std::vector<Entry> result;
 
   if (!client.is_connected()) 
     return {};
