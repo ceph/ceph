@@ -184,6 +184,22 @@
    fun:*GetStackTrace*
 }
 {
+   tcmalloc: param points to uninit bytes under call_init (jammy)
+   Memcheck:Param
+   write(buf)
+   fun:syscall
+   obj:*libunwind*
+   obj:*libunwind*
+   obj:*libunwind*
+   obj:*libunwind*
+   fun:_ULx86_64_step
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   obj:*tcmalloc*
+   fun:call_init.part.0
+}
+{
 	tcmalloc: string
 	Memcheck:Leak
 	...
