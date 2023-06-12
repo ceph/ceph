@@ -932,8 +932,8 @@ class LocalMDSCluster(LocalCephCluster, tasks.cephfs.filesystem.MDSClusterBase):
         # FIXME: unimplemented
         pass
 
-    def newfs(self, name='cephfs', create=True):
-        return LocalFilesystem(self._ctx, name=name, create=create)
+    def newfs(self, name='cephfs', create=True, **kwargs):
+        return LocalFilesystem(self._ctx, name=name, create=create, **kwargs)
 
     def delete_all_filesystems(self):
         """
@@ -954,7 +954,7 @@ class LocalMgrCluster(LocalCephCluster, tasks.mgr.mgr_test_case.MgrClusterBase):
 tasks.mgr.mgr_test_case.MgrCluster = LocalMgrCluster
 
 class LocalFilesystem(LocalMDSCluster, tasks.cephfs.filesystem.FilesystemBase):
-    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph'):
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph', **kwargs):
         # Deliberately skip calling Filesystem constructor
         LocalMDSCluster.__init__(self, ctx, cluster_name=cluster_name)
 
@@ -977,7 +977,12 @@ class LocalFilesystem(LocalMDSCluster, tasks.cephfs.filesystem.FilesystemBase):
             if fscid is not None:
                 raise RuntimeError("cannot specify fscid when creating fs")
             if create and not self.legacy_configured():
-                self.create()
+                self.create(recover=kwargs.pop("fs_recover", False),
+                            metadata_overlay=kwargs.pop("fs_metadata_overlay",
+                                                        False),
+                            fs_ops=kwargs.pop("fs_ops", None),
+                            yes_i_really_really_mean_it=kwargs.pop(
+                                "yes_i_really_really_mean_it", False))
         else:
             if fscid is not None:
                 self.id = fscid

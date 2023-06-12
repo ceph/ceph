@@ -402,8 +402,12 @@ class MDSClusterBase(CephClusterBase):
     def mds_is_running(self, mds_id):
         return self.mds_daemons[mds_id].running()
 
-    def newfs(self, name='cephfs', create=True):
-        return Filesystem(self._ctx, name=name, create=create)
+    def newfs(self, name='cephfs', create=True, **kwargs):
+        """
+        kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
+        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        """
+        return Filesystem(self._ctx, name=name, create=create, **kwargs)
 
     def status(self, epoch=None):
         return FSStatus(self.mon_manager, epoch)
@@ -535,7 +539,11 @@ class FilesystemBase(MDSClusterBase):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph'):
+    def __init__(self, ctx, fs_config={}, fscid=None, name=None, create=False, cluster_name='ceph', **kwargs):
+        """
+        kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
+        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        """
         super(FilesystemBase, self).__init__(ctx, cluster_name=cluster_name)
 
         self.name = name
@@ -554,7 +562,7 @@ class FilesystemBase(MDSClusterBase):
             if fscid is not None:
                 raise RuntimeError("cannot specify fscid when creating fs")
             if create and not self.legacy_configured():
-                self.create()
+                self.create(**kwargs)
         else:
             if fscid is not None:
                 self.id = fscid
@@ -681,7 +689,11 @@ class FilesystemBase(MDSClusterBase):
     target_size_ratio = 0.9
     target_size_ratio_ec = 0.9
 
-    def create(self, recover=False, metadata_overlay=False):
+    def create(self, **kwargs):
+        """
+        kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
+        yes_i_really_really_mean_it: bool and fs_ops: list[str]
+        """
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
@@ -690,6 +702,12 @@ class FilesystemBase(MDSClusterBase):
             data_pool_name = "{0}_data".format(self.name)
         else:
             data_pool_name = self.data_pool_name
+
+        recover = kwargs.pop("recover", False)
+        metadata_overlay = kwargs.pop("metadata_overlay", False)
+        yes_i_really_really_mean_it = kwargs.pop("yes_i_really_really_mean_it",
+                                                 False)
+        fs_ops = kwargs.pop("fs_ops", None)
 
         # will use the ec pool to store the data and a small amount of
         # metadata still goes to the primary data pool for all files.
@@ -724,6 +742,12 @@ class FilesystemBase(MDSClusterBase):
             args.append('--recover')
         if metadata_overlay:
             args.append('--allow-dangerous-metadata-overlay')
+        if yes_i_really_really_mean_it:
+            args.append('--yes-i-really-really-mean-it')
+        if fs_ops:
+            args.append('set')
+            for key_or_val in fs_ops:
+                args.append(key_or_val)
         self.run_ceph_cmd(*args)
 
         if not recover:
@@ -942,6 +966,18 @@ class FilesystemBase(MDSClusterBase):
 
     def get_var(self, var, status=None):
         return self.get_mds_map(status=status)[var]
+
+    def get_var_from_fs(self, fsname, var):
+        val = None
+        for fs in self.status().get_filesystems():
+            if fs["mdsmap"]["fs_name"] == fsname:
+                try:
+                    val = fs["mdsmap"][var]
+                    break
+                except KeyError:
+                    val = fs["mdsmap"]["flags_state"][var]
+                    break
+        return val
 
     def set_dir_layout(self, mount, path, layout):
         for name, value in layout.items():
