@@ -20,19 +20,13 @@
 #include "include/compat.h"
 #include "common/win32/registry.h"
 
-#include "wnbd_handler.h"
+#include "rbd_mapping_config.h"
+#include "rbd_mapping.h"
 
-#define SERVICE_REG_KEY "SYSTEM\\CurrentControlSet\\Services\\rbd-wnbd"
 #define SERVICE_PIPE_NAME "\\\\.\\pipe\\rbd-wnbd"
 #define SERVICE_PIPE_TIMEOUT_MS 5000
 #define SERVICE_PIPE_BUFFSZ 4096
 
-#define DEFAULT_MAP_TIMEOUT_MS 30000
-
-#define RBD_WNBD_BLKSIZE 512UL
-
-#define DEFAULT_SERVICE_START_TIMEOUT 120
-#define DEFAULT_IMAGE_MAP_TIMEOUT 20
 #define DISK_STATUS_POLLING_INTERVAL_MS 500
 
 #define HELP_INFO 1
@@ -40,52 +34,6 @@
 
 #define WNBD_STATUS_ACTIVE "active"
 #define WNBD_STATUS_INACTIVE "inactive"
-
-#define DEFAULT_SERVICE_THREAD_COUNT 8
-
-struct Config {
-  bool exclusive = false;
-  bool readonly = false;
-
-  std::string parent_pipe;
-
-  std::string poolname;
-  std::string nsname;
-  std::string imgname;
-  std::string snapname;
-  std::string devpath;
-
-  std::string format;
-  bool pretty_format = false;
-
-  bool hard_disconnect = false;
-  int soft_disconnect_timeout = DEFAULT_SOFT_REMOVE_TIMEOUT;
-  bool hard_disconnect_fallback = true;
-
-  int service_start_timeout = DEFAULT_SERVICE_START_TIMEOUT;
-  int image_map_timeout = DEFAULT_IMAGE_MAP_TIMEOUT;
-  bool remap_failure_fatal = false;
-  bool adapter_monitoring_enabled = false;
-
-  // TODO: consider moving those fields to a separate structure. Those
-  // provide connection information without actually being configurable.
-  // The disk number is provided by Windows.
-  int disk_number = -1;
-  int pid = 0;
-  std::string serial_number;
-  bool active = false;
-  bool wnbd_mapped = false;
-  std::string command_line;
-  std::string admin_sock_path;
-
-  WnbdLogLevel wnbd_log_level = WnbdLogLevelInfo;
-  int io_req_workers = DEFAULT_IO_WORKER_COUNT;
-  int io_reply_workers = DEFAULT_IO_WORKER_COUNT;
-  int service_thread_count = DEFAULT_SERVICE_THREAD_COUNT;
-
-  // register the mapping, recreating it when the Ceph service starts.
-  bool persistent = true;
-};
 
 enum Command {
   None,
@@ -117,11 +65,6 @@ int disconnect_all_mappings(
 int restart_registered_mappings(
   int worker_count, int total_timeout, int image_map_timeout);
 int map_device_using_suprocess(std::string command_line);
-
-int construct_devpath_if_missing(Config* cfg);
-int save_config_to_registry(Config* cfg);
-int remove_config_from_registry(Config* cfg);
-int load_mapping_config_from_registry(std::string devpath, Config* cfg);
 
 BOOL WINAPI console_handler_routine(DWORD dwCtrlType);
 

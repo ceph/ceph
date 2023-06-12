@@ -307,7 +307,7 @@ int send_map_request(std::string arguments) {
     &reply,
     sizeof(reply),
     &bytes_read,
-    DEFAULT_MAP_TIMEOUT_MS);
+    DEFAULT_IMAGE_MAP_TIMEOUT * 1000);
   if (!success) {
     DWORD err = GetLastError();
     derr << "Could not send device map request. "
@@ -519,77 +519,9 @@ BOOL WINAPI console_handler_routine(DWORD dwCtrlType)
   dout(0) << "Received control signal: " << dwCtrlType
           << ". Exiting." << dendl;
 
-  std::unique_lock l{shutdown_lock};
-  if (handler)
-    handler->shutdown();
+  // TODO: shutdown all mappings
 
   return true;
-}
-
-int save_config_to_registry(Config* cfg)
-{
-  std::string strKey{ SERVICE_REG_KEY };
-  strKey.append("\\");
-  strKey.append(cfg->devpath);
-  auto reg_key = RegistryKey(
-    g_ceph_context, HKEY_LOCAL_MACHINE, strKey.c_str(), true);
-  if (!reg_key.hKey) {
-      return -EINVAL;
-  }
-
-  int ret_val = 0;
-  // Registry writes are immediately available to other processes.
-  // Still, we'll do a flush to ensure that the mapping can be
-  // recreated after a system crash.
-  if (reg_key.set("pid", getpid()) ||
-      reg_key.set("devpath", cfg->devpath) ||
-      reg_key.set("poolname", cfg->poolname) ||
-      reg_key.set("nsname", cfg->nsname) ||
-      reg_key.set("imgname", cfg->imgname) ||
-      reg_key.set("snapname", cfg->snapname) ||
-      reg_key.set("command_line", get_cli_args()) ||
-      reg_key.set("persistent", cfg->persistent) ||
-      reg_key.set("admin_sock_path", g_conf()->admin_socket) ||
-      reg_key.flush()) {
-    ret_val = -EINVAL;
-  }
-
-  return ret_val;
-}
-
-int remove_config_from_registry(Config* cfg)
-{
-  std::string strKey{ SERVICE_REG_KEY };
-  strKey.append("\\");
-  strKey.append(cfg->devpath);
-  return RegistryKey::remove(
-    g_ceph_context, HKEY_LOCAL_MACHINE, strKey.c_str());
-}
-
-int load_mapping_config_from_registry(string devpath, Config* cfg)
-{
-  std::string strKey{ SERVICE_REG_KEY };
-  strKey.append("\\");
-  strKey.append(devpath);
-  auto reg_key = RegistryKey(
-    g_ceph_context, HKEY_LOCAL_MACHINE, strKey.c_str(), false);
-  if (!reg_key.hKey) {
-    if (reg_key.missingKey)
-      return -ENOENT;
-    else
-      return -EINVAL;
-  }
-
-  reg_key.get("devpath", cfg->devpath);
-  reg_key.get("poolname", cfg->poolname);
-  reg_key.get("nsname", cfg->nsname);
-  reg_key.get("imgname", cfg->imgname);
-  reg_key.get("snapname", cfg->snapname);
-  reg_key.get("command_line", cfg->command_line);
-  reg_key.get("persistent", cfg->persistent);
-  reg_key.get("admin_sock_path", cfg->admin_sock_path);
-
-  return 0;
 }
 
 int restart_registered_mappings(
@@ -793,7 +725,8 @@ class RBDService : public ServiceBase {
           // TODO: use the configured service map timeout.
           // TODO: add ceph.conf options.
           return map_device_using_suprocess(
-            (char*)request->arguments, DEFAULT_MAP_TIMEOUT_MS);
+            (char*)request->arguments,
+            DEFAULT_IMAGE_MAP_TIMEOUT * 1000);
         default:
           dout(1) << "Received unsupported command: "
                   << request->command << dendl;
@@ -1042,35 +975,6 @@ exit:
     }
 };
 
-class WNBDWatchCtx : public librbd::UpdateWatchCtx
-{
-private:
-  librados::IoCtx &io_ctx;
-  WnbdHandler* handler;
-  librbd::Image &image;
-  uint64_t size;
-public:
-  WNBDWatchCtx(librados::IoCtx& io_ctx, WnbdHandler* handler,
-               librbd::Image& image, uint64_t size)
-    : io_ctx(io_ctx)
-    , handler(handler)
-    , image(image)
-    , size(size)
-  { }
-
-  ~WNBDWatchCtx() override {}
-
-  void handle_notify() override
-  {
-    uint64_t new_size;
-
-    if (image.size(&new_size) == 0 && new_size != size &&
-        handler->resize(new_size) == 0) {
-      size = new_size;
-    }
-  }
-};
-
 static void usage()
 {
   const char* usage_str =R"(
@@ -1138,36 +1042,6 @@ Common options:
 
 static Command cmd = None;
 
-int construct_devpath_if_missing(Config* cfg)
-{
-  // Windows doesn't allow us to request specific disk paths when mapping an
-  // image. This will just be used by rbd-wnbd and wnbd as an identifier.
-  if (cfg->devpath.empty()) {
-    if (cfg->imgname.empty()) {
-      derr << "Missing image name." << dendl;
-      return -EINVAL;
-    }
-
-    if (!cfg->poolname.empty()) {
-      cfg->devpath += cfg->poolname;
-      cfg->devpath += '/';
-    }
-    if (!cfg->nsname.empty()) {
-      cfg->devpath += cfg->nsname;
-      cfg->devpath += '/';
-    }
-
-    cfg->devpath += cfg->imgname;
-
-    if (!cfg->snapname.empty()) {
-      cfg->devpath += '@';
-      cfg->devpath += cfg->snapname;
-    }
-  }
-
-  return 0;
-}
-
 boost::intrusive_ptr<CephContext> do_global_init(
   int argc, const char *argv[], Config *cfg)
 {
@@ -1233,16 +1107,6 @@ static int wait_mapped_disk(Config *cfg)
 
 static int do_map(Config *cfg)
 {
-  int r;
-
-  librados::Rados rados;
-  librbd::RBD rbd;
-  librados::IoCtx io_ctx;
-  librbd::Image image;
-  librbd::image_info_t info;
-  HANDLE parent_pipe_handle = INVALID_HANDLE_VALUE;
-  int err = 0;
-
   if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
     r = send_map_request(get_cli_args());
     if (r < 0) {
@@ -1254,85 +1118,18 @@ static int do_map(Config *cfg)
 
   dout(0) << "Mapping RBD image: " << cfg->devpath << dendl;
 
-  r = rados.init_with_context(g_ceph_context);
+  librados::Rados rados;
+  int r = rados.init_with_context(g_ceph_context);
   if (r < 0) {
     derr << "rbd-wnbd: couldn't initialize rados: " << cpp_strerror(r)
          << dendl;
-    goto close_ret;
+    return r;
   }
 
-  r = rados.connect();
-  if (r < 0) {
-    derr << "rbd-wnbd: couldn't connect to rados: " << cpp_strerror(r)
-         << dendl;
-    goto close_ret;
-  }
-
-  r = rados.ioctx_create(cfg->poolname.c_str(), io_ctx);
-  if (r < 0) {
-    derr << "rbd-wnbd: couldn't create IO context: " << cpp_strerror(r)
-         << dendl;
-    goto close_ret;
-  }
-
-  io_ctx.set_namespace(cfg->nsname);
-
-  r = rbd.open(io_ctx, image, cfg->imgname.c_str());
-  if (r < 0) {
-    derr << "rbd-wnbd: couldn't open rbd image: " << cpp_strerror(r)
-         << dendl;
-    goto close_ret;
-  }
-
-  if (cfg->exclusive) {
-    r = image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE);
-    if (r < 0) {
-      derr << "rbd-wnbd: failed to acquire exclusive lock: " << cpp_strerror(r)
-           << dendl;
-      goto close_ret;
-    }
-  }
-
-  if (!cfg->snapname.empty()) {
-    r = image.snap_set(cfg->snapname.c_str());
-    if (r < 0) {
-      derr << "rbd-wnbd: couldn't use snapshot: " << cpp_strerror(r)
-         << dendl;
-      goto close_ret;
-    }
-  }
-
-  r = image.stat(info, sizeof(info));
-  if (r < 0)
-    goto close_ret;
-
-  if (info.size > _UI64_MAX) {
-    r = -EFBIG;
-    derr << "rbd-wnbd: image is too large (" << byte_u_t(info.size)
-         << ", max is " << byte_u_t(_UI64_MAX) << ")" << dendl;
-    goto close_ret;
-  }
-
-  // We're storing mapping details in the registry even for non-persistent
-  // mappings. This allows us to easily retrieve mapping details such
-  // as the rbd pool or admin socket path.
-  // We're cleaning up the registry entry when the non-persistent mapping
-  // gets disconnected or when the ceph service restarts.
-  r = save_config_to_registry(cfg);
-  if (r < 0)
-    goto close_ret;
-
-  handler = new WnbdHandler(image, cfg->devpath,
-                            info.size / RBD_WNBD_BLKSIZE,
-                            RBD_WNBD_BLKSIZE,
-                            !cfg->snapname.empty() || cfg->readonly,
-                            g_conf().get_val<bool>("rbd_cache"),
-                            cfg->io_req_workers,
-                            cfg->io_reply_workers);
-  r = handler->start();
+  RbdMapping rbd_mapping(*cfg, rados, get_cli_args());
+  r = rbd_mapping.start();
   if (r) {
-    r = r == ERROR_ALREADY_EXISTS ? -EEXIST : -EINVAL;
-    goto close_ret;
+    return r;
   }
 
   // TODO: consider substracting the time it took to perform the
@@ -1342,75 +1139,8 @@ static int do_map(Config *cfg)
     goto close_ret;
   }
 
-  // We're informing the parent processes that the initialization
-  // was successful.
-  if (!cfg->parent_pipe.empty()) {
-    parent_pipe_handle = CreateFile(
-      cfg->parent_pipe.c_str(), GENERIC_WRITE, 0, NULL,
-      OPEN_EXISTING, 0, NULL);
-    if (parent_pipe_handle == INVALID_HANDLE_VALUE) {
-      derr << "Could not open parent pipe: " << win32_strerror(err) << dendl;
-    } else if (!WriteFile(parent_pipe_handle, "a", 1, NULL, NULL)) {
-      // TODO: consider exiting in this case. The parent didn't wait for us,
-      // maybe it was killed after a timeout.
-      err = GetLastError();
-      derr << "Failed to communicate with the parent: "
-           << win32_strerror(err) << dendl;
-    } else {
-      dout(5) << __func__ << ": submitted parent notification." << dendl;
-    }
-
-    if (parent_pipe_handle != INVALID_HANDLE_VALUE)
-      CloseHandle(parent_pipe_handle);
-
-    global_init_postfork_finish(g_ceph_context);
-  }
-
-  {
-    uint64_t watch_handle;
-    WNBDWatchCtx watch_ctx(io_ctx, handler, image, info.size);
-    r = image.update_watch(&watch_ctx, &watch_handle);
-    if (r < 0) {
-      derr << __func__ << ": update_watch failed with error: "
-           << cpp_strerror(r) << dendl;
-
-      handler->shutdown();
-      goto close_ret;
-    }
-
-    handler->wait();
-
-    r = image.update_unwatch(watch_handle);
-    if (r < 0)
-      derr << __func__ << ": update_unwatch failed with error: "
-           << cpp_strerror(r) << dendl;
-
-    handler->shutdown();
-  }
-
-close_ret:
-  // The registry record shouldn't be removed for (already) running mappings.
-  if (!cfg->persistent) {
-    dout(5) << __func__ << ": cleaning up non-persistent mapping: "
-            << cfg->devpath << dendl;
-    r = remove_config_from_registry(cfg);
-    if (r) {
-      derr << __func__ << ": could not clean up non-persistent mapping: "
-           << cfg->devpath << dendl;
-    }
-  }
-
-  std::unique_lock l{shutdown_lock};
-
-  image.close();
-  io_ctx.close();
-  rados.shutdown();
-  if (handler) {
-    delete handler;
-    handler = nullptr;
-  }
-
-  return r;
+  dout(0) << "Successfully mapped RBD image: " << cfg->devpath << dendl;
+  return rbd_mapping.wait();
 }
 
 static int do_unmap(Config *cfg, bool unregister)
