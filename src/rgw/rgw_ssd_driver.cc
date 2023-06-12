@@ -194,6 +194,18 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
     return 0;
 }
 
+std::unique_ptr<CacheAioRequest> SSDDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp)
+{
+    return std::make_unique<SSDCacheAioRequest>(this);
+}
+
+rgw::AioResultList SSDDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id)
+{
+    rgw_raw_obj r_obj;
+    r_obj.oid = key;
+    return aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, this, ofs, len, key), cost, id);
+}
+
 int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key)
 {
     std::string location = partition_info.location + key;
@@ -204,6 +216,45 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     }
 
     return remove_entry(dpp, key);
+}
+
+template <typename ExecutionContext, typename CompletionToken>
+auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+                off_t read_ofs, off_t read_len, CompletionToken&& token)
+{
+    std::string location = partition_info.location + key;
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
+#if 0
+    using Op = AsyncFileReadOp;
+    using Signature = typename Op::Signature;
+    boost::asio::async_completion<CompletionToken, Signature> init(token);
+    auto p = Op::create(ctx.get_executor(), init.completion_handler);
+    auto& op = p->user_data;
+
+    int ret = op.init(dpp, file_path, read_ofs, read_len, p.get());
+    if(0 == ret) {
+        ret = ::aio_read(op.aio_cb.get());
+    }
+    ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
+    if(ret < 0) {
+        auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+        ceph::async::post(std::move(p), ec, bufferlist{});
+    } else {
+        (void)p.release();
+    }
+    return init.result.get();
+#endif
+    return 0;
+}
+
+void SSDCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
+{
+    using namespace boost::asio;
+    async_completion<yield_context, void()> init(y.get_yield_context());
+    auto ex = get_associated_executor(init.completion_handler);
+
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
+    //async_read(dpp, context, file_path+"/"+r.obj.oid, read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
 }
 
 } } // namespace rgw::cal
