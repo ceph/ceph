@@ -30,8 +30,11 @@ def task(ctx, config):
     for (client, _) in config.items():
         # yup, we have to deploy tox first. The packaged one, available
         # on Sepia's Ubuntu machines, is outdated for Keystone/Tempest.
-        tvdir = get_toxvenv_dir(ctx)
-        ctx.cluster.only(client).run(args=['python3', '-m', 'venv', tvdir])
+        (remote,) = ctx.cluster.only(client).remotes.keys()
+        if remote.os.name == 'rhel' or remote.os.name == 'centos':
+            ctx.cluster.only(client).run(args=['python39', '-m', 'venv', tvdir])
+        else:
+            ctx.cluster.only(client).run(args=['python3.9', '-m', 'venv', tvdir])
         ctx.cluster.only(client).run(args=[
             'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
             run.Raw('&&'),
