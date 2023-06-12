@@ -20,6 +20,7 @@
 
 #include "os/bluestore/BlueFS.h"
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_exp.h"
 #include "common/admin_socket.h"
 #include "kv/RocksDBStore.h"
 
@@ -41,7 +42,7 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
     cerr << "failed to load os-type: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
-  if (type != "bluestore") {
+  if ((type != "bluestore") && (type != "bluestore-rdr")) {
     cerr << "expected bluestore, but type is " << type << std::endl;
     exit(EXIT_FAILURE);
   }
@@ -71,6 +72,53 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
     exit(EXIT_FAILURE);
   }
 }
+
+struct BlueStorePair
+{
+  std::unique_ptr<ObjectStore> os;
+  BlueStore* b1 = nullptr;
+  ceph::experimental::BlueStore* b2 = nullptr;
+};
+
+BlueStorePair open_bluestore(CephContext *cct, const string& path)
+{
+  bluestore_bdev_label_t label;
+  // assume that _read_bdev_label and bluestore_bdev_label_t are the same for all BlueStores
+  int r = BlueStore::_read_bdev_label(cct, path + "/block", &label);
+  if (r < 0) {
+    cerr << "unable to read label for " << path << ": "
+	 << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  string bluestore_type = label.meta["type"];
+  if (bluestore_type != "bluestore" && bluestore_type != "bluestore-rdr") {
+    cerr << "expected bluestore, but type is " << bluestore_type << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  std::unique_ptr<ObjectStore> os = ObjectStore::create(cct, bluestore_type, path);
+  if (os == nullptr) {
+    cerr << "cannot open '" << bluestore_type << "' at " << path << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  BlueStorePair bsp;
+  bsp.os = std::move(os);
+  bsp.b1 = dynamic_cast<BlueStore*>(bsp.os.get());
+  bsp.b2 = dynamic_cast<ceph::experimental::BlueStore*>(bsp.os.get());
+
+  if (bsp.b1 == nullptr && bsp.b2 == nullptr) {
+    cerr << "objectstore at " << path << " is not bluestore" << std::endl;
+    exit(EXIT_FAILURE);
+  }
+  ceph_assert(bsp.b1 == nullptr || bsp.b2 == nullptr);
+  return bsp;
+}
+
+// attempt action
+#define BLUESTORE_ACTION(bsp, action) { if (bsp.b1) { bsp.b1->action; } else { bsp.b2->action; } }
+
+// attempt func
+#define BLUESTORE_FUNC(bsp, func) (bsp.b1 ? bsp.b1->func : bsp.b2->func)
 
 const char* find_device_path(
   int id,
@@ -240,14 +288,14 @@ static void bluefs_import(
     cerr << "open " << input_file.c_str() << " failed: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
-  BlueStore bluestore(cct, path);
+  auto bsp = open_bluestore(cct, path);
   KeyValueDB *db_ptr;
-  r = bluestore.open_db_environment(&db_ptr, false);
+  r = BLUESTORE_FUNC(bsp, open_db_environment(&db_ptr, false));
   if (r < 0) {
     cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
   }
-  BlueFS* bs = bluestore.get_bluefs();
+  BlueFS* bs = BLUESTORE_FUNC(bsp, get_bluefs());
 
   BlueFS::FileWriter *h;
   fs::path file_path(dest_file);
@@ -267,7 +315,7 @@ static void bluefs_import(
   f.close();
   bs->fsync(h);
   bs->close_writer(h);
-  bluestore.close_db_environment();
+  BLUESTORE_ACTION(bsp, close_db_environment());
   return;
 }
 
@@ -554,8 +602,8 @@ int main(int argc, char **argv)
 #else
     cout << action << " bluestore.restore_cfb" << std::endl;
     validate_path(cct.get(), path, false);
-    BlueStore bluestore(cct.get(), path);
-    int r = bluestore.push_allocation_to_rocksdb();
+    auto bsp = open_bluestore(cct.get(), path);
+    int r = BLUESTORE_FUNC(bsp, push_allocation_to_rocksdb());
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -571,8 +619,8 @@ int main(int argc, char **argv)
 #else
     cout << action << " bluestore.allocmap" << std::endl;
     validate_path(cct.get(), path, false);
-    BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
+    auto bsp = open_bluestore(cct.get(), path);
+    int r = BLUESTORE_FUNC(bsp, read_allocation_from_drive_for_bluestore_tool());
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -588,8 +636,8 @@ int main(int argc, char **argv)
 #else
     cout << action << " bluestore.quick-fsck" << std::endl;
     validate_path(cct.get(), path, false);
-    BlueStore bluestore(cct.get(), path);
-    int r = bluestore.read_allocation_from_drive_for_bluestore_tool();
+    auto bsp = open_bluestore(cct.get(), path);
+    int r = BLUESTORE_FUNC(bsp, read_allocation_from_drive_for_bluestore_tool());
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -602,14 +650,14 @@ int main(int argc, char **argv)
       action == "repair" ||
       action == "quick-fix") {
     validate_path(cct.get(), path, false);
-    BlueStore bluestore(cct.get(), path);
+    auto bsp = open_bluestore(cct.get(), path);
     int r;
     if (action == "fsck") {
-      r = bluestore.fsck(fsck_deep);
+      r = BLUESTORE_FUNC(bsp, fsck(fsck_deep));
     } else if (action == "repair") {
-      r = bluestore.repair(fsck_deep);
+      r = BLUESTORE_FUNC(bsp, repair(fsck_deep));
     } else {
-      r = bluestore.quick_fix();
+      r = BLUESTORE_FUNC(bsp, quick_fix());
     }
     if (r < 0) {
       cerr << action << " failed: " << cpp_strerror(r) << std::endl;
@@ -742,12 +790,12 @@ int main(int argc, char **argv)
     }
   }
   else if (action == "bluefs-bdev-sizes") {
-    BlueStore bluestore(cct.get(), path);
-    bluestore.dump_bluefs_sizes(cout);
+    auto bsp = open_bluestore(cct.get(), path);
+    BLUESTORE_ACTION(bsp, dump_bluefs_sizes(cout));
   }
   else if (action == "bluefs-bdev-expand") {
-    BlueStore bluestore(cct.get(), path);
-    auto r = bluestore.expand_devices(cout);
+    auto bsp = open_bluestore(cct.get(), path);
+    auto r = BLUESTORE_FUNC(bsp, expand_devices(cout));
     if (r <0) {
       cerr << "failed to expand bluestore devices: "
 	   << cpp_strerror(r) << std::endl;
@@ -905,10 +953,10 @@ int main(int argc, char **argv)
 	return EXIT_FAILURE;
       }
     }
-    BlueStore bluestore(cct.get(), path);
-    int r = bluestore.add_new_bluefs_device(
+    auto bsp = open_bluestore(cct.get(), path);
+    int r = BLUESTORE_FUNC(bsp, add_new_bluefs_device(
       need_db ? BlueFS::BDEV_NEWDB : BlueFS::BDEV_NEWWAL,
-      target_path);
+      target_path));
     if (r == 0) {
       cout << (need_db ? "DB" : "WAL") << " device added " << target_path
 	   << std::endl;
@@ -955,10 +1003,10 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
 
-      BlueStore bluestore(cct.get(), path);
-      int r = bluestore.migrate_to_existing_bluefs_device(
+      auto bsp = open_bluestore(cct.get(), path);
+      int r = BLUESTORE_FUNC(bsp, migrate_to_existing_bluefs_device(
 	src_dev_ids,
-	dev_target_id);
+	dev_target_id));
       if (r == 0) {
 	for(auto src : src_devs) {
 	  if (src.second != BlueFS::BDEV_SLOW) {
@@ -1001,13 +1049,13 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
 
-      BlueStore bluestore(cct.get(), path);
+      auto bsp = open_bluestore(cct.get(), path);
 
       bool need_db = dev_target_id == BlueFS::BDEV_NEWDB;
-      int r = bluestore.migrate_to_new_bluefs_device(
+      int r = BLUESTORE_FUNC(bsp, migrate_to_new_bluefs_device(
 	src_dev_ids,
 	dev_target_id,
-	target_path);
+	target_path));
       if (r == 0) {
 	for(auto src : src_devs) {
 	  if (src.second != BlueFS::BDEV_SLOW) {
@@ -1034,8 +1082,8 @@ int main(int argc, char **argv)
     std::string action_name = action == "free-dump" ? "dump" :
                               action == "free-score" ? "score" : "fragmentation";
     validate_path(cct.get(), path, false);
-    BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    auto bsp = open_bluestore(cct.get(), path);
+    int r = BLUESTORE_FUNC(bsp, cold_open());
     if (r < 0) {
       cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1055,7 +1103,7 @@ int main(int argc, char **argv)
       }
     }
 
-    bluestore.cold_close();
+    BLUESTORE_ACTION(bsp, cold_close());
   } else  if (action == "bluefs-stats") {
     AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
@@ -1065,8 +1113,8 @@ int main(int argc, char **argv)
     g_conf()._clear_safe_to_start_threads();
     g_conf().set_val_or_die("bluestore_volume_selection_policy",
                             "use_some_extra_enforced");
-    BlueStore bluestore(cct.get(), path);
-    int r = bluestore.cold_open();
+    auto bsp = open_bluestore(cct.get(), path);
+    int r = BLUESTORE_FUNC(bsp, cold_open());
     if (r < 0) {
       cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1082,7 +1130,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << std::string(out.c_str(), out.length()) << std::endl;
-     bluestore.cold_close();
+    BLUESTORE_ACTION(bsp, cold_close());
   } else if (action == "reshard") {
     auto get_ctrl = [&](size_t& val) {
       if (!resharding_ctrl.empty()) {
@@ -1102,7 +1150,7 @@ int main(int argc, char **argv)
 	}
       }
     };
-    BlueStore bluestore(cct.get(), path);
+    auto bsp = open_bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
     RocksDBStore::resharding_ctrl ctrl;
     if (!resharding_ctrl.empty()) {
@@ -1115,7 +1163,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr, true);
+    int r = BLUESTORE_FUNC(bsp, open_db_environment(&db_ptr, true));
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1129,11 +1177,11 @@ int main(int argc, char **argv)
     } else {
       cout << "reshard success" << std::endl;
     }
-    bluestore.close_db_environment();
+    BLUESTORE_FUNC(bsp, close_db_environment());
   } else if (action == "show-sharding") {
-    BlueStore bluestore(cct.get(), path);
+    auto bsp = open_bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
-    int r = bluestore.open_db_environment(&db_ptr, false);
+    int r = BLUESTORE_FUNC(bsp, open_db_environment(&db_ptr, false));
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1143,7 +1191,7 @@ int main(int argc, char **argv)
     ceph_assert(rocks_db);
     std::string sharding;
     bool res = rocks_db->get_sharding(sharding);
-    bluestore.close_db_environment();
+    BLUESTORE_ACTION(bsp, close_db_environment());
     if (!res) {
       cerr << "failed to retrieve sharding def" << std::endl;
       exit(EXIT_FAILURE);
