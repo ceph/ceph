@@ -27,8 +27,6 @@
 #define SERVICE_PIPE_TIMEOUT_MS 5000
 #define SERVICE_PIPE_BUFFSZ 4096
 
-#define DISK_STATUS_POLLING_INTERVAL_MS 500
-
 #define HELP_INFO 1
 #define VERSION_INFO 2
 
@@ -64,15 +62,15 @@ int disconnect_all_mappings(
   int worker_count);
 int restart_registered_mappings(
   int worker_count, int total_timeout, int image_map_timeout);
-int map_device_using_suprocess(std::string command_line);
+int map_device_using_same_process(std::string command_line);
 
 BOOL WINAPI console_handler_routine(DWORD dwCtrlType);
 
 static int parse_args(std::vector<const char*>& args,
                       std::ostream *err_msg,
                       Command *command, Config *cfg);
+static int do_map(Config *cfg);
 static int do_unmap(Config *cfg, bool unregister);
-
 
 class BaseIterator {
   public:

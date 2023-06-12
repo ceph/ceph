@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "rados_client_cache.h"
 #include "rbd_mapping_config.h"
 #include "wnbd_handler.h"
 
@@ -45,6 +46,7 @@ public:
   }
 };
 
+typedef std::function<void(std::string devpath, int ret)> disconnect_cbk_t;
 
 class RbdMapping
 {
@@ -52,8 +54,8 @@ private:
   Config cfg;
   // We're sharing the rados object across mappings in order to
   // reuse the OSD connections.
-  librados::Rados &rados;
-  std::string command_line;
+  RadosClientCache& client_cache;
+  std::shared_ptr<librados::Rados> rados;
 
   librbd::RBD rbd;
   librados::IoCtx io_ctx;
@@ -63,26 +65,54 @@ private:
   WnbdHandler* handler = nullptr;
   uint64_t watch_handle;
   WNBDWatchCtx* watch_ctx = nullptr;
+  disconnect_cbk_t disconnect_cbk;
 
   ceph::mutex shutdown_lock = ceph::make_mutex("RbdMapping::ShutdownLock");
+  std::thread monitor_thread;
 
   int init();
-  void shutdown();
 
 public:
-  RbdMapping(Config& _cfg, librados::Rados& _rados,
-             std::string _command_line)
+  RbdMapping(Config& _cfg,
+             RadosClientCache& _client_cache)
     : cfg(_cfg)
-    , rados(_rados)
-    , command_line(_command_line)
-  {
-  }
+    , client_cache(_client_cache)
+  {}
 
-  ~RbdMapping()
-  {
-      shutdown();
-  }
+  RbdMapping(Config& _cfg,
+             RadosClientCache& _client_cache,
+             disconnect_cbk_t _disconnect_cbk)
+    : cfg(_cfg)
+    , client_cache(_client_cache)
+    , disconnect_cbk(_disconnect_cbk)
+  {}
+
+  ~RbdMapping();
 
   int start();
+  // Wait until the image gets disconnected.
   int wait();
+  void shutdown();
+};
+
+// Wait for the mapped disk to become available.
+int wait_mapped_disk(Config& cfg);
+
+class RbdMappingDispatcher
+{
+private:
+  RadosClientCache& client_cache;
+
+  std::map<std::string, std::shared_ptr<RbdMapping>> mappings;
+  ceph::mutex map_mutex = ceph::make_mutex("RbdMappingDispatcher::MapMutex");
+
+  void disconnect_cbk(std::string devpath, int ret);
+
+public:
+  RbdMappingDispatcher(RadosClientCache& _client_cache)
+    : client_cache(_client_cache)
+  {}
+
+  int create(Config& cfg);
+  std::shared_ptr<RbdMapping> get_mapping(std::string& devpath);
 };
