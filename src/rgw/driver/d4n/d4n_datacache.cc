@@ -6,7 +6,7 @@
 namespace rgw { namespace d4n {
 
 /* Base metadata and data fields should remain consistent */
-std::vector<std::string> baseFields {
+std::vector<std::string> baseFields{
   "mtime",
   "object_size",
   "accounted_size",
@@ -74,7 +74,7 @@ int D4NDatacache::exist_key(std::string key) {
   try {
     client.exists(keys, [&result](cpp_redis::reply &reply) {
       if (reply.is_integer()) {
-        result = reply.as_integer(); /* Returns 1 upon success */
+        result = reply.as_integer();
       }
     });
 
@@ -126,7 +126,7 @@ int D4NDatacache::copy_data(std::string originalOid, std::string copyOid) {
       return -1;
     }
   } catch(std::exception &e) {
-    return -1;
+    return -2;
   }
    
   return 0;
@@ -151,7 +151,7 @@ int D4NDatacache::append_data(std::string oid, buffer::list& data) {
 
       client.sync_commit(std::chrono::milliseconds(1000));
     } catch(std::exception &e) {
-      return -1;
+      return -2;
     }
   }
 
@@ -173,13 +173,13 @@ int D4NDatacache::append_data(std::string oid, buffer::list& data) {
       return -1;
     }
   } catch(std::exception &e) {
-    return -1;
+    return -2;
   }
 
   return 0;
 }
 
-int RGWD4NCache::deleteData(std::string oid) {
+int D4NDatacache::del_data(std::string oid) {
   int result = 0;
   std::string key = "rgw-object:" + oid + ":cache";
   std::vector<std::string> deleteField;
@@ -204,6 +204,8 @@ int RGWD4NCache::deleteData(std::string oid) {
   } else {
     return 0; /* No delete was necessary */
   }
+
+  return result - 1;
 }
 
 int D4NDatacache::set_attrs(std::string oid, rgw::sal::Attrs* attrs) {
