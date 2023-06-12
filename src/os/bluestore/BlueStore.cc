@@ -8219,21 +8219,6 @@ int BlueStore::mkfs()
     }
   }
 
-  {
-    string type;
-    r = read_meta("type", &type);
-    if (r == 0) {
-      if (type != BS_FLAVOR) {
-	derr << __func__ << " expected bluestore, but type is " << type << dendl;
-	return -EIO;
-      }
-    } else {
-      r = write_meta("type", BS_FLAVOR);
-      if (r < 0)
-        return r;
-    }
-  }
-
   r = _open_path();
   if (r < 0)
     return r;
@@ -8286,6 +8271,22 @@ int BlueStore::mkfs()
   r = _open_bdev(true);
   if (r < 0)
     goto out_close_fsid;
+
+  {
+    string type;
+    r = read_meta("type", &type);
+    if (r == 0) {
+      if (type != BS_FLAVOR) {
+	derr << __func__ << " expected bluestore, but type is " << type << dendl;
+	r = -EIO;
+	goto out_close_fsid;
+      }
+    } else {
+      r = write_meta("type", BS_FLAVOR);
+      if (r < 0)
+	goto out_close_fsid;
+    }
+  }
 
   // choose freelist manager
 #ifdef HAVE_LIBZBD
