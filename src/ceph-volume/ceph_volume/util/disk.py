@@ -195,6 +195,26 @@ def device_family(device):
 
     return devices
 
+def is_rotational(device):
+    """
+    Returns true if a device is rotational or not.
+    """
+    labels = ['ROTA']
+    command = ['lsblk', '-P', '-p', '-o', ','.join(labels), device]
+    out, err, rc = process.call(command)
+    device = []
+    for line in out:
+        device.append(_lsblk_parser(line))
+
+    for i in device:
+        if type(i) is dict and "ROTA" in i.keys():
+            if i['ROTA'] == '1':
+                rotational = True
+            else:
+                rotational = False
+
+    return rotational
+
 
 def udevadm_property(device, properties=[]):
     """
@@ -911,6 +931,10 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['sectorsize'] = get_file_contents(sysdir +
                                                    "/queue/logical_block_size",
                                                    fallback_sectorsize)
+        fallback_rotational = '1'
+        metadata['rotational'] = get_file_contents(sysdir +
+                                                   "/queue/rotational",
+                                                   fallback_rotational)
         metadata['size'] = float(size) * 512
         metadata['human_readable_size'] = human_readable_size(metadata['size'])
         metadata['path'] = diskname

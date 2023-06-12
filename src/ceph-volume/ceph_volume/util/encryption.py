@@ -1,11 +1,12 @@
 import base64
 import os
 import logging
+import subprocess
 from ceph_volume import process, conf, terminal
 from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
-from .disk import lsblk, device_family, get_part_entry_type
+from .disk import lsblk, device_family, get_part_entry_type, is_rotational
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -23,10 +24,55 @@ def get_key_size_from_conf():
 
     if key_size not in ['256', '512']:
         logger.warning(("Invalid value set for osd_dmcrypt_key_size ({}). "
-                        "Falling back to {}bits".format(key_size, default_key_size)))
+                        "Falling back to {} bits".format(key_size, default_key_size)))
         return default_key_size
 
     return key_size
+
+
+def execCmd(cmdline):
+    cmd = subprocess.Popen(cmdline, shell=True, stdout=subprocess.PIPE)
+    stdout, _ = cmd.communicate()
+    return stdout.decode("utf-8")
+
+
+def bypass_workqueues(device):
+    """
+    1) Check if cryptsetup has support for no_read_workqueue.
+    If so, it also supports no_write_workqueue.
+    cryptsetup has support for this since 2.3.4
+
+    2) Also check if we are using a flash (non-rotational) device
+    or not. I.e. Spinning media might still benefit from queuing.
+
+    Only if both 1) and 2) are true we do _not_ want to use work queues
+    Note:
+    crypt version 1.22 and higher have support for this. Example:
+    modprobe dm-crypt
+    dmsetup targets
+
+    integrity        v1.10.0
+    crypt            v1.23.0
+    striped          v1.6.0
+    linear           v1.4.0
+    error            v1.5.0
+
+    If dm-crypt does not have support for no_read_workqueue /
+    no_write_workqueue the options will be discarded and
+    logged by the linux kernel:
+
+    device-mapper: table: major:minor: crypt: Invalid feature arguments
+    device-mapper: ioctl: error adding target to table
+
+    The encrypted device will come online without the options active.
+    """
+    cryptsetup_help = execCmd("cryptsetup --help 2>/dev/null")
+
+    if '--perf-no_read_workqueue' not in cryptsetup_help or is_rotational(device):
+         return []
+
+    return ['--perf-no_read_workqueue', '--perf-no_write_workqueue']
+
 
 def create_dmcrypt_key():
     """
@@ -78,7 +124,8 @@ def plain_open(key, device, mapping):
         '--type', 'plain',
         '--key-size', '256',
     ]
-
+    for extra_opts in bypass_workqueues(device):
+        command.insert(1, extra_opts)
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
@@ -103,6 +150,8 @@ def luks_open(key, device, mapping):
         device,
         mapping,
     ]
+    for extra_opts in bypass_workqueues(device):
+        command.insert(1, extra_opts)
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
