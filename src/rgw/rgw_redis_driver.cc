@@ -80,11 +80,11 @@ std::unordered_map<std::string, Entry> RedisDriver::list_entries(const DoutPrefi
   if (!client.is_connected()) 
     return {};
 
-//  try {
+  try {
     size_t cursor = 0;
     const std::string pattern = "*:cache";
 
-  /*  client.scan(cursor, pattern, [](cpp_redis::reply &reply) {
+    client.scan(cursor, pattern, [](cpp_redis::reply &reply) {
       dout(0) << "Sam" << dendl;
       if (!reply.is_null()) {
         //result = reply.as_array();
@@ -92,15 +92,10 @@ std::unordered_map<std::string, Entry> RedisDriver::list_entries(const DoutPrefi
     });
 
     client.sync_commit(std::chrono::milliseconds(1000));
-*/
-/*    if (result.empty()) {
-      return {};
-    }
   } catch(std::exception &e) {
     return {};
   }
-*/
-  dout(0) << "Sam: " << client.is_connected() << dendl;
+
   return result;
 }
 
