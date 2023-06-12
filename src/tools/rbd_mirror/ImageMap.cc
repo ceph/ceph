@@ -325,14 +325,14 @@ void ImageMap<I>::notify_listener_acquire_release_images(
 }
 
 template <typename I>
-void ImageMap<I>::notify_listener_remove_images(const std::string &peer_uuid,
+void ImageMap<I>::notify_listener_remove_images(const std::string &mirror_uuid,
                                                 const Updates &remove) {
-  dout(5) << "peer_uuid=" << peer_uuid << ", "
+  dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "remove=[" << remove << "]" << dendl;
 
   for (auto const &update : remove) {
     m_listener.remove_image(
-      peer_uuid, update.global_image_id, update.instance_id,
+      mirror_uuid, update.global_image_id, update.instance_id,
       create_async_context_callback(
         m_threads->work_queue,
         new C_NotifyInstance(this, update.global_image_id, false)));
@@ -375,14 +375,14 @@ void ImageMap<I>::handle_peer_ack_remove(const std::string &global_image_id,
 
 template <typename I>
 void ImageMap<I>::update_images_added(
-    const std::string &peer_uuid,
+    const std::string &mirror_uuid,
     const std::set<std::string> &global_image_ids) {
-  dout(5) << "peer_uuid=" << peer_uuid << ", "
+  dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "global_image_ids=[" << global_image_ids << "]" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   for (auto const &global_image_id : global_image_ids) {
-    auto result = m_peer_map[global_image_id].insert(peer_uuid);
+    auto result = m_peer_map[global_image_id].insert(mirror_uuid);
     if (result.second && m_peer_map[global_image_id].size() == 1) {
       if (m_policy->add_image(global_image_id)) {
         schedule_action(global_image_id);
@@ -393,9 +393,9 @@ void ImageMap<I>::update_images_added(
 
 template <typename I>
 void ImageMap<I>::update_images_removed(
-    const std::string &peer_uuid,
+    const std::string &mirror_uuid,
     const std::set<std::string> &global_image_ids) {
-  dout(5) << "peer_uuid=" << peer_uuid << ", "
+  dout(5) << "mirror_uuid=" << mirror_uuid << ", "
           << "global_image_ids=[" << global_image_ids << "]" << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
@@ -409,11 +409,11 @@ void ImageMap<I>::update_images_removed(
     auto peer_it = m_peer_map.find(global_image_id);
     if (peer_it != m_peer_map.end()) {
       auto& peer_set = peer_it->second;
-      peer_removed = peer_set.erase(peer_uuid);
+      peer_removed = peer_set.erase(mirror_uuid);
       image_removed = peer_removed && peer_set.empty();
     }
 
-    if (image_mapped && peer_removed && !peer_uuid.empty()) {
+    if (image_mapped && peer_removed && !mirror_uuid.empty()) {
       // peer image has been deleted
       to_remove.emplace_back(global_image_id, info.instance_id);
     }
@@ -429,7 +429,7 @@ void ImageMap<I>::update_images_removed(
   if (!to_remove.empty()) {
     // removal notification will be notified instantly. this is safe
     // even after scheduling action for images as we still hold m_lock
-    notify_listener_remove_images(peer_uuid, to_remove);
+    notify_listener_remove_images(mirror_uuid, to_remove);
   }
 }
 
@@ -490,10 +490,10 @@ void ImageMap<I>::update_instances_removed(
 }
 
 template <typename I>
-void ImageMap<I>::update_images(const std::string &peer_uuid,
+void ImageMap<I>::update_images(const std::string &mirror_uuid,
                                 std::set<std::string> &&added_global_image_ids,
                                 std::set<std::string> &&removed_global_image_ids) {
-  dout(5) << "peer_uuid=" << peer_uuid << ", " << "added_count="
+  dout(5) << "mirror_uuid=" << mirror_uuid << ", " << "added_count="
           << added_global_image_ids.size() << ", " << "removed_count="
           << removed_global_image_ids.size() << dendl;
 
@@ -504,10 +504,10 @@ void ImageMap<I>::update_images(const std::string &peer_uuid,
     }
 
     if (!removed_global_image_ids.empty()) {
-      update_images_removed(peer_uuid, removed_global_image_ids);
+      update_images_removed(mirror_uuid, removed_global_image_ids);
     }
     if (!added_global_image_ids.empty()) {
-      update_images_added(peer_uuid, added_global_image_ids);
+      update_images_added(mirror_uuid, added_global_image_ids);
     }
   }
 
