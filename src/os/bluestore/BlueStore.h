@@ -67,12 +67,14 @@ class SimpleBitmap;
 #define WITH_ESB
 
 namespace ceph::experimental {
+#else
+#undef WITH_ESB
 #endif
 
 class BlueStoreRepairer;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
-#undef WITH_ESB
+
 
 
 // constants for Buffer::optimize()
