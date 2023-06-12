@@ -429,6 +429,7 @@ private:
     } else {
         ldout(conn->cct, 20) << "Kafka publish (no callback): OK" << dendl;
     }
+    // coverity[RESOURCE_LEAK:FALSE]
   }
 
   // the managers thread:
