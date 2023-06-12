@@ -6359,10 +6359,15 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     }
   }
 
-  if (params.obj_size)
+  if (params.obj_size) {
     *params.obj_size = astate->size;
-  if (params.lastmod)
+  }
+  if (params.lastmod) {
     *params.lastmod = astate->mtime;
+  }
+  if (params.epoch) {
+    *params.epoch = astate->epoch;
+  }
 
   return 0;
 }
