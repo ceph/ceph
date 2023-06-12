@@ -1091,7 +1091,8 @@ public:
   D3nDataCache* d3n_data_cache{nullptr};
 
   int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp, optional_yield y);
-  int reindex_obj(const RGWBucketInfo& dest_bucket_info,
+  int reindex_obj(rgw::sal::Driver* driver,
+		  RGWBucketInfo& dest_bucket_info,
 		  const rgw_obj& obj,
 		  const DoutPrefixProvider* dpp,
 		  optional_yield y);
@@ -1339,7 +1340,8 @@ public:
   int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState& obj_state, RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, std::map<uint64_t, std::vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver, optional_yield y, rgw_zone_set *zones_trace = nullptr);
-  int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y, rgw_zone_set *zones_trace = nullptr);
+  int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y,
+		 rgw_zone_set *zones_trace = nullptr);
   int clear_olh(const DoutPrefixProvider *dpp,
                 RGWObjectCtx& obj_ctx,
                 const rgw_obj& obj,
@@ -1347,9 +1349,19 @@ public:
                 const std::string& tag,
                 const uint64_t ver,
                 optional_yield y);
-  int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
-              uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
-              optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);
+  int set_olh(const DoutPrefixProvider *dpp,
+	      RGWObjectCtx& obj_ctx,
+	      RGWBucketInfo& bucket_info,
+	      const rgw_obj& target_obj,
+	      bool delete_marker,
+	      rgw_bucket_dir_entry_meta *meta,
+              uint64_t olh_epoch,
+	      ceph::real_time unmod_since,
+	      bool high_precision_time,
+              optional_yield y,
+	      rgw_zone_set *zones_trace = nullptr,
+	      bool log_data_change = false,
+	      bool skip_olh_obj_update = false); // can skip the OLH object update if, for example, repairing index
   int repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, const RGWBucketInfo& bucket_info,
                  const rgw_obj& obj, optional_yield y);
   int unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,

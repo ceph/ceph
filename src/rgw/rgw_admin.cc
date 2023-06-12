@@ -7872,7 +7872,7 @@ next:
     auto process = [&](const std::string& p_object, const std::string& p_object_version) -> int {
       std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(p_object);
       obj->set_instance(p_object_version);
-      ret = store->reindex_obj(bucket->get_info(), obj->get_obj(), dpp(), null_yield);
+      ret = store->reindex_obj(driver, bucket->get_info(), obj->get_obj(), dpp(), null_yield);
       if (ret < 0) {
 	return ret;
       }
@@ -7894,9 +7894,15 @@ next:
       }
 
       std::string obj_name;
-      const std::string empty_version;
       while (std::getline(file, obj_name)) {
-	ret = process(obj_name, empty_version);
+	std::string version;
+	auto pos = obj_name.find('\t');
+	if (pos != std::string::npos) {
+	  version = obj_name.substr(1 + pos);
+	  obj_name = obj_name.substr(0, pos);
+	}
+
+	ret = process(obj_name, version);
 	if (ret < 0) {
 	  std::cerr << "ERROR: while processing \"" << obj_name <<
 	    "\", received " << cpp_strerror(-ret) << "." << std::endl;
