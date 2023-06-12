@@ -681,7 +681,8 @@ int main(int argc, char **argv)
     // kludge some things into the map that we want to populate into
     // target dir
     label.meta["path_block"] = devs.front();
-    label.meta["type"] = "bluestore";
+    //now type is stored in label, this allows bluestore-rdr
+    //label.meta["type"] = "bluestore";
     label.meta["fsid"] = stringify(label.osd_uuid);
     
     for (auto kk : {
