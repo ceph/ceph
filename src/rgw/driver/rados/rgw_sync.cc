@@ -390,7 +390,7 @@ protected:
 
     mdlog->init_list_entries(shard_id, from_time, end_time, marker, &handle);
 
-    int ret = mdlog->list_entries(dpp, handle, max_entries, entries, &marker, &truncated);
+    int ret = mdlog->list_entries(dpp, handle, max_entries, entries, &marker, &truncated, null_yield);
 
     mdlog->complete_list_entries(handle);
 
