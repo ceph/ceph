@@ -12,22 +12,7 @@ class TestFscrypt(XFSTestsDev):
     def setup_xfsprogs_devs(self):
         self.install_xfsprogs = True
 
-    def require_kernel_mount(self):
-        from tasks.cephfs.fuse_mount import FuseMount
-        from tasks.cephfs.kernel_mount import KernelMount
-
-        # TODO: make xfstests-dev compatible with ceph-fuse. xfstests-dev
-        # remounts CephFS before running tests using kernel, so ceph-fuse
-        # mounts are never actually tested.
-        if isinstance(self.mount_a, FuseMount):
-            self.skipTest('Requires kernel client; xfstests-dev not '\
-                          'compatible with ceph-fuse ATM.')
-        elif isinstance(self.mount_a, KernelMount):
-            log.info('client is kernel mounted')
-
     def test_fscrypt_encrypt(self):
-        self.require_kernel_mount()
-
         # XXX: check_status is set to False so that we can check for command's
         # failure on our own (since this command doesn't set right error code
         # and error message in some cases) and print custom log messages
@@ -51,8 +36,6 @@ class TestFscrypt(XFSTestsDev):
         self.assertIn('Passed all 26 tests', stdout)
 
     def test_fscrypt_dummy_encryption_with_quick_group(self):
-        self.require_kernel_mount()
-
         self.write_local_config('test_dummy_encryption')
 
         # XXX: check_status is set to False so that we can check for command's
