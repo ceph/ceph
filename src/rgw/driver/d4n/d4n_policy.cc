@@ -204,22 +204,22 @@ int LFUDAPolicy::get_min_avg_weight() {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
-  unordered_map<std::string, rgw::cal::Entry> entries;// = cacheNode->list_entries(dpp);
+  std::vector<rgw::cal::Entry> entries;// = cacheNode->list_entries(dpp);
   std::string victimName;
   int minWeight = INT_MAX;
 
   for (auto it = entries.begin(); it != entries.end(); ++it) { // make faster by caching for future? -Sam
-    std::string localWeight = cacheNode->get_attr(dpp, it->second.key, "localWeight"); // change to block name eventually -Sam
+    std::string localWeight = cacheNode->get_attr(dpp, it->key, "localWeight"); // change to block name eventually -Sam
 
     if (localWeight.empty()) { // maybe do this in some sort of initialization procedure instead of here? -Sam
       /* Local weight hasn't been set */
-      int ret = cacheNode->set_attr(dpp, it->second.key, "localWeight", std::to_string(0)); // not the correct default value -Sam
+      int ret = cacheNode->set_attr(dpp, it->key, "localWeight", std::to_string(0)); // not the correct default value -Sam
 
       if (ret < 0)
 	return {};
     } else if (std::stoi(localWeight) < minWeight) {
       minWeight = std::stoi(localWeight);
-      victimName = it->second.key; // are entries = blocks? -Sam
+      victimName = it->key; // are entries = blocks? -Sam
     }
   }
 
