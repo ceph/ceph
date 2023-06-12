@@ -65,9 +65,8 @@ bool ImageDispatch<I>::write(
   start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_write(
-    m_image_ctx, aio_comp, std::move(image_extents), std::move(bl),
-    io_context, op_flags, parent_trace);
+  ImageRequest<I>::aio_write(m_image_ctx, aio_comp, std::move(image_extents),
+                             std::move(bl), op_flags, parent_trace);
   return true;
 }
 
@@ -85,9 +84,8 @@ bool ImageDispatch<I>::discard(
   start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_discard(
-    m_image_ctx, aio_comp, std::move(image_extents), discard_granularity_bytes,
-    io_context, parent_trace);
+  ImageRequest<I>::aio_discard(m_image_ctx, aio_comp, std::move(image_extents),
+                               discard_granularity_bytes, parent_trace);
   return true;
 }
 
@@ -104,9 +102,9 @@ bool ImageDispatch<I>::write_same(
   start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_writesame(
-    m_image_ctx, aio_comp, std::move(image_extents), std::move(bl),
-    io_context, op_flags, parent_trace);
+  ImageRequest<I>::aio_writesame(m_image_ctx, aio_comp,
+                                 std::move(image_extents), std::move(bl),
+                                 op_flags, parent_trace);
   return true;
 }
 
@@ -124,9 +122,11 @@ bool ImageDispatch<I>::compare_and_write(
   start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_compare_and_write(
-    m_image_ctx, aio_comp, std::move(image_extents), std::move(cmp_bl),
-    std::move(bl), mismatch_offset, io_context, op_flags, parent_trace);
+  ImageRequest<I>::aio_compare_and_write(m_image_ctx, aio_comp,
+                                         std::move(image_extents),
+                                         std::move(cmp_bl), std::move(bl),
+                                         mismatch_offset, op_flags,
+                                         parent_trace);
   return true;
 }
 
