@@ -1338,6 +1338,49 @@ TEST(OSDCap, AllowProfile) {
                              {{"rbd", "child_detach", true, true, true}}, addr));
   ASSERT_FALSE(cap.is_capable("abc", "", {}, "rbd_header.ABC", false, false,
                               {{"rbd", "other function", true, true, true}}, addr));
+
+  cap.grants.clear();
+  ASSERT_TRUE(cap.parse("profile rbd pool pool1 namespace ns1", nullptr));
+  ASSERT_TRUE(cap.is_capable("pool1", "", {}, "rbd_info", false, false,
+                             {{"rbd", "metadata_list", true, false, true}},
+                             addr));
+  ASSERT_TRUE(cap.is_capable("pool1", "ns1", {}, "rbd_info", false, false,
+                             {{"rbd", "metadata_list", true, false, true}},
+                             addr));
+  ASSERT_FALSE(cap.is_capable("pool1", "ns2", {}, "rbd_info", false, false,
+                              {{"rbd", "metadata_list", true, false, true}},
+                              addr));
+  ASSERT_FALSE(cap.is_capable("pool2", "", {}, "rbd_info", false, false,
+                              {{"rbd", "metadata_list", true, false, true}},
+                              addr));
+  ASSERT_FALSE(cap.is_capable("pool1", "", {}, "asdf", false, false,
+                              {{"rbd", "metadata_list", true, false, true}},
+                              addr));
+  ASSERT_FALSE(cap.is_capable("pool1", "", {}, "rbd_info", false, false,
+                              {{"rbd", "other_method", true, false, true}},
+                              addr));
+
+  cap.grants.clear();
+  ASSERT_TRUE(cap.parse("profile rbd-read-only pool pool1 namespace ns1",
+                        nullptr));
+  ASSERT_TRUE(cap.is_capable("pool1", "", {}, "rbd_info", false, false,
+                             {{"rbd", "metadata_list", true, false, true}},
+                             addr));
+  ASSERT_TRUE(cap.is_capable("pool1", "ns1", {}, "rbd_info", false, false,
+                             {{"rbd", "metadata_list", true, false, true}},
+                             addr));
+  ASSERT_FALSE(cap.is_capable("pool1", "ns2", {}, "rbd_info", false, false,
+                              {{"rbd", "metadata_list", true, false, true}},
+                              addr));
+  ASSERT_FALSE(cap.is_capable("pool2", "", {}, "rbd_info", false, false,
+                              {{"rbd", "metadata_list", true, false, true}},
+                              addr));
+  ASSERT_FALSE(cap.is_capable("pool1", "", {}, "asdf", false, false,
+                              {{"rbd", "metadata_list", true, false, true}},
+                              addr));
+  ASSERT_FALSE(cap.is_capable("pool1", "", {}, "rbd_info", false, false,
+                              {{"rbd", "other_method", true, false, true}},
+                              addr));
 }
 
 TEST(OSDCap, network) {
