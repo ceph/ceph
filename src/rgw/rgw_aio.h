@@ -29,6 +29,10 @@
 
 struct D3nGetObjData;
 
+namespace rgw::cal {
+  class CacheDriver;
+}
+
 namespace rgw {
 
 struct AioResult {
@@ -99,6 +103,9 @@ class Aio {
                             optional_yield y);
   static OpFunc d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
                              off_t read_ofs, off_t read_len, std::string& location);
+
+  static OpFunc cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cal::CacheDriver* cache_driver,
+                              off_t read_ofs, off_t read_len, const std::string& key);
 };
 
 } // namespace rgw
