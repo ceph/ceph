@@ -1152,6 +1152,18 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 		 "INFO: %s: removing tag %s from pending map",
 		   __func__, op.tag.c_str());
     entry.pending_map.erase(pinter);
+    if (entry.pending_map.empty() && entry.exists == false) {
+	string key_info;
+	encode_obj_index_key(entry.key, &key_info);
+	CLS_LOG_BITX(bitx_inst, 20,
+		     "INFO: %s: removing map entry with key=%s exists=false",
+		     __func__, escape_str(key_info).c_str());
+	int ret = cls_cxx_map_remove_key(hctx, key_info);
+	if (ret < 0) {
+	  CLS_LOG_BITX(bitx_inst, 0, "ERROR: %s: unable to remove key, key=%s, exists=false, error=%d",
+		       __func__, escape_str(key_info).c_str(), ret); // dont return here
+	}
+    }
   }
 
   if (op.tag.size() && op.op == CLS_RGW_OP_CANCEL) {
