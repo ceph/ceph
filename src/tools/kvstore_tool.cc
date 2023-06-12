@@ -49,14 +49,36 @@ StoreTool::StoreTool(const string& type,
 
 int StoreTool::load_bluestore(const string& path, bool to_repair)
 {
+  string type;
+  int r;
+  {
+    BlueStore bluestore(g_ceph_context, path);
+    r = bluestore.read_meta("type", &type);
+    if (r < 0) {
+      return -EINVAL;
+    }
+  }
+  if (type == "bluestore") {
     auto bluestore = new BlueStore(g_ceph_context, path);
     KeyValueDB *db_ptr;
     int r = bluestore->open_db_environment(&db_ptr, to_repair);
     if (r < 0) {
      return -EINVAL;
     }
-    db = decltype(db){db_ptr, Deleter(bluestore)};
+    db = decltype(db){db_ptr, Deleter(bluestore, nullptr)};
     return 0;
+  } else if (type == "bluestore-rdr") {
+    auto bluestore = new ceph::experimental::BlueStore(g_ceph_context, path);
+    KeyValueDB *db_ptr;
+    int r = bluestore->open_db_environment(&db_ptr, to_repair);
+    if (r < 0) {
+     return -EINVAL;
+    }
+    db = decltype(db){db_ptr, Deleter(nullptr, bluestore)};
+    return 0;
+  } else {
+    return -EINVAL;
+  }
 }
 
 uint32_t StoreTool::traverse(const string& prefix,
