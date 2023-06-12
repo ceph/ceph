@@ -11,6 +11,7 @@
 #include "include/buffer_fwd.h"
 #ifdef WITH_BLUESTORE
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_exp.h"
 #endif
 
 class KeyValueDB;
@@ -20,14 +21,18 @@ class StoreTool
 #ifdef WITH_BLUESTORE
   struct Deleter {
     BlueStore *bluestore;
+    ceph::experimental::BlueStore *bluestorex;
     Deleter()
-      : bluestore(nullptr) {}
-    Deleter(BlueStore *store)
-      : bluestore(store) {}
+      : bluestore(nullptr), bluestorex(nullptr) {}
+    Deleter(BlueStore *store, ceph::experimental::BlueStore *storex)
+      : bluestore(store), bluestorex(storex) {}
     void operator()(KeyValueDB *db) {
       if (bluestore) {
 	bluestore->umount();
 	delete bluestore;
+      } else if (bluestorex) {
+	bluestorex->umount();
+	delete bluestorex;
       } else {
 	delete db;
       }
