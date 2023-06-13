@@ -33,8 +33,14 @@ def task(ctx, config):
         tvdir = get_toxvenv_dir(ctx)
         (remote,) = ctx.cluster.only(client).remotes.keys()
         if remote.os.name == 'rhel' or remote.os.name == 'centos':
+            ctx.cluster.only(client).run(args=['ls', '/usr/bin/python3*'])
+            ctx.cluster.only(client).run(args=['echo', '$PATH'])
+            ctx.cluster.only(client).run(args=['python39', '-m', 'pip', 'install', 'virtualenv'])
             ctx.cluster.only(client).run(args=['python39', '-m', 'venv', tvdir])
         else:
+            ctx.cluster.only(client).run(args=['ls', '/usr/bin/python3*'])
+            ctx.cluster.only(client).run(args=['echo', '$PATH'])
+            ctx.cluster.only(client).run(args=['python3.9', '-m', 'pip', 'install', 'virtualenv'])
             ctx.cluster.only(client).run(args=['python3.9', '-m', 'venv', tvdir])
         ctx.cluster.only(client).run(args=[
             'source', '{tvdir}/bin/activate'.format(tvdir=tvdir),
