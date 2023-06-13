@@ -14,6 +14,11 @@ class RedisDriver : public CacheDriver {
   private:
     cpp_redis::client client;
     rgw::d4n::Address addr;
+    std::unordered_map<std::string, Entry> entries;
+
+    int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
+    int remove_entry(const DoutPrefixProvider* dpp, std::string key);
+    std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
 
   public:
     RedisDriver(Partition& _partition_info, std::string host, int port) : CacheDriver(_partition_info) {

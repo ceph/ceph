@@ -204,7 +204,7 @@ int LFUDAPolicy::get_min_avg_weight() {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) {
-  std::vector<rgw::cal::Entry> entries;// = cacheNode->list_entries(dpp);
+  std::vector<rgw::cal::Entry> entries = cacheNode->list_entries(dpp);
   std::string victimName;
   int minWeight = INT_MAX;
 
@@ -262,11 +262,9 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */
       localWeight += age;
     //} else {
-// list_entries works here -Sam
       uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
       //while (freeSpace < block->size) {
-        dout(0) << "Eviction being called" << dendl; 
 	int newSpace = eviction(dpp, cacheNode);
 	
 	if (newSpace > 0)
