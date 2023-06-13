@@ -281,6 +281,29 @@ describe('Dashbord Component', () => {
     expect(dangerAlerts).toBe(null);
   });
 
+  it('should render "Status" card text that is not clickable', () => {
+    fixture.detectChanges();
+
+    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"]'));
+    const clickableContent = clusterStatusCard.query(By.css('.lead.text-primary'));
+    expect(clickableContent).toBeNull();
+  });
+
+  it('should render "Status" card text that is clickable (popover)', () => {
+    const payload = _.cloneDeep(healthPayload);
+    payload.health['status'] = 'HEALTH_WARN';
+    payload.health['checks'] = [
+      { severity: 'HEALTH_WARN', type: 'WRN', summary: { message: 'fake warning' } }
+    ];
+
+    getHealthSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
+
+    const clusterStatusCard = fixture.debugElement.query(By.css('cd-card[cardTitle="Status"]'));
+    const clickableContent = clusterStatusCard.query(By.css('.lead.text-primary'));
+    expect(clickableContent).not.toBeNull();
+  });
+
   describe('features disabled', () => {
     beforeEach(() => {
       fakeFeatureTogglesService.and.returnValue(
