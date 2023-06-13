@@ -292,22 +292,22 @@ pools) to achieve a balanced distribution.
 
 Ceph supports two types of weight sets:
 
- #. A **compat** weight set is a single alternative set of weights for each
-     device and each node in the cluster. Compat weight sets cannot be expected
-     to correct all anomalies (for example, PGs for different pools might be of
-     different sizes and have different load levels, but are mostly treated
-     alike by the balancer).  However, they have the major advantage of being
-     *backward compatible* with previous versions of Ceph. This means that even
-     though weight sets were first introduced in Luminous v12.2.z, older
-     clients (for example, Firefly) can still connect to the cluster when a
-     compat weight set is being used to balance data.
+#. A **compat** weight set is a single alternative set of weights for each
+   device and each node in the cluster. Compat weight sets cannot be expected
+   to correct all anomalies (for example, PGs for different pools might be of
+   different sizes and have different load levels, but are mostly treated alike
+   by the balancer).  However, they have the major advantage of being *backward
+   compatible* with previous versions of Ceph. This means that even though
+   weight sets were first introduced in Luminous v12.2.z, older clients (for
+   example, Firefly) can still connect to the cluster when a compat weight set
+   is being used to balance data.
 
-  #. A **per-pool** weight set is more flexible in that it allows placement to
-     be optimized for each data pool. Additionally, weights can be adjusted
-     for each position of placement, allowing the optimizer to correct for a
-     subtle skew of data toward devices with small weights relative to their
-     peers (an effect that is usually apparent only in very large clusters
-     but that can cause balancing problems).
+#. A **per-pool** weight set is more flexible in that it allows placement to
+   be optimized for each data pool. Additionally, weights can be adjusted
+   for each position of placement, allowing the optimizer to correct for a
+   subtle skew of data toward devices with small weights relative to their
+   peers (an effect that is usually apparent only in very large clusters
+   but that can cause balancing problems).
 
 When weight sets are in use, the weights associated with each node in the
 hierarchy are visible in a separate column (labeled either as ``(compat)`` or
