@@ -50,11 +50,10 @@ optional Ceph internal services are started automatically when it is used to
 start a Ceph cluster. vstart is the basis for the three most commonly used
 development environments in Ceph Dashboard.
 
-You can read more about vstart in `Deploying a development cluster`_.
-Additional information for developers can also be found in the `Developer
-Guide`_.
+You can read more about vstart in :ref:`Deploying a development cluster
+<dev_deploying_a_development_cluster>`. Additional information for developers
+can also be found in the `Developer Guide`_.
 
-.. _Deploying a development cluster: https://docs.ceph.com/docs/master/dev/dev_cluster_deployment/
 .. _Developer Guide: https://docs.ceph.com/docs/master/dev/quick_guide/
 
 Host-based vs Docker-based Development Environments
