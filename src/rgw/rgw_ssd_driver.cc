@@ -67,9 +67,13 @@ std::optional<Entry> SSDDriver::get_entry(const DoutPrefixProvider* dpp, std::st
     return std::nullopt;
 }
 
-std::unordered_map<std::string, Entry>& SSDDriver::list_entries(const DoutPrefixProvider* dpp)
+std::vector<Entry> SSDDriver::list_entries(const DoutPrefixProvider* dpp)
 {
-    return entries;
+    std::vector<Entry> entries_v;
+    for (auto& it : entries) {
+        entries_v.emplace_back(it.second);
+    }
+    return entries_v;
 }
 
 SSDDriver::SSDDriver(Partition& _partition_info) : CacheDriver(_partition_info), partition_info(_partition_info),
