@@ -326,214 +326,207 @@ Although weight sets can be set up and adjusted manually, we recommend enabling
 the ``ceph-mgr`` *balancer* module to perform these tasks automatically if the
 cluster is running Luminous or a later release.
 
-
 Modifying the CRUSH map
 =======================
 
 .. _addosd:
 
-Add/Move an OSD
----------------
+Adding/Moving an OSD
+--------------------
 
-.. note: OSDs are normally automatically added to the CRUSH map when
-         the OSD is created.  This command is rarely needed.
+.. note:: Under normal conditions, OSDs automatically add themselves to the
+   CRUSH map when they are created. The command in this section is rarely
+   needed.
 
-To add or move an OSD in the CRUSH map of a running cluster:
+
+To add or move an OSD in the CRUSH map of a running cluster, run a command of
+the following form:
 
 .. prompt:: bash $
 
    ceph osd crush set {name} {weight} root={root} [{bucket-type}={bucket-name} ...]
 
-Where:
+For details on this command's parameters, see the following:
 
 ``name``
-
-:Description: The full name of the OSD.
-:Type: String
-:Required: Yes
-:Example: ``osd.0``
+   :Description: The full name of the OSD.
+   :Type: String
+   :Required: Yes
+   :Example: ``osd.0``
 
 
 ``weight``
-
-:Description: The CRUSH weight for the OSD, normally its size measure in terabytes (TB).
-:Type: Double
-:Required: Yes
-:Example: ``2.0``
+   :Description: The CRUSH weight of the OSD. Normally, this is its size, as measured in terabytes (TB).
+   :Type: Double
+   :Required: Yes
+   :Example: ``2.0``
 
 
 ``root``
-
-:Description: The root node of the tree in which the OSD resides (normally ``default``)
-:Type: Key/value pair.
-:Required: Yes
-:Example: ``root=default``
+   :Description: The root node of the CRUSH hierarchy in which the OSD resides (normally ``default``).
+   :Type: Key-value pair.
+   :Required: Yes
+   :Example: ``root=default``
 
 
 ``bucket-type``
+   :Description: The OSD's location in the CRUSH hierarchy.
+   :Type: Key-value pairs.
+   :Required: No
+   :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
-:Description: You may specify the OSD's location in the CRUSH hierarchy.
-:Type: Key/value pairs.
-:Required: No
-:Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
-
-
-The following example adds ``osd.0`` to the hierarchy, or moves the
-OSD from a previous location:
+In the following example, the command adds ``osd.0`` to the hierarchy, or moves
+``osd.0`` from a previous location:
 
 .. prompt:: bash $
 
    ceph osd crush set osd.0 1.0 root=default datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1
 
 
-Adjust OSD weight
------------------
+Adjusting OSD weight
+--------------------
 
-.. note: Normally OSDs automatically add themselves to the CRUSH map
-         with the correct weight when they are created. This command
-         is rarely needed.
+.. note:: Under normal conditions, OSDs automatically add themselves to the
+   CRUSH map with the correct weight when they are created. The command in this
+   section is rarely needed.
 
-To adjust an OSD's CRUSH weight in the CRUSH map of a running cluster, execute
-the following:
+To adjust an OSD's CRUSH weight in a running cluster, run a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph osd crush reweight {name} {weight}
 
-Where:
+For details on this command's parameters, see the following:
 
 ``name``
-
-:Description: The full name of the OSD.
-:Type: String
-:Required: Yes
-:Example: ``osd.0``
+   :Description: The full name of the OSD.
+   :Type: String
+   :Required: Yes
+   :Example: ``osd.0``
 
 
 ``weight``
-
-:Description: The CRUSH weight for the OSD.
-:Type: Double
-:Required: Yes
-:Example: ``2.0``
+   :Description: The CRUSH weight of the OSD.
+   :Type: Double
+   :Required: Yes
+   :Example: ``2.0``
 
 
 .. _removeosd:
 
-Remove an OSD
--------------
+Removing an OSD
+---------------
 
-.. note: OSDs are normally removed from the CRUSH as part of the
-   ``ceph osd purge`` command.  This command is rarely needed.
+.. note:: OSDs are normally removed from the CRUSH map as a result of the
+   `ceph osd purge`` command. This command is rarely needed.
 
-To remove an OSD from the CRUSH map of a running cluster, execute the
-following:
+To remove an OSD from the CRUSH map of a running cluster, run a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph osd crush remove {name}
 
-Where:
+For details on the ``name`` parameter, see the following:
 
 ``name``
+   :Description: The full name of the OSD.
+   :Type: String
+   :Required: Yes
+   :Example: ``osd.0``
 
-:Description: The full name of the OSD.
-:Type: String
-:Required: Yes
-:Example: ``osd.0``
 
+Adding a CRUSH Bucket
+---------------------
 
-Add a Bucket
-------------
+.. note:: Buckets are implicitly created when an OSD is added and the command
+   that creates it specifies a ``{bucket-type}={bucket-name}`` as part of the
+   OSD's location (provided that a bucket with that name does not already
+   exist). The command in this section is typically used when manually
+   adjusting the structure of the hierarchy after OSDs have already been
+   created. One use of this command is to move a series of hosts to a new
+   rack-level bucket.  Another use of this command is to add new ``host``
+   buckets (OSD nodes) to a dummy ``root`` so that the buckets don't receive
+   any data until they are ready to receive data. When they are ready, move the
+   buckets to the ``default`` root or to any other root as described below.
 
-.. note: Buckets are implicitly created when an OSD is added
-   that specifies a ``{bucket-type}={bucket-name}`` as part of its
-   location,  if a bucket with that name does not already exist.  This
-   command is typically used when manually adjusting the structure of the
-   hierarchy after OSDs have been created.  One use is to move a
-   series of hosts underneath a new rack-level bucket; another is to
-   add new ``host`` buckets (OSD nodes) to a dummy ``root`` so that they don't
-   receive data until you're ready, at which time you would move them to the
-   ``default`` or other root as described below.
-
-To add a bucket in the CRUSH map of a running cluster, execute the
-``ceph osd crush add-bucket`` command:
+To add a bucket in the CRUSH map of a running cluster, run a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph osd crush add-bucket {bucket-name} {bucket-type}
 
-Where:
+For details on this command's parameters, see the following:
 
 ``bucket-name``
-
-:Description: The full name of the bucket.
-:Type: String
-:Required: Yes
-:Example: ``rack12``
+   :Description: The full name of the bucket.
+   :Type: String
+   :Required: Yes
+   :Example: ``rack12``
 
 
 ``bucket-type``
+   :Description: The type of the bucket. This type must already exist in the CRUSH hierarchy.
+   :Type: String
+   :Required: Yes
+   :Example: ``rack``
 
-:Description: The type of the bucket. The type must already exist in the hierarchy.
-:Type: String
-:Required: Yes
-:Example: ``rack``
-
-
-The following example adds the ``rack12`` bucket to the hierarchy:
+In the following example, the command adds the ``rack12`` bucket to the hierarchy:
 
 .. prompt:: bash $
 
    ceph osd crush add-bucket rack12 rack
 
-Move a Bucket
--------------
+Moving a Bucket
+---------------
 
 To move a bucket to a different location or position in the CRUSH map
-hierarchy, execute the following:
+hierarchy, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd crush move {bucket-name} {bucket-type}={bucket-name}, [...]
 
-Where:
+For details on this command's parameters, see the following:
 
 ``bucket-name``
-
-:Description: The name of the bucket to move/reposition.
-:Type: String
-:Required: Yes
-:Example: ``foo-bar-1``
+   :Description: The name of the bucket that you are moving.
+   :Type: String
+   :Required: Yes
+   :Example: ``foo-bar-1``
 
 ``bucket-type``
+   :Description: The bucket's new location in the CRUSH hierarchy.
+   :Type: Key-value pairs.
+   :Required: No
+   :Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
 
-:Description: You may specify the bucket's location in the CRUSH hierarchy.
-:Type: Key/value pairs.
-:Required: No
-:Example: ``datacenter=dc1 room=room1 row=foo rack=bar host=foo-bar-1``
+Removing a Bucket
+-----------------
 
-Remove a Bucket
----------------
-
-To remove a bucket from the CRUSH hierarchy, execute the following:
+To remove a bucket from the CRUSH hierarchy, run a command of the following
+form:
 
 .. prompt:: bash $
 
    ceph osd crush remove {bucket-name}
 
-.. note:: A bucket must be empty before removing it from the CRUSH hierarchy.
+.. note:: A bucket must already be empty before it is removed from the CRUSH
+   hierarchy. In other words, there must not be OSDs or any other CRUSH buckets
+   within it.
 
-Where:
+For details on the ``bucket-name`` parameter, see the following:
 
 ``bucket-name``
+   :Description: The name of the bucket that is being removed.
+   :Type: String
+   :Required: Yes
+   :Example: ``rack12``
 
-:Description: The name of the bucket that you'd like to remove.
-:Type: String
-:Required: Yes
-:Example: ``rack12``
-
-The following example removes the ``rack12`` bucket from the hierarchy:
+In the following example, the command removes the ``rack12`` bucket from the
+hierarchy:
 
 .. prompt:: bash $
 
@@ -542,22 +535,23 @@ The following example removes the ``rack12`` bucket from the hierarchy:
 Creating a compat weight set
 ----------------------------
 
-.. note: This step is normally done automatically by the ``balancer``
-   module when enabled.
+.. note:: Normally this action is done automatically if needed by the
+   ``balancer`` module (provided that the module is enabled).
 
-To create a *compat* weight set:
+To create a *compat* weight set, run the following command:
 
 .. prompt:: bash $
 
    ceph osd crush weight-set create-compat
 
-Weights for the compat weight set can be adjusted with:
+To adjust the weights of the compat weight set, run a command of the following
+form:
 
 .. prompt:: bash $
 
    ceph osd crush weight-set reweight-compat {name} {weight}
 
-The compat weight set can be destroyed with:
+To destroy the compat weight set, run the following command:
 
 .. prompt:: bash $
 
@@ -566,54 +560,55 @@ The compat weight set can be destroyed with:
 Creating per-pool weight sets
 -----------------------------
 
-To create a weight set for a specific pool:
+To create a weight set for a specific pool, run a command of the following
+form:
 
 .. prompt:: bash $
 
    ceph osd crush weight-set create {pool-name} {mode}
 
-.. note:: Per-pool weight sets require that all servers and daemons
-          run Luminous v12.2.z or later.
+.. note:: Per-pool weight sets can be used only if all servers and daemons are
+   running Luminous v12.2.z or a later release.
 
-Where:
+For details on this command's parameters, see the following:
 
 ``pool-name``
-
-:Description: The name of a RADOS pool
-:Type: String
-:Required: Yes
-:Example: ``rbd``
+   :Description: The name of a RADOS pool.
+   :Type: String
+   :Required: Yes
+   :Example: ``rbd``
 
 ``mode``
+   :Description: Either ``flat`` or ``positional``. A *flat* weight set 
+                 assigns a single weight to all devices or buckets. A 
+                 *positional* weight set has a potentially different 
+                 weight for each position in the resulting placement 
+                 mapping. For example: if a pool has a replica count of 
+                 ``3``, then a positional weight set will have three
+                 weights for each device and bucket.
+   :Type: String
+   :Required: Yes
+   :Example: ``flat``
 
-:Description: Either ``flat`` or ``positional``.  A *flat* weight set
-	      has a single weight for each device or bucket.  A
-	      *positional* weight set has a potentially different
-	      weight for each position in the resulting placement
-	      mapping.  For example, if a pool has a replica count of
-	      3, then a positional weight set will have three weights
-	      for each device and bucket.
-:Type: String
-:Required: Yes
-:Example: ``flat``
-
-To adjust the weight of an item in a weight set:
+To adjust the weight of an item in a weight set, run a command of the following
+form:
 
 .. prompt:: bash $
 
    ceph osd crush weight-set reweight {pool-name} {item-name} {weight [...]}
 
-To list existing weight sets:
+To list existing weight sets, run the following command:
 
 .. prompt:: bash $
 
    ceph osd crush weight-set ls
 
-To remove a weight set:
+To remove a weight set, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd crush weight-set rm {pool-name}
+
 
 Creating a rule for a replicated pool
 -------------------------------------
