@@ -76,7 +76,9 @@ int CLSRGWConcurrentIO::operator()() {
   }
 
   if (ret < 0) {
-    cleanup();
+    if(ret != -ETIMEDOUT){
+      cleanup();
+    }
   }
   return ret;
 } // CLSRGWConcurrintIO::operator()()

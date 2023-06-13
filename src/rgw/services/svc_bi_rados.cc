@@ -376,9 +376,14 @@ int RGWSI_BucketIndex_RADOS::init_index(const DoutPrefixProvider *dpp, RGWBucket
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, idx_layout.layout.normal.num_shards, idx_layout.gen, &bucket_objs);
 
-  return CLSRGWIssueBucketIndexInit(index_pool.ioctx(),
+  int ret = CLSRGWIssueBucketIndexInit(index_pool.ioctx(),
 				    bucket_objs,
 				    cct->_conf->rgw_bucket_index_max_aio)();
+  
+  if(ret == -ETIMEDOUT){
+    ldout(cct, 0) << "ERROR: dir_oid =" << dir_oid << " timed out." << dendl; 
+  }
+  return ret;
 }
 
 int RGWSI_BucketIndex_RADOS::clean_index(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout)
