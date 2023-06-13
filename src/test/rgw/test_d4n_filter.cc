@@ -48,9 +48,9 @@ class Environment : public ::testing::Environment {
       ASSERT_EQ((bool)env_client.is_connected(), (bool)1);
 
       /* Proceed with environment setup */
-      code_environment_t code_env;
-      global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, code_env, 0);
-      cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, CINIT_FLAG_NO_MON_CONFIG, false);
+      cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT, 
+		        CODE_ENVIRONMENT_UTILITY, 
+			CINIT_FLAG_NO_MON_CONFIG);
       
       dpp = new DoutPrefix(cct->get(), dout_subsys, "d4n test: ");
       DriverManager::Config cfg;
