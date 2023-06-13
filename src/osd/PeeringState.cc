@@ -1218,7 +1218,11 @@ void PeeringState::proc_renew_lease()
 {
   assert(HAVE_FEATURE(upacting_features, SERVER_OCTOPUS));
   renew_lease(pl->get_mnow());
-  send_lease();
+  if (actingset.size() > 1) {
+    send_lease();
+  } else {
+    pl->recheck_readable();
+  }
   schedule_renew_lease();
 }
 
