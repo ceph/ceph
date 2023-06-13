@@ -32,10 +32,6 @@ namespace ECTransaction {
     std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
   };
 
-  bool requires_overwrite(
-    uint64_t prev_size,
-    const PGTransaction::ObjectOperation &op);
-
   template <typename F>
   WritePlan get_write_plan(
     const ECUtil::stripe_info_t &sinfo,
