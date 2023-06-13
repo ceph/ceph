@@ -3590,7 +3590,7 @@ options:
   type: str
   level: advanced
   desc: experimental Option to set a filter
-  long_desc: defaults to none. Other valid values are base and trace (both experimental).
+  long_desc: defaults to none. Other valid values are base and d4n (both experimental).
   default: none
   services:
   - rgw
