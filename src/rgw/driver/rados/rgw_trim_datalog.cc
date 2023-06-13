@@ -225,7 +225,7 @@ int DataLogTrimPollCR::operate(const DoutPrefixProvider *dpp)
       set_status("acquiring trim lock");
 
       // interval is a small number and unlikely to overflow
-      // coverity[Y2K38_SAFETY:FALSE]
+      // coverity[store_truncates_time_t:SUPPRESS]
       yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
                                           rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, lock_oid),
                                           "data_trim", lock_cookie,

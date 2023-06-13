@@ -57,7 +57,7 @@ AioResultList BlockingAioThrottle::get(rgw_raw_obj obj,
     std::move(f)(this, *static_cast<AioResult*>(p.get()));
     lock.lock();
   }
-  // coverity[RESOURCE_LEAK:FALSE]
+  // coverity[leaked_storage:SUPPRESS]
   p.release();
   return std::move(completed);
 }
@@ -147,7 +147,7 @@ AioResultList YieldingAioThrottle::get(rgw_raw_obj obj,
     pending.push_back(*p);
     std::move(f)(this, *static_cast<AioResult*>(p.get()));
   }
-  // coverity[RESOURCE_LEAK:FALSE]
+  // coverity[leaked_storage:SUPPRESS]
   p.release();
   return std::move(completed);
 }

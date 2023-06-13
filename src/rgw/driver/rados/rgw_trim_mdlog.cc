@@ -670,7 +670,7 @@ int MetaTrimPollCR::operate(const DoutPrefixProvider *dpp)
       set_status("acquiring trim lock");
 
       // interval is a small number and unlikely to overflow
-      // coverity[Y2K38_SAFETY:FALSE]
+      // coverity[store_truncates_time_t:SUPPRESS]
       yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
                                           obj, name, cookie, interval.sec()));
       if (retcode < 0) {
