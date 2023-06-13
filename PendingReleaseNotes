@@ -236,6 +236,10 @@
   "mgr/prometheus/x/server_port" will be displayed instead of
   "mgr/prometheus/server_port". This matches the output of the non pretty-print
   formatted version of the command.
+* CEPHFS: MDS config option name "mds_kill_skip_replaying_inotable" is a bit
+  confusing with "mds_inject_skip_replaying_inotable", therefore renaming it to
+  "mds_kill_after_journal_logs_flushed"
+
 
 >=17.2.1
 
