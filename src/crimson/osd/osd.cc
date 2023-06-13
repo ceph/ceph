@@ -1016,17 +1016,17 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 seastar::future<> OSD::handle_osd_op(crimson::net::ConnectionRef conn,
                                      Ref<MOSDOp> m)
 {
-  (void) pg_shard_manager.start_pg_operation<ClientRequest>(
+  return pg_shard_manager.start_pg_operation<ClientRequest>(
     get_shard_services(),
     conn,
-    std::move(m));
-  return seastar::now();
+    std::move(m)).second;
 }
 
 seastar::future<> OSD::handle_pg_create(crimson::net::ConnectionRef conn,
 					Ref<MOSDPGCreate2> m)
 {
-  for (auto& [pgid, when] : m->pgs) {
+  return seastar::do_for_each(m->pgs, [this, conn, m](auto& pg) {
+    auto& [pgid, when] = pg;
     const auto &[created, created_stamp] = when;
     auto q = m->pg_extra.find(pgid);
     ceph_assert(q != m->pg_extra.end());
@@ -1043,8 +1043,9 @@ seastar::future<> OSD::handle_pg_create(crimson::net::ConnectionRef conn,
         "unmatched past_intervals {} (history {})",
         pgid, m->epoch,
         pi, history);
+        return seastar::now();
     } else {
-      std::ignore = pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
+      return pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
 	  conn,
 	  pg_shard_t(),
 	  pgid,
@@ -1052,10 +1053,9 @@ seastar::future<> OSD::handle_pg_create(crimson::net::ConnectionRef conn,
 	  m->epoch,
 	  NullEvt(),
 	  true,
-	  new PGCreateInfo(pgid, m->epoch, history, pi, true));
+	  new PGCreateInfo(pgid, m->epoch, history, pi, true)).second;
     }
-  }
-  return seastar::now();
+  });
 }
 
 seastar::future<> OSD::handle_update_log_missing(
@@ -1063,10 +1063,9 @@ seastar::future<> OSD::handle_update_log_missing(
   Ref<MOSDPGUpdateLogMissing> m)
 {
   m->decode_payload();
-  (void) pg_shard_manager.start_pg_operation<LogMissingRequest>(
+  return pg_shard_manager.start_pg_operation<LogMissingRequest>(
     std::move(conn),
-    std::move(m));
-  return seastar::now();
+    std::move(m)).second;
 }
 
 seastar::future<> OSD::handle_update_log_missing_reply(
@@ -1074,20 +1073,18 @@ seastar::future<> OSD::handle_update_log_missing_reply(
   Ref<MOSDPGUpdateLogMissingReply> m)
 {
   m->decode_payload();
-  (void) pg_shard_manager.start_pg_operation<LogMissingRequestReply>(
+  return pg_shard_manager.start_pg_operation<LogMissingRequestReply>(
     std::move(conn),
-    std::move(m));
-  return seastar::now();
+    std::move(m)).second;
 }
 
 seastar::future<> OSD::handle_rep_op(crimson::net::ConnectionRef conn,
 				     Ref<MOSDRepOp> m)
 {
   m->finish_decode();
-  std::ignore = pg_shard_manager.start_pg_operation<RepRequest>(
+  return pg_shard_manager.start_pg_operation<RepRequest>(
     std::move(conn),
-    std::move(m));
-  return seastar::now();
+    std::move(m)).second;
 }
 
 seastar::future<> OSD::handle_rep_op_reply(crimson::net::ConnectionRef conn,
@@ -1139,9 +1136,8 @@ seastar::future<> OSD::handle_mark_me_down(crimson::net::ConnectionRef conn,
 seastar::future<> OSD::handle_recovery_subreq(crimson::net::ConnectionRef conn,
 				   Ref<MOSDFastDispatchOp> m)
 {
-  std::ignore = pg_shard_manager.start_pg_operation<RecoverySubRequest>(
-    conn, std::move(m));
-  return seastar::now();
+  return pg_shard_manager.start_pg_operation<RecoverySubRequest>(
+    conn, std::move(m)).second;
 }
 
 bool OSD::should_restart() const
@@ -1234,12 +1230,11 @@ seastar::future<> OSD::handle_peering_op(
   logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
   m->set_features(conn->get_features());
   std::unique_ptr<PGPeeringEvent> evt(m->get_event());
-  (void) pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
+  return pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
     conn,
     pg_shard_t{from, m->get_spg().shard},
     m->get_spg(),
-    std::move(*evt));
-  return seastar::now();
+    std::move(*evt)).second;
 }
 
 seastar::future<> OSD::check_osdmap_features()
