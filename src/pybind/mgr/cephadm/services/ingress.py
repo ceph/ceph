@@ -284,6 +284,24 @@ class IngressService(CephService):
                 f"Unable to identify interface for {spec.virtual_ip} on {host}"
             )
 
+        # Use interface as vrrp_interface for vrrp traffic if vrrp_interface_network not set on the spec
+        vrrp_interface = None
+        if not spec.vrrp_interface_network:
+            vrrp_interface = interface
+        else:
+            for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                if subnet == spec.vrrp_interface_network:
+                    vrrp_interface = list(ifaces.keys())[0]
+                    logger.info(
+                        f'vrrp will be configured on {host} interface '
+                        f'{vrrp_interface} (which has guiding subnet {subnet})'
+                    )
+                    break
+            else:
+                raise OrchestratorError(
+                    f"Unable to identify vrrp interface for {spec.vrrp_interface_network} on {host}"
+                )
+
         # script to monitor health
         script = '/usr/bin/false'
         for d in daemons:
@@ -336,6 +354,7 @@ class IngressService(CephService):
                 'script': script,
                 'password': password,
                 'interface': interface,
+                'vrrp_interface': vrrp_interface,
                 'virtual_ips': virtual_ips,
                 'states': states,
                 'priorities': priorities,

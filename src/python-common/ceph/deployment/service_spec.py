@@ -1284,6 +1284,8 @@ class IngressSpec(ServiceSpec):
                  virtual_ip: Optional[str] = None,
                  virtual_ips_list: Optional[List[str]] = None,
                  virtual_interface_networks: Optional[List[str]] = [],
+                 use_keepalived_multicast: Optional[bool] = False,
+                 vrrp_interface_network: Optional[str] = None,
                  unmanaged: bool = False,
                  ssl: bool = False,
                  keepalive_only: bool = False,
@@ -1316,6 +1318,8 @@ class IngressSpec(ServiceSpec):
         self.virtual_ip = virtual_ip
         self.virtual_ips_list = virtual_ips_list
         self.virtual_interface_networks = virtual_interface_networks or []
+        self.use_keepalived_multicast = use_keepalived_multicast
+        self.vrrp_interface_network = vrrp_interface_network
         self.unmanaged = unmanaged
         self.ssl = ssl
         self.keepalive_only = keepalive_only
