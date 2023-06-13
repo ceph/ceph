@@ -1294,7 +1294,7 @@ struct RGWBucketEnt {
     ENCODE_START(7, 5, bl);
     uint64_t s = size;
     // issue tracked here: https://tracker.ceph.com/issues/61160
-    // coverity[Y2K38_SAFETY]
+    // coverity[store_truncates_time_t:SUPPRESS]
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
     std::string empty_str;  // originally had the bucket name here, but we encode bucket later
     encode(empty_str, bl);
