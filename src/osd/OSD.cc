@@ -10736,9 +10736,18 @@ OSDShard::OSDShard(
     context_queue(sdata_wait_lock, sdata_cond)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
+  uint32_t la = cct->_conf->osd_waitgroup_la;
+  uint32_t lb = cct->_conf->osd_waitgroup_lb;
+  uint32_t lc = cct->_conf->osd_waitgroup_lc;
+  uint32_t ha = cct->_conf->osd_waitgroup_ha;
+  uint32_t hb = cct->_conf->osd_waitgroup_hb;
+  uint32_t hc = cct->_conf->osd_waitgroup_hc;
+
   wgv.emplace_back(new WaitGroup_P(0, cct, osd, this));
   for (uint32_t i = 1; i < osd->num_threads_per_shard; i++) {
-    wgv.emplace_back(new WaitGroup_S(i, cct, osd, this, i*i+2*i, i*i+8*i));
+    uint32_t lt = (la * i * i) + (lb * i) + lc;
+    uint32_t ht = (ha * i * i) + (hb * i) + hc;
+    wgv.emplace_back(new WaitGroup_S(i, cct, osd, this, lt, ht));
   }
 }
 

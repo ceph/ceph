@@ -844,7 +844,7 @@ options:
 - name: osd_op_num_threads_per_shard_hdd
   type: int
   level: advanced
-  default: 1
+  default: 2 
   see_also:
   - osd_op_num_threads_per_shard
   flags:
@@ -853,7 +853,7 @@ options:
 - name: osd_op_num_threads_per_shard_ssd
   type: int
   level: advanced
-  default: 2
+  default: 8 
   see_also:
   - osd_op_num_threads_per_shard
   flags:
@@ -873,7 +873,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for rotational media).
-  default: 5
+  default: 2 
   see_also:
   - osd_op_num_shards
   flags:
@@ -883,7 +883,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for solid state media).
-  default: 8
+  default: 4 
   see_also:
   - osd_op_num_shards
   flags:
@@ -895,6 +895,60 @@ options:
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
+- name: osd_waitgroup_la
+  type: int
+  level: dev
+  desc: first coefficient of a 2nd degree polynomial of form la*i^2+lb*i+lc 
+    governing OSD thread sleep behavior in a given shard.
+  default: 0
+  flags:
+  - startup
+  with_legacy: true
+- name: osd_waitgroup_lb
+  type: int
+  level: dev
+  desc: second coefficient of a 2nd degree polynomial of form la*i^2+lb*i+lc 
+    governing OSD thread sleep behavior in a given shard.
+  default: 1
+  flags:
+  - startup
+  with_legacy: true
+- name: osd_waitgroup_lc
+  type: int
+  level: dev
+  desc: constant in a 2nd degree polynomial of form la*i^2+lb*i+lc
+    governing OSD thread sleep behavior in a given shard.
+  default: 0 
+  flags:
+  - startup
+  with_legacy: true
+- name: osd_waitgroup_ha
+  type: int
+  level: dev
+  desc: first coefficient of a 2nd degree polynomial of form ha*i^2+hb*i+hc 
+    governing OSD thread wake behavior in a given shard.
+  default: 2
+  flags:
+  - startup
+  with_legacy: true
+- name: osd_waitgroup_hb
+  type: int
+  level: dev
+  desc: second coefficient of a 2nd degree polynomial of form ha*i^2+hb*i+hc
+    governing OSD thread wake behavior in a given shard.
+  default: 2
+  flags:
+  - startup
+  with_legacy: true
+- name: osd_waitgroup_hc
+  type: int
+  level: dev
+  desc: constant in a 2nd degree polynomial of form ha*i^2+hb*i+hc
+    governing OSD thread wake behavior in a given shard.
+  default: 0
+  flags:
+  - startup
+  with_legacy: true
 # PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
 # mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
 # and "mclock_client" are based on the mClock/dmClock algorithm
