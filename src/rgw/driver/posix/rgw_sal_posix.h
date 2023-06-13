@@ -556,11 +556,11 @@ public:
     mp_obj(driver, _oid, _upload_id, _owner), mtime(_mtime) {}
   virtual ~POSIXMultipartUpload() = default;
 
-  virtual const std::string& get_meta() const { return mp_obj.meta; }
-  virtual const std::string& get_key() const { return mp_obj.oid; }
-  virtual const std::string& get_upload_id() const { return mp_obj.upload_id; }
+  virtual const std::string& get_meta() const override { return mp_obj.meta; }
+  virtual const std::string& get_key() const override { return mp_obj.oid; }
+  virtual const std::string& get_upload_id() const override { return mp_obj.upload_id; }
   virtual const ACLOwner& get_owner() const override { return mp_obj.owner; }
-  virtual ceph::real_time& get_mtime() { return mtime; }
+  virtual ceph::real_time& get_mtime() override { return mtime; }
   virtual std::unique_ptr<rgw::sal::Object> get_meta_obj() override;
 
   virtual int init(const DoutPrefixProvider* dpp, optional_yield y, ACLOwner& owner, rgw_placement_rule& dest_placement, rgw::sal::Attrs& attrs) override;

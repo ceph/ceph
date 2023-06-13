@@ -488,10 +488,12 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
       }
     );
 
+  ldout(driver->ctx(), 0) << "Leia 1 user: " << get_id() << dendl;
   errno = 0;
   while ((entry = readdir(dir)) != NULL) {
     struct statx stx;
 
+  ldout(driver->ctx(), 0) << "Leia 2 d_name: " << entry->d_name << dendl;
     ret = statx(driver->get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
@@ -1054,6 +1056,7 @@ int POSIXBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cc
 
 int POSIXBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* existed)
 {
+  ldpp_dout(dpp, 0) << "dang making bucket name: " << get_name() << " fname: " << get_fname() << dendl;
   int ret = mkdirat(parent_fd, get_fname().c_str(), S_IRWXU);
   if (ret < 0) {
     ret = errno;
@@ -1240,19 +1243,42 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
       return -EINVAL;
   }
 
-  if (shadow) {
+  if (!b->versioned()) {
+    if (shadow) {
       return shadow->remove_bucket(dpp, true, false, nullptr, y);
+    }
+
+    int ret = unlinkat(b->get_dir_fd(dpp), get_fname().c_str(), 0);
+    if (ret < 0) {
+      ret = errno;
+      if (errno != ENOENT) {
+        ldpp_dout(dpp, 0) << "ERROR: could not remove object " << get_name()
+                          << ": " << cpp_strerror(ret) << dendl;
+        return -ret;
+      }
+    }
+    return 0;
   }
 
-  int ret = unlinkat(b->get_dir_fd(dpp), get_fname().c_str(), 0);
-  if (ret < 0) {
-    ret = errno;
-    if (errno != ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: could not remove object " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
-      return -ret;
+  // Versioned directory.  Need to remove all objects matching
+  b->for_each(dpp, [this, &dpp, &b](const char* name) {
+    int ret;
+    std::string_view vname(name);
+
+    if (vname.find(get_fname().c_str()) != std::string_view::npos) {
+      ret = unlinkat(b->get_dir_fd(dpp), name, 0);
+      if (ret < 0) {
+        ret = errno;
+        if (errno != ENOENT) {
+          ldpp_dout(dpp, 0) << "ERROR: could not remove object " << name
+                            << ": " << cpp_strerror(ret) << dendl;
+          return -ret;
+        }
+      }
     }
-  }
+    return 0;
+  });
+
   return 0;
 }
 
@@ -2166,7 +2192,8 @@ int POSIXMultipartUpload::load(bool create)
 std::unique_ptr<rgw::sal::Object> POSIXMultipartUpload::get_meta_obj()
 {
   load();
-  return shadow->get_object(rgw_obj_key(get_meta(), std::string(), mp_ns));
+  ldout(driver->ctx(), 0) << "dang getting meta: " << get_meta() << " from: " << shadow->get_fname() << dendl;
+  return shadow->get_object(rgw_obj_key(get_meta(), std::string()));
 }
 
 int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
