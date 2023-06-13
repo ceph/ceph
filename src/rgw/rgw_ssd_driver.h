@@ -38,6 +38,7 @@ public:
 
   /* Entry */
   virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) override { return entries.count(key) != 0; }
+  virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) override;
   virtual size_t get_num_entries(const DoutPrefixProvider* dpp) override { return entries.size(); }
 
   /* Partition */
