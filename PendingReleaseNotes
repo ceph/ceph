@@ -1,19 +1,21 @@
 >=18.0.0
 
 * The RGW policy parser now rejects unknown principals by default. If you are
-  mirroring policies between RGW and AWS, you may wish to set
-  "rgw policy reject invalid principals" to "false". This affects only newly set
+  mirroring policies between RGW and AWS, you might want to set ``rgw policy
+  reject invalid principals`` to ``false``. This affects only newly set
   policies, not policies that are already in place.
-* RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
-  The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
-  defaults to "/var/log/ceph/ops-log-$cluster-$name.log".
+* RGW's default backend for ``rgw_enable_ops_log`` changed from ``RADOS`` to
+  ``file``. The default value of ``rgw_ops_log_rados`` is now false, and
+  ``rgw_ops_log_file_path`` defaults to 
+  ``/var/log/ceph/ops-log-$cluster-$name.log``.
 * The SPDK backend for BlueStore is now able to connect to an NVMeoF target.
-  Please note that this is not an officially supported feature.
-* RGW's pubsub interface now returns boolean fields using bool. Before this change,
-  `/topics/<topic-name>` returns "stored_secret" and "persistent" using a string
-  of "true" or "false" with quotes around them. After this change, these fields
-  are returned without quotes so they can be decoded as boolean values in JSON.
-  The same applies to the `is_truncated` field returned by `/subscriptions/<sub-name>`.
+  This is not an officially supported feature.
+* RGW's pubsub interface now returns boolean fields using ``bool``. Before this
+  change, ``/topics/<topic-name>`` returned ``stored_secret`` and ``persistent``
+  using a string of ``"true"`` or ``"false"`` with quotes around them. After this
+  change, these fields are returned without quotes so they can be decoded as
+  boolean values in JSON.  The same applies to the ``is_truncated`` field returned
+  by ``/subscriptions/<sub-name>``.
 * RGW's response of `Action=GetTopicAttributes&TopicArn=<topic-arn>` REST API now
   returns `HasStoredSecret` and `Persistent` as boolean in the JSON string
   encoded in `Attributes/EndPoint`.
