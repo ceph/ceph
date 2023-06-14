@@ -17,7 +17,7 @@
 #include <boost/intrusive/avl_set.hpp>
 #include "include/function2.hpp"
 #include "common/cohort_lru.h"
-#include "lmdb-safe/lmdb-safe.hh"
+#include "lmdb-safe.hh"
 #include "zpp_bits.h"
 #include "notify.h"
 #include <stdint.h>
