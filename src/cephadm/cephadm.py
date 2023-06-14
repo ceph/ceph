@@ -3819,6 +3819,42 @@ def _write_container_cmd_to_bash(
     _bash_cmd(file_obj, container.run_cmd(), background=bool(background))
 
 
+def _write_init_container_cmds(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    index: int,
+    init_container: 'InitContainer',
+) -> None:
+    file_obj.write(f'# init container {index}: {init_container.cname}\n')
+    _bash_cmd(file_obj, init_container.run_cmd())
+    _write_init_container_cmds_clean(ctx, file_obj, init_container, comment='')
+
+
+def _write_init_container_cmds_clean(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    init_container: 'InitContainer',
+    comment: str = 'init container cleanup',
+) -> None:
+    if comment:
+        assert '\n' not in comment
+        file_obj.write(f'# {comment}\n')
+    _bash_cmd(
+        file_obj,
+        init_container.rm_cmd(),
+        check=False,
+        stderr=False,
+    )
+    # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
+    if isinstance(ctx.container_engine, Podman):
+        _bash_cmd(
+            file_obj,
+            init_container.rm_cmd(storage=True),
+            check=False,
+            stderr=False,
+        )
+
+
 def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
     # systemd may fail to cleanup cgroups from previous stopped unit, which will cause next "systemctl start" to fail.
     # see https://tracker.ceph.com/issues/50998
