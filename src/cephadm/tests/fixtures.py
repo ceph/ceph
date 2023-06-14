@@ -71,8 +71,17 @@ def cephadm_fs(
     uid = os.getuid()
     gid = os.getgid()
 
+    def fchown(fd, _uid, _gid):
+        """pyfakefs doesn't provide a working fchown or fchmod.
+        In order to get permissions working generally across renames
+        we need to provide our own implemenation.
+        """
+        file_obj = fs.get_open_file(fd).get_object()
+        file_obj.st_uid = _uid
+        file_obj.st_gid = _gid
+
     _cephadm = import_cephadm()
-    with mock.patch('os.fchown'), \
+    with mock.patch('os.fchown', side_effect=fchown), \
          mock.patch('os.fchmod'), \
          mock.patch('platform.processor', return_value='x86_64'), \
          mock.patch('cephadm.extract_uid_gid', return_value=(uid, gid)):
