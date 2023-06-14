@@ -6744,6 +6744,17 @@ def get_deployment_container(ctx: CephadmContext,
     return c
 
 
+def get_deployment_init_containers(
+    ctx: CephadmContext,
+    primary_container: 'CephContainer',
+) -> List['InitContainer']:
+    init_containers: List[Dict[str, Any]] = getattr(ctx, 'init_containers', [])
+    return [
+        InitContainer.from_primary_and_opts(ctx, primary_container, ic_opts)
+        for ic_opts in init_containers
+    ]
+
+
 def get_deployment_type(ctx: CephadmContext, daemon_type: str, daemon_id: str) -> DeploymentType:
     deployment_type: DeploymentType = DeploymentType.DEFAULT
     if ctx.reconfig:
