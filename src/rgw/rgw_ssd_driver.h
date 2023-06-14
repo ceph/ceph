@@ -49,6 +49,20 @@ public:
 
   virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override;
 
+  struct libaio_handler {
+    rgw::Aio* throttle = nullptr;
+    rgw::AioResult& r;
+    // read callback
+    void operator()(boost::system::error_code ec, bufferlist bl) const {
+      r.result = -ec.value();
+      r.data = std::move(bl);
+      throttle->put(r);
+    }
+  };
+  template <typename ExecutionContext, typename CompletionToken>
+  auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+                  off_t read_ofs, off_t read_len, CompletionToken&& token);
+
 protected:
   static std::unordered_map<std::string, Partition> partitions;
   std::unordered_map<std::string, Entry> entries;
@@ -64,9 +78,32 @@ protected:
   std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
 
 private:
-  template <typename ExecutionContext, typename CompletionToken>
-  auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
-                  off_t read_ofs, off_t read_len, CompletionToken&& token);
+// unique_ptr with custom deleter for struct aiocb
+struct libaio_aiocb_deleter {
+  void operator()(struct aiocb* c) {
+    if(c->aio_fildes > 0) {
+      if( ::close(c->aio_fildes) != 0) {
+      }
+    }
+    delete c;
+  }
+};
+
+using unique_aio_cb_ptr = std::unique_ptr<struct aiocb, libaio_aiocb_deleter>;
+
+struct AsyncReadOp {
+    bufferlist result;
+    unique_aio_cb_ptr aio_cb;
+    using Signature = void(boost::system::error_code, bufferlist);
+    using Completion = ceph::async::Completion<Signature, AsyncReadOp>;
+
+    int init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg);
+    static void libaio_cb_aio_dispatch(sigval sigval);
+
+    template <typename Executor1, typename CompletionHandler>
+    static auto create(const Executor1& ex1, CompletionHandler&& handler);
+  };
+
 };
 
 } } // namespace rgw::cal
