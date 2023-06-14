@@ -7465,15 +7465,19 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  r = bucket_index_trim_olh_log(dpp, bucket_info, state, obj, last_ver);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
-    return r;
-  }
-
   if (need_to_remove) {
     string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
-    clear_olh(dpp, obj_ctx, obj, bucket_info, ref, olh_tag, last_ver, null_yield);
+    r = clear_olh(dpp, obj_ctx, obj, bucket_info, ref, olh_tag, last_ver, null_yield);
+    if (r < 0 && r != -ECANCELED) {
+      ldpp_dout(dpp, 0) << "ERROR: could not clear olh, r=" << r << dendl;
+      return r;
+    }
+  }
+
+  r = bucket_index_trim_olh_log(dpp, bucket_info, state, obj, last_ver);
+  if (r < 0 && r != -ECANCELED) {
+    ldpp_dout(dpp, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
+    return r;
   }
 
   return 0;
