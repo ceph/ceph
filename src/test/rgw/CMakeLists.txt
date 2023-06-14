@@ -319,6 +319,7 @@ target_link_libraries(radosgw-cr-test ${rgw_libs} librados
 # unittest_posix_bucket_cache
 add_executable(unittest_posix_bucket_cache
 	test_posix_bucket_cache.cc)
+target_compile_definitions(unittest_posix_bucket_cache PUBLIC LMDB_SAFE_NO_CPP_UTILITIES)
 target_include_directories(unittest_posix_bucket_cache
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
