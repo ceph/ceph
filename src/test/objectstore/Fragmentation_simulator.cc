@@ -49,13 +49,10 @@
  * #Note: This is an allocation simulator not a data consistency simulator so
  * any object data is not stored.
  */
-class FragmentationSimulator : public ObjectStore {
+class ObjectStoreImitator : public ObjectStore {
 private:
   class Collection;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
-  class OpSequencer;
-  using OpSequencerRef = ceph::ref_t<OpSequencer>;
-  typedef std::list<PExtentVector> old_extent_map_t;
 
   struct Object {
     Collection *c;
@@ -76,7 +73,7 @@ private:
         : c(c_), id(id_), exists(exists_), nid(nid_), size(size_) {}
 
     void punch_hole(uint64_t offset, uint64_t length,
-                    old_extent_map_t *old_extents) {
+                    PExtentVector &old_extents) {
       uint64_t l_offset{0}, punched_length{0};
       PExtentVector to_be_punched, remains;
       for (auto e : extents) {
@@ -102,146 +99,20 @@ private:
       }
 
       extents = remains;
-      old_extents->push_back(to_be_punched);
+      old_extents = to_be_punched;
     }
   };
   typedef boost::intrusive_ptr<Object> ObjectRef;
 
-  struct TransContext final {
-    MEMPOOL_CLASS_HELPERS();
-
-    typedef enum {
-      STATE_PREPARE,
-      STATE_AIO_WAIT,
-      STATE_IO_DONE,
-      STATE_FINISHING,
-      STATE_DONE,
-    } state_t;
-
-    inline void set_state(state_t s) { state = s; }
-    inline state_t get_state() { return state; }
-
-    CollectionRef ch;
-    OpSequencerRef osr; // this should be ch->osr
-    boost::intrusive::list_member_hook<> sequencer_item;
-
-    std::list<Context *> oncommits; ///< more commit completions
-
-    boost::intrusive::list_member_hook<> deferred_queue_item;
-
-    interval_set<uint64_t> allocated, released;
-    uint64_t osd_pool_id = META_POOL_ID; ///< osd pool id we're operating on
-
-    uint64_t seq = 0;
-
-    uint64_t last_nid = 0; ///< if non-zero, highest new nid we allocated
-
-    explicit TransContext(CephContext *cct, Collection *c, OpSequencer *o,
-                          std::list<Context *> *on_commits)
-        : ch(c), osr(o) {
-      if (on_commits) {
-        oncommits.swap(*on_commits);
-      }
-    }
-    ~TransContext() {}
-
-  private:
-    state_t state = STATE_PREPARE;
-  };
-
-  class OpSequencer : public RefCountedObject {
-  public:
-    ceph::mutex qlock =
-        ceph::make_mutex("FragmentationSimulator::OpSequencer::qlock");
-    ceph::condition_variable qcond;
-    typedef boost::intrusive::list<
-        TransContext, boost::intrusive::member_hook<
-                          TransContext, boost::intrusive::list_member_hook<>,
-                          &TransContext::sequencer_item>>
-        q_list_t;
-    q_list_t q; ///< transactions
-
-    FragmentationSimulator *sim;
-    coll_t cid;
-
-    uint64_t last_seq = 0;
-
-    std::atomic_bool zombie = {
-        false}; ///< in zombie_osr std::set (collection going away)
-
-    void queue_new(TransContext *txc) {
-      std::lock_guard l(qlock);
-      txc->seq = ++last_seq;
-      q.push_back(*txc);
-    }
-
-    void drain() {
-      std::unique_lock l(qlock);
-      while (!q.empty())
-        qcond.wait(l);
-    }
-
-    void drain_preceding(TransContext *txc) {
-      std::unique_lock l(qlock);
-      while (&q.front() != txc)
-        qcond.wait(l);
-    }
-
-    void flush() {
-      std::unique_lock l(qlock);
-      while (true) {
-        qcond.wait(l);
-      }
-    }
-
-    void flush_all_but_last() {
-      std::unique_lock l(qlock);
-      ceph_assert(q.size() >= 1);
-      while (true) {
-        if (q.size() <= 1) {
-          return;
-        } else {
-          auto it = q.rbegin();
-          it++;
-          if (it->get_state() >= TransContext::STATE_FINISHING) {
-            return;
-          }
-        }
-
-        qcond.wait(l);
-      }
-    }
-
-    bool flush_commit(Context *c) {
-      std::lock_guard l(qlock);
-      if (q.empty()) {
-        return true;
-      }
-
-      TransContext *txc = &q.back();
-      if (txc->get_state() >= TransContext::STATE_FINISHING) {
-        return true;
-      }
-
-      txc->oncommits.push_back(c);
-      return false;
-    }
-
-  private:
-    FRIEND_MAKE_REF(OpSequencer);
-    OpSequencer(FragmentationSimulator *sim, uint32_t sequencer_id,
-                const coll_t &c)
-        : RefCountedObject(sim->cct), sim(sim), cid(c) {}
-    ~OpSequencer() { ceph_assert(q.empty()); }
-  };
-
   struct Collection : public CollectionImpl {
-    FragmentationSimulator *sim;
-    OpSequencerRef osr;
+    ObjectStoreImitator *sim;
     bluestore_cnode_t cnode;
     std::map<ghobject_t, ObjectRef> objects;
+
     ceph::shared_mutex lock = ceph::make_shared_mutex(
         "FragmentationSimulator::Collection::lock", true, false);
+
+    // Lock for 'objects'
     ceph::recursive_mutex obj_lock = ceph::make_recursive_mutex(
         "FragmentationSimulator::Collection::obj_lock");
 
@@ -279,9 +150,8 @@ private:
       return objects[oid] = on;
     }
 
-    bool flush_commit(Context *c) override { return osr->flush_commit(c); }
-    void flush() override { return osr->flush(); }
-    void flush_all_but_last() { return osr->flush_all_but_last(); }
+    bool flush_commit(Context *c) override { return false; }
+    void flush() override {}
 
     void rename_obj(ObjectRef &oldo, const ghobject_t &old_oid,
                     const ghobject_t &new_oid) {
@@ -294,6 +164,7 @@ private:
       if (pn != objects.end()) {
         objects.erase(pn);
       }
+
       ObjectRef o = po->second;
 
       oldo.reset(new Object(o->c, old_oid));
@@ -303,176 +174,85 @@ private:
       o->id = new_oid;
     }
 
-    Collection(FragmentationSimulator *sim, coll_t c);
+    Collection(ObjectStoreImitator *sim, coll_t c);
   };
 
   CollectionRef _get_collection(const coll_t &cid);
-  int _split_collection(TransContext *txc, CollectionRef &c, CollectionRef &d,
-                        unsigned bits, int rem);
-  int _merge_collection(TransContext *txc, CollectionRef *c, CollectionRef &d,
-                        unsigned bits);
+  int _split_collection(CollectionRef &c, CollectionRef &d, unsigned bits,
+                        int rem);
+  int _merge_collection(CollectionRef *c, CollectionRef &d, unsigned bits);
   int _collection_list(Collection *c, const ghobject_t &start,
                        const ghobject_t &end, int max, bool legacy,
                        std::vector<ghobject_t> *ls, ghobject_t *next);
-  int _remove_collection(TransContext *txc, const coll_t &cid,
-                         CollectionRef *c);
-  void _do_remove_collection(TransContext *txc, CollectionRef *c);
-  int _create_collection(TransContext *txc, const coll_t &cid, unsigned bits,
-                         CollectionRef *c);
+  int _remove_collection(const coll_t &cid, CollectionRef *c);
+  void _do_remove_collection(CollectionRef *c);
+  int _create_collection(const coll_t &cid, unsigned bits, CollectionRef *c);
 
   // Transactions
-  TransContext *_txc_create(Collection *c, OpSequencer *osr,
-                            std::list<Context *> *on_commits,
-                            TrackedOpRef osd_op = TrackedOpRef());
-  void _txc_add_transaction(TransContext *txc, Transaction *t);
-  void _txc_state_proc(TransContext *txc);
-  void _txc_finish_io(TransContext *txc);
-  void _txc_finish(TransContext *txc);
-  void _txc_release_alloc(TransContext *txc);
-
-  // OpSequencer
-  void _osr_attach(Collection *c);
-  void _osr_register_zombie(OpSequencer *osr);
-  void _osr_drain(OpSequencer *osr);
-  void _osr_drain_preceding(TransContext *txc);
+  void _txc_add_transaction(Transaction *t);
+  void _release_alloc(const PExtentVector &release_vec);
 
   // Object ops
-  int _write(TransContext *txc, CollectionRef &c, ObjectRef &o, uint64_t offset,
-             size_t length, bufferlist &bl, uint32_t fadvise_flags);
-  int _set_alloc_hint(TransContext *txc, CollectionRef &c, ObjectRef &o,
+  int _write(CollectionRef &c, ObjectRef &o, uint64_t offset, size_t length,
+             bufferlist &bl, uint32_t fadvise_flags);
+  int _set_alloc_hint(CollectionRef &c, ObjectRef &o,
                       uint64_t expected_object_size,
                       uint64_t expected_write_size, uint32_t flags);
-  int _rename(TransContext *txc, CollectionRef &c, ObjectRef &oldo,
-              ObjectRef &newo, const ghobject_t &new_oid);
-  int _clone(TransContext *txc, CollectionRef &c, ObjectRef &oldo,
-             ObjectRef &newo);
-  int _clone_range(TransContext *txc, CollectionRef &c, ObjectRef &oldo,
-                   ObjectRef &newo, uint64_t srcoff, uint64_t length,
-                   uint64_t dstoff);
-
-  // Write
-
-  struct WriteContext {
-    bool buffered = false;         ///< buffered write
-    bool compress = false;         ///< compressed write
-    uint64_t target_blob_size = 0; ///< target (max) blob size
-    unsigned csum_order = 0;       ///< target checksum chunk order
-
-    old_extent_map_t old_extents; ///< must deref these blobs
-
-    struct write_item {
-      uint64_t blob_length;
-      uint64_t b_off;
-      ceph::buffer::list bl;
-      ceph::buffer::list compressed_bl;
-      bool compressed = false;
-      size_t compressed_len = 0;
-
-      write_item(uint64_t logical_offs, uint64_t blob_len, uint64_t o,
-                 ceph::buffer::list &bl)
-          : blob_length(blob_len), b_off(o), bl(bl) {}
-    };
-    std::vector<write_item> writes; ///< blobs we're writing
-
-    void write(uint64_t loffs, uint64_t blob_len, uint64_t o,
-               ceph::buffer::list &bl, bool _new_blob) {
-      writes.emplace_back(loffs, blob_len, o, bl);
-    }
-  };
+  int _rename(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo,
+              const ghobject_t &new_oid);
+  int _clone(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo);
+  int _clone_range(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo,
+                   uint64_t srcoff, uint64_t length, uint64_t dstoff);
 
   // Helpers
 
-  void _assign_nid(TransContext *txc, ObjectRef &o);
-  void _choose_write_options(CollectionRef &c, ObjectRef &o,
-                             uint32_t fadvise_flags, WriteContext *wctx);
-  int _do_write(TransContext *txc, CollectionRef &c, ObjectRef &o,
-                uint64_t offset, uint64_t length, ceph::buffer::list &bl,
+  void _assign_nid(ObjectRef &o);
+  int _do_write(CollectionRef &c, ObjectRef &o, uint64_t offset,
+                uint64_t length, ceph::buffer::list &bl,
                 uint32_t fadvise_flags);
-  int _do_alloc_write(TransContext *txc, CollectionRef c, ObjectRef &o,
-                      WriteContext *wctx);
-  void _do_truncate(TransContext *txc, CollectionRef &c, ObjectRef &o,
-                    uint64_t offset);
-  int _do_zero(TransContext *txc, CollectionRef &c, ObjectRef &o,
-               uint64_t offset, size_t length);
-  int _do_clone_range(TransContext *txc, CollectionRef &c, ObjectRef &oldo,
-                      ObjectRef &newo, uint64_t srcoff, uint64_t length,
-                      uint64_t dstoff) {
-    return 0;
-  }
+
+  void _do_write_data(CollectionRef &c, ObjectRef &o, uint64_t offset,
+                      uint64_t length, bufferlist &bl,
+                      std::vector<bufferlist> &bls);
+  void _do_write_big(CollectionRef &c, ObjectRef &o, uint64_t offset,
+                     uint64_t length, bufferlist::iterator &blp);
+  void _do_write_small(CollectionRef &c, ObjectRef &o, uint64_t offset,
+                       uint64_t length, bufferlist::iterator &blp);
+
+  int _do_alloc_write(CollectionRef c, ObjectRef &o,
+                      std::vector<bufferlist> &bls);
+
+  void _do_truncate(CollectionRef &c, ObjectRef &o, uint64_t offset);
+  int _do_zero(CollectionRef &c, ObjectRef &o, uint64_t offset, size_t length);
+  int _do_clone_range(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo,
+                      uint64_t srcoff, uint64_t length, uint64_t dstoff);
   int _do_read(Collection *c, ObjectRef &o, uint64_t offset, size_t len,
                ceph::buffer::list &bl, uint32_t op_flags = 0,
                uint64_t retry_count = 0);
 
-  // _wctx_finish will empty out old_extents
-  void _wctx_finish(TransContext *txc, CollectionRef &c, ObjectRef &o,
-                    WriteContext *wctx);
-
   // Members
 
   boost::scoped_ptr<Allocator> alloc;
-
-  ceph::mutex zombie_osr_lock =
-      ceph::make_mutex("FragmentationSimulator::zombie_osr_lock");
   uint32_t next_sequencer_id = 0;
-  std::map<coll_t, OpSequencerRef>
-      zombie_osr_set; ///< std::set of OpSequencers for deleted collections
 
   std::atomic<uint64_t> nid_last = {0};
-  std::atomic<int> csum_type = {Checksummer::CSUM_CRC32C};
 
-  uint64_t block_size = 0;      ///< block size of block device (power of 2)
-  uint64_t block_mask = 0;      ///< mask to get just the block offset
-  size_t block_size_order = 0;  ///< bits to shift to get block size
-  uint64_t optimal_io_size = 0; ///< best performance io size for block device
-
-  uint64_t min_alloc_size;          ///< minimum allocation unit (power of 2)
-  uint8_t min_alloc_size_order = 0; ///< bits to shift to get min_alloc_size
+  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
   static_assert(std::numeric_limits<uint8_t>::max() >
                     std::numeric_limits<decltype(min_alloc_size)>::digits,
                 "not enough bits for min_alloc_size");
 
-  std::atomic<Compressor::CompressionMode> comp_mode = {
-      Compressor::COMP_NONE}; ///< compression mode
-  CompressorRef compressor;
-  std::atomic<uint64_t> comp_min_blob_size = {0};
-  std::atomic<uint64_t> comp_max_blob_size = {0};
-
-  ceph::mutex qlock = ceph::make_mutex("FragmentationSimulator::Alerts::qlock");
-  std::string failed_cmode;
-  std::set<std::string> failed_compressors;
-
-  bool _set_compression_alert(bool cmode, const char *s) {
-    std::lock_guard l(qlock);
-    if (cmode) {
-      bool ret = failed_cmode.empty();
-      failed_cmode = s;
-      return ret;
-    }
-    return failed_compressors.emplace(s).second;
-  }
-  void _clear_compression_alert() {
-    std::lock_guard l(qlock);
-    failed_compressors.clear();
-    failed_cmode.clear();
-  }
-
-  std::atomic<uint64_t> max_blob_size = {0}; ///< maximum blob size
-  ///
   ///< rwlock to protect coll_map/new_coll_map
   ceph::shared_mutex coll_lock =
       ceph::make_shared_mutex("FragmentationSimulator::coll_lock");
   std::unordered_map<coll_t, CollectionRef> coll_map;
-  bool collections_had_errors = false;
   std::unordered_map<coll_t, CollectionRef> new_coll_map;
 
-  Finisher finisher;
-
 public:
-  FragmentationSimulator(CephContext *cct, const std::string &path_)
-      : ObjectStore(cct, path_), alloc(nullptr),
-        finisher(cct, "commit_finisher", "cfin") {}
+  ObjectStoreImitator(CephContext *cct, const std::string &path_)
+      : ObjectStore(cct, path_), alloc(nullptr) {}
 
-  ~FragmentationSimulator() = default;
+  ~ObjectStoreImitator() = default;
 
   void init_alloc(const std::string &alloc_type, int64_t size,
                   uint64_t min_alloc_size);
@@ -486,8 +266,8 @@ public:
   std::string get_type() override { return "FragmentationSimulator"; }
 
   bool test_mount_in_use() override { return false; }
-  int mount() override;
-  int umount() override;
+  int mount() override { return 0; }
+  int umount() override { return 0; }
 
   int validate_hobject_key(const hobject_t &obj) const override { return 0; }
   unsigned get_max_attr_name_length() override { return 256; }
@@ -608,31 +388,18 @@ public:
   const PerfCounters *get_perf_counters() const override { return nullptr; };
 };
 
-void FragmentationSimulator::init_alloc(const std::string &alloc_type,
-                                        int64_t size, uint64_t min_alloc_size) {
+void ObjectStoreImitator::init_alloc(const std::string &alloc_type,
+                                     int64_t size, uint64_t min_alloc_size) {
   alloc.reset(Allocator::create(cct, alloc_type, size, min_alloc_size));
 }
 
 // ------- Collections -------
 
-int FragmentationSimulator::_merge_collection(TransContext *txc,
-                                              CollectionRef *c,
-                                              CollectionRef &d, unsigned bits) {
+int ObjectStoreImitator::_merge_collection(CollectionRef *c, CollectionRef &d,
+                                           unsigned bits) {
   std::unique_lock l((*c)->lock);
   std::unique_lock l2(d->lock);
   coll_t cid = (*c)->cid;
-
-  // flush all previous deferred writes on the source collection to ensure
-  // that all deferred writes complete before we merge as the target
-  // collection's sequencer may need to order new ops after those writes.
-
-  _osr_drain((*c)->osr.get());
-
-  // move any cached items (onodes and referenced shared blobs) that will
-  // belong to the child collection post-split.  leave everything else behind.
-  // this may include things that don't strictly belong to the now-smaller
-  // parent split, but the OSD will always send us a split for every new
-  // child.
 
   spg_t pgid, dest_pgid;
   bool is_pg = cid.is_pg(&pgid);
@@ -647,25 +414,16 @@ int FragmentationSimulator::_merge_collection(TransContext *txc,
   // remove source collection
   {
     std::unique_lock l3(coll_lock);
-    _do_remove_collection(txc, c);
+    _do_remove_collection(c);
   }
 
   return 0;
 }
 
-int FragmentationSimulator::_split_collection(TransContext *txc,
-                                              CollectionRef &c,
-                                              CollectionRef &d, unsigned bits,
-                                              int rem) {
+int ObjectStoreImitator::_split_collection(CollectionRef &c, CollectionRef &d,
+                                           unsigned bits, int rem) {
   std::unique_lock l(c->lock);
   std::unique_lock l2(d->lock);
-
-  // flush all previous deferred writes on this sequencer.  this is a bit
-  // heavyweight, but we need to make sure all deferred writes complete
-  // before we split as the new collection's sequencer may need to order
-  // this after those writes, and we don't bother with the complexity of
-  // moving those TransContexts over to the new osr.
-  _osr_drain_preceding(txc);
 
   // move any cached items (onodes and referenced shared blobs) that will
   // belong to the child collection post-split.  leave everything else behind.
@@ -691,25 +449,15 @@ int FragmentationSimulator::_split_collection(TransContext *txc,
 
 // ------- Transactions -------
 
-int FragmentationSimulator::queue_transactions(CollectionHandle &ch,
-                                               std::vector<Transaction> &tls,
-                                               TrackedOpRef op,
-                                               ThreadPool::TPHandle *handle) {
+int ObjectStoreImitator::queue_transactions(CollectionHandle &ch,
+                                            std::vector<Transaction> &tls,
+                                            TrackedOpRef op,
+                                            ThreadPool::TPHandle *handle) {
   FUNCTRACE(cct);
-  std::list<Context *> on_applied, on_commit, on_applied_sync;
-  ObjectStore::Transaction::collect_contexts(tls, &on_applied, &on_commit,
-                                             &on_applied_sync);
-
-  Collection *c = static_cast<Collection *>(ch.get());
-  OpSequencer *osr = c->osr.get();
-
-  // prepare
-  TransContext *txc =
-      _txc_create(static_cast<Collection *>(ch.get()), osr, &on_commit, op);
 
   for (std::vector<Transaction>::iterator p = tls.begin(); p != tls.end();
        ++p) {
-    _txc_add_transaction(txc, &(*p));
+    _txc_add_transaction(&(*p));
   }
 
   if (handle)
@@ -718,35 +466,11 @@ int FragmentationSimulator::queue_transactions(CollectionHandle &ch,
   if (handle)
     handle->reset_tp_timeout();
 
-  // execute (start)
-  _txc_state_proc(txc);
-
-  // we're immediately readable (unlike FileStore)
-  for (auto c : on_applied_sync) {
-    c->complete(0);
-  }
-  if (!on_applied.empty()) {
-    if (c->commit_queue) {
-      c->commit_queue->queue(on_applied);
-    } else {
-      finisher.queue(on_applied);
-    }
-  }
-
   return 0;
 }
 
-FragmentationSimulator::TransContext *
-FragmentationSimulator::_txc_create(Collection *c, OpSequencer *osr,
-                                    std::list<Context *> *on_commits,
-                                    TrackedOpRef osd_op) {
-  TransContext *txc = new TransContext(cct, c, osr, on_commits);
-  osr->queue_new(txc);
-  return txc;
-}
-
-FragmentationSimulator::CollectionRef
-FragmentationSimulator::_get_collection(const coll_t &cid) {
+ObjectStoreImitator::CollectionRef
+ObjectStoreImitator::_get_collection(const coll_t &cid) {
   std::shared_lock l(coll_lock);
   ceph::unordered_map<coll_t, CollectionRef>::iterator cp = coll_map.find(cid);
   if (cp == coll_map.end())
@@ -754,20 +478,18 @@ FragmentationSimulator::_get_collection(const coll_t &cid) {
   return cp->second;
 }
 
-void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
-                                                  Transaction *t) {
+void ObjectStoreImitator::_txc_add_transaction(Transaction *t) {
   Transaction::iterator i = t->begin();
 
   std::vector<CollectionRef> cvec(i.colls.size());
   unsigned j = 0;
-  for (std::vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
-       ++p, ++j) {
+  for (auto p = i.colls.begin(); p != i.colls.end(); ++p, ++j) {
     cvec[j] = _get_collection(*p);
   }
 
   std::vector<ObjectRef> ovec(i.objects.size());
 
-  for (int pos = 0; i.have_op(); ++pos) {
+  while (i.have_op()) {
     Transaction::Op *op = i.decode_op();
     int r = 0;
 
@@ -778,15 +500,6 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
     // collection operations
     CollectionRef &c = cvec[op->cid];
 
-    // initialize osd_pool_id and do a smoke test that all collections belong
-    // to the same pool
-    spg_t pgid;
-    if (!!c ? c->cid.is_pg(&pgid) : false) {
-      ceph_assert(txc->osd_pool_id == META_POOL_ID ||
-                  txc->osd_pool_id == pgid.pool());
-      txc->osd_pool_id = pgid.pool();
-    }
-
     switch (op->op) {
     case Transaction::OP_RMCOLL: {
       if (coll_map.find(c->cid) != coll_map.end())
@@ -796,7 +509,7 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
     case Transaction::OP_MKCOLL: {
       ceph_assert(!c);
       const coll_t &cid = i.get_cid(op->cid);
-      r = _create_collection(txc, cid, op->split_bits, &c);
+      r = _create_collection(cid, op->split_bits, &c);
       if (!r)
         continue;
 
@@ -809,14 +522,14 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
     case Transaction::OP_SPLIT_COLLECTION2: {
       uint32_t bits = op->split_bits;
       uint32_t rem = op->split_rem;
-      r = _split_collection(txc, c, cvec[op->dest_cid], bits, rem);
+      r = _split_collection(c, cvec[op->dest_cid], bits, rem);
       if (!r)
         continue;
     } break;
 
     case Transaction::OP_MERGE_COLLECTION: {
       uint32_t bits = op->split_bits;
-      r = _merge_collection(txc, &c, cvec[op->dest_cid], bits);
+      r = _merge_collection(&c, cvec[op->dest_cid], bits);
       if (!r)
         continue;
     } break;
@@ -855,11 +568,9 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
     }
 
     // these operations implicity create the object
-    bool create = false;
-    if (op->op == Transaction::OP_TOUCH || op->op == Transaction::OP_CREATE ||
-        op->op == Transaction::OP_WRITE || op->op == Transaction::OP_ZERO) {
-      create = true;
-    }
+    bool create =
+        (op->op == Transaction::OP_TOUCH || op->op == Transaction::OP_CREATE ||
+         op->op == Transaction::OP_WRITE || op->op == Transaction::OP_ZERO);
 
     // object operations
     std::unique_lock l(c->lock);
@@ -877,7 +588,7 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
     switch (op->op) {
     case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
-      _assign_nid(txc, o);
+      _assign_nid(o);
       r = 0;
       break;
 
@@ -887,15 +598,15 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
       uint32_t fadvise_flags = i.get_fadvise_flags();
       bufferlist bl;
       i.decode_bl(bl);
-      r = _write(txc, c, o, off, len, bl, fadvise_flags);
+      r = _write(c, o, off, len, bl, fadvise_flags);
     } break;
 
     case Transaction::OP_ZERO: {
       if (op->off + op->len > OBJECT_MAX_SIZE) {
         r = -E2BIG;
       } else {
-        _assign_nid(txc, o);
-        r = _do_zero(txc, c, o, op->off, op->len);
+        _assign_nid(o);
+        r = _do_zero(c, o, op->off, op->len);
       }
     } break;
 
@@ -904,11 +615,11 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
     } break;
 
     case Transaction::OP_TRUNCATE: {
-      _do_truncate(txc, c, o, op->off);
+      _do_truncate(c, o, op->off);
     } break;
 
     case Transaction::OP_REMOVE: {
-      _do_truncate(txc, c, o, 0);
+      _do_truncate(c, o, 0);
     } break;
 
     case Transaction::OP_SETATTR:
@@ -923,7 +634,7 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
         const ghobject_t &noid = i.get_oid(op->dest_oid);
         no = c->get_obj(noid, true);
       }
-      r = _clone(txc, c, o, no);
+      r = _clone(c, o, no);
     } break;
 
     case Transaction::OP_CLONERANGE:
@@ -939,7 +650,7 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
       uint64_t srcoff = op->off;
       uint64_t len = op->len;
       uint64_t dstoff = op->dest_off;
-      r = _clone_range(txc, c, o, no, srcoff, len, dstoff);
+      r = _clone_range(c, o, no, srcoff, len, dstoff);
     } break;
       {
       case Transaction::OP_COLL_ADD:
@@ -962,7 +673,7 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
         if (!no) {
           no = c->get_obj(noid, false);
         }
-        r = _rename(txc, c, o, no, noid);
+        r = _rename(c, o, no, noid);
       } break;
 
       case Transaction::OP_OMAP_CLEAR:
@@ -973,7 +684,7 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
         break;
 
       case Transaction::OP_SETALLOCHINT: {
-        r = _set_alloc_hint(txc, c, o, op->expected_object_size,
+        r = _set_alloc_hint(c, o, op->expected_object_size,
                             op->expected_write_size, op->hint);
       } break;
 
@@ -981,221 +692,46 @@ void FragmentationSimulator::_txc_add_transaction(TransContext *txc,
         derr << __func__ << " bad op " << op->op << dendl;
         ceph_abort();
       }
-
     endop:
-      if (r < 0) {
-        bool ok = false;
-
-        if (r == -ENOENT && !(op->op == Transaction::OP_CLONERANGE ||
-                              op->op == Transaction::OP_CLONE ||
-                              op->op == Transaction::OP_CLONERANGE2 ||
-                              op->op == Transaction::OP_COLL_ADD ||
-                              op->op == Transaction::OP_SETATTR ||
-                              op->op == Transaction::OP_SETATTRS ||
-                              op->op == Transaction::OP_RMATTR ||
-                              op->op == Transaction::OP_OMAP_SETKEYS ||
-                              op->op == Transaction::OP_OMAP_RMKEYS ||
-                              op->op == Transaction::OP_OMAP_RMKEYRANGE ||
-                              op->op == Transaction::OP_OMAP_SETHEADER))
-          // -ENOENT is usually okay
-          ok = true;
-        if (r == -ENODATA)
-          ok = true;
-
-        if (!ok) {
-          const char *msg = "unexpected error code";
-
-          if (r == -ENOENT && (op->op == Transaction::OP_CLONERANGE ||
-                               op->op == Transaction::OP_CLONE ||
-                               op->op == Transaction::OP_CLONERANGE2))
-            msg = "ENOENT on clone suggests osd bug";
-
-          if (r == -ENOSPC)
-            // For now, if we hit _any_ ENOSPC, crash, before we do any damage
-            // by partially applying transactions.
-            msg = "ENOSPC from bluestore, misconfigured cluster";
-
-          if (r == -ENOTEMPTY) {
-            msg = "ENOTEMPTY suggests garbage data in osd data dir";
-          }
-
-          derr << __func__ << " error " << cpp_strerror(r)
-               << " not handled on operation " << op->op << " (op " << pos
-               << ", counting from 0)" << dendl;
-          derr << msg << dendl;
-          ceph_abort_msg("unexpected error");
-        }
-      }
-    }
-  }
-}
-
-void FragmentationSimulator::_txc_state_proc(TransContext *txc) {
-  while (true) {
-    switch (txc->get_state()) {
-    case TransContext::STATE_PREPARE:
-      // In BLueStore this is where we submitted IO ops to BlockDevice
-      // ** fall-thru **
-
-    case TransContext::STATE_AIO_WAIT:
-      _txc_finish_io(txc); // may trigger blocked txc's too
-      return;
-
-    case TransContext::STATE_IO_DONE:
-      txc->set_state(TransContext::STATE_FINISHING);
-      return;
-
-    case TransContext::STATE_FINISHING:
-      _txc_finish(txc);
-      if (txc->ch->commit_queue) {
-        txc->ch->commit_queue->queue(txc->oncommits);
-      } else {
-        finisher.queue(txc->oncommits);
-      }
-
-      return;
-
-    default:
-      ceph_abort_msg("unexpected txc state");
       return;
     }
   }
 }
 
-void FragmentationSimulator::_txc_finish_io(TransContext *txc) {
-  OpSequencer *osr = txc->osr.get();
-  std::lock_guard l(osr->qlock);
-  txc->set_state(TransContext::STATE_IO_DONE);
-  OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
-  while (p != osr->q.begin()) {
-    --p;
-    if (p->get_state() < TransContext::STATE_IO_DONE) {
-      return;
-    }
-    if (p->get_state() > TransContext::STATE_IO_DONE) {
-      ++p;
-      break;
-    }
-  }
-
-  do {
-    _txc_state_proc(&*p++);
-  } while (p != osr->q.end() && p->get_state() == TransContext::STATE_IO_DONE);
-
-  osr->qcond.notify_all();
-}
-
-void FragmentationSimulator::_txc_finish(TransContext *txc) {
-  ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
-
-  OpSequencerRef osr = txc->osr;
-  bool empty = false;
-  OpSequencer::q_list_t releasing_txc;
-  {
-    std::lock_guard l(osr->qlock);
-    txc->set_state(TransContext::STATE_DONE);
-    bool notify = false;
-    while (!osr->q.empty()) {
-      TransContext *txc = &osr->q.front();
-      if (txc->get_state() != TransContext::STATE_DONE) {
-        if (txc->get_state() == TransContext::STATE_PREPARE) {
-          // for _osr_drain_preceding()
-          notify = true;
-        }
-        break;
-      }
-
-      osr->q.pop_front();
-      releasing_txc.push_back(*txc);
-    }
-
-    if (osr->q.empty()) {
-      empty = true;
-    }
-
-    // only drain()/drain_preceding() need wakeup,
-    // other cases use kv_submitted_waiters
-    if (notify || empty) {
-      osr->qcond.notify_all();
-    }
-  }
-
-  while (!releasing_txc.empty()) {
-    // release to allocator only after all preceding txc's have also
-    // finished any deferred writes that potentially land in these
-    // blocks
-    auto txc = &releasing_txc.front();
-    _txc_release_alloc(txc);
-    releasing_txc.pop_front();
-    delete txc;
-  }
-
-  if (empty && osr->zombie) {
-    std::lock_guard l(zombie_osr_lock);
-    zombie_osr_set.erase(osr->cid);
-  }
-}
-
-void FragmentationSimulator::_txc_release_alloc(TransContext *txc) {
-  // it's expected we're called with lazy_release_lock already taken!
-  if (unlikely(cct->_conf->bluestore_debug_no_reuse_blocks)) {
-    goto out;
-  }
-  alloc->release(txc->released);
-
-out:
-  txc->allocated.clear();
-  txc->released.clear();
+void ObjectStoreImitator::_release_alloc(const PExtentVector &release_vec) {
+  alloc->release(release_vec);
 }
 
 // ------- Helpers -------
 
-void FragmentationSimulator::_assign_nid(TransContext *txc, ObjectRef &o) {
+void ObjectStoreImitator::_assign_nid(ObjectRef &o) {
   if (o->nid) {
     ceph_assert(o->exists);
   }
 
   o->nid = ++nid_last;
-  txc->last_nid = o->nid;
   o->exists = true;
 }
 
-int FragmentationSimulator::_do_zero(TransContext *txc, CollectionRef &c,
-                                     ObjectRef &o, uint64_t offset,
-                                     size_t length) {
-  WriteContext wctx;
-  o->punch_hole(offset, length, &wctx.old_extents);
-  _wctx_finish(txc, c, o, &wctx);
+int ObjectStoreImitator::_do_zero(CollectionRef &c, ObjectRef &o,
+                                  uint64_t offset, size_t length) {
+  PExtentVector old_extents;
+  o->punch_hole(offset, length, old_extents);
+  _release_alloc(old_extents);
   return 0;
 }
 
-int FragmentationSimulator::_do_read(Collection *c, ObjectRef &o,
-                                     uint64_t offset, size_t len,
-                                     ceph::buffer::list &bl, uint32_t op_flags,
-                                     uint64_t retry_count) {
+int ObjectStoreImitator::_do_read(Collection *c, ObjectRef &o, uint64_t offset,
+                                  size_t len, ceph::buffer::list &bl,
+                                  uint32_t op_flags, uint64_t retry_count) {
   auto data = std::string(len, 'a');
   bl.append(data);
   return bl.length();
 }
 
-void FragmentationSimulator::_wctx_finish(TransContext *txc, CollectionRef &c,
-                                          ObjectRef &o, WriteContext *wctx) {
-
-  auto oep = wctx->old_extents.begin();
-  while (oep != wctx->old_extents.end()) {
-    auto &r = *oep;
-    for (auto e : r) {
-      txc->released.insert(e.offset, e.length);
-    }
-
-    delete &r;
-  }
-}
-
-int FragmentationSimulator::_do_write(TransContext *txc, CollectionRef &c,
-                                      ObjectRef &o, uint64_t offset,
-                                      uint64_t length, bufferlist &bl,
-                                      uint32_t fadvise_flags) {
+int ObjectStoreImitator::_do_write(CollectionRef &c, ObjectRef &o,
+                                   uint64_t offset, uint64_t length,
+                                   bufferlist &bl, uint32_t fadvise_flags) {
   int r = 0;
   uint64_t end = length + offset;
 
@@ -1203,16 +739,15 @@ int FragmentationSimulator::_do_write(TransContext *txc, CollectionRef &c,
     return 0;
   }
 
-  WriteContext wctx;
-  _choose_write_options(c, o, fadvise_flags, &wctx);
-  r = _do_alloc_write(txc, c, o, &wctx);
+  std::vector<bufferlist> bls;
+  _do_write_data(c, o, offset, length, bl, bls);
+  r = _do_alloc_write(c, o, bls);
   if (r < 0) {
     derr << __func__ << " _do_alloc_write failed with " << cpp_strerror(r)
          << dendl;
     goto out;
   }
 
-  _wctx_finish(txc, c, o, &wctx);
   if (end > o->size) {
     o->size = end;
   }
@@ -1222,278 +757,119 @@ int FragmentationSimulator::_do_write(TransContext *txc, CollectionRef &c,
 out:
   return r;
 }
+
+void ObjectStoreImitator::_do_write_data(CollectionRef &c, ObjectRef &o,
+                                         uint64_t offset, uint64_t length,
+                                         bufferlist &bl,
+                                         std::vector<bufferlist> &bls) {
+  uint64_t end = offset + length;
+  bufferlist::iterator p = bl.begin();
+
+  if (offset / min_alloc_size == (end - 1) / min_alloc_size &&
+      (length != min_alloc_size)) {
+    // we fall within the same block
+    _do_write_small(c, o, offset, length, p);
+  } else {
+    uint64_t head_offset, head_length;
+    uint64_t middle_offset, middle_length;
+    uint64_t tail_offset, tail_length;
+
+    head_offset = offset;
+    head_length = p2nphase(offset, min_alloc_size);
+
+    tail_offset = p2align(end, min_alloc_size);
+    tail_length = p2phase(end, min_alloc_size);
+
+    middle_offset = head_offset + head_length;
+    middle_length = length - head_length - tail_length;
+
+    if (head_length) {
+      _do_write_small(c, o, head_offset, head_length, p);
+    }
+
+    _do_write_big(c, o, middle_offset, middle_length, p);
+
+    if (tail_length) {
+      _do_write_small(c, o, tail_offset, tail_length, p);
+    }
+  }
+}
+
+int ObjectStoreImitator::_do_clone_range(CollectionRef &c, ObjectRef &oldo,
+                                         ObjectRef &newo, uint64_t srcoff,
+                                         uint64_t length, uint64_t dstoff) {
+  return 0;
+}
+
 // ------- Operations -------
 
-int FragmentationSimulator::_write(TransContext *txc, CollectionRef &c,
-                                   ObjectRef &o, uint64_t offset, size_t length,
-                                   bufferlist &bl, uint32_t fadvise_flags) {
+int ObjectStoreImitator::_write(CollectionRef &c, ObjectRef &o, uint64_t offset,
+                                size_t length, bufferlist &bl,
+                                uint32_t fadvise_flags) {
   int r = 0;
   if (offset + length >= OBJECT_MAX_SIZE) {
     r = -E2BIG;
   } else {
-    _assign_nid(txc, o);
-    r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    _assign_nid(o);
+    r = _do_write(c, o, offset, length, bl, fadvise_flags);
   }
 
   return r;
 }
 
-template <typename T, typename F>
-T select_option(const std::string &opt_name, T val1, F f) {
-  // NB: opt_name reserved for future use
-  std::optional<T> val2 = f();
-  if (val2) {
-    return *val2;
-  }
-  return val1;
-}
+int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
+                                         bufferlist &bl) {
 
-void FragmentationSimulator::_choose_write_options(CollectionRef &c,
-                                                   ObjectRef &o,
-                                                   uint32_t fadvise_flags,
-                                                   WriteContext *wctx) {
-  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
-    wctx->buffered = true;
-  } else if (cct->_conf->bluestore_default_buffered_write &&
-             (fadvise_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
-                               CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
-    wctx->buffered = true;
-  }
-
-  // apply basic csum block size
-  wctx->csum_order = block_size_order;
-
-  // compression parameters
-  unsigned alloc_hints = o->alloc_hint_flags;
-  auto cm = select_option("compression_mode", comp_mode.load(), [&]() {
-    std::string val;
-    if (c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
-      return std::optional<Compressor::CompressionMode>(
-          Compressor::get_comp_mode_type(val));
-    }
-    return std::optional<Compressor::CompressionMode>();
-  });
-
-  wctx->compress =
-      (cm != Compressor::COMP_NONE) &&
-      ((cm == Compressor::COMP_FORCE) ||
-       (cm == Compressor::COMP_AGGRESSIVE &&
-        (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_INCOMPRESSIBLE) == 0) ||
-       (cm == Compressor::COMP_PASSIVE &&
-        (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE)));
-
-  if ((alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_SEQUENTIAL_READ) &&
-      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_READ) == 0 &&
-      (alloc_hints & (CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE |
-                      CEPH_OSD_ALLOC_HINT_FLAG_APPEND_ONLY)) &&
-      (alloc_hints & CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE) == 0) {
-
-    wctx->csum_order = min_alloc_size_order;
-
-    if (wctx->compress) {
-      wctx->target_blob_size = select_option(
-          "compression_max_blob_size", comp_max_blob_size.load(), [&]() {
-            int64_t val;
-            if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE,
-                                 &val)) {
-              return std::optional<uint64_t>((uint64_t)val);
-            }
-            return std::optional<uint64_t>();
-          });
-    }
-  } else {
-    if (wctx->compress) {
-      wctx->target_blob_size = select_option(
-          "compression_min_blob_size", comp_min_blob_size.load(), [&]() {
-            int64_t val;
-            if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE,
-                                 &val)) {
-              return std::optional<uint64_t>((uint64_t)val);
-            }
-            return std::optional<uint64_t>();
-          });
-    }
-  }
-
-  uint64_t max_bsize = max_blob_size.load();
-  if (wctx->target_blob_size == 0 || wctx->target_blob_size > max_bsize) {
-    wctx->target_blob_size = max_bsize;
-  }
-
-  // set the min blob size floor at 2x the min_alloc_size, or else we
-  // won't be able to allocate a smaller extent for the compressed
-  // data.
-  if (wctx->compress && wctx->target_blob_size < min_alloc_size * 2) {
-    wctx->target_blob_size = min_alloc_size * 2;
-  }
-}
-
-int FragmentationSimulator::_do_alloc_write(TransContext *txc,
-                                            CollectionRef coll, ObjectRef &o,
-                                            WriteContext *wctx) {
-  if (wctx->writes.empty()) {
-    return 0;
-  }
-
-  CompressorRef c;
-  double crr = 0;
-  if (wctx->compress) {
-    c = select_option("compression_algorithm", compressor, [&]() {
-      std::string val;
-      if (coll->pool_opts.get(pool_opts_t::COMPRESSION_ALGORITHM, &val)) {
-        CompressorRef cp = compressor;
-        if (!cp || cp->get_type_name() != val) {
-          cp = Compressor::create(cct, val);
-          if (!cp) {
-            if (_set_compression_alert(false, val.c_str())) {
-              derr << __func__ << " unable to initialize " << val.c_str()
-                   << " compressor" << dendl;
-            }
-          }
-        }
-        return std::optional<CompressorRef>(cp);
-      }
-      return std::optional<CompressorRef>();
-    });
-
-    crr = select_option(
-        "compression_required_ratio",
-        cct->_conf->bluestore_compression_required_ratio, [&]() {
-          double val;
-          if (coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO,
-                                  &val)) {
-            return std::optional<double>(val);
-          }
-          return std::optional<double>();
-        });
-  }
-
-  // checksum
-  int64_t csum = csum_type.load();
-  csum = select_option("csum_type", csum, [&]() {
-    int64_t val;
-    if (coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-      return std::optional<int64_t>(val);
-    }
-    return std::optional<int64_t>();
-  });
-
-  // compress (as needed) and calc needed space
-  uint64_t need = 0;
-  uint64_t data_size = 0;
-  // 'need' is amount of space that must be provided by allocator.
-  // 'data_size' is a size of data that will be transferred to disk.
-  // Note that data_size is always <= need. This comes from:
-  // - write to blob was unaligned, and there is free space
-  // - data has been compressed
-  //
-  // We make one decision and apply it to all blobs.
-  // All blobs will be deferred or none will.
-  // We assume that allocator does its best to provide contiguous space,
-  // and the condition is : (data_size < deferred).
-
-  for (auto &wi : wctx->writes) {
-    if (c && wi.blob_length > min_alloc_size) {
-
-      // compress
-      ceph_assert(wi.b_off == 0);
-      ceph_assert(wi.blob_length == wi.bl.length());
-
-      // FIXME: memory alignment here is bad
-      bufferlist t;
-      std::optional<int32_t> compressor_message;
-      int r = c->compress(wi.bl, t, compressor_message);
-      uint64_t want_len_raw = wi.blob_length * crr;
-      uint64_t want_len = p2roundup(want_len_raw, min_alloc_size);
-      bool rejected = false;
-      uint64_t compressed_len = t.length();
-      // do an approximate (fast) estimation for resulting blob size
-      // that doesn't take header overhead  into account
-      uint64_t result_len = p2roundup(compressed_len, min_alloc_size);
-      if (r == 0 && result_len <= want_len && result_len < wi.blob_length) {
-        bluestore_compression_header_t chdr;
-        chdr.type = c->get_type();
-        chdr.length = t.length();
-        chdr.compressor_message = compressor_message;
-        encode(chdr, wi.compressed_bl);
-        wi.compressed_bl.claim_append(t);
-
-        compressed_len = wi.compressed_bl.length();
-        result_len = p2roundup(compressed_len, min_alloc_size);
-        if (result_len <= want_len && result_len < wi.blob_length) {
-          // Cool. We compressed at least as much as we were hoping to.
-          // pad out to min_alloc_size
-          wi.compressed_bl.append_zero(result_len - compressed_len);
-          wi.compressed_len = compressed_len;
-          wi.compressed = true;
-          need += result_len;
-          data_size += result_len;
-        } else {
-          rejected = true;
-        }
-      } else if (r != 0) {
-        need += wi.blob_length;
-        data_size += wi.bl.length();
-      } else {
-        rejected = true;
-      }
-
-      if (rejected) {
-        need += wi.blob_length;
-        data_size += wi.bl.length();
-      }
-    } else {
-      need += wi.blob_length;
-      data_size += wi.bl.length();
-    }
-  }
+  // No compression for now
+  uint64_t need = bl.length();
 
   PExtentVector prealloc;
-  prealloc.reserve(2 * wctx->writes.size());
-  int64_t prealloc_left = 0;
-  prealloc_left = alloc->allocate(need, min_alloc_size, need, 0, &prealloc);
+
+  int64_t prealloc_left =
+      alloc->allocate(need, min_alloc_size, need, 0, &prealloc);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
-    derr << __func__ << " failed to allocate 0x" << std::hex << need
-         << " allocated 0x " << (prealloc_left < 0 ? 0 : prealloc_left)
-         << " min_alloc_size 0x" << min_alloc_size << " available 0x "
-         << alloc->get_free() << std::dec << dendl;
     if (prealloc.size()) {
       alloc->release(prealloc);
     }
     return -ENOSPC;
   }
 
-  dout(20) << __func__ << std::hex << " need=0x" << need << " data=0x"
-           << data_size << " prealloc " << prealloc << dendl;
   auto prealloc_pos = prealloc.begin();
   ceph_assert(prealloc_pos != prealloc.end());
 
-  for (auto &wi : wctx->writes) {
-    uint64_t final_length = wi.blob_length;
-    PExtentVector extents;
-    int64_t left = final_length;
+  PExtentVector extents;
+  int64_t left = need;
 
-    while (left > 0) {
-      ceph_assert(prealloc_left > 0);
-      if (prealloc_pos->length <= left) {
-        prealloc_left -= prealloc_pos->length;
-        left -= prealloc_pos->length;
-        extents.push_back(*prealloc_pos);
-        ++prealloc_pos;
-      } else {
-        extents.emplace_back(prealloc_pos->offset, left);
-        prealloc_pos->offset += left;
-        prealloc_pos->length -= left;
-        prealloc_left -= left;
-        left = 0;
-        break;
-      }
+  while (left > 0) {
+    ceph_assert(prealloc_left > 0);
+    if (prealloc_pos->length <= left) {
+      prealloc_left -= prealloc_pos->length;
+      left -= prealloc_pos->length;
+      extents.push_back(*prealloc_pos);
+      ++prealloc_pos;
+    } else {
+      extents.emplace_back(prealloc_pos->offset, left);
+      prealloc_pos->offset += left;
+      prealloc_pos->length -= left;
+      prealloc_left -= left;
+      left = 0;
+      break;
+    }
+  }
+
+  for (auto &p : extents) {
+    o->extents.push_back(p);
+  }
+
+  if (prealloc_left > 0) {
+    PExtentVector old_extents;
+    while (prealloc_pos != prealloc.end()) {
+      old_extents.push_back(*prealloc_pos);
+      prealloc_left -= prealloc_pos->length;
+      ++prealloc_pos;
     }
 
-    for (auto &p : extents) {
-      txc->allocated.insert(p.offset, p.length);
-      o->extents.push_back(p);
-    }
+    _release_alloc(old_extents);
   }
 
   ceph_assert(prealloc_pos == prealloc.end());
@@ -1501,20 +877,19 @@ int FragmentationSimulator::_do_alloc_write(TransContext *txc,
   return 0;
 }
 
-void FragmentationSimulator::_do_truncate(TransContext *txc, CollectionRef &c,
-                                          ObjectRef &o, uint64_t offset) {
+void ObjectStoreImitator::_do_truncate(CollectionRef &c, ObjectRef &o,
+                                       uint64_t offset) {
   if (offset == o->size)
     return;
   o->size = offset;
 
-  WriteContext wctx;
-  o->punch_hole(offset, o->size - offset, &wctx.old_extents);
-  _wctx_finish(txc, c, o, &wctx);
+  PExtentVector old_extents;
+  o->punch_hole(offset, o->size - offset, old_extents);
+  _release_alloc(old_extents);
 }
 
-int FragmentationSimulator::_rename(TransContext *txc, CollectionRef &c,
-                                    ObjectRef &oldo, ObjectRef &newo,
-                                    const ghobject_t &new_oid) {
+int ObjectStoreImitator::_rename(CollectionRef &c, ObjectRef &oldo,
+                                 ObjectRef &newo, const ghobject_t &new_oid) {
   int r;
   ghobject_t old_oid = oldo->id;
   if (newo) {
@@ -1533,37 +908,35 @@ out:
   return r;
 }
 
-int FragmentationSimulator::_set_alloc_hint(TransContext *txc, CollectionRef &c,
-                                            ObjectRef &o,
-                                            uint64_t expected_object_size,
-                                            uint64_t expected_write_size,
-                                            uint32_t flags) {
-  int r = 0;
+int ObjectStoreImitator::_set_alloc_hint(CollectionRef &c, ObjectRef &o,
+                                         uint64_t expected_object_size,
+                                         uint64_t expected_write_size,
+                                         uint32_t flags) {
   o->expected_object_size = expected_object_size;
   o->expected_write_size = expected_write_size;
   o->alloc_hint_flags = flags;
-  return r;
+  return 0;
 }
 
-int FragmentationSimulator::_clone(TransContext *txc, CollectionRef &c,
-                                   ObjectRef &oldo, ObjectRef &newo) {
+int ObjectStoreImitator::_clone(CollectionRef &c, ObjectRef &oldo,
+                                ObjectRef &newo) {
   int r = 0;
   if (oldo->id.hobj.get_hash() != newo->id.hobj.get_hash()) {
     return -EINVAL;
   }
 
-  _assign_nid(txc, newo);
+  _assign_nid(newo);
 
-  _do_truncate(txc, c, newo, 0);
+  _do_truncate(c, newo, 0);
   if (cct->_conf->bluestore_clone_cow) {
-    _do_clone_range(txc, c, oldo, newo, 0, oldo->size, 0);
+    _do_clone_range(c, oldo, newo, 0, oldo->size, 0);
   } else {
     bufferlist bl;
     bl.clear();
     r = _do_read(c.get(), oldo, 0, oldo->size, bl, 0);
     if (r < 0)
       goto out;
-    r = _do_write(txc, c, newo, 0, oldo->size, bl, 0);
+    r = _do_write(c, newo, 0, oldo->size, bl, 0);
     if (r < 0)
       goto out;
   }
@@ -1574,10 +947,9 @@ out:
   return r;
 }
 
-int FragmentationSimulator::_clone_range(TransContext *txc, CollectionRef &c,
-                                         ObjectRef &oldo, ObjectRef &newo,
-                                         uint64_t srcoff, uint64_t length,
-                                         uint64_t dstoff) {
+int ObjectStoreImitator::_clone_range(CollectionRef &c, ObjectRef &oldo,
+                                      ObjectRef &newo, uint64_t srcoff,
+                                      uint64_t length, uint64_t dstoff) {
 
   int r = 0;
 
@@ -1591,18 +963,20 @@ int FragmentationSimulator::_clone_range(TransContext *txc, CollectionRef &c,
     goto out;
   }
 
-  _assign_nid(txc, newo);
+  _assign_nid(newo);
 
   if (length > 0) {
     if (cct->_conf->bluestore_clone_cow) {
-      _do_zero(txc, c, newo, dstoff, length);
-      _do_clone_range(txc, c, oldo, newo, srcoff, length, dstoff);
+      _do_zero(c, newo, dstoff, length);
+      _do_clone_range(c, oldo, newo, srcoff, length, dstoff);
     } else {
       bufferlist bl;
+      bl.clear();
+
       r = _do_read(c.get(), oldo, srcoff, length, bl, 0);
       if (r < 0)
         goto out;
-      r = _do_write(txc, c, newo, dstoff, bl.length(), bl, 0);
+      r = _do_write(c, newo, dstoff, bl.length(), bl, 0);
       if (r < 0)
         goto out;
     }
@@ -1617,7 +991,7 @@ out:
 // ------- Collections -------
 
 ObjectStore::CollectionHandle
-FragmentationSimulator::open_collection(const coll_t &cid) {
+ObjectStoreImitator::open_collection(const coll_t &cid) {
   std::shared_lock l(coll_lock);
   ceph::unordered_map<coll_t, CollectionRef>::iterator cp = coll_map.find(cid);
   if (cp == coll_map.end())
@@ -1626,15 +1000,14 @@ FragmentationSimulator::open_collection(const coll_t &cid) {
 }
 
 ObjectStore::CollectionHandle
-FragmentationSimulator::create_new_collection(const coll_t &cid) {
+ObjectStoreImitator::create_new_collection(const coll_t &cid) {
   std::unique_lock l{coll_lock};
   auto c = ceph::make_ref<Collection>(this, cid);
   new_coll_map[cid] = c;
-  _osr_attach(c.get());
   return c;
 }
 
-void FragmentationSimulator::set_collection_commit_queue(
+void ObjectStoreImitator::set_collection_commit_queue(
     const coll_t &cid, ContextQueue *commit_queue) {
   if (commit_queue) {
     std::shared_lock l(coll_lock);
@@ -1646,8 +1019,7 @@ void FragmentationSimulator::set_collection_commit_queue(
   }
 }
 
-bool FragmentationSimulator::exists(CollectionHandle &c_,
-                                    const ghobject_t &oid) {
+bool ObjectStoreImitator::exists(CollectionHandle &c_, const ghobject_t &oid) {
 
   Collection *c = static_cast<Collection *>(c_.get());
   if (!c->exists)
@@ -1665,8 +1037,8 @@ bool FragmentationSimulator::exists(CollectionHandle &c_,
   return r;
 }
 
-int FragmentationSimulator::set_collection_opts(CollectionHandle &ch,
-                                                const pool_opts_t &opts) {
+int ObjectStoreImitator::set_collection_opts(CollectionHandle &ch,
+                                             const pool_opts_t &opts) {
   Collection *c = static_cast<Collection *>(ch.get());
   if (!c->exists)
     return -ENOENT;
@@ -1675,7 +1047,7 @@ int FragmentationSimulator::set_collection_opts(CollectionHandle &ch,
   return 0;
 }
 
-int FragmentationSimulator::list_collections(std::vector<coll_t> &ls) {
+int ObjectStoreImitator::list_collections(std::vector<coll_t> &ls) {
   std::shared_lock l(coll_lock);
   ls.reserve(coll_map.size());
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
@@ -1685,13 +1057,12 @@ int FragmentationSimulator::list_collections(std::vector<coll_t> &ls) {
   return 0;
 }
 
-bool FragmentationSimulator::collection_exists(const coll_t &c) {
+bool ObjectStoreImitator::collection_exists(const coll_t &c) {
   std::shared_lock l(coll_lock);
   return coll_map.count(c);
 }
 
-int FragmentationSimulator::collection_empty(CollectionHandle &ch,
-                                             bool *empty) {
+int ObjectStoreImitator::collection_empty(CollectionHandle &ch, bool *empty) {
   std::vector<ghobject_t> ls;
   ghobject_t next;
   int r =
@@ -1704,17 +1075,17 @@ int FragmentationSimulator::collection_empty(CollectionHandle &ch,
   return 0;
 }
 
-int FragmentationSimulator::collection_bits(CollectionHandle &ch) {
+int ObjectStoreImitator::collection_bits(CollectionHandle &ch) {
   Collection *c = static_cast<Collection *>(ch.get());
   std::shared_lock l(c->lock);
   return c->cnode.bits;
 }
 
-int FragmentationSimulator::collection_list(CollectionHandle &c_,
-                                            const ghobject_t &start,
-                                            const ghobject_t &end, int max,
-                                            std::vector<ghobject_t> *ls,
-                                            ghobject_t *pnext) {
+int ObjectStoreImitator::collection_list(CollectionHandle &c_,
+                                         const ghobject_t &start,
+                                         const ghobject_t &end, int max,
+                                         std::vector<ghobject_t> *ls,
+                                         ghobject_t *pnext) {
   Collection *c = static_cast<Collection *>(c_.get());
   c->flush();
   int r;
@@ -1726,7 +1097,7 @@ int FragmentationSimulator::collection_list(CollectionHandle &c_,
   return r;
 }
 
-int FragmentationSimulator::_collection_list(
+int ObjectStoreImitator::_collection_list(
     Collection *c, const ghobject_t &start, const ghobject_t &end, int max,
     bool legacy, std::vector<ghobject_t> *ls, ghobject_t *next) {
 
@@ -1760,12 +1131,10 @@ int FragmentationSimulator::_collection_list(
   return 0;
 }
 
-int FragmentationSimulator::_remove_collection(TransContext *txc,
-                                               const coll_t &cid,
-                                               CollectionRef *c) {
+int ObjectStoreImitator::_remove_collection(const coll_t &cid,
+                                            CollectionRef *c) {
   int r;
 
-  (*c)->flush_all_but_last();
   {
     std::unique_lock l(coll_lock);
     if (!*c) {
@@ -1781,7 +1150,7 @@ int FragmentationSimulator::_remove_collection(TransContext *txc,
       }
     }
 
-    _do_remove_collection(txc, c);
+    _do_remove_collection(c);
     r = 0;
   }
 
@@ -1789,17 +1158,14 @@ out:
   return r;
 }
 
-void FragmentationSimulator::_do_remove_collection(TransContext *txc,
-                                                   CollectionRef *c) {
+void ObjectStoreImitator::_do_remove_collection(CollectionRef *c) {
   coll_map.erase((*c)->cid);
   (*c)->exists = false;
-  _osr_register_zombie((*c)->osr.get());
   c->reset();
 }
 
-int FragmentationSimulator::_create_collection(TransContext *txc,
-                                               const coll_t &cid, unsigned bits,
-                                               CollectionRef *c) {
+int ObjectStoreImitator::_create_collection(const coll_t &cid, unsigned bits,
+                                            CollectionRef *c) {
   int r;
   bufferlist bl;
 
@@ -1822,48 +1188,4 @@ int FragmentationSimulator::_create_collection(TransContext *txc,
 
 out:
   return r;
-}
-// -------- OpSequencer --------
-
-void FragmentationSimulator::_osr_attach(Collection *c) {
-  // note: caller has coll_lock
-  auto q = coll_map.find(c->cid);
-  if (q != coll_map.end()) {
-    c->osr = q->second->osr;
-  } else {
-    std::lock_guard l(zombie_osr_lock);
-    auto p = zombie_osr_set.find(c->cid);
-    if (p == zombie_osr_set.end()) {
-      c->osr = ceph::make_ref<OpSequencer>(this, next_sequencer_id++, c->cid);
-    } else {
-      c->osr = p->second;
-      zombie_osr_set.erase(p);
-      c->osr->zombie = false;
-    }
-  }
-}
-
-void FragmentationSimulator::_osr_register_zombie(OpSequencer *osr) {
-  std::lock_guard l(zombie_osr_lock);
-  osr->zombie = true;
-  auto i = zombie_osr_set.emplace(osr->cid, osr);
-  ceph_assert(i.second || i.first->second == osr);
-}
-void FragmentationSimulator::_osr_drain(OpSequencer *osr) { osr->drain(); }
-void FragmentationSimulator::_osr_drain_preceding(TransContext *txc) {
-  OpSequencer *osr = txc->osr.get();
-  osr->drain_preceding(txc);
-}
-
-// -------- Mount --------
-
-int FragmentationSimulator::mount() {
-  finisher.start();
-  return 0;
-}
-
-int FragmentationSimulator::umount() {
-  finisher.wait_for_empty();
-  finisher.stop();
-  return 0;
 }
