@@ -168,6 +168,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
   DIR *dir;
   struct dirent *entry;
 
+  ldpp_dout(dpp, 0) << "Ben 1 dname=" << dname << dendl;
   dir_fd = openat(parent_fd, dname, O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (dir_fd < 0) {
     dir_fd = errno;
@@ -176,6 +177,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     return -dir_fd;
   }
 
+  ldpp_dout(dpp, 0) << "Ben 2" << dendl;
   dir = fdopendir(dir_fd);
   if (dir == NULL) {
     ret = errno;
@@ -197,11 +199,13 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     }
 
     std::string_view d_name = entry->d_name;
+  ldpp_dout(dpp, 0) << "Ben 3 name=" << d_name << dendl;
     bool is_mp = d_name.starts_with("." + mp_ns);
     if (!is_mp && !delete_children) {
       return -ENOTEMPTY;
     }
 
+  ldpp_dout(dpp, 0) << "Ben 4" << dendl;
     ret = statx(dir_fd, entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
@@ -210,8 +214,10 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       return -ret;
     }
 
+  ldpp_dout(dpp, 0) << "Ben 5" << dendl;
     if (S_ISDIR(stx.stx_mode)) {
       /* Recurse */
+  ldpp_dout(dpp, 0) << "Ben 6" << dendl;
       ret = delete_directory(dir_fd, entry->d_name, true, dpp);
       if (ret < 0) {
         return ret;
@@ -220,6 +226,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
       continue;
     }
 
+  ldpp_dout(dpp, 0) << "Ben 7" << dendl;
     /* Otherwise, unlink */
     ret = unlinkat(dir_fd, entry->d_name, 0);
     if (ret < 0) {
@@ -228,8 +235,10 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
                         << ": " << cpp_strerror(ret) << dendl;
       return -ret;
     }
+  ldpp_dout(dpp, 0) << "Ben 8" << dendl;
   }
 
+  ldpp_dout(dpp, 0) << "Ben 9" << dendl;
   ret = unlinkat(parent_fd, dname, AT_REMOVEDIR);
   if (ret < 0) {
     ret = errno;
@@ -240,6 +249,7 @@ static int delete_directory(int parent_fd, const char* dname, bool delete_childr
     }
   }
 
+  ldpp_dout(dpp, 0) << "Ben 10" << dendl;
   return 0;
 }
 
@@ -744,11 +754,13 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
 {
   int ret;
 
+  ldpp_dout(dpp, 0) << "Rey 1 name=" << get_name() << dendl;
   if (get_name()[0] == '.') {
     /* Skip dotfiles */
     return -ERR_INVALID_OBJECT_NAME;
   }
   ret = stat(dpp);
+  ldpp_dout(dpp, 0) << "Rey 2 stat=" << ret << dendl;
   if (ret < 0) {
     return ret;
   }
@@ -761,16 +773,16 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   ret = open(dpp);
+  ldpp_dout(dpp, 0) << "Rey 3 open=" << ret << dendl;
   if (ret < 0) {
     return ret;
   }
   get_x_attrs(y, dpp, dir_fd, attrs, get_name());
 
-  ldpp_dout(dpp, 10) << "Rey 1 \"" << get_name() << "\"" << dendl;
   bufferlist bl;
   if (get_attr(attrs, RGW_POSIX_ATTR_BUCKET_INFO, bl)) {
     // Proper bucket with saved info
-    ldpp_dout(dpp, 10) << "Rey 2 owner \"" << info.owner << "\"" << dendl;
+    ldpp_dout(dpp, 10) << "Rey 4 owner \"" << info.owner << "\"" << dendl;
     try {
       auto bufit = bl.cbegin();
       decode(info, bufit);
@@ -778,7 +790,7 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
       ldout(driver->ctx(), 0) << "ERROR: " << __func__ << ": failed to decode " RGW_POSIX_ATTR_BUCKET_INFO " attr" << dendl;
       return -EINVAL;
     }
-    ldpp_dout(dpp, 10) << "Rey 3 owner \"" << info.owner << "\"" << dendl;
+    ldpp_dout(dpp, 10) << "Rey 5 owner \"" << info.owner << "\"" << dendl;
     // info isn't stored in attrs
     attrs.erase(RGW_POSIX_ATTR_BUCKET_INFO);
   } else {
@@ -1096,6 +1108,7 @@ int POSIXBucket::get_shadow_bucket(const DoutPrefixProvider* dpp, optional_yield
   POSIXBucket* bp;
   rgw_bucket b;
 
+  ldpp_dout(dpp, 0) << "Wedge 1 name=" << name << " tenant=" << tenant << " ns=" << ns << dendl;
   b.tenant = tenant;
   b.name = name;
 
@@ -1106,8 +1119,10 @@ int POSIXBucket::get_shadow_bucket(const DoutPrefixProvider* dpp, optional_yield
   open(dpp);
 
   bp = new POSIXBucket(driver, dir_fd, b, owner, ons);
+  ldpp_dout(dpp, 0) << "Wedge 2" << dendl;
   ret = bp->load_bucket(dpp, y);
   if (ret == -ENOENT && create) {
+  ldpp_dout(dpp, 0) << "Wedge 3" << dendl;
     /* Create it if it doesn't exist */
     ret = bp->create(dpp, y, nullptr);
   }
@@ -1116,6 +1131,7 @@ int POSIXBucket::get_shadow_bucket(const DoutPrefixProvider* dpp, optional_yield
     return ret;
   }
 
+  ldpp_dout(dpp, 0) << "Wedge 4 shadow_name=" << bp->get_name() << dendl;
   shadow->reset(bp);
   return 0;
 }
@@ -1161,10 +1177,11 @@ int POSIXBucket::open(const DoutPrefixProvider* dpp)
   if (dir_fd >= 0) {
     return 0;
   }
+  ldpp_dout(dpp, 0) << "Quigon 1 bucket " << get_name() << dendl;
 
   int ret = openat(parent_fd, get_fname().c_str(),
 		   O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
-  ldpp_dout(dpp, 0) << "Chewy 01 openat bucket " << get_name() << ": " << ret << dendl;
+  ldpp_dout(dpp, 0) << "Quigon 2 openat  ret=" << ret << dendl;
   if (ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open bucket " << get_name() << ": "
@@ -1173,7 +1190,7 @@ int POSIXBucket::open(const DoutPrefixProvider* dpp)
   }
 
   dir_fd = ret;
-  ldpp_dout(dpp, 0) << "Chewy 02 dir_fd " << dir_fd << dendl;
+  ldpp_dout(dpp, 0) << "Quigon 3 dir_fd=" << dir_fd << dendl;
 
   return 0;
 }
@@ -1183,9 +1200,12 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
 {
   POSIXObject *to = static_cast<POSIXObject*>(target_obj);
   POSIXBucket *tb = static_cast<POSIXBucket*>(target_obj->get_bucket());
+  std::string src_fname = get_fname();
+  std::string dst_fname = to->get_fname();
 
-  // swap and delete
-  int ret = renameat2(tb->get_dir_fd(dpp), get_fname().c_str(), tb->get_dir_fd(dpp), to->get_fname().c_str(), RENAME_EXCHANGE);
+  ldpp_dout(dpp, 0) << "Vader 1 src_fname= " << src_fname << " dst_fname=" << dst_fname << dendl;
+  // swap
+  int ret = renameat2(tb->get_dir_fd(dpp), src_fname.c_str(), tb->get_dir_fd(dpp), dst_fname.c_str(), RENAME_EXCHANGE);
   if(ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: renameat2 for shadow object could not finish: "
@@ -1193,7 +1213,40 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
     return -ret;
   }
 
-  remove_bucket(dpp, true, false, nullptr, y);
+  // Update saved bucket info
+  info.bucket.name = to->get_name();
+  bufferlist bl;
+  encode(info, bl);
+  ret = write_x_attr(dpp, y, dir_fd, RGW_POSIX_ATTR_BUCKET_INFO, bl, get_name());
+  if (ret < 0) {
+    return ret;
+  }
+
+  // Delete old one (could be file or directory)
+  ldpp_dout(dpp, 0) << "Vader 2 src_fname= " << src_fname << dendl;
+  struct statx stx;
+  ret = statx(parent_fd, src_fname.c_str(), AT_SYMLINK_NOFOLLOW,
+		  STATX_ALL, &stx);
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not stat object " << get_name() << ": "
+                  << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
+
+  if (S_ISREG(stx.stx_mode)) {
+  ldpp_dout(dpp, 0) << "Vader 3 File" << dendl;
+    ret = unlinkat(parent_fd, src_fname.c_str(), 0);
+  } else if (S_ISDIR(stx.stx_mode)) {
+  ldpp_dout(dpp, 0) << "Vader 4 directory" << dendl;
+    ret = delete_directory(parent_fd, src_fname.c_str(), true, dpp);
+  }
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not remove old file " << get_name()
+                      << ": " << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
 
   return 0;
 }
@@ -1243,11 +1296,15 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
       return -EINVAL;
   }
 
+  ldpp_dout(dpp, 0) << "Obiwan 1 name=" << get_name() << dendl;
   if (!b->versioned()) {
+  ldpp_dout(dpp, 0) << "Obiwan 2" << dendl;
     if (shadow) {
+  ldpp_dout(dpp, 0) << "Obiwan 3 shadow_name=" << shadow->get_name() << dendl;
       return shadow->remove_bucket(dpp, true, false, nullptr, y);
     }
 
+  ldpp_dout(dpp, 0) << "Obiwan 4" << dendl;
     int ret = unlinkat(b->get_dir_fd(dpp), get_fname().c_str(), 0);
     if (ret < 0) {
       ret = errno;
@@ -1260,12 +1317,15 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
     return 0;
   }
 
+  ldpp_dout(dpp, 0) << "Obiwan 5" << dendl;
   // Versioned directory.  Need to remove all objects matching
   b->for_each(dpp, [this, &dpp, &b](const char* name) {
     int ret;
     std::string_view vname(name);
 
+  ldpp_dout(dpp, 0) << "Obiwan 6" << dendl;
     if (vname.find(get_fname().c_str()) != std::string_view::npos) {
+  ldpp_dout(dpp, 0) << "Obiwan 6 vname=" << vname << dendl;
       ret = unlinkat(b->get_dir_fd(dpp), name, 0);
       if (ret < 0) {
         ret = errno;
@@ -1538,7 +1598,8 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
     /* multipart object */
     /* Get the shadow bucket */
     POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
-    ret = pb->get_shadow_bucket(nullptr, null_yield, std::string(),
+  ldpp_dout(dpp, 0) << "Wedge 0.5 fname=" << get_fname() << dendl;
+    ret = pb->get_shadow_bucket(dpp, null_yield, std::string(),
 				std::string(), get_fname(), false, &shadow);
     if (ret < 0) {
       return ret;
@@ -2179,20 +2240,22 @@ int POSIXMultipartPart::load(const DoutPrefixProvider* dpp, optional_yield y,
 
 int POSIXMultipartUpload::load(bool create)
 {
-  ldout(driver->ctx(), 0) << "Luke: load shadow " << get_meta() << dendl;
+  ldout(driver->ctx(), 0) << "dang: load shadow 1" << dendl;
   if (!shadow) {
+  ldout(driver->ctx(), 0) << "dang: load shadow 2 meta=" << get_meta() << dendl;
     POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
     return pb->get_shadow_bucket(nullptr, null_yield, mp_ns,
 			  std::string(), get_meta(), create, &shadow);
   }
 
+  ldout(driver->ctx(), 0) << "dang: load shadow 3" << dendl;
   return 0;
 }
 
 std::unique_ptr<rgw::sal::Object> POSIXMultipartUpload::get_meta_obj()
 {
   load();
-  ldout(driver->ctx(), 0) << "dang getting meta: " << get_meta() << " from: " << shadow->get_fname() << dendl;
+  ldout(driver->ctx(), 0) << "dang getting meta=" << get_meta() << " shadow_fname=" << shadow->get_fname() << dendl;
   return shadow->get_object(rgw_obj_key(get_meta(), std::string()));
 }
 
@@ -2202,6 +2265,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 {
   int ret;
 
+  ldpp_dout(dpp, 0) << "Luke 1" << dendl;
   /* Create the shadow bucket */
   ret = load(true);
   if (ret < 0) {
@@ -2210,11 +2274,13 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
     return ret;
   }
 
+  ldpp_dout(dpp, 0) << "Luke 2" << dendl;
   /* Now create the meta object */
   std::unique_ptr<rgw::sal::Object> meta_obj;
 
   meta_obj = get_meta_obj();
 
+  ldpp_dout(dpp, 0) << "Luke 3 meta_obj_name=" << meta_obj->get_name() << dendl;
   mp_obj.upload_info.dest_placement = dest_placement;
 
   bufferlist bl;
@@ -2222,6 +2288,7 @@ int POSIXMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y,
 
   attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
 
+  ldpp_dout(dpp, 0) << "Luke 4" << dendl;
   return meta_obj->set_obj_attrs(dpp, &attrs, nullptr, y);
 }
 
@@ -2314,6 +2381,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   auto etags_iter = part_etags.begin();
   rgw::sal::Attrs attrs = target_obj->get_attrs();
 
+  ldpp_dout(dpp, 0) << "Chewy 1 " << dendl;
   do {
     ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated);
     if (ret == -ENOENT) {
@@ -2322,6 +2390,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     if (ret < 0)
       return ret;
 
+    ldpp_dout(dpp, 0) << "Chewy 2 total_parts=" << total_parts << " parts.size=" << parts.size() << dendl;
     total_parts += parts.size();
     if (!truncated && total_parts != (int)part_etags.size()) {
       ldpp_dout(dpp, 0) << "NOTICE: total parts mismatch: have: " << total_parts
@@ -2330,9 +2399,11 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
       return ret;
     }
 
+  ldpp_dout(dpp, 0) << "Chewy 3 " << dendl;
     for (auto obj_iter = parts.begin(); etags_iter != part_etags.end() && obj_iter != parts.end(); ++etags_iter, ++obj_iter, ++handled_parts) {
       POSIXMultipartPart* part = static_cast<rgw::sal::POSIXMultipartPart*>(obj_iter->second.get());
       uint64_t part_size = part->get_size();
+  ldpp_dout(dpp, 0) << "Chewy 4 part=" << part->info.num << dendl;
       if (handled_parts < (int)part_etags.size() - 1 &&
           part_size < min_part_size) {
         ret = -ERR_TOO_SMALL;
@@ -2355,6 +2426,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return ret;
       }
 
+  ldpp_dout(dpp, 0) << "Chewy 5 part=" << part->info.num << dendl;
       hex_to_buf(part->get_etag().c_str(), petag,
 		CEPH_CRYPTO_MD5_DIGESTSIZE);
       hash.Update((const unsigned char *)petag, sizeof(petag));
@@ -2397,7 +2469,9 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
       ofs += part->get_size();
       accounted_size += part->get_size();
     }
+  ldpp_dout(dpp, 0) << "Chewy 6" << dendl;
   } while (truncated);
+  ldpp_dout(dpp, 0) << "Chewy 7 ofs=" << ofs << dendl;
   hash.Final((unsigned char *)final_etag);
 
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
@@ -2418,6 +2492,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
+  ldpp_dout(dpp, 0) << "Chewy 7" << dendl;
   // Rename to target_obj
   return shadow->rename(dpp, y, target_obj);
 }
