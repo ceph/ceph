@@ -133,7 +133,7 @@ RGWPeriodHistory::Impl::Impl(CephContext* cct, Puller* puller,
     history->periods.push_back(current_period);
 
     // insert as our current history
-    // coverity[RESOURCE_LEAK:FALSE]
+    // coverity[leaked_storage:SUPPRESS]
     current_history = histories.insert(*history).first;
 
     // get a cursor to the current period
@@ -246,7 +246,7 @@ Cursor RGWPeriodHistory::Impl::insert_locked(RGWPeriod&& period)
     // create a new history for this period
     auto history = new History;
     history->periods.emplace_back(std::move(period));
-    // coverity[RESOURCE_LEAK:FALSE]
+    // coverity[leaked_storage:SUPPRESS]
     histories.insert(last, *history);
 
     i = Set::s_iterator_to(*history);
@@ -296,7 +296,7 @@ Cursor RGWPeriodHistory::Impl::insert_locked(RGWPeriod&& period)
   // create a new history for this period
   auto history = new History;
   history->periods.emplace_back(std::move(period));
-  // coverity[RESOURCE_LEAK:FALSE]
+  // coverity[leaked_storage:SUPPRESS]
   histories.insert(i, *history);
 
   i = Set::s_iterator_to(*history);
