@@ -6205,7 +6205,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
     bluefs_layout.dedicated_db = true;
   } else {
     r = -errno;
-    if (::lstat(bfn.c_str(), &st) == -1) {
+    if (::lstat(bfn.c_str(), &st) == -1 && errno == ENOENT) {
       r = 0;
       bluefs_layout.shared_bdev = BlueFS::BDEV_DB;
     } else {
