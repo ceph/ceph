@@ -2296,6 +2296,16 @@ def default_image(func: FuncT) -> FuncT:
     return cast(FuncT, _default_image)
 
 
+def executes_early(func: FuncT) -> FuncT:
+    """Decorator that indicates the command function is meant to have no
+    dependencies and no environmental requirements and can therefore be
+    executed as non-root and with no logging, etc. Commands that have this
+    decorator applied must be simple and self-contained.
+    """
+    cast(Any, func)._execute_early = True
+    return func
+
+
 def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -> Optional[ContainerInfo]:
     """
     :param ctx: Cephadm context
@@ -4850,15 +4860,24 @@ def command_agent(ctx: CephadmContext) -> None:
 
 ##################################
 
-
-@infer_image
+@executes_early
 def command_version(ctx):
     # type: (CephadmContext) -> int
-    c = CephContainer(ctx, ctx.image, 'ceph', ['--version'])
-    out, err, ret = call(ctx, c.run_cmd(), desc=c.entrypoint)
-    if not ret:
-        print(out.strip())
-    return ret
+    import importlib
+
+    try:
+        vmod = importlib.import_module('_version')
+    except ImportError:
+        print('cephadm version UNKNOWN')
+        return 1
+    _unset = '<UNSET>'
+    print('cephadm version {0} ({1}) {2} ({3})'.format(
+        getattr(vmod, 'CEPH_GIT_NICE_VER', _unset),
+        getattr(vmod, 'CEPH_GIT_VER', _unset),
+        getattr(vmod, 'CEPH_RELEASE_NAME', _unset),
+        getattr(vmod, 'CEPH_RELEASE_TYPE', _unset),
+    ))
+    return 0
 
 ##################################
 
@@ -9427,7 +9446,7 @@ def _get_parser():
     subparsers = parser.add_subparsers(help='sub-command')
 
     parser_version = subparsers.add_parser(
-        'version', help='get ceph version from container')
+        'version', help='get cephadm version')
     parser_version.set_defaults(func=command_version)
 
     parser_pull = subparsers.add_parser(
@@ -10105,6 +10124,15 @@ def main() -> None:
     if not ctx.has_function():
         sys.stderr.write('No command specified; pass -h or --help for usage\n')
         sys.exit(1)
+
+    if ctx.has_function() and getattr(ctx.func, '_execute_early', False):
+        try:
+            sys.exit(ctx.func(ctx))
+        except Error as e:
+            if ctx.verbose:
+                raise
+            logger.error('ERROR: %s' % e)
+            sys.exit(1)
 
     cephadm_require_root()
     cephadm_init_logging(ctx, av)
