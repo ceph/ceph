@@ -1842,3 +1842,9 @@ rgw_global_init(const std::map<std::string,std::string> *defaults,
 		    std::vector < const char* >& args,
 		    uint32_t module_type, code_environment_t code_env,
 		    int flags);
+
+
+struct AioCompletionDeleter {
+  void operator()(librados::AioCompletion* c) { c->release(); }
+};
+using aio_completion_ptr = std::unique_ptr<librados::AioCompletion, AioCompletionDeleter>;

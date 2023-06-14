@@ -170,9 +170,9 @@ void RGWGC::on_defer_canceled(const cls_rgw_gc_obj_info& info)
   cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
   cls_rgw_gc_remove(op, {tag});
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-  store->gc_aio_operate(obj_names[i], c, &op);
-  c->release();
+  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+
+  store->gc_aio_operate(obj_names[i], c.get(), &op);
 }
 
 int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
@@ -191,9 +191,9 @@ int RGWGC::async_defer_chain(const string& tag, const cls_rgw_obj_chain& chain)
     // enqueue succeeds
     cls_rgw_gc_remove(op, {tag});
 
-    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-    int ret = store->gc_aio_operate(obj_names[i], c, &op);
-    c->release();
+    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+
+    int ret = store->gc_aio_operate(obj_names[i], c.get(), &op);
     return ret;
   }
 
@@ -225,12 +225,11 @@ int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc
   ObjectWriteOperation op;
   cls_rgw_gc_remove(op, tags);
 
-  auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-  int ret = store->gc_aio_operate(obj_names[index], c, &op);
-  if (ret < 0) {
-    c->release();
-  } else {
-    *pc = c;
+  aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+  int ret = store->gc_aio_operate(obj_names[index], c.get(), &op);
+  if (ret >= 0) {
+    *pc = c.get();
+    c.release();
   }
   return ret;
 }
@@ -391,12 +390,13 @@ public:
       }
     }
 
-    auto c = librados::Rados::aio_create_completion(nullptr, nullptr);
-    int ret = ioctx->aio_operate(oid, c, op);
+    aio_completion_ptr c{librados::Rados::aio_create_completion(nullptr, nullptr)};
+    int ret = ioctx->aio_operate(oid, c.get(), op);
     if (ret < 0) {
       return ret;
     }
-    ios.push_back(IO{IO::TailIO, c, oid, index, tag});
+    ios.push_back(IO{IO::TailIO, c.get(), oid, index, tag});
+    c.release();
 
     return 0;
   }
