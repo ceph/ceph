@@ -1,3 +1,4 @@
+#include "common/async/completion.h"
 #include "rgw_ssd_driver.h"
 #if defined(__linux__)
 #include <features.h>
@@ -222,24 +223,73 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     return remove_entry(dpp, key);
 }
 
+int SSDDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)
+{
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): file_path=" << file_path << dendl;
+    aio_cb.reset(new struct aiocb);
+    memset(aio_cb.get(), 0, sizeof(struct aiocb));
+    aio_cb->aio_fildes = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_RDONLY|O_CLOEXEC|O_BINARY));
+    if(aio_cb->aio_fildes < 0) {
+        int err = errno;
+        ldpp_dout(dpp, 1) << "ERROR: SSDCache: " << __func__ << "(): can't open " << file_path << " : " << " error: " << err << dendl;
+        return -err;
+    }
+    if (cct->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL) {
+        posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
+    }
+
+    bufferptr bp(read_len);
+    aio_cb->aio_buf = bp.c_str();
+    result.append(std::move(bp));
+
+    aio_cb->aio_nbytes = read_len;
+    aio_cb->aio_offset = read_ofs;
+    aio_cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
+    aio_cb->aio_sigevent.sigev_notify_function = libaio_cb_aio_dispatch;
+    aio_cb->aio_sigevent.sigev_notify_attributes = nullptr;
+    aio_cb->aio_sigevent.sigev_value.sival_ptr = arg;
+
+    return 0;
+}
+
+void SSDDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
+{
+    auto p = std::unique_ptr<Completion>{static_cast<Completion*>(sigval.sival_ptr)};
+    auto op = std::move(p->user_data);
+    const int ret = -aio_error(op.aio_cb.get());
+    boost::system::error_code ec;
+    if (ret < 0) {
+        ec.assign(-ret, boost::system::system_category());
+    }
+
+    ceph::async::dispatch(std::move(p), ec, std::move(op.result));
+}
+
+template <typename Executor1, typename CompletionHandler>
+auto SSDDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& handler)
+{
+    auto p = Completion::create(ex1, std::move(handler));
+    return p;
+}
+
 template <typename ExecutionContext, typename CompletionToken>
 auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
                 off_t read_ofs, off_t read_len, CompletionToken&& token)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
-#if 0
-    using Op = AsyncFileReadOp;
+
+    using Op = AsyncReadOp;
     using Signature = typename Op::Signature;
     boost::asio::async_completion<CompletionToken, Signature> init(token);
     auto p = Op::create(ctx.get_executor(), init.completion_handler);
     auto& op = p->user_data;
 
-    int ret = op.init(dpp, file_path, read_ofs, read_len, p.get());
+    int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
     if(0 == ret) {
         ret = ::aio_read(op.aio_cb.get());
     }
-    ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
     if(ret < 0) {
         auto ec = boost::system::error_code{-ret, boost::system::system_category()};
         ceph::async::post(std::move(p), ec, bufferlist{});
@@ -247,8 +297,6 @@ auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, 
         (void)p.release();
     }
     return init.result.get();
-#endif
-    return 0;
 }
 
 void SSDCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
@@ -258,7 +306,7 @@ void SSDCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_
     auto ex = get_associated_executor(init.completion_handler);
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
-    //async_read(dpp, context, file_path+"/"+r.obj.oid, read_ofs, read_len, bind_executor(ex, d3n_libaio_handler{aio, r}));
+    cache_driver->get_async(dpp, y.get_io_context(), key, ofs, len, bind_executor(ex, SSDDriver::libaio_handler{aio, r}));
 }
 
 } } // namespace rgw::cal
