@@ -56,7 +56,7 @@ ceph::real_time RGWObjectLock::get_lock_until_date(const ceph::real_time& mtime)
   if (!rule_exist) {
     return ceph::real_time();
   }
-  int days = get_days();
+  int64_t days = get_days();
   if (days <= 0) {
     days = get_years()*365;
   }
