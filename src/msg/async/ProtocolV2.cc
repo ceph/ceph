@@ -17,6 +17,9 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
+#if 1
+  return *_dout << __func__  << "::";
+#else
   return *_dout << "--2- " << messenger->get_myaddrs() << " >> "
                 << *connection->peer_addrs << " conn(" << connection << " "
                 << this
@@ -31,6 +34,7 @@ std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
                 << " comp rx=" << session_compression_handlers.rx.get()
                 << " tx=" << session_compression_handlers.tx.get()
                 << ").";
+#endif
 }
 
 using namespace ceph::msgr::v2;
@@ -82,6 +86,9 @@ if(connection->interceptor) { \
 #define INTERCEPT(S)
 #endif
 
+static constexpr uint32_t MAX_EPILOGUE_LEN    = 64;
+static constexpr uint32_t MAX_PREAMBLE_LEN    = 128;
+
 ProtocolV2::ProtocolV2(AsyncConnection *connection)
     : Protocol(2, connection),
       state(NONE),
@@ -102,6 +109,8 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
                    &session_compression_handlers),
       next_tag(static_cast<Tag>(0)),
       keepalive(false) {
+  rx_preamble_ptr = ceph::buffer::ptr_node::create(ceph::buffer::create(MAX_PREAMBLE_LEN));
+  rx_epilogue_ptr = ceph::buffer::ptr_node::create(ceph::buffer::create(MAX_EPILOGUE_LEN));
 }
 
 ProtocolV2::~ProtocolV2() {
@@ -314,7 +323,7 @@ void ProtocolV2::reset_throttle() {
 }
 
 CtPtr ProtocolV2::_fault() {
-  ldout(cct, 10) << __func__ << dendl;
+  ldout(cct, 0) << __func__ << dendl;
 
   if (state == CLOSED || state == NONE) {
     ldout(cct, 10) << __func__ << " connection is already closed" << dendl;
@@ -771,7 +780,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
   ssize_t r = connection->read(len, buf,
     [&next, this](char *buffer, int r) {
       if (unlikely(pre_auth.enabled) && r >= 0) {
-        pre_auth.rxbuf.append(*next.node);
+	pre_auth.rxbuf.append(next.node->c_str(), next.node->length());
 	ceph_assert(!cct->_conf->ms_die_on_bug ||
 		    pre_auth.rxbuf.length() < 20000000);
       }
@@ -781,7 +790,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
   if (r <= 0) {
     // error or done synchronously
     if (unlikely(pre_auth.enabled) && r == 0) {
-      pre_auth.rxbuf.append(*next.node);
+      pre_auth.rxbuf.append(next.node->c_str(), next.node->length());
       ceph_assert(!cct->_conf->ms_die_on_bug ||
 		  pre_auth.rxbuf.length() < 20000000);
     }
@@ -813,7 +822,7 @@ CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         ceph::bufferlist &buffer) {
   if (unlikely(pre_auth.enabled)) {
-    pre_auth.txbuf.append(buffer);
+    pre_auth.txbuf.append(buffer.c_str(), buffer.length());
     ceph_assert(!cct->_conf->ms_die_on_bug ||
 		pre_auth.txbuf.length() < 20000000);
   }
@@ -1078,14 +1087,19 @@ CtPtr ProtocolV2::read_frame() {
   if (state == CLOSED) {
     return nullptr;
   }
-
   ldout(cct, 20) << __func__ << dendl;
-  rx_preamble.clear();
-  rx_epilogue.clear();
   rx_segments_data.clear();
-
-  return READ(rx_frame_asm.get_preamble_onwire_len(),
-              handle_read_frame_preamble_main);
+  auto preamble_onwire_len = rx_frame_asm.get_preamble_onwire_len();
+  ceph_assert(rx_preamble_ptr->raw_nref() == 1);
+  if (likely(rx_preamble_ptr->raw_length() >= preamble_onwire_len)) {
+    rx_preamble_ptr->set_offset(0);
+    rx_preamble_ptr->set_length(preamble_onwire_len);
+  }
+  else {
+    rx_preamble_ptr.release();
+    rx_preamble_ptr = ceph::buffer::ptr_node::create(ceph::buffer::create(preamble_onwire_len));
+  }
+  return READ_RXBUF(std::move(rx_preamble_ptr), handle_read_frame_preamble_main);
 }
 
 CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
@@ -1097,14 +1111,16 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
     return _fault();
   }
 
-  rx_preamble.push_back(std::move(buffer));
-
+#if 0
   ldout(cct, 30) << __func__ << " preamble\n";
   rx_preamble.hexdump(*_dout);
   *_dout << dendl;
+#endif
+
+  rx_preamble_ptr = std::move(buffer);
 
   try {
-    next_tag = rx_frame_asm.disassemble_preamble(rx_preamble);
+    next_tag = rx_frame_asm.disassemble_preamble(rx_preamble_ptr);
   } catch (FrameError& e) {
     ldout(cct, 1) << __func__ << " " << e.what() << dendl;
     return _fault();
@@ -1115,13 +1131,13 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
 
   ldout(cct, 25) << __func__ << " disassembled preamble " << rx_frame_asm
                  << dendl;
-
+#if 0
   if (session_stream_handlers.rx) {
     ldout(cct, 30) << __func__ << " preamble after decrypt\n";
     rx_preamble.hexdump(*_dout);
     *_dout << dendl;
   }
-
+#endif
   // does it need throttle?
   if (next_tag == Tag::MESSAGE) {
     if (state != READY) {
@@ -1136,9 +1152,40 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(rx_buffer_t &&buffer, int r) {
   }
 }
 
+static const char* get_tag_name(unsigned index)
+{
+  static const char * tag_names [] = {
+    "UNKNOWN/BAD TAG 0",
+    "HELLO",
+    "AUTH_REQUEST",
+    "AUTH_BAD_METHOD",
+    "AUTH_REPLY_MORE",
+    "AUTH_REQUEST_MORE",
+    "AUTH_DONE",
+    "AUTH_SIGNATURE",
+    "CLIENT_IDENT" ,
+    "SERVER_IDENT",
+    "IDENT_MISSING_FEATURES",
+    "SESSION_RECONNECT",
+    "SESSION_RESET",
+    "SESSION_RETRY",
+    "SESSION_RETRY_GLOBAL",
+    "SESSION_RECONNECT_OK",
+    "WAIT",
+    "MESSAGE",
+    "KEEPALIVE2",
+    "KEEPALIVE2_ACK",
+    "ACK",
+    "COMPRESSION_REQUEST",
+    "COMPRESSION_DONE"
+  };
+
+  return tag_names[index];
+}
+
 CtPtr ProtocolV2::handle_read_frame_dispatch() {
-  ldout(cct, 10) << __func__
-                 << " tag=" << static_cast<uint32_t>(next_tag) << dendl;
+  uint32_t tag_idx = static_cast<uint32_t>(next_tag);
+  ldout(cct, 10) << __func__ << " tag=" << tag_idx << " " << get_tag_name(tag_idx) << dendl;
 
   switch (next_tag) {
     case Tag::HELLO:
@@ -1220,10 +1267,21 @@ CtPtr ProtocolV2::_handle_read_frame_segment() {
   if (rx_segments_data.size() == rx_frame_asm.get_num_segments()) {
     // OK, all segments planned to read are read. Can go with epilogue.
     uint32_t epilogue_onwire_len = rx_frame_asm.get_epilogue_onwire_len();
-    if (epilogue_onwire_len == 0) {
+    ceph_assert(rx_epilogue_ptr->raw_nref() == 1);
+    if (likely(rx_epilogue_ptr->raw_length() >= epilogue_onwire_len)) {
+      // reset buffer
+      rx_epilogue_ptr->set_offset(0);
+      rx_epilogue_ptr->set_length(epilogue_onwire_len);
+    }
+    else {
+      rx_epilogue_ptr.release();
+      rx_epilogue_ptr = ceph::buffer::ptr_node::create(ceph::buffer::create(epilogue_onwire_len));
+    }
+
+    if (unlikely(epilogue_onwire_len == 0)) {
       return _handle_read_frame_epilogue_main();
     }
-    return READ(epilogue_onwire_len, handle_read_frame_epilogue_main);
+    return READ_RXBUF(std::move(rx_epilogue_ptr), handle_read_frame_epilogue_main);
   }
   // TODO: for makeshift only. This will be more generic and throttled
   return read_frame_segment();
@@ -1330,19 +1388,19 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(rx_buffer_t &&buffer, int r)
     return _fault();
   }
 
-  rx_epilogue.push_back(std::move(buffer));
+  rx_epilogue_ptr = std::move(buffer);
   return _handle_read_frame_epilogue_main();
 }
 
 CtPtr ProtocolV2::_handle_read_frame_epilogue_main() {
   bool ok = false;
   try {
-    ok = rx_frame_asm.disassemble_segments(rx_preamble, rx_segments_data.data(), rx_epilogue);
+    ok = rx_frame_asm.disassemble_segments(rx_preamble_ptr, rx_segments_data.data(), rx_epilogue_ptr);
   } catch (FrameError& e) {
-    ldout(cct, 1) << __func__ << " " << e.what() << dendl;
+    ldout(cct, 0) << __func__ << " " << e.what() << dendl;
     return _fault();
   } catch (ceph::crypto::onwire::MsgAuthError&) {
-    ldout(cct, 1) << __func__ << "bad auth tag" << dendl;
+    ldout(cct, 0) << __func__ << "bad auth tag" << dendl;
     return _fault();
   }
 

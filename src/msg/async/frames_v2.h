@@ -11,6 +11,7 @@
 
 #include <boost/container/static_vector.hpp>
 
+using rx_buffer_t = std::unique_ptr<ceph::buffer::ptr_node, ceph::buffer::ptr_node::disposer>;
 /**
  * Protocol V2 Frame Structures
  * 
@@ -311,11 +312,10 @@ public:
                             const uint16_t segment_aligns[],
                             size_t segment_count);
 
-  Tag disassemble_preamble(bufferlist& preamble_bl);
-
-  bool disassemble_segments(bufferlist& preamble_bl, 
+  Tag disassemble_preamble(rx_buffer_t& rx_preamble_ptr);
+  bool disassemble_segments(rx_buffer_t& rx_preamble_ptr,
                             bufferlist segments_bls[], 
-                            bufferlist& epilogue_bl) const;
+                            rx_buffer_t& rx_epilogue_ptr) const;
 
 private:
   struct segment_desc_t {
@@ -375,24 +375,25 @@ private:
   // disassemble_remaining_segments() returns true if the frame is
   // ready for dispatching, or false if it was aborted by the sender
   // and must be dropped.
-  void disassemble_first_segment(bufferlist& preamble_bl,
+  void disassemble_first_segment(rx_buffer_t& rx_preamble_ptr,
                                  bufferlist& segment_bl) const;
   bool disassemble_remaining_segments(bufferlist segment_bls[],
-                                      bufferlist& epilogue_bl) const;
+                                      rx_buffer_t& rx_epilogue_ptr) const;
   void disassemble_decompress(bufferlist segment_bls[]) const;
 
   bool disasm_all_crc_rev0(bufferlist segment_bls[],
-                           bufferlist& epilogue_bl) const;
+                           rx_buffer_t& rx_epilogue_ptr) const;
+
   bool disasm_all_secure_rev0(bufferlist segment_bls[],
-                              bufferlist& epilogue_bl) const;
-  void disasm_first_crc_rev1(bufferlist& preamble_bl,
+                              rx_buffer_t& rx_epilogue_ptr) const;
+  void disasm_first_crc_rev1(rx_buffer_t& rx_preamble_ptr,
                              bufferlist& segment_bl) const;
   bool disasm_remaining_crc_rev1(bufferlist segment_bls[],
-                                 bufferlist& epilogue_bl) const;
-  void disasm_first_secure_rev1(bufferlist& preamble_bl,
+                                 rx_buffer_t& rx_epilogue_ptr) const;
+  void disasm_first_secure_rev1(rx_buffer_t& rx_preamble_ptr,
                                 bufferlist& segment_bl) const;
   bool disasm_remaining_secure_rev1(bufferlist segment_bls[],
-                                    bufferlist& epilogue_bl) const;
+                                    rx_buffer_t& rx_epilogue_ptr) const;
 
   void fill_preamble(Tag tag, preamble_block_t& preamble) const;
   friend std::ostream& operator<<(std::ostream& os,

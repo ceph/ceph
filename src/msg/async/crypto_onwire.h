@@ -87,7 +87,7 @@ struct TxHandler {
   // basing on plaintext from preceding call to _update().
   virtual ceph::bufferlist authenticated_encrypt_final() = 0;
 };
-
+using rx_buffer_t = std::unique_ptr<ceph::buffer::ptr_node, ceph::buffer::ptr_node::disposer>;
 class RxHandler {
 public:
   virtual ~RxHandler() = default;
@@ -104,11 +104,13 @@ public:
 
   // Perform decryption ciphertext must be ALWAYS aligned to 16 bytes.
   virtual void authenticated_decrypt_update(ceph::bufferlist& bl) = 0;
+  virtual void authenticated_decrypt_update(rx_buffer_t& buffer) = 0;
 
   // Perform decryption of last cipertext's portion and verify signature
   // for overall decryption sequence.
   // Throws on integrity/authenticity checks
   virtual void authenticated_decrypt_update_final(ceph::bufferlist& bl) = 0;
+  virtual void authenticated_decrypt_update_final(rx_buffer_t& buffer) = 0;
 };
 
 struct rxtx_t {

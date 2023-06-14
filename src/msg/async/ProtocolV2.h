@@ -105,8 +105,8 @@ private:
   ceph::msgr::v2::FrameAssembler tx_frame_asm;
   ceph::msgr::v2::FrameAssembler rx_frame_asm;
 
-  ceph::bufferlist rx_preamble;
-  ceph::bufferlist rx_epilogue;
+  rx_buffer_t rx_preamble_ptr;
+  rx_buffer_t rx_epilogue_ptr;
   ceph::msgr::v2::segment_bls_t rx_segments_data;
   ceph::msgr::v2::Tag next_tag;
   utime_t backoff;  // backoff time

@@ -263,7 +263,7 @@ struct error_code;
     const_iterator begin_deep(size_t offset=0) const {
       return const_iterator(this, offset, true);
     }
-
+    void invalidate_crc();
     // misc
     bool is_aligned(unsigned align) const {
       return ((uintptr_t)c_str() & (align-1)) == 0;
