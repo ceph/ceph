@@ -7012,6 +7012,36 @@ void Client::renew_caps(MetaSession *session)
   session->con->send_message2(make_message<MClientSession>(CEPH_SESSION_REQUEST_RENEWCAPS, seq));
 }
 
+int Client::_prepare_req_path(Inode *dir, MetaRequest *req, filepath& path, const char *name,
+                              Dentry **pdn)
+{
+  dir->make_nosnap_relative_path(path);
+
+  std::optional<string> enc_name;
+  const char *plain_name = name;
+  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
+  if (fscrypt_denc) {
+    string _enc_name;
+    int r = fscrypt_denc->get_encrypted_fname(name, &_enc_name);
+    if (r < 0) {
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+      return r;
+    }
+    path.push_dentry(_enc_name);
+    enc_name = std::move(_enc_name);
+  } else {
+    path.push_dentry(plain_name);
+  }
+
+  req->set_filepath(path);
+
+  if (pdn) {
+    *pdn = get_or_create(dir, plain_name, enc_name);
+  }
+
+  return 0;
+}
+
 
 // ===============================================================
 // high level (POSIXy) interface
@@ -7022,24 +7052,13 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_LOOKUPSNAP : CEPH_MDS_OP_LOOKUP;
   MetaRequest *req = new MetaRequest(op);
   filepath path;
-  dir->make_nosnap_relative_path(path);
 
-  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
-  if (fscrypt_denc) {
-    string enc_name;
-    int r = fscrypt_denc->get_encrypted_fname(name, &enc_name);
-
-    if (r < 0) {
-      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      return r;
-    }
-
-    path.push_dentry(enc_name);
-  } else {
-    path.push_dentry(name);
+  int r = _prepare_req_path(dir, req, path, name.c_str(), nullptr);
+  if (r < 0) {
+    delete req;
+    return r;
   }
 
-  req->set_filepath(path);
   req->set_inode(dir);
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
       mask |= DEBUG_GETATTR_CAPS;
@@ -7047,7 +7066,7 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
 
   ldout(cct, 10) << __func__ << " on " << path << dendl;
 
-  int r = make_request(req, perms, target);
+  r = make_request(req, perms, target);
   ldout(cct, 10) << __func__ << " res is " << r << dendl;
   return r;
 }
@@ -13758,26 +13777,17 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
       return -CEPHFS_ERANGE;  // bummer!
   }
 
-  std::optional<string> enc_name;
-  const char *plain_name = name;
-  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
-  if (fscrypt_denc) {
-    string _enc_name;
-    int r = fscrypt_denc->get_encrypted_fname(name, &_enc_name);
-    if (r < 0) {
-      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      return r;
-    }
-    enc_name = std::move(_enc_name);
-    name = enc_name->c_str();
-  }
-
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
   filepath path;
-  dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
-  req->set_filepath(path);
+  Dentry *de;
+
+  int r = _prepare_req_path(dir, req, path, name, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
   req->set_alternate_name(std::move(alternate_name));
   req->set_inode(dir);
   req->head.args.open.flags = cflags | CEPH_O_CREAT;
@@ -13804,7 +13814,6 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   if (xattrs_bl.length() > 0)
     req->set_data(xattrs_bl);
 
-  Dentry *de = get_or_create(dir, plain_name, enc_name);
   req->set_dentry(de);
 
   res = make_request(req, perms, inp, created);
