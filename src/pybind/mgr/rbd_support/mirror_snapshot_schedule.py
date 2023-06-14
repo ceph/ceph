@@ -40,10 +40,13 @@ class CreateSnapshotRequests:
         self.wait_for_pending()
 
     def wait_for_pending(self):
-        self.log.debug("CreateSnapshotRequests.wait_for_pending")
         with self.lock:
             while self.pending:
+                self.log.debug(
+                    "CreateSnapshotRequests.wait_for_pending: "
+                    "{} images".format(len(self.pending)))
                 self.condition.wait()
+        self.log.debug("CreateSnapshotRequests.wait_for_pending: done")
 
     def add(self, pool_id, namespace, image_id):
         image_spec = (pool_id, namespace, image_id)
