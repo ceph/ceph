@@ -1,6 +1,11 @@
 import unittest
 
-from .fixtures import import_cephadm
+from .fixtures import (
+    cephadm_fs,
+    import_cephadm,
+    mock_podman,
+    with_cephadm_ctx,
+)
 
 
 _cephadm = import_cephadm()
@@ -88,3 +93,45 @@ class TestCustomContainer(unittest.TestCase):
                 'ro=true'
             ]
         ])
+
+
+def test_deploy_custom_container(cephadm_fs):
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'container.tdcc'
+        ctx.reconfig = False
+        ctx.allow_ptrace = False
+        ctx.image = 'quay.io/foobar/quux:latest'
+        ctx.extra_entrypoint_args = [
+            '--label',
+            'frobnicationist',
+            '--servers',
+            '192.168.8.42,192.168.8.43,192.168.12.11',
+        ]
+
+        _cephadm._common_deploy(ctx)
+
+        with open(f'/var/lib/ceph/{fsid}/container.tdcc/unit.run') as f:
+            runfile_lines = f.read().splitlines()
+        assert 'set -e' in runfile_lines
+        assert len(runfile_lines) > 2
+        assert runfile_lines[-1] == (
+            '/usr/bin/podman run'
+            ' --rm --ipc=host --stop-signal=SIGTERM --init'
+            ' --name ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7-container-tdcc'
+            ' -d --log-driver journald'
+            ' --conmon-pidfile /run/ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7@container.tdcc.service-pid'
+            ' --cidfile /run/ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7@container.tdcc.service-cid'
+            ' --cgroups=split --no-hosts'
+            ' -e CONTAINER_IMAGE=quay.io/foobar/quux:latest'
+            ' -e NODE_NAME=host1'
+            ' quay.io/foobar/quux:latest'
+            ' --label frobnicationist --servers 192.168.8.42,192.168.8.43,192.168.12.11'
+        )
+        assert all([
+            l.startswith('! /usr/bin/podman rm')
+            for l in runfile_lines
+            if not l.startswith(('#', 'set', '/usr/bin/podman run'))
+        ]), 'remaining commands should be "rms"'
