@@ -3661,6 +3661,7 @@ def deploy_daemon(
     osd_fsid: Optional[str] = None,
     deployment_type: DeploymentType = DeploymentType.DEFAULT,
     ports: Optional[List[int]] = None,
+    init_containers: Optional[List['InitContainer']] = None,
 ) -> None:
     ports = ports or []
     # only check port in use if fresh deployment since service
@@ -3734,7 +3735,8 @@ def deploy_daemon(
         else:
             if c:
                 deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id,
-                                    c, osd_fsid=osd_fsid, ports=ports)
+                                    c, osd_fsid=osd_fsid, ports=ports,
+                                    init_containers=init_containers)
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
 
@@ -3892,6 +3894,7 @@ def deploy_daemon_units(
     start: bool = True,
     osd_fsid: Optional[str] = None,
     ports: Optional[List[int]] = None,
+    init_containers: Optional[List['InitContainer']] = None,
 ) -> None:
     # cmd
 
@@ -3912,6 +3915,11 @@ def deploy_daemon_units(
             _write_osd_unit_run_commands(ctx, f, daemon_type, str(daemon_id), fsid, osd_fsid, data_dir, uid, gid)
         elif daemon_type == CephIscsi.daemon_type:
             _write_iscsi_unit_run_commands(ctx, f, daemon_type, str(daemon_id), fsid, data_dir)
+        init_containers = init_containers or []
+        if init_containers:
+            _write_init_container_cmds_clean(ctx, f, init_containers[0])
+        for idx, ic in enumerate(init_containers):
+            _write_init_container_cmds(ctx, f, idx, ic)
 
         _write_container_cmd_to_bash(ctx, f, container, '%s.%s' % (daemon_type, str(daemon_id)))
 
@@ -6967,10 +6975,16 @@ def _dispatch_deploy(
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
                                      privileged=cc.privileged,
                                      ptrace=ctx.allow_ptrace)
+        ics = get_deployment_init_containers(
+            ctx,
+            c,
+        )
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       uid=cc.uid, gid=cc.gid, config=None,
-                      keyring=None, deployment_type=deployment_type,
-                      ports=daemon_ports)
+                      keyring=None,
+                      deployment_type=deployment_type,
+                      ports=daemon_ports,
+                      init_containers=ics)
 
     elif daemon_type == CephadmAgent.daemon_type:
         # get current user gid and uid
