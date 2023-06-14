@@ -212,7 +212,8 @@ class Module(MgrModule):
 
     def handle_command(self, inbuf, cmd):
         if not self.module_ready:
-            return -errno.EAGAIN, "", ""
+            return (-errno.EAGAIN, "",
+                    "rbd_support module is not ready, try again")
         # ensure we have latest pools available
         self.rados.wait_for_latest_osdmap()
 
