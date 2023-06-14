@@ -4,6 +4,8 @@ project(posixdriver)
 
 #set (CMAKE_INCLUDE_DIR ${CMAKE_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/common")
 
+include_subdirectory(lmdb-safe)
+
 set(dbstore_srcs
     common/dbstore_log.h
     common/dbstore.h

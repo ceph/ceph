@@ -54,8 +54,8 @@ struct BucketCacheEntry : public cohort::lru::Object
 
   BucketCache<D, B>* bc;
   std::string name;
-  std::shared_ptr<MDBEnv> env;
-  MDBDbi dbi;
+  std::shared_ptr<LMDBSafe::MDBEnv> env;
+  LMDBSafe::MDBDbi dbi;
   uint64_t hk;
   member_hook_t name_hook;
 
@@ -68,7 +68,7 @@ public:
   BucketCacheEntry(BucketCache<D, B>* bc, const std::string& name, uint64_t hk)
     : bc(bc), name(name), hk(hk), flags(FLAG_NONE) {}
 
-  void set_env(std::shared_ptr<MDBEnv>& _env, MDBDbi& _dbi) {
+  void set_env(std::shared_ptr<LMDBSafe::MDBEnv>& _env, LMDBSafe::MDBDbi& _dbi) {
     env = _env;
     dbi = _dbi;
   }
@@ -198,7 +198,7 @@ struct BucketCache : public Notifiable
   {
     std::string database_root;
     uint8_t lmdb_count;
-    std::vector<std::shared_ptr<MDBEnv>> envs;
+    std::vector<std::shared_ptr<LMDBSafe::MDBEnv>> envs;
     sf::path dbp;
 
   public:
@@ -220,16 +220,16 @@ struct BucketCache : public Notifiable
       for (int ix = 0; ix < lmdb_count; ++ix) {
 	sf::path env_path{safe_root_path / fmt::format("part_{}", ix)};
 	sf::create_directory(env_path);
-	auto env = getMDBEnv(env_path.string().c_str(), 0 /* flags? */, 0600);
+	auto env = LMDBSafe::getMDBEnv(env_path.string().c_str(), 0 /* flags? */, 0600);
 	envs.push_back(env);
       }
     }
 
-    inline std::shared_ptr<MDBEnv>& get_sp_env(BucketCacheEntry<D, B>* bucket)  {
+    inline std::shared_ptr<LMDBSafe::MDBEnv>& get_sp_env(BucketCacheEntry<D, B>* bucket)  {
       return envs[(bucket->hk % lmdb_count)];
     }
 
-    inline MDBEnv& get_env(BucketCacheEntry<D, B>* bucket) {
+    inline LMDBSafe::MDBEnv& get_env(BucketCacheEntry<D, B>* bucket) {
       return *(get_sp_env(bucket));
     }
 
@@ -378,6 +378,9 @@ public:
   int list_bucket(const DoutPrefixProvider* dpp, B* sal_bucket,
 		  rgw::sal::Bucket::ListParams& params, int max /* XXXX */,
 		  list_bucket_each_t each_func) {
+
+    using namespace LMDBSafe;
+
     int rc __attribute__((unused)) = 0;
     GetBucketResult gbr =
       get_bucket(sal_bucket->get_name(), BucketCache<D, B>::FLAG_LOCK);
@@ -451,6 +454,9 @@ public:
 
   int notify(const std::string& bname, void* opaque,
 	     const std::vector<Notifiable::Event>& evec) override {
+
+    using namespace LMDBSafe;
+
     int rc{0};
     GetBucketResult gbr = get_bucket(bname, BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
