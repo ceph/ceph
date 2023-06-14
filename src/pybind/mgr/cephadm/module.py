@@ -1739,10 +1739,14 @@ Then run the following:
                                                   "It is recommended to add the _admin label to another host"
                                                   " before completing this operation.\nIf you're certain this is"
                                                   " what you want rerun this command with --force.")
-        self.inventory.rm_label(host, label)
-        self.log.info('Removed label %s to host %s' % (label, host))
+        if self.inventory.has_label(host, label):
+            self.inventory.rm_label(host, label)
+            msg = f'Removed label {label} from host {host}'
+        else:
+            msg = f"Host {host} does not have label '{label}'. Please use 'ceph orch host ls' to list all the labels."
+        self.log.info(msg)
         self._kick_serve_loop()
-        return 'Removed label %s from host %s' % (label, host)
+        return msg
 
     def _host_ok_to_stop(self, hostname: str, force: bool = False) -> Tuple[int, str]:
         self.log.debug("running host-ok-to-stop checks")
