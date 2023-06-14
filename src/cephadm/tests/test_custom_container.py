@@ -135,3 +135,103 @@ def test_deploy_custom_container(cephadm_fs):
             for l in runfile_lines
             if not l.startswith(('#', 'set', '/usr/bin/podman run'))
         ]), 'remaining commands should be "rms"'
+
+
+def test_deploy_custom_container_and_inits(cephadm_fs):
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'container.tdccai'
+        ctx.reconfig = False
+        ctx.allow_ptrace = False
+        ctx.image = 'quay.io/foobar/quux:latest'
+        ctx.extra_entrypoint_args = [
+            '--label',
+            'treepollenparty',
+            '--servers',
+            '192.168.8.42,192.168.8.43,192.168.12.11',
+        ]
+        ctx.init_containers = [
+            {
+                'entrypoint': '/usr/local/bin/prepare.sh',
+                'volume_mounts': {
+                    'data1': '/var/lib/myapp',
+                },
+            },
+            {
+                'entrypoint': '/usr/local/bin/populate.sh',
+                'entrypoint_args': [
+                    '--source=https://my.cool.example.com/samples/geo.1.txt',
+                ],
+            },
+        ]
+        ctx.config_blobs = {
+            'dirs': ['data1', 'data2'],
+            'volume_mounts': {
+                'data1': '/var/lib/myapp',
+                'data2': '/srv',
+            },
+        }
+
+        _cephadm._common_deploy(ctx)
+
+        with open(f'/var/lib/ceph/{fsid}/container.tdccai/unit.run') as f:
+            runfile_lines = f.read().splitlines()
+        assert 'set -e' in runfile_lines
+        assert len(runfile_lines) > 2
+        assert runfile_lines[-1] == (
+            '/usr/bin/podman run'
+            ' --rm --ipc=host --stop-signal=SIGTERM --init'
+            ' --name ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7-container-tdccai'
+            ' -d --log-driver journald'
+            ' --conmon-pidfile /run/ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7@container.tdccai.service-pid'
+            ' --cidfile /run/ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7@container.tdccai.service-cid'
+            ' --cgroups=split --no-hosts'
+            ' -e CONTAINER_IMAGE=quay.io/foobar/quux:latest'
+            ' -e NODE_NAME=host1'
+            ' -v /var/lib/ceph/b01dbeef-701d-9abe-0000-e1e5a47004a7/container.tdccai/data1:/var/lib/myapp'
+            ' -v /var/lib/ceph/b01dbeef-701d-9abe-0000-e1e5a47004a7/container.tdccai/data2:/srv'
+            ' quay.io/foobar/quux:latest'
+            ' --label treepollenparty --servers 192.168.8.42,192.168.8.43,192.168.12.11'
+        )
+        assert all([
+            l.startswith('! /usr/bin/podman rm')
+            for l in runfile_lines
+            if not l.startswith(('#', 'set', '/usr/bin/podman run'))
+        ]), 'remaining commands should be "rms"'
+
+        idx = runfile_lines.index('# init container cleanup')
+        assert idx > 0
+        assert runfile_lines[idx + 1].startswith('! /usr/bin/podman rm')
+        assert runfile_lines[idx + 2].startswith('! /usr/bin/podman rm')
+
+        idx = runfile_lines.index('# init container 0: ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7-container-tdccai-init')
+        assert idx > 0
+        assert runfile_lines[idx + 1] == (
+            '/usr/bin/podman run'
+            ' --stop-signal=SIGTERM'
+            ' --entrypoint /usr/local/bin/prepare.sh'
+            ' --name ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7-container-tdccai-init'
+            ' -e CONTAINER_IMAGE=quay.io/foobar/quux:latest'
+            ' -v /var/lib/ceph/b01dbeef-701d-9abe-0000-e1e5a47004a7/container.tdccai/data1:/var/lib/myapp'
+            ' quay.io/foobar/quux:latest'
+        )
+        assert runfile_lines[idx + 2].startswith('! /usr/bin/podman rm')
+        assert runfile_lines[idx + 3].startswith('! /usr/bin/podman rm')
+
+        idx = runfile_lines.index('# init container 1: ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7-container-tdccai-init')
+        assert idx > 0
+        assert runfile_lines[idx + 1] == (
+            '/usr/bin/podman run'
+            ' --stop-signal=SIGTERM'
+            ' --entrypoint /usr/local/bin/populate.sh'
+            ' --name ceph-b01dbeef-701d-9abe-0000-e1e5a47004a7-container-tdccai-init'
+            ' -e CONTAINER_IMAGE=quay.io/foobar/quux:latest'
+            ' -v /var/lib/ceph/b01dbeef-701d-9abe-0000-e1e5a47004a7/container.tdccai/data1:/var/lib/myapp'
+            ' -v /var/lib/ceph/b01dbeef-701d-9abe-0000-e1e5a47004a7/container.tdccai/data2:/srv'
+            ' quay.io/foobar/quux:latest'
+            ' --source=https://my.cool.example.com/samples/geo.1.txt'
+        )
+        assert runfile_lines[idx + 2].startswith('! /usr/bin/podman rm')
+        assert runfile_lines[idx + 3].startswith('! /usr/bin/podman rm')
