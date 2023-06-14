@@ -184,8 +184,8 @@ struct BucketCache : public Notifiable
 
   /* the bucket lru cache keeps track of the buckets whose listings are
    * being cached in lmdb databases and updated from notify */
-  BucketCacheEntry<D, B>::bucket_lru lru;
-  BucketCacheEntry<D, B>::bucket_avl_cache cache;
+  typename BucketCacheEntry<D, B>::bucket_lru lru;
+  typename BucketCacheEntry<D, B>::bucket_avl_cache cache;
   sf::path rp;
 
   /* the lmdb handle cache maintains a vector of lmdb environments,
