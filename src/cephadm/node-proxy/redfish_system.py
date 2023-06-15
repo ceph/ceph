@@ -35,7 +35,8 @@ class RedfishSystem(System):
         return result
 
     def start_client(self) -> None:
-        self.client = RedFishClient(self.host, self.username, self.password)
+        if not self.client:
+            self.client = RedFishClient(self.host, self.username, self.password)
         self.client.login()
 
     def get_system(self) -> Dict[str, Dict[str, Dict]]:
