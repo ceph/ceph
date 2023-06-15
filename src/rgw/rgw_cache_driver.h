@@ -16,7 +16,6 @@ struct Entry {
   std::string key;
   off_t offset;
   uint64_t len;
-  int localWeight;
 };
 
 class CacheAioRequest {
