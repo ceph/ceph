@@ -12,7 +12,7 @@ namespace efs = std::filesystem;
 namespace efs = std::experimental::filesystem;
 #endif
 
-namespace rgw { namespace cal {
+namespace rgw { namespace cache {
 
 std::optional<Partition> SSDDriver::get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type)
 {
@@ -77,8 +77,8 @@ std::vector<Entry> SSDDriver::list_entries(const DoutPrefixProvider* dpp)
     return entries_v;
 }
 
-SSDDriver::SSDDriver(Partition& _partition_info) : CacheDriver(_partition_info), partition_info(_partition_info),
-                                                    free_space(_partition_info.size), outstanding_write_size(0)
+SSDDriver::SSDDriver(Partition& partition_info) : partition_info(partition_info),
+                                                    free_space(partition_info.size), outstanding_write_size(0)
 {
     add_partition_info(partition_info);
 }
@@ -309,4 +309,4 @@ void SSDCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_
     cache_driver->get_async(dpp, y.get_io_context(), key, ofs, len, bind_executor(ex, SSDDriver::libaio_handler{aio, r}));
 }
 
-} } // namespace rgw::cal
+} } // namespace rgw::cache

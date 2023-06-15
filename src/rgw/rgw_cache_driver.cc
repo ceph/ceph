@@ -1,6 +1,6 @@
 #include "rgw_cache_driver.h"
 
-namespace rgw { namespace cal {
+namespace rgw { namespace cache {
 
 
-} } // namespace rgw::cal
+} } // namespace rgw::cache
