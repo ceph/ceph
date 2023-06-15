@@ -920,6 +920,7 @@ bool ConfigMonitor::refresh_config(MonSession *s)
 
   string device_class;
   if (s->name.is_osd()) {
+    osdmap.crush->get_full_location(s->entity_name.to_str(), &crush_location);
     const char *c = osdmap.crush->get_item_class(s->name.num());
     if (c) {
       device_class = c;
