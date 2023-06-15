@@ -1,1 +1,3 @@
+lib/systemd/system/cephfs-mirror*
 usr/bin/cephfs-mirror
+usr/share/man/man8/cephfs-mirror.8
