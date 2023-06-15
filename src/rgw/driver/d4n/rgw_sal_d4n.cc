@@ -39,6 +39,7 @@ static inline Object* nextObject(Object* t)
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   FilterDriver::initialize(cct, dpp);
+
   objDir->init(cct);
   blockDir->init(cct);
 
@@ -364,40 +365,41 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     source->get_obj_state(dpp, &astate, y);
 
     for (auto it = attrs.begin(); it != attrs.end(); ++it) {
-      if (it->first == "mtime") {
-        parse_time(it->second.c_str(), &astate->mtime);
-	attrs.erase(it->first);
-      } else if (it->first == "object_size") {
-	source->set_obj_size(std::stoull(it->second.c_str()));
-	attrs.erase(it->first);
-      } else if (it->first == "accounted_size") {
-	astate->accounted_size = std::stoull(it->second.c_str());
-	attrs.erase(it->first);
-      } else if (it->first == "epoch") {
-	astate->epoch = std::stoull(it->second.c_str());
-	attrs.erase(it->first);
-      } else if (it->first == "version_id") {
-	if (it->second.length() > 0) // or return? Also do for rest? -Sam
+      if (it->second.length() > 0) { // or return? -Sam
+	if (it->first == "mtime") {
+	  parse_time(it->second.c_str(), &astate->mtime);
+	  attrs.erase(it->first);
+	} else if (it->first == "object_size") {
+	  source->set_obj_size(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "accounted_size") {
+	  astate->accounted_size = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "epoch") {
+	  astate->epoch = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "version_id") {
 	  source->set_instance(it->second.c_str());
-	attrs.erase(it->first);
-      } else if (it->first == "source_zone_short_id") {
-	astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second.c_str()));
-	attrs.erase(it->first);
-      } else if (it->first == "bucket_count") {
-	source->get_bucket()->set_count(std::stoull(it->second.c_str()));
-	attrs.erase(it->first);
-      } else if (it->first == "bucket_size") {
-	source->get_bucket()->set_size(std::stoull(it->second.c_str()));
-	attrs.erase(it->first);
-      } else if (it->first == "user_quota.max_size") {
-        quota_info.max_size = std::stoull(it->second.c_str());
-	attrs.erase(it->first);
-      } else if (it->first == "user_quota.max_objects") {
-        quota_info.max_objects = std::stoull(it->second.c_str());
-	attrs.erase(it->first);
-      } else if (it->first == "max_buckets") {
-        source->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second.c_str()));
-	attrs.erase(it->first);
+	  attrs.erase(it->first);
+	} else if (it->first == "source_zone_short_id") {
+	  astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "bucket_count") {
+	  source->get_bucket()->set_count(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "bucket_size") {
+	  source->get_bucket()->set_size(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "user_quota.max_size") {
+	  quota_info.max_size = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "user_quota.max_objects") {
+	  quota_info.max_objects = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "max_buckets") {
+	  source->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	}
       }
     }
 
