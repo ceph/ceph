@@ -53,7 +53,7 @@ int RedisDriver::find_client(const DoutPrefixProvider* dpp) {
 }
 
 int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) {
-  auto ret = entries.emplace(key, Entry(key, offset, len, 0));
+  auto ret = entries.emplace(key, Entry(key, offset, len));
   return ret.second;
 }
 
@@ -71,6 +71,7 @@ std::optional<Entry> RedisDriver::get_entry(const DoutPrefixProvider* dpp, std::
   return std::nullopt;
 }
 
+/* Currently an attribute but will also be part of the Entry metadata once consistency is guaranteed -Sam
 int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight) {
   auto iter = entries.find(key);
 
@@ -81,6 +82,7 @@ int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string 
 
   return -1;
 }
+*/
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
   if (addr.host == "" || addr.port == 0) {
@@ -175,7 +177,7 @@ uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) {
   return result;
 }
 
-int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) { // entire object -Sam
+int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
   std::string entryName = "rgw-object:" + key + ":cache";
 
   if (!client.is_connected()) 
@@ -221,10 +223,10 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
     return -1;
   }
 
-  return 0;
+  return insert_entry(dpp, key, 0, len);
 }
 
-int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) { // for whole objects -Sam
+int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) {
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
   

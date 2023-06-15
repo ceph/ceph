@@ -219,16 +219,16 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cal::Cac
   int minWeight = INT_MAX;
 
   for (auto it = entries.begin(); it != entries.end(); ++it) {
-    int localWeight = it->localWeight; // change to block name eventually -Sam
+    std::string localWeightStr = cacheNode->get_attr(dpp, it->key, "localWeight"); // should represent block -Sam
 
-    if (!localWeight) { // maybe do this in some sort of initialization procedure instead of here? -Sam
+    if (!std::stoi(localWeightStr)) { // maybe do this in some sort of initialization procedure instead of here? -Sam
       /* Local weight hasn't been set */
       int ret = cacheNode->set_attr(dpp, it->key, "localWeight", std::to_string(get_age())); 
 
       if (ret < 0)
 	return {};
-    } else if (localWeight < minWeight) {
-      minWeight = localWeight;
+    } else if (std::stoi(localWeightStr) < minWeight) {
+      minWeight = std::stoi(localWeightStr);
       victimName = it->key;
     }
   }
@@ -304,7 +304,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
       // do I need to add the block to the local cache here? -Sam
       // update hosts list for block as well? check read workflow -Sam
       localWeight += age;
-      //return cacheNode->update_local_weight(dpp, block->cacheObj.objName, localWeight);
+      return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight));
     }
   } 
 }
@@ -320,7 +320,6 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDri
   std::string key = "rgw-object:" + victim.cacheObj.objName + ":directory";
   std::string hosts;
   int globalWeight = get_global_weight(key);
-  // not correct, needs entry localWeight -Sam
   int localWeight = std::stoi(cacheNode->get_attr(dpp, victim.cacheObj.objName, "localWeight")); // change to block name eventually -Sam
   int avgWeight = get_min_avg_weight();
 
@@ -343,7 +342,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDri
   if (hosts.empty()) { /* Last copy */
     if (globalWeight > 0) {
       localWeight += globalWeight;
-      int ret = 0;//cacheNode->update_local_weight(dpp, victim.cacheObj.objName, localWeight);
+      int ret = cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight));
 
       if (!ret)
         ret = set_global_weight(key, 0);
