@@ -144,7 +144,7 @@ Aio::OpFunc Aio::d3n_cache_op(const DoutPrefixProvider *dpp, optional_yield y,
   return d3n_cache_aio_abstract(dpp, y, read_ofs, read_len, cache_location);
 }
 
-Aio::OpFunc Aio::cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cal::CacheDriver* cache_driver,
+Aio::OpFunc Aio::cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,
                                 off_t read_ofs, off_t read_len, const std::string& key) {
   return [dpp, y, cache_driver, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
     ceph_assert(y);
