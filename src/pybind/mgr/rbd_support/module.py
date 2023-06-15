@@ -38,7 +38,8 @@ def with_latest_osdmap(func: FuncT) -> FuncT:
     @functools.wraps(func)
     def wrapper(self: 'Module', *args: Any, **kwargs: Any) -> Tuple[int, str, str]:
         if not self.module_ready:
-            return -errno.EAGAIN, "", ""
+            return (-errno.EAGAIN, "",
+                    "rbd_support module is not ready, try again")
         # ensure we have latest pools available
         self.rados.wait_for_latest_osdmap()
         try:
