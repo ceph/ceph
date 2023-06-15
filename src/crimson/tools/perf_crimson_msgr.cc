@@ -9,6 +9,7 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/future-util.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/semaphore.hh>
@@ -28,6 +29,8 @@
 
 using namespace std;
 using namespace std::chrono_literals;
+
+using lowres_clock_t = seastar::lowres_system_clock;
 
 namespace bpo = boost::program_options;
 
@@ -147,7 +150,7 @@ struct server_config {
   }
 };
 
-const unsigned SAMPLE_RATE = 59;
+const unsigned SAMPLE_RATE = 256;
 
 static seastar::future<> run(
     perf_mode_t mode,
@@ -422,7 +425,7 @@ static seastar::future<> run(
         ConnStats conn_stats;
         PeriodStats period_stats;
         seastar::semaphore depth;
-        std::vector<mono_time> time_msgs_sent;
+        std::vector<lowres_clock_t::time_point> time_msgs_sent;
         unsigned sent_count = 0u;
         crimson::net::ConnectionRef active_conn;
         bool stop_send = false;
@@ -430,7 +433,7 @@ static seastar::future<> run(
 
         ConnState(std::size_t _depth)
           : depth{_depth},
-            time_msgs_sent{_depth, mono_clock::zero()} {}
+            time_msgs_sent{_depth, lowres_clock_t::time_point::min()} {}
 
         unsigned get_current_units() const {
           ceph_assert(depth.available_units() >= 0);
@@ -505,14 +508,15 @@ static seastar::future<> run(
         auto msg_id = m->get_tid();
         if (msg_id % SAMPLE_RATE == 0) {
           auto msg_index = msg_id % conn_state.time_msgs_sent.size();
-          ceph_assert(conn_state.time_msgs_sent[msg_index] != mono_clock::zero());
+          ceph_assert(conn_state.time_msgs_sent[msg_index] !=
+              lowres_clock_t::time_point::min());
           std::chrono::duration<double> cur_latency =
-              mono_clock::now() - conn_state.time_msgs_sent[msg_index];
+              lowres_clock_t::now() - conn_state.time_msgs_sent[msg_index];
           conn_state.conn_stats.sampled_total_lat_s += cur_latency.count();
           ++(conn_state.conn_stats.sampled_count);
           conn_state.period_stats.sampled_total_lat_s += cur_latency.count();
           ++(conn_state.period_stats.sampled_count);
-          conn_state.time_msgs_sent[msg_index] = mono_clock::zero();
+          conn_state.time_msgs_sent[msg_index] = lowres_clock_t::time_point::min();
         }
 
         ++(conn_state.conn_stats.received_count);
@@ -876,8 +880,9 @@ static seastar::future<> run(
           // sample message latency
           if (unlikely(conn_state.sent_count % SAMPLE_RATE == 0)) {
             auto index = conn_state.sent_count % conn_state.time_msgs_sent.size();
-            ceph_assert(conn_state.time_msgs_sent[index] == mono_clock::zero());
-            conn_state.time_msgs_sent[index] = mono_clock::now();
+            ceph_assert(conn_state.time_msgs_sent[index] ==
+                        lowres_clock_t::time_point::min());
+            conn_state.time_msgs_sent[index] = lowres_clock_t::now();
           }
 
           return conn_state.active_conn->send(std::move(m));
