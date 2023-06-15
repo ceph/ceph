@@ -3064,6 +3064,23 @@ def fetch_configs(ctx: CephadmContext) -> Dict[str, str]:
     return {}
 
 
+def fetch_custom_config_files(ctx: CephadmContext) -> List[Dict[str, Any]]:
+    """Return a list containing dicts that can be used to populate
+    custom configuration files for containers.
+    """
+    # NOTE: this function works like the opposite of fetch_configs.
+    # instead of filtering out custom_config_files, it returns only
+    # the content in that key.
+    cfg_blobs = getattr(ctx, 'config_blobs', None)
+    if cfg_blobs:
+        return cfg_blobs.get('custom_config_files', [])
+    cfg_json = getattr(ctx, 'config_json', None)
+    if cfg_json:
+        jdata = _get_config_json(cfg_json)
+        return jdata.get('custom_config_files', [])
+    return []
+
+
 def fetch_tcp_ports(ctx: CephadmContext) -> List[int]:
     """Return a list of tcp ports, as integers, stored on the given ctx.
     """
