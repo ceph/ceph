@@ -6,6 +6,9 @@
   `active_clients` array. Previously, only the address of a module's RADOS
   client was shown in the `active_clients` array.
 
+* CEPHFS: After recovering a Ceph File System post following the disaster recovery
+  procedure, the recovered files under `lost+found` directory can now be deleted.
+
 >=17.2.6
 --------
 

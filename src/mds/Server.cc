@@ -3683,7 +3683,9 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
   CInode *diri = dir->get_inode();
 
   if (!mdr->reqid.name.is_mds()) {
-    if (diri->is_system() && !diri->is_root()) {
+    if (diri->is_system() && !diri->is_root() &&
+	(!diri->is_lost_and_found() ||
+	 mdr->client_request->get_op() != CEPH_MDS_OP_UNLINK)) {
       respond_to_request(mdr, -CEPHFS_EROFS);
       return nullptr;
     }
