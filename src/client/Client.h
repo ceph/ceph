@@ -1385,6 +1385,7 @@ private:
   int _fsync(Fh *fh, bool syncdataonly);
   int _fsync(Inode *in, bool syncdataonly);
   int _sync_fs();
+  int clear_suid_sgid(Inode *in, const UserPerm& perms, bool defer=false);
   int _fallocate(Fh *fh, int mode, int64_t offset, int64_t length);
   int _getlk(Fh *fh, struct flock *fl, uint64_t owner);
   int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
