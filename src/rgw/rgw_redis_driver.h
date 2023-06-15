@@ -43,7 +43,7 @@ class RedisDriver : public CacheDriver {
     virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) override;
     virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) override;
     virtual size_t get_num_entries(const DoutPrefixProvider* dpp) override;
-    int update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight); // may need to exist for base class -Sam
+    //int update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight); // may need to exist for base class -Sam
 
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override;
