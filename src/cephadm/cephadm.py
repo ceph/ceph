@@ -3056,14 +3056,21 @@ def fetch_configs(ctx: CephadmContext) -> Dict[str, str]:
     must not be part of a deployment's configuration key-value pairs.
     To access custom configuration file data, use `fetch_custom_config_files`.
     """
+    # ctx.config_blobs is *always* a dict. it is created once when
+    # a command is parsed/processed and stored "forever"
     cfg_blobs = getattr(ctx, 'config_blobs', None)
     if cfg_blobs:
         cfg_blobs = dict(cfg_blobs)
         cfg_blobs.pop('custom_config_files', None)
         return cfg_blobs
+    # ctx.config_json is the legacy equivalent of config_blobs. it is a
+    # string that either contains json or refers to a file name where
+    # the file contains json.
     cfg_json = getattr(ctx, 'config_json', None)
     if cfg_json:
-        return get_parm(cfg_json) or {}
+        jdata = _get_config_json(cfg_json) or {}
+        jdata.pop('custom_config_files', None)
+        return jdata
     return {}
 
 
