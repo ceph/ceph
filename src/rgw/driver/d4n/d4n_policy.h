@@ -26,7 +26,7 @@ class CachePolicy {
       addr.host = cct->_conf->rgw_d4n_host;
       addr.port = cct->_conf->rgw_d4n_port;
     }
-    virtual int find_client(cpp_redis::client *client) = 0;
+    virtual int find_client(const DoutPrefixProvider* dpp) = 0;
     virtual int exist_key(std::string key) = 0;
     virtual Address get_addr() { return addr; }
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) = 0;
@@ -40,7 +40,6 @@ class LFUDAPolicy : public CachePolicy {
   public:
     LFUDAPolicy() : CachePolicy() {}
 
-    // maybe collapse these setters and getters into one? -Sam
     int set_age(int age);
     int get_age();
     int set_global_weight(std::string key, int weight);
@@ -49,7 +48,7 @@ class LFUDAPolicy : public CachePolicy {
     int get_min_avg_weight();
     CacheBlock find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode);
 
-    virtual int find_client(cpp_redis::client *client) override { return CachePolicy::find_client(client); }
+    virtual int find_client(const DoutPrefixProvider* dpp) override { return CachePolicy::find_client(dpp); }
     virtual int exist_key(std::string key) override { return CachePolicy::exist_key(key); }
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) override;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) override;
