@@ -3,7 +3,7 @@
 #include "rgw_common.h"
 #include "rgw_aio.h"
 
-namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
+namespace rgw { namespace cache {
 
 struct Partition {
     std::string name;
@@ -28,7 +28,7 @@ class CacheAioRequest {
 
 class CacheDriver {
   public:
-    CacheDriver(Partition& _partition_info) {}
+    CacheDriver() {}
     virtual ~CacheDriver() = default;
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) = 0;
@@ -56,5 +56,5 @@ class CacheDriver {
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) = 0;
 };
 
-} } // namespace rgw::cal
+} } // namespace rgw::cache
 
