@@ -989,9 +989,11 @@ struct OSDShard {
 
   struct WaitGroup {
     virtual bool wait_continue(heartbeat_handle_d *hb) = 0;
+    virtual void drain_buffer() = 0;
+    virtual uint32_t wait_threshold() = 0;
     virtual void wakeup(uint32_t size) = 0;
     virtual void forcewake() = 0;
-    virtual uint32_t low_threshold() = 0;
+    virtual void burstwake() = 0;
     virtual ~WaitGroup() = 0;
   };
 
@@ -1001,23 +1003,41 @@ struct OSDShard {
     OSD *osd;
     OSDShard *sdata;
     std::string name;
+    uint32_t wait_retry;
+    utime_t wait_start;
+    double wait_time;
+    uint32_t wait_cycles;
+    bool awake;
+    float poll_time;
 
   public:
     WaitGroup_P(int id, CephContext *cct, OSD *osd, OSDShard *sdata);
 
     bool wait_continue(heartbeat_handle_d *hb);
+    void drain_buffer();
+    bool poll();
+    void poll_reset();
+    uint32_t wait_threshold() {
+      return 1;
+    }
     void wakeup(uint32_t size) {
       if (size == 0) {
         std::lock_guard l{sdata->sdata_wait_lock};
-        sdata->sdata_cond.notify_one();
+        if (awake == false) {
+          sdata->sdata_cond.notify_one();
+          awake = true;
+        }
       }
     }
     void forcewake() {
       std::lock_guard l{sdata->sdata_wait_lock};
-      sdata->sdata_cond.notify_one();
+      if (awake == false) {
+        sdata->sdata_cond.notify_one();
+        awake = true;
+      }
     }
-    uint32_t low_threshold() {
-      return 1;
+    void burstwake() {
+      forcewake();
     }
   };
 
@@ -1032,6 +1052,8 @@ struct OSDShard {
     ceph::condition_variable cond;
     uint32_t qt_l;
     uint32_t qt_h;
+    uint32_t qt_w;
+    bool awake;
 
   public:
     WaitGroup_S(
@@ -1043,18 +1065,26 @@ struct OSDShard {
       uint32_t qt_h);
 
     bool wait_continue(heartbeat_handle_d *hb);
+    void drain_buffer();
+    void burstwake();
+    uint32_t wait_threshold() {
+      return qt_w;
+    }
     void wakeup(uint32_t size) {
       if (size > qt_h) {
         std::lock_guard l{lock};
-        cond.notify_one();
+        if (awake == false) {
+          cond.notify_one();
+          awake = true;
+        }
       }
     }
     void forcewake() {
       std::lock_guard l{lock};
-      cond.notify_one();
-    }
-    uint32_t low_threshold() {
-      return qt_l;
+      if (awake == false) {
+        cond.notify_one();
+        awake = true;
+      }
     }
   };
   std::vector<std::shared_ptr<WaitGroup>> wgv;
@@ -1681,9 +1711,8 @@ protected:
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata);
-	std::scoped_lock l{sdata->sdata_wait_lock};
+	std::scoped_lock l{sdata->shard_lock};
 	sdata->stop_waiting = true;
-	sdata->sdata_cond.notify_all();
         for (auto wg : sdata->wgv) {
           wg->forcewake();
         }
@@ -1694,7 +1723,7 @@ protected:
       for(uint32_t i = 0; i < osd->num_shards; i++) {
 	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata);
-	std::scoped_lock l{sdata->sdata_wait_lock};
+	std::scoped_lock l{sdata->shard_lock};
 	sdata->stop_waiting = false;
       }
     }

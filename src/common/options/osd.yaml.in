@@ -853,7 +853,7 @@ options:
 - name: osd_op_num_threads_per_shard_ssd
   type: int
   level: advanced
-  default: 8 
+  default: 16
   see_also:
   - osd_op_num_threads_per_shard
   flags:
@@ -873,7 +873,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for rotational media).
-  default: 2 
+  default: 2
   see_also:
   - osd_op_num_shards
   flags:
@@ -883,7 +883,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for solid state media).
-  default: 4 
+  default: 2
   see_also:
   - osd_op_num_shards
   flags:
@@ -895,6 +895,15 @@ options:
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
+- name: osd_shard_primary_thread_poll_time
+  type: float
+  level: dev
+  desc: How long the primary thread in each shard should poll before going to
+    sleep if there are no items to process.
+  default: 0
+  flags:
+  - startup
+  with_legacy: true
 - name: osd_waitgroup_la
   type: int
   level: dev
@@ -918,7 +927,7 @@ options:
   level: dev
   desc: constant in a 2nd degree polynomial of form la*i^2+lb*i+lc
     governing OSD thread sleep behavior in a given shard.
-  default: 0 
+  default: 2
   flags:
   - startup
   with_legacy: true
@@ -927,7 +936,7 @@ options:
   level: dev
   desc: first coefficient of a 2nd degree polynomial of form ha*i^2+hb*i+hc 
     governing OSD thread wake behavior in a given shard.
-  default: 2
+  default: 0
   flags:
   - startup
   with_legacy: true
@@ -936,7 +945,7 @@ options:
   level: dev
   desc: second coefficient of a 2nd degree polynomial of form ha*i^2+hb*i+hc
     governing OSD thread wake behavior in a given shard.
-  default: 2
+  default: 4
   flags:
   - startup
   with_legacy: true
@@ -945,7 +954,7 @@ options:
   level: dev
   desc: constant in a 2nd degree polynomial of form ha*i^2+hb*i+hc
     governing OSD thread wake behavior in a given shard.
-  default: 0
+  default: 16
   flags:
   - startup
   with_legacy: true

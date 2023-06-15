@@ -10745,8 +10745,9 @@ OSDShard::OSDShard(
 
   wgv.emplace_back(new WaitGroup_P(0, cct, osd, this));
   for (uint32_t i = 1; i < osd->num_threads_per_shard; i++) {
-    uint32_t lt = (la * i * i) + (lb * i) + lc;
-    uint32_t ht = (ha * i * i) + (hb * i) + hc;
+    uint32_t j = i - 1;
+    uint32_t lt = (la * j * j) + (lb * j) + lc;
+    uint32_t ht = (ha * j * j) + (hb * j) + hc;
     wgv.emplace_back(new WaitGroup_S(i, cct, osd, this, lt, ht));
   }
 }
@@ -10771,30 +10772,80 @@ OSDShard::WaitGroup_P::WaitGroup_P(
     cct(cct),
     osd(osd),
     sdata(sdata),
-    name(sdata->shard_name + "-wg." + stringify(id))
+    name(sdata->shard_name + "-wg." + stringify(id)),
+    wait_retry(0),
+    wait_start(),
+    wait_time(0),
+    wait_cycles(0),
+    awake(false),
+    poll_time(cct->_conf->osd_shard_primary_thread_poll_time)
 {
 }
 
 bool OSDShard::WaitGroup_P::wait_continue(heartbeat_handle_d *hb) {
   if (sdata->scheduler->empty() && sdata->context_queue.empty()) {
-    std::unique_lock wl{sdata->sdata_wait_lock};
+
+    // Primary threads will optionally poll before going to sleep.
+    if (!poll()) {
+      return false;
+    }
+    std::unique_lock l{sdata->sdata_wait_lock};
     if (!sdata->context_queue.empty()) {
       // we raced with a context_queue addition, don't wait
-      wl.unlock();
+      l.unlock();
     } else if (sdata->stop_waiting) {
       dout(20) << __func__ << " need return immediately" << dendl;
-      wl.unlock();
+      l.unlock();
       return false;
     } else {
       dout(20) << __func__ << " empty q, waiting" << dendl;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
       sdata->shard_lock.unlock();
-      sdata->sdata_cond.wait(wl);
-      wl.unlock();
+      awake = false;
+      sdata->sdata_cond.wait(l);
+      l.unlock();
       sdata->shard_lock.lock();
     }
   }
+  poll_reset();
   return true;
+}
+
+bool OSDShard::WaitGroup_P::poll() {
+  if (poll_time > 0) {
+    if (wait_time == 0) {
+      wait_start = ceph_clock_now();
+      wait_cycles = 0;
+    }
+    if (wait_retry < 100) {
+      wait_retry++;
+      return false;
+    }
+    wait_time = ceph_clock_now() - wait_start;
+    wait_cycles++;
+    if (wait_time < poll_time) {
+      return false;
+    }
+    dout(30) << " hit wait condition after " << wait_cycles << " wait cycles." << dendl;
+    poll_reset();
+  }
+  return true;
+}
+
+void OSDShard::WaitGroup_P::poll_reset() {
+  wait_retry = 0;
+  wait_time = 0;
+}
+
+void OSDShard::WaitGroup_P::drain_buffer() {
+  if (sdata->scheduler->size() <= wait_threshold()) {
+    std::lock_guard l{sdata->buffer_lock};
+    // Drain all items in the Buffer
+    while(sdata->buffer.size() > 0) {
+      sdata->scheduler->enqueue(std::move(sdata->buffer.front()));
+      sdata->buffer.pop();
+    }
+  }
 }
 
 OSDShard::WaitGroup_S::WaitGroup_S(
@@ -10812,34 +10863,67 @@ OSDShard::WaitGroup_S::WaitGroup_S(
     lock_name(name + "::lock"),
     lock{make_mutex(lock_name)},
     qt_l(qt_l),
-    qt_h(qt_h)
+    qt_h(qt_h),
+    qt_w(qt_l),
+    awake(false)
 {
 }
 
 bool OSDShard::WaitGroup_S::wait_continue(heartbeat_handle_d *hb)
 {
-  if (sdata->scheduler->size() < qt_l) {
-    std::unique_lock wl{lock};
-    if (sdata->stop_waiting) {
-      dout(20) << __func__ << " need return immediately" << dendl;
-      wl.unlock();
-      return false;
-    } else {
-      dout(20) << __func__ << " empty q, waiting" << dendl;
-      osd->cct->get_heartbeat_map()->clear_timeout(hb);
-      sdata->shard_lock.unlock();
-      cond.wait(wl);
-      wl.unlock();
-      sdata->shard_lock.lock();
-      // Don't do any work if there aren't enough items in the queue
-      if (sdata->scheduler->size() < qt_l) {
-        return false;
-      }
-    }
+  std::unique_lock l{lock};
+  // Keep this thread awake if stop_waiting is set regardless of the queue
+  if (sdata->stop_waiting) {
+    dout(20) << __func__ << " need return immediately" << dendl;
+    l.unlock();
+    return false;
   }
+  if (sdata->scheduler->size() <= qt_w) {
+    dout(20) << __func__ << " hit the curent wait threshold: " << qt_w << ", waiting." << dendl;
+    osd->cct->get_heartbeat_map()->clear_timeout(hb);
+    sdata->shard_lock.unlock();
+    awake = false;
+    // When the thread waits, we set the wait threshold to the default
+    // steady-state low-threshold.
+    qt_w = qt_l;
+    cond.wait(l);
+    l.unlock();
+    sdata->shard_lock.lock();
+    return false;
+  }
+  // If we burst recently the wait threshold will be zero.  Grow it
+  // back to it's low watermark for steady-state behavior.
+  if (qt_w < qt_l) {
+    qt_w++;
+  }
+  l.unlock();
   return true;
 }
 
+void OSDShard::WaitGroup_S::drain_buffer() {
+  if (sdata->scheduler->size() <= qt_w) {
+    std::lock_guard l{sdata->buffer_lock};
+    // Drain all but 1 item in the Buffer (leave the last for the primary WG)
+    while(sdata->buffer.size() > 1) {
+      sdata->scheduler->enqueue(std::move(sdata->buffer.front()));
+      sdata->buffer.pop();
+    }
+  }
+}
+
+void OSDShard::WaitGroup_S::burstwake() {
+  std::lock_guard l{lock};
+  if (awake == false) {
+    cond.notify_one();
+    awake = true;
+    // When we burst we allow all threads to service IOs, then gradually
+    // increase the wait threshold to the waitgroup's low threshold for
+    // steady state behavior.  This decreases the number of threads
+    // servicing IOs until we reach steady state or drain the queue and
+    // burst again if IO is coming in clumps.
+    qt_w = 1;
+  }
+}
 
 // =============================================================
 
@@ -10886,25 +10970,29 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   sdata->shard_lock.lock();
 
-  // Pull items out of the buffer if sceduler is running low
-  if (sdata->scheduler->size() < sdata->wgv[st_index]->low_threshold()) {
-    {
-      std::lock_guard l{sdata->buffer_lock};
-      while(!sdata->buffer.empty()) {
-        sdata->scheduler->enqueue(std::move(sdata->buffer.front()));
-        sdata->buffer.pop();
-      }
-    }
+  // Pull items out of the buffer if the sceduler is running low
+  uint32_t before = sdata->scheduler->size();
+  if (before < sdata->wgv[st_index]->wait_threshold()) {
+    sdata->wgv[st_index]->drain_buffer();
 
-    // Only wakeup other threads if we have more than 1 item in the queue
-    uint32_t qsize = sdata->scheduler->size();
-    if (qsize > 1) {
-      sdata->shard_lock.unlock();
-      for(auto wg : sdata->wgv) {
-        wg->wakeup(qsize);
+    uint32_t after = sdata->scheduler->size();
+    sdata->shard_lock.unlock();
+    if (after > 0) {
+      if (before == 0) {
+        // If there was nothing previously in the scheduler, wake up all
+        // threads that can do work in a bursty fashion to improve low-load
+        // latency.
+        for(auto wg : sdata->wgv) {
+          wg->burstwake();
+        }
+      } else {
+        // Otherwise, wakeup threads optimizing for high throughput
+        for(auto wg : sdata->wgv) {
+          wg->wakeup(after);
+        }
       }
-      sdata->shard_lock.lock();
     }
+    sdata->shard_lock.lock();
   }
 
   if (!sdata->wgv[st_index]->wait_continue(hb)) {
@@ -11227,15 +11315,8 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
     size = sdata->buffer.size();
     sdata->buffer.push(std::move(item));
   }
-  for(auto wg : sdata->wgv) {
-    wg->wakeup(size);
-  }
-  {
-    std::lock_guard l{sdata->sdata_wait_lock};
-    if (sdata->waiting_threads) {
-      sdata->sdata_cond.notify_one();
-    }
-  }
+  // Only wake up the primary thread, we'll wake the others in _process() 
+  sdata->wgv[0]->forcewake();
 }
 
 void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)
