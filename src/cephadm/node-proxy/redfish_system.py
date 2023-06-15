@@ -35,7 +35,6 @@ class RedfishSystem(System):
         return result
 
     def start_client(self) -> None:
-        log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
         self.client = RedFishClient(self.host, self.username, self.password)
         self.client.login()
 
