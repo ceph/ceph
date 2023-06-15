@@ -36,7 +36,8 @@ class Reporter:
                     log.logger.info('data has changed since last iteration.')
                     d = self.system.get_system()
                     try:
-                        requests.post(f"{self.observer_url}/fake_endpoint", json=d)
+                        # TODO: add a timeout parameter to the reporter in the config file
+                        requests.post(f"{self.observer_url}/fake_endpoint", json=d, timeout=5)
                     except requests.exceptions.RequestException as e:
                         log.logger.error(f"The reporter couldn't send data to the mgr: {e}")
                         # Need to add a new parameter 'max_retries' to the reporter if it can't
