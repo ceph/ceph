@@ -4,7 +4,7 @@
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
 
-namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
+namespace rgw { namespace cache { //cal stands for Cache Abstraction Layer
 
 class SSDDriver;
 
@@ -20,7 +20,7 @@ private:
 
 class SSDDriver : public CacheDriver {
 public:
-  SSDDriver(Partition& _partition_info);
+  SSDDriver(Partition& partition_info);
   virtual ~SSDDriver();
 
   virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
@@ -106,5 +106,5 @@ struct AsyncReadOp {
 
 };
 
-} } // namespace rgw::cal
+} } // namespace rgw::cache
 
