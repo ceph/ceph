@@ -2971,14 +2971,14 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
 
 def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: str, fsid: str, uid: int, gid: int) -> None:
     # mostly making this its own function to make unit testing easier
-    if 'config_json' not in ctx or not ctx.config_json:
+    ccfiles = fetch_custom_config_files(ctx)
+    if not ccfiles:
         return
-    config_json = get_custom_config_files(ctx.config_json)
     custom_config_dir = os.path.join(ctx.data_dir, fsid, 'custom_config_files', f'{daemon_type}.{daemon_id}')
     if not os.path.exists(custom_config_dir):
         makedirs(custom_config_dir, uid, gid, 0o755)
     mandatory_keys = ['mount_path', 'content']
-    for ccf in config_json['custom_config_files']:
+    for ccf in ccfiles:
         if all(k in ccf for k in mandatory_keys):
             file_path = os.path.join(custom_config_dir, os.path.basename(ccf['mount_path']))
             with write_new(file_path, owner=(uid, gid), encoding='utf-8') as f:
@@ -2989,18 +2989,10 @@ def get_parm(option: str) -> Dict[str, str]:
     js = _get_config_json(option)
     # custom_config_files is a special field that may be in the config
     # dict. It is used for mounting custom config files into daemon's containers
-    # and should be accessed through the "get_custom_config_files" function.
+    # and should be accessed through the "fetch_custom_config_files" function.
     # For get_parm we need to discard it.
     js.pop('custom_config_files', None)
     return js
-
-
-def get_custom_config_files(option: str) -> Dict[str, List[Dict[str, str]]]:
-    js = _get_config_json(option)
-    res: Dict[str, List[Dict[str, str]]] = {'custom_config_files': []}
-    if 'custom_config_files' in js:
-        res['custom_config_files'] = js['custom_config_files']
-    return res
 
 
 def _get_config_json(option: str) -> Dict[str, Any]:
@@ -6198,10 +6190,10 @@ def get_deployment_container(ctx: CephadmContext,
         c.container_args.extend(ctx.extra_container_args)
     if 'extra_entrypoint_args' in ctx and ctx.extra_entrypoint_args:
         c.args.extend(ctx.extra_entrypoint_args)
-    if 'config_json' in ctx and ctx.config_json:
-        conf_files = get_custom_config_files(ctx.config_json)
+    ccfiles = fetch_custom_config_files(ctx)
+    if ccfiles:
         mandatory_keys = ['mount_path', 'content']
-        for conf in conf_files['custom_config_files']:
+        for conf in ccfiles:
             if all(k in conf for k in mandatory_keys):
                 mount_path = conf['mount_path']
                 file_path = os.path.join(
