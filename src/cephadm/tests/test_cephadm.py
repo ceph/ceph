@@ -1450,7 +1450,7 @@ class TestBootstrap(object):
             (
                 '192.168.1.1',
                 {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
-                r'must use square backets',
+                r'must use square brackets',
             ),
             (
                 '[192.168.1.1]',

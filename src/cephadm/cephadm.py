@@ -438,7 +438,7 @@ class SNMPGateway:
 
     @staticmethod
     def get_version(ctx: CephadmContext, fsid: str, daemon_id: str) -> Optional[str]:
-        """Return the version of the notifer from it's http endpoint"""
+        """Return the version of the notifier from it's http endpoint"""
         path = os.path.join(ctx.data_dir, fsid, f'snmp-gateway.{daemon_id}', 'unit.meta')
         try:
             with open(path, 'r') as env:
@@ -931,7 +931,7 @@ class CephIscsi(object):
         # type: () -> CephContainer
         # daemon_id, is used to generated the cid and pid files used by podman but as both tcmu-runner
         # and rbd-target-api have the same daemon_id, it conflits and prevent the second container from
-        # starting. .tcmu runner is appened to the daemon_id to fix that.
+        # starting. .tcmu runner is appended to the daemon_id to fix that.
         tcmu_container = get_container(self.ctx, self.fsid, self.daemon_type, str(self.daemon_id) + '.tcmu')
         tcmu_container.entrypoint = '/usr/bin/tcmu-runner'
         tcmu_container.cname = self.get_container_name(desc='tcmu')
@@ -1593,7 +1593,7 @@ class FileLock(object):
     def release(self, force: bool = False) -> None:
         """
         Releases the file lock.
-        Please note, that the lock is only completly released, if the lock
+        Please note, that the lock is only completely released, if the lock
         counter is 0.
         Also note, that the lock file itself is not automatically deleted.
         :arg bool force:
@@ -2162,7 +2162,7 @@ def infer_fsid(func: FuncT) -> FuncT:
 
 def infer_config(func: FuncT) -> FuncT:
     """
-    Infer the clusater configuration using the followign priority order:
+    Infer the cluster configuration using the following priority order:
      1- if the user has provided custom conf file (-c option) use it
      2- otherwise if daemon --name has been provided use daemon conf
      3- otherwise find the mon daemon conf file and use it (if v1)
@@ -2197,7 +2197,7 @@ def infer_config(func: FuncT) -> FuncT:
         if 'fsid' in ctx and ctx.fsid:
             name = ctx.name if ('name' in ctx and ctx.name) else get_mon_daemon_name(ctx.fsid)
             if name is not None:
-                # daemon name has been specified (or inffered from mon), let's use its conf
+                # daemon name has been specified (or inferred from mon), let's use its conf
                 ctx.config = config_path(name.split('.', 1)[0], name.split('.', 1)[1])
             else:
                 # no daemon, in case the cluster has a config dir then use it
@@ -5032,7 +5032,7 @@ def parse_mon_addrv(addrv_arg: str) -> List[EndPoint]:
     addrv_args = []
     addr_arg = addrv_arg
     if addr_arg[0] != '[' or addr_arg[-1] != ']':
-        raise Error(f'--mon-addrv value {addr_arg} must use square backets')
+        raise Error(f'--mon-addrv value {addr_arg} must use square brackets')
 
     for addr in addr_arg[1: -1].split(','):
         hasport = r.findall(addr)
@@ -5188,9 +5188,9 @@ def prepare_cluster_network(ctx: CephadmContext) -> Tuple[str, bool]:
         cluster_network = cp.get('global', 'cluster_network').strip('"').strip("'")
 
     if cluster_network:
-        cluser_nets = set([x.strip() for x in cluster_network.split(',')])
+        cluster_nets = set([x.strip() for x in cluster_network.split(',')])
         local_subnets = set([x[0] for x in list_networks(ctx).items()])
-        for net in cluser_nets:
+        for net in cluster_nets:
             if net not in local_subnets:
                 logger.warning(f'The cluster CIDR network {net} is not configured locally.')
 
@@ -8001,14 +8001,14 @@ class Apt(Packager):
     def kubic_repo_path(self) -> str:
         return '/etc/apt/sources.list.d/devel:kubic:libcontainers:stable.list'
 
-    def kubric_repo_gpgkey_url(self) -> str:
+    def kubic_repo_gpgkey_url(self) -> str:
         return '%s/Release.key' % self.kubic_repo_url()
 
-    def kubric_repo_gpgkey_path(self) -> str:
+    def kubic_repo_gpgkey_path(self) -> str:
         return '/etc/apt/trusted.gpg.d/kubic.release.gpg'
 
     def add_kubic_repo(self) -> None:
-        url = self.kubric_repo_gpgkey_url()
+        url = self.kubic_repo_gpgkey_url()
         logger.info('Installing repo GPG key from %s...' % url)
         try:
             response = urlopen(url)
@@ -8018,7 +8018,7 @@ class Apt(Packager):
             raise Error('failed to fetch GPG key')
         key = response.read().decode('utf-8')
         tmp_key = write_tmp(key, 0, 0)
-        keyring = self.kubric_repo_gpgkey_path()
+        keyring = self.kubic_repo_gpgkey_path()
         call_throws(self.ctx, ['apt-key', '--keyring', keyring, 'add', tmp_key.name])
 
         logger.info('Installing repo file at %s...' % self.kubic_repo_path())
@@ -8027,7 +8027,7 @@ class Apt(Packager):
             f.write(content)
 
     def rm_kubic_repo(self) -> None:
-        keyring = self.kubric_repo_gpgkey_path()
+        keyring = self.kubic_repo_gpgkey_path()
         if os.path.exists(keyring):
             logger.info('Removing repo GPG key %s...' % keyring)
             os.unlink(keyring)
@@ -8328,7 +8328,7 @@ def command_add_repo(ctx: CephadmContext) -> None:
         except Exception:
             raise Error('version must be in the form x.y.z (e.g., 15.2.0)')
     if ctx.release:
-        # Pacific =/= pacific in this case, set to undercase to avoid confision
+        # Pacific =/= pacific in this case, set to undercase to avoid confusion
         ctx.release = ctx.release.lower()
 
     pkg = create_packager(ctx, stable=ctx.release,
@@ -8611,7 +8611,7 @@ class HostFacts():
 
         Enclosures are detected by walking the scsi generic sysfs hierarchy.
         Any device tree that holds an 'enclosure' subdirectory is interpreted as
-        an enclosure. Once identified the enclosire directory is analysis to
+        an enclosure. Once identified the enclosure directory is analysis to
         identify key descriptors that will help relate disks to enclosures and
         disks to enclosure slots.
 
@@ -8625,7 +8625,7 @@ class HostFacts():
             if os.path.exists(enc_path):
                 enc_dirs = glob(os.path.join(enc_path, '*'))
                 if len(enc_dirs) != 1:
-                    # incomplete enclosure spec - expecting ONE dir in the fomrat
+                    # incomplete enclosure spec - expecting ONE dir in the format
                     # host(adapter):bus:target:lun e.g. 16:0:0:0
                     continue
                 enc_path = enc_dirs[0]
@@ -9235,7 +9235,7 @@ class HostFacts():
 
 
 def command_gather_facts(ctx: CephadmContext) -> None:
-    """gather_facts is intended to provide host releated metadata to the caller"""
+    """gather_facts is intended to provide host related metadata to the caller"""
     host = HostFacts(ctx)
     print(host.dump())
 
@@ -9450,7 +9450,7 @@ def _get_parser():
     parser_adopt.add_argument(
         '--force-start',
         action='store_true',
-        help='start newly adoped daemon, even if it was not running previously')
+        help='start newly adopted daemon, even if it was not running previously')
     parser_adopt.add_argument(
         '--container-init',
         action='store_true',
@@ -9872,7 +9872,7 @@ def _get_parser():
         '--extra-container-args',
         action='append',
         default=[],
-        help='Additional container arguments to apply to deamon'
+        help='Additional container arguments to apply to daemon'
     )
     parser_deploy.add_argument(
         '--extra-entrypoint-args',

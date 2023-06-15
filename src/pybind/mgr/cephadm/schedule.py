@@ -327,7 +327,7 @@ class HostAssignment(object):
 
         # TODO: At some point we want to deploy daemons that are on offline hosts
         # at what point we do this differs per daemon type. Stateless daemons we could
-        # do quickly to improve availability. Steful daemons we might want to wait longer
+        # do quickly to improve availability. Stateful daemons we might want to wait longer
         # to see if the host comes back online
 
         existing = existing_active + existing_standby
