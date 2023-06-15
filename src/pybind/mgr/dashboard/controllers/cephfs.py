@@ -503,7 +503,11 @@ class CephFSClients(object):
 
     @ViewCache()
     def get(self):
-        return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
+        try:
+            ret = CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
+        except RuntimeError:
+            ret = []
+        return ret
 
 
 @UIRouter('/cephfs', Scope.CEPHFS)
