@@ -14,6 +14,7 @@ from ceph.deployment.service_spec import (
     ArgumentList,
     CephExporterSpec,
     GeneralArgList,
+    InitContainerSpec,
     MONSpec,
     RGWSpec,
     ServiceSpec,
@@ -70,6 +71,7 @@ class CephadmDaemonDeploySpec:
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[ArgumentList] = None,
                  extra_entrypoint_args: Optional[ArgumentList] = None,
+                 init_containers: Optional[List[InitContainerSpec]] = None,
                  ):
         """
         A data struction to encapsulate `cephadm deploy ...
@@ -109,6 +111,7 @@ class CephadmDaemonDeploySpec:
 
         self.extra_container_args = extra_container_args
         self.extra_entrypoint_args = extra_entrypoint_args
+        self.init_containers = init_containers
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -243,6 +246,7 @@ class CephadmService(metaclass=ABCMeta):
                 spec, 'extra_container_args') else None,
             extra_entrypoint_args=spec.extra_entrypoint_args if hasattr(
                 spec, 'extra_entrypoint_args') else None,
+            init_containers=getattr(spec, 'init_containers', None),
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
