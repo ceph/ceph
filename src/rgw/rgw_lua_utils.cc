@@ -31,14 +31,31 @@ void create_debug_action(lua_State* L, CephContext* cct) {
   lua_setglobal(L, RGWDebugLogAction);
 }
 
+
 void stack_dump(lua_State* L) {
-  int top = lua_gettop(L);
+  const auto top = lua_gettop(L);
   std::cout << std::endl << " ----------------  Stack Dump ----------------" << std::endl;
   std::cout << "Stack Size: " << top << std::endl;
   for (int i = 1, j = -top; i <= top; i++, j++) {
-    std::cout << "[" << i << "," << j << "][" << lua_typename(L, lua_type(L, i)) << "]: " 
-        << luaL_tolstring(L, i, NULL) << std::endl;
-    lua_pop(L, 1);
+		std::cout << "[" << i << "," << j << "][" << luaL_typename(L, i) << "]: ";
+    switch (lua_type(L, i)) {
+      case LUA_TNUMBER:
+        std::cout << lua_tonumber(L, i);
+        break;
+      case LUA_TSTRING:
+        std::cout << lua_tostring(L, i);
+        break;
+      case LUA_TBOOLEAN:
+        std::cout << (lua_toboolean(L, i) ? "true" : "false");
+        break;
+      case LUA_TNIL:
+        std::cout << "nil";
+        break;
+      default:
+        std::cout << lua_topointer(L, i);
+        break;
+    }
+		std::cout << std::endl;
   }
   std::cout << "--------------- Stack Dump Finished ---------------" << std::endl;
 }
