@@ -46,32 +46,32 @@ inline namespace v15_2_0 {
 
     explicit raw(unsigned l, int mempool=mempool::mempool_buffer_anon)
       : data(nullptr), len(l), nref(0), mempool(mempool) {
-      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+      // mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
     }
     raw(char *c, unsigned l, int mempool=mempool::mempool_buffer_anon)
       : data(c), len(l), nref(0), mempool(mempool) {
-      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+      // mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
     }
     virtual ~raw() {
-      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
-	-1, -(int)len);
+      // mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	// -1, -(int)len);
     }
 
     void _set_len(unsigned l) {
-      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
-	-1, -(int)len);
+      // mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	// -1, -(int)len);
       len = l;
-      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
+      // mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
     }
 
     void reassign_to_mempool(int pool) {
       if (pool == mempool) {
 	return;
       }
-      mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
-	-1, -(int)len);
+      // mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(
+	// -1, -(int)len);
       mempool = pool;
-      mempool::get_pool(mempool::pool_index_t(pool)).adjust_count(1, len);
+      // mempool::get_pool(mempool::pool_index_t(pool)).adjust_count(1, len);
     }
 
     void try_assign_to_mempool(int pool) {
