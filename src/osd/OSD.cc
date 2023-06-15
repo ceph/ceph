@@ -7293,27 +7293,29 @@ void OSDService::maybe_share_map(
 
   // assume the peer has the newer of the op's sent_epoch and what
   // we think we sent them.
-  session->projected_epoch_lock.lock();
-  if (peer_epoch_lb > session->projected_epoch) {
-    dout(10) << __func__ << " con " << con
-	     << " " << con->get_peer_addr()
-	     << " map epoch " << session->projected_epoch
-	     << " -> " << peer_epoch_lb << " (as per caller)" << dendl;
-    session->projected_epoch = peer_epoch_lb;
-  }
+  epoch_t send_from = 0;
+  {
+    std::lock_guard l(session->projected_epoch_lock);
 
-  if (osdmap->get_epoch() <= session->projected_epoch) {
-    session->projected_epoch_lock.unlock();
-    return;
-  }
+    if (peer_epoch_lb > session->projected_epoch) {
+      dout(10) << __func__ << " con " << con
+        << " " << con->get_peer_addr()
+        << " map epoch " << session->projected_epoch
+        << " -> " << peer_epoch_lb << " (as per caller)" << dendl;
+      session->projected_epoch = peer_epoch_lb;
+    }
 
-  const epoch_t send_from = session->projected_epoch;
+    if (osdmap->get_epoch() <= session->projected_epoch) {
+      return;
+    }
+
+    send_from = session->projected_epoch;
     dout(10) << __func__ << " con " << con
-	     << " " << con->get_peer_addr()
-	     << " map epoch " << session->projected_epoch
-	     << " -> " << osdmap->get_epoch() << " (shared)" << dendl;
-  session->projected_epoch = osdmap->get_epoch();
-  session->projected_epoch_lock.unlock();
+      << " " << con->get_peer_addr()
+      << " map epoch " << session->projected_epoch
+      << " -> " << osdmap->get_epoch() << " (shared)" << dendl;
+    session->projected_epoch = osdmap->get_epoch();
+  }
   send_incremental_map(send_from, con, osdmap);
 }
 
