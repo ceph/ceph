@@ -21,11 +21,27 @@
              class="col-sm-6 px-3 d-flex"
              aria-label="Status card">
       <div class="d-flex ms-4 me-4 mb-5 center-content">
+        <ng-template #healthChecks>
+          <ng-container *ngTemplateOutlet="logsLink"></ng-container>
+          <ul>
+            <li *ngFor="let check of healthData.health.checks">
+              <span [ngStyle]="check.severity | healthColor"
+                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
+              {{ check.type }}</span>: {{ check.summary.message }}
+            </li>
+          </ul>
+        </ng-template>
         <i *ngIf="healthData.health?.status"
            [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
            [ngStyle]="healthData.health.status | healthColor"
            [title]="healthData.health.status"></i>
+        <a class="ms-2 mt-n1 lead text-primary"
+           [ngbPopover]="healthChecks"
+           popoverClass="info-card-popover-cluster-status"
+           *ngIf="healthData.health?.checks?.length"
+           i18n>Cluster</a>
         <span class="ms-2 mt-n1 lead"
+              *ngIf="!healthData.health?.checks?.length"
               i18n>Cluster</span>
       </div>
       <section class="border-top mt-5"
@@ -257,5 +273,12 @@
       </div>
       <hr>
     </div>
+  </ng-container>
+</ng-template>
+
+<ng-template #logsLink>
+  <ng-container *ngIf="permissions.log.read">
+    <p class="logs-link"
+       i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
   </ng-container>
 </ng-template>
