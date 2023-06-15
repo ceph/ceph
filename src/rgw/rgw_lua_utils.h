@@ -255,30 +255,68 @@ typedef int MetaTableClosure(lua_State* L);
 // copy the input iterator into a new iterator with memory allocated as userdata
 // - allow for string conversion of the iterator (into its key)
 // - storing the iterator in the metadata table to be used for iterator invalidation handling
+// - since we have only one iterator per map/table we don't allow for nested loops or another iterationn
+// after breaking out of an iteration
 template<typename MapType>
-typename MapType::iterator* create_iterator_metadata(lua_State* L, const typename MapType::iterator& it) {
+typename MapType::iterator* create_iterator_metadata(lua_State* L, const typename MapType::iterator& start_it, const typename MapType::iterator& end_it) {
   using Iterator = typename MapType::iterator;
-  auto iter_buff = lua_newuserdata(L, sizeof(Iterator));
-  const auto userdata_pos = lua_gettop(L);
   // create metatable for userdata
-  [[maybe_unused]] const auto rc = luaL_newmetatable(L, typeid(typename MapType::key_type).name());
+  // metatable is created before the userdata to save on allocation if the metatable already exists
+  const auto metatable_is_new = luaL_newmetatable(L, typeid(typename MapType::key_type).name());
   const auto metatable_pos = lua_gettop(L);
-  auto new_it = new (iter_buff) Iterator(it);
+  int userdata_pos;
+  Iterator* new_it = nullptr;
+  if (!metatable_is_new) {
+    // metatable already exists
+    lua_pushliteral(L, "__iterator");
+    const auto type = lua_rawget(L, metatable_pos);
+		ceph_assert(type != LUA_TNIL);
+    auto old_it = reinterpret_cast<typename MapType::iterator*>(lua_touserdata(L, -1));
+    // verify we are not mid-iteration
+    if (*old_it != end_it) {
+      luaL_error(L, "Trying to iterate '%s' before previous iteration finished", 
+          typeid(typename MapType::key_type).name());
+      return nullptr;
+    } 
+    // we use the same memory buffer
+    new_it = old_it;
+    *new_it = start_it;
+    // push the userdata so it could be tied to the metatable
+    lua_pushlightuserdata(L, new_it);
+    userdata_pos = lua_gettop(L);
+  } else {
+    // new metatable
+    auto it_buff = lua_newuserdata(L, sizeof(Iterator));
+    userdata_pos = lua_gettop(L);
+    new_it = new (it_buff) Iterator(start_it);
+  }
+  // push the metatable again so it could be tied to the userdata
+  lua_pushvalue(L, metatable_pos);
   // store the iterator pointer in the metatable
   lua_pushliteral(L, "__iterator");
   lua_pushlightuserdata(L, new_it);
   lua_rawset(L, metatable_pos); 
+  // add indication that we are "mid iteration"
   // add "tostring" closure to metatable
   lua_pushliteral(L, "__tostring");
   lua_pushlightuserdata(L, new_it);
   lua_pushcclosure(L, [](lua_State* L) {
       // the key of the table is expected to be convertible to char*
-      using Iterator = typename MapType::iterator;
       static_assert(std::is_constructible<typename MapType::key_type, const char*>());
       auto iter = reinterpret_cast<Iterator*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
       ceph_assert(iter);
       pushstring(L, (*iter)->first);
       return ONE_RETURNVAL;
+    }, ONE_UPVAL);
+  lua_rawset(L, metatable_pos);
+  // define a finalizer of the iterator
+  lua_pushliteral(L, "__gc");
+  lua_pushlightuserdata(L, new_it);
+  lua_pushcclosure(L, [](lua_State* L) {
+      auto iter = reinterpret_cast<Iterator*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+      ceph_assert(iter);
+      iter->~Iterator();
+      return NO_RETURNVAL;
     }, ONE_UPVAL);
   lua_rawset(L, metatable_pos);
   // tie userdata and metatable
@@ -355,7 +393,7 @@ int next(lua_State* L) {
     // pop the 2 nils
     lua_pop(L, 2);
     // create userdata
-    next_it = create_iterator_metadata<MapType>(L, map->begin());
+    next_it = create_iterator_metadata<MapType>(L, map->begin(), map->end());
   } else {
     next_it = reinterpret_cast<Iterator*>(lua_touserdata(L, 2));
     ceph_assert(next_it);
@@ -375,8 +413,8 @@ int next(lua_State* L) {
 	using ValueType = typename MapType::mapped_type;
 	auto& value = (*next_it)->second;
   if constexpr(std::is_constructible<std::string, ValueType>()) {
-      // as an std::string
-      pushstring(L, value);
+    // as an std::string
+    pushstring(L, value);
   } else if constexpr(is_variant<ValueType>()) {
     // as an std::variant
     std::visit([L](auto&& value) { pushvalue(L, value); }, value);
@@ -385,7 +423,6 @@ int next(lua_State* L) {
     create_metatable<ValueMetaType>(L, false, &(value));
   }
   // return key, value
-    
   return TWO_RETURNVALS;
 }
 

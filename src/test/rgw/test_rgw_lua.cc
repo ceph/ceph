@@ -521,9 +521,20 @@ TEST(TestRGWLua, MetadataIterateWrite)
       print(k,v)
       if tostring(k) == "c" then
         Request.HTTP.Metadata["c"] = nil
+        print("'c' is deleted and 'd' is skipped")
       end
     end
-    assert(counter == 4)
+    assert(counter == 6)
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      print(k,v)
+      if tostring(k) == "d" then
+        Request.HTTP.Metadata["e"] = nil
+        print("'e' is deleted")
+      end
+    end
+    assert(counter == 5)
   )";
 
   DEFINE_REQ_STATE;
@@ -532,10 +543,79 @@ TEST(TestRGWLua, MetadataIterateWrite)
   s.info.x_meta_map["c"] = "3";
   s.info.x_meta_map["d"] = "4";
   s.info.x_meta_map["e"] = "5";
+  s.info.x_meta_map["f"] = "6";
+  s.info.x_meta_map["g"] = "7";
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
   ASSERT_EQ(s.info.x_meta_map.count("c"), 0);
+}
+
+TEST(TestRGWLua, MetadataIterator)
+{
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["a"] = "1";
+  s.info.x_meta_map["b"] = "2";
+  s.info.x_meta_map["c"] = "3";
+  s.info.x_meta_map["d"] = "4";
+  s.info.x_meta_map["e"] = "5";
+  s.info.x_meta_map["f"] = "6";
+  s.info.x_meta_map["g"] = "7";
+  
+  std::string script = R"(
+    print("nested loop")
+    counter = 0
+    for k1,v1 in pairs(Request.HTTP.Metadata) do
+      print(tostring(k1)..","..v1.." outer loop "..tostring(counter))
+      for k2,v2 in pairs(Request.HTTP.Metadata) do
+        print(k2,v2)
+      end
+      counter = counter + 1
+    end
+  )";
+
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  script = R"(
+    print("break loop")
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      print(k,v)
+      if counter == 3 then
+        break
+      end
+      counter = counter + 1
+    end
+    print("full loop")
+    for k,v in pairs(Request.HTTP.Metadata) do
+      print(k,v)
+    end
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  script = R"(
+    print("2 loops")
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      print(k,v)
+      counter = counter + 1
+    end
+    assert(counter == #Request.HTTP.Metadata)
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      print(k,v)
+      counter = counter + 1
+    end
+    assert(counter == #Request.HTTP.Metadata)
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
 }
 
 TEST(TestRGWLua, Acl)
