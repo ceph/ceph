@@ -90,7 +90,7 @@ void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
   arrived.insert(make_pair(op->get_initiated(), op));
   if (opduration >= history_slow_op_threshold.load()) {
     slow_op.insert(make_pair(op->get_initiated(), op));
-    logger->inc(l_osd_slow_op_count);
+    logger->inc(l_trackedop_slow_op_count);
   }
   cleanup(now);
 }
