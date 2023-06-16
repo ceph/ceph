@@ -218,6 +218,11 @@ public:
   };
   void print_io_stat(std::ostream &out) const;
 
+  seastar::future<> set_accepted_sid(
+      crosscore_t::seq_t cc_seq,
+      seastar::shard_id sid,
+      ConnectionFRef conn_fref);
+
   /*
    * may be called cross-core
    */

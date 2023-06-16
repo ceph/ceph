@@ -186,6 +186,15 @@ void ProtocolV2::start_accept(SocketFRef&& new_socket,
   logger().info("{} ProtocolV2::start_accept(): target_addr={}", conn, _peer_addr);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+
+  auto cc_seq = crosscore.prepare_submit();
+  gate.dispatch_in_background("set_accepted_sid", conn, [this, cc_seq] {
+    return io_handler.set_accepted_sid(
+        cc_seq,
+        frame_assembler->get_socket_shard_id(),
+        seastar::make_foreign(conn.shared_from_this()));
+  });
+
   execute_accepting();
 }
 
