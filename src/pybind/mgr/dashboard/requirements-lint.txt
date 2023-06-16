@@ -8,4 +8,4 @@ rstcheck==3.3.1
 autopep8==1.5.7
 pyfakefs==4.5.0
 isort==5.5.3
-jsonschema==4.16.0
+jsonschema~=4.0
