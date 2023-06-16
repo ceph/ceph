@@ -58,12 +58,22 @@
 #include "ZonedFreelistManager.h"
 #endif
 
-#if defined(WITH_LTTNG) && !defined(WITH_EXPERIMENTAL)
+#if defined(WITH_LTTNG)
+
+#ifdef WITH_EXPERIMENTAL
+namespace ceph::experimental {
+#endif
+
 #define TRACEPOINT_DEFINE
 #define TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #include "tracing/bluestore.h"
 #undef TRACEPOINT_PROBE_DYNAMIC_LINKAGE
 #undef TRACEPOINT_DEFINE
+
+#ifdef WITH_EXPERIMENTAL
+} //namespace ceph::experimental
+#endif
+
 #else
 #define tracepoint(...)
 #endif
