@@ -5,6 +5,7 @@ from util import Config, Logger
 from typing import Dict
 from basesystem import BaseSystem
 import sys
+import argparse
 
 # for devel purposes
 import os
@@ -33,133 +34,179 @@ for env_var in DEVEL_ENV_VARS:
         print(f"{env_var} environment variable must be set.")
         sys.exit(1)
 
-config = Config(default_config=DEFAULT_CONFIG)
-
-log = Logger(__name__, level=config.logging['level'])
-# must be passed as arguments
-host = os.environ.get('REDFISH_HOST')
-username = os.environ.get('REDFISH_USERNAME')
-password = os.environ.get('REDFISH_PASSWORD')
-
-# create the redfish system and the obsever
-log.logger.info("Server initialization...")
-system = RedfishDell(host=host,
-                     username=username,
-                     password=password,
-                     system_endpoint='/Systems/System.Embedded.1',
-                     config=config)
-reporter_agent = Reporter(system, "http://127.0.0.1:8000")
-
 
 class Memory:
     exposed = True
 
+    def __init__(self, backend: BaseSystem) -> None:
+        self.backend = backend
+
     @cherrypy.tools.json_out()
     def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'memory': system.get_memory()}
+        return {'memory': self.backend.get_memory()}
 
 
 class Network:
     exposed = True
 
+    def __init__(self, backend: BaseSystem) -> None:
+        self.backend = backend
+
     @cherrypy.tools.json_out()
     def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'network': system.get_network()}
+        return {'network': self.backend.get_network()}
 
 
 class Processors:
     exposed = True
 
+    def __init__(self, backend: BaseSystem) -> None:
+        self.backend = backend
+
     @cherrypy.tools.json_out()
     def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'processors': system.get_processors()}
+        return {'processors': self.backend.get_processors()}
 
 
 class Storage:
     exposed = True
 
+    def __init__(self, backend: BaseSystem) -> None:
+        self.backend = backend
+
     @cherrypy.tools.json_out()
     def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'storage': system.get_storage()}
+        return {'storage': self.backend.get_storage()}
 
 
 class Status:
     exposed = True
 
+    def __init__(self, backend: BaseSystem) -> None:
+        self.backend = backend
+
     @cherrypy.tools.json_out()
     def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'status': system.get_status()}
+        return {'status': self.backend.get_status()}
 
 
 class System:
     exposed = True
-    memory = Memory()
-    network = Network()
-    processors = Processors()
-    storage = Storage()
-    status = Status()
-    # actions = Actions()
-    # control = Control()
+
+    def __init__(self, backend: BaseSystem) -> None:
+        self.memory = Memory(backend)
+        self.network = Network(backend)
+        self.processors = Processors(backend)
+        self.storage = Storage(backend)
+        self.status = Status(backend)
+        # actions = Actions()
+        # control = Control()
 
 
 class Shutdown:
     exposed = True
 
+    def __init__(self, backend: BaseSystem, reporter: Reporter) -> None:
+        self.backend = backend
+        self.reporter = reporter
+
     def POST(self) -> str:
-        _stop()
+        _stop(self.backend, self.reporter)
         cherrypy.engine.exit()
         return 'Server shutdown...'
 
 
-def _stop() -> None:
-    system.stop_update_loop()
-    system.client.logout()
-    reporter_agent.stop()
+def _stop(backend: BaseSystem, reporter: Reporter) -> None:
+    backend.stop_update_loop()
+    backend.client.logout()
+    reporter.stop()
 
 
 class Start:
     exposed = True
 
+    def __init__(self, backend: BaseSystem, reporter: Reporter) -> None:
+        self.backend = backend
+        self.reporter = reporter
+
     def POST(self) -> str:
-        system.start_client()
-        system.start_update_loop()
-        reporter_agent.run()
+        self.backend.start_client()
+        self.backend.start_update_loop()
+        self.reporter.run()
         return 'node-proxy daemon started'
 
 
 class Stop:
     exposed = True
 
+    def __init__(self, backend: BaseSystem, reporter: Reporter) -> None:
+        self.backend = backend
+        self.reporter = reporter
+
     def POST(self) -> str:
-        _stop()
+        _stop(self.backend, self.reporter)
         return 'node-proxy daemon stopped'
 
 
 class ConfigReload:
     exposed = True
 
-    def __init__(self, config: cherrypy.config) -> None:
+    def __init__(self, config: Config) -> None:
         self.config = config
 
     def POST(self) -> str:
-        self.config['node_proxy'].reload()
+        self.config.reload()
         return 'node-proxy config reloaded'
 
 
 class API:
     exposed = True
 
-    system = System()
-    shutdown = Shutdown()
-    start = Start()
-    stop = Stop()
-    config_reload = ConfigReload(cherrypy.config)
+    def __init__(self,
+                 backend: BaseSystem,
+                 reporter: Reporter,
+                 config: Config) -> None:
+
+        self.system = System(backend)
+        self.shutdown = Shutdown(backend, reporter)
+        self.start = Start(backend, reporter)
+        self.stop = Stop(backend, reporter)
+        self.config_reload = ConfigReload(config)
 
     def GET(self) -> str:
         return 'use /system'
 
 
-if __name__ == '__main__':
+def main() -> None:
+
+    parser = argparse.ArgumentParser(
+        prog='node-proxy',
+    )
+    parser.add_argument(
+        '--config',
+        dest='config',
+        type=str,
+        required=False,
+        default='/etc/ceph/node-proxy.yml'
+    )
+
+    args = parser.parse_args()
+    config = Config(args.config, default_config=DEFAULT_CONFIG)
+
+    log = Logger(__name__, level=config.logging['level'])
+    # must be passed as arguments
+    host = os.environ.get('REDFISH_HOST')
+    username = os.environ.get('REDFISH_USERNAME')
+    password = os.environ.get('REDFISH_PASSWORD')
+
+    # create the redfish system and the obsever
+    log.logger.info("Server initialization...")
+    system = RedfishDell(host=host,
+                         username=username,
+                         password=password,
+                         system_endpoint='/Systems/System.Embedded.1',
+                         config=config)
+    reporter_agent = Reporter(system, "http://127.0.0.1:8000")
     cherrypy.config.update({
         'node_proxy': config,
         'server.socket_port': config.__dict__['server']['port']
@@ -170,4 +217,8 @@ if __name__ == '__main__':
     }}
     system.start_update_loop()
     reporter_agent.run()
-    cherrypy.quickstart(API(), config=c)
+    cherrypy.quickstart(API(system, reporter_agent, config), config=c)
+
+
+if __name__ == '__main__':
+    main()

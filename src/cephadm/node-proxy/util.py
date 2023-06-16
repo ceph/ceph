@@ -5,14 +5,26 @@ import time
 from typing import Dict, List, Callable, Any
 
 
-def normalize_dict(test_dict: Dict) -> Dict:
-    res = dict()
-    for key in test_dict.keys():
-        if isinstance(test_dict[key], dict):
-            res[key.lower()] = normalize_dict(test_dict[key])
-        else:
-            res[key.lower()] = test_dict[key]
-    return res
+class Logger:
+    _Logger: List['Logger'] = []
+
+    def __init__(self, name: str, level: int = logging.INFO):
+        self.name = name
+        self.level = level
+
+        Logger._Logger.append(self)
+        self.logger = self.get_logger()
+
+    def get_logger(self) -> logging.Logger:
+        logger = logging.getLogger(self.name)
+        logger.setLevel(self.level)
+        handler = logging.StreamHandler()
+        handler.setLevel(self.level)
+        fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler.setFormatter(fmt)
+        logger.addHandler(handler)
+
+        return logger
 
 
 class Config:
@@ -50,26 +62,17 @@ class Config:
         self.load_config()
 
 
-class Logger:
-    _Logger: List['Logger'] = []
+log = Logger(__name__)
 
-    def __init__(self, name: str, level: int = logging.INFO):
-        self.name = name
-        self.level = level
 
-        Logger._Logger.append(self)
-        self.logger = self.get_logger()
-
-    def get_logger(self) -> logging.Logger:
-        logger = logging.getLogger(self.name)
-        logger.setLevel(self.level)
-        handler = logging.StreamHandler()
-        handler.setLevel(self.level)
-        fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        handler.setFormatter(fmt)
-        logger.addHandler(handler)
-
-        return logger
+def normalize_dict(test_dict: Dict) -> Dict:
+    res = dict()
+    for key in test_dict.keys():
+        if isinstance(test_dict[key], dict):
+            res[key.lower()] = normalize_dict(test_dict[key])
+        else:
+            res[key.lower()] = test_dict[key]
+    return res
 
 
 def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Callable:
@@ -78,12 +81,12 @@ def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Cal
             _tries = retries
             while _tries > 1:
                 try:
-                    print("{}".format(_tries))
+                    log.logger.debug("{} {} attempt(s) left.".format(f, _tries - 1))
                     return f(*args, **kwargs)
                 except exceptions:
                     time.sleep(delay)
                     _tries -= 1
-            print("{} has failed after {} tries".format(f, retries))
+            log.logger.warn("{} has failed after {} tries".format(f, retries))
             return f(*args, **kwargs)
         return _retry
     return decorator
