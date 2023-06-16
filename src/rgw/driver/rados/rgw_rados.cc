@@ -8874,10 +8874,12 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       r = 0;
     }
 
+    const cls_rgw_obj_key dirent_key = dirent.key;
+
     // at this point either r >= 0 or r == -ENOENT
     if (r >= 0) { // i.e., if r != -ENOENT
       ldpp_dout(dpp, 10) << __func__ << ": got " <<
-	dirent.key << dendl;
+	dirent_key << dendl;
 
       auto [it, inserted] = m.insert_or_assign(name, std::move(dirent));
       last_entry_visited = &it->second;
@@ -8918,7 +8920,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
       // fewer than what was requested
       ldpp_dout(dpp, 10) << __func__ <<
 	": stopped accumulating results at count=" << count <<
-	", dirent=\"" << dirent.key <<
+	", dirent=\"" << dirent_key <<
 	"\", because its shard is truncated and exhausted" << dendl;
       break;
     }
