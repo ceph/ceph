@@ -2,7 +2,7 @@ from util import Config
 from typing import Dict, Any
 
 
-class System:
+class BaseSystem:
     def __init__(self, **kw: Any) -> None:
         self._system: Dict = {}
         self.config: Config = kw['config']
