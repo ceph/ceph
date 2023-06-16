@@ -1281,11 +1281,15 @@ public:
 			  RGWBucketInfo* save_bucket_info,
 			  std::string& new_bucket_id,
 			  const DoutPrefixProvider* dpp);
-  int guard_reshard(const DoutPrefixProvider *dpp,
-                    BucketShard *bs,
-		    const rgw_obj& obj_instance,
-		    const RGWBucketInfo& bucket_info,
-		    std::function<int(BucketShard *)> call);
+  int guard_reshard_read(const DoutPrefixProvider *dpp,
+                         const rgw_obj& obj_instance,
+                         const RGWBucketInfo& bucket_info,
+                         std::function<int(BucketShard *)> call);
+  int guard_reshard_write(const DoutPrefixProvider *dpp,
+                          BucketShard *bs,
+      	                  const rgw_obj& obj_instance,
+      	                  const RGWBucketInfo& bucket_info,
+      	                  std::function<int(BucketShard *)> call);
   int block_while_resharding(RGWRados::BucketShard *bs,
 			     std::string *new_bucket_id,
 			     const RGWBucketInfo& bucket_info,
