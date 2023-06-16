@@ -188,8 +188,7 @@ Request parameters:
    specified CA will be used to authenticate the broker. The default CA will
    not be used.  
  - amqp-exchange: The exchanges must exist and must be able to route messages
-   based on topics. This parameter is mandatory.  Different topics that point
-   to the same endpoint must use the same exchange.
+   based on topics. This parameter is mandatory.
  - amqp-ack-level: No end2end acking is required. Messages may persist in the
    broker before being delivered to their final destinations. Three ack methods
    exist:
