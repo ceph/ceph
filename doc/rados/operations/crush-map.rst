@@ -613,285 +613,283 @@ To remove a weight set, run a command of the following form:
 Creating a rule for a replicated pool
 -------------------------------------
 
-For a replicated pool, the primary decision when creating the CRUSH
-rule is what the failure domain is going to be.  For example, if a
-failure domain of ``host`` is selected, then CRUSH will ensure that
-each replica of the data is stored on a unique host.  If ``rack``
-is selected, then each replica will be stored in a different rack.
-What failure domain you choose primarily depends on the size and
-topology of your cluster.
+When you create a CRUSH rule for a replicated pool, there is an important
+decision to make: selecting a failure domain. For example, if you select a
+failure domain of ``host``, then CRUSH will ensure that each replica of the
+data is stored on a unique host.  Alternatively, if you select a failure domain
+of ``rack``, then each replica of the data will be stored in a different rack.
+Your selection of failure domain should be guided by the size and its CRUSH
+topology. 
 
-In most cases the entire cluster hierarchy is nested beneath a root node
-named ``default``.  If you have customized your hierarchy, you may
-want to create a rule nested at some other node in the hierarchy.  It
-doesn't matter what type is associated with that node (it doesn't have
-to be a ``root`` node).
+The entire cluster hierarchy is typically nested beneath a root node that is
+named ``default``. If you have customized your hierarchy, you might want to
+create a rule nested beneath some other node in the hierarchy.  In creating
+this rule for the customized hierarchy, the node type doesn't matter, and in
+particular the rule does not have to be nested beneath a ``root`` node.
 
-It is also possible to create a rule that restricts data placement to
-a specific *class* of device.  By default, Ceph OSDs automatically
-classify themselves as either ``hdd`` or ``ssd``, depending on the
-underlying type of device being used.  These classes can also be
-customized.
+It is possible to create a rule that restricts data placement to a specific
+*class* of device. By default, Ceph OSDs automatically classify themselves as
+either ``hdd`` or ``ssd`` in accordance with the underlying type of device
+being used. These device classes can be customized. One might set the ``device
+class`` of OSDs to ``nvme`` to distinguish the from SATA SSDs, or one might set
+them to something arbitrary like ``ssd-testing`` or ``ssd-ethel`` so that rules
+and pools may be flexibly constrained to use (or avoid using) specific subsets
+of OSDs based on specific requirements. 
 
-To create a replicated rule:
+To create a rule for a replicated pool, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd crush rule create-replicated {name} {root} {failure-domain-type} [{class}]
 
-Where:
+For details on this command's parameters, see the following:
 
 ``name``
-
-:Description: The name of the rule
-:Type: String
-:Required: Yes
-:Example: ``rbd-rule``
+   :Description: The name of the rule.
+   :Type: String
+   :Required: Yes
+   :Example: ``rbd-rule``
 
 ``root``
-
-:Description: The name of the node under which data should be placed.
-:Type: String
-:Required: Yes
-:Example: ``default``
+   :Description: The name of the CRUSH hierarchy node under which data is to be placed.
+   :Type: String
+   :Required: Yes
+   :Example: ``default``
 
 ``failure-domain-type``
-
-:Description: The type of CRUSH nodes across which we should separate replicas.
-:Type: String
-:Required: Yes
-:Example: ``rack``
+   :Description: The type of CRUSH nodes used for the replicas of the failure domain.
+   :Type: String
+   :Required: Yes
+   :Example: ``rack``
 
 ``class``
+   :Description: The device class on which data is to be placed.
+   :Type: String
+   :Required: No
+   :Example: ``ssd``
 
-:Description: The device class on which data should be placed.
-:Type: String
-:Required: No
-:Example: ``ssd``
-
-Creating a rule for an erasure coded pool
+Creating a rule for an erasure-coded pool
 -----------------------------------------
 
-For an erasure-coded (EC) pool, the same basic decisions need to be made:
-what is the failure domain, which node in the
-hierarchy will data be placed under (usually ``default``), and will
-placement be restricted to a specific device class.  Erasure code
-pools are created a bit differently, however, because they need to be
-constructed carefully based on the erasure code being used.  For this reason,
-you must include this information in the *erasure code profile*.  A CRUSH
-rule will then be created from that either explicitly or automatically when
-the profile is used to create a pool.
+For an erasure-coded pool, similar decisions need to be made: what the failure
+domain is, which node in the hierarchy data will be placed under (usually
+``default``), and whether placement is restricted to a specific device class.
+However, erasure-code pools are created in a different way: there is a need to
+construct them carefully with reference to the erasure code plugin in use. For
+this reason, these decisions must be incorporated into the **erasure-code
+profile**.  A CRUSH rule will then be created from the erasure-code profile,
+either explicitly or automatically when the profile is used to create a pool.
 
-The erasure code profiles can be listed with:
+To list the erasure-code profiles, run the following command:
 
 .. prompt:: bash $
 
    ceph osd erasure-code-profile ls
 
-An existing profile can be viewed with:
+To view a specific existing profile, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd erasure-code-profile get {profile-name}
 
-Normally profiles should never be modified; instead, a new profile
-should be created and used when creating a new pool or creating a new
+Under normal conditions, profiles should never be modified; instead, a new
+profile should be created and used when creating either a new pool or a new
 rule for an existing pool.
 
-An erasure code profile consists of a set of key=value pairs.  Most of
-these control the behavior of the erasure code that is encoding data
-in the pool.  Those that begin with ``crush-``, however, affect the
-CRUSH rule that is created.
+An erasure-code profile consists of a set of key-value pairs. Most of these
+key-value pairs govern the behavior of the erasure code that encodes data in
+the pool. However, key-value pairs that begin with ``crush-`` govern the CRUSH
+rule that is created.
 
-The erasure code profile properties of interest are:
+The relevant erasure-code profile properties are as follows:
 
- * **crush-root**: the name of the CRUSH node under which to place data [default: ``default``].
- * **crush-failure-domain**: the CRUSH bucket type across which to distribute erasure-coded shards [default: ``host``].
- * **crush-device-class**: the device class on which to place data [default: none, meaning all devices are used].
- * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the number of erasure code shards, affecting the resulting CRUSH rule.
+ * **crush-root**: the name of the CRUSH node under which to place data
+   [default: ``default``].
+ * **crush-failure-domain**: the CRUSH bucket type used in the distribution of
+   erasure-coded shards [default: ``host``].
+ * **crush-device-class**: the device class on which to place data [default:
+   none, which means that all devices are used].
+ * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the
+   number of erasure-code shards, affecting the resulting CRUSH rule.
 
-Once a profile is defined, you can create a CRUSH rule with:
+ After a profile is defined, you can create a CRUSH rule by running a command
+ of the following form:
 
 .. prompt:: bash $
 
    ceph osd crush rule create-erasure {name} {profile-name}
 
-.. note: When creating a new pool, it is not actually necessary to
-   explicitly create the rule.  If the erasure code profile alone is
-   specified and the rule argument is left off then Ceph will create
-   the CRUSH rule automatically.
+.. note: When creating a new pool, it is not necessary to create the rule
+   explicitly. If only the erasure-code profile is specified and the rule
+   argument is omitted, then Ceph will create the CRUSH rule automatically.
+
 
 Deleting rules
 --------------
 
-Rules that are not in use by pools can be deleted with:
+To delete rules that are not in use by pools, run a command of the following
+form:
 
 .. prompt:: bash $
 
    ceph osd crush rule rm {rule-name}
-
 
 .. _crush-map-tunables:
 
 Tunables
 ========
 
-Over time, we have made (and continue to make) improvements to the
-CRUSH algorithm used to calculate the placement of data.  In order to
-support the change in behavior, we have introduced a series of tunable
-options that control whether the legacy or improved variation of the
-algorithm is used.
+The CRUSH algorithm that is used to calculate the placement of data has been
+improved over time. In order to support changes in behavior, we have provided
+users with sets of tunables that determine which legacy or optimal version of
+CRUSH is to be used. 
 
-In order to use newer tunables, both clients and servers must support
-the new version of CRUSH.  For this reason, we have created
+In order to use newer tunables, all Ceph clients and daemons must support the
+new major release of CRUSH. Because of this requirement, we have created
 ``profiles`` that are named after the Ceph version in which they were
-introduced.  For example, the ``firefly`` tunables are first supported
-by the Firefly release, and will not work with older (e.g., Dumpling)
-clients.  Once a given set of tunables are changed from the legacy
-default behavior, the ``ceph-mon`` and ``ceph-osd`` will prevent older
-clients who do not support the new CRUSH features from connecting to
-the cluster.
+introduced. For example, the ``firefly`` tunables were first supported by the
+Firefly release and do not work with older clients (for example, clients
+running Dumpling).  After a cluster's tunables profile is changed from a legacy
+set to a newer or ``optimal`` set, the ``ceph-mon`` and ``ceph-osd`` options
+will prevent older clients that do not support the new CRUSH features from
+connecting to the cluster.
 
 argonaut (legacy)
 -----------------
 
-The legacy CRUSH behavior used by Argonaut and older releases works
-fine for most clusters, provided there are not many OSDs that have
-been marked out.
+The legacy CRUSH behavior used by Argonaut and older releases works fine for
+most clusters, provided that not many OSDs have been marked ``out``.
 
 bobtail (CRUSH_TUNABLES2)
 -------------------------
 
-The ``bobtail`` tunable profile fixes a few key misbehaviors:
+The ``bobtail`` tunable profile provides the following fixes:
 
- * For hierarchies with a small number of devices in the leaf buckets,
-   some PGs map to fewer than the desired number of replicas.  This
-   commonly happens for hierarchies with "host" nodes with a small
-   number (1-3) of OSDs nested beneath each one.
+ * For hierarchies with a small number of devices in leaf buckets, some PGs
+   might map to fewer than the desired number of replicas, resulting in
+   ``undersized`` PGs.  This is known to happen in the case of hierarchies with
+   ``host`` nodes that have a small number of OSDs (1 to 3) nested beneath each
+   host.
 
- * For large clusters, some small percentages of PGs map to fewer than
-   the desired number of OSDs.  This is more prevalent when there are
-   multiple hierarchy layers in use (e.g., ``row``, ``rack``, ``host``, ``osd``).
+ * For large clusters, a small percentage of PGs might map to fewer than the
+   desired number of OSDs. This is known to happen when there are multiple
+   hierarchy layers in use (for example,, ``row``, ``rack``, ``host``,
+   ``osd``).
 
- * When some OSDs are marked out, the data tends to get redistributed
+ * When one or more OSDs are marked ``out``, data tends to be redistributed
    to nearby OSDs instead of across the entire hierarchy.
 
-The new tunables are:
+The tunables introduced by ``bobtail`` are as follows:
 
- * ``choose_local_tries``: Number of local retries.  Legacy value is
-   2, optimal value is 0.
+ * ``choose_local_tries``: Number of local retries. The legacy value is ``2``,
+   and the optimal value is ``0``.
 
- * ``choose_local_fallback_tries``: Legacy value is 5, optimal value
-   is 0.
+ * ``choose_local_fallback_tries``: The legacy value is ``5``, and the optimal
+   value is 0.
 
- * ``choose_total_tries``: Total number of attempts to choose an item.
-   Legacy value was 19, subsequent testing indicates that a value of
-   50 is more appropriate for typical clusters.  For extremely large
-   clusters, a larger value might be necessary.
+ * ``choose_total_tries``: Total number of attempts to choose an item.  The
+   legacy value is ``19``, but subsequent testing indicates that a value of
+   ``50`` is more appropriate for typical clusters. For extremely large
+   clusters, an even larger value might be necessary.
 
- * ``chooseleaf_descend_once``: Whether a recursive chooseleaf attempt
-   will retry, or only try once and allow the original placement to
-   retry.  Legacy default is 0, optimal value is 1.
+ * ``chooseleaf_descend_once``: Whether a recursive ``chooseleaf`` attempt will
+   retry, or try only once and allow the original placement to retry. The
+   legacy default is ``0``, and the optimal value is ``1``.
 
 Migration impact:
 
- * Moving from ``argonaut`` to ``bobtail`` tunables triggers a moderate amount
-   of data movement.  Use caution on a cluster that is already
+ * Moving from the ``argonaut`` tunables to the ``bobtail`` tunables triggers a
+   moderate amount of data movement. Use caution on a cluster that is already
    populated with data.
 
 firefly (CRUSH_TUNABLES3)
 -------------------------
 
-The ``firefly`` tunable profile fixes a problem
-with ``chooseleaf`` CRUSH rule behavior that tends to result in PG
-mappings with too few results when too many OSDs have been marked out.
+The ``firefly`` tunable profile fixes a problem with ``chooseleaf`` CRUSH rule
+behavior. When this problem arises, PG mappings with too few OSDs can occur
+when too many OSDs have been marked ``out``.
 
-The new tunable is:
+The new tunable introduced by ``firefly`` is as follows:
 
- * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will
-   start with a non-zero value of ``r``, based on how many attempts the
-   parent has already made.  Legacy default is ``0``, but with this value
-   CRUSH is sometimes unable to find a mapping.  The optimal value (in
+ * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will start
+   with a non-zero value of ``r``, as determined by the number of attempts the
+   parent has already made. The legacy default value is ``0``, but with this
+   value CRUSH is sometimes unable to find a mapping. The optimal value (in
    terms of computational cost and correctness) is ``1``.
 
 Migration impact:
 
- * For existing clusters that house lots of data, changing
-   from ``0`` to ``1`` will cause a lot of data to move; a value of ``4`` or ``5``
-   will allow CRUSH to still find a valid mapping but will cause less data
-   to move.
+ * For existing clusters that store a great deal of data, changing this tunable
+   from ``0`` to ``1`` will trigger a large amount of data migration; a value
+   of ``4`` or ``5`` will allow CRUSH to still find a valid mapping and will
+   cause less data to move.
 
-straw_calc_version tunable (introduced with Firefly too)
---------------------------------------------------------
+straw_calc_version tunable
+--------------------------
 
-There were some problems with the internal weights calculated and
-stored in the CRUSH map for ``straw`` algorithm buckets.  Specifically, when
-there were items with a CRUSH weight of ``0``, or both a mix of different and
-unique weights, CRUSH would distribute data incorrectly (i.e.,
-not in proportion to the weights).
+There were problems with the internal weights calculated and stored in the
+CRUSH map for ``straw`` algorithm buckets. More specifically, when there were
+items with a CRUSH weight of ``0`` or with a mix of different and unique
+weights, CRUSH would distribute data incorrectly (that is, not in proportion to
+the weights).
 
-The new tunable is:
+The new tunable introduced by ``firefly`` is as follows:
 
  * ``straw_calc_version``: A value of ``0`` preserves the old, broken
-   internal weight calculation; a value of ``1`` fixes the behavior.
+   internal-weight calculation; a value of ``1`` fixes the problem.
 
 Migration impact:
 
- * Moving to straw_calc_version ``1`` and then adjusting a straw bucket
-   (by adding, removing, or reweighting an item, or by using the
-   reweight-all command) can trigger a small to moderate amount of
-   data movement *if* the cluster has hit one of the problematic
+ * Changing this tunable to a value of ``1`` and then adjusting a straw bucket
+   (either by adding, removing, or reweighting an item or by using the
+   reweight-all command) can trigger a small to moderate amount of data
+   movement provided that the cluster has hit one of the problematic
    conditions.
 
-This tunable option is special because it has absolutely no impact
-concerning the required kernel version in the client side.
+This tunable option is special because it has absolutely no impact on the
+required kernel version in the client side.
 
 hammer (CRUSH_V4)
 -----------------
 
-The ``hammer`` tunable profile does not affect the
-mapping of existing CRUSH maps simply by changing the profile.  However:
+The ``hammer`` tunable profile does not affect the mapping of existing CRUSH
+maps simply by changing the profile. However:
 
- * There is a new bucket algorithm (``straw2``) supported.  The new
-   ``straw2`` bucket algorithm fixes several limitations in the original
-   ``straw``.  Specifically, the old ``straw`` buckets would
-   change some mappings that should have changed when a weight was
-   adjusted, while ``straw2`` achieves the original goal of only
-   changing mappings to or from the bucket item whose weight has
+ * There is a new bucket algorithm supported: ``straw2``. This new algorithm
+   fixes several limitations in the original ``straw``. More specifically, the
+   old ``straw`` buckets would change some mappings that should not have
+   changed when a weight was adjusted, while ``straw2`` achieves the original
+   goal of changing mappings only to or from the bucket item whose weight has
    changed.
 
- * ``straw2`` is the default for any newly created buckets.
+ * The ``straw2`` type is the default type for any newly created buckets.
 
 Migration impact:
 
- * Changing a bucket type from ``straw`` to ``straw2`` will result in
-   a reasonably small amount of data movement, depending on how much
-   the bucket item weights vary from each other.  When the weights are
-   all the same no data will move, and when item weights vary
-   significantly there will be more movement.
+ * Changing a bucket type from ``straw`` to ``straw2`` will trigger a small
+   amount of data movement, depending on how much the bucket items' weights
+   vary from each other. When the weights are all the same no data will move,
+   and the more variance there is in the weights the more movement there will
+   be.
 
 jewel (CRUSH_TUNABLES5)
 -----------------------
 
-The ``jewel`` tunable profile improves the
-overall behavior of CRUSH such that significantly fewer mappings
-change when an OSD is marked out of the cluster.  This results in
-significantly less data movement.
+The ``jewel`` tunable profile improves the overall behavior of CRUSH. As a
+result, significantly fewer mappings change when an OSD is marked ``out`` of
+the cluster. This improvement results in significantly less data movement.
 
-The new tunable is:
+The new tunable introduced by ``jewel`` is as follows:
 
- * ``chooseleaf_stable``: Whether a recursive chooseleaf attempt will
-   use a better value for an inner loop that greatly reduces the number
-   of mapping changes when an OSD is marked out.  The legacy value is ``0``,
-   while the new value of ``1`` uses the new approach.
+ * ``chooseleaf_stable``: Determines whether a recursive chooseleaf attempt
+   will use a better value for an inner loop that greatly reduces the number of
+   mapping changes when an OSD is marked ``out``. The legacy value is ``0``,
+   and the new value of ``1`` uses the new approach.
 
 Migration impact:
 
- * Changing this value on an existing cluster will result in a very
-   large amount of data movement as almost every PG mapping is likely
-   to change.
-
-
+ * Changing this value on an existing cluster will result in a very large
+   amount of data movement because nearly every PG mapping is likely to change.
 
 
 Which client versions support CRUSH_TUNABLES
