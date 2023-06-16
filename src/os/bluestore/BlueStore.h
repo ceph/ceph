@@ -60,6 +60,8 @@
 class Allocator;
 class FreelistManager;
 class SimpleBitmap;
+class ZonedAllocator;
+class ZonedFreelistManager;
 
 #ifdef WITH_EXPERIMENTAL
 
@@ -2853,8 +2855,8 @@ private:
   void _zoned_cleaner_stop();
   void _zoned_cleaner_thread();
   void _zoned_clean_zone(uint64_t zone_num,
-			 class ZonedAllocator *a,
-			 class ZonedFreelistManager *f);
+			 ZonedAllocator *a,
+			 ZonedFreelistManager *f);
   void _clean_some(ghobject_t oid, uint32_t zone_num);
 #endif
 
