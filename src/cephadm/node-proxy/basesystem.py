@@ -1,11 +1,13 @@
 from util import Config
 from typing import Dict, Any
+from baseclient import BaseClient
 
 
 class BaseSystem:
     def __init__(self, **kw: Any) -> None:
         self._system: Dict = {}
         self.config: Config = kw['config']
+        self.client: BaseClient
 
     def get_system(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
@@ -29,4 +31,13 @@ class BaseSystem:
         raise NotImplementedError()
 
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
+        raise NotImplementedError()
+
+    def start_update_loop(self) -> None:
+        raise NotImplementedError()
+
+    def stop_update_loop(self) -> None:
+        raise NotImplementedError()
+
+    def start_client(self) -> None:
         raise NotImplementedError()
