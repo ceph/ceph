@@ -3,6 +3,7 @@ from redfish_dell import RedfishDell
 from reporter import Reporter
 from util import Config, Logger
 from typing import Dict
+from basesystem import BaseSystem
 import sys
 
 # for devel purposes

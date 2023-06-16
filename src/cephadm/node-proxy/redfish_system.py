@@ -1,4 +1,4 @@
-from system import System
+from basesystem import BaseSystem
 from redfish_client import RedFishClient
 from threading import Thread, Lock
 from time import sleep
@@ -8,7 +8,7 @@ from typing import Dict, Any
 log = Logger(__name__)
 
 
-class RedfishSystem(System):
+class RedfishSystem(BaseSystem):
     def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
         self.host: str = kw['host']
