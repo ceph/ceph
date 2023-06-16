@@ -4,12 +4,13 @@ from redfish.rest.v1 import ServerDownOrUnreachableError, \
 import redfish
 import sys
 from util import Logger
+from baseclient import BaseClient
 from typing import Dict
 
 log = Logger(__name__)
 
 
-class RedFishClient:
+class RedFishClient(BaseClient):
 
     PREFIX = '/redfish/v1'
 
@@ -18,9 +19,7 @@ class RedFishClient:
                  username: str,
                  password: str) -> None:
         log.logger.info("redfish client initialization...")
-        self.host = host
-        self.username = username
-        self.password = password
+        super().__init__(host, username, password)
         self.redfish_obj: 'redfish.redfish_client' = None
 
     def login(self) -> 'redfish.redfish_client':
