@@ -588,13 +588,13 @@ int POSIXUser::create_bucket(const DoutPrefixProvider* dpp,
 
   POSIXBucket* fb = new POSIXBucket(driver, driver->get_root_fd(), binfo, this);
 
-  int ret = fb->create(dpp, y, existed);
+  int ret = fb->set_attrs(attrs);
   if (ret < 0) {
     delete fb;
     return  ret;
   }
 
-  ret = fb->set_attrs(attrs);
+  ret = fb->create(dpp, y, existed);
   if (ret < 0) {
     delete fb;
     return  ret;

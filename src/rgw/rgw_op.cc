@@ -4410,17 +4410,20 @@ void RGWPostObj::execute(optional_yield y)
   CompressorRef plugin;
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
 
+  ldpp_dout(this, 10) << "Palpatine 1 " << dendl;
   /* Read in the data from the POST form. */
   op_ret = get_params(y);
   if (op_ret < 0) {
     return;
   }
 
+  ldpp_dout(this, 10) << "Palpatine 2 " << dendl;
   op_ret = verify_params();
   if (op_ret < 0) {
     return;
   }
 
+  ldpp_dout(this, 10) << "Palpatine 3 " << dendl;
   // add server-side encryption headers
   rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
@@ -4428,14 +4431,17 @@ void RGWPostObj::execute(optional_yield y)
     auto identity_policy_res = eval_identity_or_session_policies(this, s->iam_user_policies, s->env,
                                             rgw::IAM::s3PutObject,
                                             s->object->get_obj());
+  ldpp_dout(this, 10) << "Palpatine 4 " << dendl;
     if (identity_policy_res == Effect::Deny) {
       op_ret = -EACCES;
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 5 " << dendl;
     rgw::IAM::Effect e = Effect::Pass;
     rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
     if (s->iam_policy) {
+  ldpp_dout(this, 10) << "Palpatine 6 " << dendl;
       ARN obj_arn(s->object->get_obj());
       e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
@@ -4447,7 +4453,9 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 7 " << dendl;
     if (!s->session_policies.empty()) {
+  ldpp_dout(this, 10) << "Palpatine 8 " << dendl;
       auto session_policy_res = eval_identity_or_session_policies(this, s->session_policies, s->env,
                                               rgw::IAM::s3PutObject,
                                               s->object->get_obj());
@@ -4455,7 +4463,9 @@ void RGWPostObj::execute(optional_yield y)
           op_ret = -EACCES;
           return;
       }
+  ldpp_dout(this, 10) << "Palpatine 9 " << dendl;
       if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
+  ldpp_dout(this, 10) << "Palpatine 10 " << dendl;
         //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
         if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
             (session_policy_res == Effect::Allow && e == Effect::Allow)) {
@@ -4463,29 +4473,36 @@ void RGWPostObj::execute(optional_yield y)
           return;
         }
       } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
+  ldpp_dout(this, 10) << "Palpatine 11 " << dendl;
         //Intersection of session policy and identity policy plus bucket policy
         if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || e == Effect::Allow) {
           op_ret = 0;
           return;
         }
       } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
+  ldpp_dout(this, 10) << "Palpatine 12 " << dendl;
         if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) {
           op_ret = 0;
           return;
         }
       }
+  ldpp_dout(this, 10) << "Palpatine 13 " << dendl;
       op_ret = -EACCES;
       return;
     }
+  ldpp_dout(this, 10) << "Palpatine 14 " << dendl;
     if (identity_policy_res == Effect::Pass && e == Effect::Pass && !verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
       op_ret = -EACCES;
       return;
     }
+  ldpp_dout(this, 10) << "Palpatine 15 " << dendl;
   } else if (!verify_bucket_permission_no_policy(this, s, RGW_PERM_WRITE)) {
+  ldpp_dout(this, 10) << "Palpatine 16 " << dendl;
     op_ret = -EACCES;
     return;
   }
 
+  ldpp_dout(this, 10) << "Palpatine 17 " << dendl;
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
     = driver->get_notification(s->object.get(), s->src_object.get(), s, rgw::notify::ObjectCreatedPost, y);
@@ -4494,6 +4511,7 @@ void RGWPostObj::execute(optional_yield y)
     return;
   }
 
+  ldpp_dout(this, 10) << "Palpatine 18 " << dendl;
   /* Start iteration over data fields. It's necessary as Swift's FormPost
    * is capable to handle multiple files in single form. */
   do {
@@ -4504,11 +4522,13 @@ void RGWPostObj::execute(optional_yield y)
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     ceph::buffer::list bl, aclbl;
 
+  ldpp_dout(this, 10) << "Palpatine 19 " << dendl;
     op_ret = s->bucket->check_quota(this, quota, s->content_length, y);
     if (op_ret < 0) {
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 20 " << dendl;
     if (supplied_md5_b64) {
       char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
       ldpp_dout(this, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
@@ -4523,6 +4543,7 @@ void RGWPostObj::execute(optional_yield y)
       buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
       ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
+  ldpp_dout(this, 10) << "Palpatine 21 " << dendl;
 
     std::unique_ptr<rgw::sal::Object> obj =
 		     s->bucket->get_object(rgw_obj_key(get_current_filename()));
@@ -4530,6 +4551,7 @@ void RGWPostObj::execute(optional_yield y)
       obj->gen_rand_obj_instance_name();
     }
 
+  ldpp_dout(this, 10) << "Palpatine 22 obj=" << obj << dendl;
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
 					 s->bucket_owner.get_id(),
@@ -4539,6 +4561,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 23 " << dendl;
     /* No filters by default. */
     rgw::sal::DataProcessor *filter = processor.get();
 
@@ -4547,6 +4570,7 @@ void RGWPostObj::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+  ldpp_dout(this, 10) << "Palpatine 24 " << dendl;
     if (encrypt != nullptr) {
       filter = encrypt.get();
     } else {
@@ -4563,16 +4587,19 @@ void RGWPostObj::execute(optional_yield y)
       }
     }
 
+  ldpp_dout(this, 10) << "Palpatine 25 " << dendl;
     bool again;
     do {
       ceph::bufferlist data;
       int len = get_data(data, again);
+  ldpp_dout(this, 10) << "Palpatine 26 " << dendl;
 
       if (len < 0) {
         op_ret = len;
         return;
       }
 
+  ldpp_dout(this, 10) << "Palpatine 27 " << dendl;
       if (!len) {
         break;
       }
@@ -4583,6 +4610,7 @@ void RGWPostObj::execute(optional_yield y)
         return;
       }
 
+  ldpp_dout(this, 10) << "Palpatine 28 " << dendl;
       ofs += len;
 
       if (ofs > max_len) {
@@ -4591,17 +4619,20 @@ void RGWPostObj::execute(optional_yield y)
       }
     } while (again);
 
+  ldpp_dout(this, 10) << "Palpatine 29 " << dendl;
     // flush
     op_ret = filter->process({}, ofs);
     if (op_ret < 0) {
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 30 " << dendl;
     if (ofs < min_len) {
       op_ret = -ERR_TOO_SMALL;
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 31 " << dendl;
     s->obj_size = ofs;
     s->object->set_obj_size(ofs);
 
@@ -4611,6 +4642,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 32 " << dendl;
     hash.Final(m);
     buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
 
@@ -4621,6 +4653,7 @@ void RGWPostObj::execute(optional_yield y)
       return;
     }
 
+  ldpp_dout(this, 10) << "Palpatine 33 " << dendl;
     bl.append(etag.c_str(), etag.size());
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
@@ -4652,14 +4685,17 @@ void RGWPostObj::execute(optional_yield y)
     if (op_ret < 0) {
       return;
     }
+  ldpp_dout(this, 10) << "Palpatine 34 " << dendl;
   } while (is_next_file_to_upload());
 
+  ldpp_dout(this, 10) << "Palpatine 35 " << dendl;
   // send request to notification manager
   int ret = res->publish_commit(this, ofs, s->object->get_mtime(), etag, s->object->get_instance());
   if (ret < 0) {
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
+  ldpp_dout(this, 10) << "Palpatine 36 " << dendl;
 }
 
 
