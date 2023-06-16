@@ -2039,7 +2039,7 @@ private:
 
         pos.node = replacement;
         if (donor_is_left) {
-          pos.pos += r->get_size();
+          pos.pos += l->get_size();
           parent_pos.pos--;
         }
 
