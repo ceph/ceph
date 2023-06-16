@@ -119,8 +119,12 @@ private:
     pending_auth.push_back(inc);
   }
 
-  /* validate mon/osd/mds caps; fail on unrecognized service/type */
-  bool valid_caps(const std::string& type, const std::string& caps, std::ostream *out);
+  template<typename CAP_ENTITY_CLASS>
+  bool _was_parsing_fine(const std::string& entity, const std::string& caps,
+    std::ostream* out);
+  /* validate mon/osd/mgr/mds caps; fail on unrecognized service/type */
+  bool valid_caps(const std::string& entity, const std::string& caps,
+		  std::ostream *out);
   bool valid_caps(const std::string& type, const ceph::buffer::list& bl, std::ostream *out) {
     auto p = bl.begin();
     std::string v;
