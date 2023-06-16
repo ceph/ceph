@@ -1316,48 +1316,45 @@ int AuthMonitor::do_osd_new(
   return 0;
 }
 
-bool AuthMonitor::valid_caps(
-    const string& type,
-    const string& caps,
-    ostream *out)
+template<typename CAP_ENTITY_CLASS>
+bool AuthMonitor::_was_parsing_fine(const string& entity, const string& caps,
+  ostream* out)
 {
-  if (type == "mon") {
-    MonCap moncap;
-    if (!moncap.parse(caps, out)) {
-      dout(20) << "Parsing MON caps failed. MON cap: " << caps << dendl;
-      return false;
-    }
-    return true;
+  CAP_ENTITY_CLASS cap;
+
+  if (!cap.parse(caps, out)) {
+    dout(20) << "Parsing " << entity << " caps failed. " << entity <<
+		" cap: " << caps << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+bool AuthMonitor::valid_caps(const string& entity, const string& caps,
+			     ostream *out)
+{
+  if (entity == "mon") {
+    return _was_parsing_fine<MonCap>(entity, caps, out);
   }
 
   if (!g_conf().get_val<bool>("mon_auth_validate_all_caps")) {
     return true;
   }
 
-  if (type == "mgr") {
-    MgrCap mgrcap;
-    if (!mgrcap.parse(caps, out)) {
-      dout(20) << "Parsing MGR caps failed. MGR cap: " << caps << dendl;
-      return false;
-    }
-  } else if (type == "osd") {
-    OSDCap ocap;
-    if (!ocap.parse(caps, out)) {
-      dout(20) << "Parsing OSD caps failed. OSD cap: " << caps << dendl;
-      return false;
-    }
-  } else if (type == "mds") {
-    MDSAuthCaps mdscap;
-    if (!mdscap.parse(caps, out)) {
-      dout(20) << "Parsing MDS caps failed. MDS cap: " << caps << dendl;
-      return false;
-    }
+  if (entity == "mgr") {
+    return _was_parsing_fine<MgrCap>(entity, caps, out);
+  } else if (entity == "osd") {
+    return _was_parsing_fine<OSDCap>(entity, caps, out);
+  } else if (entity == "mds") {
+    return _was_parsing_fine<MDSAuthCaps>(entity, caps, out);
   } else {
     if (out) {
-      *out << "unknown cap type '" << type << "'";
+      *out << "unknown cap type '" << entity << "'";
     }
     return false;
   }
+
   return true;
 }
 
