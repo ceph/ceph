@@ -37,8 +37,10 @@ int D3nCacheAioWriteRequest::d3n_prepare_libaio_write_op(bufferlist& bl, unsigne
   r = fd = ::open(location.c_str(), O_WRONLY | O_CREAT | O_TRUNC, mode);
   if (fd < 0) {
     ldout(cct, 0) << "ERROR: D3nCacheAioWriteRequest::create_io: open file failed, errno=" << errno << ", location='" << location.c_str() << "'" << dendl;
-    goto done;
+    return r;
   }
+  r = 0;
+
   if (g_conf()->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL)
     posix_fadvise(fd, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
   cb->aio_fildes = fd;
@@ -46,16 +48,12 @@ int D3nCacheAioWriteRequest::d3n_prepare_libaio_write_op(bufferlist& bl, unsigne
   data = malloc(len);
   if (!data) {
     ldout(cct, 0) << "ERROR: D3nCacheAioWriteRequest::create_io: memory allocation failed" << dendl;
-    goto close_file;
+    return -1;
   }
   cb->aio_buf = data;
   memcpy((void*)data, bl.c_str(), len);
   cb->aio_nbytes = len;
-  goto done;
 
-close_file:
-  ::close(fd);
-done:
   return r;
 }
 
@@ -179,6 +177,7 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
     outstanding_write_size -= c->cb->aio_nbytes;
     lru_insert_head(chunk_info);
   }
+
   delete c;
   c = nullptr;
 }
@@ -186,28 +185,29 @@ void D3nDataCache::d3n_libaio_write_completion_cb(D3nCacheAioWriteRequest* c)
 int D3nDataCache::d3n_libaio_create_write_request(bufferlist& bl, unsigned int len, std::string oid)
 {
   lsubdout(g_ceph_context, rgw_datacache, 30) << "D3nDataCache: " << __func__ << "(): Write To Cache, oid=" << oid << ", len=" << len << dendl;
-  struct D3nCacheAioWriteRequest* wr = new struct D3nCacheAioWriteRequest(cct);
-  int r=0;
+  auto wr = std::make_unique<struct D3nCacheAioWriteRequest>(cct);
+  int r = 0;
+
   if ((r = wr->d3n_prepare_libaio_write_op(bl, len, oid, cache_location)) < 0) {
     ldout(cct, 0) << "ERROR: D3nDataCache: " << __func__ << "() prepare libaio write op r=" << r << dendl;
-    goto done;
+    return r;
   }
   wr->cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
   wr->cb->aio_sigevent.sigev_notify_function = d3n_libaio_write_cb;
   wr->cb->aio_sigevent.sigev_notify_attributes = nullptr;
-  wr->cb->aio_sigevent.sigev_value.sival_ptr = (void*)wr;
+  wr->cb->aio_sigevent.sigev_value.sival_ptr = (void*)(wr.get());
   wr->oid = oid;
   wr->priv_data = this;
 
   if ((r = ::aio_write(wr->cb)) != 0) {
     ldout(cct, 0) << "ERROR: D3nDataCache: " << __func__ << "() aio_write r=" << r << dendl;
-    goto error;
+    return r;
   }
-  return 0;
 
-error:
-  delete wr;
-done:
+  // wr will be deleted when the write is successful and d3n_libaio_write_completion_cb gets called
+  // coverity[RESOURCE_LEAK:FALSE]
+  wr.release();
+
   return r;
 }
 
