@@ -40,7 +40,7 @@ public:
   void shut_down(Context *on_finish);
 
   // update (add/remove) images
-  void update_images(const std::string &peer_uuid,
+  void update_images(const std::string &mirror_uuid,
                      std::set<std::string> &&added_global_image_ids,
                      std::set<std::string> &&removed_global_image_ids);
 
@@ -156,11 +156,12 @@ private:
   void schedule_rebalance_task();
 
   void notify_listener_acquire_release_images(const Updates &acquire, const Updates &release);
-  void notify_listener_remove_images(const std::string &peer_uuid, const Updates &remove);
+  void notify_listener_remove_images(const std::string &mirror_uuid,
+                                     const Updates &remove);
 
-  void update_images_added(const std::string &peer_uuid,
+  void update_images_added(const std::string &mirror_uuid,
                            const std::set<std::string> &global_image_ids);
-  void update_images_removed(const std::string &peer_uuid,
+  void update_images_removed(const std::string &mirror_uuid,
                              const std::set<std::string> &global_image_ids);
 
   void filter_instance_ids(const std::vector<std::string> &instance_ids,
