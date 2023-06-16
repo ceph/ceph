@@ -891,211 +891,238 @@ Migration impact:
  * Changing this value on an existing cluster will result in a very large
    amount of data movement because nearly every PG mapping is likely to change.
 
-
-Which client versions support CRUSH_TUNABLES
+Client versions that support CRUSH_TUNABLES2
 --------------------------------------------
 
- * argonaut series, v0.48.1 or later
- * v0.49 or later
- * Linux kernel version v3.6 or later (for the file system and RBD kernel clients)
+ * v0.55 and later, including Bobtail (v0.56.x)
+ * Linux kernel version v3.9 and later (for the CephFS and RBD kernel clients)
 
-Which client versions support CRUSH_TUNABLES2
----------------------------------------------
+Client versions that support CRUSH_TUNABLES3
+--------------------------------------------
 
- * v0.55 or later, including bobtail series (v0.56.x)
- * Linux kernel version v3.9 or later (for the file system and RBD kernel clients)
+ * v0.78 (Firefly) and later
+ * Linux kernel version v3.15 and later (for the CephFS and RBD kernel clients)
 
-Which client versions support CRUSH_TUNABLES3
----------------------------------------------
-
- * v0.78 (firefly) or later
- * Linux kernel version v3.15 or later (for the file system and RBD kernel clients)
-
-Which client versions support CRUSH_V4
---------------------------------------
-
- * v0.94 (hammer) or later
- * Linux kernel version v4.1 or later (for the file system and RBD kernel clients)
-
-Which client versions support CRUSH_TUNABLES5
----------------------------------------------
-
- * v10.0.2 (jewel) or later
- * Linux kernel version v4.5 or later (for the file system and RBD kernel clients)
-
-Warning when tunables are non-optimal
+Client versions that support CRUSH_V4
 -------------------------------------
 
-Starting with version v0.74, Ceph will issue a health warning if the
-current CRUSH tunables don't include all the optimal values from the
-``default`` profile (see below for the meaning of the ``default`` profile).
-To make this warning go away, you have two options:
+ * v0.94 (Hammer) and later
+ * Linux kernel version v4.1 and later (for the CephFS and RBD kernel clients)
 
-1. Adjust the tunables on the existing cluster.  Note that this will
-   result in some data movement (possibly as much as 10%).  This is the
-   preferred route, but should be taken with care on a production cluster
-   where the data movement may affect performance.  You can enable optimal
-   tunables with:
+Client versions that support CRUSH_TUNABLES5
+--------------------------------------------
+
+ * v10.0.2 (Jewel) and later
+ * Linux kernel version v4.5 and later (for the CephFS and RBD kernel clients)
+
+"Non-optimal tunables" warning
+------------------------------
+
+In v0.74 and later versions, Ceph will raise a health check ("HEALTH_WARN crush
+map has non-optimal tunables") if any of the current CRUSH tunables have
+non-optimal values: that is, if any fail to have the optimal values from the
+:ref:` ``default`` profile
+<rados_operations_crush_map_default_profile_definition>`.  There are two
+different ways to silence the alert:
+
+1. Adjust the CRUSH tunables on the existing cluster so as to render them
+   optimal. Making this adjustment will trigger some data movement
+   (possibly as much as 10%). This approach is generally preferred to the
+   other approach, but special care must be taken in situations where
+   data movement might affect performance: for example, in production clusters.
+   To enable optimal tunables, run the following command:
 
    .. prompt:: bash $
 
       ceph osd crush tunables optimal
 
-   If things go poorly (e.g., too much load) and not very much
-   progress has been made, or there is a client compatibility problem
-   (old kernel CephFS or RBD clients, or pre-Bobtail ``librados``
-   clients), you can switch back with:
+   There are several potential problems that might make it preferable to revert
+   to the previous values of the tunables. The new values might generate too
+   much load for the cluster to handle, the new values might unacceptably slow
+   the operation of the cluster, or there might be a client-compatibility
+   problem. Such client-compatibility problems can arise when using old-kernel
+   CephFS or RBD clients, or pre-Bobtail ``librados`` clients.  To revert to
+   the previous values of the tunables, run the following command:
 
    .. prompt:: bash $
 
       ceph osd crush tunables legacy
 
-2. You can make the warning go away without making any changes to CRUSH by
-   adding the following option to your ceph.conf ``[mon]`` section::
+2. To silence the alert without making any changes to CRUSH,
+   add the following option to the ``[mon]`` section of your ceph.conf file::
 
       mon_warn_on_legacy_crush_tunables = false
 
-   For the change to take effect, you will need to restart the monitors, or
-   apply the option to running monitors with:
+   In order for this change to take effect, you will need to either restart
+   the monitors or run the following command to apply the option to the
+   monitors while they are still running:
 
    .. prompt:: bash $
 
       ceph tell mon.\* config set mon_warn_on_legacy_crush_tunables false
 
 
-A few important points
-----------------------
-
- * Adjusting these values will result in the shift of some PGs between
-   storage nodes.  If the Ceph cluster is already storing a lot of
-   data, be prepared for some fraction of the data to move.
- * The ``ceph-osd`` and ``ceph-mon`` daemons will start requiring the
-   feature bits of new connections as soon as they get
-   the updated map.  However, already-connected clients are
-   effectively grandfathered in, and will misbehave if they do not
-   support the new feature.
- * If the CRUSH tunables are set to non-legacy values and then later
-   changed back to the default values, ``ceph-osd`` daemons will not be
-   required to support the feature.  However, the OSD peering process
-   requires examining and understanding old maps.  Therefore, you
-   should not run old versions of the ``ceph-osd`` daemon
-   if the cluster has previously used non-legacy CRUSH values, even if
-   the latest version of the map has been switched back to using the
-   legacy defaults.
-
 Tuning CRUSH
 ------------
 
-The simplest way to adjust CRUSH tunables is by applying them in matched
-sets known as *profiles*.  As of the Octopus release these are:
+When making adjustments to CRUSH tunables, keep the following considerations in
+mind:
 
- * ``legacy``: the legacy behavior from argonaut and earlier.
- * ``argonaut``: the legacy values supported by the original argonaut release
- * ``bobtail``: the values supported by the bobtail release
- * ``firefly``: the values supported by the firefly release
- * ``hammer``: the values supported by the hammer release
- * ``jewel``: the values supported by the jewel release
- * ``optimal``: the best (i.e. optimal) values of the current version of Ceph
- * ``default``: the default values of a new cluster installed from
-   scratch. These values, which depend on the current version of Ceph,
-   are hardcoded and are generally a mix of optimal and legacy values.
-   These values generally match the ``optimal`` profile of the previous
-   LTS release, or the most recent release for which we generally expect
-   most users to have up-to-date clients for.
+ * Adjusting the values of CRUSH tunables will result in the shift of one or
+   more PGs from one storage node to another. If the Ceph cluster is already
+   storing a great deal of data, be prepared for significant data movement.
+ * When the ``ceph-osd`` and ``ceph-mon`` daemons get the updated map, they
+   immediately begin rejecting new connections from clients that do not support
+   the new feature. However, already-connected clients are effectively
+   grandfathered in, and any of these clients that do not support the new
+   feature will malfunction.
+ * If the CRUSH tunables are set to newer (non-legacy) values and subsequently
+   reverted to the legacy values, ``ceph-osd`` daemons will not be required to
+   support any of the newer CRUSH features associated with the newer
+   (non-legacy) values. However, the OSD peering process requires the
+   examination and understanding of old maps. For this reason, **if the cluster
+   has previously used non-legacy CRUSH values, do not run old versions of
+   the** ``ceph-osd`` **daemon** -- even if the latest version of the map has
+   been reverted so as to use the legacy defaults.
 
-You can apply a profile to a running cluster with the command:
+The simplest way to adjust CRUSH tunables is to apply them in matched sets
+known as *profiles*. As of the Octopus release, Ceph supports the following
+profiles:
+
+ * ``legacy``: The legacy behavior from argonaut and earlier.
+ * ``argonaut``: The legacy values supported by the argonaut release.
+ * ``bobtail``: The values supported by the bobtail release.
+ * ``firefly``: The values supported by the firefly release.
+ * ``hammer``: The values supported by the hammer release.
+ * ``jewel``: The values supported by the jewel release.
+ * ``optimal``: The best values for the current version of Ceph.
+   .. _rados_operations_crush_map_default_profile_definition:
+ * ``default``: The default values of a new cluster that has been installed
+   from scratch. These values, which depend on the current version of Ceph, are
+   hardcoded and are typically a mix of optimal and legacy values.  These
+   values often correspond to the ``optimal`` profile of either the previous
+   LTS (long-term service) release or the most recent release for which most
+   users are expected to have up-to-date clients.
+
+To apply a profile to a running cluster, run a command of the following form:
 
 .. prompt:: bash $
 
    ceph osd crush tunables {PROFILE}
 
-Note that this may result in data movement, potentially quite a bit.  Study
-release notes and documentation carefully before changing the profile on a
-running cluster, and consider throttling recovery/backfill parameters to
-limit the impact of a bolus of backfill.
+This action might trigger a great deal of data movement. Consult release notes
+and documentation before changing the profile on a running cluster. Consider
+throttling recovery and backfill parameters in order to limit the backfill
+resulting from a specific change.
 
 .. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.io/assets/pdfs/weil-crush-sc06.pdf
 
 
-Primary Affinity
-================
+Tuning Primary OSD Selection
+============================
 
-When a Ceph Client reads or writes data, it first contacts the primary OSD in
+When a Ceph client reads or writes data, it first contacts the primary OSD in
 each affected PG's acting set. By default, the first OSD in the acting set is
-the primary.  For example, in the acting set ``[2, 3, 4]``, ``osd.2`` is
-listed first and thus is the primary (aka lead) OSD. Sometimes we know that an
-OSD is less well suited to act as the lead than are other OSDs (e.g., it has
-a slow drive or a slow controller). To prevent performance bottlenecks
-(especially on read operations) while maximizing utilization of your hardware,
-you can influence the selection of primary OSDs by adjusting primary affinity
-values, or by crafting a CRUSH rule that selects preferred OSDs first.
+the primary OSD (also known as the "lead OSD"). For example, in the acting set
+``[2, 3, 4]``, ``osd.2`` is listed first and is therefore the primary OSD.
+However, sometimes it is clear that an OSD is not well suited to act as the
+lead as compared with other OSDs (for example, if the OSD has a slow drive or a
+slow controller). To prevent performance bottlenecks (especially on read
+operations) and at the same time maximize the utilization of your hardware, you
+can influence the selection of the primary OSD either by adjusting "primary
+affinity" values, or by crafting a CRUSH rule that selects OSDs that are better
+suited to act as the lead rather than other OSDs.
 
-Tuning primary OSD selection is mainly useful for replicated pools, because
-by default read operations are served from the primary OSD for each PG.
-For erasure coded (EC) pools, a way to speed up read operations is to enable
-**fast read** as described in :ref:`pool-settings`.
+To determine whether tuning Ceph's selection of primary OSDs will improve
+cluster performance, pool redundancy strategy must be taken into account. For
+replicated pools, this tuning can be especially useful, because by default read
+operations are served from the primary OSD of each PG. For erasure-coded pools,
+however, the speed of read operations can be increased by enabling **fast
+read** (see :ref:`pool-settings`).
 
-A common scenario for primary affinity is when a cluster contains
-a mix of drive sizes, for example older racks with 1.9 TB SATA SSDS and newer racks with
-3.84TB SATA SSDs.  On average the latter will be assigned double the number of
-PGs and thus will serve double the number of write and read operations, thus
-they'll be busier than the former.  A rough assignment of primary affinity
-inversely proportional to OSD size won't be 100% optimal, but it can readily
-achieve a 15% improvement in overall read throughput by utilizing SATA
-interface bandwidth and CPU cycles more evenly.
+Primary Affinity
+----------------
 
-By default, all ceph OSDs have primary affinity of ``1``, which indicates that
-any OSD may act as a primary with equal probability.
+**Primary affinity** is a characteristic of an OSD that governs the likelihood
+that a given OSD will be selected as the primary OSD (or "lead OSD") in a given
+acting set. A primary affinity value can be any real number in the range ``0``
+to ``1``, inclusive.
 
-You can reduce a Ceph OSD's primary affinity so that CRUSH is less likely to
-choose the OSD as primary in a PG's acting set.:
+As an example of a common scenario in which it can be useful to adjust primary
+affinity values, let us suppose that a cluster contains a mix of drive sizes:
+for example, suppose it contains some older racks with 1.9 TB SATA SSDs and
+some newer racks with 3.84 TB SATA SSDs. The latter will on average be assigned
+twice the number of PGs and will thus serve twice the number of write and read
+operations -- they will be busier than the former. In such a scenario, you
+might make a rough assignment of primary affinity as inversely proportional to
+OSD size. Such an assignment will not be 100% optimal, but it can readily
+achieve a 15% improvement in overall read throughput by means of a more even
+utilization of SATA interface bandwidth and CPU cycles. This example is not
+merely a thought experiment meant to illustrate the theoretical benefits of
+adjusting primary affinity values; this fifteen percent improvement was
+achieved on an actual Ceph cluster.
+
+By default, every Ceph OSD has a primary affinity value of ``1``. In a cluster
+in which every OSD has this default value, all OSDs are equally likely to act
+as a primary OSD.
+
+By reducing the value of a Ceph OSD's primary affinity, you make CRUSH less
+likely to select the OSD as primary in a PG's acting set. To change the weight
+value associated with a specific OSD's primary affinity, run a command of the
+following form:
 
 .. prompt:: bash $
 
    ceph osd primary-affinity <osd-id> <weight>
 
-You may set an OSD's primary affinity to a real number in the range ``[0-1]``,
-where ``0`` indicates that the OSD may **NOT** be used as a primary and ``1``
-indicates that an OSD may be used as a primary.  When the weight is between
-these extremes, it is less likely that CRUSH will select that OSD as a primary.
-The process for selecting the lead OSD is more nuanced than a simple
-probability based on relative affinity values, but measurable results can be
-achieved even with first-order approximations of desirable values.
+The primary affinity of an OSD can be set to any real number in the range
+``[0-1]`` inclusive, where ``0`` indicates that the OSD may not be used as
+primary and ``1`` indicates that the OSD is maximally likely to be used as a
+primary. When the weight is between these extremes, its value indicates roughly
+how likely it is that CRUSH will select the OSD associated with it as a
+primary.
+
+The process by which CRUSH selects the lead OSD is not a mere function of a
+simple probability determined by relative affinity values. Nevertheless,
+measurable results can be achieved even with first-order approximations of
+desirable primary affinity values.
+
 
 Custom CRUSH Rules
 ------------------
 
-There are occasional clusters that balance cost and performance by mixing SSDs
-and HDDs in the same replicated pool. By setting the primary affinity of HDD
-OSDs to ``0`` one can direct operations to the SSD in each acting set. An
-alternative is to define a CRUSH rule that always selects an SSD OSD as the
-first OSD, then selects HDDs for the remaining OSDs. Thus, each PG's acting
-set will contain exactly one SSD OSD as the primary with the balance on HDDs.
+Some clusters balance cost and performance by mixing SSDs and HDDs in the same
+replicated pool. By setting the primary affinity of HDD OSDs to ``0``,
+operations will be directed to an SSD OSD in each acting set. Alternatively,
+you can define a CRUSH rule that always selects an SSD OSD as the primary OSD
+and then selects HDDs for the remaining OSDs. Given this rule, each PG's acting
+set will contain an SSD OSD as the primary and have the remaining OSDs on HDDs.
 
-For example, the CRUSH rule below::
+For example, see the following CRUSH rule::
 
-	rule mixed_replicated_rule {
-	        id 11
-	        type replicated
-	        step take default class ssd
-	        step chooseleaf firstn 1 type host
-	        step emit
-	        step take default class hdd
-	        step chooseleaf firstn 0 type host
-	        step emit
-	}
+    rule mixed_replicated_rule {
+            id 11
+            type replicated
+            step take default class ssd
+            step chooseleaf firstn 1 type host
+            step emit
+            step take default class hdd
+            step chooseleaf firstn 0 type host
+            step emit
+    }
 
-chooses an SSD as the first OSD.  Note that for an ``N``-times replicated pool
-this rule selects ``N+1`` OSDs to guarantee that ``N`` copies are on different
-hosts, because the first SSD OSD might be co-located with any of the ``N`` HDD
-OSDs.
+This rule chooses an SSD as the first OSD. For an ``N``-times replicated pool,
+this rule selects ``N+1`` OSDs in order to guarantee that ``N`` copies are on
+different hosts, because the first SSD OSD might be colocated with any of the
+``N`` HDD OSDs.
 
-This extra storage requirement can be avoided by placing SSDs and HDDs in
-different hosts with the tradeoff that hosts with SSDs will receive all client
-requests.  You may thus consider faster CPU(s) for SSD hosts and more modest
-ones for HDD nodes, since the latter will normally only service recovery
-operations.  Here the CRUSH roots ``ssd_hosts`` and ``hdd_hosts`` strictly
-must not contain the same servers::
+To avoid this extra storage requirement, you might place SSDs and HDDs in
+different hosts. However, taking this approach means that all client requests
+will be received by hosts with SSDs. For this reason, it might be advisable to
+have faster CPUs for SSD OSDs and more modest CPUs for HDD OSDs, since the
+latter will under normal circumstances perform only recovery operations. Here
+the CRUSH roots ``ssd_hosts`` and ``hdd_hosts`` are under a strict requirement
+not to contain any of the same servers, as seen in the following CRUSH rule::
 
         rule mixed_replicated_rule_two {
                id 1
@@ -1108,8 +1135,8 @@ must not contain the same servers::
                step emit
         }
 
+.. note:: If a primary SSD OSD fails, then requests to the associated PG will
+   be temporarily served from a slower HDD OSD until the PG's data has been
+   replicated onto the replacement primary SSD OSD.
 
-Note also that on failure of an SSD, requests to a PG will be served temporarily
-from a (slower) HDD OSD until the PG's data has been replicated onto the replacement
-primary SSD OSD.
 
