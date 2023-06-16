@@ -193,7 +193,7 @@ def main() -> None:
     args = parser.parse_args()
     config = Config(args.config, default_config=DEFAULT_CONFIG)
 
-    log = Logger(__name__, level=config.logging['level'])
+    log = Logger(__name__, level=config.__dict__['logging']['level'])
     # must be passed as arguments
     host = os.environ.get('REDFISH_HOST')
     username = os.environ.get('REDFISH_USERNAME')
