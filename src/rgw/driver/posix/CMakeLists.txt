@@ -4,6 +4,8 @@ project(posixdriver)
 
 #set (CMAKE_INCLUDE_DIR ${CMAKE_INCLUDE_DIR} "${CMAKE_CURRENT_SOURCE_DIR}/common")
 
+include_subdirectory(lmdb-safe)
+
 set(dbstore_srcs
     common/dbstore_log.h
     common/dbstore.h
@@ -48,6 +50,8 @@ ENDIF()
 
 # add pthread library
 set (CMAKE_LINK_LIBRARIES ${CMAKE_LINK_LIBRARIES} pthread)
+
+find_package(LMDB REQUIRED)
 
 find_package(gtest QUIET)
 if(WITH_TESTS)

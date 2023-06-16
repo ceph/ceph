@@ -17,14 +17,21 @@
 
 #include "rgw_sal_filter.h"
 #include "rgw_sal_store.h"
+#include <memory>
 #include "common/dout.h"
+#include "bucket_cache.h"
 
 namespace rgw { namespace sal {
 
 class POSIXBucket;
+class POSIXDriver;
+
+using BucketCache = file::listing::BucketCache<POSIXDriver, POSIXBucket>;
 
 class POSIXDriver : public FilterDriver {
 private:
+
+  std::unique_ptr<BucketCache> bucket_cache;
   std::string base_path;
   int root_fd;
 
@@ -91,7 +98,18 @@ public:
   /* Internal APIs */
   int get_root_fd() { return root_fd; }
   const std::string& get_base_path() const { return base_path; }
+  BucketCache* get_bucket_cache() { return bucket_cache.get(); }
+
   int close();
+
+  /* called by BucketCache layer when a new object is discovered
+   * by inotify or similar */
+  int mint_listing_entry(
+    const std::string& bucket, rgw_bucket_dir_entry& bde /* OUT */) {
+    /* TODO: finish */
+    return 0;
+  }
+
 };
 
 class POSIXUser : public FilterUser {
@@ -263,10 +281,17 @@ public:
   int open(const DoutPrefixProvider *dpp);
   int close();
   int rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj);
+
+  /* integration w/bucket listing cache */
+  using fill_cache_cb_t = file::listing::fill_cache_cb_t;
+
+  /* enumerate all entries by callback, in any order */
+  int fill_cache(const DoutPrefixProvider* dpp, fill_cache_cb_t cb);
+  
 private:
   int stat(const DoutPrefixProvider *dpp);
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
-};
+}; /* POSIXBucket */
 
 class POSIXObject : public StoreObject {
 private:

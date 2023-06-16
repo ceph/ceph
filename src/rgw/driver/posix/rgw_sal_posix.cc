@@ -52,7 +52,7 @@ static inline User* nextUser(User* t)
   if (!t)
     return nullptr;
 
-  return dynamic_cast<FilterUser*>(t)->get_next();
+  return static_cast<FilterUser*>(t)->get_next();
 }
 
 static inline std::string decode_name(const char* name)
@@ -60,10 +60,16 @@ static inline std::string decode_name(const char* name)
   return url_decode(name);
 }
 
+static inline ceph::real_time from_statx_timestamp(const struct statx_timestamp& xts)
+{
+  struct timespec ts{xts.tv_sec, xts.tv_nsec};
+  return ceph::real_clock::from_timespec(ts);
+}
+
 static inline void bucket_statx_save(struct statx& stx, RGWBucketEnt& ent, ceph::real_time& mtime)
 {
-  mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
-  ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+  mtime = from_statx_timestamp(stx.stx_mtime);
+  ent.creation_time = from_statx_timestamp(stx.stx_btime);
   ent.size = stx.stx_size;
   ent.size_rounded = stx.stx_blocks * 512;
 }
@@ -253,6 +259,17 @@ int POSIXDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   base_path = g_conf().get_val<std::string>("rgw_posix_base_path");
 
   ldpp_dout(dpp, 20) << "Initializing POSIX driver: " << base_path << dendl;
+
+  /* ordered listing cache */
+  bucket_cache.reset(
+    new BucketCache(
+      this, base_path,
+      g_conf().get_val<std::string>("rgw_posix_database_root"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_max_buckets"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lanes"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_partitions"),
+      g_conf().get_val<int64_t>("rgw_posix_cache_lmdb_count")));
+
   root_fd = openat(-1, base_path.c_str(), O_RDONLY | O_DIRECTORY | O_NOFOLLOW);
   if (root_fd == -1) {
     int err = errno;
@@ -514,7 +531,7 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
     RGWBucketInfo info;
     info.bucket.name = decode_name(entry->d_name);
     info.owner.id = std::to_string(stx.stx_uid); // TODO convert to owner name
-    info.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+    info.creation_time = from_statx_timestamp(stx.stx_btime);
 
     std::unique_ptr<rgw::sal::Bucket> bucket;
     ret = driver->get_bucket(this, info, &bucket);
@@ -607,15 +624,10 @@ std::unique_ptr<Object> POSIXBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<POSIXObject>(driver, k, this);
 }
 
-// TODO  marker and other params
-int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
-		       ListResults& results, optional_yield y)
+int POSIXBucket::fill_cache(
+  const DoutPrefixProvider* dpp, fill_cache_cb_t cb)
 {
-  // Names are url_encoded, so encode prefix and delimiter
-  params.prefix = url_encode(params.prefix);
-  params.delim = url_encode(params.delim);
-
-  int ret = for_each(dpp, [this, &results, &dpp, &params, &max](const char* name) {
+  int ret = for_each(dpp, [this, &cb, &dpp](const char* name) {
     int ret;
     struct statx stx;
 
@@ -624,52 +636,70 @@ int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
       return 0;
     }
 
-    std::string_view vname = name;
-    //if (vname.find(params.delim) == std::string_view::npos) {
-      //// Delimiter doesn't match; skip
-      //return 0;
-    //}
-
-    if (!vname.starts_with(params.prefix)) {
-      // Prefix doesn't match; skip
-      ldpp_dout(dpp, 0) << "C3PO vname: " << vname << " prefix: \"" << params.prefix << "\"" << dendl;
-      return 0;
-    }
-
-    if (max-- <= 0) {
-      return -EAGAIN;
-    }
-
     ret = statx(dir_fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
 	<< cpp_strerror(ret) << dendl;
-      results.objs.clear();
       return -ret;
     }
 
     if (S_ISREG(stx.stx_mode) || S_ISDIR(stx.stx_mode)) {
-      rgw_bucket_dir_entry *e = new rgw_bucket_dir_entry;
-      e->key.name = decode_name(name);
-      e->ver.pool = 1;
-      e->ver.epoch = 1;
-      e->exists = true;
-      e->meta.category = RGWObjCategory::Main;
-      e->meta.size = stx.stx_size;
-      e->meta.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
-      e->meta.owner = std::to_string(stx.stx_uid); // TODO convert to owner name
-      e->meta.owner_display_name = std::to_string(stx.stx_uid); // TODO convert to owner name
-      e->meta.accounted_size = stx.stx_blksize * stx.stx_blocks; // TODO Won't work for mpobj
-      e->meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
-      e->meta.appendable = true;
-
-      results.objs.push_back(*e);
+      rgw_bucket_dir_entry bde{};
+      bde.key.name = decode_name(name);
+      bde.ver.pool = 1;
+      bde.ver.epoch = 1;
+      bde.exists = true;
+      bde.meta.category = RGWObjCategory::Main;
+      bde.meta.size = stx.stx_size;
+      bde.meta.mtime = from_statx_timestamp(stx.stx_mtime);
+      bde.meta.owner = std::to_string(stx.stx_uid); // TODO convert to owner name
+      bde.meta.owner_display_name = std::to_string(stx.stx_uid); // TODO convert to owner name
+      bde.meta.accounted_size = stx.stx_blksize * stx.stx_blocks; // TODO Won't work for mpobj
+      bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+      bde.meta.appendable = true;
+      cb(dpp, bde);
     }
 
     return 0;
   });
   if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not list bucket " << get_name() << ": "
+      << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  return 0;
+}
+
+// TODO  marker and other params
+int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
+		      int max, ListResults& results, optional_yield y)
+{
+  // Names are url_encoded, so encode prefix and delimiter
+  params.prefix = url_encode(params.prefix);
+  params.delim = url_encode(params.delim);
+
+  int ret = driver->get_bucket_cache()->list_bucket(
+    dpp, this, params, max, [&](const rgw_bucket_dir_entry& bde) -> int
+      {
+	if (!bde.key.name.starts_with(params.prefix)) {
+	  // Prefix doesn't match; skip
+	  ldpp_dout(dpp, 0) << "C3PO name: " << bde.key.name << " prefix: \"" << params.prefix << "\"" << dendl;
+	  return 0;
+	}
+	//if (bde.key.name.find(params.delim) == std::string_view::npos) {
+	//// Delimiter doesn't match; skip
+	//return 0;
+	//}
+	results.objs.push_back(bde);
+	return 0;
+    });
+
+  if (ret < 0) {
+    if (ret == -EAGAIN) {
+      return ret;
+    }
     ldpp_dout(dpp, 0) << "ERROR: could not list bucket " << get_name() << ": "
       << cpp_strerror(ret) << dendl;
     results.objs.clear();
@@ -1086,8 +1116,8 @@ int POSIXBucket::open(const DoutPrefixProvider* dpp)
 // This is for renaming a shadow bucket to a MP object.  It won't work work for a normal bucket
 int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object* target_obj)
 {
-  POSIXObject *to = dynamic_cast<POSIXObject*>(target_obj);
-  POSIXBucket *tb = dynamic_cast<POSIXBucket*>(target_obj->get_bucket());
+  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
+  POSIXBucket *tb = static_cast<POSIXBucket*>(target_obj->get_bucket());
 
   // swap and delete
   int ret = renameat2(tb->get_dir_fd(dpp), get_fname().c_str(), tb->get_dir_fd(dpp), to->get_fname().c_str(), RENAME_EXCHANGE);
@@ -1142,7 +1172,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				bool prevent_versioning)
 {
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1206,8 +1236,8 @@ int POSIXObject::copy_object(User* user,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  POSIXBucket *db = dynamic_cast<POSIXBucket*>(dest_bucket);
-  POSIXBucket *sb = dynamic_cast<POSIXBucket*>(src_bucket);
+  POSIXBucket *db = static_cast<POSIXBucket*>(dest_bucket);
+  POSIXBucket *sb = static_cast<POSIXBucket*>(src_bucket);
 
   if (!db || !sb) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket to copy " << get_name() << dendl;
@@ -1386,7 +1416,7 @@ int POSIXObject::omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::s
 
 int POSIXObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y)
 {
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1412,7 +1442,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
     return 0;
   }
 
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1429,18 +1459,18 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
   if (S_ISREG(stx.stx_mode)) {
     /* Normal object */
     state.accounted_size = state.size = stx.stx_size;
-    state.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+    state.mtime = from_statx_timestamp(stx.stx_mtime);
   } else if (S_ISDIR(stx.stx_mode)) {
     /* multipart object */
     /* Get the shadow bucket */
-    POSIXBucket* pb = dynamic_cast<POSIXBucket*>(bucket);
+    POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
     ret = pb->get_shadow_bucket(nullptr, null_yield, std::string(),
 				std::string(), get_fname(), false, &shadow);
     if (ret < 0) {
       return ret;
     }
 
-    state.mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+    state.mtime = from_statx_timestamp(stx.stx_mtime);
     /* Add up size of parts */
     uint64_t total_size{0};
     int fd = shadow->get_dir_fd(dpp);
@@ -1503,7 +1533,7 @@ int POSIXObject::open(const DoutPrefixProvider* dpp, bool temp_file)
     return obj_fd;
   }
 
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
       return -EINVAL;
@@ -1542,7 +1572,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp)
   // Only works on Linux - Non-portable
   snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", obj_fd);
 
-  POSIXBucket *b = dynamic_cast<POSIXBucket*>(get_bucket());
+  POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
 
   if (!b) {
       ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name() << dendl;
@@ -2036,7 +2066,7 @@ int POSIXMultipartUpload::load(bool create)
 {
   ldout(driver->ctx(), 0) << "Luke: load shadow " << get_meta() << dendl;
   if (!shadow) {
-    POSIXBucket* pb = dynamic_cast<POSIXBucket*>(bucket);
+    POSIXBucket* pb = static_cast<POSIXBucket*>(bucket);
     return pb->get_shadow_bucket(nullptr, null_yield, mp_ns,
 			  std::string(), get_meta(), create, &shadow);
   }
@@ -2104,7 +2134,7 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
   }
   for (rgw_bucket_dir_entry& ent : results.objs) {
     std::unique_ptr<MultipartPart> part = std::make_unique<POSIXMultipartPart>(this);
-    POSIXMultipartPart* ppart = dynamic_cast<POSIXMultipartPart*>(part.get());
+    POSIXMultipartPart* ppart = static_cast<POSIXMultipartPart*>(part.get());
 
     rgw_obj_key key(ent.key);
     ret = ppart->load(dpp, null_yield, driver, key);
@@ -2185,7 +2215,7 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
 
     for (auto obj_iter = parts.begin(); etags_iter != part_etags.end() && obj_iter != parts.end(); ++etags_iter, ++obj_iter, ++handled_parts) {
-      POSIXMultipartPart* part = dynamic_cast<rgw::sal::POSIXMultipartPart*>(obj_iter->second.get());
+      POSIXMultipartPart* part = static_cast<rgw::sal::POSIXMultipartPart*>(obj_iter->second.get());
       uint64_t part_size = part->get_size();
       if (handled_parts < (int)part_etags.size() - 1 &&
           part_size < min_part_size) {
