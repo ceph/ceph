@@ -51,6 +51,7 @@ extern "C" {
 #include <optional>
 #include <ostream>
 #include <iomanip>
+#include <span>
 
 
 #include "include/unordered_map.h"
@@ -91,6 +92,8 @@ template<class A, class B>
 inline std::ostream& operator<<(std::ostream&out, const std::pair<A,B>& v);
 template<class A, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v);
+template<class T, std::size_t Extent>
+inline std::ostream& operator<<(std::ostream& out, const std::span<T, Extent>& s);
 template<class A, std::size_t N, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const boost::container::small_vector<A,N,Alloc>& v);
 template<class A, class Comp, class Alloc>
@@ -134,6 +137,19 @@ inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v
   bool first = true;
   out << "[";
   for (const auto& p : v) {
+    if (!first) out << ",";
+    out << p;
+    first = false;
+  }
+  out << "]";
+  return out;
+}
+
+template<class T, std::size_t Extent>
+inline std::ostream& operator<<(std::ostream& out, const std::span<T, Extent>& s) {
+  bool first = true;
+  out << "[";
+  for (const auto& p : s) {
     if (!first) out << ",";
     out << p;
     first = false;
