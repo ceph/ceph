@@ -161,7 +161,7 @@ Provides a visual indication of cluster health, and displays cluster alerts grou
 
 Capacity
 """"""""
-* **Used**: Displays the used capacity out of the total physical capacity providedd by storage nodes (OSDs)
+* **Used**: Displays the used capacity out of the total physical capacity provided by storage nodes (OSDs)
 * **Warning**: Displays the `nearfull` threshold of the OSDs
 * **Danger**: Displays the `full` threshold of the OSDs
 
