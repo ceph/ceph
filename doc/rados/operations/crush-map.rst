@@ -805,11 +805,13 @@ Migration impact:
 firefly (CRUSH_TUNABLES3)
 -------------------------
 
-The ``firefly`` tunable profile fixes a problem with ``chooseleaf`` CRUSH rule
-behavior. When this problem arises, PG mappings with too few OSDs can occur
-when too many OSDs have been marked ``out``.
+chooseleaf_vary_r
+~~~~~~~~~~~~~~~~~
 
-The new tunable introduced by ``firefly`` is as follows:
+This ``firefly`` tunable profile fixes a problem with ``chooseleaf`` CRUSH rule
+behavior. This problem arose when too many OSDs were marked ``out``, which resulted in PG mappings with too few OSDs.
+
+This tunable, introduced in ``firefly``, is as follows:
 
  * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will start
    with a non-zero value of ``r``, as determined by the number of attempts the
@@ -825,15 +827,14 @@ Migration impact:
    cause less data to move.
 
 straw_calc_version tunable
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 There were problems with the internal weights calculated and stored in the
-CRUSH map for ``straw`` algorithm buckets. More specifically, when there were
-items with a CRUSH weight of ``0`` or with a mix of different and unique
-weights, CRUSH would distribute data incorrectly (that is, not in proportion to
-the weights).
+CRUSH map for ``straw`` algorithm buckets. When there were items with a CRUSH
+weight of ``0`` or with a mix of different and unique weights, CRUSH would
+distribute data incorrectly (that is, not in proportion to the weights).
 
-The new tunable introduced by ``firefly`` is as follows:
+This tunable, introduced in ``Firefly``, is as follows:
 
  * ``straw_calc_version``: A value of ``0`` preserves the old, broken
    internal-weight calculation; a value of ``1`` fixes the problem.
