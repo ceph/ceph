@@ -763,7 +763,7 @@ most clusters, provided that not many OSDs have been marked ``out``.
 bobtail (CRUSH_TUNABLES2)
 -------------------------
 
-The ``bobtail`` tunable profile provides the following fixes:
+The ``bobtail`` tunable profile provides the following improvements:
 
  * For hierarchies with a small number of devices in leaf buckets, some PGs
    might map to fewer than the desired number of replicas, resulting in
@@ -779,7 +779,7 @@ The ``bobtail`` tunable profile provides the following fixes:
  * When one or more OSDs are marked ``out``, data tends to be redistributed
    to nearby OSDs instead of across the entire hierarchy.
 
-The tunables introduced by ``bobtail`` are as follows:
+The tunables introduced in the Bobtail release are as follows:
 
  * ``choose_local_tries``: Number of local retries. The legacy value is ``2``,
    and the optimal value is ``0``.
@@ -808,10 +808,10 @@ firefly (CRUSH_TUNABLES3)
 chooseleaf_vary_r
 ~~~~~~~~~~~~~~~~~
 
-This ``firefly`` tunable profile fixes a problem with ``chooseleaf`` CRUSH rule
-behavior. This problem arose when too many OSDs were marked ``out``, which resulted in PG mappings with too few OSDs.
+This ``firefly`` tunable profile fixes a problem with ``chooseleaf`` CRUSH step
+behavior. This problem arose when a large fraction of OSDs were marked ``out``, which resulted in PG mappings with too few OSDs.
 
-This tunable, introduced in ``firefly``, is as follows:
+This profile was introduced in the Firefly release, and adds a new tunable as follows:
 
  * ``chooseleaf_vary_r``: Whether a recursive chooseleaf attempt will start
    with a non-zero value of ``r``, as determined by the number of attempts the
@@ -830,11 +830,11 @@ straw_calc_version tunable
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 There were problems with the internal weights calculated and stored in the
-CRUSH map for ``straw`` algorithm buckets. When there were items with a CRUSH
+CRUSH map for ``straw`` algorithm buckets. When there were buckets with a CRUSH
 weight of ``0`` or with a mix of different and unique weights, CRUSH would
 distribute data incorrectly (that is, not in proportion to the weights).
 
-This tunable, introduced in ``Firefly``, is as follows:
+This tunable, introduced in the Firefly release, is as follows:
 
  * ``straw_calc_version``: A value of ``0`` preserves the old, broken
    internal-weight calculation; a value of ``1`` fixes the problem.
@@ -847,7 +847,7 @@ Migration impact:
    movement provided that the cluster has hit one of the problematic
    conditions.
 
-This tunable option is special because it has absolutely no impact on the
+This tunable option is notable in that it has absolutely no impact on the
 required kernel version in the client side.
 
 hammer (CRUSH_V4)
@@ -880,7 +880,7 @@ The ``jewel`` tunable profile improves the overall behavior of CRUSH. As a
 result, significantly fewer mappings change when an OSD is marked ``out`` of
 the cluster. This improvement results in significantly less data movement.
 
-The new tunable introduced by ``jewel`` is as follows:
+The new tunable introduced in the Jewel release is as follows:
 
  * ``chooseleaf_stable``: Determines whether a recursive chooseleaf attempt
    will use a better value for an inner loop that greatly reduces the number of
