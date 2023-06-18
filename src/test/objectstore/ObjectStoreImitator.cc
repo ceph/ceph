@@ -6,6 +6,7 @@
  */
 #include "test/objectstore/ObjectStoreImitator.h"
 #include "common/errno.h"
+#include "include/ceph_assert.h"
 
 #define dout_context cct
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
@@ -13,6 +14,8 @@
 void ObjectStoreImitator::init_alloc(const std::string &alloc_type,
                                      int64_t size) {
   alloc.reset(Allocator::create(cct, alloc_type, size, min_alloc_size));
+  alloc->init_add_free(0, size);
+  ceph_assert(alloc->get_free() == size);
 }
 
 void ObjectStoreImitator::print_status() {

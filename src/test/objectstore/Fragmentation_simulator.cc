@@ -63,6 +63,7 @@ public:
         return r;
     }
 
+    os->print_status();
     return 0;
   }
 
@@ -109,7 +110,7 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
 // ----------- Tests -----------
 
 TEST(FragmentationSimulator, simple) {
-  auto sim = FragmentationSimulator("stupid", _1Gb);
+  FragmentationSimulator sim = FragmentationSimulator("stupid", _1Gb);
   sim.add_generator(std::make_shared<SimpleCWGenerator>());
   sim.begin_simulation_with_generators();
 }
