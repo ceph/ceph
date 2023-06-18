@@ -11,8 +11,18 @@
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
 
 void ObjectStoreImitator::init_alloc(const std::string &alloc_type,
-                                     int64_t size, uint64_t min_alloc_size) {
+                                     int64_t size) {
   alloc.reset(Allocator::create(cct, alloc_type, size, min_alloc_size));
+}
+
+void ObjectStoreImitator::print_status() {
+  std::cout << std::hex
+            << "Fragmentation score: " << alloc->get_fragmentation_score()
+            << " , fragmentation: " << alloc->get_fragmentation()
+            << ", allocator name " << alloc->get_name() << ", allocator type "
+            << alloc->get_type() << ", capacity 0x" << alloc->get_capacity()
+            << ", block size 0x" << alloc->get_block_size() << ", free 0x"
+            << alloc->get_free() << std::dec << std::endl;
 }
 
 // ------- Transactions -------
@@ -55,7 +65,7 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
 
   std::vector<ObjectRef> ovec(i.objects.size());
 
-  while (i.have_op()) {
+  for (int pos = 0; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
     int r = 0;
 
@@ -68,8 +78,10 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
 
     switch (op->op) {
     case Transaction::OP_RMCOLL: {
-      if (coll_map.find(c->cid) != coll_map.end())
-        coll_map.erase(c->cid);
+      const coll_t &cid = i.get_cid(op->cid);
+      r = _remove_collection(cid, &c);
+      if (!r)
+        continue;
     } break;
 
     case Transaction::OP_MKCOLL: {
@@ -148,10 +160,10 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
 
     switch (op->op) {
     case Transaction::OP_CREATE:
-    case Transaction::OP_TOUCH:
+    case Transaction::OP_TOUCH: {
       _assign_nid(o);
       r = 0;
-      break;
+    } break;
 
     case Transaction::OP_WRITE: {
       uint64_t off = op->off;
@@ -213,48 +225,50 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
       uint64_t dstoff = op->dest_off;
       r = _clone_range(c, o, no, srcoff, len, dstoff);
     } break;
-      {
-      case Transaction::OP_COLL_ADD:
-        ceph_abort_msg("not implemented");
-        break;
 
-      case Transaction::OP_COLL_REMOVE:
-        ceph_abort_msg("not implemented");
-        break;
+    case Transaction::OP_COLL_ADD:
+    case Transaction::OP_COLL_REMOVE:
+      ceph_abort_msg("not implemented");
+      break;
 
-      case Transaction::OP_COLL_MOVE:
-        ceph_abort_msg("deprecated");
-        break;
+    case Transaction::OP_COLL_MOVE:
+      ceph_abort_msg("deprecated");
+      break;
 
-      case Transaction::OP_COLL_MOVE_RENAME:
-      case Transaction::OP_TRY_RENAME: {
-        ceph_assert(op->cid == op->dest_cid);
-        const ghobject_t &noid = i.get_oid(op->dest_oid);
-        ObjectRef &no = ovec[op->dest_oid];
-        if (!no) {
-          no = c->get_obj(noid, false);
-        }
-        r = _rename(c, o, no, noid);
-      } break;
-
-      case Transaction::OP_OMAP_CLEAR:
-      case Transaction::OP_OMAP_SETKEYS:
-      case Transaction::OP_OMAP_RMKEYS:
-      case Transaction::OP_OMAP_RMKEYRANGE:
-      case Transaction::OP_OMAP_SETHEADER:
-        break;
-
-      case Transaction::OP_SETALLOCHINT: {
-        r = _set_alloc_hint(c, o, op->expected_object_size,
-                            op->expected_write_size, op->hint);
-      } break;
-
-      default:
-        derr << __func__ << " bad op " << op->op << dendl;
-        ceph_abort();
+    case Transaction::OP_COLL_MOVE_RENAME:
+    case Transaction::OP_TRY_RENAME: {
+      ceph_assert(op->cid == op->dest_cid);
+      const ghobject_t &noid = i.get_oid(op->dest_oid);
+      ObjectRef &no = ovec[op->dest_oid];
+      if (!no) {
+        no = c->get_obj(noid, false);
       }
-    endop:
-      return;
+      r = _rename(c, o, no, noid);
+    } break;
+
+    case Transaction::OP_OMAP_CLEAR:
+    case Transaction::OP_OMAP_SETKEYS:
+    case Transaction::OP_OMAP_RMKEYS:
+    case Transaction::OP_OMAP_RMKEYRANGE:
+    case Transaction::OP_OMAP_SETHEADER:
+      break;
+
+    case Transaction::OP_SETALLOCHINT: {
+      r = _set_alloc_hint(c, o, op->expected_object_size,
+                          op->expected_write_size, op->hint);
+    } break;
+
+    default:
+      derr << __func__ << " bad op " << op->op << dendl;
+      ceph_abort();
+    }
+
+  endop:
+    if (r < 0) {
+      derr << __func__ << " error " << cpp_strerror(r)
+           << " not handled on operation " << op->op << " (op " << pos
+           << ", counting from 0)" << dendl;
+      ceph_abort_msg("unexpected error");
     }
   }
 }
@@ -383,9 +397,13 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
   int64_t prealloc_left =
       alloc->allocate(need, min_alloc_size, need, 0, &prealloc);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
-    if (prealloc.size()) {
+    derr << __func__ << " failed to allocate 0x" << std::hex << need
+         << " allocated 0x " << (prealloc_left < 0 ? 0 : prealloc_left)
+         << " min_alloc_size 0x" << min_alloc_size << " available 0x "
+         << alloc->get_free() << std::dec << dendl;
+    if (prealloc.size())
       alloc->release(prealloc);
-    }
+
     return -ENOSPC;
   }
 
@@ -671,6 +689,8 @@ int ObjectStoreImitator::collection_empty(CollectionHandle &ch, bool *empty) {
   int r =
       collection_list(ch, ghobject_t(), ghobject_t::get_max(), 1, &ls, &next);
   if (r < 0) {
+    derr << __func__ << " collection_list returned: " << cpp_strerror(r)
+         << dendl;
     return r;
   }
 

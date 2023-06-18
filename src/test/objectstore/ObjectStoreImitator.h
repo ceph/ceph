@@ -83,7 +83,6 @@ private:
   typedef boost::intrusive_ptr<Object> ObjectRef;
 
   struct Collection : public CollectionImpl {
-    ObjectStoreImitator *sim;
     bluestore_cnode_t cnode;
     std::map<ghobject_t, ObjectRef> objects;
 
@@ -155,8 +154,8 @@ private:
     }
 
     Collection(ObjectStoreImitator *sim_, coll_t cid_)
-        : CollectionImpl(sim_->cct, cid_), sim(sim_), exists(true),
-          commit_queue(nullptr) {}
+        : CollectionImpl(sim_->cct, cid_), exists(true), commit_queue(nullptr) {
+    }
   };
 
   CollectionRef _get_collection(const coll_t &cid);
@@ -227,11 +226,12 @@ public:
 
   ~ObjectStoreImitator() = default;
 
-  void init_alloc(const std::string &alloc_type, int64_t size,
-                  uint64_t min_alloc_size);
+  void init_alloc(const std::string &alloc_type, int64_t size);
+  void print_status();
 
   // Overrides
 
+  // This is often not called directly but through queue_transaction
   int queue_transactions(CollectionHandle &ch, std::vector<Transaction> &tls,
                          TrackedOpRef op = TrackedOpRef(),
                          ThreadPool::TPHandle *handle = NULL) override;
