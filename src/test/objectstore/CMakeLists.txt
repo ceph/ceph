@@ -139,6 +139,7 @@ if(WITH_BLUESTORE)
     DESTINATION bin)
 endif()
 
+# fragmentation simulator
 add_library(ObjectStoreImitator OBJECT ObjectStoreImitator.cc)
 
 add_executable(ceph_test_fragmentation_sim
@@ -146,3 +147,6 @@ add_executable(ceph_test_fragmentation_sim
   $<TARGET_OBJECTS:ObjectStoreImitator>)
 add_ceph_unittest(ceph_test_fragmentation_sim)
 target_link_libraries(ceph_test_fragmentation_sim os global)
+
+set_target_properties(unittest_fastbmap_allocator PROPERTIES COMPILE_FLAGS
+"${UNITTEST_CXX_FLAGS}")
