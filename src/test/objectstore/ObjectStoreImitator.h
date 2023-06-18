@@ -1,8 +1,16 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Fragmentation Simulator
+ * Author: Tri Dao, daominhtri0503@gmail.com
+ */
 #pragma once
 
+#include "include/common_fwd.h"
 #include "os/ObjectStore.h"
 #include "os/bluestore/Allocator.h"
 #include "os/bluestore/bluestore_types.h"
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 /**
  * ObjectStoreImitator will simulate how BlueStore does IO (as of the time
@@ -22,7 +30,7 @@ private:
   class Collection;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
 
-  struct Object {
+  struct Object : public RefCountedObject {
     Collection *c;
     ghobject_t oid;
     bool exists;
@@ -113,11 +121,13 @@ private:
       }
 
       auto o = objects.find(oid);
-      if (o->second)
+      if (o != objects.end())
         return o->second;
 
-      auto on = new Object(this, oid);
-      return objects[oid] = on;
+      if (!create)
+        return nullptr;
+
+      return objects[oid] = new Object(this, oid);
     }
 
     bool flush_commit(Context *c) override { return false; }
@@ -174,6 +184,8 @@ private:
   int _clone(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo);
   int _clone_range(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo,
                    uint64_t srcoff, uint64_t length, uint64_t dstoff);
+  int read(CollectionHandle &c, const ghobject_t &oid, uint64_t offset,
+           size_t len, ceph::buffer::list &bl, uint32_t op_flags = 0) override;
 
   // Helpers
 
@@ -228,6 +240,8 @@ public:
   void set_collection_commit_queue(const coll_t &cid,
                                    ContextQueue *commit_queue) override;
   bool exists(CollectionHandle &c, const ghobject_t &old) override;
+  int set_collection_opts(CollectionHandle &c,
+                          const pool_opts_t &opts) override;
 
   int list_collections(std::vector<coll_t> &ls) override;
   bool collection_exists(const coll_t &c) override;
@@ -257,8 +271,6 @@ public:
                   bool *per_pool_omap) override {
     return 0;
   }
-  int set_collection_opts(CollectionHandle &c,
-                          const pool_opts_t &opts) override;
   int stat(CollectionHandle &c, const ghobject_t &oid, struct stat *st,
            bool allow_eio = false) override {
     return 0;
@@ -325,7 +337,9 @@ public:
   }
   void set_fsid(uuid_d u) override {}
   uuid_d get_fsid() override { return {}; }
-  uint64_t estimate_objects_overhead(uint64_t num_objects) override;
+  uint64_t estimate_objects_overhead(uint64_t num_objects) override {
+    return num_objects * 300;
+  }
   objectstore_perf_stat_t get_cur_stats() override { return {}; }
   const PerfCounters *get_perf_counters() const override { return nullptr; };
 };

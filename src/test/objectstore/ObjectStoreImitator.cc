@@ -1,3 +1,9 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+/*
+ * Fragmentation Simulator
+ * Author: Tri Dao, daominhtri0503@gmail.com
+ */
 #include "test/objectstore/ObjectStoreImitator.h"
 #include "common/errno.h"
 
@@ -251,6 +257,34 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
       return;
     }
   }
+}
+
+int ObjectStoreImitator::read(CollectionHandle &c_, const ghobject_t &oid,
+                              uint64_t offset, size_t length, bufferlist &bl,
+                              uint32_t op_flags) {
+
+  Collection *c = static_cast<Collection *>(c_.get());
+  if (!c->exists)
+    return -ENOENT;
+
+  bl.clear();
+  int r;
+  {
+    std::shared_lock l(c->lock);
+    ObjectRef o = c->get_obj(oid, false);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+
+    if (offset == length && offset == 0)
+      length = o->size;
+
+    r = _do_read(c, o, offset, length, bl, op_flags);
+  }
+
+out:
+  return r;
 }
 
 // ------- Helpers -------
