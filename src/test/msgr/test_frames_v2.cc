@@ -149,9 +149,12 @@ static bufferlist make_bufferlist(size_t len, char c) {
 
 bool disassemble_frame(FrameAssembler& frame_asm, bufferlist& frame_bl,
                        Tag& tag, segment_bls_t& segment_bls) {
+  auto preamble_onwire_len = frame_asm.get_preamble_onwire_len();
   bufferlist preamble_bl;
-  frame_bl.splice(0, frame_asm.get_preamble_onwire_len(), &preamble_bl);
-  tag = frame_asm.disassemble_preamble(preamble_bl);
+  frame_bl.splice(0, preamble_onwire_len, &preamble_bl);
+  rx_buffer_t rx_preamble_ptr = ceph::buffer::ptr_node::create(preamble_onwire_len);
+  memcpy(rx_preamble_ptr->c_str(), preamble_bl.c_str(), preamble_onwire_len);
+  tag = frame_asm.disassemble_preamble(rx_preamble_ptr);
 
   do {
     size_t seg_idx = segment_bls.size();
@@ -163,13 +166,18 @@ bool disassemble_frame(FrameAssembler& frame_asm, bufferlist& frame_bl,
     }
   } while (segment_bls.size() < frame_asm.get_num_segments());
 
-  bufferlist epilogue_bl;
+  rx_buffer_t rx_epilogue_ptr;
   uint32_t epilogue_onwire_len = frame_asm.get_epilogue_onwire_len();
   if (epilogue_onwire_len > 0) {
+    bufferlist epilogue_bl;
     frame_bl.splice(0, epilogue_onwire_len, &epilogue_bl);
+    rx_epilogue_ptr = ceph::buffer::ptr_node::create(epilogue_onwire_len);
+    memcpy(rx_epilogue_ptr->c_str(), epilogue_bl.c_str(), epilogue_onwire_len);
+  }else {
+    rx_epilogue_ptr = ceph::buffer::ptr_node::create(16);
   }
-  
-  return frame_asm.disassemble_segments(preamble_bl, segment_bls.data(), epilogue_bl);
+
+  return frame_asm.disassemble_segments(rx_preamble_ptr, segment_bls.data(), rx_epilogue_ptr);
 }
 
 class RoundTripTestBase : public ::testing::TestWithParam<

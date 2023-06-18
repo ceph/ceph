@@ -17,9 +17,6 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
-#if 1
-  return *_dout << __func__  << "::";
-#else
   return *_dout << "--2- " << messenger->get_myaddrs() << " >> "
                 << *connection->peer_addrs << " conn(" << connection << " "
                 << this
@@ -34,7 +31,6 @@ std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
                 << " comp rx=" << session_compression_handlers.rx.get()
                 << " tx=" << session_compression_handlers.tx.get()
                 << ").";
-#endif
 }
 
 using namespace ceph::msgr::v2;
@@ -323,7 +319,7 @@ void ProtocolV2::reset_throttle() {
 }
 
 CtPtr ProtocolV2::_fault() {
-  ldout(cct, 0) << __func__ << dendl;
+  ldout(cct, 10) << __func__ << dendl;
 
   if (state == CLOSED || state == NONE) {
     ldout(cct, 10) << __func__ << " connection is already closed" << dendl;
@@ -780,6 +776,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
   ssize_t r = connection->read(len, buf,
     [&next, this](char *buffer, int r) {
       if (unlikely(pre_auth.enabled) && r >= 0) {
+	// don't share buffers to allow the preamble/epilogue buffers recycling
 	pre_auth.rxbuf.append(next.node->c_str(), next.node->length());
 	ceph_assert(!cct->_conf->ms_die_on_bug ||
 		    pre_auth.rxbuf.length() < 20000000);
@@ -790,6 +787,7 @@ CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
   if (r <= 0) {
     // error or done synchronously
     if (unlikely(pre_auth.enabled) && r == 0) {
+      // don't share buffers to allow the preamble/epilogue buffers recycling
       pre_auth.rxbuf.append(next.node->c_str(), next.node->length());
       ceph_assert(!cct->_conf->ms_die_on_bug ||
 		  pre_auth.rxbuf.length() < 20000000);
@@ -822,6 +820,7 @@ CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_TYPE<ProtocolV2> &next,
                         ceph::bufferlist &buffer) {
   if (unlikely(pre_auth.enabled)) {
+    // don't share buffers to allow the preamble/epilogue buffers recycling
     pre_auth.txbuf.append(buffer.c_str(), buffer.length());
     ceph_assert(!cct->_conf->ms_die_on_bug ||
 		pre_auth.txbuf.length() < 20000000);
@@ -1267,7 +1266,6 @@ CtPtr ProtocolV2::_handle_read_frame_segment() {
   if (rx_segments_data.size() == rx_frame_asm.get_num_segments()) {
     // OK, all segments planned to read are read. Can go with epilogue.
     uint32_t epilogue_onwire_len = rx_frame_asm.get_epilogue_onwire_len();
-    ceph_assert(rx_epilogue_ptr->raw_nref() == 1);
     if (likely(rx_epilogue_ptr->raw_length() >= epilogue_onwire_len)) {
       // reset buffer
       rx_epilogue_ptr->set_offset(0);
@@ -1397,10 +1395,10 @@ CtPtr ProtocolV2::_handle_read_frame_epilogue_main() {
   try {
     ok = rx_frame_asm.disassemble_segments(rx_preamble_ptr, rx_segments_data.data(), rx_epilogue_ptr);
   } catch (FrameError& e) {
-    ldout(cct, 0) << __func__ << " " << e.what() << dendl;
+    ldout(cct, 1) << __func__ << " " << e.what() << dendl;
     return _fault();
   } catch (ceph::crypto::onwire::MsgAuthError&) {
-    ldout(cct, 0) << __func__ << "bad auth tag" << dendl;
+    ldout(cct, 1) << __func__ << "bad auth tag" << dendl;
     return _fault();
   }
 
