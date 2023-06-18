@@ -1,26 +1,29 @@
 >=18.0.0
 
 * The RGW policy parser now rejects unknown principals by default. If you are
-  mirroring policies between RGW and AWS, you may wish to set
-  "rgw policy reject invalid principals" to "false". This affects only newly set
+  mirroring policies between RGW and AWS, you might want to set ``rgw policy
+  reject invalid principals`` to ``false``. This change affects only newly set
   policies, not policies that are already in place.
-* RGW's default backend for `rgw_enable_ops_log` changed from RADOS to file.
-  The default value of `rgw_ops_log_rados` is now false, and `rgw_ops_log_file_path`
-  defaults to "/var/log/ceph/ops-log-$cluster-$name.log".
-* The SPDK backend for BlueStore is now able to connect to an NVMeoF target.
-  Please note that this is not an officially supported feature.
-* RGW's pubsub interface now returns boolean fields using bool. Before this change,
-  `/topics/<topic-name>` returns "stored_secret" and "persistent" using a string
-  of "true" or "false" with quotes around them. After this change, these fields
-  are returned without quotes so they can be decoded as boolean values in JSON.
-  The same applies to the `is_truncated` field returned by `/subscriptions/<sub-name>`.
-* RGW's response of `Action=GetTopicAttributes&TopicArn=<topic-arn>` REST API now
-  returns `HasStoredSecret` and `Persistent` as boolean in the JSON string
-  encoded in `Attributes/EndPoint`.
-* All boolean fields previously rendered as string by `rgw-admin` command when
-  the JSON format is used are now rendered as boolean. If your scripts/tools
-  relies on this behavior, please update them accordingly. The impacted field names
-  are:
+* RGW's default back end for `rgw_enable_ops_log` has changed from ``RADOS`` to
+ ``file``. The default value of ``rgw_ops_log_rados`` is now ``false``, and
+ ``rgw_ops_log_file_path`` defaults to
+ ``/var/log/ceph/ops-log-$cluster-$name.log``.
+* The SPDK back end for BlueStore is now able to connect to an NVMeoF target.
+  This is not an officially supported feature.
+* RGW's pubsub interface now returns boolean fields using ``bool``. Before this
+  change, ``/topics/<topic-name>`` returns ``stored_secret`` and ``persistent``
+  using a string of ``"true"`` or ``"false"`` that contains enclosing quotation
+  marks. After this change, these fields are returned without enclosing
+  quotation marks so that the fields can be decoded as boolean values in JSON.
+  The same is true of the ``is_truncated`` field returned by
+  ``/subscriptions/<sub-name>``.
+* RGW's response of ``Action=GetTopicAttributes&TopicArn=<topic-arn>`` REST 
+  API now returns ``HasStoredSecret`` and ``Persistent`` as boolean in the JSON
+  string encoded in ``Attributes/EndPoint``.
+* All boolean fields previously rendered as string by the ``rgw-admin`` command
+  when the JSON format was used are now rendered as boolean. If your scripts or
+  tools rely on this behavior, please update them accordingly. The following is
+  a list of the field names impacted by this change:
   * absolute
   * add
   * admin
@@ -47,120 +50,128 @@
   * system
   * truncated
   * user_stats_sync
-* RGW: The beast frontend's HTTP access log line uses a new debug_rgw_access
-  configurable. This has the same defaults as debug_rgw, but can now be controlled
-  independently.
-* RBD: The semantics of compare-and-write C++ API (`Image::compare_and_write`
-  and `Image::aio_compare_and_write` methods) now match those of C API.  Both
-  compare and write steps operate only on `len` bytes even if the respective
-  buffers are larger. The previous behavior of comparing up to the size of
-  the compare buffer was prone to subtle breakage upon straddling a stripe
-  unit boundary.
+* RGW: The beast front end's HTTP access log line now uses a new 
+  ``debug_rgw_access`` configurable. It has the same defaults as ``debug_rgw``,
+  but it can be controlled independently.
+* RBD: The semantics of compare-and-write C++ API (``Image::compare_and_write``
+  and ``Image::aio_compare_and_write`` methods) now match those of C API. Both
+  compare and write steps operate only on ``len`` bytes even if the buffers
+  associated with them are larger. The previous behavior of comparing up to the
+  size of the compare buffer was prone to subtle breakage upon straddling a
+  stripe unit boundary.
 * RBD: compare-and-write operation is no longer limited to 512-byte sectors.
-  Assuming proper alignment, it now allows operating on stripe units (4M by
+  Assuming proper alignment, it now allows operating on stripe units (4 MB by
   default).
-* RBD: New `rbd_aio_compare_and_writev` API method to support scatter/gather
-  on both compare and write buffers.  This compliments existing `rbd_aio_readv`
-  and `rbd_aio_writev` methods.
-* The 'AT_NO_ATTR_SYNC' macro is deprecated, please use the standard 'AT_STATX_DONT_SYNC'
-  macro. The 'AT_NO_ATTR_SYNC' macro will be removed in the future.
-* Trimming of PGLog dups is now controlled by the size instead of the version.
-  This fixes the PGLog inflation issue that was happening when the on-line
-  (in OSD) trimming got jammed after a PG split operation. Also, a new off-line
-  mechanism has been added: `ceph-objectstore-tool` got `trim-pg-log-dups` op
-  that targets situations where OSD is unable to boot due to those inflated dups.
-  If that is the case, in OSD logs the "You can be hit by THE DUPS BUG" warning
-  will be visible.
-  Relevant tracker: https://tracker.ceph.com/issues/53729
-* RBD: `rbd device unmap` command gained `--namespace` option.  Support for
-  namespaces was added to RBD in Nautilus 14.2.0 and it has been possible to
-  map and unmap images in namespaces using the `image-spec` syntax since then
-  but the corresponding option available in most other commands was missing.
-* RGW: Compression is now supported for objects uploaded with Server-Side Encryption.
-  When both are enabled, compression is applied before encryption.
-* RGW: the "pubsub" functionality for storing bucket notifications inside Ceph
-  is removed. Together with it, the "pubsub" zone should not be used anymore.
-  The REST operations, as well as radosgw-admin commands for manipulating
-  subscriptions, as well as fetching and acking the notifications are removed 
-  as well.
-  In case that the endpoint to which the notifications are sent maybe down or 
-  disconnected, it is recommended to use persistent notifications to guarantee 
-  the delivery of the notifications. In case the system that consumes the 
-  notifications needs to pull them (instead of the notifications be pushed 
-  to it), an external message bus (e.g. rabbitmq, Kafka) should be used for 
-  that purpose.
-* RGW: The serialized format of notification and topics has changed, so that 
-  new/updated topics will be unreadable by old RGWs. We recommend completing 
-  the RGW upgrades before creating or modifying any notification topics.
-* RBD: Trailing newline in passphrase files (`<passphrase-file>` argument in
-  `rbd encryption format` command and `--encryption-passphrase-file` option
-  in other commands) is no longer stripped.
-* RBD: Support for layered client-side encryption is added.  Cloned images
-  can now be encrypted each with its own encryption format and passphrase,
-  potentially different from that of the parent image.  The efficient
-  copy-on-write semantics intrinsic to unformatted (regular) cloned images
-  are retained.
-* CEPHFS: Rename the `mds_max_retries_on_remount_failure` option to
-  `client_max_retries_on_remount_failure` and move it from mds.yaml.in to
-  mds-client.yaml.in because this option was only used by MDS client from its
-  birth.
-* The `perf dump` and `perf schema` commands are deprecated in favor of new
-  `counter dump` and `counter schema` commands. These new commands add support
-  for labeled perf counters and also emit existing unlabeled perf counters. Some
-  unlabeled perf counters became labeled in this release, with more to follow in
-  future releases; such converted perf counters are no longer emitted by the
-  `perf dump` and `perf schema` commands.
-* `ceph mgr dump` command now outputs `last_failure_osd_epoch` and
-  `active_clients` fields at the top level.  Previously, these fields were
-  output under `always_on_modules` field.
-* `ceph mgr dump` command now displays the name of the mgr module that
-  registered a RADOS client in the `name` field added to elements of the
-  `active_clients` array. Previously, only the address of a module's RADOS
-  client was shown in the `active_clients` array.
-* RBD: All rbd-mirror daemon perf counters became labeled and as such are now
-  emitted only by the new `counter dump` and `counter schema` commands.  As part
-  of the conversion, many also got renamed to better disambiguate journal-based
-  and snapshot-based mirroring.
-* RBD: list-watchers C++ API (`Image::list_watchers`) now clears the passed
-  `std::list` before potentially appending to it, aligning with the semantics
-  of the corresponding C API (`rbd_watchers_list`).
-* Telemetry: Users who are opted-in to telemetry can also opt-in to
-  participating in a leaderboard in the telemetry public
-  dashboards (https://telemetry-public.ceph.com/). Users can now also add a
-  description of the cluster to publicly appear in the leaderboard.
-  For more details, see:
-  https://docs.ceph.com/en/latest/mgr/telemetry/#leaderboard
-  See a sample report with `ceph telemetry preview`.
-  Opt-in to telemetry with `ceph telemetry on`.
-  Opt-in to the leaderboard with
-  `ceph config set mgr mgr/telemetry/leaderboard true`.
-  Add leaderboard description with:
-  `ceph config set mgr mgr/telemetry/leaderboard_description ‘Cluster description’`.
-* CEPHFS: After recovering a Ceph File System post following the disaster recovery
-  procedure, the recovered files under `lost+found` directory can now be deleted.
-* core: cache-tiering is now deprecated.
-* mClock Scheduler: The mClock scheduler (default scheduler in Quincy) has
+* RBD: New ``rbd_aio_compare_and_writev`` API method to support scatter/gather
+  on both compare and write buffers. This complements existing
+  ``rbd_aio_readv`` and ``rbd_aio_writev`` methods.
+* The ``AT_NO_ATTR_SYNC`` macro has been deprecated in favor of the standard 
+  ``AT_STATX_DONT_SYNC`` macro. The ``AT_NO_ATTR_SYNC`` macro will be removed
+  in the future.
+* Trimming of PGLog dups is now controlled by the size rather than the version.
+  This change fixes the PGLog inflation issue that was happening when the
+  on-line (in OSD) trimming got jammed after a PG split operation. Also, a new
+  off-line mechanism has been added: ``ceph-objectstore-tool`` has a new
+  operation called ``trim-pg-log-dups`` that targets situations in which an OSD
+  is unable to boot because of the inflated dups. In such situations, the "You
+  can be hit by THE DUPS BUG" warning is visible in OSD logs. Relevant
+  tracker: https://tracker.ceph.com/issues/53729
+* RBD: The ``rbd device unmap`` command now has a ``--namespace`` option. 
+  Support for namespaces was added to RBD in Nautilus 14.2.0, and since then it
+  has been possible to map and unmap images in namespaces using the
+  ``image-spec`` syntax. However, the corresponding option available in most
+  other commands was missing.
+* RGW: Compression is now supported for objects uploaded via Server-Side 
+  Encryption. When both compression and encryption are enabled, compression is
+  applied before encryption.
+* RGW: The pubsub functionality for storing bucket notifications inside Ceph
+  has been removed. As a result, the pubsub zone should not be used anymore.
+  The following have also been removed: the REST operations, ``radosgw-admin``
+  commands for manipulating subscriptions, fetching the notifications, and
+  acking the notifications.
+
+  If the endpoint to which the notifications are sent is down or
+  disconnected, we recommend using persistent notifications to guarantee their
+  delivery. If the system that consumes the notifications has to pull them
+  (instead of the notifications being pushed to the system), use an external
+  message bus (for example, RabbitMQ, Kafka) for that purpose.
+
+* RGW: The serialized format of notification and topics has been changed, 
+  so that new and updated topics will be unreadable by old RGWs. We recommend
+  completing the RGW upgrades before creating or modifying any notification
+  topics.
+* RBD: Trailing newline in passphrase files (for example: the 
+  ``<passphrase-file>`` argument of the ``rbd encryption format`` command and
+  the ``--encryption-passphrase-file`` option of other commands) is no longer
+  stripped.
+* RBD: Support for layered client-side encryption has been added. It is now 
+  possible to encrypt cloned images with a distinct encryption format and
+  passphrase, differing from that of the parent image and from that of every
+  other cloned image. The efficient copy-on-write semantics intrinsic to
+  unformatted (regular) cloned images have been retained.
+* CEPHFS: The ``mds_max_retries_on_remount_failure`` option has been renamed to
+  ``client_max_retries_on_remount_failure`` and moved from ``mds.yaml.in`` to
+  ``mds-client.yaml.in``. This change was made because the option has always
+  been used only by the MDS client.
+* The ``perf dump`` and ``perf schema`` commands have been deprecated in 
+  favor of the new ``counter dump`` and ``counter schema`` commands. These new
+  commands add support for labeled perf counters and also emit existing
+  unlabeled perf counters. Some unlabeled perf counters became labeled in this
+  release, and more will be labeled in future releases; such converted perf
+  counters are no longer emitted by the ``perf dump`` and ``perf schema``
+  commands.
+* The ``ceph mgr dump`` command now outputs ``last_failure_osd_epoch`` and
+  ``active_clients`` fields at the top level. Previously, these fields were
+  output under the ``always_on_modules`` field.
+* The ``active_clients`` array displayed by the ``ceph mgr dump`` command now
+  has a ``name`` field that shows the name of the mgr module that registered a
+  RADOS client. Previously, the ``active_clients`` array showed the address of
+  a module's RADOS client, but not the name of the module.
+* RBD: All rbd-mirror daemon perf counters have become labeled and are now
+  emitted only by the new ``counter dump`` and ``counter schema`` commands. As
+  part of the conversion, many were also renamed in order to better
+  disambiguate journal-based and snapshot-based mirroring.
+* RBD: The list-watchers C++ API (``Image::list_watchers``) now clears the 
+  passed ``std::list`` before appending to it. This aligns with the semantics
+  of the C API (``rbd_watchers_list``).
+* Telemetry: Users who have opted in to telemetry can also opt in to
+  participate in a leaderboard in the telemetry public dashboards
+  (https://telemetry-public.ceph.com/). In addition, users are now able to
+  provide a description of their cluster that will appear publicly in the
+  leaderboard. For more details, see:
+  https://docs.ceph.com/en/latest/mgr/telemetry/#leaderboard. To see a sample
+  report, run ``ceph telemetry preview``. To opt in to telemetry, run ``ceph
+  telemetry on``. To opt in to the leaderboard, run ``ceph config set mgr
+  mgr/telemetry/leaderboard true``. To add a leaderboard description, run
+  ``ceph config set mgr mgr/telemetry/leaderboard_description ‘Cluster
+  description’`` (entering your own cluster description).
+* CEPHFS: It is now possible to delete the recovered files in the ``lost+found``
+  directory after a CephFS post has been recovered in accordance with disaster
+  recovery procedures.
+* core: Cache-tiering is now deprecated.
+* mClock Scheduler: The mClock scheduler (the default scheduler in Quincy) has
   undergone significant usability and design improvements to address the slow
-  backfill issue. Some important changes are:
-  * The 'balanced' profile is set as the default mClock profile because it
-    represents a compromise between prioritizing client IO or recovery IO. Users
-    can then choose either the 'high_client_ops' profile to prioritize client IO
-    or the 'high_recovery_ops' profile to prioritize recovery IO.
-  * QoS parameters like reservation and limit are now specified in terms of a
-    fraction (range: 0.0 to 1.0) of the OSD's IOPS capacity.
-  * The cost parameters (osd_mclock_cost_per_io_usec_* and
-    osd_mclock_cost_per_byte_usec_*) have been removed. The cost of an operation
-    is now determined using the random IOPS and maximum sequential bandwidth
-    capability of the OSD's underlying device.
-  * Degraded object recovery is given higher priority when compared to misplaced
-    object recovery because degraded objects present a data safety issue not
-    present with objects that are merely misplaced. Therefore, backfilling
-    operations with the 'balanced' and 'high_client_ops' mClock profiles may
-    progress slower than what was seen with the 'WeightedPriorityQueue' (WPQ)
-    scheduler.
-  * The QoS allocations in all the mClock profiles are optimized based on the above
-    fixes and enhancements.
-  * For more detailed information see:
+  backfill issue. The following is a list of some important changes:
+  * The ``balanced`` profile is set as the default mClock profile because it
+    represents a compromise between prioritizing client I/O and prioritizing
+    recovery I/O. Users can then choose either the ``high_client_ops`` profile
+    to prioritize client I/O or the ``high_recovery_ops`` profile to prioritize
+    recovery I/O.
+  * QoS parameters like ``reservation`` and ``limit`` are now specified in 
+    terms of a percentage (range: 0.0 to 1.0) of the OSD's IOPS capacity.
+  * The cost parameters (``osd_mclock_cost_per_io_usec_*`` and
+    ``osd_mclock_cost_per_byte_usec_*``) have been removed. The cost of an 
+    operation is now a function of the random IOPS and maximum sequential
+    bandwidth capability of the OSD's underlying device.
+  * Degraded object recovery is given higher priority than misplaced
+    object recovery because degraded objects present a data safety issue that
+    is not present with objects that are merely misplaced. As a result,
+    backfilling operations with the ``balanced`` and ``high_client_ops`` mClock
+    profiles might progress slower than in the past, when backfilling
+    operations used the 'WeightedPriorityQueue' (WPQ) scheduler.
+  * The QoS allocations in all the mClock profiles are optimized in 
+    accordance with the above fixes and enhancements.
+  * For more details, see:
     https://docs.ceph.com/en/latest/rados/configuration/mclock-config-ref/
 
 >=17.2.1
