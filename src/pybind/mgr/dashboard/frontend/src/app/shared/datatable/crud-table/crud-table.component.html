@@ -68,9 +68,18 @@
     <textarea readonly
               class="form-control w-100 bg-light height-400"
               id="authExportArea">{{ modalState.authExportData }}</textarea>
-    <cd-copy-2-clipboard-button class="align-self-end"
-                                source="authExportArea">
+    <div class="btn-group align-self-end"
+         role="group">
+      <cd-download-button [textItem]="modalState.authExportData"
+                          fileName="ceph-users"
+                          fileExtension="keyring">
+      </cd-download-button>
 
-    </cd-copy-2-clipboard-button>
+      <cd-copy-2-clipboard-button class="align-self-end"
+                                  source="authExportArea">
+
+      </cd-copy-2-clipboard-button>
+    </div>
+
   </div>
 </ng-template>
