@@ -1186,7 +1186,7 @@ void get_device_metadata(
       }
       devpaths += dev + "=" + path;
     } else {
-      (*errs)[dev] + " no unique device path for "s + dev + ": " + err;
+      (*errs)[dev] += " no unique device path for "s + dev + ": " + err;
     }
   }
 }
