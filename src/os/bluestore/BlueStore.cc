@@ -7529,7 +7529,7 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
     }
 
     if (type != BS_FLAVOR) {
-      derr << __func__ << " expected bluestore, but type is " << type << dendl;
+      derr << __func__ << " expected "<< BS_FLAVOR << ", but type is " << type << dendl;
       return -EIO;
     }
   }
@@ -8287,7 +8287,7 @@ int BlueStore::mkfs()
     r = read_meta("type", &type);
     if (r == 0) {
       if (type != BS_FLAVOR) {
-	derr << __func__ << " expected bluestore, but type is " << type << dendl;
+	derr << __func__ << " expected " << BS_FLAVOR << ", but type is " << type << dendl;
 	r = -EIO;
 	goto out_close_fsid;
       }
