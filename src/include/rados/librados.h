@@ -3227,6 +3227,22 @@ CEPH_RADOS_API int rados_aio_write_op_operate(rados_write_op_t write_op,
 			                      int flags);
 
 /**
+ * Perform a write operation asynchronously
+ * @param write_op operation to perform
+ * @param io the ioctx that the object is in
+ * @param completion what to do when operation has been attempted
+ * @param oid the object id
+ * @param mtime the time to set the mtime to, NULL for the current time
+ * @param flags flags to apply to the entire operation (LIBRADOS_OPERATION_*)
+ */
+CEPH_RADOS_API int rados_aio_write_op_operate2(rados_write_op_t write_op,
+                                               rados_ioctx_t io,
+                                               rados_completion_t completion,
+                                               const char *oid,
+                                               struct timespec *mtime,
+                                               int flags);
+
+/**
  * Create a new rados_read_op_t read operation. This will store all
  * actions to be performed atomically. You must call
  * rados_release_read_op when you are finished with it (after it
