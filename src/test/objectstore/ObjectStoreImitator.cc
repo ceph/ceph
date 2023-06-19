@@ -7,6 +7,7 @@
 #include "test/objectstore/ObjectStoreImitator.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
+#include "include/intarith.h"
 
 #define dout_context cct
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
@@ -22,10 +23,10 @@ void ObjectStoreImitator::print_status() {
   std::cout << std::hex
             << "Fragmentation score: " << alloc->get_fragmentation_score()
             << " , fragmentation: " << alloc->get_fragmentation()
-            << ", allocator name " << alloc->get_name() << ", allocator type "
-            << alloc->get_type() << ", capacity 0x" << alloc->get_capacity()
-            << ", block size 0x" << alloc->get_block_size() << ", free 0x"
-            << alloc->get_free() << std::dec << std::endl;
+            << ", allocator type " << alloc->get_type() << ", capacity 0x"
+            << alloc->get_capacity() << ", block size 0x"
+            << alloc->get_block_size() << ", free 0x" << alloc->get_free()
+            << std::dec << std::endl;
 }
 
 // ------- Transactions -------
@@ -393,7 +394,7 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
                                          bufferlist &bl) {
 
   // No compression for now
-  uint64_t need = bl.length();
+  uint64_t need = p2roundup(static_cast<uint64_t>(bl.length()), min_alloc_size);
 
   PExtentVector prealloc;
 
