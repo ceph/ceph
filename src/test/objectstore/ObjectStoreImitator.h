@@ -50,8 +50,12 @@ private:
 
     void punch_hole(uint64_t offset, uint64_t length,
                     PExtentVector &old_extents) {
-      if (offset > size || length == 0)
+      if (offset >= size || length == 0)
         return;
+
+      if (offset + length >= size) {
+        length = size - offset;
+      }
 
       uint64_t l_offset{0}, punched_length{0};
       PExtentVector to_be_punched, remains;
@@ -61,7 +65,8 @@ private:
 
         // Found where we need to punch
         if (l_offset >= offset) {
-          if (e.length + punched_length >= length) {
+          // We only punched a portion of the extent
+          if (e.length + punched_length > length) {
             uint64_t left = e.length + punched_length - length;
             e.length = length - punched_length;
             remains.emplace_back(e.offset + e.length, left);

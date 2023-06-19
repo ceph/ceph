@@ -11,6 +11,7 @@
 #include "include/buffer_fwd.h"
 #include "os/ObjectStore.h"
 #include "test/objectstore/ObjectStoreImitator.h"
+#include <fmt/core.h>
 #include <gtest/gtest.h>
 #include <iostream>
 
@@ -64,6 +65,7 @@ private:
 
 void FragmentationSimulator::init(const std::string &alloc_type, uint64_t size,
                                   uint64_t min_alloc_size) {
+  std::cout << std::endl;
   std::cout << "Initializing ObjectStoreImitator" << std::endl;
   os = new ObjectStoreImitator(g_ceph_context, "", min_alloc_size);
 
@@ -101,20 +103,54 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
   std::string name() override { return "SimpleCW"; }
   int generate_txns(ObjectStore::CollectionHandle &ch,
                     ObjectStoreImitator *os) override {
-    hobject_t h1;
-    h1.oid = "obj_1";
-    h1.set_hash(1);
-    h1.pool = 1;
-    auto oid = ghobject_t(h1);
 
-    ObjectStore::Transaction t1;
-    t1.create(ch->get_cid(), oid);
-    os->queue_transaction(ch, std::move(t1));
+    std::vector<ghobject_t> objs;
+    for (unsigned i{0}; i < 100; ++i) {
+      hobject_t h;
+      h.oid = fmt::format("obj_{}", i);
+      h.set_hash(1);
+      h.pool = 1;
+      objs.emplace_back(h);
+    }
 
-    ObjectStore::Transaction t2;
-    t2.write(ch->get_cid(), oid, 0, _1Mb, make_bl(_1Mb, 'c'));
-    os->queue_transaction(ch, std::move(t2));
+    std::vector<ObjectStore::Transaction> tls;
+    for (unsigned i{0}; i < 100; ++i) {
+      ObjectStore::Transaction t1;
+      t1.create(ch->get_cid(), objs[i]);
+      tls.emplace_back(std::move(t1));
 
+      ObjectStore::Transaction t2;
+      t2.write(ch->get_cid(), objs[i], 0, _1Mb, make_bl(_1Mb, 'c'));
+      tls.emplace_back(std::move(t2));
+    }
+
+    os->queue_transactions(ch, tls);
+
+    // reapply
+    os->queue_transactions(ch, tls);
+    tls.clear();
+
+    // Overwrite on object
+    for (unsigned i{0}; i < 100; ++i) {
+      ObjectStore::Transaction t;
+      t.write(ch->get_cid(), objs[i], _1Kb * i, _1Mb * 3,
+              make_bl(_1Mb * 3, 'x'));
+      tls.emplace_back(std::move(t));
+    }
+
+    os->queue_transactions(ch, tls);
+    tls.clear();
+
+    for (unsigned i{0}; i < 50; ++i) {
+      ObjectStore::Transaction t1, t2;
+      t1.clone(ch->get_cid(), objs[i], objs[i + 50]);
+      tls.emplace_back(std::move(t1));
+
+      t2.clone(ch->get_cid(), objs[i + 50], objs[i]);
+      tls.emplace_back(std::move(t2));
+    }
+
+    os->queue_transactions(ch, tls);
     return 0;
   }
 };
@@ -140,6 +176,8 @@ int main(int argc, char **argv) {
       global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
                   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(FragmentationSimulator::cct->get());
+
+  FragmentationSimulator::cct->_conf->bluestore_clone_cow = false;
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
