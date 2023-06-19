@@ -412,6 +412,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   /* Local cache check */
   if (source->driver->get_policy_driver()->cacheDriver->key_exists(dpp, oid)) { // Entire object for now -Sam
     ret = source->driver->get_policy_driver()->cacheDriver->get(dpp, source->get_key().get_oid(), ofs, len, bl, source->get_attrs());
+    dout(0) << "Sam: correct" << dendl;
     cb->handle_data(bl, ofs, len);
   } else {
     /* Block directory check */
