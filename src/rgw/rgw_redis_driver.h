@@ -34,10 +34,7 @@ class RedisDriver : public CacheDriver {
     std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
 
   public:
-    RedisDriver(Partition& _partition_info, std::string host, int port) : CacheDriver() {
-      addr.host = host;
-      addr.port = port;
-    }
+    RedisDriver() : CacheDriver() {}
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
