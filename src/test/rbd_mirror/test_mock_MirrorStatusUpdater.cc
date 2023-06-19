@@ -169,7 +169,7 @@ public:
   void expect_mirror_status_update(
       const MirrorImageSiteStatuses& mirror_image_site_statuses,
       const std::string& mirror_uuid, int r) {
-    EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _))
+    EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _, _))
       .WillOnce(Invoke([this](auto&&... args) {
           int r = m_mock_local_io_ctx->do_aio_operate(decltype(args)(args)...);
           m_mock_local_io_ctx->aio_flush();
@@ -203,7 +203,7 @@ public:
 
   void expect_mirror_status_removes(const std::set<std::string>& mirror_images,
                                     int r) {
-    EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _))
+    EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _, _))
       .WillOnce(Invoke([this](auto&&... args) {
           int r = m_mock_local_io_ctx->do_aio_operate(decltype(args)(args)...);
           m_mock_local_io_ctx->aio_flush();
@@ -439,7 +439,7 @@ TEST_F(TestMockMirrorStatusUpdater, RemoveStatus) {
   fire_timer_event(&timer_event, &update_task);
 
   C_SaferCond remove_flush_ctx;
-  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _))
+  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _, _))
     .WillOnce(Invoke([this, &remove_flush_ctx](auto&&... args) {
         int r = m_mock_local_io_ctx->do_aio_operate(decltype(args)(args)...);
         m_mock_local_io_ctx->aio_flush();
@@ -506,7 +506,7 @@ TEST_F(TestMockMirrorStatusUpdater, OverwriteStatusInFlight) {
   Context* update_task = nullptr;
   fire_timer_event(&timer_event, &update_task);
 
-  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _))
+  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _, _))
     .WillOnce(Invoke([this, &mock_mirror_status_updater](auto&&... args) {
         mock_mirror_status_updater.set_mirror_image_status(
           "1", {"", cls::rbd::MIRROR_IMAGE_STATUS_STATE_REPLAYING,
@@ -617,7 +617,7 @@ TEST_F(TestMockMirrorStatusUpdater, RemoveRefreshInFlightStatus) {
   fire_timer_event(&timer_event, &update_task);
 
   C_SaferCond on_removed;
-  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _))
+  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _, _))
     .WillOnce(Invoke(
       [this, &mock_mirror_status_updater, &on_removed](auto&&... args) {
         mock_mirror_status_updater.remove_refresh_mirror_image_status(
@@ -652,7 +652,7 @@ TEST_F(TestMockMirrorStatusUpdater, ShutDownWhileUpdating) {
   fire_timer_event(&timer_event, &update_task);
 
   C_SaferCond on_shutdown;
-  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _))
+  EXPECT_CALL(*m_mock_local_io_ctx, aio_operate(_, _, _, _, _, _))
     .WillOnce(Invoke(
       [this, &mock_mirror_status_updater, &on_shutdown](auto&&... args) {
         mock_mirror_status_updater.shut_down(&on_shutdown);

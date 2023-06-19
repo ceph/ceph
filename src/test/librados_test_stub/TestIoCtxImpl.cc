@@ -107,7 +107,7 @@ void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
 
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, SnapContext *snap_context,
-                               int flags) {
+                               const ceph::real_time *pmtime, int flags) {
   // TODO flags for now
   ops.get();
   m_pending_ops++;
