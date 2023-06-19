@@ -4,10 +4,10 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
-namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
+namespace rgw { namespace cache { 
 
 /* Base metadata and data fields should remain consistent */
-std::vector<std::string> baseFields {
+std::vector<std::string> baseFields{
   "mtime",
   "object_size",
   "accounted_size",
@@ -96,85 +96,6 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
     return ECONNREFUSED;
 
   return 0;
-}
-
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) {
-  int result = -1;
-  std::string entryName = "rgw-object:" + key + ":cache";
-  std::vector<std::string> keys;
-  keys.push_back(entryName);
-
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {}
-
-  return result;
-}
-
-std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) {
-  std::vector<Entry> result;
-
-  for (auto it = entries.begin(); it != entries.end(); ++it) { 
-    result.push_back(it->second);
-  }
-
-  return result;
-}
-
-size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
-  return entries.size();
-}
-
-Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp) {
-  Partition part;
-  return part; // Implement -Sam
-}
-
-uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) {
-  int result = -1;
-
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  try {
-    client.info([&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        int usedMem = -1;
-	int maxMem = -1;
-
-        std::istringstream iss(reply.as_string());
-	std::string line;    
-        while (std::getline(iss, line)) {
-	  size_t pos = line.find_first_of(":");
-	  if (pos != std::string::npos) {
-	    if (line.substr(0, pos) == "used_memory") {
-	      usedMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
-	    } else if (line.substr(0, line.find_first_of(":")) == "maxmemory") {
-	      maxMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
-	    } 
-	  }
-        }
-
-	if (usedMem > -1 && maxMem > -1)
-	  result = maxMem - usedMem;
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {
-    return -1;
-  }
-
-  return result;
 }
 
 int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
@@ -269,6 +190,10 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   }
 
   return 0;
+}
+
+rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) {
+  return {}; // implement -Sam
 }
 
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) {
@@ -650,4 +575,87 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   return result - 1;
 }
 
-} } // namespace rgw::cal
+std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) {
+  return nullptr; // implement -Sam
+}
+
+bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) {
+  int result = -1;
+  std::string entryName = "rgw-object:" + key + ":cache";
+  std::vector<std::string> keys;
+  keys.push_back(entryName);
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  try {
+    client.exists(keys, [&result](cpp_redis::reply &reply) {
+      if (reply.is_integer()) {
+        result = reply.as_integer();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {}
+
+  return result;
+}
+
+std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) {
+  std::vector<Entry> result;
+
+  for (auto it = entries.begin(); it != entries.end(); ++it) { 
+    result.push_back(it->second);
+  }
+
+  return result;
+}
+
+size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
+  return entries.size();
+}
+
+Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp) {
+  Partition part;
+  return part; // Implement -Sam
+}
+
+uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) {
+  int result = -1;
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  try {
+    client.info([&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        int usedMem = -1;
+	int maxMem = -1;
+
+        std::istringstream iss(reply.as_string());
+	std::string line;    
+        while (std::getline(iss, line)) {
+	  size_t pos = line.find_first_of(":");
+	  if (pos != std::string::npos) {
+	    if (line.substr(0, pos) == "used_memory") {
+	      usedMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
+	    } else if (line.substr(0, line.find_first_of(":")) == "maxmemory") {
+	      maxMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
+	    } 
+	  }
+        }
+
+	if (usedMem > -1 && maxMem > -1)
+	  result = maxMem - usedMem;
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return result;
+}
+
+} } // namespace rgw::cache
