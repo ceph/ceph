@@ -275,6 +275,44 @@ inline bool operator==(const quota_info_t &l, const quota_info_t &r) {
 
 std::ostream& operator<<(std::ostream &out, const quota_info_t &n);
 
+struct dmclock_info_t
+{
+  double mds_reservation = 0;
+  double mds_limit = 0;
+  double mds_weight = 0;
+
+  dmclock_info_t() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(mds_reservation, bl);
+    encode(mds_limit, bl);
+    encode(mds_weight, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+    decode(mds_reservation, p);
+    decode(mds_limit, p);
+    decode(mds_weight, p);
+    DECODE_FINISH(p);
+  }
+
+  bool is_valid() const {
+    return mds_reservation > 0 && mds_limit > 0 && mds_weight > 0;
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<dmclock_info_t *>& ls);
+};
+WRITE_CLASS_ENCODER(dmclock_info_t)
+
+inline bool operator==(const dmclock_info_t &l, const dmclock_info_t &r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
+std::ostream& operator<<(std::ostream &out, const dmclock_info_t &n);
+
 struct client_writeable_range_t {
   struct byte_range_t {
     uint64_t first = 0, last = 0;    // interval client can write to
@@ -522,6 +560,7 @@ struct inode_t {
   nest_info_t accounted_rstat; // protected by parent's nestlock
 
   quota_info_t quota;
+  dmclock_info_t dmclock_info;
 
   mds_rank_t export_pin = MDS_RANK_NONE;
 
