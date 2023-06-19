@@ -414,7 +414,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
     /* Retrieve existing values from cache */
     try {
       client.hgetall(entryName, [&getFields](cpp_redis::reply &reply) {
-	if (reply.is_array()) {
+	if (reply.is_array()) { 
 	  auto arr = reply.as_array();
     
 	  if (!arr[0].is_null()) {

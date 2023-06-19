@@ -5,8 +5,8 @@
 
 namespace rgw { namespace d4n {
 
-int CachePolicy::find_client(const DoutPrefixProvider* dpp) {
-  if (client.is_connected())
+int CachePolicy::find_client(const DoutPrefixProvider* dpp, cpp_redis::client* client) {
+  if (client->is_connected())
     return 0;
 
   if (get_addr().host == "" || get_addr().port == 0) {
@@ -14,9 +14,9 @@ int CachePolicy::find_client(const DoutPrefixProvider* dpp) {
     return EDESTADDRREQ;
   }
 
-  client.connect(get_addr().host, get_addr().port, nullptr);
+  client->connect(get_addr().host, get_addr().port, nullptr);
 
-  if (!client.is_connected())
+  if (!client->is_connected())
     return ECONNREFUSED;
 
   return 0;
@@ -248,17 +248,16 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
 }
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode) {
-  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
+/*  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
   std::string localWeightStr = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight"); // change to block name eventually -Sam
   int localWeight = -1;
 
   if (!client.is_connected())
-    find_client(dpp);
+    find_client(dpp, &client);
 
   if (localWeightStr.empty()) { // figure out where to set local weight -Sam
-    /* Local weight hasn't been set */
     int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(get_age())); 
-    localWeight = 0;
+    localWeight = get_age();
 
     if (ret < 0)
       return -1;
@@ -268,7 +267,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 
   int age = get_age();
 
-  if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */
+  if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { 
     localWeight += age;
   } else {
     std::string hosts;
@@ -294,20 +293,19 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     }
 
     // should not hold local cache IP if in this else statement -Sam
-    if (hosts.length() > 0) { /* Remote copy */
+    if (hosts.length() > 0) {
       int globalWeight = get_global_weight(key);
       globalWeight += age;
       
       if (set_global_weight(key, globalWeight))
 	return -1;
-    } else { /* No remote copy */
+    } else { 
       // do I need to add the block to the local cache here? -Sam
       // update hosts list for block as well? check read workflow -Sam
       localWeight += age;
       return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight));
     }
-  }
-  return 0;
+  }*/ 
 }
 
 uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode) {
