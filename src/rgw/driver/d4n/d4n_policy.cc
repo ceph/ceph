@@ -248,7 +248,7 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
 }
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode) {
-/*  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
+  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
   std::string localWeightStr = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight"); // change to block name eventually -Sam
   int localWeight = -1;
 
@@ -267,13 +267,13 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 
   int age = get_age();
 
-  if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { 
+  if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */ 
     localWeight += age;
   } else {
     std::string hosts;
     uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
-    while (freeSpace < block->size)
+    while (freeSpace < block->size) /* Not enough space in local cache */
       freeSpace += eviction(dpp, cacheNode);
 
     if (exist_key(key)) {
@@ -293,19 +293,21 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     }
 
     // should not hold local cache IP if in this else statement -Sam
-    if (hosts.length() > 0) {
+    if (hosts.length() > 0) { /* Remote copy */
       int globalWeight = get_global_weight(key);
       globalWeight += age;
       
       if (set_global_weight(key, globalWeight))
 	return -1;
-    } else { 
+    } else { /* No remote copy */
       // do I need to add the block to the local cache here? -Sam
       // update hosts list for block as well? check read workflow -Sam
       localWeight += age;
       return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight));
     }
-  }*/ 
+  } 
+
+  return 0;
 }
 
 uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode) {
