@@ -659,7 +659,7 @@ class Filesystem(MDSCluster):
 
         return all(row["mds_dmclock_enable"] == "true" for row in result)
 
-    def create(self):
+    def create(self, recover=False, metadata_overlay=False):
         if self.name is None:
             self.name = "cephfs"
         if self.metadata_pool_name is None:
@@ -779,7 +779,7 @@ class Filesystem(MDSCluster):
 
                     if self.name not in self._ctx.created_subvols:
                         self._ctx.created_subvols[self.name] = []
-                    
+
                     subvol_path = self.mon_manager.raw_cluster_cmd(
                         'fs', 'subvolume', 'getpath', self.name, sv_name)
                     subvol_path = subvol_path.strip()
