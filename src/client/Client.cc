@@ -5271,13 +5271,13 @@ void Client::handle_qos(const MConstRef<MClientQoS>& m)
   mds_rank_t mds = mds_rank_t(m->get_source().num());
 
   std::scoped_lock cl(client_lock);
-  MetaSession *session = _get_mds_session(mds, m->get_connection().get());
+  auto session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
     ldout(cct, 10) << __func__ << " " << *m << " no session, from mds " << mds << dendl;
     return;
   }
 
-  got_mds_push(session);
+  got_mds_push(session.get());
 
   ldout(cct, 10) << __func__ << " " << *m << " from mds." << mds << dendl;
 
