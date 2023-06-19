@@ -14,8 +14,6 @@
 #include <gtest/gtest.h>
 #include <iostream>
 
-#define dout_context g_ceph_context
-
 constexpr uint64_t _1Kb = 1024;
 constexpr uint64_t _1Mb = 1024 * _1Kb;
 constexpr uint64_t _1Gb = 1024 * _1Mb;
@@ -32,8 +30,10 @@ static bufferlist make_bl(size_t len, char c) {
 
 // --------- FragmentationSimulator ----------
 
-class FragmentationSimulator {
+class FragmentationSimulator : public ::testing::TestWithParam<std::string> {
 public:
+  static boost::intrusive_ptr<CephContext> cct;
+
   struct WorkloadGenerator {
     virtual int generate_txns(ObjectStore::CollectionHandle &ch,
                               ObjectStoreImitator *os) = 0;
@@ -43,47 +43,59 @@ public:
     virtual ~WorkloadGenerator() {}
   };
   using WorkloadGeneratorRef = std::shared_ptr<WorkloadGenerator>;
-  std::vector<WorkloadGeneratorRef> generators;
 
-  void add_generator(WorkloadGeneratorRef gen) {
-    std::cout << "Generator: " << gen->name() << " added\n";
-    generators.push_back(gen);
-  }
+  void add_generator(WorkloadGeneratorRef gen);
+  void clear_generators() { generators.clear(); }
+  int begin_simulation_with_generators();
+  void init(const std::string &alloc_type, uint64_t size,
+            uint64_t min_alloc_size = 4096);
 
-  int begin_simulation_with_generators() {
-    for (auto &g : generators) {
-      ObjectStore::CollectionHandle ch =
-          os->create_new_collection(coll_t::meta());
-      ObjectStore::Transaction t;
-      t.create_collection(ch->cid, 0);
-      os->queue_transaction(ch, std::move(t));
+  static void TearDownTestSuite() { cct.reset(); }
+  static void SetUpTestSuite() {}
+  void TearDown() final {}
 
-      int r = g->generate_txns(ch, os);
-      if (r < 0)
-        return r;
-    }
-
-    os->print_status();
-    return 0;
-  }
-
-  FragmentationSimulator(const std::string &alloc_type, uint64_t size,
-                         uint64_t min_alloc_size = 4096) {
-    std::cout << "Initializing simulator" << std::endl;
-
-    os = new ObjectStoreImitator(g_ceph_context, "", min_alloc_size);
-    std::cout << "Initializing allocator: " << alloc_type << " size: 0x"
-              << std::hex << size << std::dec << "\n"
-              << std::endl;
-    os->init_alloc(alloc_type, size);
-  }
-  ~FragmentationSimulator() { delete os; }
+  FragmentationSimulator() = default;
+  ~FragmentationSimulator() = default;
 
 private:
   ObjectStoreImitator *os;
+  std::vector<WorkloadGeneratorRef> generators;
 };
 
-// --------- SimpleCWGenerator ----------
+void FragmentationSimulator::init(const std::string &alloc_type, uint64_t size,
+                                  uint64_t min_alloc_size) {
+  std::cout << "Initializing ObjectStoreImitator" << std::endl;
+  os = new ObjectStoreImitator(g_ceph_context, "", min_alloc_size);
+
+  std::cout << "Initializing allocator: " << alloc_type << " size: 0x"
+            << std::hex << size << std::dec << "\n"
+            << std::endl;
+  os->init_alloc(alloc_type, size);
+}
+
+void FragmentationSimulator::add_generator(WorkloadGeneratorRef gen) {
+  std::cout << "Generator: " << gen->name() << " added\n";
+  generators.push_back(gen);
+}
+
+int FragmentationSimulator::begin_simulation_with_generators() {
+  for (auto &g : generators) {
+    ObjectStore::CollectionHandle ch =
+        os->create_new_collection(coll_t::meta());
+    ObjectStore::Transaction t;
+    t.create_collection(ch->cid, 0);
+    os->queue_transaction(ch, std::move(t));
+
+    int r = g->generate_txns(ch, os);
+    if (r < 0)
+      return r;
+  }
+
+  os->print_status();
+  return 0;
+}
+
+// --------- Generators ----------
 
 struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
   std::string name() override { return "SimpleCW"; }
@@ -109,20 +121,25 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
 
 // ----------- Tests -----------
 
-TEST(FragmentationSimulator, simple) {
-  FragmentationSimulator sim = FragmentationSimulator("stupid", _1Gb);
-  sim.add_generator(std::make_shared<SimpleCWGenerator>());
-  sim.begin_simulation_with_generators();
+TEST_P(FragmentationSimulator, SimpleCWGenerator) {
+  init(GetParam(), _1Gb);
+  add_generator(std::make_shared<SimpleCWGenerator>());
+  begin_simulation_with_generators();
 }
 
 // ----------- main -----------
 
+INSTANTIATE_TEST_SUITE_P(Allocator, FragmentationSimulator,
+                         ::testing::Values("stupid", "bitmap", "avl", "btree"));
+
+boost::intrusive_ptr<CephContext> FragmentationSimulator::cct;
+
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
-  auto cct =
+  FragmentationSimulator::cct =
       global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
                   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(g_ceph_context);
+  common_init_finish(FragmentationSimulator::cct->get());
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
