@@ -65,7 +65,6 @@ class PolicyDriver {
     PolicyDriver(std::string _policyName) : policyName(_policyName) {}
     ~PolicyDriver() {
       delete cachePolicy;
-      delete cacheDriver;
     }
 
     int init();
