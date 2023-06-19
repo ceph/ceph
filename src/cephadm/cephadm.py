@@ -6273,8 +6273,9 @@ def apply_deploy_config_to_ctx(
     similar to how cli options on `deploy` are bound to the context.
     """
     ctx.name = config_data['name']
-    if 'image' in config_data:
-        ctx.image = config_data['image']
+    image = config_data.get('image', '')
+    if image:
+        ctx.image = image
     if 'fsid' in config_data:
         ctx.fsid = config_data['fsid']
     if 'meta' in config_data:
