@@ -29,6 +29,7 @@ namespace rgw { namespace sal {
 
 class D4NFilterDriver : public FilterDriver {
   private:
+    rgw::cache::CacheDriver* cacheDriver;
     rgw::d4n::ObjectDirectory* objDir;
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* cacheBlock;
@@ -37,12 +38,14 @@ class D4NFilterDriver : public FilterDriver {
   public:
     D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
     {
+      cacheDriver = new rgw::cache::RedisDriver(); // change later -Sam
       objDir = new rgw::d4n::ObjectDirectory();
       blockDir = new rgw::d4n::BlockDirectory();
       cacheBlock = new rgw::d4n::CacheBlock();
       policyDriver = new rgw::d4n::PolicyDriver("lfuda");
     }
     virtual ~D4NFilterDriver() {
+      delete cacheDriver;
       delete objDir; 
       delete blockDir; 
       delete cacheBlock;
@@ -61,6 +64,7 @@ class D4NFilterDriver : public FilterDriver {
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
+    rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver; }
     rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
     rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }

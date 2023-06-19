@@ -391,8 +391,6 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 }
 
 int PolicyDriver::init() {
-  cacheDriver = new rgw::cache::RedisDriver("127.0.0.1", 6379); // hardcoded for now -Sam
-
   if (policyName == "lfuda") {
     cachePolicy = new LFUDAPolicy();
     return 0;

@@ -85,6 +85,9 @@ int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string 
 */
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
+  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
+  addr.port = cct->_conf->rgw_d4n_port;
+
   if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
