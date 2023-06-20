@@ -29,6 +29,11 @@ void ObjectStoreImitator::print_status() {
             << std::dec << std::endl;
 }
 
+void ObjectStoreImitator::verify_objects(CollectionHandle &ch) {
+  Collection *c = static_cast<Collection *>(ch.get());
+  c->verify_objects();
+}
+
 // ------- Transactions -------
 
 int ObjectStoreImitator::queue_transactions(CollectionHandle &ch,
@@ -434,9 +439,7 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
     }
   }
 
-  for (auto &p : extents) {
-    o->extents.push_back(p);
-  }
+  o->append(extents);
 
   if (prealloc_left > 0) {
     PExtentVector old_extents;

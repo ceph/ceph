@@ -125,9 +125,11 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     }
 
     os->queue_transactions(ch, tls);
+    os->verify_objects(ch);
 
     // reapply
     os->queue_transactions(ch, tls);
+    os->verify_objects(ch);
     tls.clear();
 
     // Overwrite on object
@@ -139,6 +141,7 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     }
 
     os->queue_transactions(ch, tls);
+    os->verify_objects(ch);
     tls.clear();
 
     for (unsigned i{0}; i < 50; ++i) {
@@ -151,6 +154,7 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     }
 
     os->queue_transactions(ch, tls);
+    os->verify_objects(ch);
     return 0;
   }
 };
