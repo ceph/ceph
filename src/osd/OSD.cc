@@ -1390,9 +1390,10 @@ void OSDService::got_stop_ack()
 MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
                                                OSDSuperblock& sblock)
 {
+  ceph_assert(since >= sblock.oldest_map);
   MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			   osdmap->get_encoding_features());
-  m->cluster_osdmap_trim_lower_bound = sblock.cluster_osdmap_trim_lower_bound;
+  m->cluster_osdmap_trim_lower_bound = since;
   m->newest_map = sblock.newest_map;
 
   int max = cct->_conf->osd_map_message_max;
