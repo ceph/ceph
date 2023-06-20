@@ -602,7 +602,9 @@ public:
     if (stopped) {
       return STATUS_MANAGER_STOPPED;
     }
-    if (messages.push(new message_wrapper_t(conn_name, topic, message, nullptr))) {
+    auto message_wrapper = std::make_unique<message_wrapper_t>(conn_name, topic, message, nullptr);
+    if (messages.push(message_wrapper.get())) {
+      std::ignore = message_wrapper.release();
       ++queued;
       return STATUS_OK;
     }
@@ -616,7 +618,9 @@ public:
     if (stopped) {
       return STATUS_MANAGER_STOPPED;
     }
-    if (messages.push(new message_wrapper_t(conn_name, topic, message, cb))) {
+    auto message_wrapper = std::make_unique<message_wrapper_t>(conn_name, topic, message, cb);
+    if (messages.push(message_wrapper.get())) {
+      std::ignore = message_wrapper.release();
       ++queued;
       return STATUS_OK;
     }
