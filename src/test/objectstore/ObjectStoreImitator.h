@@ -10,6 +10,7 @@
 #include "os/ObjectStore.h"
 #include "os/bluestore/Allocator.h"
 #include "os/bluestore/bluestore_types.h"
+#include <algorithm>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
 /**
@@ -84,6 +85,28 @@ private:
       extents = remains;
       old_extents = to_be_punched;
     }
+
+    void append(PExtentVector &ext) {
+      for (auto &e : ext) {
+        extents.push_back(e);
+      }
+
+      std::sort(extents.begin(), extents.end(),
+                [](bluestore_pextent_t &a, bluestore_pextent_t &b) {
+                  return a.offset < b.offset;
+                });
+    }
+
+    void verify_extents() {
+      uint64_t total{0};
+      for (auto &e : extents) {
+        ceph_assert(total <= e.offset);
+        ceph_assert(e.length > 0);
+        total += e.length;
+      }
+
+      ceph_assert(total = size);
+    }
   };
   typedef boost::intrusive_ptr<Object> ObjectRef;
 
@@ -156,6 +179,12 @@ private:
       objects.insert(std::make_pair(new_oid, o));
 
       o->oid = new_oid;
+    }
+
+    void verify_objects() {
+      for (auto &[_, obj] : objects) {
+        obj->verify_extents();
+      }
     }
 
     Collection(ObjectStoreImitator *sim_, coll_t cid_)
@@ -233,6 +262,7 @@ public:
 
   void init_alloc(const std::string &alloc_type, int64_t size);
   void print_status();
+  void verify_objects(CollectionHandle &ch);
 
   // Overrides
 
