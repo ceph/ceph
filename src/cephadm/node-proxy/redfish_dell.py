@@ -52,8 +52,12 @@ class RedfishDell(RedfishSystem):
         pass
 
     def _update_memory(self) -> None:
+        fields = ['Description',
+                  'MemoryDeviceType',
+                  'CapacityMiB',
+                  'Status']
         log.logger.info("Updating memory")
-        pass
+        self._system['memory'] = self.build_data(fields, 'Memory')
 
     def _update_power(self) -> None:
         log.logger.info("Updating power")
