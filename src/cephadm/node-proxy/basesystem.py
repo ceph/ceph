@@ -41,3 +41,6 @@ class BaseSystem:
 
     def start_client(self) -> None:
         raise NotImplementedError()
+
+    def flush(self) -> None:
+        raise NotImplementedError()

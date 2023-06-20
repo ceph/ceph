@@ -160,6 +160,16 @@ class ConfigReload:
         return 'node-proxy config reloaded'
 
 
+class Flush:
+    exposed = True
+
+    def __init__(self, backend: BaseSystem) -> None:
+        self.backend = backend
+
+    def POST(self) -> str:
+        self.backend.flush()
+        return 'node-proxy data flushed'
+
 class API:
     exposed = True
 
