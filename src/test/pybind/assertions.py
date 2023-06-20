@@ -4,6 +4,9 @@ def assert_equal(a, b):
 def assert_not_equal(a, b):
     assert a != b
 
+def assert_greater(a, b):
+    assert a > b
+
 def assert_greater_equal(a, b):
     assert a >= b
 
