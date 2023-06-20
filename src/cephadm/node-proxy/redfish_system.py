@@ -147,3 +147,15 @@ class RedfishSystem(BaseSystem):
             log.logger.error(f"Error detected, logging out from redfish api.\n{e}")
             self.client.logout()
             raise
+
+    def flush(self) -> None:
+        log.logger.info("Acquiring lock to flush data.")
+        self.lock.acquire()
+        log.logger.info("Lock acquired, flushing data.")
+        self._system = {}
+        self.previous_data = {}
+        log.logger.info("Data flushed.")
+        self.data_ready = False
+        log.logger.info("Data marked as not ready.")
+        self.lock.release()
+        log.logger.info("Lock released.")
