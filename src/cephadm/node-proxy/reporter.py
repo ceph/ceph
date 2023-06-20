@@ -28,10 +28,11 @@ class Reporter:
             # scenario probably we should just send the sub-parts
             # that have changed to minimize the traffic in
             # dense clusters
+            log.logger.debug("waiting for a lock.")
+            self.system.lock.acquire()
+            log.logger.debug("lock acquired.")
             if self.system.data_ready:
-                log.logger.debug("waiting for a lock.")
-                self.system.lock.acquire()
-                log.logger.debug("lock acquired.")
+                log.logger.info('data ready to be sent to the mgr.')
                 if not self.system.get_system() == self.system.previous_data:
                     log.logger.info('data has changed since last iteration.')
                     d = self.system.get_system()
@@ -46,6 +47,6 @@ class Reporter:
                         self.system.previous_data = self.system.get_system()
                 else:
                     log.logger.info('no diff, not sending data to the mgr.')
-                self.system.lock.release()
-                log.logger.debug("lock released.")
+            self.system.lock.release()
+            log.logger.debug("lock released.")
             time.sleep(5)
