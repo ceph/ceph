@@ -245,6 +245,7 @@ It is a yaml format file with the following properties:
       frontend_port: <integer>            # ex: 8080
       monitor_port: <integer>             # ex: 1967, used by haproxy for load balancer status
       virtual_interface_networks: [ ... ] # optional: list of CIDR networks
+      first_virtual_router_id: <integer>  # optional: default 50
       ssl_cert: |                         # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
@@ -288,6 +289,11 @@ where the properties of this service specification are:
     By default, cephadm will configure keepalived to use the same interface where the VIPs are
     for VRRP communication. If another interface is needed, it can be set via ``vrrp_interface_network``
     with a network to identify which ethernet interface to use.
+* ``first_virtual_router_id``
+    Default is 50. When deploying more than 1 ingress, this parameter can be used to ensure each
+    keepalived will have different virtual_router_id. In the case of using ``virtual_ips_list``,
+    each IP will create its own virtual router. So the first one will have ``first_virtual_router_id``,
+    second one will have ``first_virtual_router_id`` + 1, etc. Valid values go from 1 to 255.
 
 .. _ingress-virtual-ip:
 

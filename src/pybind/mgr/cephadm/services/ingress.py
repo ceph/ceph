@@ -344,6 +344,7 @@ class IngressService(CephService):
                 'interface': interface,
                 'vrrp_interface': vrrp_interface,
                 'virtual_ips': virtual_ips,
+                'first_virtual_router_id': spec.first_virtual_router_id,
                 'states': states,
                 'priorities': priorities,
                 'other_ips': other_ips,
