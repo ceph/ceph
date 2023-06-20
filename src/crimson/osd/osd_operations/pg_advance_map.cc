@@ -65,6 +65,15 @@ seastar::future<> PGAdvanceMap::start()
   return enter_stage<>(
     pg->peering_request_pg_pipeline.process
   ).then([this] {
+    /*
+     * PGAdvanceMap is scheduled at pg creation and when
+     * broadcasting new osdmaps to pgs. We are not able to serialize
+     * between the two different PGAdvanceMap callers since a new pg
+     * will get advanced to the latest osdmap at it's creation.
+     * As a result, we may need to adjust the PGAdvance operation
+     * 'from' epoch.
+     * See: https://tracker.ceph.com/issues/61744
+     */
     from = pg->get_osdmap_epoch();
     auto fut = seastar::now();
     if (do_init) {
