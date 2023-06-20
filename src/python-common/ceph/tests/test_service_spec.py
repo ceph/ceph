@@ -266,6 +266,7 @@ placement:
   - host3
 spec:
   backend_service: rgw.foo
+  first_virtual_router_id: 50
   frontend_port: 8080
   monitor_port: 8081
   virtual_ip: 192.168.20.1/24
