@@ -17,6 +17,7 @@ DEFAULT_CONFIG = {
     'reporter': {
         'check_interval': 5,
         'push_data_max_retries': 30,
+        'endpoint': 'http://127.0.0.1:8150',
     },
     'system': {
         'refresh_interval': 5
@@ -206,7 +207,7 @@ def main() -> None:
                          password=password,
                          system_endpoint='/Systems/System.Embedded.1',
                          config=config)
-    reporter_agent = Reporter(system, "http://127.0.0.1:8000")
+    reporter_agent = Reporter(system, config.__dict__['reporter']['endpoint'])
     cherrypy.config.update({
         'node_proxy': config,
         'server.socket_port': config.__dict__['server']['port']
