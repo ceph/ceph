@@ -64,6 +64,7 @@ class RedfishSystem(BaseSystem):
             'storage': self.get_storage(),
             'processors': self.get_processors(),
             'network': self.get_network(),
+            'memory': self.get_memory(),
         }
         return result
 
