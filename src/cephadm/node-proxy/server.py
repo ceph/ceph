@@ -170,6 +170,18 @@ class Flush:
         self.backend.flush()
         return 'node-proxy data flushed'
 
+
+class Admin:
+    exposed = False
+
+    def __init__(self, backend: BaseSystem, config: Config, reporter: Reporter) -> None:
+        self.reload = ConfigReload(config)
+        self.flush = Flush(backend)
+        self.shutdown = Shutdown(backend, reporter)
+        self.start = Start(backend, reporter)
+        self.stop = Stop(backend, reporter)
+
+
 class API:
     exposed = True
 
@@ -179,13 +191,10 @@ class API:
                  config: Config) -> None:
 
         self.system = System(backend)
-        self.shutdown = Shutdown(backend, reporter)
-        self.start = Start(backend, reporter)
-        self.stop = Stop(backend, reporter)
-        self.config_reload = ConfigReload(config)
+        self.admin = Admin(backend, config, reporter)
 
     def GET(self) -> str:
-        return 'use /system'
+        return 'use /system or /admin endpoints'
 
 
 def main() -> None:
