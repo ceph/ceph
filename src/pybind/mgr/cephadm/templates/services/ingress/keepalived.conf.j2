@@ -12,7 +12,7 @@ vrrp_instance VI_{{ x }} {
   state {{ states[x] }}
   priority {{ priorities[x] }}
   interface {{ vrrp_interface }}
-  virtual_router_id {{ 50 + x }}
+  virtual_router_id {{ first_virtual_router_id + x }}
   advert_int 1
   authentication {
       auth_type PASS
