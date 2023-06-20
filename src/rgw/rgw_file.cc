@@ -901,6 +901,10 @@ namespace rgw {
     }
     break;
     default:
+      if (unlikely(rgw_fh->is_bucket())) {
+	/* treat buckets like immutable, namespace roots */
+	return 0; /* it's not an error, we just won't do it */
+      }
       break;
     };
 
