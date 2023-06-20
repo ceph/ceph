@@ -2,6 +2,7 @@ import logging
 import yaml
 import os
 import time
+import re
 from typing import Dict, List, Callable, Any
 
 
@@ -63,6 +64,11 @@ class Config:
 
 
 log = Logger(__name__)
+
+
+def to_snake_case(name: str) -> str:
+    name = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', name)
+    return re.sub('([a-z0-9])([A-Z])', r'\1_\2', name).lower()
 
 
 def normalize_dict(test_dict: Dict) -> Dict:

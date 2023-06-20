@@ -2,8 +2,8 @@ from basesystem import BaseSystem
 from redfish_client import RedFishClient
 from threading import Thread, Lock
 from time import sleep
-from util import Logger, retry
-from typing import Dict, Any
+from util import Logger, retry, normalize_dict, to_snake_case
+from typing import Dict, Any, List
 
 log = Logger(__name__)
 
@@ -33,6 +33,26 @@ class RedfishSystem(BaseSystem):
             log.logger.error(f"The client reported an error when getting path: {path}")
             raise RuntimeError(f"Could not get path: {path}")
         return result
+
+    def get_members(self, path: str) -> List:
+        _path = self._system[path]['@odata.id']
+        data = self._get_path(_path)
+        return [self._get_path(member['@odata.id']) for member in data['Members']]
+
+    def build_data(self,
+                   fields: List,
+                   path: str) -> Dict[str, Dict[str, Dict]]:
+        result: Dict[str, Dict[str, Dict]] = dict()
+        for member_info in self.get_members(path):
+            member_id = member_info['Id']
+            result[member_id] = dict()
+            for field in fields:
+                try:
+                    result[member_id][to_snake_case(field)] = member_info[field]
+                except KeyError:
+                    log.logger.warning(f"Could not find field: {field} in member_info: {member_info}")
+
+        return normalize_dict(result)
 
     def start_client(self) -> None:
         if not self.client:
