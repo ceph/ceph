@@ -3795,7 +3795,7 @@ def _write_container_cmd_to_bash(
         # Sometimes adding a comment, especially if there are multiple containers in one
         # unit file, makes it easier to read and grok.
         assert '\n' not in comment
-        file_obj.write('# ' + comment + '\n')
+        file_obj.write(f'# {comment}\n')
     # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
     _bash_cmd(
         file_obj, container.rm_cmd(old_cname=True), check=False, stderr=False
