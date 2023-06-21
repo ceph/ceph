@@ -214,6 +214,7 @@ public:
   FSCryptFDataDenc();
 
   int decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, bufferlist *bl);
+  int encrypt_bl(uint64_t off, uint64_t len, bufferlist& bl, bufferlist *encbl);
 };
 
 using FSCryptFDataDencRef = std::shared_ptr<FSCryptFDataDenc>;
