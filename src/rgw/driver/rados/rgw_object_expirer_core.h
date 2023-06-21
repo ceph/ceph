@@ -66,7 +66,7 @@ public:
                        const ceph::real_time& start_time,
                        const ceph::real_time& end_time,
                        const std::string& from_marker,
-                       const std::string& to_marker);
+                       const std::string& to_marker, optional_yield y);
 };
 
 class RGWObjectExpirer {
@@ -129,16 +129,16 @@ public:
                   const utime_t& from,
                   const utime_t& to,
                   const std::string& from_marker,
-                  const std::string& to_marker);
+                  const std::string& to_marker, optional_yield y);
 
   bool process_single_shard(const DoutPrefixProvider *dpp, 
                             const std::string& shard,
                             const utime_t& last_run,
-                            const utime_t& round_start);
+                            const utime_t& round_start, optional_yield y);
 
   bool inspect_all_shards(const DoutPrefixProvider *dpp, 
                           const utime_t& last_run,
-                          const utime_t& round_start);
+                          const utime_t& round_start, optional_yield y);
 
   bool going_down();
   void start_processor();

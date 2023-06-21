@@ -341,11 +341,11 @@ int RadosUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, u
 				       usage_iter, usage);
 }
 
-int RadosUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+int RadosUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
 {
   std::string bucket_name;
 
-  return store->getRados()->trim_usage(dpp, get_id(), bucket_name, start_epoch, end_epoch);
+  return store->getRados()->trim_usage(dpp, get_id(), bucket_name, start_epoch, end_epoch, y);
 }
 
 int RadosUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
@@ -438,14 +438,14 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
     for (const auto& obj : results.objs) {
       rgw_obj_key key(obj.key);
       /* xxx dang */
-      ret = rgw_remove_object(dpp, store, this, key);
+      ret = rgw_remove_object(dpp, store, this, key, y);
       if (ret < 0 && ret != -ENOENT) {
 	return ret;
       }
     }
   } while(results.is_truncated);
 
-  ret = abort_multiparts(dpp, store->ctx());
+  ret = abort_multiparts(dpp, store->ctx(), y);
   if (ret < 0) {
     return ret;
   }
@@ -522,7 +522,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   if (ret < 0)
     return ret;
 
-  ret = abort_multiparts(dpp, cct);
+  ret = abort_multiparts(dpp, cct, y);
   if (ret < 0) {
     return ret;
   }
@@ -690,13 +690,13 @@ int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y
   return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
 }
 
-int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp)
+int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
   map<std::string, RGWBucketEnt> m;
 
   m[info.bucket.name] = ent;
-  ret = store->getRados()->update_containers_stats(m, dpp);
+  ret = store->getRados()->update_containers_stats(m, dpp, y);
   if (!ret)
     return -EEXIST;
   if (ret < 0)
@@ -718,9 +718,9 @@ int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp)
+int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
 {
-      return store->getRados()->check_bucket_shards(info, info.bucket, get_count(), dpp);
+      return store->getRados()->check_bucket_shards(info, info.bucket, get_count(), dpp, y);
 }
 
 int RadosBucket::link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)
@@ -768,10 +768,10 @@ int RadosBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_y
   return this->link(dpp, &new_user, y);
 }
 
-int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime)
+int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
 {
   mtime = _mtime;
-  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, null_yield);
+  return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
 }
 
 /* Make sure to call get_bucket_info() if you need it first */
@@ -801,9 +801,9 @@ int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new
 				new_attrs, &get_info().objv_tracker, y, dpp);
 }
 
-int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime)
+int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
 {
-  return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, &attrs);
+  return store->getRados()->try_refresh_bucket_info(info, pmtime, dpp, y, &attrs);
 }
 
 int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
@@ -816,9 +816,9 @@ int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 				       usage_iter, usage);
 }
 
-int RadosBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+int RadosBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
 {
-  return store->getRados()->trim_usage(dpp, owner->get_id(), get_name(), start_epoch, end_epoch);
+  return store->getRados()->trim_usage(dpp, owner->get_id(), get_name(), start_epoch, end_epoch, y);
 }
 
 int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
@@ -841,13 +841,13 @@ int RadosBucket::set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout
   return store->getRados()->cls_obj_set_bucket_tag_timeout(dpp, info, timeout);
 }
 
-int RadosBucket::purge_instance(const DoutPrefixProvider* dpp)
+int RadosBucket::purge_instance(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int max_shards = (info.layout.current_index.layout.normal.num_shards > 0 ? info.layout.current_index.layout.normal.num_shards : 1);
   for (int i = 0; i < max_shards; i++) {
     RGWRados::BucketShard bs(store->getRados());
     int shard_id = (info.layout.current_index.layout.normal.num_shards > 0  ? i : -1);
-    int ret = bs.init(dpp, info, info.layout.current_index, shard_id);
+    int ret = bs.init(dpp, info, info.layout.current_index, shard_id, y);
     if (ret < 0) {
       cerr << "ERROR: bs.init(bucket=" << info.bucket << ", shard=" << shard_id
            << "): " << cpp_strerror(-ret) << std::endl;
@@ -935,7 +935,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				 const int& max_uploads,
 				 vector<std::unique_ptr<MultipartUpload>>& uploads,
 				 map<string, bool> *common_prefixes,
-				 bool *is_truncated)
+				 bool *is_truncated, optional_yield y)
 {
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
@@ -947,7 +947,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = &mp_filter;
 
-  int ret = list(dpp, params, max_uploads, results, null_yield);
+  int ret = list(dpp, params, max_uploads, results, y);
 
   if (ret < 0)
     return ret;
@@ -971,7 +971,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 }
 
 int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
-				  CephContext* cct)
+				  CephContext* cct, optional_yield y)
 {
   constexpr int max = 1000;
   int ret, num_deleted = 0;
@@ -984,7 +984,7 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
   do {
     ret = list_multiparts(dpp, empty_prefix, marker, empty_delim,
-			  max, uploads, nullptr, &is_truncated);
+			  max, uploads, nullptr, &is_truncated, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
@@ -998,7 +998,7 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
     if (!uploads.empty()) {
       for (const auto& upload : uploads) {
-	ret = upload->abort(dpp, cct);
+	ret = upload->abort(dpp, cct, y);
         if (ret < 0) {
 	  // we're doing a best-effort; if something cannot be found,
 	  // log it and keep moving forward
@@ -1392,9 +1392,9 @@ int RadosStore::remove_topics(const std::string& tenant, RGWObjVersionTracker* o
       objv_tracker, y);
 }
 
-int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
+int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y)
 {
-  return rados->delete_raw_obj(dpp, obj);
+  return rados->delete_raw_obj(dpp, obj, y);
 }
 
 void RadosStore::get_raw_obj(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj* raw_obj)
@@ -1415,9 +1415,9 @@ int RadosStore::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int RadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info)
+int RadosStore::log_usage(const DoutPrefixProvider *dpp, map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y)
 {
-    return rados->log_usage(dpp, usage_info);
+    return rados->log_usage(dpp, usage_info, y);
 }
 
 int RadosStore::log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl)
@@ -1455,9 +1455,9 @@ void RadosStore::get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitI
   anon_ratelimit = svc()->zone->get_current_period().get_config().anon_ratelimit;
 }
 
-int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled)
+int RadosStore::set_buckets_enabled(const DoutPrefixProvider* dpp, vector<rgw_bucket>& buckets, bool enabled, optional_yield y)
 {
-    return rados->set_buckets_enabled(buckets, enabled, dpp);
+    return rados->set_buckets_enabled(buckets, enabled, dpp, y);
 }
 
 int RadosStore::get_sync_policy_handler(const DoutPrefixProvider* dpp,
@@ -1486,12 +1486,12 @@ int RadosStore::read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epo
 			   is_truncated, usage_iter, usage);
 }
 
-int RadosStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch)
+int RadosStore::trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
 {
   rgw_user uid;
   std::string bucket_name;
 
-  return rados->trim_usage(dpp, uid, bucket_name, start_epoch, end_epoch);
+  return rados->trim_usage(dpp, uid, bucket_name, start_epoch, end_epoch, y);
 }
 
 int RadosStore::get_config_key_val(std::string name, bufferlist* bl)
@@ -1635,7 +1635,7 @@ std::unique_ptr<RGWOIDCProvider> RadosStore::get_oidc_provider()
 
 int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
-				   vector<std::unique_ptr<RGWOIDCProvider>>& providers)
+				   vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y)
 {
   std::string prefix = tenant + RGWOIDCProvider::oidc_url_oid_prefix;
   auto pool = svc()->zone->get_zone_params().oidc_pool;
@@ -1656,7 +1656,7 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
       std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = get_oidc_provider();
       bufferlist bl;
 
-      r = rgw_get_system_obj(svc()->sysobj, pool, iter, bl, nullptr, nullptr, null_yield, dpp);
+      r = rgw_get_system_obj(svc()->sysobj, pool, iter, bl, nullptr, nullptr, y, dpp);
       if (r < 0) {
         return r;
       }
@@ -2371,7 +2371,7 @@ int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 }
 
 int RadosObject::swift_versioning_restore(bool& restored,
-					  const DoutPrefixProvider* dpp)
+					  const DoutPrefixProvider* dpp, optional_yield y)
 {
   rgw_obj obj = get_obj();
   return store->getRados()->swift_versioning_restore(*rados_ctx,
@@ -2379,7 +2379,7 @@ int RadosObject::swift_versioning_restore(bool& restored,
 						     bucket->get_info(),
 						     obj,
 						     restored,
-						     dpp);
+						     dpp, y);
 }
 
 int RadosObject::swift_versioning_copy(const DoutPrefixProvider* dpp, optional_yield y)
@@ -2420,7 +2420,7 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
     store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
   } else {
     // use upload id as tag and do it synchronously
-    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
     if (ret < 0 && leftover_chain) {
       ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
       if (ret == -ENOENT) {
@@ -2434,7 +2434,7 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
 }
 
 
-int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
+int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
   meta_obj->set_in_extra_data(true);
@@ -2447,7 +2447,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
   uint64_t parts_accounted_size = 0;
 
   do {
-    ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated);
+    ret = list_parts(dpp, cct, 1000, marker, &marker, &truncated, y);
     if (ret < 0) {
       ldpp_dout(dpp, 20) << __func__ << ": RadosMultipartUpload::list_parts returned " <<
 	ret << dendl;
@@ -2462,7 +2462,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
 	std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
 				    rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
 	obj->set_hash_source(mp_obj.get_key());
-	ret = obj->delete_object(dpp, null_yield);
+	ret = obj->delete_object(dpp, y);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
@@ -2490,7 +2490,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
     store->getRados()->delete_objs_inline(dpp, chain, mp_obj.get_upload_id());
   } else {
     /* use upload id as tag and do it synchronously */
-    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id());
+    auto [ret, leftover_chain] = store->getRados()->send_chain_to_gc(chain, mp_obj.get_upload_id(), y);
     if (ret < 0 && leftover_chain) {
       ldpp_dout(dpp, 5) << __func__ << ": gc->send_chain() returned " << ret << dendl;
       if (ret == -ENOENT) {
@@ -2512,7 +2512,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
   del_op->params.parts_accounted_size = parts_accounted_size;
 
   // and also remove the metadata obj
-  ret = del_op->delete_obj(dpp, null_yield);
+  ret = del_op->delete_obj(dpp, y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
@@ -2573,7 +2573,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
 
 int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext *cct,
 				     int num_parts, int marker,
-				     int *next_marker, bool *truncated,
+				     int *next_marker, bool *truncated, optional_yield y,
 				     bool assume_unsorted)
 {
   map<string, bufferlist> parts_map;
@@ -2601,9 +2601,9 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
     p.append(buf);
 
     ret = sysobj.omap().get_vals(dpp, p, num_parts + 1, &parts_map,
-                                 nullptr, null_yield);
+                                 nullptr, y);
   } else {
-    ret = sysobj.omap().get_all(dpp, &parts_map, null_yield);
+    ret = sysobj.omap().get_all(dpp, &parts_map, y);
   }
   if (ret < 0) {
     return ret;
@@ -2635,7 +2635,7 @@ int RadosMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
          * where one gateway doesn't support correctly sorted omap
          * keys for multipart upload just assume data is unsorted.
          */
-        return list_parts(dpp, cct, num_parts, marker, next_marker, truncated, true);
+        return list_parts(dpp, cct, num_parts, marker, next_marker, truncated, y, true);
       }
       expected_next++;
     }
@@ -2704,7 +2704,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   rgw::sal::Attrs attrs = target_obj->get_attrs();
 
   do {
-    ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated);
+    ret = list_parts(dpp, cct, max_parts, marker, &marker, &truncated, y);
     if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_UPLOAD;
     }
@@ -3493,14 +3493,14 @@ int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::strin
   return rgw_put_system_obj(dpp, sysobj, store->svc()->zone->get_zone_params().oidc_pool, oid, bl, exclusive, nullptr, real_time(), y);
 }
 
-int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant)
+int RadosOIDCProvider::read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant, optional_yield y)
 {
   auto sysobj = store->svc()->sysobj;
   auto& pool = store->svc()->zone->get_zone_params().oidc_pool;
   std::string oid = tenant + get_url_oid_prefix() + url;
   bufferlist bl;
 
-  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, null_yield, dpp);
+  int ret = rgw_get_system_obj(sysobj, pool, oid, bl, nullptr, nullptr, y, dpp);
   if (ret < 0) {
     return ret;
   }

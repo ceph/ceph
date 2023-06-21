@@ -625,7 +625,7 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& _u, rgw_bucket& _b, optional_
     return r;
   }
 
-  return bucket->check_bucket_shards(dpp);
+  return bucket->check_bucket_shards(dpp, y);
 }
 
 int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& _u, optional_yield y)

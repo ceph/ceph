@@ -207,7 +207,7 @@ public:
   static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Driver* driver);
 };
 
-extern int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key);
+extern int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y);
 
 extern int rgw_object_get_attr(rgw::sal::Driver* driver, rgw::sal::Object* obj,
 			       const char* attr_name, bufferlist& out_bl,
@@ -325,7 +325,7 @@ public:
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
               RGWFormatterFlusher& flusher,
-              const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+              const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
   int check_object_index(const DoutPrefixProvider *dpp, 
                          RGWBucketAdminOpState& op_state,
@@ -341,12 +341,12 @@ public:
 
   int chown(RGWBucketAdminOpState& op_state, const std::string& marker,
             optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
-  int set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  int set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
-  int remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int remove_object(const DoutPrefixProvider *dpp, RGWBucketAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, std::ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y, const DoutPrefixProvider *dpp);
-  int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  int sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
   void clear_failure() { failure = false; }
 
@@ -356,41 +356,41 @@ public:
 class RGWBucketAdminOp {
 public:
   static int get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+                  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y);
   static int get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-                  RGWAccessControlPolicy& policy, const DoutPrefixProvider *dpp);
+                  RGWAccessControlPolicy& policy, const DoutPrefixProvider *dpp, optional_yield y);
   static int dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-                  std::ostream& os, const DoutPrefixProvider *dpp);
+                  std::ostream& os, const DoutPrefixProvider *dpp, optional_yield y);
 
-  static int unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp);
-  static int link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
-  static int chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const std::string& marker, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  static int unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y);
+  static int link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
+  static int chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const std::string& marker, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
   static int check_index(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp);
 
   static int remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, optional_yield y,
 			   const DoutPrefixProvider *dpp, bool bypass_gc = false, bool keep_index_consistent = true);
-  static int remove_object(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp);
+  static int remove_object(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y);
   static int info(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp);
   static int limit_check(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
 			 const std::list<std::string>& user_ids,
 			 RGWFormatterFlusher& flusher, optional_yield y,
                          const DoutPrefixProvider *dpp,
 			 bool warnings_only = false);
-  static int set_quota(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp);
+  static int set_quota(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y);
 
   static int list_stale_instances(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-				  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+				  RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y);
 
   static int clear_stale_instances(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-				   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+				   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y);
   static int fix_lc_shards(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-                           RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp);
+                           RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y);
   static int fix_obj_expiry(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-			    RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, bool dry_run = false);
+			    RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y, bool dry_run = false);
 
-  static int sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  static int sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 };
 
 struct rgw_ep_info {

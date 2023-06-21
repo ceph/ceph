@@ -34,7 +34,7 @@ protected:
 
   int get_tenant_url_from_arn(std::string& tenant, std::string& url);
   virtual int store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y) = 0;
-  virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant) = 0;
+  virtual int read_url(const DoutPrefixProvider *dpp, const std::string& url, const std::string& tenant, optional_yield y) = 0;
   bool validate_input(const DoutPrefixProvider *dpp);
 
 public:
@@ -109,7 +109,7 @@ public:
 
   int create(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y);
   virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-  int get(const DoutPrefixProvider *dpp);
+  int get(const DoutPrefixProvider *dpp, optional_yield y);
   void dump(Formatter *f) const;
   void dump_all(Formatter *f) const;
   void decode_json(JSONObj *obj);
