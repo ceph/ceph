@@ -638,6 +638,62 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, buffe
   return 0;
 }
 
+int FSCryptFDataDenc::encrypt_bl(uint64_t off, uint64_t len, bufferlist& bl, bufferlist *encbl)
+{
+  if (off != fscrypt_block_start(off)) {
+    return -EINVAL;
+  }
+
+  auto pos = off;
+  auto target_end = off + len;
+  auto target_end_block_ofs = fscrypt_block_start(target_end - 1);
+
+  target_end = target_end_block_ofs + FSCRYPT_BLOCK_SIZE;
+
+  if (bl.length() < target_end - off) {
+    /* fill in zeros at the end if last block is partial */
+    bl.append_zero(target_end - off - bl.length());
+  }
+
+  auto data_len = bl.length();
+
+  bufferlist newbl;
+
+  uint64_t end = off + data_len;
+  uint64_t cur_block = fscrypt_block_from_ofs(pos);
+  uint64_t block_off = fscrypt_block_start(pos);
+
+  while (pos < target_end) {
+    uint64_t write_end = std::min(end, block_off + FSCRYPT_BLOCK_SIZE);
+    uint64_t write_end_aligned = fscrypt_align_ofs(write_end);
+    auto chunk_len = write_end_aligned - block_off;
+
+    int r = calc_fdata_key(cur_block);
+    if (r  < 0) {
+      break;
+    }
+
+    bufferlist chunk;
+    chunk.append_hole(chunk_len);
+
+    r = encrypt(bl.c_str() + pos - off, chunk_len,
+                chunk.c_str(), chunk_len);
+    if (r < 0) {
+      return r;
+    }
+
+    newbl.claim_append(chunk);
+
+    pos = write_end;
+    ++cur_block;
+    block_off += FSCRYPT_BLOCK_SIZE;
+  }
+
+  encbl->swap(newbl);
+
+  return 0;
+}
+
 FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
                                   std::function<FSCryptDenc *()> gen_denc)
 {
