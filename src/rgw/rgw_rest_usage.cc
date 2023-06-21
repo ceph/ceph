@@ -105,7 +105,7 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
     }
   }
 
-  op_ret = RGWUsage::trim(this, driver, user.get(), bucket.get(), start, end);
+  op_ret = RGWUsage::trim(this, driver, user.get(), bucket.get(), start, end, y);
 }
 
 RGWOp *RGWHandler_Usage::op_get()

@@ -1494,7 +1494,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
   // use empty strings for params.{prefix,delim}
 
   do {
-    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated);
+    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
       ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<
@@ -1515,7 +1515,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 
 	do { // while (is_parts_truncated);
 	  ret = upload->list_parts(dpp, store->ctx(), max_parts, parts_marker,
-				   &parts_marker, &is_parts_truncated);
+				   &parts_marker, &is_parts_truncated, null_yield);
 	  if (ret == -ENOENT) {
 	    ldpp_dout(dpp, 5) <<  "RGWRadosList::" << __func__ <<
 	      ": WARNING: list_multipart_parts returned ret=-ENOENT "

@@ -344,7 +344,7 @@ class Driver {
 
     /** Log usage data to the driver.  Usage data is things like bytes sent/received and
      * op count */
-    virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info) = 0;
+    virtual int log_usage(const DoutPrefixProvider *dpp, std::map<rgw_user_bucket, RGWUsageBatch>& usage_info, optional_yield y) = 0;
     /** Log OP data to the driver.  Data is opaque to SAL */
     virtual int log_op(const DoutPrefixProvider *dpp, std::string& oid, bufferlist& bl) = 0;
     /** Register this driver to the service map.  Somewhat Rados specific; may be removed*/
@@ -355,7 +355,7 @@ class Driver {
     /** Get global rate limit configuration*/
     virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit, RGWRateLimitInfo& user_ratelimit, RGWRateLimitInfo& anon_ratelimit) = 0;
     /** Enable or disable a set of bucket.  e.g. if a User is suspended */
-    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled) = 0;
+    virtual int set_buckets_enabled(const DoutPrefixProvider* dpp, std::vector<rgw_bucket>& buckets, bool enabled, optional_yield y) = 0;
     /** Get a new request ID */
     virtual uint64_t get_new_req_id() = 0;
     /** Get a handler for bucket sync policy. */
@@ -371,14 +371,14 @@ class Driver {
     /** Wake up sync threads for bucket data sync */
     virtual void wakeup_data_sync_shards(const DoutPrefixProvider *dpp, const rgw_zone_id& source_zone, boost::container::flat_map<int, boost::container::flat_set<rgw_data_notify_entry>>& shard_ids) = 0;
     /** Clear all usage statistics globally */
-    virtual int clear_usage(const DoutPrefixProvider *dpp) = 0;
+    virtual int clear_usage(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Get usage statistics for all users and buckets */
     virtual int read_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
 			       uint32_t max_entries, bool* is_truncated,
 			       RGWUsageIter& usage_iter,
 			       std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     /** Trim usage log for all users and buckets */
-    virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
+    virtual int trim_all_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) = 0;
     /** Get a configuration value for the given name */
     virtual int get_config_key_val(std::string name, bufferlist* bl) = 0;
     /** Start a metadata listing of the given section */
@@ -418,7 +418,7 @@ class Driver {
     /** Get all Open ID Connector providers, optionally filtered by tenant  */
     virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				   const std::string& tenant,
-				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) = 0;
+				   std::vector<std::unique_ptr<RGWOIDCProvider>>& providers, optional_yield y) = 0;
     /** Get a Writer that appends to an object */
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
@@ -547,7 +547,7 @@ class User {
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     /** Trim User usage stats to the given epoch range */
-    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
+    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) = 0;
 
     /** Load this User from the backing store.  requires ID to be set, fills all other fields. */
     virtual int load_user(const DoutPrefixProvider* dpp, optional_yield y) = 0;
@@ -677,14 +677,14 @@ class Bucket {
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Refresh the metadata stats (size, count, and so on) from the backing store */
-    virtual int update_container_stats(const DoutPrefixProvider* dpp) = 0;
+    virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
-    virtual int check_bucket_shards(const DoutPrefixProvider* dpp) = 0;
+    virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
     virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) = 0;
     /** Store the cached bucket info into the backing store */
-    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime) = 0;
+    virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
     /** Check to see if the given user is the owner of this bucket */
     virtual bool is_owner(User* user) = 0;
     /** Get the owner of this bucket */
@@ -700,13 +700,13 @@ class Bucket {
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;
     /** Try to refresh the cached bucket info from the backing store.  Used in
      * read-modify-update loop. */
-    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime) = 0;
+    virtual int try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y) = 0;
     /** Read usage information about this bucket from the backing store */
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) = 0;
     /** Trim the usage information to the given epoch range */
-    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch) = 0;
+    virtual int trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y) = 0;
     /** Remove objects from the bucket index of this bucket.  May be removed from API */
     virtual int remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink) = 0;
     /** Check the state of the bucket index, and get stats from it.  May be removed from API */
@@ -716,7 +716,7 @@ class Bucket {
     /** Set a timeout on the check_index() call.  May be removed from API */
     virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
-    virtual int purge_instance(const DoutPrefixProvider* dpp) = 0;
+    virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Set the cached object count of this bucket */
     virtual void set_count(uint64_t _count) = 0;
     /** Set the cached size of this bucket */
@@ -773,10 +773,10 @@ class Bucket {
 				const int& max_uploads,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
-				bool *is_truncated) = 0;
+				bool *is_truncated, optional_yield y) = 0;
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
-				 CephContext* cct) = 0;
+				 CephContext* cct, optional_yield y) = 0;
 
     /** Read the bucket notification config into @a notifications with and (optionally) @a objv_tracker */
     virtual int read_topics(rgw_pubsub_bucket_topics& notifications, 
@@ -1078,7 +1078,7 @@ class Object {
 
     /** Restore the previous swift version of this object */
     virtual int swift_versioning_restore(bool& restored,   /* out */
-					 const DoutPrefixProvider* dpp) = 0;
+					 const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Copy the current version of a swift object to the configured destination bucket*/
     virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;
@@ -1198,10 +1198,10 @@ public:
   /** List all the parts of this upload, filling the parts cache */
   virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
 			 int num_parts, int marker,
-			 int* next_marker, bool* truncated,
+			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) = 0;
   /** Abort this upload */
-  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) = 0;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) = 0;
   /** Complete this upload, making it available as a normal object */
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
@@ -1589,7 +1589,7 @@ public:
 				      bool quota_threads,
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
-				      bool run_notification_thread,
+				      bool run_notification_thread, optional_yield y,
 				      bool use_cache = true,
 				      bool use_gc = true) {
     rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, use_gc_thread,
@@ -1598,7 +1598,7 @@ public:
 						   run_sync_thread,
 						   run_reshard_thread,
                                                    run_notification_thread,
-						   use_cache, use_gc);
+						   use_cache, use_gc, y);
     return driver;
   }
   /** Get a stripped down driver by service name */
@@ -1618,7 +1618,7 @@ public:
 						bool run_reshard_thread,
                                                 bool run_notification_thread,
 						bool use_metadata_cache,
-						bool use_gc);
+						bool use_gc, optional_yield y);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,

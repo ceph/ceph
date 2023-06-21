@@ -990,10 +990,10 @@ void rgw_bucket_object_pre_exec(req_state *s)
 // general, they should just return op_ret.
 namespace {
 template<typename F>
-int retry_raced_bucket_write(const DoutPrefixProvider *dpp, rgw::sal::Bucket* b, const F& f) {
+int retry_raced_bucket_write(const DoutPrefixProvider *dpp, rgw::sal::Bucket* b, const F& f, optional_yield y) {
   auto r = f();
   for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
-    r = b->try_refresh_info(dpp, nullptr);
+    r = b->try_refresh_info(dpp, nullptr, y);
     if (r >= 0) {
       r = f();
     }
@@ -1221,7 +1221,7 @@ void RGWPutBucketTags::execute(optional_yield y)
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_TAGS] = tags_bl;
     return s->bucket->merge_and_store_attrs(this, attrs, y);
-  });
+  }, y);
 
 }
 
@@ -1258,7 +1258,7 @@ void RGWDeleteBucketTags::execute(optional_yield y)
 			 << " returned err= " << op_ret << dendl;
     }
     return op_ret;
-  });
+  }, y);
 }
 
 int RGWGetBucketReplication::verify_permission(optional_yield y)
@@ -1303,7 +1303,7 @@ void RGWPutBucketReplication::execute(optional_yield y) {
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     auto sync_policy = (s->bucket->get_info().sync_policy ? *s->bucket->get_info().sync_policy : rgw_sync_policy_info());
 
     for (auto& group : sync_policy_groups) {
@@ -1312,14 +1312,14 @@ void RGWPutBucketReplication::execute(optional_yield y) {
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_info(this, false, real_time());
+    int ret = s->bucket->put_info(this, false, real_time(), y);
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
     }
 
     return 0;
-  });
+  }, y);
 }
 
 void RGWDeleteBucketReplication::pre_exec()
@@ -1345,7 +1345,7 @@ void RGWDeleteBucketReplication::execute(optional_yield y)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     if (!s->bucket->get_info().sync_policy) {
       return 0;
     }
@@ -1356,14 +1356,14 @@ void RGWDeleteBucketReplication::execute(optional_yield y)
 
     s->bucket->get_info().set_sync_policy(std::move(sync_policy));
 
-    int ret = s->bucket->put_info(this, false, real_time());
+    int ret = s->bucket->put_info(this, false, real_time(), y);
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: put_bucket_instance_info (bucket=" << s->bucket << ") returned ret=" << ret << dendl;
       return ret;
     }
 
     return 0;
-  });
+  }, y);
 }
 
 int RGWOp::do_aws4_auth_completion()
@@ -2813,8 +2813,8 @@ void RGWSetBucketVersioning::execute(optional_yield y)
 	return op_ret;
       }
       s->bucket->set_attrs(rgw::sal::Attrs(s->bucket_attrs));
-      return s->bucket->put_info(this, false, real_time());
-    });
+      return s->bucket->put_info(this, false, real_time(), y);
+    }, y);
 
   if (!modified) {
     return;
@@ -2880,12 +2880,12 @@ void RGWSetBucketWebsite::execute(optional_yield y)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
       s->bucket->get_info().has_website = true;
       s->bucket->get_info().website_conf = website_conf;
-      op_ret = s->bucket->put_info(this, false, real_time());
+      op_ret = s->bucket->put_info(this, false, real_time(), y);
       return op_ret;
-    });
+    }, y);
 
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
@@ -2923,12 +2923,12 @@ void RGWDeleteBucketWebsite::execute(optional_yield y)
       << "returned err=" << op_ret << dendl;
     return;
   }
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
       s->bucket->get_info().has_website = false;
       s->bucket->get_info().website_conf = RGWBucketWebsiteConf();
-      op_ret = s->bucket->put_info(this, false, real_time());
+      op_ret = s->bucket->put_info(this, false, real_time(), y);
       return op_ret;
-    });
+    }, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket
         << " returned err=" << op_ret << dendl;
@@ -2966,7 +2966,7 @@ void RGWStatBucket::execute(optional_yield y)
   if (op_ret) {
     return;
   }
-  op_ret = bucket->update_container_stats(s);
+  op_ret = bucket->update_container_stats(s, y);
 }
 
 int RGWListBucket::verify_permission(optional_yield y)
@@ -3029,7 +3029,7 @@ void RGWListBucket::execute(optional_yield y)
   }
 
   if (need_container_stats()) {
-    op_ret = s->bucket->update_container_stats(s);
+    op_ret = s->bucket->update_container_stats(s, y);
   }
 
   rgw::sal::Bucket::ListParams params;
@@ -4864,7 +4864,7 @@ void RGWPutMetadataBucket::execute(optional_yield y)
        * the same call. */
       op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
       return op_ret;
-    });
+    }, y);
 }
 
 int RGWPutMetadataObject::verify_permission(optional_yield y)
@@ -5174,7 +5174,7 @@ void RGWDeleteObj::execute(optional_yield y)
     s->object->set_atomic();
     
     bool ver_restored = false;
-    op_ret = s->object->swift_versioning_restore(ver_restored, this);
+    op_ret = s->object->swift_versioning_restore(ver_restored, this, y);
     if (op_ret < 0) {
       return;
     }
@@ -6102,7 +6102,7 @@ void RGWPutCORS::execute(optional_yield y)
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_CORS] = cors_bl;
       return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
-    });
+    }, y);
 }
 
 int RGWDeleteCORS::verify_permission(optional_yield y)
@@ -6143,7 +6143,7 @@ void RGWDeleteCORS::execute(optional_yield y)
 			 << " returned err=" << op_ret << dendl;
       }
       return op_ret;
-    });
+    }, y);
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
@@ -6247,7 +6247,7 @@ void RGWSetRequestPayment::execute(optional_yield y)
   }
 
   s->bucket->get_info().requester_pays = requester_pays;
-  op_ret = s->bucket->put_info(this, false, real_time());
+  op_ret = s->bucket->put_info(this, false, real_time(), y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
 		     << " returned err=" << op_ret << dendl;
@@ -6730,7 +6730,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   }
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
-  op_ret = upload->abort(this, s->cct);
+  op_ret = upload->abort(this, s->cct, y);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
@@ -6774,7 +6774,7 @@ void RGWListMultipart::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  op_ret = upload->list_parts(this, s->cct, max_parts, marker, NULL, &truncated);
+  op_ret = upload->list_parts(this, s->cct, max_parts, marker, NULL, &truncated, y);
 }
 
 int RGWListBucketMultiparts::verify_permission(optional_yield y)
@@ -6817,7 +6817,7 @@ void RGWListBucketMultiparts::execute(optional_yield y)
 
   op_ret = s->bucket->list_multiparts(this, prefix, marker_meta,
 				      delimiter, max_uploads, uploads,
-				      &common_prefixes, &is_truncated);
+				      &common_prefixes, &is_truncated, y);
   if (op_ret < 0) {
     return;
   }
@@ -8060,7 +8060,7 @@ void RGWConfigBucketMetaSearch::execute(optional_yield y)
 
   s->bucket->get_info().mdsearch_config = mdsearch_config;
 
-  op_ret = s->bucket->put_info(this, false, real_time());
+  op_ret = s->bucket->put_info(this, false, real_time(), y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
         << " returned err=" << op_ret << dendl;
@@ -8101,7 +8101,7 @@ void RGWDelBucketMetaSearch::execute(optional_yield y)
 {
   s->bucket->get_info().mdsearch_config.clear();
 
-  op_ret = s->bucket->put_info(this, false, real_time());
+  op_ret = s->bucket->put_info(this, false, real_time(), y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket->get_name()
         << " returned err=" << op_ret << dendl;
@@ -8249,7 +8249,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
 	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
 	op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
 	return op_ret;
-      });
+      }, y);
   } catch (rgw::IAM::PolicyParseException& e) {
     ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -EINVAL;
@@ -8339,7 +8339,7 @@ void RGWDeleteBucketPolicy::execute(optional_yield y)
       attrs.erase(RGW_ATTR_IAM_POLICY);
       op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
       return op_ret;
-    });
+    }, y);
 }
 
 void RGWPutBucketObjectLock::pre_exec()
@@ -8400,11 +8400,11 @@ void RGWPutBucketObjectLock::execute(optional_yield y)
     return;
   }
 
-  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+  op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this, y] {
     s->bucket->get_info().obj_lock = obj_lock;
-    op_ret = s->bucket->put_info(this, false, real_time());
+    op_ret = s->bucket->put_info(this, false, real_time(), y);
     return op_ret;
-  });
+  }, y);
   return;
 }
 
@@ -8768,7 +8768,7 @@ void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
       rgw::sal::Attrs attrs(s->bucket_attrs);
       attrs[RGW_ATTR_PUBLIC_ACCESS] = bl;
       return s->bucket->merge_and_store_attrs(this, attrs, s->yield);
-    });
+    }, y);
 
 }
 
@@ -8843,7 +8843,7 @@ void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
       attrs.erase(RGW_ATTR_PUBLIC_ACCESS);
       op_ret = s->bucket->merge_and_store_attrs(this, attrs, s->yield);
       return op_ret;
-    });
+    }, y);
 }
 
 int RGWPutBucketEncryption::get_params(optional_yield y)
@@ -8899,7 +8899,7 @@ void RGWPutBucketEncryption::execute(optional_yield y)
     rgw::sal::Attrs attrs = s->bucket->get_attrs();
     attrs[RGW_ATTR_BUCKET_ENCRYPTION_POLICY] = conf_bl;
     return s->bucket->merge_and_store_attrs(this, attrs, y);
-  });
+  }, y);
 }
 
 int RGWGetBucketEncryption::verify_permission(optional_yield y)
@@ -8954,7 +8954,7 @@ void RGWDeleteBucketEncryption::execute(optional_yield y)
     attrs.erase(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
     op_ret = s->bucket->merge_and_store_attrs(this, attrs, y);
     return op_ret;
-  });
+  }, y);
 }
 
 void rgw_slo_entry::decode_json(JSONObj *obj)

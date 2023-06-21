@@ -83,7 +83,7 @@ int main(const int argc, const char **argv)
   DriverManager::Config cfg;
   cfg.store_name = "rados";
   cfg.filter_name = "none";
-  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, false, false, false, false, false, false);
+  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, false, false, false, false, false, false, null_yield);
   if (!driver) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;
