@@ -319,7 +319,8 @@ struct BucketMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "PlacementRule") == 0) {
       create_metatable<PlacementRuleMetaTable>(L, false, &(bucket->get_info().placement_rule));
     } else if (strcasecmp(index, "User") == 0) {
-      create_metatable<UserMetaTable>(L, false, &(bucket->get_info().owner));
+      create_metatable<UserMetaTable>(L, false, 
+          const_cast<rgw_user*>(&bucket->get_owner()->get_id()));
     } else {
       return error_unknown_field(L, index, TableName());
     }
