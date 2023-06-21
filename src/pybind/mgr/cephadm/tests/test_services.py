@@ -18,9 +18,22 @@ from cephadm.services.osd import OSDService
 from cephadm.services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService, LokiService, PromtailService
 from cephadm.module import CephadmOrchestrator
-from ceph.deployment.service_spec import IscsiServiceSpec, MonitoringSpec, AlertManagerSpec, \
-    ServiceSpec, RGWSpec, GrafanaSpec, SNMPGatewaySpec, IngressSpec, PlacementSpec, TracingSpec, \
-    PrometheusSpec, CephExporterSpec, NFSServiceSpec, NvmeofServiceSpec
+from ceph.deployment.service_spec import (
+    AlertManagerSpec,
+    CephExporterSpec,
+    GrafanaSpec,
+    IngressSpec,
+    IscsiServiceSpec,
+    MonitoringSpec,
+    NFSServiceSpec,
+    NvmeofServiceSpec,
+    PlacementSpec,
+    PrometheusSpec,
+    RGWSpec,
+    SNMPGatewaySpec,
+    ServiceSpec,
+    TracingSpec,
+)
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
 
 from ceph.utils import datetime_now
