@@ -4396,7 +4396,11 @@ WantedBy=ceph-{fsid}.target
 ##################################
 
 
-class CephContainer:
+class BasicContainer:
+    pass
+
+
+class CephContainer(BasicContainer):
     def __init__(self,
                  ctx: CephadmContext,
                  image: str,
