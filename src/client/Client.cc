@@ -7013,7 +7013,7 @@ void Client::renew_caps(MetaSession *session)
 }
 
 int Client::_prepare_req_path(Inode *dir, MetaRequest *req, filepath& path, const char *name,
-                              Dentry **pdn)
+                              bool set_filepath, Dentry **pdn)
 {
   dir->make_nosnap_relative_path(path);
 
@@ -7033,7 +7033,9 @@ int Client::_prepare_req_path(Inode *dir, MetaRequest *req, filepath& path, cons
     path.push_dentry(plain_name);
   }
 
-  req->set_filepath(path);
+  if (set_filepath) {
+    req->set_filepath(path);
+  }
 
   if (pdn) {
     *pdn = get_or_create(dir, plain_name, enc_name);
@@ -7053,7 +7055,7 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
   MetaRequest *req = new MetaRequest(op);
   filepath path;
 
-  int r = _prepare_req_path(dir, req, path, name.c_str(), nullptr);
+  int r = _prepare_req_path(dir, req, path, name.c_str(), true, nullptr);
   if (r < 0) {
     delete req;
     return r;
@@ -13635,9 +13637,13 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
   filepath path;
-  dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
-  req->set_filepath(path); 
+  Dentry *de;
+  int r = _prepare_req_path(dir, req, path, name, true, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
   req->set_inode(dir);
   req->head.args.mknod.rdev = rdev;
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
@@ -13653,8 +13659,6 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   if (xattrs_bl.length() > 0)
     req->set_data(xattrs_bl);
 
-#warning revisit nullopt here
-  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
 
   res = make_request(req, perms, inp);
@@ -13782,7 +13786,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   filepath path;
   Dentry *de;
 
-  int r = _prepare_req_path(dir, req, path, name, &de);
+  int r = _prepare_req_path(dir, req, path, name, true, &de);
   if (r < 0) {
     delete req;
     return r;
@@ -13861,9 +13865,13 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
 				     CEPH_MDS_OP_MKSNAP : CEPH_MDS_OP_MKDIR);
 
   filepath path;
-  dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
-  req->set_filepath(path);
+  Dentry *de;
+  int r = _prepare_req_path(dir, req, path, name, true, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
   req->set_inode(dir);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
@@ -13890,8 +13898,6 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
     req->set_data(bl);
   }
 
-#warning revisit nullopt here
-  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
 
   ldout(cct, 10) << "_mkdir: making request" << dendl;
@@ -14000,17 +14006,19 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
 
   filepath path;
-  dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
-  req->set_filepath(path);
+  Dentry *de;
+  int r = _prepare_req_path(dir, req, path, name, true, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
   req->set_alternate_name(std::move(alternate_name));
   req->set_inode(dir);
   req->set_string2(target); 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
-#warning revisit nullopt here
-  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
 
   int res = make_request(req, perms, inp);
@@ -14109,14 +14117,15 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_UNLINK);
 
   filepath path;
-  dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
-  req->set_filepath(path);
+  Dentry *de;
+  int r = _prepare_req_path(dir, req, path, name, true, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
 
   InodeRef otherin;
   Inode *in;
-#warning revisit nullopt here
-  Dentry *de = get_or_create(dir, name, std::nullopt);
   req->set_dentry(de);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
@@ -14176,9 +14185,13 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
   int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP : CEPH_MDS_OP_RMDIR;
   MetaRequest *req = new MetaRequest(op);
   filepath path;
-  dir->make_nosnap_relative_path(path);
-  path.push_dentry(name);
-  req->set_filepath(path);
+  Dentry *de;
+  int r = _prepare_req_path(dir, req, path, name, true, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
   req->set_inode(dir);
 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
@@ -14187,8 +14200,6 @@ int Client::_rmdir(Inode *dir, const char *name, const UserPerm& perms)
 
   InodeRef in;
 
-#warning revisit nullopt here
-  Dentry *de = get_or_create(dir, name, std::nullopt);
   if (op == CEPH_MDS_OP_RMDIR)
     req->set_dentry(de);
   else
@@ -14269,20 +14280,24 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   InodeRef target;
   MetaRequest *req = new MetaRequest(op);
 
-  filepath from;
-  fromdir->make_nosnap_relative_path(from);
-  from.push_dentry(fromname);
   filepath to;
-  todir->make_nosnap_relative_path(to);
-  to.push_dentry(toname);
-  req->set_filepath(to);
-  req->set_filepath2(from);
-  req->set_alternate_name(std::move(alternate_name));
+  Dentry *de;
+  int r = _prepare_req_path(todir, req, to, toname, true, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
 
-#warning revisit nullopt here
-  Dentry *oldde = get_or_create(fromdir, fromname, std::nullopt);
-#warning revisit nullopt here
-  Dentry *de = get_or_create(todir, toname, std::nullopt);
+  filepath from;
+  Dentry *oldde;
+  r = _prepare_req_path(fromdir, req, from, fromname, false, &oldde);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+  req->set_filepath2(from);
+
+  req->set_alternate_name(std::move(alternate_name));
 
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
@@ -14391,22 +14406,17 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
     return -CEPHFS_EDQUOT;
   }
 
-  string enc_name;
-  auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
-  if (fscrypt_denc) {
-    int r = fscrypt_denc->get_encrypted_fname(newname, &enc_name);
-    if (r < 0) {
-      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
-      return r;
-    }
-    newname = enc_name.c_str();
-  }
-
   in->break_all_delegs();
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
-  filepath path(newname, dir->ino);
-  req->set_filepath(path);
+  filepath path;
+  Dentry *de;
+  int r = _prepare_req_path(dir, req, path, newname, true, &de);
+  if (r < 0) {
+    delete req;
+    return r;
+  }
+
   req->set_alternate_name(std::move(alternate_name));
   filepath existing(in->ino);
   req->set_filepath2(existing);
@@ -14415,8 +14425,6 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
   req->inode_drop = CEPH_CAP_FILE_SHARED;
   req->inode_unless = CEPH_CAP_FILE_EXCL;
 
-#warning revisit nullopt here
-  Dentry *de = get_or_create(dir, newname, std::nullopt);
   req->set_dentry(de);
 
   int res = make_request(req, perm, inp);
