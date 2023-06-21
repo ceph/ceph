@@ -1603,7 +1603,7 @@ private:
   bool _dentry_valid(const Dentry *dn);
 
   int _prepare_req_path(Inode *dir, MetaRequest *req, filepath& path, const char *name,
-                        Dentry **pdn);
+                        bool set_filepath, Dentry **pdn);
 
   // internal interface
   //   call these with client_lock held!
