@@ -70,7 +70,14 @@ int D3NFilterObject::D3NFilterReadOp::drain(const DoutPrefixProvider* dpp) {
     }
     c = aio->wait();
   }
-  return flush(dpp, std::move(c));
+
+  c = aio->drain();
+  int r = flush(dpp, std::move(c));
+  if (r < 0) {
+    cancel();
+    return r;
+  }
+  return 0;
 }
 
 int D3NFilterObject::D3NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results) {
