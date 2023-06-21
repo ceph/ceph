@@ -8,6 +8,10 @@ overrides:
     - \(OSD_
     - \(OBJECT_
     - \(POOL_APP_NOT_ENABLED\)
+  install:
+    ceph:
+      extra_system_packages:
+      - python3-pytest
 tasks:
 - workunit:
     timeout: 1h
