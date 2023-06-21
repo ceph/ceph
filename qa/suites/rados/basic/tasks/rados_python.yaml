@@ -8,6 +8,13 @@ overrides:
     - \(OSD_
     - \(OBJECT_
     - \(POOL_APP_NOT_ENABLED\)
+  install:
+    ceph:
+      extra_system_packages:
+        rpm:
+        - python3-pytest
+        deb:
+        - python3-pytest
 tasks:
 - workunit:
     clients:
