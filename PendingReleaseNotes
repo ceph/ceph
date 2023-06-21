@@ -124,6 +124,9 @@
 * RBD: list-watchers C++ API (`Image::list_watchers`) now clears the passed
   `std::list` before potentially appending to it, aligning with the semantics
   of the corresponding C API (`rbd_watchers_list`).
+* The rados python binding is now able to process (opt-in) omap keys as bytes
+  objects. This enables interacting with RADOS omap keys that are not decodeable as
+  UTF-8 strings.
 * Telemetry: Users who are opted-in to telemetry can also opt-in to
   participating in a leaderboard in the telemetry public
   dashboards (https://telemetry-public.ceph.com/). Users can now also add a
