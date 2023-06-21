@@ -4397,7 +4397,157 @@ WantedBy=ceph-{fsid}.target
 
 
 class BasicContainer:
-    pass
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        *,
+        image: str,
+        entrypoint: str,
+        args: Optional[List[str]] = None,
+        container_name: str = '',
+        container_args: Optional[List[str]] = None,
+        envs: Optional[List[str]] = None,
+        volume_mounts: Optional[Dict[str, str]] = None,
+        bind_mounts: Optional[List[List[str]]] = None,
+        network: str = '',
+        ipc: str = '',
+        init: bool = False,
+        ptrace: bool = False,
+        privileged: bool = False,
+        remove: bool = False,
+        memory_request: Optional[str] = None,
+        memory_limit: Optional[str] = None,
+    ) -> None:
+        self.ctx = ctx
+        self.image = image
+        self.entrypoint = entrypoint
+        self.args = args or []
+        self.container_name = container_name
+        self.container_args = container_args or []
+        self.envs = envs or []
+        self.volume_mounts = volume_mounts or {}
+        self.bind_mounts = bind_mounts or []
+        self.network = network
+        self.ipc = ipc
+        self.init = init
+        self.ptrace = ptrace
+        self.privileged = privileged
+        self.remove = remove
+        self.memory_request = memory_request
+        self.memory_limit = memory_limit
+
+    @property
+    def _container_engine(self) -> str:
+        return self.ctx.container_engine.path
+
+    @property
+    def _using_podman(self) -> bool:
+        return isinstance(self.ctx.container_engine, Podman)
+
+    @property
+    def _using_docker(self) -> bool:
+        return isinstance(self.ctx.container_engine, Docker)
+
+    @property
+    def cname(self) -> str:
+        return self.container_name
+
+    def build_run_cmd(self) -> List[str]:
+        cmd_args: List[str] = [self._container_engine]
+        cmd_args.append('run')
+        if self.remove:
+            cmd_args.append('--rm')
+        if self.ipc:
+            cmd_args.append(f'--ipc={self.ipc}')
+        # some containers (ahem, haproxy) override this, but we want a fast
+        # shutdown always (and, more importantly, a successful exit even if we
+        # fall back to SIGKILL).
+        cmd_args.append('--stop-signal=SIGTERM')
+
+        if isinstance(self.ctx.container_engine, Podman):
+            if os.path.exists('/etc/ceph/podman-auth.json'):
+                cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
+
+        if isinstance(self.ctx.container_engine, Docker):
+            cmd_args.extend(['--ulimit', 'nofile=1048576'])
+
+        if self.memory_request:
+            cmd_args.extend(['-e', 'POD_MEMORY_REQUEST', str(self.memory_request)])
+        if self.memory_limit:
+            cmd_args.extend(['-e', 'POD_MEMORY_LIMIT', str(self.memory_limit)])
+            cmd_args.extend(['--memory', str(self.memory_limit)])
+
+        if self.network:
+            cmd_args.append(f'--net={self.network}')
+        if self.entrypoint:
+            cmd_args.extend(['--entrypoint', self.entrypoint])
+        if self.privileged:
+            cmd_args.extend([
+                '--privileged',
+                # let OSD etc read block devs that haven't been chowned
+                '--group-add=disk'])
+        if self.ptrace and not self.privileged:
+            # if privileged, the SYS_PTRACE cap is already added
+            # in addition, --cap-add and --privileged are mutually
+            # exclusive since podman >= 2.0
+            cmd_args.append('--cap-add=SYS_PTRACE')
+        if self.init:
+            cmd_args.append('--init')
+        if self.cname:
+            cmd_args.extend(['--name', self.cname])
+
+        envs: List[str] = [
+            '-e', 'CONTAINER_IMAGE=%s' % self.image,
+        ]
+        if self.envs:
+            for env in self.envs:
+                envs.extend(['-e', env])
+
+        vols: List[str] = []
+        vols = sum(
+            [
+                ['-v', '%s:%s' % (host_dir, container_dir)]
+                for host_dir, container_dir in self.volume_mounts.items()
+            ],
+            [],
+        )
+
+        binds: List[str] = []
+        binds = sum(
+            [
+                ['--mount', '{}'.format(','.join(bind))]
+                for bind in self.bind_mounts
+            ],
+            [],
+        )
+
+        return (
+            cmd_args
+            + self.container_args
+            + envs
+            + vols
+            + binds
+            + [self.image]
+            + self.args
+        )
+
+    def build_rm_cmd(self, cname: str = '', storage: bool = False) -> List[str]:
+        cmd = [
+            self._container_engine,
+            'rm',
+            '-f',
+        ]
+        if storage:
+            cmd.append('--storage')
+        cmd.append(cname or self.cname)
+        return cmd
+
+    def build_stop_cmd(self, cname: str = '', timeout: Optional[int] = None) -> List[str]:
+        cmd = [self._container_engine, 'stop']
+        if timeout is not None:
+            cmd.extend(('-t', str(timeout)))
+        cmd.append(cname or self.cname)
+        return cmd
 
 
 class CephContainer(BasicContainer):
@@ -4425,7 +4575,7 @@ class CephContainer(BasicContainer):
         self.volume_mounts = volume_mounts
         self._cname = cname
         self.container_args = container_args
-        self.envs = envs
+        self.envs = envs or []
         self.privileged = privileged
         self.ptrace = ptrace
         self.bind_mounts = bind_mounts if bind_mounts else []
@@ -4433,6 +4583,9 @@ class CephContainer(BasicContainer):
         self.host_network = host_network
         self.memory_request = memory_request
         self.memory_limit = memory_limit
+        self.remove = True
+        self.ipc = 'host'
+        self.network = 'host' if self.host_network else ''
 
     @classmethod
     def for_daemon(cls,
@@ -4502,69 +4655,21 @@ class CephContainer(BasicContainer):
         return self._cname
 
     def run_cmd(self) -> List[str]:
-        cmd_args: List[str] = [
-            str(self.ctx.container_engine.path),
-            'run',
-            '--rm',
-            '--ipc=host',
-            # some containers (ahem, haproxy) override this, but we want a fast
-            # shutdown always (and, more importantly, a successful exit even if we
-            # fall back to SIGKILL).
-            '--stop-signal=SIGTERM',
-        ]
+        if not (self.envs and self.envs[0].startswith('NODE_NAME=')):
+            self.envs.insert(0, 'NODE_NAME=%s' % get_hostname())
+        return self.build_run_cmd()
 
-        if isinstance(self.ctx.container_engine, Podman):
-            if os.path.exists('/etc/ceph/podman-auth.json'):
-                cmd_args.append('--authfile=/etc/ceph/podman-auth.json')
+    def rm_cmd(self, old_cname: bool = False, storage: bool = False) -> List[str]:
+        return self.build_rm_cmd(
+            cname=self.old_cname if old_cname else self.cname,
+            storage=storage,
+        )
 
-        if isinstance(self.ctx.container_engine, Docker):
-            cmd_args.extend(['--ulimit', 'nofile=1048576'])
-
-        envs: List[str] = [
-            '-e', 'CONTAINER_IMAGE=%s' % self.image,
-            '-e', 'NODE_NAME=%s' % get_hostname(),
-        ]
-        vols: List[str] = []
-        binds: List[str] = []
-
-        if self.memory_request:
-            cmd_args.extend(['-e', 'POD_MEMORY_REQUEST', str(self.memory_request)])
-        if self.memory_limit:
-            cmd_args.extend(['-e', 'POD_MEMORY_LIMIT', str(self.memory_limit)])
-            cmd_args.extend(['--memory', str(self.memory_limit)])
-
-        if self.host_network:
-            cmd_args.append('--net=host')
-        if self.entrypoint:
-            cmd_args.extend(['--entrypoint', self.entrypoint])
-        if self.privileged:
-            cmd_args.extend([
-                '--privileged',
-                # let OSD etc read block devs that haven't been chowned
-                '--group-add=disk'])
-        if self.ptrace and not self.privileged:
-            # if privileged, the SYS_PTRACE cap is already added
-            # in addition, --cap-add and --privileged are mutually
-            # exclusive since podman >= 2.0
-            cmd_args.append('--cap-add=SYS_PTRACE')
-        if self.init:
-            cmd_args.append('--init')
-        if self.cname:
-            cmd_args.extend(['--name', self.cname])
-        if self.envs:
-            for env in self.envs:
-                envs.extend(['-e', env])
-
-        vols = sum(
-            [['-v', '%s:%s' % (host_dir, container_dir)]
-             for host_dir, container_dir in self.volume_mounts.items()], [])
-        binds = sum([['--mount', '{}'.format(','.join(bind))]
-                     for bind in self.bind_mounts], [])
-
-        return \
-            cmd_args + self.container_args + \
-            envs + vols + binds + \
-            [self.image] + self.args  # type: ignore
+    def stop_cmd(self, old_cname: bool = False, timeout: Optional[int] = None) -> List[str]:
+        return self.build_stop_cmd(
+            cname=self.old_cname if old_cname else self.cname,
+            timeout=timeout,
+        )
 
     def shell_cmd(self, cmd: List[str]) -> List[str]:
         cmd_args: List[str] = [
@@ -4618,33 +4723,6 @@ class CephContainer(BasicContainer):
         ] + self.container_args + [
             self.cname,
         ] + cmd
-
-    def rm_cmd(self, old_cname: bool = False, storage: bool = False) -> List[str]:
-        ret = [
-            str(self.ctx.container_engine.path),
-            'rm', '-f',
-        ]
-        if storage:
-            ret.append('--storage')
-        if old_cname:
-            ret.append(self.old_cname)
-        else:
-            ret.append(self.cname)
-        return ret
-
-    def stop_cmd(self, old_cname: bool = False, timeout: Optional[int] = None) -> List[str]:
-        if timeout is None:
-            ret = [
-                str(self.ctx.container_engine.path),
-                'stop', self.old_cname if old_cname else self.cname,
-            ]
-        else:
-            ret = [
-                str(self.ctx.container_engine.path),
-                'stop', '-t', f'{timeout}',
-                self.old_cname if old_cname else self.cname,
-            ]
-        return ret
 
     def run(self, timeout=DEFAULT_TIMEOUT, verbosity=CallVerbosity.VERBOSE_ON_FAILURE):
         # type: (Optional[int], CallVerbosity) -> str
