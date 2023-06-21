@@ -330,8 +330,8 @@ TEST(TestRGWLua, Bucket)
     assert(Request.Bucket.Quota.MaxObjects == -1)
     assert(tostring(Request.Bucket.Quota.Enabled))
     assert(tostring(Request.Bucket.Quota.Rounded))
-    assert(Request.Bucket.User.Id)
-    assert(Request.Bucket.User.Tenant)
+    assert(Request.Bucket.User.Id == "myuser")
+    assert(Request.Bucket.User.Tenant == "mytenant")
   )";
 
   DEFINE_REQ_STATE;
@@ -342,6 +342,7 @@ TEST(TestRGWLua, Bucket)
   b.marker = "mymarker";
   b.bucket_id = "myid"; 
   s.bucket.reset(new sal::RadosBucket(nullptr, b));
+  s.bucket->set_owner(new sal::RadosUser(nullptr, rgw_user("mytenant", "myuser")));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
@@ -685,15 +686,11 @@ TEST(TestRGWLua, User)
 
   DEFINE_REQ_STATE;
 
-  rgw_user u;
-  u.tenant = "mytenant";
-  u.id = "myid";
-  s.user.reset(new sal::RadosUser(nullptr, u));
+  s.user.reset(new sal::RadosUser(nullptr, rgw_user("mytenant", "myid")));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
-
 
 TEST(TestRGWLua, UseFunction)
 {
