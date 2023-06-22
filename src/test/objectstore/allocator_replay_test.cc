@@ -622,14 +622,25 @@ int main(int argc, char **argv)
         std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                   << std::endl;
         {
+          auto t00 = ceph::mono_clock::now();
           PExtentVector extents;
           for(size_t i = 0; i < count; i++) {
             extents.clear();
+	    auto t0 = ceph::mono_clock::now();
             auto r = a->allocate(want, alloc_unit, 0, &extents);
+            std::cout << "Duration (ns): " << (ceph::mono_clock::now() - t0).count() << std::endl;
             if (r < 0) {
               std::cerr << "Error: allocation failure at step:" << i + 1
-                        << ", ret = " << r << std::endl;
-              return -1;
+                        << ", ret = " << r
+			<< " elapsed (ns): " << (ceph::mono_clock::now() - t00).count()
+                        << std::endl;
+	      return -1;
+            } else if ((size_t)r < want) {
+              std::cerr << "Error: allocation failure at step:" << i + 1
+                        << ", allocated " << r << " of " << want
+			<< " elapsed (ns): " << (ceph::mono_clock::now() - t00).count()
+                        << std::endl;
+	      return -1;
             }
             std::cout << ">allocated: " << r << std::endl;
 
@@ -639,9 +650,11 @@ int main(int argc, char **argv)
             }
             std::cout << std::dec << std::endl;
 	  }
+          std::cout << "Successfully allocated: " << count << " * " << want
+                    << ", unit:" << alloc_unit
+		    << " elapsed (ns): " << (ceph::mono_clock::now() - t00).count()
+		    << std::endl;
         }
-        std::cout << "Successfully allocated: " << count << " * " << want
-                  << ", unit:" << alloc_unit << std::endl;
         return 0;
       });
   } else if (strcmp(argv[2], "replay_alloc") == 0) {
