@@ -3701,10 +3701,30 @@ paths:
         name: facts
         schema:
           type: boolean
+      - default: 0
+        in: query
+        name: offset
+        schema:
+          type: integer
+      - default: 5
+        in: query
+        name: limit
+        schema:
+          type: integer
+      - default: ''
+        in: query
+        name: search
+        schema:
+          type: string
+      - default: ''
+        in: query
+        name: sort
+        schema:
+          type: string
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.2+json:
+            application/vnd.ceph.api.v1.3+json:
               schema:
                 properties:
                   addr:
@@ -3888,7 +3908,7 @@ paths:
       responses:
         '200':
           content:
-            application/vnd.ceph.api.v1.0+json:
+            application/vnd.ceph.api.v1.2+json:
               type: object
           description: OK
         '400':
