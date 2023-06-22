@@ -41,7 +41,7 @@ CRUSH algorithm.
 	placement-groups
 	upmap
         read-balancer
-        balancer-module
+        balancer
 	crush-map
 	crush-map-edits
 	stretch-mode
