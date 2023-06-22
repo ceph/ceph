@@ -833,6 +833,24 @@ lsubdout(client->cct, client, 0) << __func__ << " " << *this << " failed to deco
   return ctx;
 }
 
+void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
+{
+  if (!fscrypt_ctx) {
+#warning need to make sure that we do not skip entire subtree somehow
+    return;
+  }
+
+  FSCryptContext new_ctx = *fscrypt_ctx;
+
+  new_ctx.generate_new_nonce();
+
+  bufferlist bl;
+  new_ctx.encode(bl);
+
+  fsa->resize(bl.length());
+  memcpy(fsa->data(), bl.c_str(), bl.length());
+}
+
 uint64_t Inode::effective_size() const
 {
   if (fscrypt_file.size() < sizeof(uint64_t)) {

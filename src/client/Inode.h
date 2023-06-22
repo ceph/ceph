@@ -185,6 +185,8 @@ struct Inode : RefCountedObject {
 
   FSCryptContextRef init_fscrypt_ctx();
 
+  void gen_inherited_fscrypt_auth(std::vector<uint8_t> *ctx);
+
   bool is_root()    const { return ino == CEPH_INO_ROOT; }
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }

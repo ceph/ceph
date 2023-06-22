@@ -18,6 +18,7 @@
 #include "common/ceph_crypto.h"
 #include "common/debug.h"
 #include "include/ceph_assert.h"
+#include "auth/Crypto.h"
 
 #include "client/FSCrypt.h"
 
@@ -346,6 +347,11 @@ void FSCryptContext::generate_iv(uint64_t block_num, FSCryptIV& iv) const
 
   // memcpy(iv.u.nonce, nonce, FSCRYPT_FILE_NONCE_SIZE);
   iv.u.block_num = block_num;
+}
+
+void FSCryptContext::generate_new_nonce()
+{
+  g_ceph_context->random()->get_bytes((char *)nonce, sizeof(nonce));
 }
 
 void FSCryptKeyHandler::reset(int64_t _epoch, FSCryptKeyRef k)
