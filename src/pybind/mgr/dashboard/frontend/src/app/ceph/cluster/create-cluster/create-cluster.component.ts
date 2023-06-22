@@ -20,6 +20,7 @@ import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeploymentOptions } from '~/app/shared/models/osd-deployment-options';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -119,7 +120,8 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
 
   onSubmit() {
     if (!this.stepsToSkip['Add Hosts']) {
-      this.hostService.list('false').subscribe((hosts) => {
+      const hostContext = new CdTableFetchDataContext(() => undefined);
+      this.hostService.list(hostContext.toParams(), 'false').subscribe((hosts) => {
         hosts.forEach((host) => {
           const index = host['labels'].indexOf('_no_schedule', 0);
           if (index > -1) {
@@ -143,6 +145,45 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
             error: (error) => error.preventDefault()
           });
       });
+
+      if (this.driveGroup) {
+        const user = this.authStorageService.getUsername();
+        this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
+        this.driveGroups.push(this.driveGroup.spec);
+      }
+
+      if (this.simpleDeployment) {
+        const title = this.deploymentOption?.options[this.selectedOption['option']].title;
+        const trackingId = $localize`${title} deployment`;
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+              tracking_id: trackingId
+            }),
+            call: this.osdService.create([this.selectedOption], trackingId, 'predefined')
+          })
+          .subscribe({
+            error: (error) => error.preventDefault(),
+            complete: () => {
+              this.submitAction.emit();
+            }
+          });
+          forkJoin(this.observables)
+            .pipe(
+              finalize(() =>
+                this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
+                  this.notificationService.show(
+                    NotificationType.success,
+                    $localize`Cluster expansion was successful`
+                  );
+                  this.router.navigate(['/dashboard']);
+                })
+              )
+            )
+            .subscribe({
+              error: (error) => error.preventDefault()
+            });
+        });
     }
 
     if (!this.stepsToSkip['Create OSDs']) {

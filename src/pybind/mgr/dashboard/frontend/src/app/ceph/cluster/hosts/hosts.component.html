@@ -13,6 +13,9 @@
                 selectionType="single"
                 [searchableObjects]="true"
                 [hasDetails]="hasTableDetails"
+                [serverSide]="true"
+                [count]="count"
+                [maxLimit]="25"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
                 [toolHeader]="!hideToolHeader">
