@@ -10544,41 +10544,21 @@ int BlueStore::get_devices(set<string> *ls)
     }
     return 0;
   }
-
   // grumble, we haven't started up yet.
-  if (int r = _open_path(); r < 0) {
-    return r;
+  int r = _open_base();
+  if (r == 0) {
+    ceph_assert(bdev);
+    bdev->get_devices(ls);
   }
-  auto close_path = make_scope_guard([&] {
-    _close_path();
-  });
-  if (int r = _open_fsid(false); r < 0) {
-    return r;
+  if (r == 0 && _is_bluefs()) {
+    r = _open_bluefs_env();
+    if (r == 0) {
+      ceph_assert(bluefs);
+      bluefs->get_devices(ls);
+    }
   }
-  auto close_fsid = make_scope_guard([&] {
-    _close_fsid();
-  });
-  if (int r = _read_fsid(&fsid); r < 0) {
-    return r;
-  }
-  if (int r = _lock_fsid(); r < 0) {
-    return r;
-  }
-  if (int r = _open_bdev(false); r < 0) {
-    return r;
-  }
-  auto close_bdev = make_scope_guard([&] {
-    _close_bdev();
-  });
-  if (int r = _prepare_bluefs_devices(false); r < 0) {
-    return r;
-  }
-  bdev->get_devices(ls);
-  if (bluefs) {
-    bluefs->get_devices(ls);
-  }
-  _minimal_close_bluefs();
-  return 0;
+  _full_close();
+  return r;
 }
 
 void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
