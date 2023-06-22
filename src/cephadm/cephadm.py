@@ -4627,6 +4627,7 @@ class CephContainer(BasicContainer):
                  entrypoint: str,
                  args: List[str] = [],
                  volume_mounts: Dict[str, str] = {},
+                 identity: Optional['DaemonIdentity'] = None,
                  cname: str = '',
                  container_args: List[str] = [],
                  envs: Optional[List[str]] = None,
@@ -4643,6 +4644,7 @@ class CephContainer(BasicContainer):
         self.entrypoint = entrypoint
         self.args = args
         self.volume_mounts = volume_mounts
+        self.identity = identity
         self._cname = cname
         self.container_args = container_args
         self.envs = envs or []
@@ -4676,13 +4678,14 @@ class CephContainer(BasicContainer):
                    memory_request: Optional[str] = None,
                    memory_limit: Optional[str] = None,
                    ) -> 'CephContainer':
+        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         return cls(
             ctx,
             image=ctx.image,
             entrypoint=entrypoint,
             args=args,
             volume_mounts=volume_mounts,
-            cname='ceph-%s-%s.%s' % (fsid, daemon_type, daemon_id),
+            identity=ident,
             container_args=container_args,
             envs=envs,
             privileged=privileged,
@@ -4714,6 +4717,8 @@ class CephContainer(BasicContainer):
 
         Fascinatingly, this doesn't happen when using dashes.
         """
+        if not self._cname and self.identity:
+            return self.identity.container_name
         return self._cname.replace('.', '-')
 
     @cname.setter
@@ -4722,6 +4727,8 @@ class CephContainer(BasicContainer):
 
     @property
     def old_cname(self) -> str:
+        if not self._cname and self.identity:
+            return self.identity.legacy_container_name
         return self._cname
 
     def run_cmd(self) -> List[str]:
