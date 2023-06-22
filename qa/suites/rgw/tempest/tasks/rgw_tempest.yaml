@@ -4,7 +4,7 @@ tasks:
 - tox: [ client.0 ]
 - keystone:
     client.0:
-      force-branch: stable/xena
+      force-branch: stable/2023.1
       services:
         - name: swift
           type: object-store
@@ -15,7 +15,7 @@ tasks:
       use-keystone-role: client.0
 - tempest:
     client.0:
-      sha1: 30.0.0
+      sha1: 34.1.0
       force-branch: master
       use-keystone-role: client.0
       auth:
@@ -35,6 +35,8 @@ tasks:
       object-storage-feature-enabled:
         container_sync: false
         discoverability: true
+        # TODO(tobias-urdin): Use sha256 when supported in RadosGW
+        tempurl_digest_hashlib: sha1
       blocklist:
         - .*test_account_quotas_negative.AccountQuotasNegativeTest.test_user_modify_quota
         - .*test_container_acl_negative.ObjectACLsNegativeTest.*
@@ -48,6 +50,7 @@ tasks:
         - .*test_container_services.ContainerTest.test_create_container_with_remove_metadata_value
         - .*test_object_expiry.ObjectExpiryTest.test_get_object_after_expiry_time
         - .*test_object_expiry.ObjectExpiryTest.test_get_object_at_expiry_time
+        - .*test_account_services.AccountTest.test_list_no_account_metadata
 
 overrides:
   ceph:
@@ -57,7 +60,7 @@ overrides:
         osd_max_pg_log_entries: 10
       client:
         rgw keystone api version: 3
-        rgw keystone accepted roles: admin,Member
+        rgw keystone accepted roles: admin,member
         rgw keystone implicit tenants: true
         rgw keystone accepted admin roles: admin
         rgw swift enforce content length: true
