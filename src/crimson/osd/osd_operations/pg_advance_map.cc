@@ -24,7 +24,10 @@ PGAdvanceMap::PGAdvanceMap(
   ShardServices &shard_services, Ref<PG> pg, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
   : shard_services(shard_services), pg(pg), to(to),
-    rctx(std::move(rctx)), do_init(do_init) {}
+    rctx(std::move(rctx)), do_init(do_init)
+{
+  logger().debug("{}: created", *this);
+}
 
 PGAdvanceMap::~PGAdvanceMap() {}
 
@@ -62,6 +65,15 @@ seastar::future<> PGAdvanceMap::start()
   return enter_stage<>(
     pg->peering_request_pg_pipeline.process
   ).then([this] {
+    /*
+     * PGAdvanceMap is scheduled at pg creation and when
+     * broadcasting new osdmaps to pgs. We are not able to serialize
+     * between the two different PGAdvanceMap callers since a new pg
+     * will get advanced to the latest osdmap at it's creation.
+     * As a result, we may need to adjust the PGAdvance operation
+     * 'from' epoch.
+     * See: https://tracker.ceph.com/issues/61744
+     */
     from = pg->get_osdmap_epoch();
     auto fut = seastar::now();
     if (do_init) {
@@ -71,10 +83,13 @@ seastar::future<> PGAdvanceMap::start()
       });
     }
     return fut.then([this] {
+      ceph_assert(std::cmp_less_equal(*from, to));
       return seastar::do_for_each(
 	boost::make_counting_iterator(*from + 1),
 	boost::make_counting_iterator(to + 1),
 	[this](epoch_t next_epoch) {
+	  logger().debug("{}: start: getting map {}",
+	                 *this, next_epoch);
 	  return shard_services.get_map(next_epoch).then(
 	    [this] (cached_map_t&& next_map) {
 	      logger().debug("{}: advancing map to {}",
