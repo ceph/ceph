@@ -12,5 +12,4 @@ tasks:
     client.0:
       dbstore_tests: True
       rgw_server: client.0
-      extra_attrs: ["not fails_on_rgw","not fails_on_dbstore"]
-
+      extra_attrs: ["not fails_on_dbstore"]
