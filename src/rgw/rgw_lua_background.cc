@@ -184,7 +184,10 @@ void Background::run() {
 }
 
 void Background::create_background_metatable(lua_State* L) {
-  create_metatable<rgw::lua::RGWTable>(L, true, &rgw_map, &table_mutex);
+  static const char* background_table_name = "RGW";
+  create_metatable<RGWTable>(L, "", background_table_name, true, &rgw_map, &table_mutex);
+  lua_getglobal(L, background_table_name);
+  ceph_assert(lua_istable(L, -1));
 }
 
 } //namespace rgw::lua
