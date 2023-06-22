@@ -4,6 +4,7 @@ from enum import Enum, unique
 
 from ..exception import VolumeException
 
+
 class GroupTemplate(object):
     def list_subvolumes(self):
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
@@ -35,42 +36,44 @@ class GroupTemplate(object):
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
+
 @unique
 class SubvolumeOpType(Enum):
-    CREATE                = 'create'
-    REMOVE                = 'rm'
-    REMOVE_FORCE          = 'rm-force'
-    PIN                   = 'pin'
-    LIST                  = 'ls'
-    GETPATH               = 'getpath'
-    INFO                  = 'info'
-    RESIZE                = 'resize'
-    SNAP_CREATE           = 'snap-create'
-    SNAP_REMOVE           = 'snap-rm'
-    SNAP_LIST             = 'snap-ls'
-    SNAP_INFO             = 'snap-info'
-    SNAP_PROTECT          = 'snap-protect'
-    SNAP_UNPROTECT        = 'snap-unprotect'
-    CLONE_SOURCE          = 'clone-source'
-    CLONE_CREATE          = 'clone-create'
-    CLONE_STATUS          = 'clone-status'
-    CLONE_CANCEL          = 'clone-cancel'
-    CLONE_INTERNAL        = 'clone_internal'
-    ALLOW_ACCESS          = 'allow-access'
-    DENY_ACCESS           = 'deny-access'
-    AUTH_LIST             = 'auth-list'
-    EVICT                 = 'evict'
-    USER_METADATA_SET     = 'user-metadata-set'
-    USER_METADATA_GET     = 'user-metadata-get'
-    USER_METADATA_LIST    = 'user-metadata-ls'
-    USER_METADATA_REMOVE  = 'user-metadata-rm'
-    SNAP_METADATA_SET     = 'snap-metadata-set'
-    SNAP_METADATA_GET     = 'snap-metadata-get'
-    SNAP_METADATA_LIST    = 'snap-metadata-ls'
-    SNAP_METADATA_REMOVE  = 'snap-metadata-rm'
+    CREATE = 'create'
+    REMOVE = 'rm'
+    REMOVE_FORCE = 'rm-force'
+    PIN = 'pin'
+    LIST = 'ls'
+    GETPATH = 'getpath'
+    INFO = 'info'
+    RESIZE = 'resize'
+    SNAP_CREATE = 'snap-create'
+    SNAP_REMOVE = 'snap-rm'
+    SNAP_LIST = 'snap-ls'
+    SNAP_INFO = 'snap-info'
+    SNAP_PROTECT = 'snap-protect'
+    SNAP_UNPROTECT = 'snap-unprotect'
+    CLONE_SOURCE = 'clone-source'
+    CLONE_CREATE = 'clone-create'
+    CLONE_STATUS = 'clone-status'
+    CLONE_CANCEL = 'clone-cancel'
+    CLONE_INTERNAL = 'clone_internal'
+    ALLOW_ACCESS = 'allow-access'
+    DENY_ACCESS = 'deny-access'
+    AUTH_LIST = 'auth-list'
+    EVICT = 'evict'
+    USER_METADATA_SET = 'user-metadata-set'
+    USER_METADATA_GET = 'user-metadata-get'
+    USER_METADATA_LIST = 'user-metadata-ls'
+    USER_METADATA_REMOVE = 'user-metadata-rm'
+    SNAP_METADATA_SET = 'snap-metadata-set'
+    SNAP_METADATA_GET = 'snap-metadata-get'
+    SNAP_METADATA_LIST = 'snap-metadata-ls'
+    SNAP_METADATA_REMOVE = 'snap-metadata-rm'
+
 
 class SubvolumeTemplate(object):
-    VERSION = None # type: int
+    VERSION = None  # type: int
 
     @staticmethod
     def version():
