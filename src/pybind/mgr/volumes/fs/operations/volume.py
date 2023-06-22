@@ -17,11 +17,13 @@ from mgr_util import open_filesystem, CephfsConnectionException
 
 log = logging.getLogger(__name__)
 
+
 def gen_pool_names(volname):
     """
     return metadata and data pool name (from a filesystem/volume name) as a tuple
     """
     return "cephfs.{}.meta".format(volname), "cephfs.{}.data".format(volname)
+
 
 def get_mds_map(mgr, volname):
     """
@@ -34,13 +36,14 @@ def get_mds_map(mgr, volname):
             return f['mdsmap']
     return mds_map
 
+
 def get_pool_names(mgr, volname):
     """
     return metadata and data pools (list) names of volume as a tuple
     """
     fs_map = mgr.get("fs_map")
     metadata_pool_id = None
-    data_pool_ids = [] # type: List[int]
+    data_pool_ids = []  # type: List[int]
     for f in fs_map['filesystems']:
         if volname == f['mdsmap']['fs_name']:
             metadata_pool_id = f['mdsmap']['metadata_pool']
@@ -55,13 +58,14 @@ def get_pool_names(mgr, volname):
     data_pools = [pools[id] for id in data_pool_ids]
     return metadata_pool, data_pools
 
+
 def get_pool_ids(mgr, volname):
     """
     return metadata and data pools (list) id of volume as a tuple
     """
     fs_map = mgr.get("fs_map")
     metadata_pool_id = None
-    data_pool_ids = [] # type: List[int]
+    data_pool_ids = []  # type: List[int]
     for f in fs_map['filesystems']:
         if volname == f['mdsmap']['fs_name']:
             metadata_pool_id = f['mdsmap']['metadata_pool']
@@ -70,6 +74,7 @@ def get_pool_ids(mgr, volname):
     if metadata_pool_id is None:
         return None, None
     return metadata_pool_id, data_pool_ids
+
 
 def create_volume(mgr, volname, placement):
     """
@@ -82,14 +87,14 @@ def create_volume(mgr, volname, placement):
         return r, outb, outs
     r, outb, outs = create_pool(mgr, data_pool)
     if r != 0:
-        #cleanup
+        # cleanup
         remove_pool(mgr, metadata_pool)
         return r, outb, outs
     # create filesystem
     r, outb, outs = create_filesystem(mgr, volname, metadata_pool, data_pool)
     if r != 0:
         log.error("Filesystem creation error: {0} {1} {2}".format(r, outb, outs))
-        #cleanup
+        # cleanup
         remove_pool(mgr, data_pool)
         remove_pool(mgr, metadata_pool)
         return r, outb, outs
@@ -132,6 +137,7 @@ def delete_volume(mgr, volname, metadata_pool, data_pools):
             return r, outb, outs
     result_str = "metadata pool: {0} data pool: {1} removed".format(metadata_pool, str(data_pools))
     return r, result_str, ""
+
 
 def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
     """
@@ -189,7 +195,7 @@ def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
 
     new_metadata_pool, new_data_pool = gen_pool_names(newvolname)
     if metadata_pool != new_metadata_pool:
-        r, outb, outs =  rename_pool(mgr, metadata_pool, new_metadata_pool)
+        r, outb, outs = rename_pool(mgr, metadata_pool, new_metadata_pool)
         if r != 0:
             errmsg = f"Failed to rename metadata pool '{metadata_pool}' to '{new_metadata_pool}'"
             log.error("Failed to rename metadata pool '%s' to '%s'", metadata_pool, new_metadata_pool)
@@ -229,6 +235,7 @@ def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
         outb += ". But failed to rename data pools as more than one data pool was found."
 
     return r, outb, ""
+
 
 def list_volumes(mgr):
     """
