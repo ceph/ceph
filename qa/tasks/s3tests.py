@@ -385,7 +385,7 @@ def run_tests(ctx, config):
             attrs += ['not sse_s3']
        
         if 'extra_attrs' in client_config:
-            attrs = client_config.get('extra_attrs') 
+            attrs += client_config.get('extra_attrs')
         args += ['tox', '--', '-v', '-m', ' and '.join(attrs)]
         if 'extra_args' in client_config:
             args.append(client_config['extra_args'])
