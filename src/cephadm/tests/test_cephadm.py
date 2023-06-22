@@ -258,7 +258,7 @@ class TestCephAdm(object):
             _cephadm.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
 
     @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.get_custom_config_files')
+    @mock.patch('cephadm.fetch_custom_config_files')
     @mock.patch('cephadm.get_container')
     def test_get_deployment_container(self, _get_container, _get_config, _logger):
         """
@@ -272,12 +272,12 @@ class TestCephAdm(object):
             '--something',
         ]
         ctx.data_dir = 'data'
-        _get_config.return_value = {'custom_config_files': [
+        _get_config.return_value = [
             {
                 'mount_path': '/etc/testing.str',
                 'content': 'this\nis\na\nstring',
             }
-        ]}
+        ]
         _get_container.return_value = _cephadm.CephContainer.for_daemon(
             ctx,
             fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
@@ -306,14 +306,16 @@ class TestCephAdm(object):
     @mock.patch('cephadm.logger')
     @mock.patch('cephadm.FileLock')
     @mock.patch('cephadm.deploy_daemon')
-    @mock.patch('cephadm.get_parm')
+    @mock.patch('cephadm.fetch_configs')
     @mock.patch('cephadm.make_var_run')
     @mock.patch('cephadm.migrate_sysctl_dir')
     @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
     @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
     @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (0, 0))
     @mock.patch('cephadm.get_deployment_container')
-    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _get_parm, _deploy_daemon, _file_lock, _logger):
+    @mock.patch('cephadm.read_configuration_source', lambda c: {})
+    @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
+    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _fetch_configs, _deploy_daemon, _file_lock, _logger):
         """
         test that crush location for mon is set if it is included in config_json
         """
@@ -327,7 +329,7 @@ class TestCephAdm(object):
         ctx.config_json = '-'
         ctx.osd_fsid = '0'
         ctx.tcp_ports = '3300 6789'
-        _get_parm.return_value = {
+        _fetch_configs.return_value = {
             'crush_location': 'database=a'
         }
 
@@ -354,10 +356,10 @@ class TestCephAdm(object):
         _deploy_daemon.side_effect = _crush_location_checker
 
         with pytest.raises(Exception, match='--set-crush-location database=a'):
-            _cephadm.command_deploy(ctx)
+            _cephadm.command_deploy_from(ctx)
 
     @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.get_custom_config_files')
+    @mock.patch('cephadm.fetch_custom_config_files')
     def test_write_custom_conf_files(self, _get_config, _logger, cephadm_fs):
         """
         test _write_custom_conf_files writes the conf files correctly
@@ -366,7 +368,7 @@ class TestCephAdm(object):
         ctx = _cephadm.CephadmContext()
         ctx.config_json = '-'
         ctx.data_dir = _cephadm.DATA_DIR
-        _get_config.return_value = {'custom_config_files': [
+        _get_config.return_value = [
             {
                 'mount_path': '/etc/testing.str',
                 'content': 'this\nis\na\nstring',
@@ -378,7 +380,7 @@ class TestCephAdm(object):
             {
                 'mount_path': '/etc/no-content.conf',
             },
-        ]}
+        ]
         _cephadm._write_custom_conf_files(ctx, 'mon', 'host1', 'fsid', 0, 0)
         with open(os.path.join(_cephadm.DATA_DIR, 'fsid', 'custom_config_files', 'mon.host1', 'testing.str'), 'r') as f:
             assert 'this\nis\na\nstring' == f.read()

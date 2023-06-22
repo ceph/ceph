@@ -94,7 +94,7 @@ class TestCopyTree:
             self._copy_tree([src1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 2
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert (dst / "foo.txt").exists()
 
 
@@ -187,7 +187,7 @@ class TestCopyFiles:
             self._copy_files([file1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 1
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert (dst / "f1.txt").exists()
 
 
@@ -270,7 +270,7 @@ class TestMoveFiles:
             self._move_files([file1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 1
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert dst.is_file()
         assert not file1.exists()
 
@@ -288,9 +288,9 @@ def test_recursive_chown(tmp_path):
         _chown.return_value = None
         _cephadm.recursive_chown(str(d1), uid=500, gid=500)
     assert len(_chown.mock_calls) == 3
-    assert _chown.mock_calls[0].args == (str(d1), 500, 500)
-    assert _chown.mock_calls[1].args == (str(d2), 500, 500)
-    assert _chown.mock_calls[2].args == (str(f1), 500, 500)
+    assert _chown.mock_calls[0] == mock.call(str(d1), 500, 500)
+    assert _chown.mock_calls[1] == mock.call(str(d2), 500, 500)
+    assert _chown.mock_calls[2] == mock.call(str(f1), 500, 500)
 
 
 class TestFindExecutable:
@@ -726,3 +726,83 @@ class TestWriteNew:
         assert not dest.exists()
         assert not dest.with_name(dest.name+".new").exists()
         assert list(dest.parent.iterdir()) == []
+
+
+class CompareContext1:
+    cfg_data = {
+        "name": "mane",
+        "fsid": "foobar",
+        "image": "fake.io/noway/nohow:gndn",
+        "meta": {
+            "fruit": "banana",
+            "vegetable": "carrot",
+        },
+        "params": {
+            "osd_fsid": "robble",
+            "tcp_ports": [404, 9999],
+        },
+        "config_blobs": {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        },
+    }
+
+    def check(self, ctx):
+        assert ctx.name == 'mane'
+        assert ctx.fsid == 'foobar'
+        assert ctx.image == 'fake.io/noway/nohow:gndn'
+        assert ctx.meta_properties == {"fruit": "banana", "vegetable": "carrot"}
+        assert ctx.config_blobs == {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        }
+        assert ctx.osd_fsid == "robble"
+        assert ctx.tcp_ports == [404, 9999]
+
+
+class CompareContext2:
+    cfg_data = {
+        "name": "cc2",
+        "fsid": "foobar",
+        "meta": {
+            "fruit": "banana",
+            "vegetable": "carrot",
+        },
+        "params": {},
+        "config_blobs": {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        },
+    }
+
+    def check(self, ctx):
+        assert ctx.name == 'cc2'
+        assert ctx.fsid == 'foobar'
+        assert ctx.image == 'quay.ceph.io/ceph-ci/ceph:main'
+        assert ctx.meta_properties == {"fruit": "banana", "vegetable": "carrot"}
+        assert ctx.config_blobs == {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        }
+        assert ctx.osd_fsid is None
+        assert ctx.tcp_ports is None
+
+
+@pytest.mark.parametrize(
+    "cc",
+    [
+        CompareContext1(),
+        CompareContext2(),
+    ],
+)
+def test_apply_deploy_config_to_ctx(cc, monkeypatch):
+    import logging
+
+    monkeypatch.setattr("cephadm.logger", logging.getLogger())
+    ctx = FakeContext()
+    _cephadm.apply_deploy_config_to_ctx(cc.cfg_data, ctx)
+    cc.check(ctx)

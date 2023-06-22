@@ -89,6 +89,7 @@ DEFAULT_TIMEOUT = None  # in seconds
 DEFAULT_RETRY = 15
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%fZ'
 QUIET_LOG_LEVEL = 9  # DEBUG is 10, so using 9 to be lower level than DEBUG
+NO_DEPRECATED = False
 
 logger: logging.Logger = None  # type: ignore
 
@@ -444,9 +445,9 @@ class SNMPGateway:
     @classmethod
     def init(cls, ctx: CephadmContext, fsid: str,
              daemon_id: Union[int, str]) -> 'SNMPGateway':
-        assert ctx.config_json
-        return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+        cfgs = fetch_configs(ctx)
+        assert cfgs  # assert some config data was found
+        return cls(ctx, fsid, daemon_id, cfgs, ctx.image)
 
     @staticmethod
     def get_version(ctx: CephadmContext, fsid: str, daemon_id: str) -> Optional[str]:
@@ -479,13 +480,10 @@ class SNMPGateway:
 
     @property
     def port(self) -> int:
-        if not self.ctx.tcp_ports:
+        ports = fetch_tcp_ports(self.ctx)
+        if not ports:
             return self.DEFAULT_PORT
-        else:
-            if len(self.ctx.tcp_ports) > 0:
-                return int(self.ctx.tcp_ports.split()[0])
-            else:
-                return self.DEFAULT_PORT
+        return ports[0]
 
     def get_daemon_args(self) -> List[str]:
         v3_args = []
@@ -755,7 +753,7 @@ class NFSGanesha(object):
     @classmethod
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> NFSGanesha
-        return cls(ctx, fsid, daemon_id, get_parm(ctx.config_json), ctx.image)
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     def get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
@@ -883,7 +881,7 @@ class CephIscsi(object):
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
         return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     @staticmethod
     def get_container_mounts(data_dir, log_dir):
@@ -1019,7 +1017,7 @@ class CephExporter(object):
     def init(cls, ctx: CephadmContext, fsid: str,
              daemon_id: Union[int, str]) -> 'CephExporter':
         return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     @staticmethod
     def get_container_mounts() -> Dict[str, str]:
@@ -1068,7 +1066,7 @@ class HAproxy(object):
     @classmethod
     def init(cls, ctx: CephadmContext,
              fsid: str, daemon_id: Union[int, str]) -> 'HAproxy':
-        return cls(ctx, fsid, daemon_id, get_parm(ctx.config_json),
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx),
                    ctx.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
@@ -1157,7 +1155,7 @@ class Keepalived(object):
     def init(cls, ctx: CephadmContext, fsid: str,
              daemon_id: Union[int, str]) -> 'Keepalived':
         return cls(ctx, fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
@@ -1293,7 +1291,7 @@ class CustomContainer(object):
     def init(cls, ctx: CephadmContext,
              fsid: str, daemon_id: Union[int, str]) -> 'CustomContainer':
         return cls(fsid, daemon_id,
-                   get_parm(ctx.config_json), ctx.image)
+                   fetch_configs(ctx), ctx.image)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """
@@ -1409,7 +1407,7 @@ def dict_get(d: Dict, key: str, default: Any = None, require: bool = False) -> A
 ##################################
 
 
-def dict_get_join(d: Dict, key: str) -> Any:
+def dict_get_join(d: Dict[str, Any], key: str) -> Any:
     """
     Helper function to get the value of a given key from a dictionary.
     `List` values will be converted to a string by joining them with a
@@ -2304,27 +2302,33 @@ def require_image(func: FuncT) -> FuncT:
 def default_image(func: FuncT) -> FuncT:
     @wraps(func)
     def _default_image(ctx: CephadmContext) -> Any:
-        if not ctx.image:
-            if 'name' in ctx and ctx.name:
-                type_ = ctx.name.split('.', 1)[0]
-                if type_ in Monitoring.components:
-                    ctx.image = Monitoring.components[type_]['image']
-                if type_ == 'haproxy':
-                    ctx.image = HAproxy.default_image
-                if type_ == 'keepalived':
-                    ctx.image = Keepalived.default_image
-                if type_ == SNMPGateway.daemon_type:
-                    ctx.image = SNMPGateway.default_image
-                if type_ in Tracing.components:
-                    ctx.image = Tracing.components[type_]['image']
-            if not ctx.image:
-                ctx.image = os.environ.get('CEPHADM_IMAGE')
-            if not ctx.image:
-                ctx.image = _get_default_image(ctx)
-
+        update_default_image(ctx)
         return func(ctx)
 
     return cast(FuncT, _default_image)
+
+
+def update_default_image(ctx: CephadmContext) -> None:
+    if getattr(ctx, 'image', None):
+        return
+    ctx.image = None  # ensure ctx.image exists to avoid repeated `getattr`s
+    name = getattr(ctx, 'name', None)
+    if name:
+        type_ = name.split('.', 1)[0]
+        if type_ in Monitoring.components:
+            ctx.image = Monitoring.components[type_]['image']
+        if type_ == 'haproxy':
+            ctx.image = HAproxy.default_image
+        if type_ == 'keepalived':
+            ctx.image = Keepalived.default_image
+        if type_ == SNMPGateway.daemon_type:
+            ctx.image = SNMPGateway.default_image
+        if type_ in Tracing.components:
+            ctx.image = Tracing.components[type_]['image']
+    if not ctx.image:
+        ctx.image = os.environ.get('CEPHADM_IMAGE')
+    if not ctx.image:
+        ctx.image = _get_default_image(ctx)
 
 
 def executes_early(func: FuncT) -> FuncT:
@@ -2335,6 +2339,17 @@ def executes_early(func: FuncT) -> FuncT:
     """
     cast(Any, func)._execute_early = True
     return func
+
+
+def deprecated_command(func: FuncT) -> FuncT:
+    @wraps(func)
+    def _deprecated_command(ctx: CephadmContext) -> Any:
+        logger.warning(f'Deprecated command used: {func}')
+        if NO_DEPRECATED:
+            raise Error('running deprecated commands disabled')
+        return func(ctx)
+
+    return cast(FuncT, _deprecated_command)
 
 
 def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -> Optional[ContainerInfo]:
@@ -2786,15 +2801,15 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         if daemon_type not in ['grafana', 'loki', 'promtail']:
             ip = ''
             port = Monitoring.port_map[daemon_type][0]
-            if 'meta_json' in ctx and ctx.meta_json:
-                meta = json.loads(ctx.meta_json) or {}
+            meta = fetch_meta(ctx)
+            if meta:
                 if 'ip' in meta and meta['ip']:
                     ip = meta['ip']
                 if 'ports' in meta and meta['ports']:
                     port = meta['ports'][0]
             r += [f'--web.listen-address={ip}:{port}']
             if daemon_type == 'prometheus':
-                config = get_parm(ctx.config_json)
+                config = fetch_configs(ctx)
                 retention_time = config.get('retention_time', '15d')
                 retention_size = config.get('retention_size', '0')  # default to disabled
                 r += [f'--storage.tsdb.retention.time={retention_time}']
@@ -2810,7 +2825,7 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
                     host = wrap_ipv6(addr) if addr else host
                 r += [f'--web.external-url={scheme}://{host}:{port}']
         if daemon_type == 'alertmanager':
-            config = get_parm(ctx.config_json)
+            config = fetch_configs(ctx)
             peers = config.get('peers', list())  # type: ignore
             for peer in peers:
                 r += ['--cluster.peer={}'.format(peer)]
@@ -2823,13 +2838,13 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
         if daemon_type == 'promtail':
             r += ['--config.expand-env']
         if daemon_type == 'prometheus':
-            config = get_parm(ctx.config_json)
+            config = fetch_configs(ctx)
             try:
                 r += [f'--web.config.file={config["web_config"]}']
             except KeyError:
                 pass
         if daemon_type == 'node-exporter':
-            config = get_parm(ctx.config_json)
+            config = fetch_configs(ctx)
             try:
                 r += [f'--web.config={config["web_config"]}']
             except KeyError:
@@ -2877,9 +2892,7 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
             f.write(keyring)
 
     if daemon_type in Monitoring.components.keys():
-        config_json: Dict[str, Any] = dict()
-        if 'config_json' in ctx:
-            config_json = get_parm(ctx.config_json)
+        config_json = fetch_configs(ctx)
 
         # Set up directories specific to the monitoring component
         config_dir = ''
@@ -2930,7 +2943,10 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
         # populate the config directory for the component from the config-json
         if 'files' in config_json:
             for fname in config_json['files']:
-                content = dict_get_join(config_json['files'], fname)
+                # work around mypy wierdness where it thinks `str`s aren't Anys
+                # when used for dictionary values! feels like possibly a mypy bug?!
+                cfg = cast(Dict[str, Any], config_json['files'])
+                content = dict_get_join(cfg, fname)
                 if os.path.isabs(fname):
                     fpath = os.path.join(data_dir_root, fname.lstrip(os.path.sep))
                 else:
@@ -2967,14 +2983,14 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
 
 def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: str, fsid: str, uid: int, gid: int) -> None:
     # mostly making this its own function to make unit testing easier
-    if 'config_json' not in ctx or not ctx.config_json:
+    ccfiles = fetch_custom_config_files(ctx)
+    if not ccfiles:
         return
-    config_json = get_custom_config_files(ctx.config_json)
     custom_config_dir = os.path.join(ctx.data_dir, fsid, 'custom_config_files', f'{daemon_type}.{daemon_id}')
     if not os.path.exists(custom_config_dir):
         makedirs(custom_config_dir, uid, gid, 0o755)
     mandatory_keys = ['mount_path', 'content']
-    for ccf in config_json['custom_config_files']:
+    for ccf in ccfiles:
         if all(k in ccf for k in mandatory_keys):
             file_path = os.path.join(custom_config_dir, os.path.basename(ccf['mount_path']))
             with write_new(file_path, owner=(uid, gid), encoding='utf-8') as f:
@@ -2985,18 +3001,10 @@ def get_parm(option: str) -> Dict[str, str]:
     js = _get_config_json(option)
     # custom_config_files is a special field that may be in the config
     # dict. It is used for mounting custom config files into daemon's containers
-    # and should be accessed through the "get_custom_config_files" function.
+    # and should be accessed through the "fetch_custom_config_files" function.
     # For get_parm we need to discard it.
     js.pop('custom_config_files', None)
     return js
-
-
-def get_custom_config_files(option: str) -> Dict[str, List[Dict[str, str]]]:
-    js = _get_config_json(option)
-    res: Dict[str, List[Dict[str, str]]] = {'custom_config_files': []}
-    if 'custom_config_files' in js:
-        res['custom_config_files'] = js['custom_config_files']
-    return res
 
 
 def _get_config_json(option: str) -> Dict[str, Any]:
@@ -3029,13 +3037,79 @@ def _get_config_json(option: str) -> Dict[str, Any]:
         return js
 
 
+def fetch_meta(ctx: CephadmContext) -> Dict[str, Any]:
+    """Return a dict containing metadata about a deployment.
+    """
+    meta = getattr(ctx, 'meta_properties', None)
+    if meta is not None:
+        return meta
+    mjson = getattr(ctx, 'meta_json', None)
+    if mjson is not None:
+        meta = json.loads(mjson) or {}
+        ctx.meta_properties = meta
+        return meta
+    return {}
+
+
+def fetch_configs(ctx: CephadmContext) -> Dict[str, str]:
+    """Return a dict containing arbitrary configuration parameters.
+    This function filters out the key 'custom_config_files' which
+    must not be part of a deployment's configuration key-value pairs.
+    To access custom configuration file data, use `fetch_custom_config_files`.
+    """
+    # ctx.config_blobs is *always* a dict. it is created once when
+    # a command is parsed/processed and stored "forever"
+    cfg_blobs = getattr(ctx, 'config_blobs', None)
+    if cfg_blobs:
+        cfg_blobs = dict(cfg_blobs)
+        cfg_blobs.pop('custom_config_files', None)
+        return cfg_blobs
+    # ctx.config_json is the legacy equivalent of config_blobs. it is a
+    # string that either contains json or refers to a file name where
+    # the file contains json.
+    cfg_json = getattr(ctx, 'config_json', None)
+    if cfg_json:
+        jdata = _get_config_json(cfg_json) or {}
+        jdata.pop('custom_config_files', None)
+        return jdata
+    return {}
+
+
+def fetch_custom_config_files(ctx: CephadmContext) -> List[Dict[str, Any]]:
+    """Return a list containing dicts that can be used to populate
+    custom configuration files for containers.
+    """
+    # NOTE: this function works like the opposite of fetch_configs.
+    # instead of filtering out custom_config_files, it returns only
+    # the content in that key.
+    cfg_blobs = getattr(ctx, 'config_blobs', None)
+    if cfg_blobs:
+        return cfg_blobs.get('custom_config_files', [])
+    cfg_json = getattr(ctx, 'config_json', None)
+    if cfg_json:
+        jdata = _get_config_json(cfg_json)
+        return jdata.get('custom_config_files', [])
+    return []
+
+
+def fetch_tcp_ports(ctx: CephadmContext) -> List[int]:
+    """Return a list of tcp ports, as integers, stored on the given ctx.
+    """
+    ports = getattr(ctx, 'tcp_ports', None)
+    if ports is None:
+        return []
+    if isinstance(ports, str):
+        return list(map(int, ports.split()))
+    return ports
+
+
 def get_config_and_keyring(ctx):
     # type: (CephadmContext) -> Tuple[Optional[str], Optional[str]]
     config = None
     keyring = None
 
-    if 'config_json' in ctx and ctx.config_json:
-        d = get_parm(ctx.config_json)
+    d = fetch_configs(ctx)
+    if d:
         config = d.get('config')
         keyring = d.get('keyring')
         if config and keyring:
@@ -3295,7 +3369,7 @@ def get_container(ctx: CephadmContext,
     elif daemon_type in Tracing.components:
         entrypoint = ''
         name = '%s.%s' % (daemon_type, daemon_id)
-        config = get_parm(ctx.config_json)
+        config = fetch_configs(ctx)
         Tracing.set_configuration(config, daemon_type)
         envs.extend(Tracing.components[daemon_type].get('envs', []))
     elif daemon_type == NFSGanesha.daemon_type:
@@ -3490,10 +3564,7 @@ def deploy_daemon(ctx: CephadmContext, fsid: str, daemon_type: str,
     # with systemd if this is not a reconfig
     if deployment_type != DeploymentType.RECONFIG:
         if daemon_type == CephadmAgent.daemon_type:
-            if ctx.config_json == '-':
-                config_js = get_parm('-')
-            else:
-                config_js = get_parm(ctx.config_json)
+            config_js = fetch_configs(ctx)
             assert isinstance(config_js, dict)
 
             cephadm_agent = CephadmAgent(ctx, fsid, daemon_id)
@@ -3673,9 +3744,7 @@ def deploy_daemon_units(
         _write_container_cmd_to_bash(ctx, f, c, '%s.%s' % (daemon_type, str(daemon_id)))
 
         # some metadata about the deploy
-        meta: Dict[str, Any] = {}
-        if 'meta_json' in ctx and ctx.meta_json:
-            meta = json.loads(ctx.meta_json) or {}
+        meta: Dict[str, Any] = fetch_meta(ctx)
         meta.update({
             'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
             'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
@@ -4484,10 +4553,8 @@ class CephadmAgent():
         with write_new(unit_run_path) as f:
             f.write(self.unit_run())
 
-        meta: Dict[str, Any] = {}
+        meta: Dict[str, Any] = fetch_meta(self.ctx)
         meta_file_path = os.path.join(self.daemon_dir, 'unit.meta')
-        if 'meta_json' in self.ctx and self.ctx.meta_json:
-            meta = json.loads(self.ctx.meta_json) or {}
         with write_new(meta_file_path) as f:
             f.write(json.dumps(meta, indent=4) + '\n')
 
@@ -5361,7 +5428,7 @@ def create_mon(
     fsid: str, mon_id: str
 ) -> None:
     mon_c = get_container(ctx, fsid, 'mon', mon_id)
-    ctx.meta_json = json.dumps({'service_name': 'mon'})
+    ctx.meta_properties = {'service_name': 'mon'}
     deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
                   config=None, keyring=None)
 
@@ -5408,7 +5475,7 @@ def create_mgr(
     mgr_keyring = '[mgr.%s]\n\tkey = %s\n' % (mgr_id, mgr_key)
     mgr_c = get_container(ctx, fsid, 'mgr', mgr_id)
     # Note:the default port used by the Prometheus node exporter is opened in fw
-    ctx.meta_json = json.dumps({'service_name': 'mgr'})
+    ctx.meta_properties = {'service_name': 'mgr'}
     ports = [9283, 8765]
     if not ctx.skip_monitoring_stack:
         ports.append(8443)
@@ -6142,10 +6209,10 @@ def get_deployment_container(ctx: CephadmContext,
         c.container_args.extend(ctx.extra_container_args)
     if 'extra_entrypoint_args' in ctx and ctx.extra_entrypoint_args:
         c.args.extend(ctx.extra_entrypoint_args)
-    if 'config_json' in ctx and ctx.config_json:
-        conf_files = get_custom_config_files(ctx.config_json)
+    ccfiles = fetch_custom_config_files(ctx)
+    if ccfiles:
         mandatory_keys = ['mount_path', 'content']
-        for conf in conf_files['custom_config_files']:
+        for conf in ccfiles:
             if all(k in conf for k in mandatory_keys):
                 mount_path = conf['mount_path']
                 file_path = os.path.join(
@@ -6178,35 +6245,99 @@ def get_deployment_type(ctx: CephadmContext, daemon_type: str, daemon_id: str) -
 
 
 @default_image
+@deprecated_command
 def command_deploy(ctx):
     # type: (CephadmContext) -> None
+    _common_deploy(ctx)
+
+
+def read_configuration_source(ctx: CephadmContext) -> Dict[str, Any]:
+    """Read a JSON configuration based on the `ctx.source` value."""
+    source = '-'
+    if 'source' in ctx and ctx.source:
+        source = ctx.source
+    if source == '-':
+        config_data = json.load(sys.stdin)
+    else:
+        with open(source, 'rb') as fh:
+            config_data = json.load(fh)
+    logger.debug('Loaded deploy configuration: %r', config_data)
+    return config_data
+
+
+def apply_deploy_config_to_ctx(
+    config_data: Dict[str, Any],
+    ctx: CephadmContext,
+) -> None:
+    """Bind properties taken from the config_data dictionary to our ctx,
+    similar to how cli options on `deploy` are bound to the context.
+    """
+    ctx.name = config_data['name']
+    image = config_data.get('image', '')
+    if image:
+        ctx.image = image
+    if 'fsid' in config_data:
+        ctx.fsid = config_data['fsid']
+    if 'meta' in config_data:
+        ctx.meta_properties = config_data['meta']
+    if 'config_blobs' in config_data:
+        ctx.config_blobs = config_data['config_blobs']
+
+    # many functions don't check that an attribute is set on the ctx
+    # (with getattr or the '__contains__' func on ctx).
+    # This reuses the defaults from the CLI options so we don't
+    # have to repeat things and they can stay in sync.
+    facade = ArgumentFacade()
+    _add_deploy_parser_args(facade)
+    facade.apply(ctx)
+    for key, value in config_data.get('params', {}).items():
+        if key not in facade.defaults:
+            logger.warning('unexpected parameter: %r=%r', key, value)
+        setattr(ctx, key, value)
+    update_default_image(ctx)
+    logger.debug('Determined image: %r', ctx.image)
+
+
+def command_deploy_from(ctx: CephadmContext) -> None:
+    """The deploy-from command is similar to deploy but sources nearly all
+    configuration parameters from an input JSON configuration file.
+    """
+    config_data = read_configuration_source(ctx)
+    apply_deploy_config_to_ctx(config_data, ctx)
+    _common_deploy(ctx)
+
+
+def _common_deploy(ctx: CephadmContext) -> None:
     daemon_type, daemon_id = ctx.name.split('.', 1)
+    if daemon_type not in get_supported_daemons():
+        raise Error('daemon type %s not recognized' % daemon_type)
 
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
 
-    if daemon_type not in get_supported_daemons():
-        raise Error('daemon type %s not recognized' % daemon_type)
-
-    deployment_type: DeploymentType = get_deployment_type(ctx, daemon_type, daemon_id)
+    deployment_type = get_deployment_type(ctx, daemon_type, daemon_id)
 
     # Migrate sysctl conf files from /usr/lib to /etc
     migrate_sysctl_dir(ctx, ctx.fsid)
 
     # Get and check ports explicitly required to be opened
-    daemon_ports = []  # type: List[int]
+    daemon_ports = fetch_tcp_ports(ctx)
+    _dispatch_deploy(ctx, daemon_type, daemon_id, daemon_ports, deployment_type)
 
-    if ctx.tcp_ports:
-        daemon_ports = list(map(int, ctx.tcp_ports.split()))
 
+def _dispatch_deploy(
+    ctx: CephadmContext,
+    daemon_type: str,
+    daemon_id: str,
+    daemon_ports: List[int],
+    deployment_type: DeploymentType,
+) -> None:
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        config_json: Optional[Dict[str, str]] = None
-        if 'config_json' in ctx and ctx.config_json:
-            config_json = get_parm(ctx.config_json)
+        config_json = fetch_configs(ctx)
 
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
                                      ptrace=ctx.allow_ptrace)
@@ -6229,7 +6360,7 @@ def command_deploy(ctx):
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
         # Default Checks
         # make sure provided config-json is sufficient
-        config = get_parm(ctx.config_json)  # type: ignore
+        config = fetch_configs(ctx)  # type: ignore
         required_files = Monitoring.components[daemon_type].get('config-json-files', list())
         required_args = Monitoring.components[daemon_type].get('config-json-args', list())
         if required_files:
@@ -7443,8 +7574,8 @@ def command_rm_daemon(ctx):
     else:
         call_throws(ctx, ['rm', '-rf', data_dir])
 
-    if 'tcp_ports' in ctx and ctx.tcp_ports is not None:
-        ports: List[int] = [int(p) for p in ctx.tcp_ports.split()]
+    ports: List[int] = fetch_tcp_ports(ctx)
+    if ports:
         try:
             fw = Firewalld(ctx)
             fw.close_ports(ports)
@@ -9368,6 +9499,89 @@ def command_maintenance(ctx: CephadmContext) -> str:
 ##################################
 
 
+class ArgumentFacade:
+    def __init__(self) -> None:
+        self.defaults: Dict[str, Any] = {}
+
+    def add_argument(self, *args: Any, **kwargs: Any) -> None:
+        if not args:
+            raise ValueError('expected at least one argument')
+        name = args[0]
+        if not name.startswith('--'):
+            raise ValueError(f'expected long option, got: {name!r}')
+        name = name[2:].replace('-', '_')
+        value = kwargs.pop('default', None)
+        self.defaults[name] = value
+
+    def apply(self, ctx: CephadmContext) -> None:
+        for key, value in self.defaults.items():
+            setattr(ctx, key, value)
+
+
+def _add_deploy_parser_args(
+    parser_deploy: Union[argparse.ArgumentParser, ArgumentFacade],
+) -> None:
+    parser_deploy.add_argument(
+        '--config', '-c',
+        help='config file for new daemon')
+    parser_deploy.add_argument(
+        '--config-json',
+        help='Additional configuration information in JSON format')
+    parser_deploy.add_argument(
+        '--keyring',
+        help='keyring for new daemon')
+    parser_deploy.add_argument(
+        '--key',
+        help='key for new daemon')
+    parser_deploy.add_argument(
+        '--osd-fsid',
+        help='OSD uuid, if creating an OSD container')
+    parser_deploy.add_argument(
+        '--skip-firewalld',
+        action='store_true',
+        help='Do not configure firewalld')
+    parser_deploy.add_argument(
+        '--tcp-ports',
+        help='List of tcp ports to open in the host firewall')
+    parser_deploy.add_argument(
+        '--reconfig',
+        action='store_true',
+        help='Reconfigure a previously deployed daemon')
+    parser_deploy.add_argument(
+        '--allow-ptrace',
+        action='store_true',
+        help='Allow SYS_PTRACE on daemon container')
+    parser_deploy.add_argument(
+        '--container-init',
+        action='store_true',
+        default=CONTAINER_INIT,
+        help=argparse.SUPPRESS)
+    parser_deploy.add_argument(
+        '--memory-request',
+        help='Container memory request/target'
+    )
+    parser_deploy.add_argument(
+        '--memory-limit',
+        help='Container memory hard limit'
+    )
+    parser_deploy.add_argument(
+        '--meta-json',
+        help='JSON dict of additional metadata'
+    )
+    parser_deploy.add_argument(
+        '--extra-container-args',
+        action='append',
+        default=[],
+        help='Additional container arguments to apply to daemon'
+    )
+    parser_deploy.add_argument(
+        '--extra-entrypoint-args',
+        action='append',
+        default=[],
+        help='Additional entrypoint arguments to apply to deamon'
+    )
+
+
 def _get_parser():
     # type: () -> argparse.ArgumentParser
     parser = argparse.ArgumentParser(
@@ -9870,64 +10084,29 @@ def _get_parser():
         '--fsid',
         required=True,
         help='cluster FSID')
-    parser_deploy.add_argument(
-        '--config', '-c',
-        help='config file for new daemon')
-    parser_deploy.add_argument(
-        '--config-json',
-        help='Additional configuration information in JSON format')
-    parser_deploy.add_argument(
-        '--keyring',
-        help='keyring for new daemon')
-    parser_deploy.add_argument(
-        '--key',
-        help='key for new daemon')
-    parser_deploy.add_argument(
-        '--osd-fsid',
-        help='OSD uuid, if creating an OSD container')
-    parser_deploy.add_argument(
-        '--skip-firewalld',
-        action='store_true',
-        help='Do not configure firewalld')
-    parser_deploy.add_argument(
-        '--tcp-ports',
-        help='List of tcp ports to open in the host firewall')
-    parser_deploy.add_argument(
-        '--reconfig',
-        action='store_true',
-        help='Reconfigure a previously deployed daemon')
-    parser_deploy.add_argument(
-        '--allow-ptrace',
-        action='store_true',
-        help='Allow SYS_PTRACE on daemon container')
-    parser_deploy.add_argument(
-        '--container-init',
-        action='store_true',
-        default=CONTAINER_INIT,
-        help=argparse.SUPPRESS)
-    parser_deploy.add_argument(
-        '--memory-request',
-        help='Container memory request/target'
+    _add_deploy_parser_args(parser_deploy)
+
+    parser_orch = subparsers.add_parser(
+        '_orch',
     )
-    parser_deploy.add_argument(
-        '--memory-limit',
-        help='Container memory hard limit'
+    subparsers_orch = parser_orch.add_subparsers(
+        title='Orchestrator Driven Commands',
+        description='Commands that are typically only run by cephadm mgr module',
     )
-    parser_deploy.add_argument(
-        '--meta-json',
-        help='JSON dict of additional metadata'
-    )
-    parser_deploy.add_argument(
-        '--extra-container-args',
-        action='append',
-        default=[],
-        help='Additional container arguments to apply to daemon'
-    )
-    parser_deploy.add_argument(
-        '--extra-entrypoint-args',
-        action='append',
-        default=[],
-        help='Additional entrypoint arguments to apply to deamon'
+
+    parser_deploy_from = subparsers_orch.add_parser(
+        'deploy', help='deploy a daemon')
+    parser_deploy_from.set_defaults(func=command_deploy_from)
+    # currently cephadm mgr module passes an fsid option on the CLI too
+    # TODO: remove this and always source fsid from the JSON?
+    parser_deploy_from.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_deploy_from.add_argument(
+        'source',
+        default='-',
+        nargs='?',
+        help='Configuration input source file',
     )
 
     parser_check_host = subparsers.add_parser(
