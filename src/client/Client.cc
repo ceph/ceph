@@ -1541,14 +1541,29 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   InodeStat dirst;
   DirStat dst;
   string dname;
+  string enc_name;
   LeaseStat dlease;
   InodeStat ist;
+
+  Inode *diri = NULL;
 
   if (reply->head.is_dentry) {
     dirst.decode(p, features);
     dst.decode(p, features);
     decode(dname, p);
     dlease.decode(p, features);
+
+    diri = add_update_inode(&dirst, request->sent_stamp, session,
+			    request->perms);
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
+    if (fscrypt_denc) {
+      enc_name = dname;
+      int r = fscrypt_denc->get_decrypted_fname(enc_name, &dname);
+      if (r < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
+        dname = enc_name;
+      }
+    }
   }
 
   Inode *in = 0;
@@ -1570,10 +1585,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 			  request->perms);
   }
 
-  Inode *diri = NULL;
   if (reply->head.is_dentry) {
-    diri = add_update_inode(&dirst, request->sent_stamp, session,
-			    request->perms);
     mds_rank_t from_mds = mds_rank_t(reply->get_source().num());
     update_dir_dist(diri, &dst, from_mds);  // dir stat info is attached to ..
 
@@ -1610,6 +1622,16 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     
     string dname = request->path.last_dentry();
     
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
+    if (fscrypt_denc) {
+      enc_name = dname;
+      int r = fscrypt_denc->get_decrypted_fname(enc_name, &dname);
+      if (r < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
+        dname = enc_name;
+      }
+    }
+
     LeaseStat dlease;
     dlease.duration_ms = 0;
 
@@ -9656,7 +9678,7 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
     return r;
   }
 
-  if (dirinode->fscrypt_ctx) {
+  if (dirinode->is_fscrypt_enabled()) {
     if (mask & CEPH_FILE_MODE_WR) {
       mask |= CEPH_FILE_MODE_RD;
     }
@@ -13929,6 +13951,11 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   int cmode = ceph_flags_to_mode(cflags);
 
+#warning FIXME caps
+  if (cmode & CEPH_FILE_MODE_WR) {
+    cmode |= CEPH_FILE_MODE_RD;
+  }
+
   int64_t pool_id = -1;
   if (data_pool && *data_pool) {
     pool_id = objecter->with_osdmap(
@@ -13951,6 +13978,7 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
   }
 
   req->set_alternate_name(std::move(alternate_name));
+  dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
   req->set_inode(dir);
   req->head.args.open.flags = cflags | CEPH_O_CREAT;
 
@@ -14034,6 +14062,7 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
   req->set_alternate_name(std::move(alternate_name));
+  dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 
   mode |= S_IFDIR;
   bufferlist bl;

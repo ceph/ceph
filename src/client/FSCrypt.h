@@ -70,6 +70,10 @@ struct ceph_fscrypt_key_identifier {
     bl.copy(sizeof(raw), raw);
   }
 
+  void encode(bufferlist& bl) const {
+    bl.append(raw, sizeof(raw));
+  }
+
   bool operator<(const struct ceph_fscrypt_key_identifier& r) const;
 };
 
@@ -138,6 +142,30 @@ struct FSCryptPolicy {
 
   virtual void decode_extra(bufferlist::const_iterator& bl) {}
 
+  void encode(bufferlist& env_bl) const {
+    uint32_t v = 1;
+    ceph::encode(v, env_bl);
+
+    bufferlist bl;
+
+    ceph::encode(version, bl);
+    ceph::encode(contents_encryption_mode, bl);
+    ceph::encode(filenames_encryption_mode, bl);
+    ceph::encode(flags, bl);
+
+    uint32_t __reserved = 0;
+    ceph::encode(__reserved, bl);
+
+    master_key_identifier.encode(bl);
+
+    encode_extra(bl);
+
+    ceph::encode(bl, env_bl);
+
+  }
+
+  virtual void encode_extra(bufferlist& bl) const {}
+
   void convert_to(struct fscrypt_policy_v2 *dest) {
     dest->version = version;
     dest->contents_encryption_mode = contents_encryption_mode;
@@ -157,6 +185,11 @@ struct FSCryptContext : public FSCryptPolicy {
     bl.copy(sizeof(nonce), (char *)nonce);
   }
 
+  void encode_extra(bufferlist& bl) const override {
+    bl.append((char *)nonce, sizeof(nonce));
+  }
+
+  void generate_new_nonce();
   void generate_iv(uint64_t block_num, FSCryptIV& iv) const;
 };
 
