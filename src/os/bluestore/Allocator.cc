@@ -14,6 +14,7 @@
 #include "common/debug.h"
 #include "common/admin_socket.h"
 #define dout_subsys ceph_subsys_bluestore
+using TOPNSPC::common::cmd_getval;
 
 using std::string;
 using std::to_string;
@@ -51,6 +52,13 @@ public:
           ("bluestore allocator fragmentation " + name).c_str(),
           this,
           "give allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+        ceph_assert(r == 0);
+        r = admin_socket->register_command(
+	  ("bluestore allocator fragmentation histogram " + name +
+           " name=alloc_unit,type=CephInt,req=false" +
+           " name=num_buckets,type=CephInt,req=false").c_str(),
+	  this,
+	  "build allocator free regions state histogram");
         ceph_assert(r == 0);
       }
     }
@@ -99,6 +107,47 @@ public:
     } else if (command == "bluestore allocator fragmentation " + name) {
       f->open_object_section("fragmentation");
       f->dump_float("fragmentation_rating", alloc->get_fragmentation());
+      f->close_section();
+    } else if (command == "bluestore allocator fragmentation histogram " + name) {
+      int64_t alloc_unit = 4096;
+      cmd_getval(cmdmap, "alloc_unit", alloc_unit);
+      if (alloc_unit == 0  ||
+          p2align(alloc_unit, alloc->get_block_size()) != alloc_unit) {
+        ss << "Invalid allocation unit: '" << alloc_unit
+           << ", to be aligned with: '" << alloc->get_block_size()
+           << std::endl;
+        return -EINVAL;
+      }
+      int64_t num_buckets = 8;
+      cmd_getval(cmdmap, "num_buckets", num_buckets);
+      if (num_buckets < 2) {
+        ss << "Invalid amount of buckets (min=2): '" << num_buckets
+           << std::endl;
+        return -EINVAL;
+      }
+
+      Allocator::FreeStateHistogram hist;
+      hist.resize(num_buckets);
+      alloc->build_free_state_histogram(alloc_unit, hist);
+      f->open_object_section("scheme");
+      f->dump_unsigned("alloc_unit", alloc_unit);
+      f->close_section();
+
+      f->open_array_section("extent_counts");
+      for(int i = 0; i < num_buckets; i++) {
+        f->open_object_section("bin");
+        f->dump_unsigned("min_len",
+          hist[i].get_min(i, num_buckets)
+        );
+        f->dump_unsigned("max_len",
+          hist[i].get_max(i, num_buckets)
+        );
+        f->dump_unsigned("extent_count", hist[i].extent_count);
+        f->dump_unsigned("aligned_extent_count", hist[i].aligned_extent_count);
+        f->dump_unsigned("usable_bytes", hist[i].usable_bytes);
+        f->dump_unsigned("total_bytes", hist[i].total_bytes);
+        f->close_section();
+      }
       f->close_section();
     } else {
       ss << "Invalid command" << std::endl;
@@ -233,4 +282,46 @@ double Allocator::get_fragmentation_score()
   double ideal = get_score(sum);
   double terrible = (sum / block_size) * get_score(block_size);
   return (ideal - score_sum) / (ideal - terrible);
+}
+
+void Allocator::build_free_state_histogram(
+  size_t alloc_unit, Allocator::FreeStateHistogram& hist)
+{
+  auto num_buckets = hist.size();
+  ceph_assert(num_buckets);
+
+  auto base = free_state_hist_bucket::base;
+  auto base_bits = free_state_hist_bucket::base_bits;
+  auto mux = free_state_hist_bucket::mux;
+  // maximum chunk size we track,
+  // provided by the bucket before the last one
+  size_t max =
+    free_state_hist_bucket::get_max(num_buckets - 2, num_buckets);
+
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    size_t idx;
+    if (len <= base) {
+      idx = 0;
+    } else if (len > max) {
+      idx = num_buckets - 1;
+    } else {
+      size_t most_bit = cbits(uint64_t(len-1)) - 1;
+      idx = 1 + ((most_bit - base_bits) / mux);
+    }
+    ceph_assert(idx < num_buckets);
+    ++hist[idx].extent_count;
+    hist[idx].total_bytes += len;
+
+    // now what we have if extent is aligned,
+    // resulting extents shorter than a single alloc_unit
+    //  are discarded
+    auto s = p2roundup(off, alloc_unit);
+    auto e = p2align(off + len, alloc_unit);
+    if ((e >= s) && ((e - s) >= alloc_unit)) {
+      ++hist[idx].aligned_extent_count;
+      hist[idx].usable_bytes += e - s;
+    }
+  };
+
+  foreach(iterated_allocation);
 }
