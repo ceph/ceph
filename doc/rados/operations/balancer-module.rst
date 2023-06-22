@@ -1,7 +1,7 @@
 .. _balancer:
 
-Balancer
-========
+Balancer Module
+=======================
 
 The *balancer* can optimize the allocation of placement groups (PGs) across
 OSDs in order to achieve a balanced distribution. The balancer can operate
