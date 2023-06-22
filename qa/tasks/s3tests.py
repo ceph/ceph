@@ -377,7 +377,6 @@ def run_tests(ctx, config):
             args += ['REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt']
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
-        # civetweb > 1.8 && beast parsers are strict on rfc2616
         attrs = ["not fails_on_rgw", "not lifecycle_expiration", "not test_of_sts", "not webidentity_test"]
         if client_config.get('calling-format') != 'ordinary':
             attrs += ['not fails_with_subdomain']
