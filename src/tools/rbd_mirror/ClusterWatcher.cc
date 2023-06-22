@@ -185,10 +185,10 @@ void ClusterWatcher::read_pool_peers(PoolPeers *pool_peers)
 }
 
 int ClusterWatcher::read_site_name(std::string* site_name) {
-  dout(10) << dendl;
-
   librbd::RBD rbd;
-  return rbd.mirror_site_name_get(*m_cluster, site_name);
+  int r = rbd.mirror_site_name_get(*m_cluster, site_name);
+  dout(10) << "site_name=" << *site_name << ", r=" << r << dendl;
+  return r;
 }
 
 int ClusterWatcher::resolve_peer_site_config_keys(int64_t pool_id,
