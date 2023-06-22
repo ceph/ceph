@@ -183,6 +183,18 @@ Options
 
    write modified osdmap with upmap or crush-adjust changes
 
+.. option:: --read <file>
+
+   calculate pg upmap entries to balance pg primaries
+
+.. option:: --read-pool <poolname>
+
+   specify which pool the read balancer should adjust
+
+.. option:: --vstart
+
+   prefix upmap and read output with './bin/'
+
 Example
 =======
 
@@ -315,6 +327,31 @@ To simulate the active balancer in upmap mode::
    osd.20 pgs 42
    Total time elapsed 0.0167765 secs, 5 rounds
 
+To simulate the active balancer in read mode, first make sure capacity is balanced
+by running the balancer in upmap mode. Then, balance the reads on a replicated pool with::
+
+        osdmaptool osdmap --read read.out --read-pool <pool name>
+
+   ./bin/osdmaptool: osdmap file 'om'
+   writing upmap command output to: read.out
+
+   ---------- BEFORE ------------ 
+   osd.0 | primary affinity: 1 | number of prims: 3
+   osd.1 | primary affinity: 1 | number of prims: 10
+   osd.2 | primary affinity: 1 | number of prims: 3
+ 
+   read_balance_score of 'cephfs.a.meta': 1.88
+
+
+   ---------- AFTER ------------ 
+   osd.0 | primary affinity: 1 | number of prims: 5
+   osd.1 | primary affinity: 1 | number of prims: 5
+   osd.2 | primary affinity: 1 | number of prims: 6
+ 
+   read_balance_score of 'cephfs.a.meta': 1.13
+
+  
+   num changes: 5
 
 Availability
 ============
