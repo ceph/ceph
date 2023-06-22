@@ -9,6 +9,7 @@ class VolumeException(Exception):
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
 
+
 class MetadataMgrException(Exception):
     def __init__(self, error_code, error_message):
         self.errno = error_code
@@ -16,6 +17,7 @@ class MetadataMgrException(Exception):
 
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
+
 
 class IndexException(Exception):
     def __init__(self, error_code, error_message):
@@ -25,6 +27,7 @@ class IndexException(Exception):
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
 
+
 class OpSmException(Exception):
     def __init__(self, error_code, error_message):
         self.errno = error_code
@@ -33,8 +36,10 @@ class OpSmException(Exception):
     def __str__(self):
         return "{0} ({1})".format(self.errno, self.error_str)
 
+
 class NotImplementedException(Exception):
     pass
+
 
 class ClusterTimeout(Exception):
     """
@@ -44,12 +49,14 @@ class ClusterTimeout(Exception):
     """
     pass
 
+
 class ClusterError(Exception):
     """
     Exception indicating that the cluster returned an error to a command that
     we thought should be successful based on our last knowledge of the cluster
     state.
     """
+
     def __init__(self, action, result_code, result_str):
         self._action = action
         self._result_code = result_code
@@ -58,6 +65,7 @@ class ClusterError(Exception):
     def __str__(self):
         return "Error {0} (\"{1}\") while {2}".format(
             self._result_code, self._result_str, self._action)
+
 
 class EvictionError(Exception):
     pass
