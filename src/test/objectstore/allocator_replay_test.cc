@@ -20,7 +20,15 @@
 using namespace std;
 
 void usage(const string &name) {
-  cerr << "Usage: " << name << " <log_to_replay> <raw_duplicates|duplicates|free_dump|try_alloc count want alloc_unit|replay_alloc alloc_list_file|export_binary out_file>" << std::endl;
+  cerr << "Usage: " << name << " <log_to_replay|free-dump> "
+       << " raw_duplicates|"
+          "duplicates|"
+          "free_dump|"
+          "try_alloc <count> <want> <alloc_unit>|"
+          "replay_alloc <alloc_list_file|"
+          "export_binary <out_file>|"
+          "free_histogram [<alloc_unit>] [<num_buckets>]"
+       << std::endl;
 }
 
 void usage_replay_alloc(const string &name) {
@@ -548,7 +556,7 @@ int main(int argc, char **argv)
                   << std::endl;
         std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                   << std::endl;
-        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                   << std::endl;
         {
         // stub to implement various testing stuff on properly initialized allocator
@@ -574,7 +582,7 @@ int main(int argc, char **argv)
                   << std::endl;
         std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                   << std::endl;
-        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                   << std::endl;
         {
           PExtentVector extents;
@@ -606,7 +614,7 @@ int main(int argc, char **argv)
                   << std::endl;
         std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                   << std::endl;
-        std::cout << "Free:" << std::hex << a->get_free() << std::dec
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                   << std::endl;
         {
           /* replay a set of allocation requests */
@@ -655,7 +663,7 @@ int main(int argc, char **argv)
                           << std::endl;
                 std::cerr << "Fragmentation score:" << a->get_fragmentation_score()
                           << std::endl;
-                std::cerr << "Free:" << std::hex << a->get_free() << std::dec
+                std::cerr << "Free: 0x" << std::hex << a->get_free() << std::dec
                           << std::endl;
                 /* return 0 if the allocator ran out of space */
                 if (r == -ENOSPC) {
@@ -681,10 +689,47 @@ int main(int argc, char **argv)
                     << std::endl;
           std::cout << "Fragmentation score:" << a->get_fragmentation_score()
                     << std::endl;
-          std::cout << "Free:" << std::hex << a->get_free() << std::dec
+          std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
                     << std::endl;
         }
         return 0;
+    });
+  } else if (strcmp(argv[2], "free_histogram") == 0) {
+    uint64_t alloc_unit = 4096;
+    auto num_buckets = 8;
+    if (argc >= 4) {
+      alloc_unit = strtoul(argv[3], nullptr, 10);
+    }
+    if (argc >= 5) {
+      num_buckets = strtoul(argv[4], nullptr, 10);
+    }
+    return replay_free_dump_and_apply(argv[1],
+      [&](Allocator *a, const string &aname) {
+        ceph_assert(a);
+        std::cout << "Fragmentation:" << a->get_fragmentation()
+                  << std::endl;
+        std::cout << "Fragmentation score:" << a->get_fragmentation_score()
+                  << std::endl;
+        std::cout << "Free: 0x" << std::hex << a->get_free() << std::dec
+                  << std::endl;
+        std::cout << "Allocation unit:" << alloc_unit
+                  << std::endl;
+
+        Allocator::FreeStateHistogram hist;
+        hist.resize(num_buckets);
+        a->build_free_state_histogram(alloc_unit, hist);
+
+        uint64_t s = 0;
+        for(int i = 0; i < num_buckets; i++) {
+          uint64_t e = hist[i].get_max(i, num_buckets);
+	  std::cout << "(" << s << ".." << e << "]"
+                    << " -> " << hist[i].total
+                    << " chunks, " << hist[i].aligned << " aligned with "
+                    << hist[i].alloc_units << " alloc_units."
+		    << std::endl;
+          s = e;
+        }
+	return 0;
     });
   } else if (strcmp(argv[2], "export_binary") == 0) {
     return export_as_binary(argv[1], argv[3]);
