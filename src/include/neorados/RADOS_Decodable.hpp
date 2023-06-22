@@ -24,6 +24,11 @@
 #include <utility>
 #include <vector>
 
+#include <fmt/core.h>
+#if FMT_VERSION >= 90000
+#include <fmt/ostream.h>
+#endif
+
 namespace neorados {
 struct Entry {
   std::string nspace;
@@ -103,5 +108,9 @@ struct hash<::neorados::Entry> {
   }
 };
 }
+
+#if FMT_VERSION >= 90000
+template <> struct fmt::formatter<neorados::Entry> : ostream_formatter {};
+#endif
 
 #endif // RADOS_DECODABLE_HPP
