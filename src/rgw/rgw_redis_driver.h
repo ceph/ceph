@@ -1,6 +1,8 @@
 #ifndef CEPH_REDISDRIVER_H
 #define CEPH_REDISDRIVER_H
 
+#include <aio.h>
+#include "common/async/completion.h"
 #include <string>
 #include <iostream>
 #include <cpp_redis/cpp_redis>
@@ -10,17 +12,19 @@
 
 namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
 
-class RedisDriver : public CacheDriver {
+class RedisDriver;
+
+class RedisCacheAioRequest: public CacheAioRequest {
+  public:
+    RedisCacheAioRequest(RedisDriver* cache_driver) : cache_driver(cache_driver) {}
+    virtual ~RedisCacheAioRequest() = default;
+    virtual void cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override;
+    virtual void cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override;
   private:
-    cpp_redis::client client;
-    rgw::d4n::Address addr;
-    std::unordered_map<std::string, Entry> entries;
+    RedisDriver* cache_driver;
+};
 
-    int find_client(const DoutPrefixProvider* dpp);
-    int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
-    int remove_entry(const DoutPrefixProvider* dpp, std::string key);
-    std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
-
+class RedisDriver : public CacheDriver {
   public:
     RedisDriver(Partition& _partition_info, std::string host, int port) : CacheDriver(_partition_info) {
       addr.host = host;
@@ -48,6 +52,58 @@ class RedisDriver : public CacheDriver {
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override;
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override;
+
+    struct libaio_handler { // should this be the same as SSDDriver? -Sam
+      rgw::Aio* throttle = nullptr;
+      rgw::AioResult& r;
+
+      // read callback
+      void operator()(boost::system::error_code ec, bufferlist bl) const {
+	r.result = -ec.value();
+	r.data = std::move(bl);
+	throttle->put(r);
+      }
+    };
+    template <typename ExecutionContext, typename CompletionToken>
+    auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+                  off_t read_ofs, off_t read_len, CompletionToken&& token);
+
+  private:
+    cpp_redis::client client;
+    rgw::d4n::Address addr;
+    std::unordered_map<std::string, Entry> entries;
+    CephContext* cct;
+
+    int find_client(const DoutPrefixProvider* dpp);
+    int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
+    int remove_entry(const DoutPrefixProvider* dpp, std::string key);
+    std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
+
+    // unique_ptr with custom deleter for struct aiocb
+    struct libaio_aiocb_deleter {
+      void operator()(struct aiocb* c) {
+        if(c->aio_fildes > 0) {
+          if( ::close(c->aio_fildes) != 0) {
+          }
+        }
+        delete c;
+      }
+    };
+
+    using unique_aio_cb_ptr = std::unique_ptr<struct aiocb, libaio_aiocb_deleter>;
+
+    struct AsyncReadOp {
+      bufferlist result;
+      unique_aio_cb_ptr aio_cb;
+      using Signature = void(boost::system::error_code, bufferlist);
+      using Completion = ceph::async::Completion<Signature, AsyncReadOp>;
+
+      int init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg);
+      static void libaio_cb_aio_dispatch(sigval sigval);
+
+      template <typename Executor1, typename CompletionHandler>
+      static auto create(const Executor1& ex1, CompletionHandler&& handler);
+    };
 };
 
 } } // namespace rgw::cal
