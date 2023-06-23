@@ -66,11 +66,11 @@ laggy daemon.
 
 Each file system may specify a minimum number of standby daemons in order to be
 considered healthy. This number includes daemons in the ``standby-replay`` state
-waiting for a ``rank`` to fail. Note that a ``standby-replay`` daemon will not
-be assigned to take over a failure for another ``rank`` or a failure in a
-different CephFS file system). The pool of standby daemons not in ``replay``
-counts towards any file system count.
-Each file system may set the desired number of standby daemons by:
+waiting for a ``rank`` to fail. (Note, the monitors will not assign a
+``standby-replay`` daemon to take over a failure for another ``rank`` or a
+failure in a different CephFS file system). The pool of standby daemons not in
+``replay`` counts towards any file system count.  Each file system may set the
+desired number of standby daemons by:
 
 ::
 
