@@ -196,7 +196,8 @@ int Capability::confirm_receipt(ceph_seq_t seq, unsigned caps) {
       dout(10) << "revocation is not totally finished yet on " << *in
                << ", the session " << *session << dendl;
       _revokes.emplace_back(_pending, last_sent, last_issue);
-      calc_issued();
+      if (!is_notable())
+        mark_notable();
     }
   } else {
     // can i forget any revocations?
