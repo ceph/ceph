@@ -45,9 +45,6 @@ class BufferedRecoveryMessages;
 
 namespace crimson::osd {
 
-// seastar::sharded puts start_single on core 0
-constexpr core_id_t PRIMARY_CORE = 0;
-
 class PGShardManager;
 
 /**
@@ -58,6 +55,7 @@ class PGShardManager;
 class PerShardState {
   friend class ShardServices;
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
@@ -67,6 +65,9 @@ class PerShardState {
   const int whoami;
   crimson::os::FuturizedStore::Shard &store;
   crimson::common::CephContext cct;
+
+  OSDState &osd_state;
+  OSD_OSDMapGate osdmap_gate;
 
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
@@ -188,7 +189,8 @@ public:
     ceph::mono_time startup_time,
     PerfCounters *perf,
     PerfCounters *recoverystate_perf,
-    crimson::os::FuturizedStore &store);
+    crimson::os::FuturizedStore &store,
+    OSDState& osd_state);
 };
 
 /**
@@ -219,8 +221,6 @@ private:
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
 
-  OSDState osd_state;
-
   SharedLRU<epoch_t, OSDMap> osdmaps;
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
 
@@ -229,7 +229,6 @@ private:
   void update_map(cached_map_t new_osdmap) {
     osdmap = std::move(new_osdmap);
   }
-  OSD_OSDMapGate osdmap_gate;
 
   crimson::net::Messenger &cluster_msgr;
   crimson::net::Messenger &public_msgr;
@@ -319,6 +318,7 @@ private:
  */
 class ShardServices : public OSDMapService {
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 

@@ -363,6 +363,8 @@ seastar::future<> OSD::start()
         whoami, std::ref(*cluster_msgr), std::ref(*public_msgr),
         std::ref(*monc), std::ref(*mgrc));
     }).then([this] {
+      return osd_states.start();
+    }).then([this] {
       ceph::mono_time startup_time = ceph::mono_clock::now();
       return shard_services.start(
         std::ref(osd_singleton_state),
@@ -371,7 +373,8 @@ seastar::future<> OSD::start()
         startup_time,
         osd_singleton_state.local().perf,
         osd_singleton_state.local().recoverystate_perf,
-        std::ref(store));
+        std::ref(store),
+        std::ref(osd_states));
     }).then([this] {
       return shard_dispatchers.start(
         std::ref(*this),
@@ -405,11 +408,13 @@ seastar::future<> OSD::start()
     osdmap = make_local_shared_foreign(OSDMapService::local_cached_map_t(map));
     return get_pg_shard_manager().update_map(std::move(map));
   }).then([this] {
-    get_pg_shard_manager().got_map(osdmap->get_epoch());
+    return shard_services.invoke_on_all([this](auto &local_service) {
+      local_service.local_state.osdmap_gate.got_map(osdmap->get_epoch());
+    });
+  }).then([this] {
     bind_epoch = osdmap->get_epoch();
     return get_pg_shard_manager().load_pgs(store);
   }).then([this] {
-
     uint64_t osd_required =
       CEPH_FEATURE_UID |
       CEPH_FEATURE_PGID64 |
@@ -659,7 +664,8 @@ seastar::future<> OSD::stop()
   tick_timer.cancel();
   // see also OSD::shutdown()
   return prepare_to_stop().then([this] {
-    get_pg_shard_manager().set_stopping();
+    return get_pg_shard_manager().set_stopping();
+  }).then([this] {
     logger().debug("prepared to stop");
     public_msgr->stop();
     cluster_msgr->stop();
@@ -683,6 +689,8 @@ seastar::future<> OSD::stop()
       return shard_dispatchers.stop();
     }).then([this] {
       return shard_services.stop();
+    }).then([this] {
+      return osd_states.stop();
     }).then([this] {
       return osd_singleton_state.stop();
     }).then([this] {
@@ -1063,6 +1071,7 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
       }
     });
   }).then([m, this] {
+    auto fut = seastar::now();
     if (osd.osdmap->is_up(whoami)) {
       const auto up_from = osd.osdmap->get_up_from(whoami);
       logger().info("osd.{}: map e {} marked me up: up_from {}, bind_epoch {}, state {}",
@@ -1072,12 +1081,13 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
           osd.osdmap->get_addrs(whoami) == osd.public_msgr->get_myaddrs() &&
           pg_shard_manager.is_booting()) {
         logger().info("osd.{}: activating...", whoami);
-        pg_shard_manager.set_active();
-        osd.beacon_timer.arm_periodic(
-          std::chrono::seconds(local_conf()->osd_beacon_report_interval));
-	// timer continuation rearms when complete
-        osd.tick_timer.arm(
-          std::chrono::seconds(TICK_INTERVAL));
+        fut = pg_shard_manager.set_active().then([this] {
+          osd.beacon_timer.arm_periodic(
+            std::chrono::seconds(local_conf()->osd_beacon_report_interval));
+	  // timer continuation rearms when complete
+          osd.tick_timer.arm(
+            std::chrono::seconds(TICK_INTERVAL));
+        });
       }
     } else {
       if (pg_shard_manager.is_prestop()) {
@@ -1085,11 +1095,13 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
 	return seastar::now();
       }
     }
-    return check_osdmap_features().then([this] {
-      // yay!
-      logger().info("osd.{}: committed_osd_maps: broadcasting osdmaps up"
-                    " to {} epoch to pgs", whoami, osd.osdmap->get_epoch());
-      return pg_shard_manager.broadcast_map_to_pgs(osd.osdmap->get_epoch());
+    return fut.then([this] {
+      return check_osdmap_features().then([this] {
+        // yay!
+        logger().info("osd.{}: committed_osd_maps: broadcasting osdmaps up"
+                      " to {} epoch to pgs", whoami, osd.osdmap->get_epoch());
+        return pg_shard_manager.broadcast_map_to_pgs(osd.osdmap->get_epoch());
+      });
     });
   }).then([m, this] {
     if (pg_shard_manager.is_active()) {

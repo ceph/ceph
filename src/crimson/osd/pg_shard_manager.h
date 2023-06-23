@@ -105,22 +105,22 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_pg_created)
 
   // osd state forwards
-  FORWARD(is_active, is_active, get_osd_singleton_state().osd_state)
-  FORWARD(is_preboot, is_preboot, get_osd_singleton_state().osd_state)
-  FORWARD(is_booting, is_booting, get_osd_singleton_state().osd_state)
-  FORWARD(is_stopping, is_stopping, get_osd_singleton_state().osd_state)
-  FORWARD(is_prestop, is_prestop, get_osd_singleton_state().osd_state)
-  FORWARD(is_initializing, is_initializing, get_osd_singleton_state().osd_state)
-  FORWARD(set_prestop, set_prestop, get_osd_singleton_state().osd_state)
-  FORWARD(set_preboot, set_preboot, get_osd_singleton_state().osd_state)
-  FORWARD(set_booting, set_booting, get_osd_singleton_state().osd_state)
-  FORWARD(set_stopping, set_stopping, get_osd_singleton_state().osd_state)
-  FORWARD(set_active, set_active, get_osd_singleton_state().osd_state)
-  FORWARD(when_active, when_active, get_osd_singleton_state().osd_state)
-  FORWARD_CONST(get_osd_state_string, to_string, get_osd_singleton_state().osd_state)
+  FORWARD(is_active, is_active, get_shard_services().local_state.osd_state)
+  FORWARD(is_preboot, is_preboot, get_shard_services().local_state.osd_state)
+  FORWARD(is_booting, is_booting, get_shard_services().local_state.osd_state)
+  FORWARD(is_stopping, is_stopping, get_shard_services().local_state.osd_state)
+  FORWARD(is_prestop, is_prestop, get_shard_services().local_state.osd_state)
+  FORWARD(is_initializing, is_initializing, get_shard_services().local_state.osd_state)
+  FORWARD(set_prestop, set_prestop, get_shard_services().local_state.osd_state)
+  FORWARD(set_preboot, set_preboot, get_shard_services().local_state.osd_state)
+  FORWARD(set_booting, set_booting, get_shard_services().local_state.osd_state)
+  FORWARD(set_stopping, set_stopping, get_shard_services().local_state.osd_state)
+  FORWARD(set_active, set_active, get_shard_services().local_state.osd_state)
+  FORWARD(when_active, when_active, get_shard_services().local_state.osd_state)
+  FORWARD_CONST(get_osd_state_string, to_string, get_shard_services().local_state.osd_state)
 
-  FORWARD(got_map, got_map, get_osd_singleton_state().osdmap_gate)
-  FORWARD(wait_for_map, wait_for_map, get_osd_singleton_state().osdmap_gate)
+  FORWARD(got_map, got_map, get_shard_services().local_state.osdmap_gate)
+  FORWARD(wait_for_map, wait_for_map, get_shard_services().local_state.osdmap_gate)
 
   // Metacoll
   FORWARD_TO_OSD_SINGLETON(init_meta_coll)
@@ -345,10 +345,7 @@ public:
       opref.get_connection_pipeline().await_active
     ).then([this, &opref, &logger] {
       logger.debug("{}: start_pg_operation in await_active stage", opref);
-      return osd_singleton_state.invoke_on(PRIMARY_CORE, []
-      (auto& primary_osd_singleton_state) {
-        return primary_osd_singleton_state.osd_state.when_active();
-      });
+      return get_shard_services().local_state.osd_state.when_active();
     }).then([&logger, &opref] {
       logger.debug("{}: start_pg_operation active, entering await_map", opref);
       return opref.template enter_stage<>(
@@ -360,15 +357,10 @@ public:
       return opref.template with_blocking_event<OSDMapBlockingEvent>(
 	[this, &opref](auto &&trigger) {
 	  std::ignore = this;
-          return osd_singleton_state.invoke_on(PRIMARY_CORE,
-            [trigger = std::move(trigger), epoch = opref.get_epoch(),
-             &shard_services = shard_services]
-            (auto& primary_osd_singleton_state) mutable {
-	    return primary_osd_singleton_state.osdmap_gate.wait_for_map(
+	  return get_shard_services().local_state.osdmap_gate.wait_for_map(
 	      std::move(trigger),
-	      epoch,
-	      &shard_services.local());
-	});
+	      opref.get_epoch(),
+	      &get_shard_services());
       });
     }).then([&logger, &opref](auto epoch) {
       logger.debug("{}: got map {}, entering get_pg", opref, epoch);

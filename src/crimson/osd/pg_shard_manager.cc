@@ -88,8 +88,10 @@ seastar::future<> PGShardManager::broadcast_map_to_pgs(epoch_t epoch)
     logger().debug("PGShardManager::broadcast_map_to_pgs "
                    "broadcasted up to {}",
                     epoch);
-    get_osd_singleton_state().osdmap_gate.got_map(epoch);
-    return seastar::now();
+    return shard_services.invoke_on_all([epoch](auto &local_service) {
+      local_service.local_state.osdmap_gate.got_map(epoch);
+      return seastar::now();
+    });
   });
 }
 

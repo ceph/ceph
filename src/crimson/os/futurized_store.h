@@ -25,8 +25,6 @@ class Transaction;
 namespace crimson::os {
 class FuturizedCollection;
 
-constexpr core_id_t PRIMARY_CORE = 0;
-
 class FuturizedStore {
 public:
   class Shard {
