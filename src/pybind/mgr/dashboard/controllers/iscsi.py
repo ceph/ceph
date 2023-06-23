@@ -4,6 +4,7 @@
 # pylint: disable=too-many-lines
 
 import json
+import random
 import re
 from copy import deepcopy
 from typing import Any, Dict, List, no_type_check
@@ -287,10 +288,9 @@ class IscsiTarget(RESTController):
                                      code='target_does_not_exist',
                                      component='iscsi')
         portal_names = list(config['targets'][target_iqn]['portals'].keys())
-        validate_rest_api(portal_names)
-        if portal_names:
-            portal_name = portal_names[0]
-            target_info = IscsiClient.instance(gateway_name=portal_name).get_targetinfo(target_iqn)
+        gateway_name = get_active_portal(portal_names)
+        if gateway_name:
+            target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(target_iqn)
             if target_info['num_sessions'] > 0:
                 raise DashboardException(msg='Target has active sessions',
                                          code='target_has_active_sessions',
@@ -347,10 +347,10 @@ class IscsiTarget(RESTController):
                                      component='iscsi')
 
         settings = IscsiClient.instance(gateway_name=gateway).get_settings()
-        new_portal_names = {p['host'] for p in portals}
-        old_portal_names = set(config['targets'][target_iqn]['portals'].keys())
-        deleted_portal_names = list(old_portal_names - new_portal_names)
-        validate_rest_api(deleted_portal_names)
+        # new_portal_names = {p['host'] for p in portals}
+        # old_portal_names = set(config['targets'][target_iqn]['portals'].keys())
+        # deleted_portal_names = list(old_portal_names - new_portal_names)
+        # validate_rest_api(deleted_portal_names)
         IscsiTarget._validate(new_target_iqn, target_controls, portals, disks, groups, settings)
         IscsiTarget._validate_delete(gateway, target_iqn, config, new_target_iqn, target_controls,
                                      disks, clients, groups)
@@ -371,10 +371,14 @@ class IscsiTarget(RESTController):
 
         TaskManager.current_task().set_progress(task_progress_begin)
         target_config = config['targets'][target_iqn]
-        if not target_config['portals'].keys():
+
+        portal_names = list(target_config['portals'].keys())
+        gateway_name = get_active_portal(portal_names)
+        if gateway_name is None:
             raise DashboardException(msg="Cannot delete a target that doesn't contain any portal",
                                      code='cannot_delete_target_without_portals',
                                      component='iscsi')
+
         target = IscsiTarget._config_to_target(target_iqn, config)
         n_groups = len(target_config['groups'])
         n_clients = len(target_config['clients'])
@@ -384,7 +388,6 @@ class IscsiTarget(RESTController):
         if task_progress_steps != 0:
             task_progress_inc = int((task_progress_end - task_progress_begin) / task_progress_steps)
 
-        gateway_name = list(target_config['portals'].keys())[0]
         IscsiTarget._delete_groups(target_config, target, new_target_iqn,
                                    new_target_controls, new_groups, gateway_name,
                                    target_iqn, task_progress_inc)
@@ -613,8 +616,8 @@ class IscsiTarget(RESTController):
         # When using an older `ceph-iscsi` version these validations will
         # NOT be executed beforehand
         IscsiTarget._validate_target_controls_limits(settings, target_controls)
-        portal_names = [p['host'] for p in portals]
-        validate_rest_api(portal_names)
+        # portal_names = [p['host'] for p in portals]
+        # validate_rest_api(portal_names)
         IscsiTarget._validate_disks(disks, settings)
         IscsiTarget._validate_initiators(groups)
 
@@ -782,7 +785,8 @@ class IscsiTarget(RESTController):
         task_progress_inc = 0
         if task_progress_steps != 0:
             task_progress_inc = int((task_progress_end - task_progress_begin) / task_progress_steps)
-        gateway_name = portals[0]['host']
+        portal_names = [p['host'] for p in portals]
+        gateway_name = get_active_portal(portal_names)
         if not target_config:
             IscsiClient.instance(gateway_name=gateway_name).create_target(target_iqn,
                                                                           target_controls)
@@ -1026,19 +1030,14 @@ class IscsiTarget(RESTController):
 
     @staticmethod
     def _set_info(target):
-        if not target['portals']:
+        portal_names = [p['host'] for p in target['portals']]
+        gateway_name = get_active_portal(portal_names)
+        if gateway_name is None:
             return
         target_iqn = target['target_iqn']
         # During task execution, additional info is not available
         if IscsiTarget._is_executing(target_iqn):
             return
-        # If any portal is down, additional info is not available
-        for portal in target['portals']:
-            try:
-                IscsiClient.instance(gateway_name=portal['host']).ping()
-            except (IscsiGatewayDoesNotExist, RequestException):
-                return
-        gateway_name = target['portals'][0]['host']
         try:
             target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(
                 target_iqn)
@@ -1108,6 +1107,17 @@ def get_available_gateway():
     raise DashboardException(msg='There are no gateways available',
                              code='no_gateways_available',
                              component='iscsi')
+
+
+def get_active_portal(portal_names):
+    random.shuffle(portal_names)
+    for portal_name in portal_names:
+        try:
+            IscsiClient.instance(gateway_name=portal_name).ping()
+            return portal_name
+        except (IscsiGatewayDoesNotExist, RequestException):
+            pass
+    return None
 
 
 def validate_rest_api(gateways):

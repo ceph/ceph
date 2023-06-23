@@ -18,6 +18,7 @@ from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..services.exception import handle_request_error
 from ..services.iscsi_client import IscsiClient
+from ..services.iscsi_config import IscsiGatewayDoesNotExist
 from ..services.orchestrator import OrchClient
 from ..tests import CLICommandTestMixin, CmdException, ControllerTestCase, KVStoreMockMixin
 from ..tools import NotificationQueue, TaskManager
@@ -106,6 +107,47 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
         # pylint: disable=protected-access
         IscsiClientMock._instance = IscsiClientMock()
         IscsiClient.instance = IscsiClientMock.instance
+
+    def test_set_info(self):
+        IscsiClientMock._instance.ping = mock.MagicMock(side_effect=[
+            True,
+            IscsiGatewayDoesNotExist("node2"),
+            IscsiGatewayDoesNotExist("node2"),
+            True
+        ])
+        IscsiClientMock._instance.config['targets'] = {
+            "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw1": {
+                "portals": {
+                    "node2": {},
+                    "node3": {}
+                },
+                "disks": {},
+                "clients": {},
+                "groups": {},
+                "controls": {},
+                "acl_enabled": False,
+                "auth": {
+                    "username": "",
+                    "password": "",
+                    "mutual_username": "",
+                    "mutual_password": ""
+                }
+            }
+        }
+        IscsiClientMock._instance.create_gateway(
+            "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw1",
+            "node2",
+            ['192.168.100.202', '10.0.2.15'])
+        IscsiClientMock._instance.create_gateway(
+            "iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw1",
+            "node3",
+            ['192.168.100.203'])
+        self._get('/api/iscsi/target')
+        self.assertStatus(200)
+        json_body = self.json_body()
+        self.assertTrue(json_body)
+        for target in json_body:
+            self.assertIn("info", target)
 
     def test_enable_discoveryauth(self):
         discoveryauth = {
