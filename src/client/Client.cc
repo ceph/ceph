@@ -11088,9 +11088,32 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   Inode *in = f->inode.get();
-  uint64_t pos = off;
-  int left = len;
+
+  auto effective_size = in->effective_size();
+
+  // trim read based on file size?
+  if (off >= in->effective_size())
+    return 0;
+  if (len == 0)
+    return 0;
+
+  auto target_len = std::min(len, effective_size - off);
+  uint64_t read_start;
+  uint64_t read_len;
+
+  FSCryptFDataDencRef fscrypt_denc;
+  fscrypt->prepare_data_read(in->fscrypt_ctx,
+                             &in->fscrypt_key_validator,
+                             off, len, in->size,
+                             &read_start, &read_len,
+                             &fscrypt_denc);
+
+  uint64_t pos = read_start;
+  int left = read_len;
   int read = 0;
+
+  bufferlist encbl;
+  bufferlist *pbl = (fscrypt_denc ? &encbl : bl);
 
   ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
@@ -11110,9 +11133,9 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
       read += r;
       pos += r;
       left -= r;
-      bl->claim_append(tbl);
+      pbl->claim_append(tbl);
     }
-    auto effective_size = in->effective_size();
+    auto effective_size = (fscrypt_denc ? in->effective_size() : in->size);
 
     // short read?
     if (r >= 0 && r < wanted) {
@@ -11123,7 +11146,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 	  some = left;
 	auto z = buffer::ptr_node::create(some);
 	z->zero();
-	bl->push_back(std::move(z));
+	pbl->push_back(std::move(z));
 	read += some;
 	pos += some;
 	left -= some;
@@ -11137,6 +11160,8 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     return 1;
   };
 
+  int r = 0;
+
   while (left > 0) {
     C_SaferCond onfinish("Client::_read_sync flock");
     bufferlist tbl;
@@ -11146,13 +11171,26 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
 		      &onfinish);
+#warning implement file read here
     client_lock.unlock();
-    int r = wait_and_copy(onfinish, tbl, wanted);
+    r = wait_and_copy(onfinish, tbl, wanted);
     client_lock.lock();
     if (!r)
-      return read;
+      break;
     if (r < 0)
       return r;
+  }
+
+  if (r >= 0) {
+    if (fscrypt_denc) {
+      r = fscrypt_denc->decrypt_bl(off, target_len, read_start, pbl);
+      if (r < 0) {
+        ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
+      }
+    }
+
+    read = pbl->length();
+    bl->claim_append(*pbl);
   }
   return read;
 }
