@@ -2668,14 +2668,7 @@ private:
   int _create_bluefs();
   void _close_bluefs();
 
-  int _is_bluefs(bool create, bool* ret);
-  /*
-  * opens both DB and dependant super_meta, FreelistManager and allocator
-  * in the proper order
-  */
-  int _open_db_and_around(bool read_only, bool to_repair = false);
-  void _close_db_and_around();
-  void _close_around_db();
+  bool _is_bluefs();
 
   int _create_rocksdb_fs();
   int _open_rocksdb_fs(bool read_only);

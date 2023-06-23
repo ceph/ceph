@@ -6327,28 +6327,25 @@ void BlueStore::_minimal_close_bluefs()
   bluefs = NULL;
 }
 
-int BlueStore::_is_bluefs(bool create, bool* ret)
+bool BlueStore::_is_bluefs()
 {
-  if (create) {
-    *ret = cct->_conf->bluestore_bluefs;
-  } else {
-    string s;
-    int r = read_meta("bluefs", &s);
-    if (r < 0) {
-      derr << __func__ << " unable to read 'bluefs' meta" << dendl;
-      return -EIO;
-    }
-    if (s == "1") {
-      *ret = true;
-    } else if (s == "0") {
-      *ret = false;
-    } else {
-      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting"
-	   << dendl;
-      return -EIO;
-    }
+  bool result = false;
+  string s;
+  int r = read_meta("bluefs", &s);
+  if (r < 0) {
+    derr << __func__ << " unable to read 'bluefs' meta" << dendl;
+    ceph_assert(r < 0);
   }
-  return 0;
+  if (s == "1") {
+    result = true;
+  } else if (s == "0") {
+    result = false;
+  } else {
+    derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting"
+	 << dendl;
+    ceph_assert(false);
+  }
+  return result;
 }
 
 int BlueStore::_open_base()
