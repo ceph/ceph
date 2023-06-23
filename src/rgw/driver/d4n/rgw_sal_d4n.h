@@ -20,6 +20,7 @@
 #include "rgw_oidc_provider.h"
 #include "rgw_role.h"
 #include "common/dout.h" 
+#include "rgw_aio_throttle.h"
 
 #include "rgw_redis_driver.h"
 #include "driver/d4n/d4n_directory.h"
@@ -104,15 +105,55 @@ class D4NFilterObject : public FilterObject {
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
-      D4NFilterObject* source;
+      public:
+	class D4NFilterGetCB: public RGWGetDataCB {
+	  private:
+	    D4NFilterDriver* filter; // don't need -Sam ?
+	    std::string oid;
+	    RGWGetDataCB* client_cb;
+	    uint64_t ofs = 0, len = 0;
+	    bufferlist bl_rem;
+	    bool last_part{false};
+	    D3nGetObjData d3n_get_data; // should make d4n version? -Sam
+	    bool write_to_cache{true};
 
-      D4NFilterReadOp(std::unique_ptr<ReadOp> _next, D4NFilterObject* _source) : FilterReadOp(std::move(_next)),
-										 source(_source) {}
-      virtual ~D4NFilterReadOp() = default;
+	  public:
+	    D4NFilterGetCB(D4NFilterDriver* _filter, std::string& _oid) : filter(_filter), 
+									  oid(_oid) {}
 
-      virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
-      virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
-        RGWGetDataCB* cb, optional_yield y) override;
+	    const DoutPrefixProvider* save_dpp;
+
+	    int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
+	    void set_client_cb(RGWGetDataCB* client_cb) { this->client_cb = client_cb;}
+	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
+	    int flush_last_part(const DoutPrefixProvider* dpp);
+	    void bypass_cache_write() { this->write_to_cache = false; }
+	};
+
+	D4NFilterObject* source;
+
+	D4NFilterReadOp(std::unique_ptr<ReadOp> _next, D4NFilterObject* _source) : FilterReadOp(std::move(_next)),
+										   source(_source) 
+        {
+	  std::string oid = source->get_bucket()->get_marker() + "_" + source->get_key().get_oid();
+          cb = std::make_unique<D4NFilterGetCB>(source->driver, oid); 
+	}
+	virtual ~D4NFilterReadOp() = default;
+
+	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
+	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
+	  RGWGetDataCB* cb, optional_yield y) override;
+
+      private:
+	RGWGetDataCB* client_cb;
+	std::unique_ptr<D4NFilterGetCB> cb;
+        std::unique_ptr<rgw::Aio> aio;
+	uint64_t offset = 0; // next offset to write to client
+        rgw::AioResultList completed; // completed read results, sorted by offset
+
+	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results);
+	void cancel();
+	int drain(const DoutPrefixProvider* dpp);
     };
 
     struct D4NFilterDeleteOp : FilterDeleteOp {
@@ -191,7 +232,7 @@ class D4NFilterWriter : public FilterWriter {
                        const req_context& rctx,
                        uint32_t flags) override;
    bool is_atomic() { return atomic; };
-   const DoutPrefixProvider* dpp() { return save_dpp; }
+   const DoutPrefixProvider* dpp() { return save_dpp; } 
 };
 
 } } // namespace rgw::sal
