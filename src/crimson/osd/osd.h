@@ -236,12 +236,10 @@ public:
   }
 
   auto &get_pg_shard_manager() {
-    ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
     return shard_dispatchers.local().get_pg_shard_manager();
   }
 
   auto &get_pg_shard_manager() const {
-    ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
     return shard_dispatchers.local().get_pg_shard_manager();
   }
 
