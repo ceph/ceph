@@ -302,6 +302,8 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   // multisite sync requests should fetch cloudtiered objects
   sync_cloudtiered = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-cloudtiered");
 
+  dst_zone_trace = s->info.args.get(RGW_SYS_PARAM_PREFIX "if-not-replicated-to");
+
   return RGWGetObj_ObjStore::get_params(y);
 }
 
@@ -436,6 +438,17 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
       i != attrs.end()) {
     dump_header(s, "x-amz-replication-status", i->second);
+  }
+  if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+      i != attrs.end()) {
+    try {
+      std::vector<rgw_zone_set_entry> zones;
+      auto p = i->second.cbegin();
+      decode(zones, p);
+      for (const auto& zone : zones) {
+        dump_header(s, "x-rgw-replicated-from", zone.to_str());
+      }
+    } catch (const buffer::error&) {} // omit x-rgw-replicated-from headers
   }
 
   if (! op_ret) {

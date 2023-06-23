@@ -772,6 +772,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        NULL, /* void *progress_data*); */
                        dpp,
                        filter.get(),
+                       source_trace_entry,
                        &zones_trace,
                        &bytes_transferred);
 

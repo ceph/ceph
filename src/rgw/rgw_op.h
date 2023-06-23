@@ -361,6 +361,7 @@ protected:
   std::string lo_etag;
   bool rgwx_stat; /* extended rgw stat operation */
   std::string version_id;
+  rgw_zone_set_entry dst_zone_trace;
 
   // compression attrs
   RGWCompressionInfo cs_info;

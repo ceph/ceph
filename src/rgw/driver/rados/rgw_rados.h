@@ -1132,7 +1132,8 @@ public:
                        void *progress_data,
                        const DoutPrefixProvider *dpp,
                        RGWFetchObjFilter *filter,
-                       rgw_zone_set *zones_trace= nullptr,
+                       const rgw_zone_set_entry& source_trace_entry,
+                       rgw_zone_set *zones_trace = nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0);
   /**
    * Copy an object.

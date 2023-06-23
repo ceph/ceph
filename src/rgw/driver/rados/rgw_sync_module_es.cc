@@ -886,7 +886,7 @@ public:
     return new RGWElasticGetESInfoCBCR(sc, conf);
   }
 
-  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+  RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, const rgw_zone_set_entry& source_trace_entry, rgw_zone_set *zones_trace) override {
     ldpp_dout(dpp, 10) << conf->id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     if (!conf->should_handle_operation(sync_pipe.dest_bucket_info)) {
       ldpp_dout(dpp, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
