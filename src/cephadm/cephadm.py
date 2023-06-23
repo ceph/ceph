@@ -4472,8 +4472,8 @@ class BasicContainer:
         *,
         image: str,
         entrypoint: str,
+        identity: Optional['DaemonIdentity'],
         args: Optional[List[str]] = None,
-        container_name: str = '',
         container_args: Optional[List[str]] = None,
         envs: Optional[List[str]] = None,
         volume_mounts: Optional[Dict[str, str]] = None,
@@ -4490,8 +4490,8 @@ class BasicContainer:
         self.ctx = ctx
         self.image = image
         self.entrypoint = entrypoint
+        self.identity = identity
         self.args = args or []
-        self.container_name = container_name
         self.container_args = container_args or []
         self.envs = envs or []
         self.volume_mounts = volume_mounts or {}
@@ -4519,7 +4519,8 @@ class BasicContainer:
 
     @property
     def cname(self) -> str:
-        return self.container_name
+        assert self.identity
+        return self.identity.container_name
 
     def build_run_cmd(self) -> List[str]:
         cmd_args: List[str] = [self._container_engine]
