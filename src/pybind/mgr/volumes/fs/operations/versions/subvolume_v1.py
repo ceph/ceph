@@ -29,6 +29,7 @@ from ..clone_index import open_clone_index, create_clone_index
 
 log = logging.getLogger(__name__)
 
+
 class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     """
     Version 1 subvolumes creates a subvolume with path as follows,
@@ -55,7 +56,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # no need to stat the path -- open() does that
             return self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH).encode('utf-8')
-        except MetadataMgrException as me:
+        except MetadataMgrException:
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
 
     @property
@@ -68,7 +69,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # MDS treats this as a noop for already marked subvolume
             self.fs.setxattr(self.path, 'ceph.dir.subvolume', b'1', 0)
-        except cephfs.InvalidValue as e:
+        except cephfs.InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
@@ -89,7 +90,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
-        except OpSmException as oe:
+        except OpSmException:
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
@@ -156,7 +157,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
-        except OpSmException as oe:
+        except OpSmException:
             raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
@@ -365,7 +366,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             group_name = self.group.groupname if self.group.groupname != Group.NO_GROUP_NAME else None
             group_subvol_id = "{0}/{1}".format(group_name, self.subvolname)
             subvolume = {
-                group_subvol_id : {
+                group_subvol_id: {
                     # The access level at which the auth_id is authorized to
                     # access the volume.
                     'access_level': access_level,
@@ -471,14 +472,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         client_entity = "client.{0}".format(auth_id)
         want_mds_cap = "allow {0} path={1}".format(access_level, subvol_path.decode('utf-8'))
         want_osd_cap = "allow {0} pool={1}{2}".format(
-                access_level, pool, " namespace={0}".format(namespace) if namespace else "")
+            access_level, pool, " namespace={0}".format(namespace) if namespace else "")
 
         # Construct auth caps that if present might conflict with the desired
         # auth caps.
         unwanted_access_level = 'r' if access_level == 'rw' else 'rw'
         unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, subvol_path.decode('utf-8'))
         unwanted_osd_cap = "allow {0} pool={1}{2}".format(
-                unwanted_access_level, pool, " namespace={0}".format(namespace) if namespace else "")
+            unwanted_access_level, pool, " namespace={0}".format(namespace) if namespace else "")
 
         return allow_access(self.mgr, client_entity, want_mds_cap, want_osd_cap,
                             unwanted_mds_cap, unwanted_osd_cap, existing_caps)
@@ -501,18 +502,18 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             group_subvol_id = "{0}/{1}".format(group_name, self.subvolname)
             if (auth_meta is None) or (not auth_meta['subvolumes']):
                 log.warning("deauthorized called for already-removed auth"
-                         "ID '{auth_id}' for subvolume '{subvolume}'".format(
-                    auth_id=auth_id, subvolume=self.subvolname
-                ))
+                            "ID '{auth_id}' for subvolume '{subvolume}'".format(
+                                auth_id=auth_id, subvolume=self.subvolname
+                            ))
                 # Clean up the auth meta file of an auth ID
                 self.fs.unlink(self.auth_mdata_mgr._auth_metadata_path(auth_id))
                 return
 
             if group_subvol_id not in auth_meta['subvolumes']:
                 log.warning("deauthorized called for already-removed auth"
-                         "ID '{auth_id}' for subvolume '{subvolume}'".format(
-                    auth_id=auth_id, subvolume=self.subvolname
-                ))
+                            "ID '{auth_id}' for subvolume '{subvolume}'".format(
+                                auth_id=auth_id, subvolume=self.subvolname
+                            ))
                 return
 
             if auth_meta['dirty']:
@@ -541,9 +542,9 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             if (subvol_meta is None) or (auth_id not in subvol_meta['auths']):
                 log.warning("deauthorized called for already-removed auth"
-                         "ID '{auth_id}' for subvolume '{subvolume}'".format(
-                    auth_id=auth_id, subvolume=self.subvolname
-                ))
+                            "ID '{auth_id}' for subvolume '{subvolume}'".format(
+                                auth_id=auth_id, subvolume=self.subvolname
+                            ))
                 return
 
             subvol_meta['auths'][auth_id]['dirty'] = True
@@ -582,8 +583,8 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         want_mds_caps = ['allow {0} path={1}'.format(access_level, subvol_path.decode('utf-8'))
                          for access_level in access_levels]
         want_osd_caps = ['allow {0} pool={1}{2}'.format(
-                          access_level, pool_name, " namespace={0}".format(namespace) if namespace else "")
-                         for access_level in access_levels]
+            access_level, pool_name, " namespace={0}".format(namespace) if namespace else "")
+            for access_level in access_levels]
         deny_access(self.mgr, client_entity, want_mds_caps, want_osd_caps)
 
     def authorized_list(self):
@@ -596,7 +597,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         """
         with self.auth_mdata_mgr.subvol_metadata_lock(self.group.groupname, self.subvolname):
             meta = self.auth_mdata_mgr.subvol_metadata_get(self.group.groupname, self.subvolname)
-            auths = [] # type: List[Dict[str,str]]
+            auths = []  # type: List[Dict[str,str]]
             if not meta or not meta['auths']:
                 return auths
 
@@ -650,16 +651,16 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             if not t.success:
                 msg = ("Failed to evict client with {0} from mds {1}/{2}: {3}".
                        format(', '.join(client_spec), t.rank, t.gid, t.exception)
-                      )
+                       )
                 log.error(msg)
                 raise EvictionError(msg)
 
     def _get_clone_source(self):
         try:
             clone_source = {
-                'volume'   : self.metadata_mgr.get_option("source", "volume"),
+                'volume': self.metadata_mgr.get_option("source", "volume"),
                 'subvolume': self.metadata_mgr.get_option("source", "subvolume"),
-                'snapshot' : self.metadata_mgr.get_option("source", "snapshot"),
+                'snapshot': self.metadata_mgr.get_option("source", "snapshot"),
             }
 
             try:
@@ -669,14 +670,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     pass
                 else:
                     raise
-        except MetadataMgrException as me:
+        except MetadataMgrException:
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
         return clone_source
 
     def _get_clone_failure(self):
         clone_failure = {
-            'errno'     : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERRNO),
-            'error_msg' : self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG),
+            'errno': self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERRNO),
+            'error_msg': self.metadata_mgr.get_option(MetadataManager.CLONE_FAILURE_SECTION, MetadataManager.CLONE_FAILURE_META_KEY_ERROR_MSG),
         }
         return clone_failure
 
@@ -685,7 +686,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
         subvolume_type = self.subvol_type
         subvolume_status = {
-            'state' : state.value
+            'state': state.value
         }
         if not SubvolumeOpSm.is_complete_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
             subvolume_status["source"] = self._get_clone_source()
@@ -777,7 +778,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                         # If clone is completed between 'list_all_keys_with_specified_values_from_section'
                         # and readlink(track_id_path) call then readlink will fail with error ENOENT (2)
                         # Hence we double check whether track_id is exist in .meta file or not.
-                        value = self.metadata_mgr.get_option('clone snaps', track_id)
+                        self.metadata_mgr.get_option('clone snaps', track_id)
                         # Edge case scenario.
                         # If track_id for clone exist but path /volumes/_index/clone/{track_id} not found
                         # then clone is orphan.
@@ -818,7 +819,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 log.info(f"Allowing snapshot removal on failure of it's metadata removal with force on "
                          f"snap={snapname} subvol={self.subvol_name} group={self.group_name} reason={me.args[1]}, "
                          f"errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
-                pass
             else:
                 log.error(f"Failed to remove snapshot metadata on snap={snapname} subvol={self.subvol_name} "
                           f"group={self.group_name} reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
@@ -833,14 +833,14 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         snappath = self.snapshot_data_path(snapname)
         snap_info = {}
         try:
-            snap_attrs = {'created_at':'ceph.snap.btime',
-                          'data_pool':'ceph.dir.layout.pool'}
+            snap_attrs = {'created_at': 'ceph.snap.btime',
+                          'data_pool': 'ceph.dir.layout.pool'}
             for key, val in snap_attrs.items():
                 snap_info[key] = self.fs.getxattr(snappath, val)
             pending_clones_info = self.get_pending_clones(snapname)
             info_dict = {'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
-                    'data_pool': snap_info['data_pool'].decode('utf-8')}  # type: Dict[str, Any]
-            info_dict.update(pending_clones_info);
+                         'data_pool': snap_info['data_pool'].decode('utf-8')}  # type: Dict[str, Any]
+            info_dict.update(pending_clones_info)
             return info_dict
         except cephfs.Error as e:
             if e.errno == errno.ENOENT:
@@ -871,7 +871,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                         log.error(f"Failed to remove stale snap metadata on snap={snap_with_metadata} "
                                   f"subvol={self.subvol_name} group={self.group_name} reason={me.args[1]}, "
                                   f"errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
-                        pass
 
     def _add_snap_clone(self, track_id, snapname):
         self.metadata_mgr.add_section("clone snaps")
