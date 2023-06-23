@@ -7057,7 +7057,9 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
     return r;
   }
 
-  add_datalog_entry(dpp, svc.datalog_rados, bucket_info, bs.shard_id, y);
+  if (log_data_change) {
+    add_datalog_entry(dpp, svc.datalog_rados, bucket_info, bs.shard_id, y);
+  }
 
   return 0;
 }
