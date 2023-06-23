@@ -433,6 +433,7 @@ void EstimateDedupRatio::estimate_dedup_ratio()
   }
 }
 
+static void print_chunk_scrub();
 void ChunkScrub::chunk_scrub_common()
 {
   ObjectCursor shard_start;
@@ -459,6 +460,13 @@ void ChunkScrub::chunk_scrub_common()
     &shard_start,
     &shard_end);
 
+  const utime_t start = ceph_clock_now();
+  utime_t next_report;
+  if (report_period) {
+    next_report = start;
+    next_report += report_period;
+  }
+
   ObjectCursor c(shard_start);
   while(c < shard_end)
   {
@@ -477,6 +485,17 @@ void ChunkScrub::chunk_scrub_common()
 	delete formatter;
 	return;
       }
+
+      utime_t now = ceph_clock_now();
+      if (n == 0 && // first thread only
+	  next_report != utime_t() && now > next_report) {
+	cerr << (int)(now - start) << "s, interim findings is : "
+	     << std::endl;
+	print_chunk_scrub();
+	next_report = now;
+	next_report += report_period;
+      }
+
       auto oid = i.oid;
       cout << oid << std::endl;
       chunk_refs_t refs;
