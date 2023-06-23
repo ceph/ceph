@@ -1,5 +1,6 @@
 #include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
+//#include "rgw_ssd_driver.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -21,7 +22,8 @@ std::vector<std::string> baseFields {
   "max_buckets",
   "data"};
 
-std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* binary) {
+std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* binary) 
+{
   std::vector< std::pair<std::string, std::string> > values;
   rgw::sal::Attrs::iterator attrs;
 
@@ -35,16 +37,37 @@ std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* 
   return values;
 }
 
-int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) {
+int RedisDriver::find_client(const DoutPrefixProvider* dpp) 
+{
+  if (client.is_connected())
+    return 0;
+
+  if (addr.host == "" || addr.port == 0) { 
+    dout(10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
+    return EDESTADDRREQ;
+  }
+
+  client.connect(addr.host, addr.port, nullptr);
+
+  if (!client.is_connected())
+    return ECONNREFUSED;
+
+  return 0;
+}
+
+int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) 
+{
   auto ret = entries.emplace(key, Entry(key, offset, len));
   return ret.second;
 }
 
-int RedisDriver::remove_entry(const DoutPrefixProvider* dpp, std::string key) {
+int RedisDriver::remove_entry(const DoutPrefixProvider* dpp, std::string key) 
+{
   return entries.erase(key);
 }
 
-std::optional<Entry> RedisDriver::get_entry(const DoutPrefixProvider* dpp, std::string key) {
+std::optional<Entry> RedisDriver::get_entry(const DoutPrefixProvider* dpp, std::string key) 
+{
   auto iter = entries.find(key);
 
   if (iter != entries.end()) {
@@ -54,7 +77,23 @@ std::optional<Entry> RedisDriver::get_entry(const DoutPrefixProvider* dpp, std::
   return std::nullopt;
 }
 
-int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
+/* Currently an attribute but will also be part of the Entry metadata once consistency is guaranteed -Sam
+int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight) 
+{
+  auto iter = entries.find(key);
+
+  if (iter != entries.end()) {
+    iter->second.localWeight = localWeight;
+    return 0;
+  }
+
+  return -1;
+}
+*/
+
+int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
+{
+  this->cct = cct;
   addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
   addr.port = cct->_conf->rgw_d4n_port;
 
@@ -71,166 +110,8 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
   return 0;
 }
 
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) {
-  int result = -1;
-  std::string entryName = "rgw-object:" + key + ":cache";
-  std::vector<std::string> keys;
-  keys.push_back(entryName);
-
-  if (!client.is_connected()) 
-    return ECONNREFUSED;
-
-  try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {}
-
-  return result;
-}
-
-std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) {
-  std::vector<std::string> keys;
-  std::vector<Entry> entries;
-
-  if (!client.is_connected()) 
-    return {};
-
-  try {
-    size_t cursor = 0;
-    const std::string pattern = "*:cache";
-
-    do {
-      auto reply = client.scan(cursor, pattern); 
-      client.sync_commit(std::chrono::milliseconds(1000));
-
-      auto arr = reply.get().as_array();
-      cursor = std::stoi(arr[0].as_string());
-      auto result = arr[1].as_array();
-  
-      for (auto it = result.begin(); it != result.end(); ++it) {
-        int i = std::distance(result.begin(), it);
-	std::string entryName = result[i].as_string();
-	keys.push_back(entryName.substr(11, entryName.length() - 17));
-      }
-    } while (cursor != 0);
-  } catch(std::exception &e) {
-    return {};
-  }
-
-  /* Construct list of entries */
-  for (auto it = keys.begin(); it != keys.end(); ++it) {
-    Entry entry;
-
-    if (key_exists(dpp, *it)) {
-      try {
-	std::vector<std::string> fields;
-        std::string entryName = "rgw-object:" + *it + ":cache";
-
-	entry.key = *it;
-	fields.push_back("offset");
-	fields.push_back("len");
-	fields.push_back("localWeight");
-
-	client.hmget(entryName, fields, [&entry](cpp_redis::reply &reply) {
-	  if (reply.is_array()) {
-	    auto arr = reply.as_array();
-      
-	    if (!arr[0].is_null()) {
-	      entry.offset = std::stol(arr[0].as_string().c_str());
-	      entry.len = std::stoi(arr[1].as_string());
-	      entry.localWeight = std::stoi(arr[2].as_string());
-	    }
-	  }
-	});
-
-	client.sync_commit(std::chrono::milliseconds(1000));
-      } catch(std::exception &e) {
-	return {}; // return failure or skip entry? -Sam
-      }
-    } else { // if one entry isn't found, shoud entire operation return a failure? -Sam
-      dout(20) << "RGW Redis Cache: Entry " << *it << " was not retrievable." << dendl;
-    }
-
-    entries.push_back(entry);
-  } 
-
-  return entries;
-}
-
-size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) {
-  int result = -1;
-
-  if (!client.is_connected()) 
-    return ECONNREFUSED;
-
-  try {
-    client.keys(":cache", [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_integer();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-
-    if (result < 0) {
-      return -1;
-    }
-  } catch(std::exception &e) {
-    return -1;
-  }
-
-  return result;
-}
-
-Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp) {
-  Partition part;
-  return part; // Implement -Sam
-}
-
-uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) {
-  int result = -1;
-
-  if (!client.is_connected()) 
-    return ECONNREFUSED;
-
-  try {
-    client.info([&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        int usedMem = -1;
-	int maxMem = -1;
-
-        std::istringstream iss(reply.as_string());
-	std::string line;    
-        while (std::getline(iss, line)) {
-	  size_t pos = line.find_first_of(":");
-	  if (pos != std::string::npos) {
-	    if (line.substr(0, pos) == "used_memory") {
-	      usedMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
-	    } else if (line.substr(0, line.find_first_of(":")) == "maxmemory") {
-	      maxMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
-	    } 
-	  }
-        }
-
-	if (usedMem > -1 && maxMem > -1)
-	  result = maxMem - usedMem;
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {
-    return -1;
-  }
-
-  return result;
-}
-
-int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
+int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) 
+{
   std::string entryName = "rgw-object:" + key + ":cache";
 
   if (!client.is_connected()) 
@@ -249,7 +130,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
 
     client.sync_commit(std::chrono::milliseconds(1000));
 
-    if (result != 0) {
+    if (result <= 0) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -279,7 +160,8 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
   return 0;
 }
 
-int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) { // for whole objects? -Sam
+int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) 
+{
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
   
@@ -324,7 +206,13 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
-int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) {
+rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) 
+{
+  return {};
+}
+
+int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) 
+{
   std::string result;
   std::string value = "";
   std::string entryName = "rgw-object:" + key + ":cache";
@@ -370,7 +258,8 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   return 0;
 }
 
-int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key) {
+int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key) 
+{
   int result = 0;
   std::string entryName = "rgw-object:" + key + ":cache";
   std::vector<std::string> deleteField;
@@ -398,8 +287,8 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   return result - 1;
 }
 
-int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) {
-  int exists = -2;
+int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+{
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
 
@@ -441,7 +330,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
     }
 
     getFields.erase(std::find(getFields.begin(), getFields.end(), "data")); /* Do not query for data field */
-    
+    int exists = -1;
     /* Get attributes from cache */
     try {
       client.hmget(entryName, getFields, [&exists, &attrs, &getFields](cpp_redis::reply &reply) {
@@ -475,7 +364,8 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
-int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) {
+int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+{
   /* Creating the index based on oid */
   std::string entryName = "rgw-object:" + key + ":cache";
   std::string result;
@@ -509,7 +399,8 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
-int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) {
+int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+{
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
 
@@ -544,7 +435,8 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return 0;
 }
 
-int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) {
+int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) 
+{
   int result = 0;
   std::string entryName = "rgw-object:" + key + ":cache";
 
@@ -605,7 +497,8 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return -2;
 }
 
-std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) {
+std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) 
+{
   int exists = -2;
   std::string result;
   std::string entryName = "rgw-object:" + key + ":cache";
@@ -658,7 +551,8 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   return attrValue;
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) {
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) 
+{
   /* Creating the index based on key */
   std::string entryName = "rgw-object:" + key + ":cache";
   int result = -1;
@@ -682,19 +576,185 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   return result;
 }
 
-std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp)
+std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) 
 {
-    return std::make_unique<RedisCacheAioRequest>(this);
+  return std::make_unique<RedisCacheAioRequest>(this);  
 }
 
-rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id)
+bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
 {
-    rgw_raw_obj r_obj;
-    r_obj.oid = key;
-    return aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, this, ofs, len, key), cost, id);
+  int result = -1;
+  std::string entryName = "rgw-object:" + key + ":cache";
+  std::vector<std::string> keys;
+  keys.push_back(entryName);
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  try {
+    client.exists(keys, [&result](cpp_redis::reply &reply) {
+      if (reply.is_integer()) {
+        result = reply.as_integer();
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {}
+
+  return result;
 }
 
-void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) {}
-void RedisCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) {}
+std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) 
+{
+  std::vector<Entry> result;
 
-} } // namespace rgw::cal
+  for (auto it = entries.begin(); it != entries.end(); ++it) { 
+    result.push_back(it->second);
+  }
+
+  return result;
+}
+
+size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) 
+{
+  return entries.size();
+}
+
+Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp) 
+{
+  Partition part;
+  return part; // Implement -Sam
+}
+
+uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) 
+{
+  int result = -1;
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  try {
+    client.info([&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        int usedMem = -1;
+	int maxMem = -1;
+
+        std::istringstream iss(reply.as_string());
+	std::string line;    
+        while (std::getline(iss, line)) {
+	  size_t pos = line.find_first_of(":");
+	  if (pos != std::string::npos) {
+	    if (line.substr(0, pos) == "used_memory") {
+	      usedMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
+	    } else if (line.substr(0, line.find_first_of(":")) == "maxmemory") {
+	      maxMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
+	    } 
+	  }
+        }
+
+	if (usedMem > -1 && maxMem > -1)
+	  result = maxMem - usedMem;
+      }
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  return result;
+}
+
+int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)
+{
+    ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): file_path=" << file_path << dendl;
+    aio_cb.reset(new struct aiocb);
+    memset(aio_cb.get(), 0, sizeof(struct aiocb));
+    aio_cb->aio_fildes = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_RDONLY|O_CLOEXEC|O_BINARY));
+
+    if (aio_cb->aio_fildes < 0) {
+        int err = errno;
+        ldpp_dout(dpp, 1) << "ERROR: RedisCache: " << __func__ << "(): can't open " << file_path << " : " << " error: " << err << dendl;
+        return -err;
+    }
+
+    if (cct->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL) {
+        posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
+    }
+
+    bufferptr bp(read_len);
+    aio_cb->aio_buf = bp.c_str();
+    result.append(std::move(bp));
+
+    aio_cb->aio_nbytes = read_len;
+    aio_cb->aio_offset = read_ofs;
+    aio_cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
+    aio_cb->aio_sigevent.sigev_notify_function = libaio_cb_aio_dispatch;
+    aio_cb->aio_sigevent.sigev_notify_attributes = nullptr;
+    aio_cb->aio_sigevent.sigev_value.sival_ptr = arg;
+
+    return 0;
+}
+
+void RedisDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
+{
+    auto p = std::unique_ptr<Completion>{static_cast<Completion*>(sigval.sival_ptr)};
+    auto op = std::move(p->user_data);
+    const int ret = -aio_error(op.aio_cb.get());
+    boost::system::error_code ec;
+    if (ret < 0) {
+        ec.assign(-ret, boost::system::system_category());
+    }
+
+    ceph::async::dispatch(std::move(p), ec, std::move(op.result));
+}
+
+template <typename Executor1, typename CompletionHandler>
+auto RedisDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& handler)
+{
+    auto p = Completion::create(ex1, std::move(handler));
+    return p;
+}
+
+template <typename ExecutionContext, typename CompletionToken>
+auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+                off_t read_ofs, off_t read_len, CompletionToken&& token)
+{
+    std::string location = "";//partition_info.location + key;
+    ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
+
+    using Op = AsyncReadOp;
+    using Signature = typename Op::Signature;
+    boost::asio::async_completion<CompletionToken, Signature> init(token);
+    auto p = Op::create(ctx.get_executor(), init.completion_handler);
+    auto& op = p->user_data;
+
+    int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
+    if(0 == ret) {
+        ret = ::aio_read(op.aio_cb.get());
+    }
+  //  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
+   /* if(ret < 0) {
+        auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+        ceph::async::post(std::move(p), ec, bufferlist{});
+    } else {
+        (void)p.release();
+    }*/
+    //return init.result.get();
+}
+
+void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
+{
+  using namespace boost::asio;
+  async_completion<yield_context, void()> init(y.get_yield_context());
+  auto ex = get_associated_executor(init.completion_handler);
+
+  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): key=" << key << dendl;
+  cache_driver->get_async(dpp, y.get_io_context(), key, ofs, len, bind_executor(ex, RedisDriver::libaio_handler{aio, r}));
+}
+
+void RedisCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
+{
+}
+
+} } // namespace rgw::cache
