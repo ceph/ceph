@@ -1390,10 +1390,12 @@ private:
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
                      bool is_file_write, utime_t start, Fh *f, Inode *in,
-                     uint64_t fpos, int64_t offset, uint64_t size,
+                     uint64_t fpos, int64_t req_ofs, uint64_t req_size,
+                     int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly)
       : clnt(clnt), onfinish(onfinish),
         is_file_write(is_file_write), start(start), f(f), in(in), fpos(fpos),
+        req_ofs(req_ofs), req_size(req_size),
         offset(offset), size(size), syncdataonly(syncdataonly) {
       iofinished_r = 0;
       onuninlinefinished_r = 0;
@@ -1415,6 +1417,8 @@ private:
     Fh *f;
     Inode *in;
     uint64_t fpos;
+    int64_t req_ofs;
+    uint64_t req_size;
     int64_t offset;
     uint64_t size;
     bool syncdataonly;
@@ -1673,7 +1677,8 @@ private:
   		Context *onfinish = nullptr);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
   int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
-          int64_t offset, uint64_t size, Inode *in);
+                         int64_t request_offset, uint64_t request_size,
+                         int64_t offset, uint64_t size, Inode *in);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
           const struct iovec *iov, int iovcnt, Context *onfinish = nullptr,
           bool do_fsync = false, bool syncdataonly = false);
