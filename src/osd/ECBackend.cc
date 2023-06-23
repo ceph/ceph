@@ -55,16 +55,19 @@ using ceph::Formatter;
 static ostream& _prefix(std::ostream *_dout, ECBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
+static ostream& _prefix(std::ostream *_dout, ECBackend::RMWPipeline *rmw_pipeline) {
+  return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout);
+}
 
 struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
   list<ECBackend::RecoveryOp> ops;
 };
 
-ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs) {
+ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs) {
   switch (rhs.pipeline_state) {
-  case ECBackend::pipeline_state_t::CACHE_VALID:
+  case ECBackend::RMWPipeline::pipeline_state_t::CACHE_VALID:
     return lhs << "CACHE_VALID";
-  case ECBackend::pipeline_state_t::CACHE_INVALID:
+  case ECBackend::RMWPipeline::pipeline_state_t::CACHE_INVALID:
     return lhs << "CACHE_INVALID";
   default:
     ceph_abort_msg("invalid pipeline state");
@@ -218,6 +221,7 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
+    rmw_pipeline(cct, ec_impl, this->sinfo, get_parent(), *this),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   ceph_assert((ec_impl->get_data_chunk_count() *
@@ -1160,8 +1164,8 @@ void ECBackend::handle_sub_write_reply(
   const ECSubWriteReply &op,
   const ZTracer::Trace &trace)
 {
-  map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
-  ceph_assert(i != tid_to_op_map.end());
+  map<ceph_tid_t, Op>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
+  ceph_assert(i != rmw_pipeline.tid_to_op_map.end());
   if (op.committed) {
     trace.event("sub write committed");
     ceph_assert(i->second.pending_commit.count(from));
@@ -1185,7 +1189,7 @@ void ECBackend::handle_sub_write_reply(
     i->second.on_all_commit = 0;
     i->second.trace.event("ec write all committed");
   }
-  check_ops();
+  rmw_pipeline.check_ops();
 }
 
 void ECBackend::handle_sub_read_reply(
@@ -1476,7 +1480,7 @@ void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
   }
 }
 
-void ECBackend::on_change()
+void ECBackend::RMWPipeline::on_change()
 {
   dout(10) << __func__ << dendl;
 
@@ -1490,7 +1494,11 @@ void ECBackend::on_change()
     cache.release_write_pin(op.second.pin);
   }
   tid_to_op_map.clear();
+}
 
+void ECBackend::on_change()
+{
+  rmw_pipeline.on_change();
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {
@@ -1504,8 +1512,8 @@ void ECBackend::on_change()
     }
   }
   tid_to_read_map.clear();
-  in_progress_client_reads.clear();
   shard_to_read_map.clear();
+  in_progress_client_reads.clear();
   clear_recovery_state();
 }
 
@@ -1551,13 +1559,13 @@ void ECBackend::submit_transaction(
   OpRequestRef client_op
   )
 {
-  ceph_assert(!tid_to_op_map.count(tid));
-  Op *op = &(tid_to_op_map[tid]);
+  ceph_assert(!rmw_pipeline.tid_to_op_map.count(tid));
+  Op *op = &(rmw_pipeline.tid_to_op_map[tid]);
   op->hoid = hoid;
   op->delta_stats = delta_stats;
   op->version = at_version;
   op->trim_to = trim_to;
-  op->roll_forward_to = std::max(min_last_complete_ondisk, committed_to);
+  op->roll_forward_to = std::max(min_last_complete_ondisk, rmw_pipeline.committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_all_commit = on_all_commit;
@@ -1568,10 +1576,10 @@ void ECBackend::submit_transaction(
     op->trace = client_op->pg_trace;
   }
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
-  start_rmw(op, std::move(t));
+  rmw_pipeline.start_rmw(op, std::move(t));
 }
 
-void ECBackend::call_write_ordered(std::function<void(void)> &&cb) {
+void ECBackend::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
   if (!waiting_state.empty()) {
     waiting_state.back().on_write.emplace_back(std::move(cb));
   } else if (!waiting_reads.empty()) {
@@ -1895,7 +1903,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   return ref;
 }
 
-void ECBackend::start_rmw(Op *op, PGTransactionUPtr &&t)
+void ECBackend::RMWPipeline::start_rmw(Op *op, PGTransactionUPtr &&t)
 {
   ceph_assert(op);
 
@@ -1921,7 +1929,7 @@ void ECBackend::start_rmw(Op *op, PGTransactionUPtr &&t)
   check_ops();
 }
 
-bool ECBackend::try_state_to_reads()
+bool ECBackend::RMWPipeline::try_state_to_reads()
 {
   if (waiting_state.empty())
     return false;
@@ -1984,7 +1992,7 @@ bool ECBackend::try_state_to_reads()
     ceph_assert(get_parent()->get_pool().allows_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
-      [this, op](map<hobject_t,pair<int, extent_map> > &&results) {
+      [op, this](map<hobject_t,pair<int, extent_map> > &&results) {
 	for (auto &&i: results) {
 	  op->remote_read_result.emplace(i.first, i.second.second);
 	}
@@ -1995,7 +2003,7 @@ bool ECBackend::try_state_to_reads()
   return true;
 }
 
-bool ECBackend::try_reads_to_commit()
+bool ECBackend::RMWPipeline::try_reads_to_commit()
 {
   if (waiting_reads.empty())
     return false;
@@ -2101,7 +2109,7 @@ bool ECBackend::try_reads_to_commit()
     const pg_stat_t &stats =
       (should_send || !backfill_shards.count(*i)) ?
       get_info().stats :
-      parent->get_shard_info().find(*i)->second.stats;
+      get_parent()->get_shard_info().find(*i)->second.stats;
 
     ECSubWrite sop(
       get_parent()->whoami_shard(),
@@ -2160,7 +2168,7 @@ bool ECBackend::try_reads_to_commit()
   return true;
 }
 
-bool ECBackend::try_finish_rmw()
+bool ECBackend::RMWPipeline::try_finish_rmw()
 {
   if (waiting_commit.empty())
     return false;
@@ -2208,7 +2216,7 @@ bool ECBackend::try_finish_rmw()
   return true;
 }
 
-void ECBackend::check_ops()
+void ECBackend::RMWPipeline::check_ops()
 {
   while (try_state_to_reads() ||
 	 try_reads_to_commit() ||
@@ -2284,7 +2292,7 @@ void ECBackend::objects_read_async(
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
 			 << dendl;
-      ldpp_dout(dpp, 20) << "objects_read_async_cb: cache: " << ec->cache
+      ldpp_dout(dpp, 20) << "objects_read_async_cb: cache: " << ec->rmw_pipeline.cache
 			 << dendl;
 
       auto &got = results[hoid];
