@@ -392,10 +392,202 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   return ret;
 }
 
+void D4NFilterObject::D4NFilterReadOp::cancel() {
+  aio->drain();
+}
+
+int D4NFilterObject::D4NFilterReadOp::drain(const DoutPrefixProvider* dpp) {
+  auto c = aio->wait();
+  while (!c.empty()) {
+    int r = flush(dpp, std::move(c));
+    if (r < 0) {
+      cancel();
+      return r;
+    }
+    c = aio->wait();
+  }
+  return flush(dpp, std::move(c));
+}
+
+int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results) {
+  int r = rgw::check_for_errors(results);
+
+  if (r < 0) {
+    return r;
+  }
+
+  std::list<bufferlist> bl_list;
+
+  auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.id < rhs.id; };
+  results.sort(cmp); // merge() requires results to be sorted first
+  completed.merge(results, cmp); // merge results in sorted order
+
+  ldpp_dout(dpp, 20) << "D4NFilterObject::In flush:: " << dendl;
+
+  while (!completed.empty() && completed.front().id == offset) {
+    auto bl = std::move(completed.front().data);
+
+    ldpp_dout(dpp, 20) << "D4NFilterObject::flush:: calling handle_data for offset: " << offset << " bufferlist length: " << bl.length() << dendl;
+
+    bl_list.push_back(bl);
+    offset += bl.length();
+    int r = client_cb->handle_data(bl, 0, bl.length());
+    if (r < 0) {
+      return r;
+    }
+    completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+  }
+
+  return 0;
+}
+
 int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
                         RGWGetDataCB* cb, optional_yield y) 
 {
-  /* Execute cache replacement policy */
+  const uint64_t window_size = g_conf()->rgw_get_obj_window_size;
+  std::string oid = source->get_key().get_oid();
+
+  ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << "oid: " << oid << " ofs: " << ofs << " end: " << end << dendl;
+
+  this->client_cb = cb;
+  this->cb->set_client_cb(cb); // what's this for? -Sam
+
+  uint64_t obj_max_req_size = g_conf()->rgw_get_obj_max_req_size;
+  uint64_t start_part_num = 0;
+  uint64_t part_num = ofs/obj_max_req_size; //part num of ofs wrt start of the object
+  uint64_t adjusted_start_ofs = part_num*obj_max_req_size; //in case of ranged request, adjust the start offset to the beginning of a chunk/ part
+  uint64_t diff_ofs = ofs - adjusted_start_ofs; //difference between actual offset and adjusted offset
+  off_t len = (end - adjusted_start_ofs) + 1;
+  uint64_t num_parts = (len%obj_max_req_size) == 0 ? len/obj_max_req_size : (len/obj_max_req_size) + 1; //calculate num parts based on adjusted offset
+  //len_to_read is the actual length read from a part/ chunk in cache, while part_len is the length of the chunk/ part in cache 
+  uint64_t cost = 0, len_to_read = 0, part_len = 0;
+
+  if (y) {
+    aio = rgw::make_throttle(window_size, y);
+
+    ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << "obj_max_req_size " << obj_max_req_size << 
+      " num_parts " << num_parts << " adjusted_start_offset: " << adjusted_start_ofs << " len: " << len << dendl;
+
+    this->offset = ofs;
+
+    do {
+      uint64_t id = adjusted_start_ofs;
+      if (start_part_num == (num_parts - 1)) {
+        len_to_read = len;
+        part_len = len;
+        cost = len;
+      } else {
+        len_to_read = obj_max_req_size;
+        cost = obj_max_req_size;
+        part_len = obj_max_req_size;
+      }
+      if (start_part_num == 0) {
+        len_to_read -= diff_ofs;
+        id += diff_ofs;
+      }
+
+      uint64_t read_ofs = diff_ofs; //read_ofs is the actual offset to start reading from the current part/ chunk
+      std::string oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(part_len);
+      rgw_raw_obj r_obj;
+      r_obj.oid = oid_in_cache;
+      ceph::bufferlist bl;
+
+      ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << 
+	oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
+	" read_ofs: " << read_ofs << " part len: " << part_len << dendl;
+
+      if (source->driver->get_cache_driver()->get(dpp, oid_in_cache, ofs, part_len, bl, source->get_attrs()) == 0) { 
+        // Read From Cache
+        auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
+			   read_ofs, len_to_read, oid_in_cache), cost, id); 
+
+        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
+
+        auto r = flush(dpp, std::move(completed));
+
+        if (r < 0) {
+          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, r= " << r << dendl;
+          return r;
+        }
+      } else {
+        //for ranged requests, for last part, the whole part might exist in the cache
+        oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(obj_max_req_size);
+        r_obj.oid = oid_in_cache;
+
+        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << 
+	  oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
+	  " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
+
+        if (source->driver->get_cache_driver()->get(dpp, oid_in_cache, ofs, obj_max_req_size, bl, source->get_attrs()) == 0) {
+          // Read From Cache
+	  auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
+			     read_ofs, len_to_read, oid_in_cache), cost, id); 
+
+          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
+
+          auto r = flush(dpp, std::move(completed));
+
+          if (r < 0) {
+            ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, r= " << r << dendl;
+            return r;
+          }
+        } else {
+          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid_in_cache << dendl;
+
+          auto r = drain(dpp);
+
+          if (r < 0) {
+            ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to drain, r= " << r << dendl;
+            return r;
+          }
+
+          break;
+        }
+      }
+
+      if (start_part_num == (num_parts - 1)) {
+        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid_in_cache << dendl;
+        return drain(dpp);
+      } else {
+        adjusted_start_ofs += obj_max_req_size;
+      }
+
+      start_part_num += 1;
+      len -= obj_max_req_size;
+    } while (start_part_num < num_parts);
+  }
+
+  ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
+
+  Attrs obj_attrs;
+  if (source->has_attrs()) {
+    obj_attrs = source->get_attrs();
+  }
+
+  if (source->is_compressed() || obj_attrs.find(RGW_ATTR_CRYPT_MODE) != obj_attrs.end() || !y) {
+    ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Skipping writing to cache" << dendl;
+    this->cb->bypass_cache_write();
+  }
+
+  if (start_part_num == 0) {
+    this->cb->set_ofs(ofs);
+  } else {
+    this->cb->set_ofs(adjusted_start_ofs);
+    ofs = adjusted_start_ofs; // redundant? -Sam
+  }
+
+  this->cb->set_ofs(ofs);
+  auto r = next->iterate(dpp, ofs, end, this->cb.get(), y);
+  
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to fetch object from backend store, r= " << r << dendl;
+    return r;
+  }
+  
+  return this->cb->flush_last_part(dpp);
+
+  /*
+  / Execute cache replacement policy /
   int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(dpp, source->driver->get_cache_block(), 
 		    source->driver->get_cache_driver());
   
@@ -410,12 +602,12 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   uint64_t len = end - ofs + 1;
   std::string oid(source->get_name());
   
-  /* Local cache check */
+  / Local cache check /
   if (source->driver->get_cache_driver()->key_exists(dpp, oid)) { // Entire object for now -Sam
     ret = source->driver->get_cache_driver()->get(dpp, source->get_key().get_oid(), ofs, len, bl, source->get_attrs());
     cb->handle_data(bl, ofs, len);
   } else {
-    /* Block directory check */
+    / Block directory check /
     int getDirReturn = source->driver->get_block_dir()->get_value(source->driver->get_cache_block()); 
 
     if (getDirReturn >= -1) {
@@ -427,11 +619,11 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 
       // remote cache get
 
-      /* Cache block locally */
+      / Cache block locally /
       ret = source->driver->get_cache_driver()->put(dpp, source->get_key().get_oid(), bl, len, source->get_attrs()); // May be put_async -Sam
 
       if (!ret) {
-	int updateValueReturn = source->driver->get_block_dir()->update_field(source->driver->get_cache_block(), "hostsList", ""/*local cache ip from config*/);
+	int updateValueReturn = source->driver->get_block_dir()->update_field(source->driver->get_cache_block(), "hostsList", ""/local cache ip from config/);
 
 	if (updateValueReturn < 0) {
 	  ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation failed." << dendl;
@@ -442,7 +634,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 	cb->handle_data(bl, ofs, len);
       }
     } else {
-      /* Write tier retrieval */
+      / Write tier retrieval /
       ldpp_dout(dpp, 20) << "D4N Filter: Block directory get operation failed." << dendl;
       getDirReturn = source->driver->get_obj_dir()->get_value(&(source->driver->get_cache_block()->cacheObj));
 
@@ -455,11 +647,11 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 	
 	// retrieve from write back cache, which will be stored as a cache driver instance in the filter
 
-	/* Cache block locally */
+	/ Cache block locally /
 	ret = source->driver->get_cache_driver()->put(dpp, source->get_key().get_oid(), bl, len, source->get_attrs()); // May be put_async -Sam
 
 	if (!ret) {
-	  int updateValueReturn = source->driver->get_block_dir()->update_field(source->driver->get_cache_block(), "hostsList", ""/*local cache ip from config*/);
+	  int updateValueReturn = source->driver->get_block_dir()->update_field(source->driver->get_cache_block(), "hostsList", ""/local cache ip from config/);
 
 	  if (updateValueReturn < 0) {
 	    ldpp_dout(dpp, 20) << "D4N Filter: Block directory update value operation failed." << dendl;
@@ -470,15 +662,15 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 	  cb->handle_data(bl, ofs, len);
 	}
       } else {
-	/* Backend store retrieval */
+	/ Backend store retrieval /
 	ldpp_dout(dpp, 20) << "D4N Filter: Object directory get operation failed." << dendl;
 	ret = next->iterate(dpp, ofs, end, cb, y);
 
 	if (!ret) {
-	  /* Cache block locally */
+	  / Cache block locally /
 	  ret = source->driver->get_cache_driver()->put(dpp, source->get_key().get_oid(), bl, len, source->get_attrs()); // May be put_async -Sam
 
-	  /* Store block in directory */
+	  / Store block in directory /
 	  rgw::d4n::BlockDirectory* tempBlockDir = source->driver->get_block_dir(); // remove later -Sam
 
 	  source->driver->get_cache_block()->hostsList.push_back(tempBlockDir->get_addr().host + ":" + std::to_string(tempBlockDir->get_addr().port)); // local cache address -Sam 
@@ -501,7 +693,63 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   if (ret < 0) 
     ldpp_dout(dpp, 20) << "D4N Filter: Cache iterate operation failed." << dendl;
 
-  return next->iterate(dpp, ofs, end, cb, y); 
+  return next->iterate(dpp, ofs, end, cb, y); */
+}
+
+int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::flush_last_part(const DoutPrefixProvider* dpp)
+{
+  save_dpp = dpp;
+  last_part = true;
+  return handle_data(bl_rem, 0, bl_rem.length());
+}
+
+int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len)
+{
+  auto rgw_get_obj_max_req_size = g_conf()->rgw_get_obj_max_req_size;
+
+  if (!last_part && bl.length() <= rgw_get_obj_max_req_size) {
+    auto r = client_cb->handle_data(bl, bl_ofs, bl_len);
+
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  //Accumulating data from backend store into rgw_get_obj_max_req_size sized chunks and then writing to cache
+  if (write_to_cache) {
+    const std::lock_guard l(d3n_get_data.d3n_lock);
+    Attrs attrs;
+
+    if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
+      std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
+
+      filter->get_cache_driver()->put(save_dpp, oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
+    } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
+      std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
+      ofs += bl_len;
+
+      filter->get_cache_driver()->put(save_dpp, oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
+    } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
+      uint64_t rem_space = rgw_get_obj_max_req_size - bl_rem.length();
+      uint64_t len_to_copy = rem_space > bl.length() ? bl.length() : rem_space;
+      bufferlist bl_copy;
+
+      bl.splice(0, len_to_copy, &bl_copy);
+      bl_rem.claim_append(bl_copy);
+
+      if (bl_rem.length() == g_conf()->rgw_get_obj_max_req_size) {
+        std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
+        ofs += bl_rem.length();
+
+        filter->get_cache_driver()->put(save_dpp, oid, bl_rem, bl_rem.length(), attrs); // need attrs for just chunk? -Sam
+
+        bl_rem.clear();
+        bl_rem = std::move(bl);
+      }
+    }
+  }
+
+  return 0;
 }
 
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
