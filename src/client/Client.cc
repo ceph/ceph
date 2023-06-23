@@ -9656,6 +9656,12 @@ int Client::create_and_open(int dirfd, const char *relpath, int flags,
     return r;
   }
 
+  if (dirinode->fscrypt_ctx) {
+    if (mask & CEPH_FILE_MODE_WR) {
+      mask |= CEPH_FILE_MODE_RD;
+    }
+  }
+
   r = path_walk(path, &in, perms, followsym, mask, dirinode);
   if (r == 0 && (flags & O_CREAT) && (flags & O_EXCL))
     return -CEPHFS_EEXIST;
@@ -9966,6 +9972,20 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     cflags |= CEPH_O_LAZY;
 
   int cmode = ceph_flags_to_mode(cflags);
+#if 0
+  if (in->dir) {
+    auto diri = in->dir->parent_inode;
+    if (diri && diri->fscrypt_ctx) {
+      if (want & CEPH_FILE_MODE_WR) {
+        want |= CEPH_FILE_MODE_RD;
+      }
+    }
+  }
+#endif
+#warning FIXME
+  if (cmode & CEPH_FILE_MODE_WR) {
+    cmode |= CEPH_FILE_MODE_RD;
+  }
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
 
@@ -10848,6 +10868,103 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     }
   }
 
+  uint64_t request_offset = offset;
+  uint64_t request_size = size;
+
+  bufferlist encbl;
+  bufferlist *pbl = &bl;
+
+  auto denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
+  if (denc) {
+#if 0
+    int want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_RD;
+    int have;
+    if (f->mode & CEPH_FILE_MODE_LAZY) {
+      want |= CEPH_CAP_FILE_LAZYIO;
+    }
+#endif
+    int want = CEPH_CAP_FILE_RD;
+    int have;
+    int r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, endoff);
+    if (r < 0) {
+      return r;
+    }
+    auto start_block = fscrypt_block_from_ofs(offset);
+    auto start_block_ofs = fscrypt_block_start(offset);
+    auto ofs_in_start_block = fscrypt_ofs_in_block(offset);
+    auto end_block = fscrypt_block_from_ofs(endoff - 1);
+    auto end_block_ofs = fscrypt_block_start(endoff - 1);
+    auto ofs_in_end_block = fscrypt_ofs_in_block(endoff - 1);
+
+    bool need_read_start = ofs_in_start_block > 0;
+    bool need_read_end = (endoff < in->effective_size() && ofs_in_end_block < FSCRYPT_BLOCK_SIZE - 1);
+
+    int read_start_size = (need_read_start && need_read_end && start_block == end_block ?
+                           FSCRYPT_BLOCK_SIZE : ofs_in_start_block);
+
+    if (read_start_size > 0) {
+      bufferlist startbl;
+
+      int r = _read(f, start_block_ofs, read_start_size, &startbl);
+      if (r < 0) {
+        ldout(cct, 0) << "failed to read first block: r=" << r << dendl;
+        return r;
+      }
+
+      /* prepend data from the start of the first block */
+      bufferlist newbl;
+      startbl.splice(0, ofs_in_start_block, &newbl);
+
+      /* append new data */
+      newbl.claim_append(bl);
+
+      if (startbl.length() > bl.length()) {
+        /* can happen if start and end are in the same block */
+        bufferlist tail;
+        startbl.splice(bl.length(), startbl.length()-bl.length(), &tail);
+        newbl.claim_append(tail);
+
+        if (newbl.length() < FSCRYPT_BLOCK_SIZE) {
+          newbl.append_zero(FSCRYPT_BLOCK_SIZE - newbl.length());
+        }
+
+        need_read_end = false;
+      }
+
+      bl.swap(newbl);
+    }
+
+    if (need_read_end) {
+      bufferlist endbl;
+      int r = _read(f, end_block_ofs, FSCRYPT_BLOCK_SIZE, &endbl);
+      if (r < 0) {
+        ldout(cct, 0) << "failed to read first block: r=" << r << dendl;
+        return r;
+      }
+
+      if (endbl.length() > ofs_in_end_block) {
+        bufferlist tail;
+        endbl.splice(ofs_in_end_block + 1, endbl.length() - ofs_in_end_block - 1, &tail);
+
+        bl.claim_append(tail);
+      }
+    }
+
+    put_cap_ref(in, CEPH_CAP_FILE_RD);
+    in->mark_caps_dirty(CEPH_CAP_FILE_RD);
+
+    offset = start_block_ofs;
+
+    pbl = &encbl;
+    r = denc->encrypt_bl(offset, bl.length(), bl, &encbl);
+    if (r < 0) {
+      ldout(cct, 0) << "failed to encrypt bl: r=" << r << dendl;
+      return r;
+    }
+
+    size = encbl.length();
+  }
+
   utime_t lat;
   uint64_t totalwritten;
   int want, have;
@@ -10873,6 +10990,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
   }
 
+#warning buffered encrypted writes handling
   if (f->flags & O_DIRECT)
     have &= ~(CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO);
 
@@ -10919,7 +11037,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     // async, caching, non-blocking.
     r = objectcacher->file_write(&in->oset, &in->layout,
 				 in->snaprealm->get_snap_context(),
-				 offset, size, bl, ceph::real_clock::now(),
+				 offset, size, *pbl, ceph::real_clock::now(),
 				 0);
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
@@ -10941,7 +11059,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-		       offset, size, bl, ceph::real_clock::now(), 0,
+		       offset, size, *pbl, ceph::real_clock::now(), 0,
 		       in->truncate_size, in->truncate_seq,
 		       &onfinish);
     client_lock.unlock();
@@ -10968,11 +11086,13 @@ success:
     unlock_fh_pos(f);
   }
   totalwritten = size;
-  r = (int64_t)totalwritten;
+  r = (int64_t)request_size;
 
   // extend file?
-  if (totalwritten + offset > in->size) {
-    in->size = totalwritten + offset;
+  if (request_size + request_offset > in->effective_size()) {
+    in->set_effective_size(request_size + request_offset);
+    ldout(cct, 7) << "in->effective_size()=" << in->effective_size() << dendl;
+    in->size = offset + size;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
     if (is_quota_bytes_approaching(in, f->actor_perms)) {
@@ -10981,9 +11101,9 @@ success:
       check_caps(in, 0);
     }
 
-    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
+    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", effective size " << request_size + request_offset << ", extending file size" << dendl;
   } else {
-    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->size << dendl;
+    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", effective size " << request_size + request_offset << ", leaving file size at " << in->size << dendl;
   }
 
   // mtime

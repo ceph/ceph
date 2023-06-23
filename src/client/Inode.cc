@@ -841,3 +841,12 @@ uint64_t Inode::effective_size() const
 
   return *(ceph_le64 *)fscrypt_file.data();
 }
+
+void Inode::set_effective_size(uint64_t size)
+{
+  if (fscrypt_file.size() < sizeof(uint64_t)) {
+    fscrypt_file.resize(sizeof(uint64_t));
+  }
+
+  *(ceph_le64 *)fscrypt_file.data() = size;
+}
