@@ -1,25 +1,24 @@
-Manually editing a CRUSH Map
-============================
+Manually editing the CRUSH Map
+==============================
 
-.. note:: Manually editing the CRUSH map is an advanced
-	  administrator operation.  All CRUSH changes that are
-	  necessary for the overwhelming majority of installations are
-	  possible via the standard ceph CLI and do not require manual
-	  CRUSH map edits.  If you have identified a use case where
-	  manual edits *are* necessary with recent Ceph releases, consider
-	  contacting the Ceph developers so that future versions of Ceph
-	  can obviate your corner case.
+.. note:: Manually editing the CRUSH map is an advanced administrator
+   operation. For the majority of installations, CRUSH changes can be
+   implemented via the Ceph CLI and do not require manual CRUSH map edits. If
+   you have identified a use case where manual edits *are* necessary with a
+   recent Ceph release, consider contacting the Ceph developers at dev@ceph.io
+   so that future versions of Ceph do not have this problem.
 
-To edit an existing CRUSH map:
+To edit an existing CRUSH map, carry out the following procedure:
 
 #. `Get the CRUSH map`_.
 #. `Decompile`_ the CRUSH map.
-#. Edit at least one of `Devices`_, `Buckets`_ and `Rules`_.
+#.  Edit at least one of the following sections: `Devices`_, `Buckets`_, and
+    `Rules`_. Use a text editor for this task.
 #. `Recompile`_ the CRUSH map.
 #. `Set the CRUSH map`_.
 
-For details on setting the CRUSH map rule for a specific pool, see `Set
-Pool Values`_.
+For details on setting the CRUSH map rule for a specific pool, see `Set Pool
+Values`_.
 
 .. _Get the CRUSH map: #getcrushmap
 .. _Decompile: #decompilecrushmap
@@ -32,193 +31,204 @@ Pool Values`_.
 
 .. _getcrushmap:
 
-Get a CRUSH Map
----------------
+Get the CRUSH Map
+-----------------
 
-To get the CRUSH map for your cluster, execute the following:
+To get the CRUSH map for your cluster, run a command of the following form:
 
 .. prompt:: bash $
 
-	ceph osd getcrushmap -o {compiled-crushmap-filename}
+    ceph osd getcrushmap -o {compiled-crushmap-filename}
 
-Ceph will output (-o) a compiled CRUSH map to the filename you specified. Since
-the CRUSH map is in a compiled form, you must decompile it first before you can
-edit it.
+Ceph outputs (``-o``) a compiled CRUSH map to the filename that you have
+specified. Because the CRUSH map is in a compiled form, you must first
+decompile it before you can edit it.
 
 .. _decompilecrushmap:
 
-Decompile a CRUSH Map
----------------------
+Decompile the CRUSH Map
+-----------------------
 
-To decompile a CRUSH map, execute the following:
+To decompile the CRUSH map, run a command of the following form:
 
 .. prompt:: bash $
 
-	crushtool -d {compiled-crushmap-filename} -o {decompiled-crushmap-filename}
+    crushtool -d {compiled-crushmap-filename} -o {decompiled-crushmap-filename}
 
 .. _compilecrushmap:
 
-Recompile a CRUSH Map
----------------------
+Recompile the CRUSH Map
+-----------------------
 
-To compile a CRUSH map, execute the following:
+To compile the CRUSH map, run a command of the following form:
 
 .. prompt:: bash $
 
-	crushtool -c {decompiled-crushmap-filename} -o {compiled-crushmap-filename}
+    crushtool -c {decompiled-crushmap-filename} -o {compiled-crushmap-filename}
 
 .. _setcrushmap:
 
 Set the CRUSH Map
 -----------------
 
-To set the CRUSH map for your cluster, execute the following:
+To set the CRUSH map for your cluster, run a command of the following form:
 
 .. prompt:: bash $
 
-	ceph osd setcrushmap -i {compiled-crushmap-filename}
+    ceph osd setcrushmap -i {compiled-crushmap-filename}
 
-Ceph will load (-i) a compiled CRUSH map from the filename you specified.
+Ceph loads (``-i``) a compiled CRUSH map from the filename that you have
+specified.
 
 Sections
 --------
 
-There are six main sections to a CRUSH Map.
+A CRUSH map has six main sections:
 
 #. **tunables:** The preamble at the top of the map describes any *tunables*
-   that differ from the historical / legacy CRUSH behavior. These
-   correct for old bugs, optimizations, or other changes that have
-   been made over the years to improve CRUSH's behavior.
+   that are not a part of legacy CRUSH behavior. These tunables correct for old
+   bugs, optimizations, or other changes that have been made over the years to
+   improve CRUSH's behavior.
 
 #. **devices:** Devices are individual OSDs that store data.
 
-#. **types**: Bucket ``types`` define the types of buckets used in
-   your CRUSH hierarchy. Buckets consist of a hierarchical aggregation
-   of storage locations (e.g., rows, racks, chassis, hosts, etc.) and
-   their assigned weights.
+#. **types**: Bucket ``types`` define the types of buckets that are used in
+   your CRUSH hierarchy. 
 
-#. **buckets:** Once you define bucket types, you must define each node
-   in the hierarchy, its type, and which devices or other nodes it
+#. **buckets:** Buckets consist of a hierarchical aggregation of storage
+   locations (for example, rows, racks, chassis, hosts) and their assigned
+   weights. After the bucket ``types`` have been defined, the CRUSH map defines
+   each node in the hierarchy, its type, and which devices or other nodes it
    contains.
 
 #. **rules:** Rules define policy about how data is distributed across
    devices in the hierarchy.
 
-#. **choose_args:** Choose_args are alternative weights associated with
-   the hierarchy that have been adjusted to optimize data placement.  A single
-   choose_args map can be used for the entire cluster, or one can be
-   created for each individual pool.
+#. **choose_args:** ``choose_args`` are alternative weights associated with
+   the hierarchy that have been adjusted in order to optimize data placement. A
+   single ``choose_args`` map can be used for the entire cluster, or a number
+   of ``choose_args`` maps can be created such that each map is crafted for a
+   particular pool.
 
 
 .. _crushmapdevices:
 
-CRUSH Map Devices
+CRUSH-Map Devices
 -----------------
 
-Devices are individual OSDs that store data.  Usually one is defined here for each
-OSD daemon in your
-cluster.  Devices are identified by an ``id`` (a non-negative integer) and
-a ``name``, normally ``osd.N`` where ``N`` is the device id.
+Devices are individual OSDs that store data. In this section, there is usually
+one device defined for each OSD daemon in your cluster. Devices are identified
+by an ``id`` (a non-negative integer) and a ``name`` (usually ``osd.N``, where
+``N`` is the device's ``id``).
+
 
 .. _crush-map-device-class:
 
-Devices may also have a *device class* associated with them (e.g.,
-``hdd`` or ``ssd``), allowing them to be conveniently targeted by a
-crush rule.
+A device can also have a *device class* associated with it: for example,
+``hdd`` or ``ssd``. Device classes make it possible for devices to be targeted
+by CRUSH rules. This means that device classes allow CRUSH rules to select only
+OSDs that match certain characteristics. For example, you might want an RBD
+pool associated only with SSDs and a different RBD pool associated only with
+HDDs.
+
+To see a list of devices, run the following command:
 
 .. prompt:: bash #
 
-	devices
+   ceph device ls 
+
+The output of this command takes the following form:
 
 ::
 
-	device {num} {osd.name} [class {class}]
+    device {num} {osd.name} [class {class}]
 
 For example:
 
 .. prompt:: bash #
 
-	devices
+    ceph device ls
 
 ::
 
-	device 0 osd.0 class ssd
-	device 1 osd.1 class hdd
-	device 2 osd.2
-	device 3 osd.3
+    device 0 osd.0 class ssd
+    device 1 osd.1 class hdd
+    device 2 osd.2
+    device 3 osd.3
 
-In most cases, each device maps to a single ``ceph-osd`` daemon.  This
-is normally a single storage device, a pair of devices (for example,
-one for data and one for a journal or metadata), or in some cases a
-small RAID device.
+In most cases, each device maps to a corresponding ``ceph-osd`` daemon. This
+daemon might map to a single storage device, a pair of devices (for example,
+one for data and one for a journal or metadata), or in some cases a small RAID
+device or a partition of a larger storage device.
 
-CRUSH Map Bucket Types
+
+CRUSH-Map Bucket Types
 ----------------------
 
-The second list in the CRUSH map defines 'bucket' types. Buckets facilitate
-a hierarchy of nodes and leaves. Node (or non-leaf) buckets typically represent
-physical locations in a hierarchy. Nodes aggregate other nodes or leaves.
-Leaf buckets represent ``ceph-osd`` daemons and their corresponding storage
-media.
+The second list in the CRUSH map defines 'bucket' types. Buckets facilitate a
+hierarchy of nodes and leaves. Node buckets (also known as non-leaf buckets)
+typically represent physical locations in a hierarchy. Nodes aggregate other
+nodes or leaves. Leaf buckets represent ``ceph-osd`` daemons and their
+corresponding storage media.
 
-.. tip:: The term "bucket" used in the context of CRUSH means a node in
-   the hierarchy, i.e. a location or a piece of physical hardware. It
-   is a different concept from the term "bucket" when used in the
-   context of RADOS Gateway APIs.
+.. tip:: In the context of CRUSH, the term "bucket" is used to refer to
+   a node in the hierarchy (that is, to a location or a piece of physical
+   hardware). In the context of RADOS Gateway APIs, however, the term
+   "bucket" has a different meaning.
 
-To add a bucket type to the CRUSH map, create a new line under your list of
+To add a bucket type to the CRUSH map, create a new line under the list of
 bucket types. Enter ``type`` followed by a unique numeric ID and a bucket name.
-By convention, there is one leaf bucket and it is ``type 0``;  however, you may
-give it any name you like (e.g., osd, disk, drive, storage)::
+By convention, there is exactly one leaf bucket type and it is ``type 0``;
+however, you may give the leaf bucket any name you like (for example: ``osd``,
+``disk``, ``drive``, ``storage``)::
 
-	# types
-	type {num} {bucket-name}
+    # types
+    type {num} {bucket-name}
 
 For example::
 
-	# types
-	type 0 osd
-	type 1 host
-	type 2 chassis
-	type 3 rack
-	type 4 row
-	type 5 pdu
-	type 6 pod
-	type 7 room
-	type 8 datacenter
-	type 9 zone
-	type 10 region
-	type 11 root
-
-
+    # types
+    type 0 osd
+    type 1 host
+    type 2 chassis
+    type 3 rack
+    type 4 row
+    type 5 pdu
+    type 6 pod
+    type 7 room
+    type 8 datacenter
+    type 9 zone
+    type 10 region
+    type 11 root
 
 .. _crushmapbuckets:
 
-CRUSH Map Bucket Hierarchy
+CRUSH-Map Bucket Hierarchy
 --------------------------
 
-The CRUSH algorithm distributes data objects among storage devices according
-to a per-device weight value, approximating a uniform probability distribution.
+The CRUSH algorithm distributes data objects among storage devices according to
+a per-device weight value, approximating a uniform probability distribution.
 CRUSH distributes objects and their replicas according to the hierarchical
-cluster map you define. Your CRUSH map represents the available storage
-devices and the logical elements that contain them.
+cluster map you define. The CRUSH map represents the available storage devices
+and the logical elements that contain them.
 
-To map placement groups to OSDs across failure domains, a CRUSH map defines a
-hierarchical list of bucket types (i.e., under ``#types`` in the generated CRUSH
-map). The purpose of creating a bucket hierarchy is to segregate the
-leaf nodes by their failure domains, such as hosts, chassis, racks, power
-distribution units, pods, rows, rooms, and data centers. With the exception of
-the leaf nodes representing OSDs, the rest of the hierarchy is arbitrary, and
+To map placement groups (PGs) to OSDs across failure domains, a CRUSH map
+defines a hierarchical list of bucket types under ``#types`` in the generated
+CRUSH map. The purpose of creating a bucket hierarchy is to segregate the leaf
+nodes according to their failure domains (for example: hosts, chassis, racks,
+power distribution units, pods, rows, rooms, and data centers). With the
+exception of the leaf nodes that represent OSDs, the hierarchy is arbitrary and
 you may define it according to your own needs.
 
-We recommend adapting your CRUSH map to your firm's hardware naming conventions
-and using instance names that reflect the physical hardware. Your naming
-practice can make it easier to administer the cluster and troubleshoot
-problems when an OSD and/or other hardware malfunctions and the administrator
-need access to physical hardware.
+We recommend adapting your CRUSH map to your preferred hardware-naming
+conventions and using bucket names that clearly reflect the physical
+hardware. Clear naming practice can make it easier to administer the cluster
+and easier to troubleshoot problems when OSDs malfunction (or other hardware
+malfunctions) and the administrator needs access to physical hardware.
 
-In the following example, the bucket hierarchy has a leaf bucket named ``osd``,
-and two node buckets named ``host`` and ``rack`` respectively.
+
+In the following example, the bucket hierarchy has a leaf bucket named ``osd``
+and two node buckets named ``host`` and ``rack``:
 
 .. ditaa::
                            +-----------+
@@ -240,121 +250,137 @@ and two node buckets named ``host`` and ``rack`` respectively.
    |   Bucket  |   |   Bucket  |   |   Bucket  |   |   Bucket  |
    +-----------+   +-----------+   +-----------+   +-----------+
 
-.. note:: The higher numbered ``rack`` bucket type aggregates the lower
-   numbered ``host`` bucket type.
+.. note:: The higher-numbered ``rack`` bucket type aggregates the
+   lower-numbered ``host`` bucket type.
 
-Since leaf nodes reflect storage devices declared under the ``#devices`` list
-at the beginning of the CRUSH map, you do not need to declare them as bucket
-instances. The second lowest bucket type in your hierarchy usually aggregates
-the devices (i.e., it's usually the computer containing the storage media, and
-uses whatever term you prefer to describe it, such as  "node", "computer",
-"server," "host", "machine", etc.). In high density environments, it is
-increasingly common to see multiple hosts/nodes per chassis. You should account
-for chassis failure too--e.g., the need to pull a chassis if a node fails may
-result in bringing down numerous hosts/nodes and their OSDs.
+Because leaf nodes reflect storage devices that have already been declared
+under the ``#devices`` list at the beginning of the CRUSH map, there is no need
+to declare them as bucket instances. The second-lowest bucket type in your
+hierarchy is typically used to aggregate the devices (that is, the
+second-lowest bucket type is usually the computer that contains the storage
+media and, such as ``node``, ``computer``, ``server``, ``host``, or
+``machine``). In high-density environments, it is common to have multiple hosts
+or nodes in a single chassis (for example, in the cases of blades or twins). It
+is important to anticipate the potential consequences of chassis failure -- for
+example, during the replacement of a chassis in case of a node failure, the
+chassis's hosts or nodes (and their associated OSDs) will be in a ``down``
+state.
 
-When declaring a bucket instance, you must specify its type, give it a unique
-name (string), assign it a unique ID expressed as a negative integer (optional),
-specify a weight relative to the total capacity/capability of its item(s),
-specify the bucket algorithm (usually ``straw2``), and the hash (usually ``0``,
-reflecting hash algorithm ``rjenkins1``). A bucket may have one or more items.
-The items may consist of node buckets or leaves. Items may have a weight that
-reflects the relative weight of the item.
+To declare a bucket instance, do the following: specify its type, give it a
+unique name (an alphanumeric string), assign it a unique ID expressed as a
+negative integer (this is optional), assign it a weight relative to the total
+capacity and capability of the item(s) in the bucket, assign it a bucket
+algorithm (usually ``straw2``), and specify the bucket algorithm's hash
+(usually ``0``, a setting that reflects the hash algorithm ``rjenkins1``). A
+bucket may have one or more items. The items may consist of node buckets or
+leaves. Items may have a weight that reflects the relative weight of the item.
 
-You may declare a node bucket with the following syntax::
+To declare a node bucket, use the following syntax::
 
-	[bucket-type] [bucket-name] {
-		id [a unique negative numeric ID]
-		weight [the relative capacity/capability of the item(s)]
-		alg [the bucket type: uniform | list | tree | straw | straw2 ]
-		hash [the hash type: 0 by default]
-		item [item-name] weight [weight]
-	}
+    [bucket-type] [bucket-name] {
+        id [a unique negative numeric ID]
+        weight [the relative capacity/capability of the item(s)]
+        alg [the bucket type: uniform | list | tree | straw | straw2 ]
+        hash [the hash type: 0 by default]
+        item [item-name] weight [weight]
+    }
 
-For example, using the diagram above, we would define two host buckets
-and one rack bucket. The OSDs are declared as items within the host buckets::
+For example, in the above diagram, two host buckets (referred to in the
+declaration below as ``node1`` and ``node2``) and one rack bucket (referred to
+in the declaration below as ``rack1``) are defined. The OSDs are declared as
+items within the host buckets::
 
-	host node1 {
-		id -1
-		alg straw2
-		hash 0
-		item osd.0 weight 1.00
-		item osd.1 weight 1.00
-	}
+    host node1 {
+        id -1
+        alg straw2
+        hash 0
+        item osd.0 weight 1.00
+        item osd.1 weight 1.00
+    }
 
-	host node2 {
-		id -2
-		alg straw2
-		hash 0
-		item osd.2 weight 1.00
-		item osd.3 weight 1.00
-	}
+    host node2 {
+        id -2
+        alg straw2
+        hash 0
+        item osd.2 weight 1.00
+        item osd.3 weight 1.00
+    }
 
-	rack rack1 {
-		id -3
-		alg straw2
-		hash 0
-		item node1 weight 2.00
-		item node2 weight 2.00
-	}
+    rack rack1 {
+        id -3
+        alg straw2
+        hash 0
+        item node1 weight 2.00
+        item node2 weight 2.00
+    }
 
-.. note:: In the foregoing example, note that the rack bucket does not contain
-   any OSDs. Rather it contains lower level host buckets, and includes the
-   sum total of their weight in the item entry.
+.. note:: In this example, the rack bucket does not contain any OSDs. Instead,
+   it contains lower-level host buckets and includes the sum of their weight in
+   the item entry.
+
 
 .. topic:: Bucket Types
 
-   Ceph supports five bucket types, each representing a tradeoff between
-   performance and reorganization efficiency. If you are unsure of which bucket
-   type to use, we recommend using a ``straw2`` bucket.  For a detailed
-   discussion of bucket types, refer to
-   `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
-   and more specifically to **Section 3.4**. The bucket types are:
+   Ceph supports five bucket types. Each bucket type provides a balance between
+   performance and reorganization efficiency, and each is different from the
+   others. If you are unsure of which bucket type to use, use the ``straw2``
+   bucket. For a more technical discussion of bucket types than is offered
+   here, see **Section 3.4** of `CRUSH - Controlled, Scalable, Decentralized
+   Placement of Replicated Data`_. 
+   
+   The bucket types are as follows:
 
-	#. **uniform**: Uniform buckets aggregate devices with **exactly** the same
-	   weight. For example, when firms commission or decommission hardware, they
-	   typically do so with many machines that have exactly the same physical
-	   configuration (e.g., bulk purchases). When storage devices have exactly
-	   the same weight, you may use the ``uniform`` bucket type, which allows
-	   CRUSH to map replicas into uniform buckets in constant time. With
-	   non-uniform weights, you should use another bucket algorithm.
+    #. **uniform**: Uniform buckets aggregate devices that have **exactly** 
+       the same weight. For example, when hardware is commissioned or
+       decommissioned, it is often done in sets of machines that have exactly
+       the same physical configuration (this can be the case, for example,
+       after bulk purchases). When storage devices have exactly the same
+       weight, you may use the ``uniform`` bucket type, which allows CRUSH to
+       map replicas into uniform buckets in constant time. If your devices have
+       non-uniform weights, you should not use the uniform bucket algorithm.
 
-	#. **list**: List buckets aggregate their content as linked lists. Based on
-	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`P` algorithm,
-	   a list is a natural and intuitive choice for an **expanding cluster**:
-	   either an object is relocated to the newest device with some appropriate
-	   probability, or it remains on the older devices as before. The result is
-	   optimal data migration when items are added to the bucket. Items removed
-	   from the middle or tail of the list, however, can result in a signiﬁcant
-	   amount of unnecessary movement, making list buckets most suitable for
-	   circumstances in which they **never (or very rarely) shrink**.
+    #. **list**: List buckets aggregate their content as linked lists. The 
+       behavior of list buckets is governed by the :abbr:`RUSH (Replication
+       Under Scalable Hashing)`:sub:`P` algorithm. In the behavior of this
+       bucket type, an object is either relocated to the newest device in
+       accordance with an appropriate probability, or it remains on the older
+       devices as before. This results in optimal data migration when items are
+       added to the bucket. The removal of items from the middle or the tail of
+       the list, however, can result in a significant amount of unnecessary
+       data movement. This means that list buckets are most suitable for
+       circumstances in which they **never shrink or very rarely shrink**.
 
-	#. **tree**: Tree buckets use a binary search tree. They are more efficient
-	   than list buckets when a bucket contains a larger set of items. Based on
-	   the :abbr:`RUSH (Replication Under Scalable Hashing)` :sub:`R` algorithm,
-	   tree buckets reduce the placement time to O(log :sub:`n`), making them
-	   suitable for managing much larger sets of devices or nested buckets.
+    #. **tree**: Tree buckets use a binary search tree. They are more efficient
+       at dealing with buckets that contain many items than are list buckets.
+       The behavior of tree buckets is governed by the :abbr:`RUSH (Replication
+       Under Scalable Hashing)`:sub:`R` algorithm. Tree buckets reduce the
+       placement time to 0(log\ :sub:`n`). This means that tree buckets are
+       suitable for managing large sets of devices or nested buckets.
 
-	#. **straw**: List and Tree buckets use a divide and conquer strategy
-	   in a way that either gives certain items precedence (e.g., those
-	   at the beginning of a list) or obviates the need to consider entire
-	   subtrees of items at all. That improves the performance of the replica
-	   placement process, but can also introduce suboptimal reorganization
-	   behavior when the contents of a bucket change due an addition, removal,
-	   or re-weighting of an item. The straw bucket type allows all items to
-	   fairly “compete” against each other for replica placement through a
-	   process analogous to a draw of straws.
+    #. **straw**: Straw buckets allow all items in the bucket to "compete" 
+       against each other for replica placement through a process analogous to
+       drawing straws. This is different from the behavior of list buckets and
+       tree buckets, which use a divide-and-conquer strategy that either gives
+       certain items precedence (for example, those at the beginning of a list)
+       or obviates the need to consider entire subtrees of items. Such an
+       approach improves the performance of the replica placement process, but
+       can also introduce suboptimal reorganization behavior when the contents
+       of a bucket change due an addition, a removal, or the re-weighting of an
+       item.
 
-        #. **straw2**: Straw2 buckets improve Straw to correctly avoid any data
-           movement between items when neighbor weights change.
+        * **straw2**: Straw2 buckets improve on Straw by correctly avoiding 
+          any data movement between items when neighbor weights change. For
+          example, if the weight of a given item changes (including during the
+          operations of adding it to the cluster or removing it from the
+          cluster), there will be data movement to or from only that item.
+          Neighbor weights are not taken into account.
 
-           For example the weight of item A including adding it anew or removing
-           it completely, there will be data movement only to or from item A.
 
 .. topic:: Hash
 
-   Each bucket uses a hash algorithm. Currently, Ceph supports ``rjenkins1``.
-   Enter ``0`` as your hash setting to select ``rjenkins1``.
+   Each bucket uses a hash algorithm. As of Reef, Ceph supports the
+   ``rjenkins1`` algorithm. To select ``rjenkins1`` as the hash algorithm,
+   enter ``0`` as your hash setting.
 
 
 .. _weightingbucketitems:
