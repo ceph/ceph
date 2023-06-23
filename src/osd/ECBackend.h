@@ -94,7 +94,9 @@ public:
 
   void dump_recovery_info(ceph::Formatter *f) const override;
 
-  void call_write_ordered(std::function<void(void)> &&cb) override;
+  void call_write_ordered(std::function<void(void)> &&cb) override {
+    rmw_pipeline.call_write_ordered(std::move(cb));
+  }
 
   void submit_transaction(
     const hobject_t &hoid,
@@ -175,24 +177,6 @@ public:
     Context *on_complete,
     bool fast_read = false) override;
 
-  template <typename Func>
-  void objects_read_async_no_cache(
-    const std::map<hobject_t,extent_set> &to_read,
-    Func &&on_complete) {
-    std::map<hobject_t,std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
-    for (auto &&hpair: to_read) {
-      auto &l = _to_read[hpair.first];
-      for (auto extent: hpair.second) {
-	l.emplace_back(extent.first, extent.second, 0);
-      }
-    }
-    objects_read_and_reconstruct(
-      _to_read,
-      false,
-      make_gen_lambda_context<
-      std::map<hobject_t,std::pair<int, extent_map> > &&, Func>(
-	  std::forward<Func>(on_complete)));
-  }
   void kick_reads() {
     while (in_progress_client_reads.size() &&
 	   in_progress_client_reads.front().is_complete()) {
@@ -510,61 +494,126 @@ public:
   using op_list = boost::intrusive::list<Op>;
   friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
-  ExtentCache cache;
-  std::map<ceph_tid_t, Op> tid_to_op_map; /// Owns Op structure
+  struct RMWPipeline {
+    ExtentCache cache;
+    std::map<ceph_tid_t, Op> tid_to_op_map; /// Owns Op structure
+    /**
+     * We model the possible rmw states as a std::set of waitlists.
+     * All writes at this time complete in order, so a write blocked
+     * at waiting_state blocks all writes behind it as well (same for
+     * other states).
+     *
+     * Future work: We can break this up into a per-object pipeline
+     * (almost).  First, provide an ordering token to submit_transaction
+     * and require that all operations within a single transaction take
+     * place on a subset of hobject_t space partitioned by that token
+     * (the hashid seem about right to me -- even works for temp objects
+     * if you recall that a temp object created for object head foo will
+     * only ever be referenced by other transactions on foo and aren't
+     * reused).  Next, factor this part into a class and maintain one per
+     * ordering token.  Next, fixup PrimaryLogPG's repop queue to be
+     * partitioned by ordering token.  Finally, refactor the op pipeline
+     * so that the log entries passed into submit_transaction aren't
+     * versioned.  We can't assign versions to them until we actually
+     * submit the operation.  That's probably going to be the hard part.
+     */
+    class pipeline_state_t {
+      enum {
+        CACHE_VALID = 0,
+        CACHE_INVALID = 1
+      } pipeline_state = CACHE_VALID;
+    public:
+      bool caching_enabled() const {
+        return pipeline_state == CACHE_VALID;
+      }
+      bool cache_invalid() const {
+        return !caching_enabled();
+      }
+      void invalidate() {
+        pipeline_state = CACHE_INVALID;
+      }
+      void clear() {
+        pipeline_state = CACHE_VALID;
+      }
+      friend ostream &operator<<(ostream &lhs, const pipeline_state_t &rhs);
+    } pipeline_state;
 
-  /**
-   * We model the possible rmw states as a std::set of waitlists.
-   * All writes at this time complete in order, so a write blocked
-   * at waiting_state blocks all writes behind it as well (same for
-   * other states).
-   *
-   * Future work: We can break this up into a per-object pipeline
-   * (almost).  First, provide an ordering token to submit_transaction
-   * and require that all operations within a single transaction take
-   * place on a subset of hobject_t space partitioned by that token
-   * (the hashid seem about right to me -- even works for temp objects
-   * if you recall that a temp object created for object head foo will
-   * only ever be referenced by other transactions on foo and aren't
-   * reused).  Next, factor this part into a class and maintain one per
-   * ordering token.  Next, fixup PrimaryLogPG's repop queue to be
-   * partitioned by ordering token.  Finally, refactor the op pipeline
-   * so that the log entries passed into submit_transaction aren't
-   * versioned.  We can't assign versions to them until we actually
-   * submit the operation.  That's probably going to be the hard part.
-   */
-  class pipeline_state_t {
-    enum {
-      CACHE_VALID = 0,
-      CACHE_INVALID = 1
-    } pipeline_state = CACHE_VALID;
-  public:
-    bool caching_enabled() const {
-      return pipeline_state == CACHE_VALID;
-    }
-    bool cache_invalid() const {
-      return !caching_enabled();
-    }
-    void invalidate() {
-      pipeline_state = CACHE_INVALID;
-    }
-    void clear() {
-      pipeline_state = CACHE_VALID;
-    }
-    friend ostream &operator<<(ostream &lhs, const pipeline_state_t &rhs);
-  } pipeline_state;
+    op_list waiting_state;        /// writes waiting on pipe_state
+    op_list waiting_reads;        /// writes waiting on partial stripe reads
+    op_list waiting_commit;       /// writes waiting on initial commit
+    eversion_t completed_to;
+    eversion_t committed_to;
+    void start_rmw(Op *op, PGTransactionUPtr &&t);
+    bool try_state_to_reads();
+    bool try_reads_to_commit();
+    bool try_finish_rmw();
+    void check_ops();
 
+    void on_change();
+    void call_write_ordered(std::function<void(void)> &&cb);
 
-  op_list waiting_state;        /// writes waiting on pipe_state
-  op_list waiting_reads;        /// writes waiting on partial stripe reads
-  op_list waiting_commit;       /// writes waiting on initial commit
-  eversion_t completed_to;
-  eversion_t committed_to;
-  void start_rmw(Op *op, PGTransactionUPtr &&t);
-  bool try_state_to_reads();
-  bool try_reads_to_commit();
-  bool try_finish_rmw();
-  void check_ops();
+    CephContext* cct;
+    PGBackend::Listener *get_parent() const { return parent; }
+    const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+    epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
+    const pg_info_t &get_info() { return get_parent()->get_info(); }
+
+    // TODO: this will is going to be the RMWPipeline::Listener
+    template <typename Func>
+    void objects_read_async_no_cache(
+      const std::map<hobject_t,extent_set> &to_read,
+      Func &&on_complete
+    ) {
+      std::map<hobject_t,std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
+      for (auto &&hpair: to_read) {
+        auto &l = _to_read[hpair.first];
+        for (auto extent: hpair.second) {
+          l.emplace_back(extent.first, extent.second, 0);
+        }
+      }
+      ec_backend.objects_read_and_reconstruct(
+        _to_read,
+        false,
+        make_gen_lambda_context<
+        std::map<hobject_t,std::pair<int, extent_map> > &&, Func>(
+            std::forward<Func>(on_complete)));
+    }
+    void handle_sub_write(
+      pg_shard_t from,
+      OpRequestRef msg,
+      ECSubWrite &op,
+      const ZTracer::Trace &trace
+    ) {
+      ec_backend.handle_sub_write(from, std::move(msg), op, trace);
+    }
+
+    ECUtil::HashInfoRef get_hash_info(
+      const hobject_t &hoid,
+      bool create
+    ) {
+      return ec_backend.get_hash_info(hoid, create);
+    }
+    // end of iface
+
+    ceph::ErasureCodeInterfaceRef ec_impl;
+    const ECUtil::stripe_info_t& sinfo;
+    PGBackend::Listener* parent;
+
+    // TODO: lay an interface down here
+    ECBackend& ec_backend;
+
+    RMWPipeline(CephContext* cct,
+                ceph::ErasureCodeInterfaceRef ec_impl,
+                const ECUtil::stripe_info_t& sinfo,
+                PGBackend::Listener* parent,
+                ECBackend& ec_backend)
+      : cct(cct),
+        ec_impl(std::move(ec_impl)),
+        sinfo(sinfo),
+        parent(parent),
+        ec_backend(ec_backend) {
+    }
+  } rmw_pipeline;
 
   ceph::ErasureCodeInterfaceRef ec_impl;
 
@@ -682,6 +731,6 @@ public:
   void _failed_push(const hobject_t &hoid,
     std::pair<RecoveryMessages *, ECBackend::read_result_t &> &in);
 };
-ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs);
+ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
 
 #endif
