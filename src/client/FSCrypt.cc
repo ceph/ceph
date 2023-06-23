@@ -519,7 +519,7 @@ int FSCryptDenc::decrypt(const char *in_data, int in_len,
 
     int key_size = key.size();
 
-    if (out_len < ((in_len + (key_size - 1)) & ~(key_size - 1))) {
+    if (out_len < (fscrypt_align_ofs(in_len))) {
       return -ERANGE;
     }
 

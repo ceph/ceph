@@ -10708,6 +10708,8 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
   utime_t start = ceph_clock_now(); 
   CRF_iofinish *crf_iofinish = nullptr;
 
+  ldout(cct, 10) << __func__ << " " << *in << " " << offset << "~" << size << dendl;
+
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -CEPHFS_EBADF;
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
@@ -10916,7 +10918,7 @@ void Client::C_Readahead::finish(int r) {
 void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 {
   if(f->readahead.get_min_readahead_size() > 0) {
-    pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
+    pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->effective_size());
     if (readahead_extent.second > 0) {
       ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
 		     << " (caller wants " << off << "~" << len << ")" << dendl;
@@ -10956,14 +10958,18 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
+  auto effective_size = in->effective_size();
+
   // trim read based on file size?
-  if (off >= in->size)
+  if (off >= effective_size)
     return 0;
   if (len == 0)
     return 0;
   if (off + len > in->size) {
     len = in->size - off;    
   }
+
+  auto dest_len = std::min(len, effective_size - off);
 
   ldout(cct, 10) << " min_bytes=" << f->readahead.get_min_readahead_size()
                  << " max_bytes=" << f->readahead.get_max_readahead_size()
@@ -11006,12 +11012,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     client_lock.unlock();
     r = io_finish_cond->wait();
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " bl.length()=" << bl->length() << " bl:" << fscrypt_hex_str(bl->c_str(), bl->length()) << dendl;
-    int block_num = 0;
-    bufferlist newbl;
-    auto len = bl->length();
-    newbl.append_hole(len);
-
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
@@ -11019,20 +11019,39 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " bl.length()=" << bl->length() 
   if (r >= 0) {
     auto len = r;
     if (fscrypt_denc) {
-      for (uint64_t pos = 0; pos < len; pos += 4096, ++block_num) {
+      bufferlist newbl;
 
-        r = fscrypt_denc->calc_fdata_key(block_num);
+      uint64_t pos = off;
+      uint64_t end = off + len;
+      uint64_t dest_end = off + dest_len;
+
+      while (pos < off + len) {
+        uint64_t cur_block = fscrypt_block_from_ofs(pos);
+        uint64_t block_off = fscrypt_block_start(pos);
+        uint64_t read_end = std::min(end, block_off + FSCRYPT_BLOCK_SIZE);
+        uint64_t read_end_aligned = fscrypt_align_ofs(read_end);
+        int read_len = read_end_aligned - block_off;
+
+        r = fscrypt_denc->calc_fdata_key(cur_block);
         if (r  < 0) {
-          return r;
+          break;
         }
 
-        r = fscrypt_denc->decrypt(bl->c_str() + pos, 4096,
-                                  newbl.c_str() + pos, 4096);
+        bufferlist chunk;
+        chunk.append_hole(read_len);
+
+        r = fscrypt_denc->decrypt(bl->c_str() + pos, read_len,
+                                  chunk.c_str(), read_len);
         if (r < 0) {
-          return r;
+          break;
         }
+
+        uint64_t needed_end = std::min(dest_end, read_end);
+        int needed_len = needed_end - pos;
+        chunk.splice(fscrypt_ofs_in_block(pos), needed_len, &newbl);
+
+        pos = read_end;
       }
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " r=" << r << " newbl.length()=" << newbl.length() << " bl:" << fscrypt_hex_str(newbl.c_str(), newbl.length()) << dendl;
 
       bl->swap(newbl);
     }
@@ -11075,11 +11094,13 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
       left -= r;
       bl->claim_append(tbl);
     }
+    auto effective_size = in->effective_size();
+
     // short read?
     if (r >= 0 && r < wanted) {
-      if (pos < in->size) {
+      if (pos < effective_size) {
 	// zero up to known EOF
-	int64_t some = in->size - pos;
+	int64_t some = effective_size - pos;
 	if (some > left)
 	  some = left;
 	auto z = buffer::ptr_node::create(some);

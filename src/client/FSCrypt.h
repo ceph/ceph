@@ -16,6 +16,27 @@
 #define HKDF_CONTEXT_KEY_IDENTIFIER 1
 #define HKDF_CONTEXT_PER_FILE_ENC_KEY 2
 
+#define FSCRYPT_BLOCK_SIZE 4096
+#define FSCRYPT_BLOCK_BITS 12
+
+#define FSCRYPT_DATA_ALIGNMENT 16
+
+static inline uint64_t fscrypt_align_ofs(uint64_t ofs) {
+  return (ofs + FSCRYPT_DATA_ALIGNMENT - 1) & ~(FSCRYPT_DATA_ALIGNMENT - 1);
+}
+
+static inline int fscrypt_ofs_in_block(uint64_t pos) {
+  return pos & (FSCRYPT_BLOCK_SIZE - 1);
+}
+
+static inline int fscrypt_block_from_ofs(uint64_t ofs) {
+  return ofs >> FSCRYPT_BLOCK_BITS;
+}
+
+static inline uint64_t fscrypt_block_start(uint64_t ofs) {
+  return ofs & ~(FSCRYPT_BLOCK_SIZE - 1);
+}
+
 static inline std::string fscrypt_hex_str(const void *p, int len)
 {
   if (!p) {
