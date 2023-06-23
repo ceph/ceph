@@ -24,6 +24,7 @@
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/state.h"
 
 #include "messages/MOSDOp.h"
 #include "osd/PeeringState.h"
@@ -189,6 +190,7 @@ public:
 
   seastar::sharded<PGShardMapping> pg_to_shard_mappings;
   seastar::sharded<OSDSingletonState> osd_singleton_state;
+  seastar::sharded<OSDState> osd_states;
   seastar::sharded<ShardServices> shard_services;
   seastar::sharded<ShardDispatcher> shard_dispatchers;
 
