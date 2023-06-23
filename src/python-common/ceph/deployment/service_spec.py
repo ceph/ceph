@@ -1507,6 +1507,7 @@ class CustomContainerSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 init_containers: Optional[List[Union['InitContainerSpec', Dict[str, Any]]]] = None,
                  ):
         assert service_type == 'container'
         assert service_id is not None
@@ -1532,6 +1533,11 @@ class CustomContainerSpec(ServiceSpec):
         self.ports = ports
         self.dirs = dirs
         self.files = files
+        self.init_containers: Optional[List['InitContainerSpec']] = None
+        if init_containers:
+            self.init_containers = InitContainerSpec.import_values(
+                init_containers
+            )
 
     def config_json(self) -> Dict[str, Any]:
         """
@@ -1563,6 +1569,15 @@ class CustomContainerSpec(ServiceSpec):
             raise SpecValidationError(
                 '"files" and "custom_configs" are mutually exclusive '
                 '(and both serve the same purpose)')
+
+    # use quotes for OrderedDict, getting this to work across py 3.6, 3.7
+    # and 3.7+ is suprisingly difficult
+    def to_json(self) -> "OrderedDict[str, Any]":
+        data = super().to_json()
+        ics = data.get('spec', {}).get('init_containers')
+        if ics:
+            data['spec']['init_containers'] = [ic.to_json() for ic in ics]
+        return data
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
