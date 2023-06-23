@@ -12,39 +12,6 @@ namespace {
 
 namespace crimson::osd {
 
-seastar::future<> PGShardManager::start(
-  const int whoami,
-  crimson::net::Messenger &cluster_msgr,
-  crimson::net::Messenger &public_msgr,
-  crimson::mon::Client &monc,
-  crimson::mgr::Client &mgrc,
-  crimson::os::FuturizedStore &store)
-{
-  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return osd_singleton_state.start_single(
-    whoami, std::ref(cluster_msgr), std::ref(public_msgr),
-    std::ref(monc), std::ref(mgrc)
-  ).then([this, whoami, &store] {
-    ceph::mono_time startup_time = ceph::mono_clock::now();
-    return shard_services.start(
-      std::ref(osd_singleton_state),
-      whoami,
-      startup_time,
-      osd_singleton_state.local().perf,
-      osd_singleton_state.local().recoverystate_perf,
-      std::ref(store));
-  });
-}
-
-seastar::future<> PGShardManager::stop()
-{
-  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  return shard_services.stop(
-  ).then([this] {
-    return osd_singleton_state.stop();
-  });
-}
-
 seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);

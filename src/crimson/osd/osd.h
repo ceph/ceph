@@ -61,6 +61,81 @@ class PG;
 class OSD final : public crimson::net::Dispatcher,
 		  private crimson::common::AuthHandler,
 		  private crimson::mgr::WithStats {
+public:
+  class ShardDispatcher
+    : public seastar::peering_sharded_service<ShardDispatcher> {
+  friend class OSD;
+  public:
+    ShardDispatcher(
+      OSD& osd,
+      int whoami,
+      crimson::os::FuturizedStore& store)
+    : pg_shard_manager(osd.osd_singleton_state, osd.shard_services),
+      osd(osd),
+      whoami(whoami),
+      store(store) {}
+    ~ShardDispatcher() = default;
+
+    // Dispatcher methods
+    seastar::future<> ms_dispatch(crimson::net::ConnectionRef,
+                                                 MessageRef);
+
+  private:
+    bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
+
+    seastar::future<> handle_osd_map(Ref<MOSDMap> m);
+    seastar::future<> _handle_osd_map(Ref<MOSDMap> m);
+    seastar::future<> handle_pg_create(crimson::net::ConnectionRef conn,
+                                       Ref<MOSDPGCreate2> m);
+    seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
+                                    Ref<MOSDOp> m);
+    seastar::future<> handle_rep_op(crimson::net::ConnectionRef conn,
+                                    Ref<MOSDRepOp> m);
+    seastar::future<> handle_rep_op_reply(crimson::net::ConnectionRef conn,
+                                          Ref<MOSDRepOpReply> m);
+    seastar::future<> handle_peering_op(crimson::net::ConnectionRef conn,
+                                        Ref<MOSDPeeringOp> m);
+    seastar::future<> handle_recovery_subreq(crimson::net::ConnectionRef conn,
+                                             Ref<MOSDFastDispatchOp> m);
+    seastar::future<> handle_scrub(crimson::net::ConnectionRef conn,
+                                   Ref<MOSDScrub2> m);
+    seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
+                                          Ref<MOSDMarkMeDown> m);
+
+    seastar::future<> committed_osd_maps(version_t first,
+                                         version_t last,
+                                         Ref<MOSDMap> m);
+
+    seastar::future<> check_osdmap_features();
+
+    seastar::future<> handle_command(crimson::net::ConnectionRef conn,
+                                     Ref<MCommand> m);
+    seastar::future<> handle_update_log_missing(crimson::net::ConnectionRef conn,
+                                                Ref<MOSDPGUpdateLogMissing> m);
+    seastar::future<> handle_update_log_missing_reply(
+      crimson::net::ConnectionRef conn,
+      Ref<MOSDPGUpdateLogMissingReply> m);
+
+  public:
+    void print(std::ostream&) const;
+
+    auto &get_pg_shard_manager() {
+      return pg_shard_manager;
+    }
+    auto &get_pg_shard_manager() const {
+      return pg_shard_manager;
+    }
+    ShardServices &get_shard_services() {
+      return pg_shard_manager.get_shard_services();
+    }
+
+  private:
+    crimson::osd::PGShardManager pg_shard_manager;
+    OSD& osd;
+    const int whoami;
+    crimson::os::FuturizedStore& store;
+  };
+
   const int whoami;
   const uint32_t nonce;
   seastar::abort_source& abort_source;
@@ -110,7 +185,9 @@ class OSD final : public crimson::net::Dispatcher,
   void handle_authentication(const EntityName& name,
 			     const AuthCapsInfo& caps) final;
 
-  crimson::osd::PGShardManager pg_shard_manager;
+  seastar::sharded<OSDSingletonState> osd_singleton_state;
+  seastar::sharded<ShardServices> shard_services;
+  seastar::sharded<ShardDispatcher> shard_dispatchers;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
@@ -148,6 +225,21 @@ public:
   /// @return the seq id of the pg stats being sent
   uint64_t send_pg_stats();
 
+  auto &get_shard_services() {
+    ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+    return shard_services.local();
+  }
+
+  auto &get_pg_shard_manager() {
+    ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+    return shard_dispatchers.local().get_pg_shard_manager();
+  }
+
+  auto &get_pg_shard_manager() const {
+    ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+    return shard_dispatchers.local().get_pg_shard_manager();
+  }
+
 private:
   static seastar::future<> _write_superblock(
     crimson::os::FuturizedStore &store,
@@ -163,51 +255,10 @@ private:
 
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
 
+  seastar::future<> start_asok_admin();
+
   void write_superblock(ceph::os::Transaction& t);
   seastar::future<> read_superblock();
-
-  bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
-
-  seastar::future<> handle_osd_map(Ref<MOSDMap> m);
-  seastar::future<> _handle_osd_map(Ref<MOSDMap> m);
-  seastar::future<> handle_pg_create(crimson::net::ConnectionRef conn,
-				     Ref<MOSDPGCreate2> m);
-  seastar::future<> handle_osd_op(crimson::net::ConnectionRef conn,
-				  Ref<MOSDOp> m);
-  seastar::future<> handle_rep_op(crimson::net::ConnectionRef conn,
-				  Ref<MOSDRepOp> m);
-  seastar::future<> handle_rep_op_reply(crimson::net::ConnectionRef conn,
-					Ref<MOSDRepOpReply> m);
-  seastar::future<> handle_peering_op(crimson::net::ConnectionRef conn,
-				      Ref<MOSDPeeringOp> m);
-  seastar::future<> handle_recovery_subreq(crimson::net::ConnectionRef conn,
-					   Ref<MOSDFastDispatchOp> m);
-  seastar::future<> handle_scrub(crimson::net::ConnectionRef conn,
-				 Ref<MOSDScrub2> m);
-  seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
-					Ref<MOSDMarkMeDown> m);
-
-  seastar::future<> committed_osd_maps(version_t first,
-                                       version_t last,
-                                       Ref<MOSDMap> m);
-
-  seastar::future<> check_osdmap_features();
-
-  seastar::future<> handle_command(crimson::net::ConnectionRef conn,
-				   Ref<MCommand> m);
-  seastar::future<> start_asok_admin();
-  seastar::future<> handle_update_log_missing(crimson::net::ConnectionRef conn,
-                                              Ref<MOSDPGUpdateLogMissing> m);
-  seastar::future<> handle_update_log_missing_reply(
-    crimson::net::ConnectionRef conn,
-    Ref<MOSDPGUpdateLogMissingReply> m);
-public:
-  auto &get_pg_shard_manager() {
-    return pg_shard_manager;
-  }
-  ShardServices &get_shard_services() {
-    return pg_shard_manager.get_shard_services();
-  }
 
 private:
   crimson::common::Gated gate;
@@ -236,8 +287,15 @@ inline std::ostream& operator<<(std::ostream& out, const OSD& osd) {
   return out;
 }
 
+inline std::ostream& operator<<(std::ostream& out,
+                                const OSD::ShardDispatcher& shard_dispatcher) {
+  shard_dispatcher.print(out);
+  return out;
+}
+
 }
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::osd::OSD> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::osd::OSD::ShardDispatcher> : fmt::ostream_formatter {};
 #endif

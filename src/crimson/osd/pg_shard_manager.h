@@ -24,8 +24,8 @@ namespace crimson::osd {
  * etc)
  */
 class PGShardManager {
-  seastar::sharded<OSDSingletonState> osd_singleton_state;
-  seastar::sharded<ShardServices> shard_services;
+  seastar::sharded<OSDSingletonState> &osd_singleton_state;
+  seastar::sharded<ShardServices> &shard_services;
 
 #define FORWARD_CONST(FROM_METHOD, TO_METHOD, TARGET)		\
   template <typename... Args>					\
@@ -46,16 +46,11 @@ public:
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
-  PGShardManager() = default;
-
-  seastar::future<> start(
-    const int whoami,
-    crimson::net::Messenger &cluster_msgr,
-    crimson::net::Messenger &public_msgr,
-    crimson::mon::Client &monc,
-    crimson::mgr::Client &mgrc,
-    crimson::os::FuturizedStore &store);
-  seastar::future<> stop();
+  PGShardManager(
+    seastar::sharded<OSDSingletonState> &osd_singleton_state,
+    seastar::sharded<ShardServices> &shard_services)
+  : osd_singleton_state(osd_singleton_state),
+    shard_services(shard_services) {}
 
   auto &get_osd_singleton_state() {
     ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
