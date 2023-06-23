@@ -570,11 +570,6 @@ public:
       return cur_reference >= dedup_threshold && dedup_threshold != -1;
     }
 
-    void init(size_t dedup_threshold_) {
-      std::unique_lock lock(fingerprint_lock);
-      fp_map.clear();
-      dedup_threshold = dedup_threshold_;
-    }
     FpStore(size_t chunk_threshold) : dedup_threshold(chunk_threshold) { }
 
   private:
