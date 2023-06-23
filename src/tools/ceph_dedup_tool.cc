@@ -497,7 +497,9 @@ void ChunkScrub::chunk_scrub_common()
       }
 
       auto oid = i.oid;
-      cout << oid << std::endl;
+      if (debug) {
+	cout << oid << std::endl;
+      }
       chunk_refs_t refs;
       {
 	bufferlist t;
