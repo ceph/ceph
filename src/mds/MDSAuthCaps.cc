@@ -113,11 +113,11 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, bool()> root_squash;
   qi::rule<Iterator, MDSCapSpec()> capspec;
   qi::rule<Iterator, uint32_t()> uid;
-  qi::rule<Iterator, std::vector<uint32_t>() > uintlist;
-  qi::rule<Iterator, std::vector<uint32_t>() > gidlist;
+  qi::rule<Iterator, vector<uint32_t>() > uintlist;
+  qi::rule<Iterator, vector<uint32_t>() > gidlist;
   qi::rule<Iterator, MDSCapMatch()> match;
   qi::rule<Iterator, MDSCapGrant()> grant;
-  qi::rule<Iterator, std::vector<MDSCapGrant>()> grants;
+  qi::rule<Iterator, vector<MDSCapGrant>()> grants;
   qi::rule<Iterator, MDSAuthCaps()> mdscaps;
 };
 
@@ -356,7 +356,7 @@ bool MDSAuthCaps::parse(string_view str, ostream *err)
 
     if (err)
       *err << "mds capability parse failed, stopped at '"
-	   << std::string(iter, end)
+	   << string(iter, end)
            << "' of '" << str << "'";
     return false; 
   }
