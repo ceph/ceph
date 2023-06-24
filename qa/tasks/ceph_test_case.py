@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 class TestTimeoutError(RuntimeError):
     pass
 
+
 class RunCephCmd:
 
     def run_ceph_cmd(self, *args, **kwargs):
@@ -37,6 +38,61 @@ class RunCephCmd:
             kwargs['args'] = args
         kwargs['stdout'] = kwargs.pop('stdout', StringIO())
         return self.run_ceph_cmd(**kwargs).stdout.getvalue()
+
+    def assert_retval(self, proc_retval, exp_retval):
+        msg = (f'expected return value: {exp_retval}\n'
+               f'received return value: {proc_retval}\n')
+        assert proc_retval == exp_retval, msg
+
+    def _verify(self, proc, exp_retval=None, exp_errmsgs=None):
+        if exp_retval is None and exp_errmsgs is None:
+            raise RuntimeError('Method didn\'t get enough parameters. Pass '
+                               'return value or error message expected from '
+                               'the command/process.')
+
+        if exp_retval is not None:
+            self.assert_retval(proc.returncode, exp_retval)
+        if exp_errmsgs is None:
+            return
+
+        if isinstance(exp_errmsgs, str):
+            exp_errmsgs = (exp_errmsgs, )
+        exp_errmsgs = tuple([e.lower() for e in exp_errmsgs])
+
+        proc_stderr = proc.stderr.getvalue().lower()
+        msg = ('didn\'t find any of the expected string in stderr.\n'
+               f'expected string: {exp_errmsgs}\n'
+               f'received error message: {proc_stderr}\n'
+               'note: received error message is converted to lowercase')
+        for e in exp_errmsgs:
+            if e in proc_stderr:
+                break
+        # this else is meant for the for loop above.
+        else:
+            assert False, msg
+
+    def negtest_ceph_cmd(self, args, retval=None, errmsgs=None, **kwargs):
+        """
+        Conduct a negative test for the given Ceph command.
+
+        retval and errmsgs are parameters to confirm the cause of command
+        failure.
+
+        NOTE: errmsgs is expected to be a tuple, but in case there's only one
+        error message, it can also be a string. This method will add the string
+        to a tuple internally.
+        """
+        kwargs['args'] = args
+        # execution is needed to not halt on command failure because we are
+        # conducting negative testing
+        kwargs['check_status'] = False
+        # stderr is needed to check for expected error messages.
+        kwargs['stderr'] = StringIO()
+
+        proc = self.ceph_cluster.mon_manager.run_cluster_cmd(**kwargs)
+        self._verify(proc, retval, errmsgs)
+
+        return proc
 
 
 class CephTestCase(unittest.TestCase, RunCephCmd):
