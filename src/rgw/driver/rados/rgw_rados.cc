@@ -4733,6 +4733,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
 
   if (read_mtime != mtime) {
     /* raced */
+    ldpp_dout(dpp, 0) << __func__ << " ERROR: failed to transition obj(" << obj.key << ") read_mtime = " << read_mtime << " doesn't match mtime = " << mtime << dendl;
     return -ECANCELED;
   }
 
@@ -6045,7 +6046,11 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* rctx, RGWBu
   }
 
 
-  real_time mtime = real_clock::now();
+  /* As per https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html, 
+   * the only way for users to modify object metadata is to make a copy of the object and
+   * set the metadata.
+   * Hence do not update mtime for any other attr changes */
+  real_time mtime = state->mtime;
   struct timespec mtime_ts = real_clock::to_timespec(mtime);
   op.mtime2(&mtime_ts);
   auto& ioctx = ref.pool.ioctx();
