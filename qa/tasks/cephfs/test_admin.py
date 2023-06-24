@@ -1153,4 +1153,10 @@ class TestPermErrMsg(CephFSTestCase):
     def test_auth_get_or_create_key(self):
         for mdscap in self.MDSCAPS:
             self._negtestcmd('auth get-or-create-key', mdscap)
->>>>>>> f163dd3ef1f (MDSAuthCaps: print a special error message for wrong permissions)
+
+    def test_fs_authorize(self):
+        for wrong_perm in ('w', 'wr'):
+            self.negtest_ceph_cmd(
+                args=(f'fs authorize {self.fs.name} {self.CLIENT_NAME} / '
+                      f'{wrong_perm}'), retval=self.EXPECTED_ERRNO,
+                errmsgs=self.EXPECTED_ERRMSG)
