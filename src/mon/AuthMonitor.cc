@@ -1769,11 +1769,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	++it;
       }
 
-      if (cap != "r" && cap.compare(0, 2, "rw")) {
-	ss << "Permission flags must start with 'r' or 'rw'.";
-	err = -EINVAL;
-	goto done;
-      }
       if (cap.compare(0, 2, "rw") == 0)
 	osd_cap_wanted = "rw";
 
