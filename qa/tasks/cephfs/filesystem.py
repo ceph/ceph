@@ -18,7 +18,7 @@ from teuthology.nuke import clear_firewall
 from teuthology.parallel import parallel
 from teuthology import contextutil
 from tasks.ceph_manager import write_conf
-from tasks import ceph_manager
+from tasks.ceph_manager import CephManager
 
 
 log = logging.getLogger(__name__)
@@ -225,7 +225,8 @@ class CephCluster(object):
 
     def __init__(self, ctx) -> None:
         self._ctx = ctx
-        self.mon_manager = ceph_manager.CephManager(self.admin_remote, ctx=ctx, logger=log.getChild('ceph_manager'))
+        self.mon_manager = CephManager(self.admin_remote, ctx=ctx,
+                                       logger=log.getChild('ceph_manager'))
 
     def get_config(self, key, service_type=None):
         """
