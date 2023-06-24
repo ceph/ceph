@@ -20,6 +20,7 @@ from teuthology.parallel import parallel
 from teuthology import contextutil
 from tasks.ceph_manager import write_conf
 from tasks import ceph_manager
+from tasks.ceph_test_case import RunCephCmd
 
 
 log = logging.getLogger(__name__)
@@ -67,7 +68,7 @@ class FSMissing(Exception):
     def __str__(self):
         return f"File system {self.ident} does not exist in the map"
 
-class FSStatus(object):
+class FSStatus(RunCephCmd):
     """
     Operations on a snapshot of the FSMap.
     """
@@ -217,7 +218,7 @@ class FSStatus(object):
         #all matching
         return False
 
-class CephCluster(object):
+class CephCluster(RunCephCmd):
     @property
     def admin_remote(self):
         first_mon = misc.get_first_mon(self._ctx, None)
