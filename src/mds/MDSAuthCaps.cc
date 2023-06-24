@@ -79,11 +79,11 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
 	     (uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2)] |
 	     (path >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3)] |
              (fs_name >> path)[_val = phoenix::construct<MDSCapMatch>(_2, _1)] |
-             (fs_name >> root_squash)[_val = phoenix::construct<MDSCapMatch>(std::string(), _1, _2)] |
-             (path >> root_squash)[_val = phoenix::construct<MDSCapMatch>(_1, std::string(), _2)] |
+             (fs_name >> root_squash)[_val = phoenix::construct<MDSCapMatch>(string(), _1, _2)] |
+             (path >> root_squash)[_val = phoenix::construct<MDSCapMatch>(_1, string(), _2)] |
              (path)[_val = phoenix::construct<MDSCapMatch>(_1)] |
-             (root_squash)[_val = phoenix::construct<MDSCapMatch>(std::string(), std::string(), _1)] |
-             (fs_name)[_val = phoenix::construct<MDSCapMatch>(std::string(),
+             (root_squash)[_val = phoenix::construct<MDSCapMatch>(string(), string(), _1)] |
+             (fs_name)[_val = phoenix::construct<MDSCapMatch>(string(),
 							      _1)]);
 
     // capspec = * | r[w][f][p][s]
@@ -123,11 +123,11 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, bool()> root_squash;
   qi::rule<Iterator, MDSCapSpec()> capspec;
   qi::rule<Iterator, uint32_t()> uid;
-  qi::rule<Iterator, std::vector<uint32_t>() > uintlist;
-  qi::rule<Iterator, std::vector<uint32_t>() > gidlist;
+  qi::rule<Iterator, vector<uint32_t>() > uintlist;
+  qi::rule<Iterator, vector<uint32_t>() > gidlist;
   qi::rule<Iterator, MDSCapMatch()> match;
   qi::rule<Iterator, MDSCapGrant()> grant;
-  qi::rule<Iterator, std::vector<MDSCapGrant>()> grants;
+  qi::rule<Iterator, vector<MDSCapGrant>()> grants;
   qi::rule<Iterator, MDSAuthCaps()> mdscaps;
 };
 
@@ -366,7 +366,7 @@ bool MDSAuthCaps::parse(string_view str, ostream *err)
 
     if (err)
       *err << "mds capability parse failed, stopped at '"
-	   << std::string(iter, end)
+	   << string(iter, end)
            << "' of '" << str << "'";
     return false; 
   }
