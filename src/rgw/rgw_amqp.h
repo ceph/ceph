@@ -34,6 +34,8 @@ struct connection_id_t {
   connection_id_t(const amqp_connection_info& info, const std::string& _exchange);
 };
 
+std::string to_string(const connection_id_t& id);
+
 // connect to an amqp endpoint
 bool connect(connection_id_t& conn_id, const std::string& url, const std::string& exchange, bool mandatory_delivery, bool verify_ssl,
         boost::optional<const std::string&> ca_location);
