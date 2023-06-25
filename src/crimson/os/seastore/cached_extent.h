@@ -415,6 +415,13 @@ public:
     return is_mutable() || state == extent_state_t::EXIST_CLEAN;
   }
 
+  /// Returns true if extent is stable and shared among transactions
+  bool is_stable() const {
+    return state == extent_state_t::CLEAN_PENDING ||
+      state == extent_state_t::CLEAN ||
+      state == extent_state_t::DIRTY;
+  }
+
   /// Returns true if extent has a pending delta
   bool is_mutation_pending() const {
     return state == extent_state_t::MUTATION_PENDING;
