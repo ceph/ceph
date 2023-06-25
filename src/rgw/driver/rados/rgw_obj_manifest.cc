@@ -346,6 +346,18 @@ void RGWObjManifestRule::dump(Formatter *f) const
   encode_json("override_prefix", override_prefix, f);
 }
 
+void RGWObjManifestRule::generate_test_instances(std::list<RGWObjManifestRule*>& o)
+{
+  RGWObjManifestRule *r = new RGWObjManifestRule;
+  r->start_part_num = 0;
+  r->start_ofs = 0;
+  r->part_size = 512 * 1024;
+  r->stripe_max_size = 512 * 1024 * 1024;
+  r->override_prefix = "override_prefix";
+  o.push_back(r);
+  o.push_back(new RGWObjManifestRule);
+}
+
 void rgw_obj_select::dump(Formatter *f) const
 {
   f->dump_string("placement_rule", placement_rule.to_str());
@@ -359,6 +371,20 @@ void RGWObjTier::dump(Formatter *f) const
   encode_json("name", name, f);
   encode_json("tier_placement", tier_placement, f);
   encode_json("is_multipart_upload", is_multipart_upload, f);
+}
+
+void RGWObjTier::generate_test_instances(std::list<RGWObjTier*>& o)
+{
+  RGWObjTier *t = new RGWObjTier;
+  t->name = "name";
+  std::list<RGWZoneGroupPlacementTier *> tiers;
+  RGWZoneGroupPlacementTier::generate_test_instances(tiers);
+  for (auto iter = tiers.begin(); iter != tiers.end(); ++iter) {
+    t->tier_placement = *(*iter);
+  }
+  t->is_multipart_upload = true;
+  o.push_back(t);
+  o.push_back(new RGWObjTier);
 }
 
 // returns true on success, false on failure

@@ -27,6 +27,23 @@ struct cls_log_add_op {
     }
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter* f) const {
+    encode_json("entries", entries, f);
+    encode_json("monotonic_inc", monotonic_inc, f);
+  }
+
+  static void generate_test_instances(std::list<cls_log_add_op *>& l) {
+    l.push_back(new cls_log_add_op);
+    l.push_back(new cls_log_add_op);
+    l.back()->entries.push_back(cls_log_entry());
+    l.back()->entries.push_back(cls_log_entry());
+    l.back()->entries.back().section = "section";
+    l.back()->entries.back().name = "name";
+    l.back()->entries.back().timestamp = utime_t(1, 2);
+    l.back()->entries.back().data.append("data");
+    l.back()->entries.back().id = "id";
+  }
 };
 WRITE_CLASS_ENCODER(cls_log_add_op)
 

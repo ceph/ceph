@@ -45,7 +45,7 @@ public:
     decode(years, bl);
     DECODE_FINISH(bl);
   }
-
+  void dump(Formatter *f) const;
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
 };
@@ -82,6 +82,8 @@ public:
 
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<ObjectLockRule*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectLockRule)
 
@@ -141,6 +143,8 @@ public:
   void decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   ceph::real_time get_lock_until_date(const ceph::real_time& mtime) const;
+  void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWObjectLock*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjectLock)
 
