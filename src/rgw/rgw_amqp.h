@@ -6,19 +6,12 @@
 #include <string>
 #include <functional>
 #include <boost/optional.hpp>
-#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 #include "include/common_fwd.h"
 
+struct amqp_connection_info;
+
 namespace rgw::amqp {
-// forward declaration of connection object
-struct connection_t;
-
-typedef boost::intrusive_ptr<connection_t> connection_ptr_t;
-
-// required interfaces needed so that connection_t could be used inside boost::intrusive_ptr
-void intrusive_ptr_add_ref(const connection_t* p);
-void intrusive_ptr_release(const connection_t* p);
 
 // the reply callback is expected to get an integer parameter
 // indicating the result, and not to return anything
@@ -30,19 +23,32 @@ bool init(CephContext* cct);
 // shutdown the amqp manager
 void shutdown();
 
+// key class for the connection list
+struct connection_id_t {
+  std::string host;
+  int port;
+  std::string vhost;
+  std::string exchange;
+  bool ssl;
+  connection_id_t() = default;
+  connection_id_t(const amqp_connection_info& info, const std::string& _exchange);
+};
+
+std::string to_string(const connection_id_t& id);
+
 // connect to an amqp endpoint
-connection_ptr_t connect(const std::string& url, const std::string& exchange, bool mandatory_delivery, bool verify_ssl,
+bool connect(connection_id_t& conn_id, const std::string& url, const std::string& exchange, bool mandatory_delivery, bool verify_ssl,
         boost::optional<const std::string&> ca_location);
 
 // publish a message over a connection that was already created
-int publish(connection_ptr_t& conn,
+int publish(const connection_id_t& conn_id,
     const std::string& topic,
     const std::string& message);
 
 // publish a message over a connection that was already created
 // and pass a callback that will be invoked (async) when broker confirms
 // receiving the message
-int publish_with_confirm(connection_ptr_t& conn, 
+int publish_with_confirm(const connection_id_t& conn_id, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb);
