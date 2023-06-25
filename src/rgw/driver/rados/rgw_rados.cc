@@ -10081,3 +10081,9 @@ void RGWOLHPendingInfo::dump(Formatter *f) const
   encode_json("time", ut, f);
 }
 
+void RGWOLHPendingInfo::generate_test_instances(list<RGWOLHPendingInfo*>& o)
+{
+  auto it = new RGWOLHPendingInfo;
+  it->time = ceph::real_clock::zero();
+  o.push_back(it);
+}

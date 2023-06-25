@@ -71,6 +71,7 @@ struct RGWCompressionInfo {
      DECODE_FINISH(bl);
   } 
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWCompressionInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWCompressionInfo)
 

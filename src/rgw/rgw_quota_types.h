@@ -75,7 +75,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-
+  static void generate_test_instances(std::list<RGWQuotaInfo*>& o);
   void decode_json(JSONObj *obj);
 
 };

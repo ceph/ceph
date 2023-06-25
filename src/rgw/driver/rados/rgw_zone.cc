@@ -1502,3 +1502,10 @@ void RGWNameToId::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("obj_id", obj_id, obj);
 }
 
+void RGWNameToId::generate_test_instances(list<RGWNameToId*>& o) {
+  RGWNameToId *n = new RGWNameToId;
+  n->obj_id = "id";
+  o.push_back(n);
+  o.push_back(new RGWNameToId);
+}
+

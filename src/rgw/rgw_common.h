@@ -1368,6 +1368,17 @@ struct multipart_upload_info
     decode(dest_placement, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const {
+    dest_placement.dump(f);
+  }
+
+  static void generate_test_instances(std::list<multipart_upload_info*>& o) {
+    o.push_back(new multipart_upload_info);
+    o.push_back(new multipart_upload_info);
+    o.back()->dest_placement.name = "dest_placement";
+    o.back()->dest_placement.storage_class = "dest_storage_class";
+  }
 };
 WRITE_CLASS_ENCODER(multipart_upload_info)
 
