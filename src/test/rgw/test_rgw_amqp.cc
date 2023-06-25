@@ -134,10 +134,12 @@ TEST_F(TestAMQP, PlainAndSSLConnectionsOK)
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
   rc = amqp::publish(conn_id1, "topic", "message");
   EXPECT_EQ(rc, 0);
+  EXPECT_EQ(amqp::to_string(conn_id1), "amqps://localhost:5671/?exchange=ex1");
   amqp_mock::set_valid_port(5672);
   amqp::connection_id_t conn_id2;
   rc = amqp::connect(conn_id2, "amqp://localhost", "ex1", false, false, boost::none);
   EXPECT_TRUE(rc);
+  EXPECT_EQ(amqp::to_string(conn_id2), "amqp://localhost:5672/?exchange=ex1");
   EXPECT_EQ(amqp::get_connection_count(), connection_number + 2);
   rc = amqp::publish(conn_id2, "topic", "message");
   EXPECT_EQ(rc, 0);
