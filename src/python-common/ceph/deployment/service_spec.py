@@ -2000,6 +2000,7 @@ class CephExporterSpec(ServiceSpec):
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  ):
         assert service_type == 'ceph-exporter'
 
@@ -2008,7 +2009,8 @@ class CephExporterSpec(ServiceSpec):
             placement=placement,
             unmanaged=unmanaged,
             preview_only=preview_only,
-            extra_container_args=extra_container_args)
+            extra_container_args=extra_container_args,
+            extra_entrypoint_args=extra_entrypoint_args)
 
         self.service_type = service_type
         self.sock_dir = sock_dir
