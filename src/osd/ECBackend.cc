@@ -1161,30 +1161,30 @@ void ECBackend::handle_sub_write_reply(
   const ECSubWriteReply &op,
   const ZTracer::Trace &trace)
 {
-  map<ceph_tid_t, Op>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
+  map<ceph_tid_t, std::unique_ptr<Op>>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
   ceph_assert(i != rmw_pipeline.tid_to_op_map.end());
   if (op.committed) {
     trace.event("sub write committed");
-    ceph_assert(i->second.pending_commit.count(from));
-    i->second.pending_commit.erase(from);
+    ceph_assert(i->second->pending_commit.count(from));
+    i->second->pending_commit.erase(from);
     if (from != get_parent()->whoami_shard()) {
       get_parent()->update_peer_last_complete_ondisk(from, op.last_complete);
     }
   }
   if (op.applied) {
     trace.event("sub write applied");
-    ceph_assert(i->second.pending_apply.count(from));
-    i->second.pending_apply.erase(from);
+    ceph_assert(i->second->pending_apply.count(from));
+    i->second->pending_apply.erase(from);
   }
 
-  if (i->second.pending_commit.empty() &&
-      i->second.on_all_commit &&
+  if (i->second->pending_commit.empty() &&
+      i->second->on_all_commit &&
       // also wait for apply, to preserve ordering with luminous peers.
-      i->second.pending_apply.empty()) {
+      i->second->pending_apply.empty()) {
     dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
-    i->second.on_all_commit->complete(0);
-    i->second.on_all_commit = 0;
-    i->second.trace.event("ec write all committed");
+    i->second->on_all_commit->complete(0);
+    i->second->on_all_commit = 0;
+    i->second->trace.event("ec write all committed");
   }
   rmw_pipeline.check_ops();
 }
@@ -1488,7 +1488,7 @@ void ECBackend::RMWPipeline::on_change()
   waiting_state.clear();
   waiting_commit.clear();
   for (auto &&op: tid_to_op_map) {
-    cache.release_write_pin(op.second.pin);
+    cache.release_write_pin(op.second->pin);
   }
   tid_to_op_map.clear();
 }
@@ -1541,6 +1541,42 @@ void ECBackend::dump_recovery_info(Formatter *f) const
   f->close_section();
 }
 
+struct ECClassicalOp : ECBackend::Op {
+  PGTransactionUPtr t;
+
+  void generate_transactions(
+      ECTransaction::WritePlan &plan,
+      ceph::ErasureCodeInterfaceRef &ecimpl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      const std::map<hobject_t,extent_map> &partial_extents,
+      std::vector<pg_log_entry_t> &entries,
+      std::map<hobject_t,extent_map> *written,
+      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      std::set<hobject_t> *temp_added,
+      std::set<hobject_t> *temp_removed,
+      DoutPrefixProvider *dpp,
+      const ceph_release_t require_osd_release) override
+  {
+    if (t) {
+      ECTransaction::generate_transactions(
+        t.get(),
+        plan,
+        ecimpl,
+        pgid,
+        sinfo,
+        partial_extents,
+        entries,
+        written,
+        transactions,
+        temp_added,
+        temp_removed,
+        dpp,
+        require_osd_release);
+    }
+  }
+};
+
 void ECBackend::submit_transaction(
   const hobject_t &hoid,
   const object_stat_sum_t &delta_stats,
@@ -1557,7 +1593,10 @@ void ECBackend::submit_transaction(
   )
 {
   ceph_assert(!rmw_pipeline.tid_to_op_map.count(tid));
-  Op *op = &(rmw_pipeline.tid_to_op_map[tid]);
+  auto concete_op = std::make_unique<ECClassicalOp>();
+  concete_op->t = std::move(t);
+  rmw_pipeline.tid_to_op_map[tid] = std::move(concete_op);
+  Op *op = rmw_pipeline.tid_to_op_map[tid].get();
   op->hoid = hoid;
   op->delta_stats = delta_stats;
   op->version = at_version;
@@ -1572,8 +1611,23 @@ void ECBackend::submit_transaction(
   if (client_op) {
     op->trace = client_op->pg_trace;
   }
+  op->plan = ECTransaction::get_write_plan(
+    sinfo,
+    *(concete_op->t),
+    [&](const hobject_t &i) {
+      ECUtil::HashInfoRef ref = get_hash_info(i, true);
+      if (!ref) {
+	derr << __func__ << ": get_hash_info(" << i << ")"
+	     << " returned a null pointer and there is no "
+	     << " way to recover from such an error in this "
+	     << " context" << dendl;
+	ceph_abort();
+      }
+      return ref;
+    },
+    get_parent()->get_dpp());
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
-  rmw_pipeline.start_rmw(op, std::move(t));
+  rmw_pipeline.start_rmw(op);
 }
 
 void ECBackend::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
@@ -1900,26 +1954,9 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   return ref;
 }
 
-void ECBackend::RMWPipeline::start_rmw(Op *op, PGTransactionUPtr &&t)
+void ECBackend::RMWPipeline::start_rmw(Op *op)
 {
   ceph_assert(op);
-
-  op->plan = ECTransaction::get_write_plan(
-    sinfo,
-    std::move(t),
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(i, true);
-      if (!ref) {
-	derr << __func__ << ": get_hash_info(" << i << ")"
-	     << " returned a null pointer and there is no "
-	     << " way to recover from such an error in this "
-	     << " context" << dendl;
-	ceph_abort();
-      }
-      return ref;
-    },
-    get_parent()->get_dpp());
-
   dout(10) << __func__ << ": " << *op << dendl;
 
   waiting_state.push_back(*op);
@@ -2041,21 +2078,19 @@ bool ECBackend::RMWPipeline::try_reads_to_commit()
   op->trace.event("start ec write");
 
   map<hobject_t,extent_map> written;
-  if (op->plan.t) {
-    ECTransaction::generate_transactions(
-      op->plan,
-      ec_impl,
-      get_parent()->get_info().pgid.pgid,
-      sinfo,
-      op->remote_read_result,
-      op->log_entries,
-      &written,
-      &trans,
-      &(op->temp_added),
-      &(op->temp_cleared),
-      get_parent()->get_dpp(),
-      get_osdmap()->require_osd_release);
-  }
+  op->generate_transactions(
+    op->plan,
+    ec_impl,
+    get_parent()->get_info().pgid.pgid,
+    sinfo,
+    op->remote_read_result,
+    op->log_entries,
+    &written,
+    &trans,
+    &(op->temp_added),
+    &(op->temp_cleared),
+    get_parent()->get_dpp(),
+    get_osdmap()->require_osd_release);
 
   dout(20) << __func__ << ": " << cache << dendl;
   dout(20) << __func__ << ": written: " << written << dendl;
@@ -2188,7 +2223,7 @@ bool ECBackend::RMWPipeline::try_finish_rmw()
 	waiting_commit.empty()) {
       // submit a dummy transaction to kick the rollforward
       auto tid = get_parent()->get_tid();
-      Op *nop = &(tid_to_op_map[tid]);
+      Op *nop = tid_to_op_map[tid].get();
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->roll_forward_to = op->version;

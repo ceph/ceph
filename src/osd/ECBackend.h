@@ -487,16 +487,30 @@ public:
 
     /// Callbacks
     Context *on_all_commit = nullptr;
-    ~Op() {
+    virtual ~Op() {
       delete on_all_commit;
     }
+
+    virtual void generate_transactions(
+      ECTransaction::WritePlan &plan,
+      ceph::ErasureCodeInterfaceRef &ecimpl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      const std::map<hobject_t,extent_map> &partial_extents,
+      std::vector<pg_log_entry_t> &entries,
+      std::map<hobject_t,extent_map> *written,
+      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      std::set<hobject_t> *temp_added,
+      std::set<hobject_t> *temp_removed,
+      DoutPrefixProvider *dpp,
+      const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
   };
   using op_list = boost::intrusive::list<Op>;
   friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
   struct RMWPipeline {
     ExtentCache cache;
-    std::map<ceph_tid_t, Op> tid_to_op_map; /// Owns Op structure
+    std::map<ceph_tid_t, std::unique_ptr<Op>> tid_to_op_map; /// Owns Op structure
     /**
      * We model the possible rmw states as a std::set of waitlists.
      * All writes at this time complete in order, so a write blocked
@@ -543,7 +557,7 @@ public:
     op_list waiting_commit;       /// writes waiting on initial commit
     eversion_t completed_to;
     eversion_t committed_to;
-    void start_rmw(Op *op, PGTransactionUPtr &&t);
+    void start_rmw(Op *op);
     bool try_state_to_reads();
     bool try_reads_to_commit();
     bool try_finish_rmw();
