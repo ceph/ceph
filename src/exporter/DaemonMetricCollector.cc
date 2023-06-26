@@ -7,6 +7,7 @@
 #include <map>
 #include <memory>
 #include <regex>
+#include <sstream>
 #include <string>
 #include <utility>
 
@@ -157,7 +158,6 @@ void DaemonMetricCollector::dump_asok_metrics() {
             labels.insert(multisite_labels_and_name.first.begin(), multisite_labels_and_name.first.end());
             counter_name = multisite_labels_and_name.second;
           }
-          labels.insert({"ceph_daemon", quote(daemon_name)});
           auto perf_values = counters_values.at(counter_name_init);
           dump_asok_metric(counter_group, perf_values, counter_name, labels);
         }
@@ -291,6 +291,14 @@ DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
   std::string new_metric_name;
   labels_t labels;
   new_metric_name = metric_name;
+  const std::string ceph_daemon_prefix = "ceph-";
+  const std::string ceph_client_prefix = "client.";
+  if (daemon_name.rfind(ceph_daemon_prefix, 0) == 0) {
+    daemon_name = daemon_name.substr(ceph_daemon_prefix.size());
+  }
+  if (daemon_name.rfind(ceph_client_prefix, 0) == 0) {
+    daemon_name = daemon_name.substr(ceph_client_prefix.size());
+  }
   // In vstart cluster socket files for rgw are stored as radosgw.<instance_id>.asok
   if (daemon_name.find("radosgw") != std::string::npos) {
     std::size_t pos = daemon_name.find_last_of('.');
@@ -298,11 +306,17 @@ DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
     labels["instance_id"] = quote(tmp);
   }
   else if (daemon_name.find("rgw") != std::string::npos) {
-    std::string tmp = daemon_name.substr(16, std::string::npos);
-    std::string::size_type pos = tmp.find('.');
-    labels["instance_id"] = quote("rgw." + tmp.substr(0, pos));
+    // fetch intance_id for e.g. "okbvtv" from daemon_name=rgw.foo.ceph-node-00.okbvtv 
+    size_t pos = daemon_name.find_last_of(".");
+    std::string instance_id = "";
+    if (pos != std::string::npos) {
+       instance_id = daemon_name.substr(pos+1);
+    }
+    labels["instance_id"] = quote(instance_id);
+  } else {
+    labels.insert({"ceph_daemon", quote(daemon_name)});
   }
-  else if (daemon_name.find("rbd-mirror") != std::string::npos) {
+  if (daemon_name.find("rbd-mirror") != std::string::npos) {
     std::regex re(
         "^rbd_mirror_image_([^/]+)/(?:(?:([^/]+)/"
         ")?)(.*)\\.(replay(?:_bytes|_latency)?)$");
