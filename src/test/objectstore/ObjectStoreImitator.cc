@@ -461,10 +461,10 @@ void ObjectStoreImitator::_do_truncate(CollectionRef &c, ObjectRef &o,
                                        uint64_t offset) {
   if (offset == o->size)
     return;
-  o->size = offset;
 
   PExtentVector old_extents;
   o->punch_hole(offset, o->size - offset, old_extents);
+  o->size = offset;
   alloc->release(old_extents);
 }
 

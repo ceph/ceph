@@ -82,6 +82,7 @@ private:
         l_offset += e.length;
       }
 
+      size -= punched_length;
       extents = remains;
       old_extents = to_be_punched;
     }
@@ -89,6 +90,7 @@ private:
     void append(PExtentVector &ext) {
       for (auto &e : ext) {
         extents.push_back(e);
+        size += e.length;
       }
 
       std::sort(extents.begin(), extents.end(),
@@ -105,7 +107,7 @@ private:
         total += e.length;
       }
 
-      ceph_assert(total = size);
+      ceph_assert(total == size);
     }
   };
   typedef boost::intrusive_ptr<Object> ObjectRef;
@@ -250,7 +252,9 @@ private:
   ceph::shared_mutex coll_lock =
       ceph::make_shared_mutex("FragmentationSimulator::coll_lock");
   std::unordered_map<coll_t, CollectionRef> coll_map;
-  std::unordered_map<coll_t, CollectionRef> new_coll_map;
+  std::unordered_map<coll_t, CollectionRef>
+      new_coll_map; // store collections that is opened via open_new_collection
+                    // but a create txn has not executed
 
 public:
   ObjectStoreImitator(CephContext *cct, const std::string &path_,
