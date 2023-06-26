@@ -1070,24 +1070,36 @@ static seastar::future<> run(
     server_needs_report = true;
   }
   return seastar::when_all(
-      create_sharded<test_state::Server>(
-        server_conf.core,
-        server_conf.block_size,
-        server_needs_report),
-      create_sharded<test_state::Client>(
-        client_conf.num_clients,
-        client_conf.num_conns,
-        client_conf.block_size,
-        client_conf.depth,
-        server_sid),
-      crimson::common::sharded_conf().start(
-        EntityName{}, std::string_view{"ceph"}
-      ).then([] {
-        return crimson::common::local_conf().start();
-      }).then([crc_enabled] {
-        return crimson::common::local_conf().set_val(
-            "ms_crc_data", crc_enabled ? "true" : "false");
-      })
+    seastar::futurize_invoke([mode, server_conf, server_needs_report] {
+      if (mode == perf_mode_t::client) {
+        return seastar::make_ready_future<test_state::Server*>(nullptr);
+      } else {
+        return create_sharded<test_state::Server>(
+          server_conf.core,
+          server_conf.block_size,
+          server_needs_report);
+      }
+    }),
+    seastar::futurize_invoke([mode, client_conf, server_sid] {
+      if (mode == perf_mode_t::server) {
+        return seastar::make_ready_future<test_state::Client*>(nullptr);
+      } else {
+        return create_sharded<test_state::Client>(
+          client_conf.num_clients,
+          client_conf.num_conns,
+          client_conf.block_size,
+          client_conf.depth,
+          server_sid);
+      }
+    }),
+    crimson::common::sharded_conf().start(
+      EntityName{}, std::string_view{"ceph"}
+    ).then([] {
+      return crimson::common::local_conf().start();
+    }).then([crc_enabled] {
+      return crimson::common::local_conf().set_val(
+          "ms_crc_data", crc_enabled ? "true" : "false");
+    })
   ).then([=](auto&& ret) {
     auto server = std::move(std::get<0>(ret).get0());
     auto client = std::move(std::get<1>(ret).get0());
