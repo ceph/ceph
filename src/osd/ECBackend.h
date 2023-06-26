@@ -430,85 +430,86 @@ public:
    * completions. Thus, callbacks and completion are called in order
    * on the writing std::list.
    */
-  struct Op : boost::intrusive::list_base_hook<> {
-    /// From submit_transaction caller, describes operation
-    hobject_t hoid;
-    object_stat_sum_t delta_stats;
-    eversion_t version;
-    eversion_t trim_to;
-    std::optional<pg_hit_set_history_t> updated_hit_set_history;
-    std::vector<pg_log_entry_t> log_entries;
-    ceph_tid_t tid;
-    osd_reqid_t reqid;
-    ZTracer::Trace trace;
-
-    eversion_t roll_forward_to; /// Soon to be generated internally
-
-    /// Ancillary also provided from submit_transaction caller
-    std::map<hobject_t, ObjectContextRef> obc_map;
-
-    /// see call_write_ordered
-    std::list<std::function<void(void)> > on_write;
-
-    /// Generated internally
-    std::set<hobject_t> temp_added;
-    std::set<hobject_t> temp_cleared;
-
-    ECTransaction::WritePlan plan;
-    bool requires_rmw() const { return !plan.to_read.empty(); }
-    bool invalidates_cache() const { return plan.invalidates_cache; }
-
-    // must be true if requires_rmw(), must be false if invalidates_cache()
-    bool using_cache = true;
-
-    /// In progress read state;
-    std::map<hobject_t,extent_set> pending_read; // subset already being read
-    std::map<hobject_t,extent_set> remote_read;  // subset we must read
-    std::map<hobject_t,extent_map> remote_read_result;
-    bool read_in_progress() const {
-      return !remote_read.empty() && remote_read_result.empty();
-    }
-
-    /// In progress write state.
-    std::set<pg_shard_t> pending_commit;
-    // we need pending_apply for pre-mimic peers so that we don't issue a
-    // read on a remote shard before it has applied a previous write.  We can
-    // remove this after nautilus.
-    std::set<pg_shard_t> pending_apply;
-    bool write_in_progress() const {
-      return !pending_commit.empty() || !pending_apply.empty();
-    }
-
-    /// optional, may be null, for tracking purposes
-    OpRequestRef client_op;
-
-    /// pin for cache
-    ExtentCache::write_pin pin;
-
-    /// Callbacks
-    Context *on_all_commit = nullptr;
-    virtual ~Op() {
-      delete on_all_commit;
-    }
-
-    virtual void generate_transactions(
-      ECTransaction::WritePlan &plan,
-      ceph::ErasureCodeInterfaceRef &ecimpl,
-      pg_t pgid,
-      const ECUtil::stripe_info_t &sinfo,
-      const std::map<hobject_t,extent_map> &partial_extents,
-      std::vector<pg_log_entry_t> &entries,
-      std::map<hobject_t,extent_map> *written,
-      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
-      std::set<hobject_t> *temp_added,
-      std::set<hobject_t> *temp_removed,
-      DoutPrefixProvider *dpp,
-      const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
-  };
-  using op_list = boost::intrusive::list<Op>;
-  friend ostream &operator<<(ostream &lhs, const Op &rhs);
 
   struct RMWPipeline {
+    struct Op : boost::intrusive::list_base_hook<> {
+      /// From submit_transaction caller, describes operation
+      hobject_t hoid;
+      object_stat_sum_t delta_stats;
+      eversion_t version;
+      eversion_t trim_to;
+      std::optional<pg_hit_set_history_t> updated_hit_set_history;
+      std::vector<pg_log_entry_t> log_entries;
+      ceph_tid_t tid;
+      osd_reqid_t reqid;
+      ZTracer::Trace trace;
+
+      eversion_t roll_forward_to; /// Soon to be generated internally
+
+      /// Ancillary also provided from submit_transaction caller
+      std::map<hobject_t, ObjectContextRef> obc_map;
+
+      /// see call_write_ordered
+      std::list<std::function<void(void)> > on_write;
+
+      /// Generated internally
+      std::set<hobject_t> temp_added;
+      std::set<hobject_t> temp_cleared;
+
+      ECTransaction::WritePlan plan;
+      bool requires_rmw() const { return !plan.to_read.empty(); }
+      bool invalidates_cache() const { return plan.invalidates_cache; }
+
+      // must be true if requires_rmw(), must be false if invalidates_cache()
+      bool using_cache = true;
+
+      /// In progress read state;
+      std::map<hobject_t,extent_set> pending_read; // subset already being read
+      std::map<hobject_t,extent_set> remote_read;  // subset we must read
+      std::map<hobject_t,extent_map> remote_read_result;
+      bool read_in_progress() const {
+        return !remote_read.empty() && remote_read_result.empty();
+      }
+
+      /// In progress write state.
+      std::set<pg_shard_t> pending_commit;
+      // we need pending_apply for pre-mimic peers so that we don't issue a
+      // read on a remote shard before it has applied a previous write.  We can
+      // remove this after nautilus.
+      std::set<pg_shard_t> pending_apply;
+      bool write_in_progress() const {
+        return !pending_commit.empty() || !pending_apply.empty();
+      }
+
+      /// optional, may be null, for tracking purposes
+      OpRequestRef client_op;
+
+      /// pin for cache
+      ExtentCache::write_pin pin;
+
+      /// Callbacks
+      Context *on_all_commit = nullptr;
+      virtual ~Op() {
+        delete on_all_commit;
+      }
+
+      virtual void generate_transactions(
+        ECTransaction::WritePlan &plan,
+        ceph::ErasureCodeInterfaceRef &ecimpl,
+        pg_t pgid,
+        const ECUtil::stripe_info_t &sinfo,
+        const std::map<hobject_t,extent_map> &partial_extents,
+        std::vector<pg_log_entry_t> &entries,
+        std::map<hobject_t,extent_map> *written,
+        std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+        std::set<hobject_t> *temp_added,
+        std::set<hobject_t> *temp_removed,
+        DoutPrefixProvider *dpp,
+        const ceph_release_t require_osd_release = ceph_release_t::unknown) = 0;
+    };
+    using op_list = boost::intrusive::list<Op>;
+    friend ostream &operator<<(ostream &lhs, const Op &rhs);
+
     ExtentCache cache;
     std::map<ceph_tid_t, std::unique_ptr<Op>> tid_to_op_map; /// Owns Op structure
     /**

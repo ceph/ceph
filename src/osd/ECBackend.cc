@@ -155,7 +155,7 @@ void ECBackend::ReadOp::dump(Formatter *f) const
   f->dump_stream("in_progress") << in_progress;
 }
 
-ostream &operator<<(ostream &lhs, const ECBackend::Op &rhs)
+ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::Op &rhs)
 {
   lhs << "Op(" << rhs.hoid
       << " v=" << rhs.version
@@ -1161,7 +1161,7 @@ void ECBackend::handle_sub_write_reply(
   const ECSubWriteReply &op,
   const ZTracer::Trace &trace)
 {
-  map<ceph_tid_t, std::unique_ptr<Op>>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
+  map<ceph_tid_t, std::unique_ptr<RMWPipeline::Op>>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
   ceph_assert(i != rmw_pipeline.tid_to_op_map.end());
   if (op.committed) {
     trace.event("sub write committed");
@@ -1541,7 +1541,7 @@ void ECBackend::dump_recovery_info(Formatter *f) const
   f->close_section();
 }
 
-struct ECClassicalOp : ECBackend::Op {
+struct ECClassicalOp : ECBackend::RMWPipeline::Op {
   PGTransactionUPtr t;
 
   void generate_transactions(
@@ -1593,10 +1593,10 @@ void ECBackend::submit_transaction(
   )
 {
   ceph_assert(!rmw_pipeline.tid_to_op_map.count(tid));
-  auto concete_op = std::make_unique<ECClassicalOp>();
-  concete_op->t = std::move(t);
-  rmw_pipeline.tid_to_op_map[tid] = std::move(concete_op);
-  Op *op = rmw_pipeline.tid_to_op_map[tid].get();
+  auto conrete_op = std::make_unique<ECClassicalOp>();
+  conrete_op->t = std::move(t);
+  rmw_pipeline.tid_to_op_map[tid] = std::move(conrete_op);
+  RMWPipeline::Op *op = rmw_pipeline.tid_to_op_map[tid].get();
   op->hoid = hoid;
   op->delta_stats = delta_stats;
   op->version = at_version;
@@ -1613,7 +1613,7 @@ void ECBackend::submit_transaction(
   }
   op->plan = ECTransaction::get_write_plan(
     sinfo,
-    *(concete_op->t),
+    *(conrete_op->t),
     [&](const hobject_t &i) {
       ECUtil::HashInfoRef ref = get_hash_info(i, true);
       if (!ref) {
