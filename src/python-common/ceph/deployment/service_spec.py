@@ -6,8 +6,21 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
 from ipaddress import ip_network, ip_address
-from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
-    NamedTuple, Mapping, Iterator
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import yaml
 
