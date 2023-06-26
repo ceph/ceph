@@ -294,7 +294,7 @@ if(WITH_CEPHFS_JAVA)
 endif()
 
 if(WITH_RADOSGW_D4N)
-  add_subdirectory(cpp_redis)
+  add_subdirectory(cpp_redis) # remove later -Sam
 endif()
 
 if (WITH_BLKIN)

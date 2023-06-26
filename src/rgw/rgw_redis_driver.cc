@@ -1,6 +1,7 @@
 #include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
-//#include "rgw_ssd_driver.h"
+//#include "rgw_ssd_driver.h" // fix -Sam
+//#include <aedis/src.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
