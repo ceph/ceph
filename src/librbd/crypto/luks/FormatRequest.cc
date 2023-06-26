@@ -167,8 +167,7 @@ void FormatRequest<I>::send() {
   ZTracer::Trace trace;
   auto req = io::ImageDispatchSpec::create_write(
           *m_image_ctx, io::IMAGE_DISPATCH_LAYER_API_START, aio_comp,
-          {{0, bl.length()}}, io::ImageArea::DATA, std::move(bl),
-          m_image_ctx->get_data_io_context(), 0, trace);
+          {{0, bl.length()}}, io::ImageArea::DATA, std::move(bl), 0, trace);
   req->send();
 }
 
