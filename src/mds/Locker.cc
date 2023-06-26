@@ -1984,7 +1984,6 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 
 void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue)
 {
-  ceph_assert(!lock->is_stable());
   if (lock->get_type() != CEPH_LOCK_DN &&
       lock->get_type() != CEPH_LOCK_ISNAP &&
       lock->get_type() != CEPH_LOCK_IPOLICY &&
