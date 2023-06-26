@@ -264,7 +264,7 @@ public:
 
   ~ObjectStoreImitator() = default;
 
-  void init_alloc(const std::string &alloc_type, int64_t size);
+  void init_alloc(const std::string &alloc_type, uint64_t size);
   void print_status();
   void verify_objects(CollectionHandle &ch);
 
