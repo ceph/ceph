@@ -38,6 +38,8 @@ cypress_run () {
 
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
 
+kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'
+
 # check if the prometheus daemon is running
 # before starting the e2e tests
 
@@ -52,8 +54,6 @@ kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-alertmanager-ap
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-prometheus-api-host http://192.168.100.100:9095"'
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph dashboard set-grafana-api-url https://192.168.100.100:3000"'
 kcli ssh -u root ceph-node-00 'cephadm shell "ceph orch apply node-exporter --placement 'count:2'"'
-
-kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'
 
 cypress_run ["cypress/e2e/orchestrator/workflow/*.feature","cypress/e2e/orchestrator/workflow/*-spec.ts"]
 cypress_run "cypress/e2e/orchestrator/grafana/*.feature"
