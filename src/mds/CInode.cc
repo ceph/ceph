@@ -4162,6 +4162,7 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
   m->truncate_size = i->truncate_size;
   m->fscrypt_file = i->fscrypt_file;
   m->fscrypt_auth = i->fscrypt_auth;
+  dout(20) << __func__ << " XXX fscrypt_file.size()=" << m->fscrypt_file.size() << dendl;
   m->mtime = i->mtime;
   m->atime = i->atime;
   m->ctime = i->ctime;

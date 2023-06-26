@@ -3767,6 +3767,7 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
 	      << " for " << *in << dendl;
       pi->time_warp_seq = m->get_time_warp_seq();
     }
+    dout(7) << __func__ << " XXX " << in->ino() << " m->fscrypt_file.size()=" << m->fscrypt_file.size() << " pi->fscrypt_file.size=" << pi->fscrypt_file.size() << dendl;
     if (m->fscrypt_file.size())
       pi->fscrypt_file = m->fscrypt_file;
   }
