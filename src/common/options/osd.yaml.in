@@ -1366,7 +1366,7 @@ options:
   type: str
   level: advanced
   desc: extended block device plugins to load, provide compression feedback at runtime
-  default: vdo
+  default:
   flags:
   - startup
 # minimum number of peers
