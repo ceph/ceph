@@ -11,6 +11,8 @@
 #  Boost_USE_STATIC_LIBS : boolean (default: OFF)
 #  Boost_USE_MULTITHREADED : boolean (default: OFF)
 #  BOOST_J: integer (defanult 1)
+#
+# Note: Remove boost_redis submodule once upgraded to Boost version that includes it
 
 function(check_boost_version source_dir expected_version)
   set(version_hpp "${source_dir}/boost/version.hpp")

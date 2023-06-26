@@ -81,3 +81,6 @@
 [submodule "src/qatzip"]
 	path = src/qatzip
 	url = https://github.com/intel/qatzip.git
+[submodule "src/boost_redis"]
+	path = src/boost_redis
+	url = https://github.com/boostorg/redis.git
