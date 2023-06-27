@@ -554,7 +554,7 @@ public:
     op_list waiting_commit;       /// writes waiting on initial commit
     eversion_t completed_to;
     eversion_t committed_to;
-    void start_rmw(Op *op);
+    void start_rmw(OpRef op);
     bool try_state_to_reads();
     bool try_reads_to_commit();
     bool try_finish_rmw();
