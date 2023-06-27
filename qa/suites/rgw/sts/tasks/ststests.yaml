@@ -3,9 +3,3 @@ tasks:
     client.0:
       sts_tests: True
       rgw_server: client.0
-overrides:
-  ceph:
-    conf:
-      client:
-              rgw sts key: abcdefghijklmnop
-              rgw s3 auth use sts: true
