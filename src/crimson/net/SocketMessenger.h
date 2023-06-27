@@ -37,7 +37,7 @@ public:
   SocketMessenger(const entity_name_t& myname,
                   const std::string& logic_name,
                   uint32_t nonce,
-                  bool is_fixed_cpu);
+                  bool dispatch_only_on_this_shard);
 
   ~SocketMessenger() override;
 
@@ -165,7 +165,7 @@ private:
   // Distinguish messengers with meaningful names for debugging
   const std::string logic_name;
   const uint32_t nonce;
-  const bool is_fixed_cpu;
+  const bool dispatch_only_on_sid;
 
   entity_name_t my_name;
   entity_addrvec_t my_addrs;

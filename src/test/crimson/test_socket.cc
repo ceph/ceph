@@ -202,7 +202,7 @@ class SocketFactory {
             logger().info("dispatch_sockets(): accepted at shard {}",
                           seastar::this_shard_id());
             psf->server_socket_CPU = seastar::this_shard_id();
-            if (psf->pss->is_fixed()) {
+            if (psf->pss->is_fixed_shard_dispatching()) {
               ceph_assert_always(SERVER_CPU == seastar::this_shard_id());
             }
             SocketFRef socket = seastar::make_foreign(std::move(_socket));

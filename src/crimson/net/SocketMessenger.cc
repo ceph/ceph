@@ -35,11 +35,11 @@ namespace crimson::net {
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce,
-                                 bool is_fixed_cpu)
+                                 bool dispatch_only_on_this_shard)
   : sid{seastar::this_shard_id()},
     logic_name{logic_name},
     nonce{nonce},
-    is_fixed_cpu{is_fixed_cpu},
+    dispatch_only_on_sid{dispatch_only_on_this_shard},
     my_name{myname}
 {}
 
@@ -94,7 +94,7 @@ SocketMessenger::do_listen(const entity_addrvec_t& addrs)
   set_myaddrs(addrs);
   return seastar::futurize_invoke([this] {
     if (!listener) {
-      return ShardedServerSocket::create(is_fixed_cpu
+      return ShardedServerSocket::create(dispatch_only_on_sid
       ).then([this] (auto _listener) {
         listener = _listener;
       });
@@ -232,7 +232,7 @@ seastar::future<> SocketMessenger::start(
     return listener->accept([this](SocketRef _socket, entity_addr_t peer_addr) {
       assert(get_myaddr().is_msgr2());
       SocketFRef socket = seastar::make_foreign(std::move(_socket));
-      if (listener->is_fixed()) {
+      if (listener->is_fixed_shard_dispatching()) {
         return accept(std::move(socket), peer_addr);
       } else {
         return seastar::smp::submit_to(sid,
