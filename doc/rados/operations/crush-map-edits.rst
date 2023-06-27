@@ -382,26 +382,26 @@ items within the host buckets::
    ``rjenkins1`` algorithm. To select ``rjenkins1`` as the hash algorithm,
    enter ``0`` as your hash setting.
 
-
 .. _weightingbucketitems:
 
 .. topic:: Weighting Bucket Items
 
-   Ceph expresses bucket weights as doubles, which allows for fine
+   Ceph expresses bucket weights as doubles, which allows for fine-grained
    weighting. A weight is the relative difference between device capacities. We
-   recommend using ``1.00`` as the relative weight for a 1TB storage device.
-   In such a scenario, a weight of ``0.5`` would represent approximately 500GB,
-   and a weight of ``3.00`` would represent approximately 3TB. Higher level
-   buckets have a weight that is the sum total of the leaf items aggregated by
-   the bucket.
+   recommend using ``1.00`` as the relative weight for a 1 TB storage device.
+   In such a scenario, a weight of ``0.50`` would represent approximately 500
+   GB, and a weight of ``3.00`` would represent approximately 3 TB.
+   Higher-level buckets have a weight that is the sum of the weight of the leaf
+   items aggregated by the bucket.
 
-   A bucket item weight is one dimensional, but you may also calculate your
+   A bucket item weight is one-dimensional, but you may also calculate your
    item weights to reflect the performance of the storage drive. For example,
-   if you have many 1TB drives where some have relatively low data transfer
-   rate and the others have a relatively high data transfer rate, you may
-   weight them differently, even though they have the same capacity (e.g.,
-   a weight of 0.80 for the first set of drives with lower total throughput,
-   and 1.20 for the second set of drives with higher total throughput).
+   if you have numerous 1 TB drives and some of them have a relatively low
+   data-transfer rate but the others have a relatively high data-transfer rate,
+   you might want to weight them differently even though they have the same
+   capacity (for example, you might assign a weight of 0.80 to the first set of
+   drives with lower total throughput and 1.20 to the second set of drives with
+   higher total throughput).
 
 
 .. _crushmaprules:
@@ -409,164 +409,160 @@ items within the host buckets::
 CRUSH Map Rules
 ---------------
 
-CRUSH maps support the notion of 'CRUSH rules', which are the rules that
-determine data placement for a pool. The default CRUSH map has a rule for each
-pool. For large clusters, you will likely create many pools where each pool may
-have its own non-default CRUSH rule.
-
-.. note:: In most cases, you will not need to modify the default rule. When
-   you create a new pool, by default the rule will be set to ``0``.
+CRUSH maps have rules that determine data placement for a pool: these are
+called "CRUSH rules". The default CRUSH map has one rule for each pool. If you
+are running a large cluster, you might create many pools and each of those
+pools might have its own non-default CRUSH rule.
 
 
-CRUSH rules define placement and replication strategies or distribution policies
-that allow you to specify exactly how CRUSH places object replicas. For
-example, you might create a rule selecting a pair of targets for 2-way
-mirroring, another rule for selecting three targets in two different data
-centers for 3-way mirroring, and yet another rule for erasure coding over six
-storage devices. For a detailed discussion of CRUSH rules, refer to
-`CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
-and more specifically to **Section 3.2**.
+.. note:: In most cases, there is no need to modify the default rule. When
+   a new pool is created, by default the rule will be set to the value ``0``.
+
+CRUSH rules define policy that governs how data is distributed across the devices in
+the hierarchy. The rules define placement as well as replication strategies or
+distribution policies that allow you to specify exactly how CRUSH places data
+replicas. For example, you might create one rule selecting a pair of targets for
+two-way mirroring, another rule for selecting three targets in two different data
+centers for three-way replication, and yet another rule for erasure coding across
+six storage devices. For a detailed discussion of CRUSH rules, see **Section 3.2**
+of `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_.
 
 A rule takes the following form::
 
-	rule <rulename> {
+    rule <rulename> {
 
-		id [a unique whole numeric ID]
-		type [ replicated | erasure ]
-		step take <bucket-name> [class <device-class>]
-		step [choose|chooseleaf] [firstn|indep] <N> type <bucket-type>
-		step emit
-	}
+        id [a unique whole numeric ID]
+        type [replicated|erasure]
+        step take <bucket-name> [class <device-class>]
+        step [choose|chooseleaf] [firstn|indep] <N> type <bucket-type>
+        step emit
+    }
 
 
 ``id``
-
-:Description: A unique whole number for identifying the rule.
-
-:Purpose: A component of the rule mask.
-:Type: Integer
-:Required: Yes
-:Default: 0
+   :Description: A unique whole number that identifies the rule.
+   :Purpose: A component of the rule mask.
+   :Type: Integer
+   :Required: Yes
+   :Default: 0
 
 
 ``type``
-
-:Description: Describes a rule for either a storage drive (replicated)
-              or a RAID.
-
-:Purpose: A component of the rule mask.
-:Type: String
-:Required: Yes
-:Default: ``replicated``
-:Valid Values: Currently only ``replicated`` and ``erasure``
+   :Description: Describes a rule for either a storage drive (replicated)
+                 or a RAID.
+   :Purpose: A component of the rule mask.
+   :Type: String
+   :Required: Yes
+   :Default: ``replicated``
+   :Valid Values: ``replicated`` or ``erasure``
 
 
 ``step take <bucket-name> [class <device-class>]``
+   :Description: Takes a bucket name and iterates down the tree. If
+                 the ``device-class`` argument is specified, the argument must match
+                 a class that has been previously used in defining a device. Only
+                 devices belonging to the class are included.
+   :Purpose: A component of the rule.
+   :Required: Yes
+   :Example: ``step take data``
 
-:Description: Takes a bucket name, and begins iterating down the tree.
-              If the ``device-class`` is specified, it must match
-              a class previously used when defining a device. All
-              devices that do not belong to the class are excluded.
-:Purpose: A component of the rule.
-:Required: Yes
-:Example: ``step take data``
 
 
 ``step choose firstn {num} type {bucket-type}``
+   :Description: Selects the number of buckets of the given type from within the
+                 current bucket. ``{num}`` is usually the number of replicas in
+                 the pool (in other words, the pool size).
 
-:Description: Selects the number of buckets of the given type from within the
-	      current bucket. The number is usually the number of replicas in
-	      the pool (i.e., pool size).
+                 - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (as many buckets as are available).
+                 - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
+                 - If ``{num} < 0``, choose ``pool-num-replicas - {num}`` buckets.
 
-              - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
-              - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
-              - If ``{num} < 0``, it means ``pool-num-replicas - {num}``.
-
-:Purpose: A component of the rule.
-:Prerequisite: Follows ``step take`` or ``step choose``.
-:Example: ``step choose firstn 1 type row``
+   :Purpose: A component of the rule.
+   :Prerequisite: Follows ``step take`` or ``step choose``.
+   :Example: ``step choose firstn 1 type row``
 
 
 ``step chooseleaf firstn {num} type {bucket-type}``
+   :Description: Selects a set of buckets of the given type and chooses a leaf
+                 node (that is, an OSD) from the subtree of each bucket in that set of buckets. The
+                 number of buckets in the set is usually the number of replicas in
+                 the pool (in other words, the pool size).
 
-:Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf
-              node (that is, an OSD) from the subtree of each bucket in the set of buckets.
-              The number of buckets in the set is usually the number of replicas in
-              the pool (i.e., pool size).
-
-              - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
-              - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
-              - If ``{num} < 0``, it means ``pool-num-replicas - {num}``.
-
-:Purpose: A component of the rule. Usage removes the need to select a device using two steps.
-:Prerequisite: Follows ``step take`` or ``step choose``.
-:Example: ``step chooseleaf firstn 0 type row``
+                 - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (as many buckets as are available).
+                 - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
+                 - If ``{num} < 0``, choose ``pool-num-replicas - {num}`` buckets.
+   :Purpose: A component of the rule. Using ``chooseleaf`` obviates the need to select a device in a separate step.
+   :Prerequisite: Follows ``step take`` or ``step choose``.
+   :Example: ``step chooseleaf firstn 0 type row``
 
 
 ``step emit``
+   :Description: Outputs the current value on the top of the stack and empties 
+                 the stack. Typically used
+                 at the end of a rule, but may also be used to choose from different
+                 trees in the same rule.
 
-:Description: Outputs the current value and empties the stack. Typically used
-              at the end of a rule, but may also be used to pick from different
-              trees in the same rule.
+   :Purpose: A component of the rule.
+   :Prerequisite: Follows ``step choose``.
+   :Example: ``step emit``
 
-:Purpose: A component of the rule.
-:Prerequisite: Follows ``step choose``.
-:Example: ``step emit``
+.. important:: A single CRUSH rule can be assigned to multiple pools, but
+   a single pool cannot have multiple CRUSH rules.
 
-.. important:: A given CRUSH rule may be assigned to multiple pools, but it
-   is not possible for a single pool to have multiple CRUSH rules.
+``firstn`` or ``indep``
 
-``firstn`` versus ``indep``
+   :Description: Determines which replacement strategy CRUSH uses when items (OSDs)
+                 are marked ``down`` in the CRUSH map. When this rule is used
+                 with replicated pools, ``firstn`` is used.  When this rule is
+                 used with erasure-coded pools, ``indep`` is used.
 
-:Description: Controls the replacement strategy CRUSH uses when items (OSDs)
-	      are marked down in the CRUSH map. If this rule is to be used with
-	      replicated pools it should be ``firstn`` and if it's for
-	      erasure-coded pools it should be ``indep``.
+                 This option determines the replacement strategy when a
+                 previously-selected device fails. Suppose that a PG is stored
+                 on OSDs 1, 2, 3, 4, and 5 and then OSD 3 goes down.
 
-	      The reason has to do with how they behave when a
-	      previously-selected device fails. Let's say you have a PG stored
-	      on OSDs 1, 2, 3, 4, 5. Then 3 goes down.
-	      
-	      With the "firstn" mode, CRUSH simply adjusts its calculation to
-	      select 1 and 2, then selects 3 but discovers it's down, so it
-	      retries and selects 4 and 5, and then goes on to select a new
-	      OSD 6. So the final CRUSH mapping change is
-	      1, 2, 3, 4, 5 -> 1, 2, 4, 5, 6.
+                 When in ``firstn`` mode, CRUSH simply adjusts its calculation
+                 to select OSDs 1 and 2, then selects 3 and discovers that 3 is
+                 down, retries and selects 4 and 5, and finally goes on to
+                 select a new OSD: OSD 6. The final CRUSH mapping
+                 transformation is therefore 1, 2, 3, 4, 5 → 1, 2, 4, 5, 6.
 
-	      But if you're storing an EC pool, that means you just changed the
-	      data mapped to OSDs 4, 5, and 6! So the "indep" mode attempts to
-	      not do that. You can instead expect it, when it selects the failed
-	      OSD 3, to try again and pick out 6, for a final transformation of:
-	      1, 2, 3, 4, 5 -> 1, 2, 6, 4, 5
-	      
+                 However, if you were storing an erasure-coded pool, the above
+                 sequence would have changed the data that is mapped to OSDs 4,
+                 5, and 6. The ``indep`` mode attempts to avoid this unwanted
+                 consequence. When in ``indep`` mode, CRUSH can be expected to
+                 select 3, discover that 3 is down, retry, and select 6. The
+                 final CRUSH mapping transformation is therefore 1, 2, 3, 4, 5
+                 → 1, 2, 6, 4, 5.
+
 .. _crush-reclassify:
 
 Migrating from a legacy SSD rule to device classes
 --------------------------------------------------
 
-It used to be necessary to manually edit your CRUSH map and maintain a
-parallel hierarchy for each specialized device type (e.g., SSD) in order to
-write rules that apply to those devices.  Since the Luminous release,
-the *device class* feature has enabled this transparently.
+Prior to the Luminous release's introduction of the *device class* feature, in
+order to write rules that appled to a specialized device type (for example,
+SSD), it was necessary to manually edit the CRUSH map and maintain a parallel
+hierarchy for each device type. The device class feature provides a more
+transparent way to achieve this end.
 
-However, migrating from an existing, manually customized per-device map to
-the new device class rules in the trivial way will cause all data in the
-system to be reshuffled.
+However, if your cluster is migrated from an existing manually-customized
+per-device map to the new device class rules, all data in the system will be
+reshuffled.
 
-The ``crushtool`` has a few commands that can transform a legacy rule
-and hierarchy so that you can start using the new class-based rules.
-There are three types of transformations possible:
+The ``crushtool`` utility has several commands that can transform a legacy rule
+and hierarchy and allow you to start using the new device class rules. There
+are three possible types of transformation:
 
 #. ``--reclassify-root <root-name> <device-class>``
 
-   This will take everything in the hierarchy beneath root-name and
-   adjust any rules that reference that root via a ``take
-   <root-name>`` to instead ``take <root-name> class <device-class>``.
-   It renumbers the buckets in such a way that the old IDs are instead
-   used for the specified class's "shadow tree" so that no data
-   movement takes place.
+   This command examines everything under ``root-name`` in the hierarchy and
+   rewrites any rules that reference the specified root and that have the
+   form ``take <root-name>`` so that they instead have the
+   form ``take <root-name> class <device-class>``. The command also renumbers
+   the buckets in such a way that the old IDs are used for the specified
+   class's "shadow tree" and as a result no data movement takes place.
 
-   For example, imagine you have an existing rule like::
+   For example, suppose you have the following as an existing rule::
 
      rule replicated_rule {
         id 0
@@ -576,8 +572,8 @@ There are three types of transformations possible:
         step emit
      }
 
-   If you reclassify the root `default` as class `hdd`, the rule will
-   become::
+   If the root ``default`` is reclassified as class ``hdd``, the new rule will
+   be as follows::
 
      rule replicated_rule {
         id 0
@@ -589,23 +585,26 @@ There are three types of transformations possible:
 
 #. ``--set-subtree-class <bucket-name> <device-class>``
 
-   This will mark every device in the subtree rooted at *bucket-name*
+   This command marks every device in the subtree that is rooted at *bucket-name*
    with the specified device class.
 
-   This is normally used in conjunction with the ``--reclassify-root``
-   option to ensure that all devices in that root are labeled with the
-   correct class.  In some situations, however, some of those devices
-   (correctly) have a different class and we do not want to relabel
-   them.  In such cases, one can exclude the ``--set-subtree-class``
-   option.  This means that the remapping process will not be perfect,
-   since the previous rule distributed across devices of multiple
-   classes but the adjusted rules will only map to devices of the
-   specified *device-class*, but that often is an accepted level of
-   data movement when the number of outlier devices is small.
+   This command is typically used in conjunction with the ``--reclassify-root`` option
+   in order to ensure that all devices in that root are labeled with the
+   correct class. In certain circumstances, however, some of those devices
+   are correctly labeled with a different class and must not be relabeled. To
+   manage this difficulty, one can exclude the ``--set-subtree-class``
+   option. The remapping process will not be perfect, because the previous rule
+   had an effect on devices of multiple classes but the adjusted rules will map
+   only to devices of the specified device class. However, when there are not many
+   outlier devices, the resulting level of data movement is often within tolerable
+   limits.
+
 
 #. ``--reclassify-bucket <match-pattern> <device-class> <default-parent>``
 
-   This will allow you to merge a parallel type-specific hierarchy with the normal hierarchy.  For example, many users have maps like::
+   This command allows you to merge a parallel type-specific hierarchy with the
+   normal hierarchy. For example, many users have maps that resemble the
+   following::
 
      host node1 {
         id -2           # do not change unnecessarily
@@ -627,7 +626,7 @@ There are three types of transformations possible:
         alg straw2
         hash 0  # rjenkins1
         item osd.80 weight 2.000
-	...
+    ...
      }
 
      root default {
@@ -644,42 +643,52 @@ There are three types of transformations possible:
         alg straw2
         hash 0  # rjenkins1
         item node1-ssd weight 2.000
-	...
+    ...
      }
 
-   This function will reclassify each bucket that matches a
-   pattern.  The pattern can look like ``%suffix`` or ``prefix%``.
-   For example, in the above example, we would use the pattern
-   ``%-ssd``.  For each matched bucket, the remaining portion of the
-   name (that matches the ``%`` wildcard) specifies the *base bucket*.
-   All devices in the matched bucket are labeled with the specified
-   device class and then moved to the base bucket.  If the base bucket
-   does not exist (e.g., ``node12-ssd`` exists but ``node12`` does
-   not), then it is created and linked underneath the specified
-   *default parent* bucket.  In each case, we are careful to preserve
-   the old bucket IDs for the new shadow buckets to prevent data
-   movement.  Any rules with ``take`` steps referencing the old
-   buckets are adjusted.
+   This command reclassifies each bucket that matches a certain
+   pattern. The pattern can be of the form ``%suffix`` or ``prefix%``. For
+   example, in the above example, we would use the pattern
+   ``%-ssd``. For each matched bucket, the remaining portion of the
+   name (corresponding to the ``%`` wildcard) specifies the *base bucket*. All
+   devices in the matched bucket are labeled with the specified
+   device class and then moved to the base bucket. If the base bucket
+   does not exist (for example, ``node12-ssd`` exists but ``node12`` does
+   not), then it is created and linked under the specified
+   *default parent* bucket. In each case, care is taken to preserve
+   the old bucket IDs for the new shadow buckets in order to prevent data
+   movement. Any rules with ``take`` steps that reference the old
+   buckets are adjusted accordingly.
 
-#. ``--reclassify-bucket <bucket-name> <device-class> <base-bucket>``
 
-   The same command can also be used without a wildcard to map a
-   single bucket.  For example, in the previous example, we want the
-   ``ssd`` bucket to be mapped to the ``default`` bucket.
+   #. ``--reclassify-bucket <bucket-name> <device-class> <base-bucket>``
 
-The final command to convert the map comprising the above fragments would be something like:
+      The same command can also be used without a wildcard in order to map a
+      single bucket. For example, in the previous example, we want the
+      ``ssd`` bucket to be mapped to the ``default`` bucket.
 
-.. prompt:: bash $
+   #. The final command to convert the map that consists of the above fragments
+      resembles the following:
 
-  ceph osd getcrushmap -o original
-  crushtool -i original --reclassify \
-    --set-subtree-class default hdd \
-    --reclassify-root default hdd \
-    --reclassify-bucket %-ssd ssd default \
-    --reclassify-bucket ssd ssd default \
-    -o adjusted
+      .. prompt:: bash $
 
-In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs against the CRUSH map and check that the same result is output. These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,:
+         ceph osd getcrushmap -o original
+         crushtool -i original --reclassify \
+           --set-subtree-class default hdd \
+           --reclassify-root default hdd \
+           --reclassify-bucket %-ssd ssd default \
+           --reclassify-bucket ssd ssd default \
+           -o adjusted
+
+``--compare`` flag
+------------------
+
+A ``--compare`` flag is available to make sure that the conversion is
+correct.  This flag tests a large sample of inputs against the CRUSH map and
+checks that the expected result is output. The options that control these
+inputs are the same as the options that apply to the ``--test`` command. For
+an illustration of how this ``--compare`` command applies to the above
+example, see the following:
 
 .. prompt:: bash $
 
@@ -691,57 +700,55 @@ In order to ensure that the conversion is correct, there is a ``--compare`` comm
   rule 1 had 0/10240 mismatched mappings (0)
   maps appear equivalent
 
-If there were differences, the ratio of remapped inputs would be reported in
-the parentheses.
+If the command finds any differences, the ratio of remapped inputs is reported
+in the parentheses.
 
-When you are satisfied with the adjusted map, apply it to the cluster with a command of the form:
+When you are satisfied with the adjusted map, apply it to the cluster by
+running the following command:
 
 .. prompt:: bash $
 
    ceph osd setcrushmap -i adjusted
 
-Tuning CRUSH, the hard way
---------------------------
+Manually Tuning CRUSH
+---------------------
 
-If you can ensure that all clients are running recent code, you can
-adjust the tunables by extracting the CRUSH map, modifying the values,
-and reinjecting it into the cluster.
+If you have verified that all clients are running recent code, you can adjust
+the CRUSH tunables by extracting the CRUSH map, modifying the values, and
+reinjecting the map into the cluster. The procedure is carried out as follows:
 
-* Extract the latest CRUSH map:
+#. Extract the latest CRUSH map:
 
-  .. prompt:: bash $
+   .. prompt:: bash $
 
-	ceph osd getcrushmap -o /tmp/crush
+      ceph osd getcrushmap -o /tmp/crush
 
-* Adjust tunables.  These values appear to offer the best behavior
-  for both large and small clusters we tested with.  You will need to
-  additionally specify the ``--enable-unsafe-tunables`` argument to
-  ``crushtool`` for this to work.  Please use this option with
-  extreme care.:
+#. Adjust tunables. In our tests, the following values appear to result in the 
+   best behavior for both large and small clusters. The procedure requires that
+   you specify the ``--enable-unsafe-tunables`` flag in the ``crushtool``
+   command. Use this option with **extreme care**:
 
-  .. prompt:: bash $
+   .. prompt:: bash $
 
-     crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
+      crushtool -i /tmp/crush --set-choose-local-tries 0 --set-choose-local-fallback-tries 0 --set-choose-total-tries 50 -o /tmp/crush.new
 
-* Reinject modified map:
+#. Reinject the modified map:
 
-  .. prompt:: bash $
+   .. prompt:: bash $
 
      ceph osd setcrushmap -i /tmp/crush.new
 
 Legacy values
 -------------
 
-For reference, the legacy values for the CRUSH tunables can be set
-with:
+To set the legacy values of the CRUSH tunables, run the following command:
 
 .. prompt:: bash $
 
    crushtool -i /tmp/crush --set-choose-local-tries 2 --set-choose-local-fallback-tries 5 --set-choose-total-tries 19 --set-chooseleaf-descend-once 0 --set-chooseleaf-vary-r 0 -o /tmp/crush.legacy
 
-Again, the special ``--enable-unsafe-tunables`` option is required.
-Further, as noted above, be careful running old versions of the
-``ceph-osd`` daemon after reverting to legacy values as the feature
-bit is not perfectly enforced.
+The special ``--enable-unsafe-tunables`` flag is required. Be careful when
+running old versions of the ``ceph-osd`` daemon after reverting to legacy
+values, because the feature bit is not perfectly enforced.
 
 .. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.io/assets/pdfs/weil-crush-sc06.pdf
