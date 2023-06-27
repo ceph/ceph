@@ -109,7 +109,7 @@ public:
   create(const entity_name_t& name,
          const std::string& lname,
          uint64_t nonce,
-         bool is_fixed_cpu);
+         bool dispatch_only_on_this_shard);
 
 #ifdef UNIT_TESTS_BUILT
   virtual void set_interceptor(Interceptor *) = 0;

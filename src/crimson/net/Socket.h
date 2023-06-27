@@ -158,7 +158,10 @@ class ShardedServerSocket
   struct construct_tag {};
 
 public:
-  ShardedServerSocket(seastar::shard_id sid, bool is_fixed_cpu, construct_tag);
+  ShardedServerSocket(
+      seastar::shard_id sid,
+      bool dispatch_only_on_primary_sid,
+      construct_tag);
 
   ~ShardedServerSocket();
 
@@ -167,7 +170,9 @@ public:
   ShardedServerSocket& operator=(ShardedServerSocket&&) = delete;
   ShardedServerSocket& operator=(const ShardedServerSocket&) = delete;
 
-  bool is_fixed() const { return is_fixed_cpu; }
+  bool is_fixed_shard_dispatching() const {
+    return dispatch_only_on_primary_sid;
+  }
 
   listen_ertr::future<> listen(entity_addr_t addr);
 
@@ -177,12 +182,13 @@ public:
 
   seastar::future<> shutdown_destroy();
 
-  static seastar::future<ShardedServerSocket*> create(bool is_fixed_cpu);
+  static seastar::future<ShardedServerSocket*> create(
+      bool dispatch_only_on_this_shard);
 
 private:
-  // the fixed CPU if is_fixed_cpu is true
   const seastar::shard_id primary_sid;
-  const bool is_fixed_cpu;
+  /// XXX: Remove once all infrastructure uses multi-core messenger
+  const bool dispatch_only_on_primary_sid;
   entity_addr_t listen_addr;
   std::optional<seastar::server_socket> listener;
   seastar::gate shutdown_gate;
