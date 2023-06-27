@@ -760,9 +760,14 @@ class Filesystem(MDSCluster):
 
                 for sv in range(0, subvols['create']):
                     sv_name = f'sv_{sv}'
-                    self.run_ceph_cmd('fs', 'subvolume', 'create', self.name,
-                                      sv_name,
-                                      self.fs_config.get('subvol_options', ''))
+                    svopts = self.fs_config.get('subvol_options', None)
+                    if svopts:
+                        self.run_ceph_cmd(
+                            'fs', 'subvolume', 'create',
+                            self.name, sv_name, svopts)
+                    else:
+                        self.run_ceph_cmd(
+                            'fs', 'subvolume', 'create', self.name, sv_name)
 
                     if self.name not in self._ctx.created_subvols:
                         self._ctx.created_subvols[self.name] = []
