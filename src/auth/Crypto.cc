@@ -511,6 +511,23 @@ void CryptoKey::decode(bufferlist::const_iterator& bl)
     throw ceph::buffer::malformed_input("malformed secret");
 }
 
+void CryptoKey::dump(Formatter *f) const
+{
+  f->dump_int("type", type);
+  f->dump_stream("created") << created;
+  f->dump_int("secret.length", secret.length());
+}
+
+void CryptoKey::generate_test_instances(std::list<CryptoKey*>& ls)
+{
+  ls.push_back(new CryptoKey);
+  ls.push_back(new CryptoKey);
+  ls.back()->type = CEPH_CRYPTO_AES;
+  ls.back()->set_secret(
+    CEPH_CRYPTO_AES, bufferptr("1234567890123456", 16), utime_t(123, 456));
+  ls.back()->created = utime_t(123, 456);
+}
+
 int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)
 {
   int r = _set_secret(type, s);

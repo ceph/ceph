@@ -34,6 +34,17 @@ struct cls_queue_entry
     decode(marker, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("marker", marker);
+    f->dump_unsigned("data_len", data.length());
+  }
+  static void generate_test_instances(std::list<cls_queue_entry*>& o) {
+    o.push_back(new cls_queue_entry);
+    o.push_back(new cls_queue_entry);
+    o.back()->data.append(std::string_view("data"));
+    o.back()->marker = "marker";
+  }
 };
 WRITE_CLASS_ENCODER(cls_queue_entry)
 
@@ -80,7 +91,16 @@ struct cls_queue_marker
     }
     return 0;
   }
-
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("offset", offset);
+    f->dump_unsigned("gen", gen);
+  }
+  static void generate_test_instances(std::list<cls_queue_marker*>& o) {
+    o.push_back(new cls_queue_marker);
+    o.push_back(new cls_queue_marker);
+    o.back()->offset = 1024;
+    o.back()->gen = 0;
+  }
 };
 WRITE_CLASS_ENCODER(cls_queue_marker)
 
@@ -113,6 +133,27 @@ struct cls_queue_head
     decode(max_urgent_data_size, bl);
     decode(bl_urgent_data, bl);
     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("max_head_size", max_head_size);
+    f->dump_unsigned("queue_size", queue_size);
+    f->dump_unsigned("max_urgent_data_size", max_urgent_data_size);
+    f->dump_unsigned("front_offset", front.offset);
+    f->dump_unsigned("front_gen", front.gen);
+    f->dump_unsigned("tail_offset", tail.offset);
+    f->dump_unsigned("tail_gen", tail.gen);
+  }
+  static void generate_test_instances(std::list<cls_queue_head*>& o) {
+    o.push_back(new cls_queue_head);
+    o.push_back(new cls_queue_head);
+    o.back()->max_head_size = 1024;
+    o.back()->front.offset = 1024;
+    o.back()->front.gen = 0;
+    o.back()->tail.offset = 1024;
+    o.back()->tail.gen = 0;
+    o.back()->queue_size = 1024;
+    o.back()->max_urgent_data_size = 0;
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_head)

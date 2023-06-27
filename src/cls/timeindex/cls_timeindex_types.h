@@ -4,9 +4,9 @@
 #ifndef CEPH_CLS_TIMEINDEX_TYPES_H
 #define CEPH_CLS_TIMEINDEX_TYPES_H
 
+#include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/types.h"
-
 #include "include/utime.h"
 
 class JSONObj;

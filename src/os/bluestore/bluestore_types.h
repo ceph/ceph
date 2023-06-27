@@ -954,6 +954,7 @@ struct bluestore_onode_t {
       denc_varint(v.bytes, p);
     }
     void dump(ceph::Formatter *f) const;
+    static void generate_test_instances(std::list<shard_info*>& ls);
   };
   std::vector<shard_info> extent_map_shards; ///< extent std::map shards (if any)
 

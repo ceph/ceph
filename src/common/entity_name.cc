@@ -29,21 +29,30 @@ const std::array<EntityName::str_to_entity_type_t, 6> EntityName::STR_TO_ENTITY_
   { CEPH_ENTITY_TYPE_CLIENT, "client" },
 }};
 
-const std::string& EntityName::
-to_str() const
-{
+void EntityName::dump(ceph::Formatter *f) const {
+  f->dump_int("type", type);
+  f->dump_string("id", id);
+}
+
+void EntityName::generate_test_instances(std::list<EntityName*>& ls) {
+  ls.push_back(new EntityName);
+  ls.push_back(new EntityName);
+  ls.back()->set_type(CEPH_ENTITY_TYPE_OSD);
+  ls.back()->set_id("0");
+  ls.push_back(new EntityName);
+  ls.back()->set_type(CEPH_ENTITY_TYPE_MDS);
+  ls.back()->set_id("a");
+}
+
+const std::string& EntityName::to_str() const {
   return type_id;
 }
 
-const char* EntityName::
-to_cstr() const
-{
+const char* EntityName::to_cstr() const {
   return type_id.c_str();
 }
 
-bool EntityName::
-from_str(std::string_view s)
-{
+bool EntityName::from_str(std::string_view s) {
   size_t pos = s.find('.');
 
   if (pos == string::npos)
@@ -56,9 +65,7 @@ from_str(std::string_view s)
   return true;
 }
 
-void EntityName::
-set(uint32_t type_, std::string_view id_)
-{
+void EntityName::set(uint32_t type_, std::string_view id_) {
   type = type_;
   id = id_;
 
@@ -71,9 +78,7 @@ set(uint32_t type_, std::string_view id_)
   }
 }
 
-int EntityName::
-set(std::string_view type_, std::string_view id_)
-{
+int EntityName::set(std::string_view type_, std::string_view id_) {
   uint32_t t = str_to_ceph_entity_type(type_);
   if (t == CEPH_ENTITY_TYPE_ANY)
     return -EINVAL;
@@ -81,9 +86,7 @@ set(std::string_view type_, std::string_view id_)
   return 0;
 }
 
-void EntityName::
-set_type(uint32_t type_)
-{
+void EntityName::set_type(uint32_t type_) {
   set(type_, id);
 }
 
@@ -93,9 +96,7 @@ set_type(std::string_view type_)
   return set(type_, id);
 }
 
-void EntityName::
-set_id(std::string_view id_)
-{
+void EntityName::set_id(std::string_view id_) {
   set(type, id_);
 }
 
@@ -106,33 +107,23 @@ void EntityName::set_name(entity_name_t n)
   set(n.type(), s);
 }
 
-const char* EntityName::
-get_type_str() const
-{
+const char* EntityName::get_type_str() const {
   return ceph_entity_type_name(type);
 }
 
-std::string_view EntityName::
-get_type_name() const
-{
+std::string_view EntityName::get_type_name() const {
   return ceph_entity_type_name(type);
 }
 
-const std::string &EntityName::
-get_id() const
-{
+const std::string &EntityName::get_id() const {
   return id;
 }
 
-bool EntityName::
-has_default_id() const
-{
+bool EntityName::has_default_id() const {
   return (id == "admin");
 }
 
-std::string EntityName::
-get_valid_types_as_str()
-{
+std::string EntityName::get_valid_types_as_str() {
   std::ostringstream out;
   size_t i;
   for (i = 0; i < STR_TO_ENTITY_TYPE.size(); ++i) {
