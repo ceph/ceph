@@ -191,7 +191,8 @@ public:
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
 			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
-				    bool okexist=false, bool want_layout=false);
+				    bool okexist=false, bool authexist=false,
+				    bool want_layout=false);
   std::pair<CDentry*, CDentry*>
 	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
 
