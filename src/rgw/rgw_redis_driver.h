@@ -1,6 +1,7 @@
 #ifndef CEPH_REDISDRIVER_H
 #define CEPH_REDISDRIVER_H
 
+#include "../boost_redis/include/boost/redis/src.hpp" // fix -Sam
 #include <aio.h>
 #include "common/async/completion.h"
 #include <string>
