@@ -9489,13 +9489,18 @@ paths:
         schema:
           type: string
       - in: query
-        name: zonegroup_name
+        name: delete_pools
         required: true
         schema:
           type: string
-      - in: query
-        name: delete_pools
-        required: true
+      - allowEmptyValue: true
+        in: query
+        name: pools
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: zonegroup_name
         schema:
           type: string
       - allowEmptyValue: true
@@ -9746,6 +9751,11 @@ paths:
       - in: query
         name: delete_pools
         required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: pools
         schema:
           type: string
       - allowEmptyValue: true
