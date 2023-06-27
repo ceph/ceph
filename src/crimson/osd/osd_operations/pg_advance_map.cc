@@ -55,6 +55,11 @@ void PGAdvanceMap::dump_detail(Formatter *f) const
   f->close_section();
 }
 
+PGPeeringPipeline &PGAdvanceMap::peering_pp(PG &pg)
+{
+  return pg.peering_request_pg_pipeline;
+}
+
 seastar::future<> PGAdvanceMap::start()
 {
   using cached_map_t = OSDMapService::cached_map_t;
@@ -63,7 +68,7 @@ seastar::future<> PGAdvanceMap::start()
 
   IRef ref = this;
   return enter_stage<>(
-    pg->peering_request_pg_pipeline.process
+    peering_pp(*pg).process
   ).then([this] {
     /*
      * PGAdvanceMap is scheduled at pg creation and when
