@@ -5,3 +5,4 @@ werkzeug
 requests
 pkg-resources
 python-dateutil
+bcrypt
