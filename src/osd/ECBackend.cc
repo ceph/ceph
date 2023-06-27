@@ -1592,11 +1592,8 @@ void ECBackend::submit_transaction(
   OpRequestRef client_op
   )
 {
-  ceph_assert(!rmw_pipeline.tid_to_op_map.count(tid));
-  auto conrete_op = std::make_unique<ECClassicalOp>();
-  conrete_op->t = std::move(t);
-  rmw_pipeline.tid_to_op_map[tid] = std::move(conrete_op);
-  RMWPipeline::Op *op = rmw_pipeline.tid_to_op_map[tid].get();
+  auto op = std::make_unique<ECClassicalOp>();
+  op->t = std::move(t);
   op->hoid = hoid;
   op->delta_stats = delta_stats;
   op->version = at_version;
@@ -1613,7 +1610,7 @@ void ECBackend::submit_transaction(
   }
   op->plan = ECTransaction::get_write_plan(
     sinfo,
-    *(conrete_op->t),
+    *(op->t),
     [&](const hobject_t &i) {
       ECUtil::HashInfoRef ref = get_hash_info(i, true);
       if (!ref) {
@@ -1627,7 +1624,7 @@ void ECBackend::submit_transaction(
     },
     get_parent()->get_dpp());
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
-  rmw_pipeline.start_rmw(op);
+  rmw_pipeline.start_rmw(std::move(op));
 }
 
 void ECBackend::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
@@ -1954,12 +1951,14 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   return ref;
 }
 
-void ECBackend::RMWPipeline::start_rmw(Op *op)
+void ECBackend::RMWPipeline::start_rmw(std::unique_ptr<Op> op)
 {
   ceph_assert(op);
   dout(10) << __func__ << ": " << *op << dendl;
 
+  ceph_assert(!tid_to_op_map.count(op->tid));
   waiting_state.push_back(*op);
+  tid_to_op_map[op->tid] = std::move(op);
   check_ops();
 }
 
