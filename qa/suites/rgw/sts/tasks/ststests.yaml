@@ -2,7 +2,6 @@ tasks:
 - s3tests:
     client.0:
       sts_tests: True
-      extra_attrs: ["test_of_sts"]
       rgw_server: client.0
 overrides:
   ceph:
