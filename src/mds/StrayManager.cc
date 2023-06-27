@@ -281,6 +281,17 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, MutationRef& 
     dir->remove_dentry(dn);
   }
 
+  // Once we are here normally the waiter list are mostly empty
+  // but in corner case that the clients pass a invalidate ino,
+  // which maybe under unlinking, the link caller will add the
+  // request to the waiter list. We need try to wake them up
+  // anyway.
+  MDSContext::vec finished;
+  in->take_waiting(CInode::WAIT_UNLINK, finished);
+  if (!finished.empty()) {
+    mds->queue_waiters(finished);
+  }
+
   // drop inode
   inodeno_t ino = in->ino();
   if (in->is_dirty())
@@ -653,7 +664,7 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
 	dout(20) << __func__ << ": not reintegrating (can't authpin remote parent)" << dendl;
       }
 
-    } else if (!remote_dn->is_auth() && stray_dn->is_auth()) {
+    } else if (stray_dn->is_auth()) {
       migrate_stray(stray_dn, remote_dn->authority().first);
     } else {
       dout(20) << __func__ << ": not reintegrating" << dendl;
