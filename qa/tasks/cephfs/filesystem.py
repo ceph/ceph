@@ -834,7 +834,7 @@ class FilesystemBase(MDSClusterBase):
                 assert(subvols['create'] > 0)
 
                 self.run_ceph_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
-                subvol_options = self.fs_config.get('subvol_options', '')
+                subvol_options = self.fs_config.get('subvol_options', None)
 
                 for sv in range(0, subvols['create']):
                     sv_name = f'sv_{sv}'
