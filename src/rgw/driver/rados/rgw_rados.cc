@@ -3386,6 +3386,7 @@ public:
 
 
   int process_attrs(void) {
+    bool encrypted = false;
     if (extra_data_bl.length()) {
       JSONParser jp;
       if (!jp.parse(extra_data_bl.c_str(), extra_data_bl.length())) {
@@ -3394,6 +3395,12 @@ public:
       }
 
       JSONDecoder::decode_json("attrs", src_attrs, &jp);
+
+      encrypted = src_attrs.count(RGW_ATTR_CRYPT_MODE);
+      if (encrypted) {
+        // we won't have access to the decrypted data for checksumming
+        try_etag_verify = false;
+      }
 
       auto iter = src_attrs.find(RGW_ATTR_COMPRESSION);
       if (iter != src_attrs.end()) {
@@ -3437,8 +3444,8 @@ public:
       return ret;
     }
 
-    if (plugin && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
-      //do not compress if object is encrypted
+    // do not compress if object is encrypted
+    if (plugin && !encrypted) {
       compressor = boost::in_place(cct, plugin, filter);
       // add a filter that buffers data so we don't try to compress tiny blocks.
       // libcurl reads in 16k at a time, and we need at least 64k to get a good
@@ -3448,12 +3455,7 @@ public:
       filter = &*buffering;
     }
 
-    /*
-     * Presently we don't support ETag based verification if encryption is
-     * requested. We can enable simultaneous support once we have a mechanism
-     * to know the sequence in which the filters must be applied.
-     */
-    if (try_etag_verify && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
+    if (try_etag_verify) {
       ret = rgw::putobj::create_etag_verifier(dpp, cct, filter, manifest_bl,
                                               compression_info,
                                               etag_verifier);
