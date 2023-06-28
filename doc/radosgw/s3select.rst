@@ -7,23 +7,27 @@
 Overview
 --------
 
-The purpose of the **s3 select** engine is to create an efficient pipe between
-user client and storage nodes (the engine should be close as possible to
-storage). It enables the selection of a restricted subset of (structured) data
-stored in an S3 object using an SQL-like syntax. It also enables for higher
-level analytic-applications (such as SPARK-SQL), using that feature to improve
-their latency and throughput.
+The **s3 select** engine creates an efficient pipe between clients and Ceph
+back end nodes. The S3 Select engine works best when implemented as closely as
+possible to back end storage.
 
-For example, an s3-object of several GB (CSV file), a user needs to extract a
-single column filtered by another column.  As the following query: ``select
-customer-id from s3Object where age>30 and age<65;``
+The S3 Select engine makes it possible to use an SQL-like syntax to select a
+restricted subset of data stored in an S3 object. The s3select engine
+facilitates the use of higher level, analytic applications (for example:
+SPARK-SQL). The ability of the s3select engine to target a proper subset of
+structed data within an S3 object decreases latency and increases throughput.
 
-Currently the whole s3-object must be retrieved from OSD via RGW before
-filtering and extracting data.  By "pushing down" the query into radosgw, it's
-possible to save a lot of network and CPU(serialization / deserialization).
+For example: assume that a user needs to extract a single column that is
+filtered by another column, and that these colums are stored in a CSV file in
+an S3 object that is several GB in size. The following query performs this
+extraction: ``select customer-id from s3Object where age>30 and age<65;``
 
-    **The bigger the object, and the more accurate the query, the better the
-    performance**.
+Without the use of s3select, the whole S3 object must be retrieved from an OSD
+via RGW before the data is filtered and extracted. Significant network and CPU
+overhead are saved by "pushing down" the query into radosgw.
+
+**The bigger the object and the more accurate the query,
+the better the performance of s3select**.
  
 Basic Workflow
 --------------
