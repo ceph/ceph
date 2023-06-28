@@ -858,6 +858,17 @@ class UpgradeStatusSpec(object):
         self.message = ""  # Freeform description
         self.is_paused: bool = False  # Is the upgrade paused?
 
+    def to_json(self) -> dict:
+        return {
+            'in_progress': self.in_progress,
+            'target_image': self.target_image,
+            'which': self.which,
+            'services_complete': self.services_complete,
+            'progress': self.progress,
+            'message': self.message,
+            'is_paused': self.is_paused,
+        }
+
 
 def handle_type_error(method: FuncT) -> FuncT:
     @wraps(method)
