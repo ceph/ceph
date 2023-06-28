@@ -51,7 +51,7 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
 protected:
-  PGPeeringPipeline &pp(PG &pg);
+  PGPeeringPipeline &peering_pp(PG &pg);
 
   PeeringCtx ctx;
   pg_shard_t from;

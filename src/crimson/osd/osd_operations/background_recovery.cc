@@ -172,7 +172,7 @@ PglogBasedRecovery::do_recovery()
   });
 }
 
-PGPeeringPipeline &BackfillRecovery::bp(PG &pg)
+PGPeeringPipeline &BackfillRecovery::peering_pp(PG &pg)
 {
   return pg.peering_request_pg_pipeline;
 }
@@ -193,7 +193,7 @@ BackfillRecovery::do_recovery()
     // with the backfill_pipeline we protect it from a second entry from
     // the implementation of BackfillListener.
     // additionally, this stage serves to synchronize with PeeringEvent.
-    bp(*pg).process
+    peering_pp(*pg).process
   ).then_interruptible([this] {
     pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
     return seastar::make_ready_future<bool>(false);

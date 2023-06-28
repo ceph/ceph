@@ -244,7 +244,7 @@ private:
       Ref<PG> &pg);
   bool is_pg_op() const;
 
-  PGPipeline &pp(PG &pg);
+  PGPipeline &client_pp(PG &pg);
 
   template <typename Errorator>
   using interruptible_errorator =
