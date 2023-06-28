@@ -170,6 +170,36 @@ class DaemonManager(ResourceManager):
         return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
 
 
+class UpgradeManager(ResourceManager):
+    @wait_api_result
+    def list(self, image: Optional[str], tags: bool,
+             show_all_versions: Optional[bool]) -> Dict[Any, Any]:
+        return self.api.upgrade_ls(image, tags, show_all_versions)
+
+    @wait_api_result
+    def status(self):
+        return self.api.upgrade_status()
+
+    @wait_api_result
+    def start(self, image: str, version: str, daemon_types: Optional[List[str]] = None,
+              host_placement: Optional[str] = None, services: Optional[List[str]] = None,
+              limit: Optional[int] = None) -> str:
+        return self.api.upgrade_start(image, version, daemon_types, host_placement, services,
+                                      limit)
+
+    @wait_api_result
+    def pause(self) -> str:
+        return self.api.upgrade_pause()
+
+    @wait_api_result
+    def resume(self) -> str:
+        return self.api.upgrade_resume()
+
+    @wait_api_result
+    def stop(self) -> str:
+        return self.api.upgrade_stop()
+
+
 class OrchClient(object):
 
     _instance = None
@@ -189,6 +219,7 @@ class OrchClient(object):
         self.services = ServiceManager(self.api)
         self.osds = OsdManager(self.api)
         self.daemons = DaemonManager(self.api)
+        self.upgrades = UpgradeManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']
@@ -240,3 +271,10 @@ class OrchFeature(object):
     DEVICE_BLINK_LIGHT = 'blink_device_light'
 
     DAEMON_ACTION = 'daemon_action'
+
+    UPGRADE_LIST = 'upgrade_ls'
+    UPGRADE_STATUS = 'upgrade_status'
+    UPGRADE_START = 'upgrade_start'
+    UPGRADE_PAUSE = 'upgrade_pause'
+    UPGRADE_RESUME = 'upgrade_resume'
+    UPGRADE_STOP = 'upgrade_stop'
