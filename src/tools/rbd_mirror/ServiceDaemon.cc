@@ -261,6 +261,8 @@ void ServiceDaemon<I>::schedule_update_status() {
     return;
   }
 
+  dout(20) << dendl;
+
   m_timer_ctx = new LambdaContext([this](int) {
       m_timer_ctx = nullptr;
       update_status();
@@ -270,7 +272,6 @@ void ServiceDaemon<I>::schedule_update_status() {
 
 template <typename I>
 void ServiceDaemon<I>::update_status() {
-  dout(20) << dendl;
   ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
 
   ceph::JSONFormatter f;
@@ -313,6 +314,8 @@ void ServiceDaemon<I>::update_status() {
 
   std::stringstream ss;
   f.flush(ss);
+
+  dout(20) << ss.str() << dendl;
 
   int r = m_rados->service_daemon_update_status({{"json", ss.str()}});
   if (r < 0) {

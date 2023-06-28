@@ -502,6 +502,7 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args) :
   m_cache_manager_handler(new CacheManagerHandler(cct)),
   m_pool_meta_cache(new PoolMetaCache(cct)),
   m_asok_hook(new MirrorAdminSocketHook(cct, this)) {
+  dout(10) << "args=" << args << dendl;
 }
 
 Mirror::~Mirror()
