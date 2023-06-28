@@ -56,6 +56,7 @@ private:
   crimson::net::ConnectionRef conn;
   seastar::timer<seastar::lowres_clock> report_timer;
   crimson::common::Gated gate;
+  uint64_t last_config_bl_version = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Client& client) {
