@@ -45,6 +45,7 @@
 #include "rgw_tools.h"
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
+#include "rgw_crypt.h"
 #include "rgw_etag_verifier.h"
 #include "rgw_worker.h"
 #include "rgw_notify.h"
@@ -3426,11 +3427,28 @@ public:
           }
         }
       }
+
       /* We need the manifest to recompute the ETag for verification */
       iter = src_attrs.find(RGW_ATTR_MANIFEST);
       if (iter != src_attrs.end()) {
         manifest_bl = std::move(iter->second);
         src_attrs.erase(iter);
+
+        // if the source object was encrypted, preserve the original object's
+        // part lengths
+        if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
+          std::vector<size_t> parts_len;
+          int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
+                                                              parts_len);
+          if (r < 0) {
+            ldpp_dout(dpp, 4) << "failed to read part lengths from the manifest" << dendl;
+          } else {
+            // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
+            bufferlist parts_bl;
+            encode(parts_len, parts_bl);
+            src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
+          }
+        }
       }
 
       // filter out olh attributes
