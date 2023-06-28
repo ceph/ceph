@@ -601,15 +601,18 @@ public:
     size_t chunk_size,
     std::string &fp_algo,
     std::string &chunk_algo,
-    SampleDedupGlobal &sample_dedup_global) :
-    io_ctx(io_ctx),
+    SampleDedupGlobal &sample_dedup_global,
+    bool snap) :
     chunk_io_ctx(chunk_io_ctx),
     chunk_size(chunk_size),
     fp_type(pg_pool_t::get_fingerprint_from_str(fp_algo)),
     chunk_algo(chunk_algo),
     sample_dedup_global(sample_dedup_global),
     begin(begin),
-    end(end) { }
+    end(end),
+    snap(snap) {
+      this->io_ctx.dup(io_ctx);
+    }
 
   ~SampleDedupWorkerThread() { };
 
@@ -626,9 +629,9 @@ private:
     ObjectCursor end,
     size_t max_object_count);
   std::vector<size_t> sample_object(size_t count);
-  void try_dedup_and_accumulate_result(ObjectItem &object);
+  void try_dedup_and_accumulate_result(ObjectItem &object, snap_t snap = 0);
   bool ok_to_dedup_all();
-  int do_chunk_dedup(chunk_t &chunk);
+  int do_chunk_dedup(chunk_t &chunk, snap_t snap);
   bufferlist read_object(ObjectItem &object);
   std::vector<std::tuple<bufferlist, pair<uint64_t, uint64_t>>> do_cdc(
     ObjectItem &object,
@@ -641,13 +644,14 @@ private:
   size_t total_duplicated_size = 0;
   size_t total_object_size = 0;
 
-  std::set<std::string> oid_for_evict;
+  std::set<std::pair<std::string, snap_t>> oid_for_evict;
   const size_t chunk_size = 0;
   pg_pool_t::fingerprint_t fp_type = pg_pool_t::TYPE_FINGERPRINT_NONE;
   std::string chunk_algo;
   SampleDedupGlobal &sample_dedup_global;
   ObjectCursor begin;
   ObjectCursor end;
+  bool snap;
 };
 
 void SampleDedupWorkerThread::crawl()
@@ -666,14 +670,33 @@ void SampleDedupWorkerThread::crawl()
     auto sampled_indexes = sample_object(objects.size());
     for (size_t index : sampled_indexes) {
       ObjectItem target = objects[index];
-      try_dedup_and_accumulate_result(target);
+      if (snap) {
+	io_ctx.snap_set_read(librados::SNAP_DIR);
+	snap_set_t snap_set;
+	int snap_ret;
+	ObjectReadOperation op;
+	op.list_snaps(&snap_set, &snap_ret);
+	io_ctx.operate(target.oid, &op, NULL);
+
+	for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
+	  r != snap_set.clones.end();
+	  ++r) {
+	  io_ctx.snap_set_read(r->cloneid);
+	  try_dedup_and_accumulate_result(target, r->cloneid);
+	}
+      } else {
+	try_dedup_and_accumulate_result(target);
+      }
     }
   }
 
   vector<AioCompRef> evict_completions(oid_for_evict.size());
   int i = 0;
   for (auto &oid : oid_for_evict) {
-    evict_completions[i] = do_async_evict(oid);
+    if (snap) {
+      io_ctx.snap_set_read(oid.second);
+    }
+    evict_completions[i] = do_async_evict(oid.first);
     i++;
   }
   for (auto &completion : evict_completions) {
@@ -731,7 +754,8 @@ std::vector<size_t> SampleDedupWorkerThread::sample_object(size_t count)
   return indexes;
 }
 
-void SampleDedupWorkerThread::try_dedup_and_accumulate_result(ObjectItem &object)
+void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
+  ObjectItem &object, snap_t snap)
 {
   bufferlist data = read_object(object);
   if (data.length() == 0) {
@@ -780,7 +804,7 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(ObjectItem &object
 
   // perform chunk-dedup
   for (auto &p : redundant_chunks) {
-    do_chunk_dedup(p);
+    do_chunk_dedup(p, snap);
   }
   total_duplicated_size += duplicated_size;
   total_object_size += object_size;
@@ -848,7 +872,7 @@ std::string SampleDedupWorkerThread::generate_fingerprint(bufferlist chunk_data)
   return ret;
 }
 
-int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk)
+int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk, snap_t snap)
 {
   uint64_t size;
   time_t mtime;
@@ -874,7 +898,7 @@ int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk)
       0,
       CEPH_OSD_OP_FLAG_WITH_REFERENCE);
   ret = io_ctx.operate(chunk.oid, &op, nullptr);
-  oid_for_evict.insert(chunk.oid);
+  oid_for_evict.insert(make_pair(chunk.oid, snap));
   return ret;
 }
 
@@ -1548,6 +1572,10 @@ int make_crawling_daemon(const po::variables_map &opts)
   } else {
     cout << "8192 is set as chunk size by default" << std::endl;
   }
+  bool snap = false;
+  if (opts.count("snap")) {
+    snap = true;
+  }
 
   uint32_t chunk_dedup_threshold = -1;
   if (opts.count("chunk-dedup-threshold")) {
@@ -1668,7 +1696,8 @@ int make_crawling_daemon(const po::variables_map &opts)
 	chunk_size,
 	fp_algo,
 	chunk_algo,
-	sample_dedup_global);
+	sample_dedup_global,
+	snap);
       threads.back().create("sample_dedup");
     }
 
