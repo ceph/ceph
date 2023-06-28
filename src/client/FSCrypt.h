@@ -246,7 +246,9 @@ class FSCryptFDataDenc : public FSCryptDenc {
 public:
   FSCryptFDataDenc();
 
-  int decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, bufferlist *bl);
+  using Segment = std::pair<uint64_t, uint64_t>;
+
+  int decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const std::vector<Segment>& holes, bufferlist *bl);
   int encrypt_bl(uint64_t off, uint64_t len, bufferlist& bl, bufferlist *encbl);
 };
 

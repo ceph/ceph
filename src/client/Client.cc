@@ -8024,6 +8024,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       return -CEPHFS_EFBIG;
     }
 
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ setxattr CEPH_SETATTR_SIZE size=" << stx->stx_size << dendl;
     ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
     if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
@@ -10389,6 +10390,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   utime_t start = ceph_clock_now(); 
 
   ldout(cct, 10) << __func__ << " " << *in << " " << offset << "~" << size << dendl;
+ldout(cct, 10) << __func__ << " ZZZ " << *in << " " << offset << "~" << size << dendl;
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -CEPHFS_EBADF;
@@ -10570,23 +10572,29 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": len=" << len << " effective_s
                              &fscrypt_denc);
 
   // read (and possibly block)
+  //
   int r = 0;
+  std::vector<ObjectCacher::ObjHole> holes;
   C_SaferCond onfinish("Client::_read_async flock");
-  r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-			      read_start, read_len, bl, 0, &onfinish);
+  r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
+                                 read_start, read_len, bl, 0, &holes, &onfinish);
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ read_start=" << read_start << " read_len=" << read_len << " bl.len=" << bl->length() << " r=" << r << dendl;
   if (r == 0) {
     get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.unlock();
     r = onfinish.wait();
-
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ read_start=" << read_start << " read_len=" << read_len << " bl.len=" << bl->length() << " r=" << r << dendl;
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ read data:" << fscrypt_hex_str(bl->c_str(), bl->length()) << dendl;
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ holes=" << holes << dendl;
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
 
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ r=" << r << dendl;
   if (r >= 0) {
     auto len = r;
     if (fscrypt_denc) {
-      r = fscrypt_denc->decrypt_bl(off, target_len, read_start, bl);
+      r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, bl);
       if (r < 0) {
         ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       }
@@ -10620,6 +10628,7 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": len=" << len << " effective_s
 int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		       bool *checkeof)
 {
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " ZZZ read_sync" << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   Inode *in = f->inode.get();
@@ -10702,6 +10711,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     bufferlist tbl;
 
     int wanted = left;
+#warning read holes
     filer->read_trunc(in->ino, &in->layout, in->snapid,
 		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
@@ -10718,7 +10728,8 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   if (r >= 0) {
     if (fscrypt_denc) {
-      r = fscrypt_denc->decrypt_bl(off, target_len, read_start, pbl);
+      std::vector<ObjectCacher::ObjHole> holes;
+      r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, pbl);
       if (r < 0) {
         ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
       }
@@ -10940,7 +10951,10 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
     int read_start_size = (need_read_start && need_read_end && start_block == end_block ?
                            FSCRYPT_BLOCK_SIZE : ofs_in_start_block);
-
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ offset=" << offset << " size=" << size << " in.effective_size=" << in->effective_size() << dendl;
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ start_block=" << start_block << " start_block_ofs=" << start_block_ofs << " ofs_in_start_block=" << ofs_in_start_block << dendl;
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ end_block=" << end_block << " end_block_ofs=" << end_block_ofs << " ofs_in_end_block=" << ofs_in_end_block << dendl;
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ need_read_start=" << need_read_start << " need_read_end=" << need_read_end << " read_start_size=" << read_start_size << dendl;
     if (read_start_size > 0) {
       bufferlist startbl;
 
@@ -10949,6 +10963,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
         ldout(cct, 0) << "failed to read first block: r=" << r << dendl;
         return r;
       }
+
+      int read_len = startbl.length();
+      if (read_len < read_start_size) {
+        startbl.append_zero(read_start_size - read_len);
+      }
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ  startbl: " << fscrypt_hex_str(startbl.c_str(), startbl.length()) << dendl;
 
       /* prepend data from the start of the first block */
       bufferlist newbl;
