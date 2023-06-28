@@ -1437,7 +1437,6 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
     if (external_call)
       touch_ob(o);
 
-ldout(cct, 0) << "ZZZ readx " << *ex_it << " o->exist=" << o->exists << dendl;
     // does not exist and no hits?
     if (oset->return_enoent && !o->exists) {
       ldout(cct, 10) << "readx  object !exists, 1 extent..." << dendl;
@@ -1682,7 +1681,6 @@ ldout(cct, 0) << "ZZZ readx " << *ex_it << " o->exist=" << o->exists << dendl;
 
   // no misses... success!  do the read.
   ldout(cct, 10) << "readx has all buffers" << dendl;
-ldout(cct, 0) << "ZZZ readx has all buffers" << dendl;
 
   // ok, assemble into result buffer.
   uint64_t pos = 0;
@@ -1694,13 +1692,11 @@ ldout(cct, 0) << "ZZZ readx has all buffers" << dendl;
       ceph_assert(pos == i->first);
       ldout(cct, 10) << "readx  adding buffer len " << i->second.length()
 		     << " at " << pos << dendl;
-ldout(cct, 0) << "ZZZ readx  adding buffer len " << i->second.length() << " at " << pos << dendl;
       pos += i->second.length();
       rd->bl->claim_append(i->second);
       ceph_assert(rd->bl->length() == pos);
     }
     ldout(cct, 10) << "readx  result is " << rd->bl->length() << dendl;
-ldout(cct, 0) << "ZZZ readx  result is " << rd->bl->length() << dendl;
   } else if (!error) {
     ldout(cct, 10) << "readx  no bufferlist ptr (readahead?), done." << dendl;
     map<uint64_t,bufferlist>::reverse_iterator i = stripe_map.rbegin();

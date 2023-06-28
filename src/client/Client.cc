@@ -1041,13 +1041,11 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       ((st->cap.flags & CEPH_CAP_FLAG_AUTH) &&
        (in->version & ~1) < st->version))
     new_version = true;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__  << "(): XXX " << in->ino << " in->version=" << in->version << " st->version=" << st->version << dendl;
 
   int issued;
   in->caps_issued(&issued);
   issued |= in->caps_dirty();
   int new_issued = ~issued & (int)st->cap.caps;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__  << "(): XXX " << in->ino << " new_issues=" << ccap_string(new_issued) << dendl;
 
   bool need_snapdir_attr_refresh = false;
   if ((new_version || (new_issued & CEPH_CAP_AUTH_SHARED)) &&
@@ -1065,7 +1063,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__  << "(): XXX " <
 
   if ((new_version || (new_issued & CEPH_CAP_LINK_SHARED)) &&
       !(issued & CEPH_CAP_LINK_EXCL)) {
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__  << "(): XXX " << in->ino << dendl;
     in->nlink = st->nlink;
   }
 
@@ -1081,8 +1078,7 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__  << "(): XXX " <
     if (st->fscrypt_file.size() >= sizeof(uint64_t)) {
       in->fscrypt_file = st->fscrypt_file;
     }
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__  << "(): XXX " << in->ino << " update fscrypt_file: " << in->effective_size() << dendl;
-    update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
+    update_inode_file_size(in, issued, in->effective_size(), st->truncate_seq, st->truncate_size);
   }
 
   if (in->is_dir()) {
@@ -3825,7 +3821,6 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->change_attr = in->change_attr;
   m->fscrypt_auth = in->fscrypt_auth;
   m->fscrypt_file = in->fscrypt_file;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": XXX in=" << (void *)in << " " << in->ino << " m->fscryptfile.size=" << m->fscrypt_file.size() << " " << in->effective_size() << dendl;
 
   if (!(flags & MClientCaps::FLAG_PENDING_CAPSNAP) &&
       !in->cap_snaps.empty() &&
@@ -8024,7 +8019,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       return -CEPHFS_EFBIG;
     }
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ setxattr CEPH_SETATTR_SIZE size=" << stx->stx_size << dendl;
     ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
     if (in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
@@ -8056,7 +8050,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ setxatt
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->fscrypt_file = *aux;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__  << "(): update fscrypt_file: " << in->effective_size() << dendl;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
       mask &= ~CEPH_SETATTR_FSCRYPT_FILE;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
@@ -8452,7 +8445,8 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   } else {
     st->st_size = in->effective_size();
 #ifndef _WIN32
-    st->st_blocks = (in->size + 511) >> 9;
+#warning is this right?
+    st->st_blocks = (in->effective_size() + 511) >> 9;
 #endif
   }
 #ifndef _WIN32
@@ -8538,7 +8532,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
       }
       stx->stx_blocks = 1;
     } else {
-      stx->stx_size = in->size;
+      stx->stx_size = in->effective_size();
       stx->stx_blocks = (in->size + 511) >> 9;
     }
     stx->stx_mask |= (CEPH_STATX_ATIME|CEPH_STATX_MTIME|
@@ -10026,14 +10020,11 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " YYY" << dendl;
   if ((flags & O_TRUNC) == 0 && in->caps_issued_mask(want)) {
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " YYY in->effective_size=" << in->effective_size() << dendl;
     // update wanted?
     check_caps(in, CHECK_CAPS_NODELAY);
   } else {
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " YYY in->effective_size=" << in->effective_size() << dendl;
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
     in->make_nosnap_relative_path(path);
@@ -10080,7 +10071,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " YYY in->effective_size=" << in
 
   // success?
   if (result >= 0) {
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " YYY in->effective_size=" << in->effective_size() << dendl;
     if (fhp)
       *fhp = _create_fh(in, flags, cmode, perms);
   } else {
@@ -10225,7 +10215,7 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 
 #ifdef SEEK_DATA
   case SEEK_DATA:
-    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size)
+    if (offset < 0 || static_cast<uint64_t>(offset) >= in->effective_size())
       return -CEPHFS_ENXIO;
     pos = offset;
     break;
@@ -10233,9 +10223,9 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 
 #ifdef SEEK_HOLE
   case SEEK_HOLE:
-    if (offset < 0 || static_cast<uint64_t>(offset) >= in->size)
+    if (offset < 0 || static_cast<uint64_t>(offset) >= in->effective_size())
       return -CEPHFS_ENXIO;
-    pos = in->size;
+    pos = in->effective_size();
     break;
 #endif
 
@@ -10390,7 +10380,6 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   utime_t start = ceph_clock_now(); 
 
   ldout(cct, 10) << __func__ << " " << *in << " " << offset << "~" << size << dendl;
-ldout(cct, 10) << __func__ << " ZZZ " << *in << " " << offset << "~" << size << dendl;
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -CEPHFS_EBADF;
@@ -10430,8 +10419,8 @@ retry:
   if (in->inline_version < CEPH_INLINE_NONE) {
     uint32_t len = in->inline_data.length();
     uint64_t endoff = offset + size;
-    if (endoff > in->size)
-      endoff = in->size;
+    if (endoff > in->effective_size())
+      endoff = in->effective_size();
 
     if (offset < len) {
       if (endoff <= len) {
@@ -10555,7 +10544,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   }
 
   auto target_len = std::min(len, effective_size - off);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": len=" << len << " effective_size=" << effective_size << dendl;
 
   ldout(cct, 10) << " min_bytes=" << f->readahead.get_min_readahead_size()
                  << " max_bytes=" << f->readahead.get_max_readahead_size()
@@ -10578,27 +10566,25 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": len=" << len << " effective_s
   C_SaferCond onfinish("Client::_read_async flock");
   r = objectcacher->file_read_ex(&in->oset, &in->layout, in->snapid,
                                  read_start, read_len, bl, 0, &holes, &onfinish);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ read_start=" << read_start << " read_len=" << read_len << " bl.len=" << bl->length() << " r=" << r << dendl;
   if (r == 0) {
     get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.unlock();
     r = onfinish.wait();
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ read_start=" << read_start << " read_len=" << read_len << " bl.len=" << bl->length() << " r=" << r << dendl;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ read data:" << fscrypt_hex_str(bl->c_str(), bl->length()) << dendl;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ holes=" << holes << dendl;
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
   }
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ r=" << r << dendl;
   if (r >= 0) {
     auto len = r;
     if (fscrypt_denc) {
       r = fscrypt_denc->decrypt_bl(off, target_len, read_start, holes, bl);
       if (r < 0) {
         ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
+        return r;
       }
     }
+
+    r = bl->length();
 
     update_read_io_size(bl->length());
   }
@@ -10628,7 +10614,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ r=" << 
 int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 		       bool *checkeof)
 {
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " ZZZ read_sync" << dendl;
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   Inode *in = f->inode.get();
@@ -10951,10 +10936,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
     int read_start_size = (need_read_start && need_read_end && start_block == end_block ?
                            FSCRYPT_BLOCK_SIZE : ofs_in_start_block);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ offset=" << offset << " size=" << size << " in.effective_size=" << in->effective_size() << dendl;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ start_block=" << start_block << " start_block_ofs=" << start_block_ofs << " ofs_in_start_block=" << ofs_in_start_block << dendl;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ end_block=" << end_block << " end_block_ofs=" << end_block_ofs << " ofs_in_end_block=" << ofs_in_end_block << dendl;
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ need_read_start=" << need_read_start << " need_read_end=" << need_read_end << " read_start_size=" << read_start_size << dendl;
     if (read_start_size > 0) {
       bufferlist startbl;
 
@@ -10968,7 +10949,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ need_re
       if (read_len < read_start_size) {
         startbl.append_zero(read_start_size - read_len);
       }
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ  startbl: " << fscrypt_hex_str(startbl.c_str(), startbl.length()) << dendl;
 
       /* prepend data from the start of the first block */
       bufferlist newbl;
@@ -11189,7 +11169,6 @@ done:
       r = uninline_ret;
   }
 
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": XXX ll_write() in=" << (void*)in << " complete effective_size=" << in->effective_size() << dendl;
   put_cap_ref(in, CEPH_CAP_FILE_WR);
   return r;
 }
@@ -15062,7 +15041,6 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
     return -CEPHFS_ENOTCONN;
 
   ldout(cct, 3) << "ll_read " << fh << " " << fh->inode->ino << " " << " " << off << "~" << len << dendl;
-ldout(cct, 3) << "XXX ll_read " << fh << " " << fh->inode->ino << " in=" << (void*)fh->inode.get() << " " << off << "~" << len << " fscrypt_file.size=" << fh->inode->fscrypt_file.size() << " effective_size=" << fh->inode->effective_size() << dendl;
   tout(cct) << "ll_read" << std::endl;
   tout(cct) << (uintptr_t)fh << std::endl;
   tout(cct) << off << std::endl;
@@ -15073,7 +15051,6 @@ ldout(cct, 3) << "XXX ll_read " << fh << " " << fh->inode->ino << " in=" << (voi
   std::scoped_lock lock(client_lock);
 
   int r = _read(fh, off, len, bl);
-ldout(cct, 3) << "XXX ll_read " << fh << " " << " in=" << (void *)fh->inode.get() << " " << off << "~" << len << " = " << r << " bl.len=" << bl->length() << dendl;
   ldout(cct, 3) << "ll_read " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
   return r;
@@ -15216,7 +15193,6 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   int r = _write(fh, off, len, data, NULL, 0);
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
-ldout(cct, 3) << "XXX ll_write " << fh << " " << fh->inode->ino << " in=" << (void *)fh->inode.get() << " " << off << "~" << len << " fscrypt_file.size=" << fh->inode->fscrypt_file.size() << " effective_size=" << fh->inode->effective_size() << dendl;
   return r;
 }
 
