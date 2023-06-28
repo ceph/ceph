@@ -16,6 +16,7 @@
 #include "ScrubStore.h"
 #include "scrub_machine_lstnr.h"
 #include "osd/scrubber_common.h"
+#include "osd/SnapMapReaderI.h"
 #include "osd_scrub_sched.h"
 
 class Callback;
@@ -488,7 +489,15 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
 
-  void _scan_snaps(ScrubMap& smap);
+  [[nodiscard]] std::vector<snap_mapper_fix_t> _scan_snaps(ScrubMap& smap);
+
+  [[nodiscard]] std::optional<snap_mapper_fix_t> scan_object_snaps(
+      const hobject_t& hoid,
+      const SnapSet& snapset,
+      Scrub::SnapMapReaderI& snaps_getter);
+
+  void apply_snap_mapper_fixes(
+      const std::vector<snap_mapper_fix_t>& fix_list);
 
   ScrubMap clean_meta_map();
 

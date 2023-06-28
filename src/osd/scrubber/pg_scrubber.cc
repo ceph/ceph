@@ -976,8 +976,81 @@ void PgScrubber::on_replica_init()
   ++m_sessions_counter;
 }
 
-void PgScrubber::_scan_snaps(ScrubMap& smap)
+void PgScrubber::apply_snap_mapper_fixes(
+    const std::vector<snap_mapper_fix_t>& fix_list)
 {
+  dout(15) << __func__ << " " << fix_list.size() << " fixes" << dendl;
+
+  if (fix_list.empty()) {
+    return;
+  }
+
+  ObjectStore::Transaction t;
+  OSDriver::OSTransaction t_drv(m_pg->osdriver.get_transaction(&t));
+
+  for (auto& [fix_op, hoid, snaps, bogus_snaps] : fix_list) {
+
+    if (fix_op != snap_mapper_op_t::add) {
+
+      // must remove the existing snap-set before inserting the correct one
+      if (auto r = m_pg->snap_mapper.remove_oid(hoid, &t_drv); r < 0) {
+
+	derr << __func__ << ": remove_oid returned " << cpp_strerror(r)
+	     << dendl;
+	if (fix_op == snap_mapper_op_t::update) {
+	  // for inconsistent snapmapper objects (i.e. for
+	  // snap_mapper_op_t::inconsistent), we don't fret if we can't remove
+	  // the old entries
+	  ceph_abort();
+	}
+      }
+
+      m_osds->clog->error() << fmt::format(
+	  "osd.{} found snap mapper error on pg {} oid {} snaps in mapper: {}, "
+	  "oi: "
+	  "{} ...repaired",
+	  m_pg_whoami, m_pg_id, hoid, bogus_snaps, snaps);
+
+    } else {
+
+      m_osds->clog->error() << fmt::format(
+	  "osd.{} found snap mapper error on pg {} oid {} snaps missing in "
+	  "mapper, should be: {} ...repaired",
+	  m_pg_whoami, m_pg_id, hoid, snaps);
+    }
+
+    // now - insert the correct snap-set
+    m_pg->snap_mapper.add_oid(hoid, snaps, &t_drv);
+  }
+
+  // wait for repair to apply to avoid confusing other bits of the system.
+  {
+    dout(15) << __func__ << " wait on repair!" << dendl;
+
+    ceph::condition_variable my_cond;
+    ceph::mutex my_lock = ceph::make_mutex("PG::_scan_snaps my_lock");
+    int e = 0;
+    bool done{false};
+
+    t.register_on_applied_sync(new C_SafeCond(my_lock, my_cond, &done, &e));
+
+    if (e = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
+	e != 0) {
+      derr << __func__ << ": queue_transaction got " << cpp_strerror(e)
+	   << dendl;
+    } else {
+      std::unique_lock l{my_lock};
+      my_cond.wait(l, [&done] { return done; });
+      ceph_assert(m_pg->osd->store);  // RRR why?
+    }
+    dout(15) << __func__ << " wait on repair - done" << dendl;
+  }
+}
+
+
+std::vector<snap_mapper_fix_t> PgScrubber::_scan_snaps(ScrubMap& smap)
+{
+  std::vector<snap_mapper_fix_t> out_orders;
   hobject_t head;
   SnapSet snapset;
 
@@ -1013,66 +1086,116 @@ void PgScrubber::_scan_snaps(ScrubMap& smap)
     if (hoid.snap < CEPH_MAXSNAP) {
       // check and if necessary fix snap_mapper
       if (hoid.get_head() != head) {
-	derr << __func__ << " no head for " << hoid << " (have " << head << ")" << dendl;
+	derr << __func__ << " no head for " << hoid << " (have " << head << ")"
+	     << dendl;
 	continue;
       }
       set<snapid_t> obj_snaps;
       auto p = snapset.clone_snaps.find(hoid.snap);
       if (p == snapset.clone_snaps.end()) {
-	derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset << dendl;
+	derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
+	     << dendl;
 	continue;
       }
-      obj_snaps.insert(p->second.begin(), p->second.end());
-      set<snapid_t> cur_snaps;
-      int r = m_pg->snap_mapper.get_snaps(hoid, &cur_snaps);
-      if (r != 0 && r != -ENOENT) {
-	derr << __func__ << ": get_snaps returned " << cpp_strerror(r) << dendl;
-	ceph_abort();
-      }
-      if (r == -ENOENT || cur_snaps != obj_snaps) {
-	ObjectStore::Transaction t;
-	OSDriver::OSTransaction _t(m_pg->osdriver.get_transaction(&t));
-	if (r == 0) {
-	  r = m_pg->snap_mapper.remove_oid(hoid, &_t);
-	  if (r != 0) {
-	    derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
-	    ceph_abort();
-	  }
-	  m_pg->osd->clog->error()
-	    << "osd." << m_pg->osd->whoami << " found snap mapper error on pg "
-	    << m_pg->info.pgid << " oid " << hoid << " snaps in mapper: " << cur_snaps
-	    << ", oi: " << obj_snaps << "...repaired";
-	} else {
-	  m_pg->osd->clog->error()
-	    << "osd." << m_pg->osd->whoami << " found snap mapper error on pg "
-	    << m_pg->info.pgid << " oid " << hoid << " snaps missing in mapper"
-	    << ", should be: " << obj_snaps << " was " << cur_snaps << " r " << r
-	    << "...repaired";
+
+      /// \todo document why guaranteed to have initialized 'head' at this point
+
+      if (hoid.snap < CEPH_MAXSNAP) {
+
+	if (hoid.get_head() != head) {
+	  derr << __func__ << " no head for " << hoid << " (have " << head
+	       << ")" << dendl;
+	  continue;
 	}
-	m_pg->snap_mapper.add_oid(hoid, obj_snaps, &_t);
 
-	// wait for repair to apply to avoid confusing other bits of the system.
-	{
-	  dout(15) << __func__ << " wait on repair!" << dendl;
-
-	  ceph::condition_variable my_cond;
-	  ceph::mutex my_lock = ceph::make_mutex("PG::_scan_snaps my_lock");
-	  int e = 0;
-	  bool done;
-
-	  t.register_on_applied_sync(new C_SafeCond(my_lock, my_cond, &done, &e));
-
-	  e = m_pg->osd->store->queue_transaction(m_pg->ch, std::move(t));
-	  if (e != 0) {
-	    derr << __func__ << ": queue_transaction got " << cpp_strerror(e) << dendl;
-	  } else {
-	    std::unique_lock l{my_lock};
-	    my_cond.wait(l, [&done] { return done; });
-	  }
+	// the 'hoid' is a clone hoid at this point. The 'snapset' below was taken
+	// from the corresponding head hoid.
+	auto maybe_fix_order = scan_object_snaps(hoid, snapset, m_pg->snap_mapper);
+	if (maybe_fix_order) {
+	  out_orders.push_back(std::move(*maybe_fix_order));
 	}
       }
     }
   }
+
+  dout(15) << __func__ << " " << out_orders.size() << " fix orders" << dendl;
+  return out_orders;
+}
+
+std::optional<snap_mapper_fix_t> PgScrubber::scan_object_snaps(
+  const hobject_t& hoid,
+  const SnapSet& snapset,
+  SnapMapReaderI& snaps_getter)
+{
+  using result_t = Scrub::SnapMapReaderI::result_t;
+
+  auto p = snapset.clone_snaps.find(hoid.snap);
+  if (p == snapset.clone_snaps.end()) {
+    derr << __func__ << " no clone_snaps for " << hoid << " in " << snapset
+         << dendl;
+    return std::nullopt;
+  }
+  set<snapid_t> obj_snaps{p->second.begin(), p->second.end()};
+
+  // validate both that the mapper contains the correct snaps for the object
+  // and that it is internally consistent.
+  // possible outcomes:
+  //
+  // Error scenarios:
+  // - SnapMapper index of object snaps does not match that stored in head
+  //   object snapset attribute:
+  //    we should delete the snapmapper entry and re-add it.
+  // - no mapping found for the object's snaps:
+  //    we should add the missing mapper entries.
+  // - the snapmapper set for this object is internally inconsistent (e.g.
+  //    the OBJ_ entries do not match the SNA_ entries). We remove
+  //    whatever entries are there, and redo the DB content for this object.
+  //
+  // And
+  // There is the "happy path": cur_snaps == obj_snaps. Nothing to do there.
+
+  auto cur_snaps = snaps_getter.get_snaps_check_consistency(hoid);
+  if (!cur_snaps) {
+    switch (auto e = cur_snaps.error(); e.code) {
+      case result_t::code_t::backend_error:
+	derr << __func__ << ": get_snaps returned "
+	     << cpp_strerror(e.backend_error) << " for " << hoid << dendl;
+	ceph_abort();
+      case result_t::code_t::not_found:
+	dout(10) << __func__ << ": no snaps for " << hoid << ". Adding."
+		 << dendl;
+	return snap_mapper_fix_t{snap_mapper_op_t::add, hoid, obj_snaps, {}};
+      case result_t::code_t::inconsistent:
+	dout(10) << __func__ << ": inconsistent snapmapper data for " << hoid
+		 << ". Recreating." << dendl;
+	return snap_mapper_fix_t{
+	  snap_mapper_op_t::overwrite, hoid, obj_snaps, {}};
+      default:
+	dout(10) << __func__ << ": error (" << cpp_strerror(e.backend_error)
+		 << ") fetching snapmapper data for " << hoid << ". Recreating."
+		 << dendl;
+	return snap_mapper_fix_t{
+	  snap_mapper_op_t::overwrite, hoid, obj_snaps, {}};
+    }
+    __builtin_unreachable();
+  }
+
+  if (*cur_snaps == obj_snaps) {
+    dout(20) << fmt::format(
+		  "{}: {}: snapset match SnapMapper's ({})", __func__, hoid,
+		  obj_snaps)
+	     << dendl;
+    return std::nullopt;
+  }
+
+  // add this object to the list of snapsets that needs fixing. Note
+  // that we also collect the existing (bogus) list, for logging purposes
+  dout(20) << fmt::format(
+		"{}: obj {}: was: {} updating to: {}", __func__, hoid,
+		*cur_snaps, obj_snaps)
+	   << dendl;
+  return snap_mapper_fix_t{
+    snap_mapper_op_t::update, hoid, obj_snaps, *cur_snaps};
 }
 
 int PgScrubber::build_primary_map_chunk()
@@ -1114,7 +1237,8 @@ int PgScrubber::build_replica_map_chunk()
       m_cleaned_meta_map.clear_from(m_start);
       m_cleaned_meta_map.insert(replica_scrubmap);
       auto for_meta_scrub = clean_meta_map();
-      _scan_snaps(for_meta_scrub);
+      auto required_fixes = _scan_snaps(for_meta_scrub);
+      apply_snap_mapper_fixes(required_fixes);
 
       // the local map has been created. Send it to the primary.
       // Note: once the message reaches the Primary, it may ask us for another
@@ -1448,7 +1572,10 @@ void PgScrubber::scrub_compare_maps()
   scrub_snapshot_metadata(for_meta_scrub, missing_digest);
 
   // Called here on the primary can use an authoritative map if it isn't the primary
-  _scan_snaps(for_meta_scrub);
+  auto required_fixes = _scan_snaps(for_meta_scrub);
+
+  // actuate snap-mapper changes:
+  apply_snap_mapper_fixes(required_fixes);
 
   if (!m_store->empty()) {
 
