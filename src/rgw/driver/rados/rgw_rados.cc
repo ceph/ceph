@@ -3402,8 +3402,12 @@ public:
         try_etag_verify = false;
       }
 
+      // if the object is both compressed and encrypted, it was transferred
+      // in its encrypted+compressed form. we need to preserve the original
+      // RGW_ATTR_COMPRESSION instead of falling back to default compression
+      // settings
       auto iter = src_attrs.find(RGW_ATTR_COMPRESSION);
-      if (iter != src_attrs.end()) {
+      if (iter != src_attrs.end() && !encrypted) {
         const bufferlist bl = std::move(iter->second);
         src_attrs.erase(iter); // don't preserve source compression info
 
