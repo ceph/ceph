@@ -35,6 +35,7 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
   void report();
+  uint64_t last_config_bl_version = 0;
 
 private:
   std::optional<seastar::future<>> ms_dispatch(
