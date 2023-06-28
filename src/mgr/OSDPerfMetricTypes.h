@@ -4,9 +4,9 @@
 #ifndef OSD_PERF_METRIC_H_
 #define OSD_PERF_METRIC_H_
 
+#include "common/ceph_json.h"
 #include "include/denc.h"
 #include "include/stringify.h"
-
 #include "mgr/Types.h"
 
 #include <regex>
@@ -69,6 +69,23 @@ struct OSDPerfMetricSubKeyDescriptor {
     denc(v.type, p);
     denc(v.regex_str, p);
     DENC_FINISH(p);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("type", static_cast<uint8_t>(type));
+    f->dump_string("regex", regex_str);
+  }
+
+  static void generate_test_instances(std::list<OSDPerfMetricSubKeyDescriptor*>& o) {
+    o.push_back(new OSDPerfMetricSubKeyDescriptor());
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ID, ".*"));
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::CLIENT_ADDRESS, ".*"));
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::POOL_ID, ".*"));
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::NAMESPACE, ".*"));
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OSD_ID, ".*"));
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::PG_ID, ".*"));
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::OBJECT_NAME, ".*"));
+    o.push_back(new OSDPerfMetricSubKeyDescriptor(OSDPerfMetricSubKeyType::SNAP_ID, ".*"));
   }
 };
 WRITE_CLASS_DENC(OSDPerfMetricSubKeyDescriptor)
@@ -182,6 +199,23 @@ struct PerformanceCounterDescriptor {
     DENC_START(1, 1, p);
     denc(v.type, p);
     DENC_FINISH(p);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("type", static_cast<uint8_t>(type));
+  }
+
+  static void generate_test_instances(std::list<PerformanceCounterDescriptor*>& o) {
+    o.push_back(new PerformanceCounterDescriptor());
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::OPS));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_OPS));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::BYTES));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_BYTES));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_BYTES));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::LATENCY));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::WRITE_LATENCY));
+    o.push_back(new PerformanceCounterDescriptor(PerformanceCounterType::READ_LATENCY));
   }
 
   void pack_counter(const PerformanceCounter &c, ceph::buffer::list *bl) const;
@@ -306,6 +340,28 @@ struct OSDPerfMetricQuery {
     DENC_FINISH(p);
   }
 
+  void dump(ceph::Formatter *f) const {
+    encode_json("key_descriptor", key_descriptor, f);
+    encode_json("performance_counter_descriptors",
+                performance_counter_descriptors, f);
+  }
+
+  static void generate_test_instances(std::list<OSDPerfMetricQuery*> &o) {
+    o.push_back(new OSDPerfMetricQuery());
+    o.push_back(new OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
+                                       PerformanceCounterDescriptors()));
+    o.push_back(new OSDPerfMetricQuery(OSDPerfMetricKeyDescriptor(),
+                                       PerformanceCounterDescriptors{
+                                         PerformanceCounterType::WRITE_OPS,
+                                         PerformanceCounterType::READ_OPS,
+                                         PerformanceCounterType::BYTES,
+                                         PerformanceCounterType::WRITE_BYTES,
+                                         PerformanceCounterType::READ_BYTES,
+                                         PerformanceCounterType::LATENCY,
+                                         PerformanceCounterType::WRITE_LATENCY,
+                                         PerformanceCounterType::READ_LATENCY}));
+  }
+
   void get_performance_counter_descriptors(
       PerformanceCounterDescriptors *descriptors) const {
     *descriptors = performance_counter_descriptors;
@@ -352,6 +408,24 @@ struct OSDPerfMetricReport {
     denc(v.performance_counter_descriptors, p);
     denc(v.group_packed_performance_counters, p);
     DENC_FINISH(p);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    encode_json("performance_counter_descriptors",
+                performance_counter_descriptors, f);
+    encode_json("group_packed_performance_counters",
+                group_packed_performance_counters, f);
+  }
+
+  static void generate_test_instances(std::list<OSDPerfMetricReport *> &o) {
+    o.push_back(new OSDPerfMetricReport);
+    o.push_back(new OSDPerfMetricReport);
+    o.back()->performance_counter_descriptors.push_back(
+        PerformanceCounterDescriptor(PerformanceCounterType::OPS));
+    o.back()->performance_counter_descriptors.push_back(
+        PerformanceCounterDescriptor(PerformanceCounterType::WRITE_OPS));
+    o.back()->performance_counter_descriptors.push_back(
+        PerformanceCounterDescriptor(PerformanceCounterType::READ_OPS));
   }
 };
 WRITE_CLASS_DENC(OSDPerfMetricReport)

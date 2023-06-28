@@ -132,6 +132,8 @@ public:
     object_snaps() {}
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator &bp);
+    void dump(ceph::Formatter *f) const;
+    static void generate_test_instances(std::list<object_snaps*>& o);
   };
 
   struct Mapping {
@@ -151,6 +153,16 @@ public:
       decode(snap, bl);
       decode(hoid, bl);
       DECODE_FINISH(bl);
+    }
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("snap", snap);
+      f->dump_stream("hoid") << hoid;
+    }
+    static void generate_test_instances(std::list<Mapping*>& o) {
+      o.push_back(new Mapping);
+      o.push_back(new Mapping);
+      o.back()->snap = 1;
+      o.back()->hoid = hobject_t(object_t("objname"), "key", 123, 456, 0, "");
     }
   };
 
