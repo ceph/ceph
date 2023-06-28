@@ -43,7 +43,7 @@ void InternalClientRequest::dump_detail(Formatter *f) const
 {
 }
 
-CommonPGPipeline& InternalClientRequest::pp()
+CommonPGPipeline& InternalClientRequest::client_pp()
 {
   return pg->request_pg_pipeline;
 }
@@ -56,7 +56,7 @@ seastar::future<> InternalClientRequest::start()
       logger().debug("{}: in repeat", *this);
       return interruptor::with_interruption([this]() mutable {
         return enter_stage<interruptor>(
-	  pp().wait_for_active
+	  client_pp().wait_for_active
         ).then_interruptible([this] {
           return with_blocking_event<PGActivationBlocker::BlockingEvent,
 	  			     interruptor>([this] (auto&& trigger) {
@@ -64,12 +64,12 @@ seastar::future<> InternalClientRequest::start()
           });
         }).then_interruptible([this] {
           return enter_stage<interruptor>(
-            pp().recover_missing);
+            client_pp().recover_missing);
         }).then_interruptible([this] {
           return do_recover_missing(pg, get_target_oid());
         }).then_interruptible([this] {
           return enter_stage<interruptor>(
-            pp().get_obc);
+            client_pp().get_obc);
         }).then_interruptible([this] () -> PG::load_obc_iertr::future<> {
           logger().debug("{}: getting obc lock", *this);
           return seastar::do_with(create_osd_ops(),
@@ -81,7 +81,8 @@ seastar::future<> InternalClientRequest::start()
             assert(ret == 0);
             return pg->with_locked_obc(get_target_oid(), op_info,
               [&osd_ops, this](auto obc) {
-              return enter_stage<interruptor>(pp().process).then_interruptible(
+              return enter_stage<interruptor>(client_pp().process
+              ).then_interruptible(
                 [obc=std::move(obc), &osd_ops, this] {
                 return pg->do_osd_ops(
                   std::move(obc),

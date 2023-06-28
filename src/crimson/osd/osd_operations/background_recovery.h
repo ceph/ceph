@@ -116,7 +116,7 @@ private:
   boost::intrusive_ptr<const boost::statechart::event_base> evt;
   PipelineHandle handle;
 
-  static PGPeeringPipeline &bp(PG &pg);
+  static PGPeeringPipeline &peering_pp(PG &pg);
   interruptible_future<bool> do_recovery() override;
 };
 
