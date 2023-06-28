@@ -4916,7 +4916,7 @@ options:
   long_desc: Overwrites on snapped objects cause shared blob count to grow.
     It has a very negative performance effect. When enabled shared blob count
     is significantly reduced.
-  default: false
+  default: true
   flags:
   - create
   with_legacy: false
