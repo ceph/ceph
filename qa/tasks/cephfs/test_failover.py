@@ -151,8 +151,14 @@ class TestClusterAffinity(CephFSTestCase):
         ranks = list(self.fs.get_ranks(status=status))
         self.assertEqual(len(ranks), 1)
         self.assertIn(ranks[0]['name'], standbys)
-        # Note that we would expect the former active to reclaim its spot, but
-        # we're not testing that here.
+
+        # Wait for the former active to reclaim its spot
+        def reclaimed():
+            ranks = list(self.fs.get_ranks())
+            return len(ranks) > 0 and ranks[0]['name'] not in standbys
+
+        log.info("Waiting for former active to reclaim its spot")
+        self.wait_until_true(reclaimed, timeout=self.fs.beacon_timeout)
 
     def test_join_fs_steady(self):
         """
