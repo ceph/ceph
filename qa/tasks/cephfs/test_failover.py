@@ -160,6 +160,31 @@ class TestClusterAffinity(CephFSTestCase):
         log.info("Waiting for former active to reclaim its spot")
         self.wait_until_true(reclaimed, timeout=self.fs.beacon_timeout)
 
+    def test_join_fs_last_resort_refused(self):
+        """
+        That a standby with mds_join_fs set to another fs is not used if refuse_standby_for_another_fs is set.
+        """
+        status, target = self._verify_init()
+        standbys = [info['name'] for info in status.get_standbys()]
+        for mds in standbys:
+            self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
+        fs2 = self.mds_cluster.newfs(name="cephfs2")
+        for mds in standbys:
+            self._change_target_state(target, mds, {'join_fscid': fs2.id})
+        self.fs.set_refuse_standby_for_another_fs(True)
+        self.fs.rank_fail()
+        status = self.fs.status()
+        ranks = list(self.fs.get_ranks(status=status))
+        self.assertTrue(len(ranks) == 0 or ranks[0]['name'] not in standbys)
+
+        # Wait for the former active to reclaim its spot
+        def reclaimed():
+            ranks = list(self.fs.get_ranks())
+            return len(ranks) > 0 and ranks[0]['name'] not in standbys
+
+        log.info("Waiting for former active to reclaim its spot")
+        self.wait_until_true(reclaimed, timeout=self.fs.beacon_timeout)
+
     def test_join_fs_steady(self):
         """
         That a sole MDS with mds_join_fs set will come back as active eventually even after failover.
