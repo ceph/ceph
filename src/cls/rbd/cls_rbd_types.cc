@@ -1132,6 +1132,12 @@ void TrashImageSpec::dump(Formatter *f) const {
   f->dump_unsigned("deferment_end_time", deferment_end_time);
 }
 
+void TrashImageSpec::generate_test_instances(std::list<TrashImageSpec *> &o) {
+  o.push_back(new TrashImageSpec());
+  o.push_back(new TrashImageSpec(TRASH_IMAGE_SOURCE_USER, "trash_image",
+                                 utime_t(123, 456), utime_t(123, 456)));
+}
+
 void MirrorImageMap::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
   encode(instance_id, bl);

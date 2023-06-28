@@ -877,6 +877,7 @@ struct TrashImageSpec {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator& it);
   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<TrashImageSpec *> &o);
 
   inline bool operator==(const TrashImageSpec& rhs) const {
     return (source == rhs.source &&

@@ -24,6 +24,11 @@ void ClientId::dump(Formatter *f) const {
   f->dump_unsigned("handle", handle);
 }
 
+void ClientId::generate_test_instances(std::list<ClientId *> &o) {
+  o.push_back(new ClientId());
+  o.push_back(new ClientId(123, 456));
+}
+
 void NotifyResponse::encode(bufferlist& bl) const {
   using ceph::encode;
   encode(acks, bl);

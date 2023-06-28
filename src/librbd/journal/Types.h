@@ -675,9 +675,9 @@ struct Listener {
   virtual void handle_resync() = 0;
 };
 
-WRITE_CLASS_ENCODER(EventEntry);
-WRITE_CLASS_ENCODER(ClientData);
-WRITE_CLASS_ENCODER(TagData);
+WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
+WRITE_CLASS_ENCODER(librbd::journal::ClientData);
+WRITE_CLASS_ENCODER(librbd::journal::TagData);
 
 } // namespace journal
 } // namespace librbd

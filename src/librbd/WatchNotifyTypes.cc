@@ -29,6 +29,11 @@ void AsyncRequestId::dump(Formatter *f) const {
   f->dump_unsigned("request_id", request_id);
 }
 
+void AsyncRequestId::generate_test_instances(std::list<AsyncRequestId *> &o) {
+  o.push_back(new AsyncRequestId());
+  o.push_back(new AsyncRequestId(ClientId(1, 2), 3));
+}
+
 void AcquiredLockPayload::encode(bufferlist &bl) const {
   using ceph::encode;
   encode(client_id, bl);
