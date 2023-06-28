@@ -158,6 +158,14 @@ struct bluestore_extent_ref_map_t {
       denc_varint_lowz(v.length, p);
       denc_varint(v.refs, p);
     }
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("length", length);
+      f->dump_unsigned("refs", refs);
+    }
+    static void generate_test_instances(std::list<record_t*>& o) {
+      o.push_back(new record_t);
+      o.push_back(new record_t(123, 456));
+    }
   };
 
   typedef mempool::bluestore_cache_other::map<uint64_t,record_t> map_t;
@@ -223,8 +231,8 @@ struct bluestore_extent_ref_map_t {
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bluestore_extent_ref_map_t*>& o);
 };
-WRITE_CLASS_DENC(bluestore_extent_ref_map_t)
-
+WRITE_CLASS_DENC(bluestore_extent_ref_map_t);
+WRITE_CLASS_DENC(bluestore_extent_ref_map_t::record_t);
 
 std::ostream& operator<<(std::ostream& out, const bluestore_extent_ref_map_t& rm);
 static inline bool operator==(const bluestore_extent_ref_map_t::record_t& l,
@@ -916,6 +924,7 @@ struct bluestore_shared_blob_t {
   uint64_t sbid;                       ///> shared blob id
   bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
 
+  bluestore_shared_blob_t() : sbid(0) {}
   bluestore_shared_blob_t(uint64_t _sbid) : sbid(_sbid) {}
   bluestore_shared_blob_t(uint64_t _sbid,
 			  bluestore_extent_ref_map_t&& _ref_map ) 
@@ -954,6 +963,7 @@ struct bluestore_onode_t {
       denc_varint(v.bytes, p);
     }
     void dump(ceph::Formatter *f) const;
+    static void generate_test_instances(std::list<shard_info*>& ls);
   };
   std::vector<shard_info> extent_map_shards; ///< extent std::map shards (if any)
 

@@ -110,6 +110,30 @@ void mon_info_t::print(ostream& out) const
       << " crush location " << crush_loc;
 }
 
+void mon_info_t::dump(ceph::Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->dump_stream("addr") << public_addrs;
+  f->dump_int("priority", priority);
+  f->dump_float("weight", weight);
+  f->open_object_section("crush_locations");
+  for (auto& p : crush_loc) {
+    f->dump_string(p.first.c_str(), p.second);
+  }
+  f->close_section();
+}
+
+void mon_info_t::generate_test_instances(list<mon_info_t*>& ls)
+{
+  ls.push_back(new mon_info_t);
+  ls.push_back(new mon_info_t);
+  ls.back()->name = "noname";
+  ls.back()->public_addrs.parse("v1:1.2.3.4:567/890");
+  ls.back()->priority = 1;
+  ls.back()->weight = 1.0;
+  ls.back()->crush_loc.emplace("root", "default");
+  ls.back()->crush_loc.emplace("host", "foo");
+}
 namespace {
   struct rank_cmp {
     bool operator()(const mon_info_t &a, const mon_info_t &b) const {

@@ -205,6 +205,7 @@ struct bluefs_layout_t {
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<bluefs_layout_t*>& ls);
 };
 WRITE_CLASS_ENCODER(bluefs_layout_t)
 

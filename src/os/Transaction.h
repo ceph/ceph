@@ -1293,7 +1293,7 @@ public:
   void dump(ceph::Formatter *f);
   static void generate_test_instances(std::list<Transaction*>& o);
 };
-WRITE_CLASS_ENCODER(Transaction)
+WRITE_CLASS_ENCODER(ceph::os::Transaction)
 WRITE_CLASS_ENCODER(Transaction::TransactionData)
 
 std::ostream& operator<<(std::ostream& out, const Transaction& tx);

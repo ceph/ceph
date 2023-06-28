@@ -206,6 +206,14 @@ struct vinodeno_t {
     decode(ino, p);
     decode(snapid, p);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("ino", ino);
+    f->dump_unsigned("snapid", snapid);
+  }
+  static void generate_test_instances(std::list<vinodeno_t*>& ls) {
+    ls.push_back(new vinodeno_t);
+    ls.push_back(new vinodeno_t(1, 2));
+  }
 
   inodeno_t ino;
   snapid_t snapid;

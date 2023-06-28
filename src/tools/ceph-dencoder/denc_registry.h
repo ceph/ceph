@@ -47,8 +47,9 @@ protected:
   bool nondeterministic;
 
 public:
-  DencoderBase(bool stray_okay, bool nondeterministic)
-    : m_object(new T),
+  template<typename... Args>
+  DencoderBase(bool stray_okay, bool nondeterministic, Args&&... args)
+    : m_object(new T(std::forward<Args>(args)...)),
       stray_okay(stray_okay),
       nondeterministic(nondeterministic) {}
   ~DencoderBase() override {

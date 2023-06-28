@@ -1528,6 +1528,11 @@ void pool_opts_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
+void pool_opts_t::generate_test_instances(std::list<pool_opts_t*>& o)
+{
+  o.push_back(new pool_opts_t);
+}
+
 ostream& operator<<(ostream& out, const pool_opts_t& opts)
 {
   for (auto i = opt_mapping.begin(); i != opt_mapping.end(); ++i) {
@@ -3714,10 +3719,7 @@ void pg_notify_t::dump(Formatter *f) const
 
 void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 {
-  o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1,
-			      pg_info_t(), PastIntervals()));
-  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10,
-			      pg_info_t(), PastIntervals()));
+  o.push_back(new pg_notify_t);
 }
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
@@ -3799,9 +3801,6 @@ void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>&
   o.back()->last = 5;
   o.back()->maybe_went_rw = true;
 }
-
-WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
-
 
 /**
  * pi_compact_rep
@@ -6024,6 +6023,14 @@ void chunk_info_t::dump(Formatter *f) const
   f->dump_unsigned("flags", flags);
 }
 
+void chunk_info_t::generate_test_instances(std::list<chunk_info_t*>& o)
+{
+  o.push_back(new chunk_info_t);
+  o.push_back(new chunk_info_t);
+  o.back()->length = 123;
+  o.back()->oid = hobject_t(object_t("foo"), "", 123, 456, -1, "");
+  o.back()->flags = cflag_t::FLAG_DIRTY;
+}
 
 bool chunk_info_t::operator==(const chunk_info_t& cit) const
 {

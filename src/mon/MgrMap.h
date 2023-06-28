@@ -102,6 +102,22 @@ public:
       }
       f->close_section();
     }
+    static void generate_test_instances(std::list<ModuleOption*>& ls) {
+      ls.push_back(new ModuleOption);
+      ls.push_back(new ModuleOption);
+      ls.back()->name = "name";
+      ls.back()->type = Option::TYPE_STR;
+      ls.back()->level = Option::LEVEL_ADVANCED;
+      ls.back()->flags = Option::FLAG_RUNTIME;
+      ls.back()->default_value = "default_value";
+      ls.back()->min = "min";
+      ls.back()->max = "max";
+      ls.back()->enum_allowed.insert("enum_allowed");
+      ls.back()->desc = "desc";
+      ls.back()->long_desc = "long_desc";
+      ls.back()->tags.insert("tag");
+      ls.back()->see_also.insert("see_also");
+    }
   };
 
   class ModuleInfo
@@ -150,6 +166,15 @@ public:
       }
       f->close_section();
       f->close_section();
+    }
+
+    static void generate_test_instances(std::list<ModuleInfo*>& ls) {
+      ls.push_back(new ModuleInfo);
+      ls.push_back(new ModuleInfo);
+      ls.back()->name = "name";
+      ls.back()->can_run = true;
+      ls.back()->error_string = "error_string";
+      ls.back()->module_options["module_option"] = ModuleOption();
     }
   };
 
@@ -208,6 +233,22 @@ public:
 	decode(mgr_features, p);
       }
       DECODE_FINISH(p);
+    }
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("gid", gid);
+      f->dump_string("name", name);
+      f->open_array_section("available_modules");
+      for (auto& i : available_modules) {
+        f->dump_object("module", i);
+      }
+      f->close_section();
+      f->dump_unsigned("mgr_features", mgr_features);
+    }
+    static void generate_test_instances(std::list<StandbyInfo*>& ls)
+    {
+      ls.push_back(new StandbyInfo(1, "a", {}, 0));
+      ls.push_back(new StandbyInfo(2, "b", {}, 0));
+      ls.push_back(new StandbyInfo(3, "c", {}, 0));
     }
 
     bool have_module(const std::string &module_name) const

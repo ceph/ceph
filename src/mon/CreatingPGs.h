@@ -83,8 +83,20 @@ struct creating_pgs_t {
       f->dump_object("pg_history", history);
       f->dump_object("past_intervals", past_intervals);
     }
+    static void generate_test_instances(std::list<pg_create_info*>& o) {
+      o.push_back(new pg_create_info);
+      o.back()->create_epoch = 10;
+      o.push_back(new pg_create_info);
+      o.back()->create_epoch = 1;
+      o.back()->create_stamp = utime_t(2, 3);
+      o.back()->up = {1, 2, 3};
+      o.back()->up_primary = 1;
+      o.back()->acting = {1, 2, 3};
+      o.back()->acting_primary = 1;
+    }
 
-    pg_create_info() {}
+    pg_create_info() 
+      : create_epoch(0) {}
     pg_create_info(epoch_t e, utime_t t)
       : create_epoch(e),
 	create_stamp(t) {

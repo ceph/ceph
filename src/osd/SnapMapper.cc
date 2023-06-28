@@ -280,6 +280,22 @@ void SnapMapper::object_snaps::decode(ceph::buffer::list::const_iterator &bl)
   DECODE_FINISH(bl);
 }
 
+void SnapMapper::object_snaps::dump(ceph::Formatter *f) const
+{
+  f->dump_stream("oid") << oid;
+  f->dump_stream("snaps") << snaps;
+}
+
+void SnapMapper::object_snaps::generate_test_instances(
+  std::list<object_snaps *> &o)
+{
+  o.push_back(new object_snaps);
+  o.push_back(new object_snaps);
+  o.back()->oid = hobject_t(sobject_t("name", CEPH_NOSNAP));
+  o.back()->snaps.insert(1);
+  o.back()->snaps.insert(2);
+}
+
 bool SnapMapper::check(const hobject_t &hoid) const
 {
   if (hoid.match(mask_bits, match)) {

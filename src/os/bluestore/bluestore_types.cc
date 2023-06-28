@@ -1087,6 +1087,15 @@ void bluestore_onode_t::shard_info::dump(Formatter *f) const
   f->dump_unsigned("bytes", bytes);
 }
 
+void bluestore_onode_t::shard_info::generate_test_instances(
+  std::list<shard_info*>& o)
+{
+  o.push_back(new shard_info);
+  o.push_back(new shard_info);
+  o.back()->offset = 1;
+  o.back()->bytes = 2;
+}
+
 ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si)
 {
   return out << std::hex << "0x" << si.offset << "(0x" << si.bytes << " bytes"

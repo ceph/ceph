@@ -30,6 +30,23 @@ struct OSDMetricPayload {
     denc(v.report, p);
     DENC_FINISH(p);
   }
+
+  void dump(ceph::Formatter *f) const {
+    f->open_array_section("report");
+    for (auto& i : report) {
+      f->open_object_section("query");
+      i.first.dump(f);
+      f->close_section();
+      f->open_object_section("report");
+      i.second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
+
+  static void generate_test_instances(std::list<OSDMetricPayload*>& ls) {
+    ls.push_back(new OSDMetricPayload);
+  }
 };
 
 struct MDSMetricPayload {

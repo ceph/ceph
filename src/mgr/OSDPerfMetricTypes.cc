@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "mgr/OSDPerfMetricTypes.h"
-
+#include "common/Formatter.h"
 #include <ostream>
 
 using ceph::bufferlist;

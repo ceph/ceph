@@ -110,6 +110,15 @@ struct FeatureMap {
       f->close_section();
     }
   }
+
+  static void generate_test_instances(std::list<FeatureMap*>& ls) {
+    ls.push_back(new FeatureMap);
+    ls.push_back(new FeatureMap);
+    ls.back()->add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_UID);
+    ls.back()->add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_NOSRCADDR);
+    ls.back()->add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_PGID64);
+    ls.back()->add(CEPH_ENTITY_TYPE_OSD, CEPH_FEATURE_INCSUBOSDMAP);
+  }
 };
 WRITE_CLASS_ENCODER(FeatureMap)
 
@@ -189,6 +198,20 @@ struct DataStats {
     f->open_object_section("store_stats");
     store_stats.dump(f);
     f->close_section();
+  }
+  static void generate_test_instances(std::list<DataStats*>& ls) {
+    ls.push_back(new DataStats);
+    ls.push_back(new DataStats);
+    ls.back()->fs_stats.byte_total = 1024*1024;
+    ls.back()->fs_stats.byte_used = 512*1024;
+    ls.back()->fs_stats.byte_avail = 256*1024;
+    ls.back()->fs_stats.avail_percent = 50;
+    ls.back()->last_update = utime_t();
+    ls.back()->store_stats.bytes_total = 1024*1024;
+    ls.back()->store_stats.bytes_sst = 512*1024;
+    ls.back()->store_stats.bytes_log = 256*1024;
+    ls.back()->store_stats.bytes_misc = 256*1024;
+    ls.back()->store_stats.last_update = utime_t();
   }
 
   void encode(ceph::buffer::list &bl) const {
@@ -467,6 +490,14 @@ public:
     decode(features, p);
     DECODE_FINISH(p);
   }
+
+  static void generate_test_instances(std::list<mon_feature_t*>& ls) {
+    ls.push_back(new mon_feature_t);
+    ls.push_back(new mon_feature_t);
+    ls.back()->features = 1;
+    ls.push_back(new mon_feature_t);
+    ls.back()->features = 2;
+  }
 };
 WRITE_CLASS_ENCODER(mon_feature_t)
 
@@ -668,6 +699,13 @@ struct ProgressEvent {
     f->dump_string("message", message);
     f->dump_float("progress", progress);
     f->dump_bool("add_to_ceph_s", add_to_ceph_s);
+  }
+  static void generate_test_instances(std::list<ProgressEvent*>& o) {
+    o.push_back(new ProgressEvent);
+    o.push_back(new ProgressEvent);
+    o.back()->message = "test message";
+    o.back()->progress = 0.5;
+    o.back()->add_to_ceph_s = true;
   }
 };
 WRITE_CLASS_ENCODER(ProgressEvent)

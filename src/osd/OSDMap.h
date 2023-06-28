@@ -342,6 +342,12 @@ struct PGTempMap {
       f->close_section();
     }
   }
+  static void generate_test_instances(std::list<PGTempMap*>& o) {
+    o.push_back(new PGTempMap);
+    o.push_back(new PGTempMap);
+    o.back()->set(pg_t(1, 2), { 3, 4 });
+    o.back()->set(pg_t(2, 3), { 4, 5 });
+  }
 };
 WRITE_CLASS_ENCODER(PGTempMap)
 

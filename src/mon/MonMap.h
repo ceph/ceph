@@ -85,6 +85,8 @@ struct mon_info_t {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
   void print(std::ostream& out) const;
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<mon_info_t*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(mon_info_t)
 
