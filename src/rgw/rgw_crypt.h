@@ -101,16 +101,16 @@ class RGWGetObj_BlockDecrypt : public RGWGetObj_Filter {
   bufferlist cache; /**< stores extra data that could not (yet) be processed by BlockCrypt */
   size_t block_size; /**< snapshot of \ref BlockCrypt.get_block_size() */
   optional_yield y;
+  std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 
   int process(bufferlist& cipher, size_t part_ofs, size_t size);
 
-protected:
-  std::vector<size_t> parts_len; /**< size of parts of multipart object, parsed from manifest */
 public:
   RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                          CephContext* cct,
                          RGWGetObj_Filter* next,
                          std::unique_ptr<BlockCrypt> crypt,
+                         std::vector<size_t> parts_len,
                          optional_yield y);
   virtual ~RGWGetObj_BlockDecrypt();
 
@@ -121,7 +121,9 @@ public:
                           off_t bl_len) override;
   virtual int flush() override;
 
-  int read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl);
+  static int read_manifest_parts(const DoutPrefixProvider *dpp,
+                                 const bufferlist& manifest_bl,
+                                 std::vector<size_t>& parts_len);
 }; /* RGWGetObj_BlockDecrypt */
 
 
