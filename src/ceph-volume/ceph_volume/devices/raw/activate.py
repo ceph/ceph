@@ -82,7 +82,9 @@ class Activate(object):
             return
         self.args = parser.parse_args(self.argv)
 
-        devs = [self.args.device]
+        devs = []
+        if self.args.device:
+            devs = [self.args.device]
         if self.args.block_wal:
             devs.append(self.args.block_wal)
         if self.args.block_db:
