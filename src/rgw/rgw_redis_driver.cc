@@ -1,6 +1,6 @@
 #include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
-//#include "rgw_ssd_driver.h"
+//#include "rgw_ssd_driver.h" // fix -Sam
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -53,6 +53,20 @@ int RedisDriver::find_client(const DoutPrefixProvider* dpp)
     return ECONNREFUSED;
 
   return 0;
+}
+
+int RedisDriver::add_partition_info(Partition& info)
+{
+  std::string key = info.name + info.type;
+  //auto ret = partitions.emplace(key, info);
+
+  //return ret.second;
+}
+
+int RedisDriver::remove_partition_info(Partition& info)
+{
+  std::string key = info.name + info.type;
+  return partitions.erase(key);
 }
 
 int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) 
@@ -729,12 +743,7 @@ size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp)
   return entries.size();
 }
 
-Partition RedisDriver::get_current_partition_info(const DoutPrefixProvider* dpp) 
-{
-  Partition part;
-  return part; // Implement -Sam
-}
-
+/*
 uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) 
 {
   int result = -1;
@@ -772,6 +781,32 @@ uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp)
   }
 
   return result;
+}
+*/
+
+std::optional<Partition> RedisDriver::get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type)
+{
+  std::string key = name + type;
+
+  /*
+  auto iter = partitions.find(key);
+  if (iter != partitions.end()) {
+      return iter->second;
+  }
+
+  return std::nullopt;*/
+}
+
+std::vector<Partition> RedisDriver::list_partitions(const DoutPrefixProvider* dpp)
+{
+  std::vector<Partition> partitions_v;
+
+  /*for (auto& it : RedisDriver::partitions) {
+    partitions_v.emplace_back(it.second);
+
+  }
+
+  return partitions_v;*/
 }
 
 int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)
@@ -829,27 +864,27 @@ template <typename ExecutionContext, typename CompletionToken>
 auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
                 off_t read_ofs, off_t read_len, CompletionToken&& token)
 {
-    std::string location = "";//partition_info.location + key;
-    ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
+  std::string location = "";//partition_info.location + key;
+  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
 
-    using Op = AsyncReadOp;
-    using Signature = typename Op::Signature;
-    boost::asio::async_completion<CompletionToken, Signature> init(token);
-    auto p = Op::create(ctx.get_executor(), init.completion_handler);
-    auto& op = p->user_data;
+  using Op = AsyncReadOp;
+  using Signature = typename Op::Signature;
+  boost::asio::async_completion<CompletionToken, Signature> init(token);
+  auto p = Op::create(ctx.get_executor(), init.completion_handler);
+  auto& op = p->user_data;
 
-    int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
-    if(0 == ret) {
-        ret = ::aio_read(op.aio_cb.get());
-    }
-  //  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
-   /* if(ret < 0) {
-        auto ec = boost::system::error_code{-ret, boost::system::system_category()};
-        ceph::async::post(std::move(p), ec, bufferlist{});
-    } else {
-        (void)p.release();
-    }*/
-    //return init.result.get();
+  int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
+  if (0 == ret) {
+    ret = ::aio_read(op.aio_cb.get());
+  }
+//  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
+ /* if(ret < 0) {
+      auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+      ceph::async::post(std::move(p), ec, bufferlist{});
+  } else {
+      (void)p.release();
+  }*/
+  //return init.result.get();
 }
 
 void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)

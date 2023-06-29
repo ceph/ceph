@@ -1,14 +1,13 @@
 #ifndef CEPH_REDISDRIVER_H
 #define CEPH_REDISDRIVER_H
 
-#include "../boost_redis/include/boost/redis/src.hpp" // fix -Sam
+//#include <boost/redis/src.hpp>
 #include <aio.h>
 #include "common/async/completion.h"
-#include <string>
-#include <iostream>
-#include <cpp_redis/cpp_redis>
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
+
+#include <cpp_redis/cpp_redis>
 #include "driver/d4n/d4n_directory.h"
 
 namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
@@ -27,9 +26,11 @@ class RedisCacheAioRequest: public CacheAioRequest {
 
 class RedisDriver : public CacheDriver {
   public:
-    RedisDriver(Partition& _partition_info, std::string host, int port) : CacheDriver(_partition_info) {
-      addr.host = host;
-      addr.port = port;
+    RedisDriver(Partition& _partition_info) : partition_info(_partition_info),
+                                              free_space(_partition_info.size), 
+				              outstanding_write_size(0) 
+    {
+      add_partition_info(_partition_info);
     }
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
@@ -51,8 +52,10 @@ class RedisDriver : public CacheDriver {
     //int update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight); // may need to exist for base class -Sam
 
     /* Partition */
-    virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override;
-    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override;
+    virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; } // how to get this from redis server? -Sam
+    static std::optional<Partition> get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type);
+    static std::vector<Partition> list_partitions(const DoutPrefixProvider* dpp);
 
     struct libaio_handler { // should this be the same as SSDDriver? -Sam
       rgw::Aio* throttle = nullptr;
@@ -72,10 +75,16 @@ class RedisDriver : public CacheDriver {
   private:
     cpp_redis::client client;
     rgw::d4n::Address addr;
+    static std::unordered_map<std::string, Partition> partitions;
     std::unordered_map<std::string, Entry> entries;
+    Partition partition_info;
+    uint64_t free_space;
+    uint64_t outstanding_write_size;
     CephContext* cct;
 
     int find_client(const DoutPrefixProvider* dpp);
+    int add_partition_info(Partition& info);
+    int remove_partition_info(Partition& info);
     int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
     int remove_entry(const DoutPrefixProvider* dpp, std::string key);
     std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
