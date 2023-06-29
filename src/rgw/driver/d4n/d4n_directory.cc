@@ -24,7 +24,7 @@ int ObjectDirectory::find_client(cpp_redis::client* client) {
 }
 
 std::string ObjectDirectory::build_index(CacheObj* object) {
-  return "rgw-object:" + object->objName + ":object-directory";
+  return object->bucketName + "_" + object->objName;
 }
 
 int ObjectDirectory::exist_key(std::string key) {
@@ -204,7 +204,7 @@ int BlockDirectory::find_client(cpp_redis::client* client) {
 }
 
 std::string BlockDirectory::build_index(CacheBlock* block) {
-  return "rgw-object:" + block->cacheObj.objName + ":block-directory";
+  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + boost::lexical_cast<std::string>(block->blockId);
 }
 
 int BlockDirectory::exist_key(std::string key) {
