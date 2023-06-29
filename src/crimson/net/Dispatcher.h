@@ -32,13 +32,18 @@ class Dispatcher {
 
   // The connection is accepted or recoverred(lossless), all the followup
   // events and messages will be dispatched to the new_shard.
-  virtual void ms_handle_accept(ConnectionRef conn, seastar::shard_id new_shard) {}
+  //
+  // is_replace=true means the accepted connection has replaced
+  // another connecting connection with the same peer_addr, which currently only
+  // happens under lossy policy when both sides wish to connect to each other.
+  virtual void ms_handle_accept(ConnectionRef conn, seastar::shard_id new_shard, bool is_replace) {}
 
   // The connection is (re)connected, all the followup events and messages will
   // be dispatched to the new_shard.
   virtual void ms_handle_connect(ConnectionRef conn, seastar::shard_id new_shard) {}
 
   // a reset event is dispatched when the connection is closed unexpectedly.
+  //
   // is_replace=true means the reset connection is going to be replaced by
   // another accepting connection with the same peer_addr, which currently only
   // happens under lossy policy when both sides wish to connect to each other.

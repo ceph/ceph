@@ -105,7 +105,7 @@ class SyntheticDispatcher final
   }
 
   std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef con,
-                                               MessageRef m) {
+                                               MessageRef m) final {
     if (verbose) {
       logger().warn("{}: con = {}", __func__, *con);
     }
@@ -136,21 +136,22 @@ class SyntheticDispatcher final
 
   void ms_handle_accept(
       crimson::net::ConnectionRef conn,
-      seastar::shard_id new_shard) {
+      seastar::shard_id new_shard,
+      bool is_replace) final {
     logger().info("{} - Connection:{}", __func__, *conn);
     assert(new_shard == seastar::this_shard_id());
   }
 
   void ms_handle_connect(
       crimson::net::ConnectionRef conn,
-      seastar::shard_id new_shard) {
+      seastar::shard_id new_shard) final {
     logger().info("{} - Connection:{}", __func__, *conn);
     assert(new_shard == seastar::this_shard_id());
   }
 
-  void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace);
+  void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace) final;
 
-  void ms_handle_remote_reset(crimson::net::ConnectionRef con) {
+  void ms_handle_remote_reset(crimson::net::ConnectionRef con) final {
     clear_pending(con);
   }
 

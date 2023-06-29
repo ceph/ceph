@@ -26,7 +26,7 @@ public:
     return dispatchers.empty();
   }
   seastar::future<> ms_dispatch(crimson::net::ConnectionRef, MessageRef);
-  void ms_handle_accept(crimson::net::ConnectionRef conn, seastar::shard_id);
+  void ms_handle_accept(crimson::net::ConnectionRef conn, seastar::shard_id, bool is_replace);
   void ms_handle_connect(crimson::net::ConnectionRef conn, seastar::shard_id);
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace);
   void ms_handle_remote_reset(crimson::net::ConnectionRef conn);

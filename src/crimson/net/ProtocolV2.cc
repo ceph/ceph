@@ -1760,6 +1760,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
 
   ceph_assert_always(is_socket_valid);
   trigger_state(state_t::ESTABLISHING, io_state_t::delay);
+  bool is_replace;
   if (existing_conn) {
     logger().info("{} start establishing: gs={}, pgs={}, cs={}, "
                   "client_cookie={}, server_cookie={}, {}, new_sid={}, "
@@ -1768,6 +1769,7 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
                   client_cookie, server_cookie,
                   io_states, frame_assembler->get_socket_shard_id(),
                   *existing_conn);
+    is_replace = true;
     ProtocolV2 *existing_proto = dynamic_cast<ProtocolV2*>(
         existing_conn->protocol.get());
     existing_proto->do_close(
@@ -1786,10 +1788,11 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
                   conn, global_seq, peer_global_seq, connect_seq,
                   client_cookie, server_cookie, io_states,
                   frame_assembler->get_socket_shard_id());
+    is_replace = false;
     accept_me();
   }
 
-  gated_execute("execute_establishing", conn, [this] {
+  gated_execute("execute_establishing", conn, [this, is_replace] {
     ceph_assert_always(state == state_t::ESTABLISHING);
 
     // set io_handler to a new shard
@@ -1803,10 +1806,10 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
     pr_switch_io_shard = seastar::shared_promise<>();
     return seastar::smp::submit_to(
         io_handler.get_shard_id(),
-        [this, cc_seq, new_io_shard,
+        [this, cc_seq, new_io_shard, is_replace,
          conn_fref=std::move(conn_fref)]() mutable {
       return io_handler.dispatch_accept(
-          cc_seq, new_io_shard, std::move(conn_fref));
+          cc_seq, new_io_shard, std::move(conn_fref), is_replace);
     }).then([this, new_io_shard] {
       ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
       pr_switch_io_shard->set_value();
@@ -1976,7 +1979,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
           [this, cc_seq, new_io_shard,
            conn_fref=std::move(conn_fref)]() mutable {
         return io_handler.dispatch_accept(
-            cc_seq, new_io_shard, std::move(conn_fref));
+            cc_seq, new_io_shard, std::move(conn_fref), false);
       }).then([this, new_io_shard] {
         ceph_assert_always(io_handler.get_shard_id() == new_io_shard);
         pr_switch_io_shard->set_value();

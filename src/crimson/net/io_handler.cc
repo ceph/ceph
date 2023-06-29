@@ -558,21 +558,22 @@ seastar::future<>
 IOHandler::dispatch_accept(
     crosscore_t::seq_t cc_seq,
     seastar::shard_id new_sid,
-    ConnectionFRef conn_fref)
+    ConnectionFRef conn_fref,
+    bool is_replace)
 {
   ceph_assert_always(seastar::this_shard_id() == get_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
     logger().debug("{} got {} dispatch_accept(), wait at {}",
                    conn, cc_seq, crosscore.get_in_seq());
     return crosscore.wait(cc_seq
-    ).then([this, cc_seq, new_sid,
+    ).then([this, cc_seq, new_sid, is_replace,
             conn_fref=std::move(conn_fref)]() mutable {
-      return dispatch_accept(cc_seq, new_sid, std::move(conn_fref));
+      return dispatch_accept(cc_seq, new_sid, std::move(conn_fref), is_replace);
     });
   }
 
-  logger().debug("{} got {} dispatch_accept({}) at {}",
-                 conn, cc_seq, new_sid, io_stat_printer{*this});
+  logger().debug("{} got {} dispatch_accept(new_sid={}, replace={}) at {}",
+                 conn, cc_seq, new_sid, is_replace, io_stat_printer{*this});
   if (get_io_state() == io_state_t::drop) {
     assert(!protocol_is_connected);
     // it is possible that both io_handler and protocolv2 are
@@ -586,7 +587,7 @@ IOHandler::dispatch_accept(
   auto _conn_ref = conn_ref;
   auto fut = to_new_sid(new_sid, std::move(conn_fref));
 
-  dispatchers.ms_handle_accept(_conn_ref, new_sid);
+  dispatchers.ms_handle_accept(_conn_ref, new_sid, is_replace);
   // user can make changes
 
   return fut;
