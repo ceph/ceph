@@ -59,12 +59,14 @@ function import_corpus() {
     shift
 
     # import the corpus
-    ../src/test/encoding/import.sh \
-        ${encode_dump_path} \
-        ${version} \
-        ../ceph-object-corpus/archive
-    ../src/test/encoding/import-generated.sh \
-        ../ceph-object-corpus/archive
+    python3 ../src/test/encoding/import.py \
+        --archive-path ../ceph-object-corpus/archive \
+        --dump-path ${encode_dump_path} \
+        --version ${version}
+
+    python3 ../src/test/encoding/import-generated.py \
+            ../ceph-object-corpus/archive
+
     # prune it
     pushd ../ceph-object-corpus
     bin/prune-archive.sh
@@ -72,7 +74,7 @@ function import_corpus() {
 }
 
 function verify() {
-    ctest -R readable.sh
+    ctest -R readable.py
 }
 
 function commit_and_push() {
@@ -83,10 +85,14 @@ function commit_and_push() {
     git checkout -b wip-${version}
     git add archive/${version}
     git commit --signoff --message=${version}
-    git remote add cc git@github.com:ceph/ceph-object-corpus.git
+    # Check if the remote already exists
+    if ! git remote | grep -q "cc"; then
+        git remote add cc git@github.com:ceph/ceph-object-corpus.git
+    fi
     git push cc wip-${version}
     popd
 }
+
 
 encode_dump_path=$(mktemp -d)
 build $encode_dump_path
