@@ -7,6 +7,8 @@
 
 namespace rgw { namespace cache { 
 
+std::unordered_map<std::string, Partition> RedisDriver::partitions;
+
 /* Base metadata and data fields should remain consistent */
 std::vector<std::string> baseFields {
   "mtime",
@@ -58,9 +60,9 @@ int RedisDriver::find_client(const DoutPrefixProvider* dpp)
 int RedisDriver::add_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
-  //auto ret = partitions.emplace(key, info);
+  auto ret = partitions.emplace(key, info);
 
-  //return ret.second;
+  return ret.second;
 }
 
 int RedisDriver::remove_partition_info(Partition& info)
@@ -701,25 +703,23 @@ std::optional<Partition> RedisDriver::get_partition_info(const DoutPrefixProvide
 {
   std::string key = name + type;
 
-  /*
   auto iter = partitions.find(key);
   if (iter != partitions.end()) {
       return iter->second;
   }
 
-  return std::nullopt;*/
+  return std::nullopt;
 }
 
 std::vector<Partition> RedisDriver::list_partitions(const DoutPrefixProvider* dpp)
 {
   std::vector<Partition> partitions_v;
 
-  /*for (auto& it : RedisDriver::partitions) {
+  for (auto& it : RedisDriver::partitions) {
     partitions_v.emplace_back(it.second);
-
   }
 
-  return partitions_v;*/
+  return partitions_v;
 }
 
 int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)

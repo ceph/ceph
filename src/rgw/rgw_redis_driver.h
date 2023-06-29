@@ -32,6 +32,10 @@ class RedisDriver : public CacheDriver {
     {
       add_partition_info(_partition_info);
     }
+    virtual ~RedisDriver()
+    {
+      remove_partition_info(partition_info);
+    }
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
@@ -75,7 +79,7 @@ class RedisDriver : public CacheDriver {
     auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
                   off_t read_ofs, off_t read_len, CompletionToken&& token);
 
-  private:
+  protected:
     cpp_redis::client client;
     rgw::d4n::Address addr;
     static std::unordered_map<std::string, Partition> partitions;
@@ -92,6 +96,7 @@ class RedisDriver : public CacheDriver {
     int remove_entry(const DoutPrefixProvider* dpp, std::string key);
     std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
 
+  private:
     // unique_ptr with custom deleter for struct aiocb
     struct libaio_aiocb_deleter {
       void operator()(struct aiocb* c) {
