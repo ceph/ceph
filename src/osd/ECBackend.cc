@@ -271,19 +271,20 @@ struct OnRecoveryReadComplete :
 
 struct RecoveryMessages {
   map<hobject_t,
-      ECBackend::read_request_t> reads;
+      ECBackend::read_request_t> recovery_reads;
   map<hobject_t, set<int>> want_to_read;
-  void read(
+  void recovery_read(
     ECBackend *ec,
     const hobject_t &hoid, uint64_t off, uint64_t len,
     set<int> &&_want_to_read,
     const map<pg_shard_t, vector<pair<int, int>>> &need,
-    bool attrs) {
+    bool attrs)
+  {
     list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     to_read.push_back(boost::make_tuple(off, len, 0));
-    ceph_assert(!reads.count(hoid));
+    ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
-    reads.insert(
+    recovery_reads.insert(
       make_pair(
 	hoid,
 	ECBackend::read_request_t(
@@ -578,12 +579,12 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     get_parent()->queue_transaction(std::move(m.t));
   } 
 
-  if (m.reads.empty())
+  if (m.recovery_reads.empty())
     return;
   start_read_op(
     priority,
     m.want_to_read,
-    m.reads,
+    m.recovery_reads,
     OpRequestRef(),
     false, true);
 }
@@ -632,7 +633,7 @@ void ECBackend::continue_recovery_op(
 	recovery_ops.erase(op.hoid);
 	return;
       }
-      m->read(
+      m->recovery_read(
 	this,
 	op.hoid,
 	op.recovery_progress.data_recovered_to,
