@@ -1778,12 +1778,12 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       + " data=" + filesystem;
 
     map<string, bufferlist> encoded_caps;
-    map<string, string> wanted_caps = {
+    map<string, string> newcaps = {
       {"mon", mon_cap_string},
       {"osd", osd_cap_string},
       {"mds", mds_cap_string}
     };
-    if (err = _check_and_encode_caps(wanted_caps, encoded_caps, ss); err < 0) {
+    if (err = _check_and_encode_caps(newcaps, encoded_caps, ss); err < 0) {
       goto done;
     }
 
@@ -1807,7 +1807,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       goto done;
     }
 
-    err = _create_entity(entity, wanted_caps, op, ds, &rdata, f.get());
+    err = _create_entity(entity, newcaps, op, ds, &rdata, f.get());
     if (err == 0) {
       return true;
     } else {
