@@ -82,7 +82,6 @@ public:
   void handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
-    RecoveryMessages *m,
     const ZTracer::Trace &trace
     );
 
@@ -277,6 +276,7 @@ private:
   void continue_recovery_op(
     RecoveryOp &op,
     RecoveryMessages *m);
+  friend struct RecoveryMessages;
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
   friend struct OnRecoveryReadComplete;
   void handle_recovery_read_complete(
@@ -356,6 +356,7 @@ public:
     // True if reading for recovery which could possibly reading only a subset
     // of the available shards.
     bool for_recovery;
+    GenContext<int> *on_complete;
 
     ZTracer::Trace trace;
 
@@ -375,11 +376,17 @@ public:
       ceph_tid_t tid,
       bool do_redundant_reads,
       bool for_recovery,
+      GenContext<int> *on_complete,
       OpRequestRef op,
       std::map<hobject_t, std::set<int>> &&_want_to_read,
       std::map<hobject_t, read_request_t> &&_to_read)
-      : priority(priority), tid(tid), op(op), do_redundant_reads(do_redundant_reads),
-	for_recovery(for_recovery), want_to_read(std::move(_want_to_read)),
+      : priority(priority),
+        tid(tid),
+        op(op),
+        do_redundant_reads(do_redundant_reads),
+        for_recovery(for_recovery),
+        on_complete(on_complete),
+        want_to_read(std::move(_want_to_read)),
 	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
 	auto &returned = complete[hpair.first].returned;
@@ -400,8 +407,9 @@ public:
   void filter_read_op(
     const OSDMapRef& osdmap,
     ReadOp &op);
-  void complete_read_op(ReadOp &rop, RecoveryMessages *m);
+  void complete_read_op(ReadOp &rop);
   friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
+
   std::map<ceph_tid_t, ReadOp> tid_to_read_map;
   std::map<pg_shard_t, std::set<ceph_tid_t> > shard_to_read_map;
   void start_read_op(
@@ -409,7 +417,9 @@ public:
     std::map<hobject_t, std::set<int>> &want_to_read,
     std::map<hobject_t, read_request_t> &to_read,
     OpRequestRef op,
-    bool do_redundant_reads, bool for_recovery);
+    bool do_redundant_reads,
+    bool for_recovery,
+    GenContext<int> *on_complete);
 
   void do_read_op(ReadOp &rop);
   int send_all_remaining_reads(
