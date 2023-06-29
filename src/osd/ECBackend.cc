@@ -250,10 +250,12 @@ void ECBackend::_failed_push(const hobject_t &hoid,
 
 struct OnRecoveryReadComplete :
   public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
+  struct RecoveryMessages* rm;
   ECBackend *backend;
   hobject_t hoid;
-  OnRecoveryReadComplete(ECBackend *backend, const hobject_t &hoid)
-    : backend(backend), hoid(hoid) {}
+
+  OnRecoveryReadComplete(RecoveryMessages* rm, ECBackend *backend, const hobject_t &hoid)
+    : rm(rm), backend(backend), hoid(hoid) {}
   void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
     ECBackend::read_result_t &res = in.second;
     if (!(res.r == 0 && res.errors.empty())) {
@@ -265,14 +267,18 @@ struct OnRecoveryReadComplete :
       hoid,
       res.returned.back(),
       res.attrs,
-      in.first);
+      rm);
   }
 };
 
-struct RecoveryMessages {
+struct RecoveryMessages : GenContext<int> {
+  ECBackend *ec;
   map<hobject_t,
       ECBackend::read_request_t> recovery_reads;
   map<hobject_t, set<int>> want_to_read;
+
+  RecoveryMessages(ECBackend* ec) : ec(ec) {}
+
   void recovery_read(
     ECBackend *ec,
     const hobject_t &hoid, uint64_t off, uint64_t len,
@@ -292,6 +298,7 @@ struct RecoveryMessages {
 	  need,
 	  attrs,
 	  new OnRecoveryReadComplete(
+	    this,
 	    ec,
 	    hoid))));
   }
@@ -301,6 +308,10 @@ struct RecoveryMessages {
   ObjectStore::Transaction t;
   RecoveryMessages() {}
   ~RecoveryMessages() {}
+
+  void finish(int priority) override {
+    ec->dispatch_recovery_messages(*this, priority);
+  }
 };
 
 void ECBackend::handle_recovery_push(
@@ -586,7 +597,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     m.want_to_read,
     m.recovery_reads,
     OpRequestRef(),
-    false, true);
+    false, true, new RecoveryMessages{});
 }
 
 void ECBackend::continue_recovery_op(
@@ -751,7 +762,7 @@ void ECBackend::run_recovery_op(
   int priority)
 {
   ECRecoveryHandle *h = static_cast<ECRecoveryHandle*>(_h);
-  RecoveryMessages m;
+  RecoveryMessages m{this};
   for (list<RecoveryOp>::iterator i = h->ops.begin();
        i != h->ops.end();
        ++i) {
@@ -855,14 +866,14 @@ bool ECBackend::_handle_message(
     // buffers.  It does not conflict with ECSubReadReply operator<<.
     MOSDECSubOpReadReply *op = static_cast<MOSDECSubOpReadReply*>(
       _op->get_nonconst_req());
-    RecoveryMessages rm;
-    handle_sub_read_reply(op->op.from, op->op, &rm, _op->pg_trace);
-    dispatch_recovery_messages(rm, priority);
+    handle_sub_read_reply(op->op.from, op->op, _op->pg_trace);
+    // dispatch_recovery_messages() in the case of recovery_reads
+    // is called via the `on_complete` callback
     return true;
   }
   case MSG_OSD_PG_PUSH: {
     auto op = _op->get_req<MOSDPGPush>();
-    RecoveryMessages rm;
+    RecoveryMessages rm{this};
     for (vector<PushOp>::const_iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
@@ -874,7 +885,7 @@ bool ECBackend::_handle_message(
   case MSG_OSD_PG_PUSH_REPLY: {
     const MOSDPGPushReply *op = static_cast<const MOSDPGPushReply *>(
       _op->get_req());
-    RecoveryMessages rm;
+    RecoveryMessages rm{this};
     for (vector<PushReplyOp>::const_iterator i = op->replies.begin();
 	 i != op->replies.end();
 	 ++i) {
@@ -1192,7 +1203,6 @@ void ECBackend::handle_sub_write_reply(
 void ECBackend::handle_sub_read_reply(
   pg_shard_t from,
   ECSubReadReply &op,
-  RecoveryMessages *m,
   const ZTracer::Trace &trace)
 {
   trace.event("ec sub read reply");
@@ -1331,13 +1341,13 @@ void ECBackend::handle_sub_read_reply(
              is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
     rop.trace.event("ec read complete");
-    complete_read_op(rop, m);
+    complete_read_op(rop);
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;
   }
 }
 
-void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
+void ECBackend::complete_read_op(ReadOp &rop)
 {
   map<hobject_t, read_request_t>::iterator reqiter =
     rop.to_read.begin();
@@ -1360,6 +1370,10 @@ void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
   }
   rop.in_progress.clear();
   tid_to_read_map.erase(rop.tid);
+  if (rop.on_complete) {
+    rop.on_complete->complete(rop.priority);
+    rop.on_complete = nullptr;
+  }
 }
 
 struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
@@ -1369,10 +1383,7 @@ struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
   void finish(ThreadPool::TPHandle &handle) override {
     auto ropiter = ec->tid_to_read_map.find(tid);
     ceph_assert(ropiter != ec->tid_to_read_map.end());
-    int priority = ropiter->second.priority;
-    RecoveryMessages rm;
-    ec->complete_read_op(ropiter->second, &rm);
-    ec->dispatch_recovery_messages(rm, priority);
+    ec->complete_read_op(ropiter->second);
   }
 };
 
@@ -1739,7 +1750,8 @@ void ECBackend::start_read_op(
   map<hobject_t, read_request_t> &to_read,
   OpRequestRef _op,
   bool do_redundant_reads,
-  bool for_recovery)
+  bool for_recovery,
+  GenContext<int> *on_complete)
 {
   ceph_tid_t tid = get_parent()->get_tid();
   ceph_assert(!tid_to_read_map.count(tid));
@@ -1750,6 +1762,7 @@ void ECBackend::start_read_op(
       tid,
       do_redundant_reads,
       for_recovery,
+      on_complete,
       _op,
       std::move(want_to_read),
       std::move(to_read))).first->second;
@@ -2453,7 +2466,7 @@ void ECBackend::objects_read_and_reconstruct(
     obj_want_to_read,
     for_read_op,
     OpRequestRef(),
-    fast_read, false);
+    fast_read, false, nullptr);
   return;
 }
 
