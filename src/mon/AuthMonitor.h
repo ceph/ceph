@@ -119,8 +119,12 @@ private:
     pending_auth.push_back(inc);
   }
 
-  /* validate mon/osd/mds caps; fail on unrecognized service/type */
-  bool valid_caps(const std::string& type, const std::string& caps, std::ostream *out);
+  template<typename CAP_ENTITY_CLASS>
+  bool _was_parsing_fine(const std::string& entity, const std::string& caps,
+    std::ostream* out);
+  /* validate mon/osd/mgr/mds caps; fail on unrecognized service/type */
+  bool valid_caps(const std::string& entity, const std::string& caps,
+		  std::ostream *out);
   bool valid_caps(const std::string& type, const ceph::buffer::list& bl, std::ostream *out) {
     auto p = bl.begin();
     std::string v;
@@ -133,7 +137,8 @@ private:
     }
     return valid_caps(type, v, out);
   }
-  bool valid_caps(const std::vector<std::string>& caps, std::ostream *out);
+  bool valid_caps(const std::map<std::string, std::string>& caps,
+		  std::ostream *out);
 
   void on_active() override;
   bool should_propose(double& delay) override;
@@ -165,6 +170,30 @@ private:
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
+
+  void _encode_keyring(KeyRing& kr, const EntityName& entity,
+    bufferlist& rdata, Formatter* fmtr,
+    std::map<std::string, bufferlist>* wanted_caps=nullptr);
+  void _encode_auth(const EntityName& entity, const EntityAuth& eauth,
+    bufferlist& rdata, Formatter* fmtr, bool pending_key=false,
+    std::map<std::string, bufferlist>* caps=nullptr);
+  void _encode_key(const EntityName& entity, const EntityAuth& eauth,
+    bufferlist& rdata, Formatter* fmtr, bool pending_key=false,
+    std::map<std::string, bufferlist>* caps=nullptr);
+
+  int _check_and_encode_caps(const std::map<std::string, std::string>& caps,
+    std::map<std::string, bufferlist>& encoded_caps, std::stringstream& ss);
+
+  int _update_or_create_entity(const EntityName& entity,
+    const std::map<std::string, std::string>& caps, MonOpRequestRef op,
+    std::stringstream& ds, bufferlist* rdata=nullptr, Formatter* fmtr=nullptr,
+    bool create_entity=false);
+  int _create_entity(const EntityName& entity,
+    const std::map<std::string, std::string>& caps, MonOpRequestRef op,
+    std::stringstream& ds, bufferlist* rdata, Formatter* fmtr);
+  int _update_caps(const EntityName& entity,
+    const std::map<std::string, std::string>& caps, MonOpRequestRef op,
+    std::stringstream& ds, bufferlist* rdata, Formatter* fmtr);
 
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);
