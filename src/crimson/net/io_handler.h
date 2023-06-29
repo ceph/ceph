@@ -279,7 +279,8 @@ public:
   seastar::future<> dispatch_accept(
       crosscore_t::seq_t cc_seq,
       seastar::shard_id new_sid,
-      ConnectionFRef);
+      ConnectionFRef,
+      bool is_replace);
 
   seastar::future<> dispatch_connect(
       crosscore_t::seq_t cc_seq,
