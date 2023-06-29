@@ -41,10 +41,11 @@ ChainedDispatchers::ms_dispatch(crimson::net::ConnectionRef conn,
 void
 ChainedDispatchers::ms_handle_accept(
     crimson::net::ConnectionRef conn,
-    seastar::shard_id new_shard) {
+    seastar::shard_id new_shard,
+    bool is_replace) {
   try {
     for (auto& dispatcher : dispatchers) {
-      dispatcher->ms_handle_accept(conn, new_shard);
+      dispatcher->ms_handle_accept(conn, new_shard, is_replace);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_accept() {}",

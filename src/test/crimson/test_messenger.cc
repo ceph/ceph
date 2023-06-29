@@ -862,7 +862,8 @@ class FailoverSuite : public Dispatcher {
 
   void ms_handle_accept(
       ConnectionRef conn,
-      seastar::shard_id new_shard) override {
+      seastar::shard_id new_shard,
+      bool is_replace) override {
     assert(new_shard == seastar::this_shard_id());
     auto result = interceptor.find_result(conn);
     if (result == nullptr) {
@@ -1457,7 +1458,8 @@ class FailoverSuitePeer : public Dispatcher {
 
   void ms_handle_accept(
       ConnectionRef conn,
-      seastar::shard_id new_shard) override {
+      seastar::shard_id new_shard,
+      bool is_replace) override {
     assert(new_shard == seastar::this_shard_id());
     logger().info("[TestPeer] got accept from Test");
     ceph_assert(!tracked_conn ||
@@ -1616,7 +1618,8 @@ class FailoverTestPeer : public Dispatcher {
 
   void ms_handle_accept(
       ConnectionRef conn,
-      seastar::shard_id new_shard) override {
+      seastar::shard_id new_shard,
+      bool is_replace) override {
     assert(new_shard == seastar::this_shard_id());
     cmd_conn = conn;
   }
