@@ -251,18 +251,18 @@ void ECBackend::_failed_push(const hobject_t &hoid,
 
 struct OnRecoveryReadComplete :
   public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
-  ECBackend *pg;
+  ECBackend *backend;
   hobject_t hoid;
-  OnRecoveryReadComplete(ECBackend *pg, const hobject_t &hoid)
-    : pg(pg), hoid(hoid) {}
+  OnRecoveryReadComplete(ECBackend *backend, const hobject_t &hoid)
+    : backend(backend), hoid(hoid) {}
   void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
     ECBackend::read_result_t &res = in.second;
     if (!(res.r == 0 && res.errors.empty())) {
-        pg->_failed_push(hoid, in);
+        backend->_failed_push(hoid, in);
         return;
     }
     ceph_assert(res.returned.size() == 1);
-    pg->handle_recovery_read_complete(
+    backend->handle_recovery_read_complete(
       hoid,
       res.returned.back(),
       res.attrs,
