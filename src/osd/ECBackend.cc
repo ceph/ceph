@@ -230,10 +230,8 @@ PGBackend::RecoveryHandle *ECBackend::open_recovery_op()
   return new ECRecoveryHandle;
 }
 
-void ECBackend::_failed_push(const hobject_t &hoid,
-  pair<RecoveryMessages *, ECBackend::read_result_t &> &in)
+void ECBackend::_failed_push(const hobject_t &hoid, ECBackend::read_result_t &res)
 {
-  ECBackend::read_result_t &res = in.second;
   dout(10) << __func__ << ": Read error " << hoid << " r="
 	   << res.r << " errors=" << res.errors << dendl;
   dout(10) << __func__ << ": canceling recovery op for obj " << hoid
@@ -250,17 +248,16 @@ void ECBackend::_failed_push(const hobject_t &hoid,
 }
 
 struct OnRecoveryReadComplete :
-  public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
+  public GenContext<ECBackend::read_result_t&> {
   struct RecoveryMessages* rm;
   ECBackend *backend;
   hobject_t hoid;
 
   OnRecoveryReadComplete(RecoveryMessages* rm, ECBackend *backend, const hobject_t &hoid)
     : rm(rm), backend(backend), hoid(hoid) {}
-  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
-    ECBackend::read_result_t &res = in.second;
+  void finish(ECBackend::read_result_t &res) override {
     if (!(res.r == 0 && res.errors.empty())) {
-        backend->_failed_push(hoid, in);
+        backend->_failed_push(hoid, res);
         return;
     }
     ceph_assert(res.returned.size() == 1);
@@ -1357,9 +1354,7 @@ void ECBackend::complete_read_op(ReadOp &rop)
   ceph_assert(rop.to_read.size() == rop.complete.size());
   for (; reqiter != rop.to_read.end(); ++reqiter, ++resiter) {
     if (reqiter->second.cb) {
-      pair<RecoveryMessages *, read_result_t &> arg(
-	m, resiter->second);
-      reqiter->second.cb->complete(arg);
+      reqiter->second.cb->complete(resiter->second);
       reqiter->second.cb = nullptr;
     }
   }
@@ -2398,7 +2393,7 @@ void ECBackend::objects_read_async(
 }
 
 struct CallClientContexts :
-  public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
+  public GenContext<ECBackend::read_result_t&> {
   hobject_t hoid;
   ECBackend *ec;
   ECBackend::ClientAsyncReadStatus *status;
@@ -2409,8 +2404,7 @@ struct CallClientContexts :
     ECBackend::ClientAsyncReadStatus *status,
     const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read)
     : hoid(hoid), ec(ec), status(status), to_read(to_read) {}
-  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
-    ECBackend::read_result_t &res = in.second;
+  void finish(ECBackend::read_result_t &res) override {
     extent_map result;
     if (res.r != 0)
       goto out;
@@ -2527,8 +2521,7 @@ int ECBackend::send_all_remaining_reads(
 
   list<boost::tuple<uint64_t, uint64_t, uint32_t> > offsets =
     rop.to_read.find(hoid)->second.to_read;
-  GenContext<pair<RecoveryMessages *, read_result_t& > &> *c =
-    rop.to_read.find(hoid)->second.cb;
+  GenContext<read_result_t&> *c = rop.to_read.find(hoid)->second.cb;
 
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
