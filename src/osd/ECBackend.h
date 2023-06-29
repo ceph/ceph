@@ -350,12 +350,12 @@ public:
     const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
-    GenContext<std::pair<RecoveryMessages *, read_result_t& > &> *cb;
+    GenContext<read_result_t&> *cb;
     read_request_t(
       const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
       bool want_attrs,
-      GenContext<std::pair<RecoveryMessages *, read_result_t& > &> *cb)
+      GenContext<read_result_t&> *cb)
       : to_read(to_read), need(need), want_attrs(want_attrs),
 	cb(cb) {}
   };
@@ -689,8 +689,7 @@ public:
   uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
-  void _failed_push(const hobject_t &hoid,
-    std::pair<RecoveryMessages *, ECBackend::read_result_t &> &in);
+  void _failed_push(const hobject_t &hoid, ECBackend::read_result_t &res);
 };
 ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs);
 
