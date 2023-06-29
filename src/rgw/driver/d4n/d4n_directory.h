@@ -5,6 +5,7 @@
 #include <cpp_redis/cpp_redis>
 #include <string>
 #include <iostream>
+#include <boost/lexical_cast.hpp>
 
 namespace rgw { namespace d4n {
 
@@ -16,16 +17,17 @@ struct Address {
 struct CacheObj {
   std::string objName; /* S3 object name */
   std::string bucketName; /* S3 bucket name */
-  time_t creationTime; // Creation time of the S3 Object
+  time_t creationTime; /* Creation time of the S3 Object */
   bool dirty;
-  std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of object locations for multiple backends */
+  std::vector<std::string> hostsList; /* List of hostnames <ip:port> of object locations for multiple backends */
 };
 
 struct CacheBlock {
   CacheObj cacheObj;
+  uint64_t blockId; /* RADOS object block ID */
   uint64_t size; /* Block size in bytes */
   int globalWeight = 0;
-  std::vector<std::string> hostsList; /* Currently not supported: list of hostnames <ip:port> of block locations */
+  std::vector<std::string> hostsList; /* List of hostnames <ip:port> of block locations */
 };
 
 class Directory {
@@ -34,7 +36,7 @@ class Directory {
     CephContext* cct;
 };
 
-class ObjectDirectory: public Directory { // where else should object directory be called? -Sam
+class ObjectDirectory: public Directory { // weave into write workflow -Sam
   public:
     ObjectDirectory() {}
     ObjectDirectory(std::string host, int port) {
