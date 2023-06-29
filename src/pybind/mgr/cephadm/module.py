@@ -884,7 +884,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
                 logger.warning(f"Found unknown daemon type {daemon_type} on host {host}")
                 continue
-
             container_id = d.get('container_id')
             if container_id:
                 # shorten the hash
@@ -892,8 +891,14 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             rank = int(d['rank']) if d.get('rank') is not None else None
             rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
-            status, status_desc = None, 'unknown'
+            status, status_desc, last_status_change = None, 'unknown', None
             if 'state' in d:
+                try:
+                    curr_d = self.cache.get_daemon(d['name'], host)
+                    last_status_change = curr_d.last_status_change
+                    prev_status = curr_d.status
+                except orchestrator.OrchestratorError:
+                    prev_status = None
                 status_desc = d['state']
                 status = {
                     'running': DaemonDescriptionStatus.running,
@@ -901,6 +906,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                     'error': DaemonDescriptionStatus.error,
                     'unknown': DaemonDescriptionStatus.error,
                 }[d['state']]
+                if prev_status is not None and status != prev_status:
+                    last_status_change = datetime_now()
             sd = orchestrator.DaemonDescription(
                 daemon_type=daemon_type,
                 daemon_id='.'.join(d['name'].split('.')[1:]),
@@ -916,6 +923,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 started=_as_datetime(d.get('started')),
                 last_configured=_as_datetime(d.get('last_configured')),
                 last_deployed=_as_datetime(d.get('last_deployed')),
+                last_status_change=last_status_change,
                 memory_usage=d.get('memory_usage'),
                 memory_request=d.get('memory_request'),
                 memory_limit=d.get('memory_limit'),

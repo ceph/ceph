@@ -853,6 +853,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     status = DaemonDescriptionStatus.to_str(s.status)
                 if s.status == DaemonDescriptionStatus.running and s.started:  # See DDS.starting
                     status += ' (%s)' % to_pretty_timedelta(now - s.started)
+                elif s.last_status_change is not None:
+                    status += ' (%s)' % to_pretty_timedelta(now - s.last_status_change)
 
                 table.add_row((
                     s.name(),

@@ -929,6 +929,7 @@ class DaemonDescription(object):
                  created: Optional[datetime.datetime] = None,
                  started: Optional[datetime.datetime] = None,
                  last_configured: Optional[datetime.datetime] = None,
+                 last_status_change: Optional[datetime.datetime] = None,
                  osdspec_affinity: Optional[str] = None,
                  last_deployed: Optional[datetime.datetime] = None,
                  events: Optional[List['OrchestratorEvent']] = None,
@@ -989,6 +990,7 @@ class DaemonDescription(object):
         self.created: Optional[datetime.datetime] = created
         self.started: Optional[datetime.datetime] = started
         self.last_configured: Optional[datetime.datetime] = last_configured
+        self.last_status_change: Optional[datetime.datetime] = last_status_change
         self.last_deployed: Optional[datetime.datetime] = last_deployed
 
         #: Affinity to a certain OSDSpec
@@ -1172,7 +1174,7 @@ class DaemonDescription(object):
         out['rank_generation'] = self.rank_generation
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
-                  'last_configured']:
+                  'last_configured', 'last_status_change']:
             if getattr(self, k):
                 out[k] = datetime_to_str(getattr(self, k))
 
@@ -1208,7 +1210,7 @@ class DaemonDescription(object):
         out['ip'] = self.ip
 
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
-                  'last_configured']:
+                  'last_configured', 'last_status_change']:
             if getattr(self, k):
                 out[k] = datetime_to_str(getattr(self, k))
 
@@ -1226,7 +1228,7 @@ class DaemonDescription(object):
         c = data.copy()
         event_strs = c.pop('events', [])
         for k in ['last_refresh', 'created', 'started', 'last_deployed',
-                  'last_configured']:
+                  'last_configured', 'last_status_change']:
             if k in c:
                 c[k] = str_to_datetime(c[k])
         events = [OrchestratorEvent.from_json(e) for e in event_strs]
