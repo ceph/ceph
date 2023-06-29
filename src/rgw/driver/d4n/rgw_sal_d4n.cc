@@ -487,21 +487,20 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       }
 
       uint64_t read_ofs = diff_ofs; //read_ofs is the actual offset to start reading from the current part/ chunk
-      std::string oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(part_len);
-      rgw_raw_obj r_obj;
-      r_obj.oid = oid_in_cache;
       ceph::bufferlist bl;
+      rgw_raw_obj r_obj;
+      r_obj.oid = oid;
 
       ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << 
-	oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
+	oid << " length to read is: " << len_to_read << " part num: " << start_part_num << 
 	" read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-      if (source->driver->get_cache_driver()->get(dpp, oid_in_cache, ofs, part_len, bl, source->get_attrs()) == 0) { 
+      if (source->driver->get_cache_driver()->get(dpp, oid, ofs, part_len, bl, source->get_attrs()) == 0) { 
         // Read From Cache
         auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
-			   read_ofs, len_to_read, oid_in_cache), cost, id); 
+			   read_ofs, len_to_read, oid), cost, id); 
 
-        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
+        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid << dendl;
 
         auto r = flush(dpp, std::move(completed));
 
@@ -511,19 +510,16 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
         }
       } else {
         //for ranged requests, for last part, the whole part might exist in the cache
-        oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(obj_max_req_size);
-        r_obj.oid = oid_in_cache;
-
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << 
-	  oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
+	  oid << " length to read is: " << len_to_read << " part num: " << start_part_num << 
 	  " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-        if (source->driver->get_cache_driver()->get(dpp, oid_in_cache, ofs, obj_max_req_size, bl, source->get_attrs()) == 0) {
+        if (source->driver->get_cache_driver()->get(dpp, oid, ofs, obj_max_req_size, bl, source->get_attrs()) == 0) {
           // Read From Cache
 	  auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
-			     read_ofs, len_to_read, oid_in_cache), cost, id); 
+			     read_ofs, len_to_read, oid), cost, id); 
 
-          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
+          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid << dendl;
 
           auto r = flush(dpp, std::move(completed));
 
@@ -532,7 +528,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
             return r;
           }
         } else {
-          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid_in_cache << dendl;
+          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid << dendl;
 
           auto r = drain(dpp);
 
@@ -546,7 +542,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       }
 
       if (start_part_num == (num_parts - 1)) {
-        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid_in_cache << dendl;
+        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid << dendl;
         return drain(dpp);
       } else {
         adjusted_start_ofs += obj_max_req_size;
@@ -721,14 +717,11 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     Attrs attrs;
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
-      std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
-
-      filter->get_cache_driver()->put(save_dpp, oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
+      filter->get_cache_driver()->put(save_dpp, this->oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
-      std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
 
-      filter->get_cache_driver()->put(save_dpp, oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
+      filter->get_cache_driver()->put(save_dpp, this->oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
       uint64_t rem_space = rgw_get_obj_max_req_size - bl_rem.length();
       uint64_t len_to_copy = rem_space > bl.length() ? bl.length() : rem_space;
@@ -738,10 +731,9 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       bl_rem.claim_append(bl_copy);
 
       if (bl_rem.length() == g_conf()->rgw_get_obj_max_req_size) {
-        std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
         ofs += bl_rem.length();
 
-        filter->get_cache_driver()->put(save_dpp, oid, bl_rem, bl_rem.length(), attrs); // need attrs for just chunk? -Sam
+        filter->get_cache_driver()->put(save_dpp, this->oid, bl_rem, bl_rem.length(), attrs); // need attrs for just chunk? -Sam
 
         bl_rem.clear();
         bl_rem = std::move(bl);
