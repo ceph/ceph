@@ -7,5 +7,5 @@ tasks:
     client.0:
       rgw_server: client.0
       storage classes: LUKEWARM, FROZEN
-      extra_attrs: ["lifecycle"]
       lc_debug_interval: 10
+      lifecycle_tests: True
