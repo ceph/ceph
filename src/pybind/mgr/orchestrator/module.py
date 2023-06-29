@@ -129,6 +129,16 @@ class HostDetails:
 yaml.add_representer(HostDetails, HostDetails.yaml_representer)
 
 
+class DaemonFields(enum.Enum):
+    name = 'name'
+    host = 'host'
+    status = 'status'
+    refreshed = 'refreshed'
+    age = 'age'
+    mem_use = 'mem_use'
+    mem_lim = 'mem_lim'
+    image = 'image'
+
 class ServiceType(enum.Enum):
     mon = 'mon'
     mgr = 'mgr'
@@ -808,6 +818,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                       service_name: Optional[str] = None,
                       daemon_type: Optional[str] = None,
                       daemon_id: Optional[str] = None,
+                      sort_by: Optional[DaemonFields] = DaemonFields.name,
                       format: Format = Format.plain,
                       refresh: bool = False) -> HandleCommandResult:
         """
@@ -823,6 +834,27 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
         def ukn(s: Optional[str]) -> str:
             return '<unknown>' if s is None else s
+
+        def sort_by_field(d: DaemonDescription) -> Optional[str]:
+            if sort_by == DaemonFields.name:
+                return d.name()
+            elif sort_by == DaemonFields.host:
+                return d.hostname
+            elif sort_by == DaemonFields.status:
+                return d.status
+            elif sort_by == DaemonFields.refreshed:
+                return d.last_refresh
+            elif sort_by == DaemonFields.age:
+                return d.created
+            elif sort_by == DaemonFields.mem_use:
+                return d.memory_usage
+            elif sort_by == DaemonFields.mem_lim:
+                return d.memory_request
+            elif sort_by == DaemonFields.image:
+                return d.container_image_id
+            else:
+                return None
+
         # Sort the list for display
         daemons.sort(key=lambda s: (ukn(s.daemon_type), ukn(s.hostname), ukn(s.daemon_id)))
 
@@ -846,7 +878,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table._align['MEM LIM'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for s in natsorted(daemons, key=lambda d: d.name()):
+            for s in natsorted(daemons, key=lambda d: sort_by_field(d)):
                 if s.status_desc:
                     status = s.status_desc
                 else:
