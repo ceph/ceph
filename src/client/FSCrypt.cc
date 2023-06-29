@@ -626,8 +626,10 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
   uint64_t block_off = fscrypt_block_start(pos);
 
   auto hiter = holes.begin();
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ holes=" << holes << " data_len=" << data_len << dendl;
 
   while (pos < target_end) {
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ pos=" << pos << " target_end=" << target_end << dendl;
     bool has_hole = false;
 
     while (hiter != holes.end()) {
@@ -650,10 +652,14 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
     }
 #warning is this the way to do it?
     void *data_pos = bl->c_str() + pos - off;
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ val=" << *(uint64_t *)data_pos << dendl;
     if (!has_hole && *(uint64_t *)data_pos == 0) {
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ zero data detected" << dendl;
       has_hole = true;
     }
 
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ has_hole=" << has_hole << dendl;
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ bl =" << fscrypt_hex_str(bl->c_str() + pos - off, 32) << dendl;
     uint64_t read_end = std::min(end, block_off + FSCRYPT_BLOCK_SIZE);
     uint64_t read_end_aligned = fscrypt_align_ofs(read_end);
     auto chunk_len = read_end_aligned - block_off;
@@ -676,6 +682,7 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
         return r;
       }
     } else {
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ appending zeros: " << chunk_len << " bytes" << dendl;
       chunk.append_zero(chunk_len);
     }
 
@@ -687,6 +694,7 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
     ++cur_block;
     block_off += FSCRYPT_BLOCK_SIZE;
   }
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ newbl.length()=" << newbl.length() << dendl;
 
   bl->swap(newbl);
 
@@ -835,7 +843,14 @@ void FSCrypt::prepare_data_read(FSCryptContextRef& ctx,
   *read_start = (!fscrypt_denc ? off : fscrypt_block_start(off));
   uint64_t end = off + len;
   if (fscrypt_denc) {
+#if 0
+    end = std::min(fscrypt_block_end(end), file_raw_size);
+#endif
+#if 0
     end = std::min(fscrypt_align_ofs(end), file_raw_size);
+#endif
+    end = fscrypt_align_ofs(end);
   }
   *read_len = end - *read_start;
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " ZZZ end=" << end << " file_raw_size=" << file_raw_size << " read_len=" << read_len << dendl;
 }

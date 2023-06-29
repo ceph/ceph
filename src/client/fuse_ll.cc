@@ -865,13 +865,15 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   bufferlist bl;
   int r = cfuse->client->ll_read(fh, off, size, &bl);
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " size=" << size << " r=" << r << " len=" << bl.length() << dendl;
   if (r >= 0) {
     vector<iovec> iov;
     size_t len;
     struct fuse_bufvec *bufv;
 
-    if (bl.get_num_buffers() > IOV_MAX)
+    if (bl.get_num_buffers() > IOV_MAX) {
       bl.rebuild();
+    }
 
     bl.prepare_iov(&iov);
     len = sizeof(struct fuse_bufvec) + sizeof(struct fuse_buf) * (iov.size() - 1);
