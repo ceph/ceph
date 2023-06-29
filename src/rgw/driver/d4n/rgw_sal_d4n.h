@@ -39,7 +39,10 @@ class D4NFilterDriver : public FilterDriver {
   public:
     D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
     {
-      cacheDriver = new rgw::cache::RedisDriver(); // change later -Sam
+      rgw::cache::Partition partition_info;
+      partition_info.location = "RedisCache"; // figure out how to fill rest of partition information -Sam
+
+      cacheDriver = new rgw::cache::RedisDriver(partition_info); // change later -Sam
       objDir = new rgw::d4n::ObjectDirectory();
       blockDir = new rgw::d4n::BlockDirectory();
       cacheBlock = new rgw::d4n::CacheBlock();
