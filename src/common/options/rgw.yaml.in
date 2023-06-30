@@ -3838,4 +3838,15 @@ options:
   flags:
   - startup
   with_legacy: true
-
+- name: rgw_lua_max_memory_per_state
+  type: uint
+  level: advanced
+  desc: Max size of memory used by a single lua state
+  long_desc: This is the maximum size in bytes that a lua state can allocate for its own use.
+    Note that this does not include any memory that can be accessed from lua, but managed by the RGW.
+    If not set, it would use a default of 128K. If set to zero, the amount of memory would 
+    only be limited by the system.
+  default: 128000
+  services:
+  - rgw
+  with_legacy: true

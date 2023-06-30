@@ -20,22 +20,24 @@ template<class... Ts>
 struct is_variant<std::variant<Ts...>> : 
     std::true_type {};
 
+class DoutPrefixProvider;
+
 namespace rgw::lua {
 
 // push ceph time in string format: "%Y-%m-%d %H:%M:%S"
 template <typename CephTime>
-void pushtime(lua_State* L, const CephTime& tp)
+const char* pushtime(lua_State* L, const CephTime& tp)
 {
   const auto tt = CephTime::clock::to_time_t(tp);
   const auto tm = *std::localtime(&tt);
   char buff[64];
-  std::strftime(buff, sizeof(buff), "%Y-%m-%d %H:%M:%S", &tm);
-  lua_pushstring(L, buff);
+  const auto len = std::strftime(buff, sizeof(buff), "%Y-%m-%d %H:%M:%S", &tm);
+  return lua_pushlstring(L, buff, len+1);
 }
 
-inline void pushstring(lua_State* L, std::string_view str)
+static inline const char* pushstring(lua_State* L, std::string_view str)
 {
-  lua_pushlstring(L, str.data(), str.size());
+  return lua_pushlstring(L, str.data(), str.size());
 }
 
 inline void pushvalue(lua_State* L, const std::string& value) {
@@ -64,21 +66,16 @@ inline void unsetglobal(lua_State* L, const char* name)
 void stack_dump(lua_State* L);
 
 class lua_state_guard {
-  lua_State* l;
+  const std::size_t max_memory;
+  const DoutPrefixProvider* const dpp;
+  lua_State* const state;
 public:
-  lua_state_guard(lua_State* _l) : l(_l) {
-    if (perfcounter) {
-      perfcounter->inc(l_rgw_lua_current_vms, 1);
-    }
-  }
-  ~lua_state_guard() {
-    lua_close(l);
-    if (perfcounter) {
-      perfcounter->dec(l_rgw_lua_current_vms, 1);
-    }
-  }
-  void reset(lua_State* _l=nullptr) {l = _l;}
+  lua_state_guard(std::size_t _max_memory, const DoutPrefixProvider* _dpp);
+  ~lua_state_guard();
+  lua_State* get() { return state; }
 };
+
+int dostring(lua_State* L, const char* str);
 
 constexpr const int MAX_LUA_VALUE_SIZE = 1000;
 constexpr const int MAX_LUA_KEY_ENTRIES = 100000;

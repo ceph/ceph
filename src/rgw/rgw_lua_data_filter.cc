@@ -84,33 +84,37 @@ struct BufferlistMetaTable : public EmptyMetaTable {
 };
 
 int RGWObjFilter::execute(bufferlist& bl, off_t offset, const char* op_name) const {
-  auto L = luaL_newstate();
-  lua_state_guard lguard(L);
-
-  open_standard_libs(L);
-
-  create_debug_action(L, s->cct);  
-
-  // create the "Data" table
-  create_metatable<BufferlistMetaTable>(L, true, &bl);
-  lua_getglobal(L, BufferlistMetaTable::TableName().c_str());
-  ceph_assert(lua_istable(L, -1));
-
-  // create the "Request" table
-  request::create_top_metatable(L, s, op_name);
-
-  // create the "Offset" variable
-  lua_pushinteger(L, offset);
-  lua_setglobal(L, "Offset");
-
-  if (s->penv.lua.background) {
-    // create the "RGW" table
-    s->penv.lua.background->create_background_metatable(L);
-    lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
-    ceph_assert(lua_istable(L, -1));
+  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state, s);
+  auto L = lguard.get();
+  if (!L) {
+    ldpp_dout(s, 1) << "Failed to create state for Lua data context" << dendl;
+    return -ENOMEM;
   }
 
   try {
+    open_standard_libs(L);
+
+    create_debug_action(L, s->cct);  
+
+    // create the "Data" table
+    create_metatable<BufferlistMetaTable>(L, true, &bl);
+    lua_getglobal(L, BufferlistMetaTable::TableName().c_str());
+    ceph_assert(lua_istable(L, -1));
+
+    // create the "Request" table
+    request::create_top_metatable(L, s, op_name);
+
+    // create the "Offset" variable
+    lua_pushinteger(L, offset);
+    lua_setglobal(L, "Offset");
+
+    if (s->penv.lua.background) {
+      // create the "RGW" table
+      s->penv.lua.background->create_background_metatable(L);
+      lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
+      ceph_assert(lua_istable(L, -1));
+    }
+
     // execute the lua script
     if (luaL_dostring(L, script.c_str()) != LUA_OK) {
       const std::string err(lua_tostring(L, -1));

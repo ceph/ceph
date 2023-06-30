@@ -18,6 +18,8 @@ A request (pre or post) or data (get or put) context script may be constrained t
 The request context script can also access fields in the request and modify certain fields, as well as the `Global RGW Table`_.
 The data context script can access the content of the object as well as the request fields and the `Global RGW Table`_. 
 All Lua language features can be used in all contexts.
+An execution of a script in a context can use up to 500K byte of memory. This include all libraries used by Lua, but not the memory which is managed by the RGW itself, and may be accessed from Lua.
+To change this default value, use the ``rgw_lua_max_memory_per_state`` configuration parameter. Note that the basic overhead of Lua with its standard libraries is ~32K bytes. To disable the limit, use zero or a negative number.
 
 By default, all Lua standard libraries are available in the script, however, in order to allow for other Lua modules to be used in the script, we support adding packages to an allowlist:
 
