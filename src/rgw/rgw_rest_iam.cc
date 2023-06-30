@@ -52,6 +52,15 @@ bool RGWHandler_REST_IAM::action_exists(const req_state* s)
 RGWOp *RGWHandler_REST_IAM::op_post()
 {
   if (s->info.args.exists("Action")) {
+    boost::char_separator<char> sep("&");
+    string post_body = bl_post_body.c_str();
+    boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
+    for (const auto& t : tokens) {
+      auto pos = t.find("=");
+      if (pos != string::npos) {
+        s->info.args.append(t.substr(0,pos), url_decode(t.substr(pos+1, t.size() -1), true));
+      }
+    }
     const std::string action_name = s->info.args.get("Action");
     const auto action_it = op_generators.find(action_name);
     if (action_it != op_generators.end()) {

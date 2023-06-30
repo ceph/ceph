@@ -201,7 +201,7 @@ bool RGWRole::validate_input(const DoutPrefixProvider* dpp)
     return false;
   }
 
-  std::regex regex_name("[A-Za-z0-9:=,.@-]+");
+  std::regex regex_name("[A-Za-z0-9_+=,.@-]+");
   if (! std::regex_match(info.name, regex_name)) {
     ldpp_dout(dpp, 0) << "ERROR: Invalid chars in name " << dendl;
     return false;
