@@ -43,6 +43,10 @@ static inline uint64_t fscrypt_block_end(uint64_t ofs) {
 
 static inline std::string fscrypt_hex_str(const void *p, int len)
 {
+  if (!p) {
+    return "<null>";
+  }
+
   bufferlist bl;
   bl.append_hole(len);
   memcpy(bl.c_str(), p, len);

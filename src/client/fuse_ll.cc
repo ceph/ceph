@@ -865,7 +865,6 @@ static void fuse_ll_read(fuse_req_t req, fuse_ino_t ino, size_t size, off_t off,
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
   bufferlist bl;
   int r = cfuse->client->ll_read(fh, off, size, &bl);
-generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " size=" << size << " r=" << r << " len=" << bl.length() << dendl;
   if (r >= 0) {
     vector<iovec> iov;
     size_t len;
