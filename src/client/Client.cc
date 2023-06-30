@@ -890,6 +890,7 @@ void Client::update_inode_file_size(Inode *in, int issued, uint64_t size,
 {
   uint64_t prior_size = in->size;
 
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " in.size=" << in->size << " in.tseq=" << in->truncate_seq << " size=" << size << " truncate_seq=" << truncate_seq << " truncate_size=" << truncate_size << dendl;
   if (truncate_seq > in->truncate_seq ||
       (truncate_seq == in->truncate_seq && size > in->size)) {
     ldout(cct, 10) << "size " << in->size << " -> " << size << dendl;
@@ -1078,7 +1079,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     if (st->fscrypt_file.size() >= sizeof(uint64_t)) {
       in->fscrypt_file = st->fscrypt_file;
     }
-    update_inode_file_size(in, issued, in->effective_size(), st->truncate_seq, st->truncate_size);
+    update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
   }
 
   if (in->is_dir()) {
@@ -1405,8 +1406,10 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
         dname = orig_dname;
       }
 
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " ist.size=" << ist.size << dendl;
       Inode *in = add_update_inode(&ist, request->sent_stamp, session,
 				   request->perms);
+ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " in.size=" << in->size << " eff=" << in->effective_size() << dendl;
       Dentry *dn;
       if (diri->dir->dentries.count(dname)) {
 	Dentry *olddn = diri->dir->dentries[dname];
