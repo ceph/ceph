@@ -294,9 +294,7 @@ if(WITH_RADOSGW_D4N)
   target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
   target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
 
-  #add_dependencies(rgw_common boost_redis) 
-  #target_link_libraries(rgw_common PRIVATE boost_redis)
-  #target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/boost_redis/includes")
+  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/boost_redis/include")
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
