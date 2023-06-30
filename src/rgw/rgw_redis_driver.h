@@ -37,21 +37,6 @@ class RedisDriver : public CacheDriver {
       remove_partition_info(partition_info);
     }
 
-    virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
-    virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
-    virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) override;
-    virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
-    virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) override;
-    virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key) override;
-    virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
-    virtual int set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
-    virtual int update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
-    virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) override;
-    virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) override;
-    virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) override;
-
-    virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override;
-
     /* Entry */
     virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) override;
     virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) override;
@@ -63,6 +48,21 @@ class RedisDriver : public CacheDriver {
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; } // how to get this from redis server? -Sam
     static std::optional<Partition> get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type);
     static std::vector<Partition> list_partitions(const DoutPrefixProvider* dpp);
+
+    virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
+    virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
+    virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) override;
+    virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) override;
+    virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key) override;
+    virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
+    virtual int set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
+    virtual int update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
+    virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) override;
+    virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) override;
+    virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) override;
+
+    virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override;
+    virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
 
     struct libaio_handler { // should this be the same as SSDDriver? -Sam
       rgw::Aio* throttle = nullptr;
@@ -90,11 +90,11 @@ class RedisDriver : public CacheDriver {
     CephContext* cct;
 
     int find_client(const DoutPrefixProvider* dpp);
+    int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
+    std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
+    int remove_entry(const DoutPrefixProvider* dpp, std::string key);
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
-    int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
-    int remove_entry(const DoutPrefixProvider* dpp, std::string key);
-    std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
 
   private:
     // unique_ptr with custom deleter for struct aiocb
