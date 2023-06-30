@@ -2116,6 +2116,15 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
       /* fetches the entry pointed to by head.bucket */
       ret = sal_lc->get_entry(lc_shard, head->get_marker(), &entry);
+      if (ret == -ENOENT) {
+        ret = sal_lc->get_next_entry(lc_shard, head->get_marker(), &entry);
+        if (ret < 0) {
+          ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_next_entry(lc_shard, "
+                             << "head.marker, entry) returned error ret==" << ret
+                             << dendl;
+          goto exit;
+        }
+      }
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->get_entry(lc_shard, head.marker, entry) "
 			   << "returned error ret==" << ret << dendl;
