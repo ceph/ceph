@@ -295,7 +295,13 @@ public:
 	lat.lock->unlock();
 	/* LOCKED */
       } else {
-	/* BucketCacheEntry not in cache, we need to create it */
+	/* BucketCacheEntry not in cache */
+	if (! (flags & BucketCache<D, B>::FLAG_CREATE)) {
+	  /* the caller does not want to instantiate a new cache
+	   * entry (i.e., only wants to notify on an existing one) */
+	  return result;
+	}
+	/* we need to create it */
 	b = static_cast<BucketCacheEntry<D, B>*>(
 	  lru.insert(&fac, cohort::lru::Edge::MRU, iflags));
 	if (b) [[likely]] {
@@ -383,7 +389,8 @@ public:
 
     int rc __attribute__((unused)) = 0;
     GetBucketResult gbr =
-      get_bucket(sal_bucket->get_name(), BucketCache<D, B>::FLAG_LOCK);
+      get_bucket(sal_bucket->get_name(),
+		 BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b /* XXX again, can this fail? */) {
       if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
@@ -447,7 +454,7 @@ public:
 	proc_result();
       }
       lru.unref(b, cohort::lru::FLAG_NONE);
-    }
+    } /* b */
 
     return 0;
   } /* list_bucket */
@@ -525,6 +532,7 @@ public:
 	}
       } /* all events */
       txn->commit();
+      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
     return rc;
   } /* notify */
