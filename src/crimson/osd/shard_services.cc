@@ -671,17 +671,17 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    pg_shard_t(local_state.whoami, info->pgid.shard),
 	    acting);
 
-	  PeeringCtx rctx;
+	  std::unique_ptr<PeeringCtx> rctx = std::make_unique<PeeringCtx>();
 	  create_pg_collection(
-	    rctx.transaction,
+	    rctx->transaction,
 	    info->pgid,
 	    info->pgid.get_split_bits(pp->get_pg_num()));
 	  init_pg_ondisk(
-	    rctx.transaction,
+	    rctx->transaction,
 	    info->pgid,
 	    pp);
 
-	  pg->init(
+	  return pg->init(
 	    role,
 	    up,
 	    up_primary,
@@ -689,12 +689,13 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    acting_primary,
 	    info->history,
 	    info->past_intervals,
-	    rctx.transaction);
-
-	  return start_operation<PGAdvanceMap>(
-	    pg, *this, get_map()->get_epoch(), std::move(rctx), true
-	  ).second.then([pg=pg] {
-	    return seastar::make_ready_future<Ref<PG>>(pg);
+	    rctx->transaction
+	  ).then([this, pg=pg, rctx=std::move(rctx)] {
+	    return start_operation<PGAdvanceMap>(
+	      pg, *this, get_map()->get_epoch(), std::move(*rctx), true
+	    ).second.then([pg=pg] {
+	      return seastar::make_ready_future<Ref<PG>>(pg);
+	    });
 	  });
 	});
     });

@@ -136,7 +136,7 @@ PG::PG(
     osdriver(
       &shard_services.get_store(),
       coll_ref,
-      pgid.make_pgmeta_oid()),
+      make_snapmapper_oid()),
     snap_mapper(
       this->shard_services.get_cct(),
       &osdriver,
@@ -596,7 +596,7 @@ void PG::schedule_renew_lease(epoch_t last_peering_reset, ceph::timespan delay)
 }
 
 
-void PG::init(
+seastar::future<> PG::init(
   int role,
   const vector<int>& newup, int new_up_primary,
   const vector<int>& newacting, int new_acting_primary,
@@ -607,6 +607,16 @@ void PG::init(
   peering_state.init(
     role, newup, new_up_primary, newacting,
     new_acting_primary, history, pi, t);
+  assert(coll_ref);
+  return shard_services.get_store().exists(
+    get_collection_ref(), make_snapmapper_oid()
+  ).safe_then([&t, this](bool existed) {
+      if (!existed) {
+        t.touch(coll_ref->get_cid(), make_snapmapper_oid());
+      }
+    },
+    ::crimson::ct_error::assert_all{"unexpected eio"}
+  );
 }
 
 seastar::future<> PG::read_state(crimson::os::FuturizedStore::Shard* store)
