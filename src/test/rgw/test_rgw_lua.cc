@@ -1505,3 +1505,41 @@ TEST(TestRGWLua, WriteDataFail)
   ASSERT_NE(rc, 0);
 }
 
+TEST(TestRGWLua, MemoryLimit)
+{
+  std::string script = "print(\"hello world\")";
+
+  DEFINE_REQ_STATE;
+  
+  // memory should be sufficient
+  s.cct->_conf->rgw_lua_max_memory_per_state = 1024*32;
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  
+  // no memory limit
+  s.cct->_conf->rgw_lua_max_memory_per_state = 0;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  
+  // not enough memory to start lua
+  s.cct->_conf->rgw_lua_max_memory_per_state = 2048;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+
+  // not enough memory for initial setup
+  s.cct->_conf->rgw_lua_max_memory_per_state = 1024*16;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  // not enough memory for the script
+  script = R"(
+    t = {}
+    for i = 1,1000 do
+      table.insert(t, i)
+    end
+  )";
+  s.cct->_conf->rgw_lua_max_memory_per_state = 1024*32;
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+}
+

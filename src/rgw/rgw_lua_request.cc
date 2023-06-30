@@ -816,37 +816,41 @@ int execute(
     RGWOp* op,
     const std::string& script)
 {
-  auto L = luaL_newstate();
-  const char* op_name = op ? op->name() : "Unknown";
-  lua_state_guard lguard(L);
-
-  open_standard_libs(L);
-  set_package_path(L, s->penv.lua.luarocks_path);
-
-  create_debug_action(L, s->cct);  
-  
-  create_metatable<RequestMetaTable>(L, true, s, const_cast<char*>(op_name));
-
-  lua_getglobal(L, RequestMetaTable::TableName().c_str());
-  ceph_assert(lua_istable(L, -1));
-
-  // add the ops log action
-  pushstring(L, RequestLogAction);
-  lua_pushlightuserdata(L, rest);
-  lua_pushlightuserdata(L, olog);
-  lua_pushlightuserdata(L, s);
-  lua_pushlightuserdata(L, op);
-  lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
-  lua_rawset(L, -3);
-  
-  if (s->penv.lua.background) {
-    s->penv.lua.background->create_background_metatable(L);
-    lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
-    ceph_assert(lua_istable(L, -1));
+  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state, s);
+  auto L = lguard.get();
+  if (!L) {
+    ldpp_dout(s, 1) << "Failed to create state for Lua request context" << dendl;
+    return -ENOMEM;
   }
+  const char* op_name = op ? op->name() : "Unknown";
 
   int rc = 0;
   try {
+    open_standard_libs(L);
+    set_package_path(L, s->penv.lua.luarocks_path);
+
+    create_debug_action(L, s->cct);  
+    
+    create_metatable<RequestMetaTable>(L, true, s, const_cast<char*>(op_name));
+
+    lua_getglobal(L, RequestMetaTable::TableName().c_str());
+    ceph_assert(lua_istable(L, -1));
+
+    // add the ops log action
+    pushstring(L, RequestLogAction);
+    lua_pushlightuserdata(L, rest);
+    lua_pushlightuserdata(L, olog);
+    lua_pushlightuserdata(L, s);
+    lua_pushlightuserdata(L, op);
+    lua_pushcclosure(L, RequestLog, FOUR_UPVALS);
+    lua_rawset(L, -3);
+    
+    if (s->penv.lua.background) {
+      s->penv.lua.background->create_background_metatable(L);
+      lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
+      ceph_assert(lua_istable(L, -1));
+    }
+
     // execute the lua script
     if (luaL_dostring(L, script.c_str()) != LUA_OK) {
       const std::string err(lua_tostring(L, -1));
