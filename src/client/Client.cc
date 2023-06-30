@@ -8388,7 +8388,6 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
   ldout(cct, 10) << __func__ << " on " << in->ino << " snap/dev" << in->snapid
 	   << " mode 0" << oct << in->mode << dec
 	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
-ldout(cct, 0) << __FILE__ << __LINE__ << __func__ << " ZZZ size=" << in->size << " eff=" << in->effective_size() << " max_size=" << in->max_size << " wanted_max=" << in->wanted_max_size << " req_max" << in->requested_max_size << dendl;
   memset(st, 0, sizeof(struct stat));
   if (use_faked_inos())
     st->st_ino = in->faked_ino;
@@ -10553,7 +10552,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   uint64_t read_start;
   uint64_t read_len;
 
-ldout(cct, 0) << __FILE__ << __LINE__ << __func__ << " ZZZ size=" << in->size << " eff=" << in->effective_size() << dendl;
   FSCryptFDataDencRef fscrypt_denc;
   fscrypt->prepare_data_read(in->fscrypt_ctx,
                              &in->fscrypt_key_validator,
@@ -10632,7 +10630,6 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   uint64_t read_start;
   uint64_t read_len;
 
-ldout(cct, 0) << __FILE__ << __LINE__ << __func__ << " ZZZ size=" << in->size << " eff=" << in->effective_size() << dendl;
   FSCryptFDataDencRef fscrypt_denc;
   fscrypt->prepare_data_read(in->fscrypt_ctx,
                              &in->fscrypt_key_validator,
@@ -10957,13 +10954,15 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       bufferlist newbl;
       startbl.splice(0, ofs_in_start_block, &newbl);
 
+      int orig_len = bl.length();
+
       /* append new data */
       newbl.claim_append(bl);
 
-      if (startbl.length() > bl.length()) {
+      if (startbl.length() > orig_len) {
         /* can happen if start and end are in the same block */
         bufferlist tail;
-        startbl.splice(bl.length(), startbl.length()-bl.length(), &tail);
+        startbl.splice(orig_len, startbl.length()-orig_len, &tail);
         newbl.claim_append(tail);
 
         if (newbl.length() < FSCRYPT_BLOCK_SIZE) {
@@ -11015,7 +11014,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   else
     want = CEPH_CAP_FILE_BUFFER;
   int r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " get_caps r=" << r << dendl;
   if (r < 0)
     return r;
 
@@ -11025,7 +11023,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " get_caps r=" << r << dendl;
 
     put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
     r = __setattrx(in, &stx, CEPH_SETATTR_KILL_SGUID, f->actor_perms);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " put_cap_ref r=" << r << dendl;
     if (r < 0) {
       put_cap_ref(in, CEPH_CAP_FILE_WR);
       return r;
@@ -11084,7 +11081,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " put_cap_ref r=" << r << dendl;
 				 offset, size, *pbl, ceph::real_clock::now(),
 				 0);
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " put_cap_ref r=" << r << dendl;
 
     if (r < 0)
       goto done;
@@ -11111,7 +11107,6 @@ ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " put_cap_ref r=" << r << dendl;
     r = onfinish.wait();
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " put_cap_ref r=" << r << dendl;
     if (r < 0)
       goto done;
   }
@@ -11177,7 +11172,6 @@ done:
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
-ldout(cct, 0) << __FILE__ << ":" << __LINE__ << " _write done r=" << r << dendl;
   return r;
 }
 
