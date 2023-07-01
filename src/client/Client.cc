@@ -1076,7 +1076,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   if (new_version ||
       (new_issued & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR))) {
     in->layout = st->layout;
-    in->fscrypt_file = st->fscrypt_file;
+    if (st->fscrypt_file.size() >= sizeof(uint64_t)) {
+      in->fscrypt_file = st->fscrypt_file;
+    }
     update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
   }
 
