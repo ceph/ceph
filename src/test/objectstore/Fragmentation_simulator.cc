@@ -11,6 +11,7 @@
 #include "include/buffer_fwd.h"
 #include "os/ObjectStore.h"
 #include "test/objectstore/ObjectStoreImitator.h"
+#include <boost/random/uniform_int.hpp>
 #include <fmt/core.h>
 #include <gtest/gtest.h>
 #include <iostream>
@@ -46,7 +47,6 @@ public:
   using WorkloadGeneratorRef = std::shared_ptr<WorkloadGenerator>;
 
   void add_generator(WorkloadGeneratorRef gen);
-  void clear_generators() { generators.clear(); }
   int begin_simulation_with_generators();
   void init(const std::string &alloc_type, uint64_t size,
             uint64_t min_alloc_size = 4096);
@@ -69,7 +69,7 @@ void FragmentationSimulator::init(const std::string &alloc_type, uint64_t size,
   std::cout << "Initializing ObjectStoreImitator" << std::endl;
   os = new ObjectStoreImitator(g_ceph_context, "", min_alloc_size);
 
-  std::cout << "Initializing allocator: " << alloc_type << " size: 0x"
+  std::cout << "Initializing allocator: " << alloc_type << ", size: 0x"
             << std::hex << size << std::dec << "\n"
             << std::endl;
   os->init_alloc(alloc_type, size);
@@ -93,7 +93,9 @@ int FragmentationSimulator::begin_simulation_with_generators() {
       return r;
   }
 
+  generators.clear();
   os->print_status();
+  os->print_per_object_fragmentation();
   return 0;
 }
 
@@ -159,11 +161,56 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
   }
 };
 
+typedef boost::mt11213b gen_type;
+
+struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
+  std::string name() override { return "RandomCW"; }
+  int generate_txns(ObjectStore::CollectionHandle &ch,
+                    ObjectStoreImitator *os) override {
+
+    hobject_t h;
+    h.oid = fmt::format("obj");
+    h.set_hash(1);
+    h.pool = 1;
+    ghobject_t obj(h);
+
+    std::vector<ObjectStore::Transaction> tls;
+
+    ObjectStore::Transaction t1;
+    t1.create(ch->get_cid(), obj);
+    tls.emplace_back(std::move(t1));
+
+    gen_type rng(0);
+    boost::uniform_int<> u_size(0, _1Mb * 4);
+    boost::uniform_int<> u_offset(0, _1Mb);
+
+    for (unsigned i{0}; i < 100; ++i) {
+      ObjectStore::Transaction t2;
+
+      auto size = u_size(rng);
+      auto offset = u_offset(rng);
+
+      t2.write(ch->get_cid(), obj, offset, size, make_bl(size, 'c'));
+      tls.emplace_back(std::move(t2));
+    }
+
+    os->queue_transactions(ch, tls);
+    os->verify_objects(ch);
+    return 0;
+  }
+};
+
 // ----------- Tests -----------
 
 TEST_P(FragmentationSimulator, SimpleCWGenerator) {
   init(GetParam(), _1Gb);
   add_generator(std::make_shared<SimpleCWGenerator>());
+  begin_simulation_with_generators();
+}
+
+TEST_P(FragmentationSimulator, RandomCWGenerator) {
+  init(GetParam(), _1Mb * 8);
+  add_generator(std::make_shared<RandomCWGenerator>());
   begin_simulation_with_generators();
 }
 

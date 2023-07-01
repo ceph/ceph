@@ -7,6 +7,7 @@
 #pragma once
 
 #include "include/common_fwd.h"
+#include "include/intarith.h"
 #include "os/ObjectStore.h"
 #include "os/bluestore/Allocator.h"
 #include "os/bluestore/bluestore_types.h"
@@ -42,74 +43,135 @@ private:
     uint32_t expected_object_size = 0;
     uint32_t expected_write_size = 0;
 
-    // We assume these extents are sorted according by "logical" order.
-    PExtentVector extents;
+    typedef std::map<uint64_t, bluestore_pextent_t> ExtentMap;
+    ExtentMap extent_map;
 
     Object(Collection *c_, const ghobject_t &oid_, bool exists_ = false,
            uint64_t nid_ = 0, uint64_t size_ = 0)
         : c(c_), oid(oid_), exists(exists_), nid(nid_), size(size_) {}
 
-    void punch_hole(uint64_t offset, uint64_t length,
+    void punch_hole(uint64_t offset, uint64_t length, uint64_t min_alloc_size,
                     PExtentVector &old_extents) {
-      if (offset >= size || length == 0)
+      if (extent_map.empty())
         return;
 
-      if (offset + length >= size) {
-        length = size - offset;
-      }
+      PExtentVector to_be_punched;
+      std::vector<uint64_t> deleted_keys;
+      uint64_t end = offset + length;
 
-      uint64_t l_offset{0}, punched_length{0};
-      PExtentVector to_be_punched, remains;
-      for (auto e : extents) {
-        if (l_offset > offset && l_offset - length >= offset)
-          break;
+      uint64_t re_add_key{0};
+      bluestore_pextent_t re_add;
 
-        // Found where we need to punch
-        if (l_offset >= offset) {
-          // We only punched a portion of the extent
-          if (e.length + punched_length > length) {
-            uint64_t left = e.length + punched_length - length;
-            e.length = length - punched_length;
-            remains.emplace_back(e.offset + e.length, left);
+      // std::cout << "current extents:\n";
+      // for (auto &[l_off, e] : extent_map) {
+      //   std::cout << "l_off " << l_off << ", off " << e.offset << ", len "
+      //             << e.length << std::endl;
+      // }
+
+      // std::cout << "wants to punch: off " << offset << ", len " << length
+      //           << std::endl;
+
+      auto it = extent_map.lower_bound(offset);
+      if ((it == extent_map.end() || it->first > offset) &&
+          it != extent_map.begin()) {
+        it = std::prev(it);
+
+        // diff between where we need to punch and current position
+        auto diff = offset - it->first;
+        // std::cout << "diff " << diff << " , p_off " << it->first <<
+        // std::endl;
+
+        // offset will be inside this extent
+        // otherwise skip over this extent and assume 'offset' has been passed
+        if (diff < it->second.length) {
+          // the hole is bigger than the remaining of the extent
+          if (end > it->first + it->second.length) {
+            to_be_punched.emplace_back(it->second.offset + diff,
+                                       it->second.length - diff);
+          } else { // else the hole is entirely in this extent
+            to_be_punched.emplace_back(it->second.offset + diff, length);
+
+            re_add_key = end;
+            re_add.offset = it->second.offset + diff + length;
+            re_add.length = it->second.length - diff - length;
+
+            // std::cout << "re_add: off " << re_add.offset << ", len "
+            //           << re_add.length << std::endl;
           }
 
-          to_be_punched.push_back(e);
-          punched_length += e.length;
-        } else { // else the extent will remain
-          remains.push_back(e);
+          // Modify the remaining extent's length
+          it->second.length = diff;
         }
 
-        l_offset += e.length;
+        it++;
       }
 
-      size -= punched_length;
-      extents = remains;
+      // this loop is only valid when 'it' is in the hole
+      while (it != extent_map.end() && it->first < end) {
+        if (it->first + it->second.length > end) { // last extent to punched
+          uint64_t remaining = it->first + it->second.length - end;
+          uint64_t punched = it->second.length - remaining;
+
+          to_be_punched.emplace_back(it->second.offset, punched);
+          deleted_keys.push_back(it->first);
+
+          re_add.offset = it->second.offset + punched;
+          re_add.length = remaining;
+          re_add_key = it->first + punched;
+
+          it++;
+          break;
+        }
+
+        deleted_keys.push_back(it->first);
+        to_be_punched.push_back(it->second);
+        it++;
+      }
+
+      for (auto k : deleted_keys) {
+        extent_map.erase(k);
+      }
+
+      if (re_add.length > 0) {
+        extent_map[re_add_key] = re_add;
+      }
+
       old_extents = to_be_punched;
+      // std::cout << "to be deleted\n";
+      // for (auto e : to_be_punched) {
+      //   std::cout << "off " << e.offset << ", len " << e.length << std::endl;
+      // }
     }
 
-    void append(PExtentVector &ext) {
+    void append(PExtentVector &ext, uint64_t offset) {
       for (auto &e : ext) {
-        extents.push_back(e);
-        size += e.length;
+        ceph_assert(e.length > 0);
+        // std::cout << "adding off " << offset << ", len " << e.length
+        //           << std::endl;
+        extent_map[offset] = e;
+        offset += e.length;
       }
-
-      std::sort(extents.begin(), extents.end(),
-                [](bluestore_pextent_t &a, bluestore_pextent_t &b) {
-                  return a.offset < b.offset;
-                });
     }
 
     void verify_extents() {
-      uint64_t total{0};
-      for (auto &e : extents) {
-        ceph_assert(total <= e.offset);
-        ceph_assert(e.length > 0);
-        total += e.length;
+      // std::cout << "verifying extents:\n";
+      for (auto &[l_off, ext] : extent_map) {
+        // std::cout << l_off << " " << ext.offset << " " << ext.length
+        //           << std::endl;
+        ceph_assert(ext.is_valid());
+        ceph_assert(ext.length > 0);
       }
+    }
 
-      ceph_assert(total == size);
+    uint64_t ext_length() {
+      uint64_t ret{0};
+      for (auto &[_, ext] : extent_map) {
+        ret += ext.length;
+      }
+      return ret;
     }
   };
+
   typedef boost::intrusive_ptr<Object> ObjectRef;
 
   struct Collection : public CollectionImpl {
@@ -183,12 +245,6 @@ private:
       o->oid = new_oid;
     }
 
-    void verify_objects() {
-      for (auto &[_, obj] : objects) {
-        obj->verify_extents();
-      }
-    }
-
     Collection(ObjectStoreImitator *sim_, coll_t cid_)
         : CollectionImpl(sim_->cct, cid_), exists(true), commit_queue(nullptr) {
     }
@@ -228,7 +284,8 @@ private:
   int _do_write(CollectionRef &c, ObjectRef &o, uint64_t offset,
                 uint64_t length, ceph::buffer::list &bl,
                 uint32_t fadvise_flags);
-  int _do_alloc_write(CollectionRef c, ObjectRef &o, bufferlist &bl);
+  int _do_alloc_write(CollectionRef c, ObjectRef &o, bufferlist &bl,
+                      uint64_t offset, uint64_t length);
 
   void _do_truncate(CollectionRef &c, ObjectRef &o, uint64_t offset);
   int _do_zero(CollectionRef &c, ObjectRef &o, uint64_t offset, size_t length);
@@ -267,6 +324,13 @@ public:
   void init_alloc(const std::string &alloc_type, uint64_t size);
   void print_status();
   void verify_objects(CollectionHandle &ch);
+
+  // Generate metrics for per-object fragmentation, defined by:
+  // frag_score = 1 - sum((size proportion of each extents / object size) ^
+  // index of each extent in a vector sorted by descending length).
+  // This should only be called after the  generators are finished as it will
+  // attempt to change an object's extents.
+  void print_per_object_fragmentation();
 
   // Overrides
 

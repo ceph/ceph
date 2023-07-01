@@ -8,6 +8,9 @@
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "include/intarith.h"
+#include "os/bluestore/bluestore_types.h"
+#include <algorithm>
+#include <cmath>
 
 #define dout_context cct
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
@@ -31,7 +34,33 @@ void ObjectStoreImitator::print_status() {
 
 void ObjectStoreImitator::verify_objects(CollectionHandle &ch) {
   Collection *c = static_cast<Collection *>(ch.get());
-  c->verify_objects();
+  for (auto &[_, obj] : c->objects) {
+    obj->verify_extents();
+  }
+}
+
+void ObjectStoreImitator::print_per_object_fragmentation() {
+  for (auto &[_, coll_ref] : coll_map) {
+    double coll_total{0};
+    for (auto &[id, obj] : coll_ref->objects) {
+      double frag_score{1};
+      unsigned i{1};
+      uint64_t ext_size = obj->ext_length();
+
+      for (auto &[_, ext] : obj->extent_map) {
+        double ext_frag =
+            std::pow(((double)ext.length / (double)ext_size), (double)i++);
+        frag_score -= ext_frag;
+      }
+      coll_total += frag_score;
+
+      std::cout << "Object: " << id.hobj.oid.name
+                << ", hash: " << id.hobj.get_hash()
+                << " fragmentation score: " << frag_score << std::endl;
+    }
+    double avg = coll_total / coll_ref->objects.size();
+    std::cout << "Average obj fragmentation " << avg << std::endl;
+  }
 }
 
 // ------- Transactions -------
@@ -324,7 +353,7 @@ void ObjectStoreImitator::_assign_nid(ObjectRef &o) {
 int ObjectStoreImitator::_do_zero(CollectionRef &c, ObjectRef &o,
                                   uint64_t offset, size_t length) {
   PExtentVector old_extents;
-  o->punch_hole(offset, length, old_extents);
+  o->punch_hole(offset, length, min_alloc_size, old_extents);
   alloc->release(old_extents);
   return 0;
 }
@@ -340,35 +369,37 @@ int ObjectStoreImitator::_do_read(Collection *c, ObjectRef &o, uint64_t offset,
 int ObjectStoreImitator::_do_write(CollectionRef &c, ObjectRef &o,
                                    uint64_t offset, uint64_t length,
                                    bufferlist &bl, uint32_t fadvise_flags) {
-  ceph_assert(length == bl.length());
-
-  int r = 0;
-  uint64_t end = length + offset;
-
   if (length == 0) {
     return 0;
   }
+  ceph_assert(length == bl.length());
+
+  if (offset + length > o->size) {
+    o->size = offset + length;
+  }
+
+  if (length < min_alloc_size) {
+    return 0;
+  }
+
+  // roundup offset, consider the beginning as deffered
+  offset = p2roundup(offset, min_alloc_size);
+  // align length, consider the end as deffered
+  length = p2align(length, min_alloc_size);
 
   PExtentVector punched;
-  o->punch_hole(offset, length, punched);
+  o->punch_hole(offset, length, min_alloc_size, punched);
   alloc->release(punched);
 
   // all writes will trigger an allocation
-  r = _do_alloc_write(c, o, bl);
+  int r = _do_alloc_write(c, o, bl, offset, length);
   if (r < 0) {
     derr << __func__ << " _do_alloc_write failed with " << cpp_strerror(r)
          << dendl;
-    goto out;
+    return r;
   }
 
-  if (end > o->size) {
-    o->size = end;
-  }
-
-  r = 0;
-
-out:
-  return r;
+  return 0;
 }
 
 int ObjectStoreImitator::_do_clone_range(CollectionRef &c, ObjectRef &oldo,
@@ -396,18 +427,18 @@ int ObjectStoreImitator::_write(CollectionRef &c, ObjectRef &o, uint64_t offset,
 }
 
 int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
-                                         bufferlist &bl) {
+                                         bufferlist &bl, uint64_t offset,
+                                         uint64_t length) {
 
   // No compression for now
-  uint64_t need = p2roundup(static_cast<uint64_t>(bl.length()), min_alloc_size);
-
+  uint64_t need = length;
   PExtentVector prealloc;
 
   int64_t prealloc_left =
       alloc->allocate(need, min_alloc_size, need, 0, &prealloc);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
     derr << __func__ << " failed to allocate 0x" << std::hex << need
-         << " allocated 0x " << (prealloc_left < 0 ? 0 : prealloc_left)
+         << " allocated 0x" << (prealloc_left < 0 ? 0 : prealloc_left)
          << " min_alloc_size 0x" << min_alloc_size << " available 0x "
          << alloc->get_free() << std::dec << dendl;
     if (prealloc.size())
@@ -439,7 +470,7 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
     }
   }
 
-  o->append(extents);
+  o->append(extents, offset);
 
   if (prealloc_left > 0) {
     PExtentVector old_extents;
@@ -459,11 +490,12 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
 
 void ObjectStoreImitator::_do_truncate(CollectionRef &c, ObjectRef &o,
                                        uint64_t offset) {
-  if (offset == o->size)
+  // current size already satisfied
+  if (offset >= o->size)
     return;
 
   PExtentVector old_extents;
-  o->punch_hole(offset, o->size - offset, old_extents);
+  o->punch_hole(offset, o->size - offset, min_alloc_size, old_extents);
   o->size = offset;
   alloc->release(old_extents);
 }
