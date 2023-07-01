@@ -113,6 +113,10 @@ namespace librados {
 struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   explicit inconsistent_obj_wrapper(const hobject_t& hoid);
 
+  void merge(obj_err_t other) {
+    errors |= other.errors;
+  }
+
   void set_object_info_inconsistency() {
     errors |= obj_err_t::OBJECT_INFO_INCONSISTENCY;
   }
