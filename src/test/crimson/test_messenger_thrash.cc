@@ -105,7 +105,7 @@ class SyntheticDispatcher final
   }
 
   std::optional<seastar::future<>> ms_dispatch(crimson::net::ConnectionRef con,
-                                               MessageRef m) {
+                                               MessageRef m) final {
     if (verbose) {
       logger().warn("{}: con = {}", __func__, *con);
     }
@@ -134,17 +134,24 @@ class SyntheticDispatcher final
     }
   }
 
-  void ms_handle_accept(crimson::net::ConnectionRef conn) {
+  void ms_handle_accept(
+      crimson::net::ConnectionRef conn,
+      seastar::shard_id new_shard,
+      bool is_replace) final {
     logger().info("{} - Connection:{}", __func__, *conn);
+    assert(new_shard == seastar::this_shard_id());
   }
 
-  void ms_handle_connect(crimson::net::ConnectionRef conn) {
+  void ms_handle_connect(
+      crimson::net::ConnectionRef conn,
+      seastar::shard_id new_shard) final {
     logger().info("{} - Connection:{}", __func__, *conn);
+    assert(new_shard == seastar::this_shard_id());
   }
 
-  void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace);
+  void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace) final;
 
-  void ms_handle_remote_reset(crimson::net::ConnectionRef con) {
+  void ms_handle_remote_reset(crimson::net::ConnectionRef con) final {
     clear_pending(con);
   }
 
@@ -348,7 +355,8 @@ class SyntheticWorkload {
                           const uint64_t nonce,
                           const entity_addr_t& addr) {
      crimson::net::MessengerRef msgr =
-       crimson::net::Messenger::create(name, lname, nonce);
+       crimson::net::Messenger::create(
+           name, lname, nonce, true);
      msgr->set_default_policy(server_policy);
      msgr->set_auth_client(&dummy_auth);
      msgr->set_auth_server(&dummy_auth);
@@ -369,7 +377,8 @@ class SyntheticWorkload {
                           const std::string& lname,
                           const uint64_t nonce) {
      crimson::net::MessengerRef msgr =
-       crimson::net::Messenger::create(name, lname, nonce);
+       crimson::net::Messenger::create(
+           name, lname, nonce, true);
      msgr->set_default_policy(client_policy);
      msgr->set_auth_client(&dummy_auth);
      msgr->set_auth_server(&dummy_auth);
