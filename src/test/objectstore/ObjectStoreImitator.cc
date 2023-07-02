@@ -122,12 +122,19 @@ void ObjectStoreImitator::Object::append(PExtentVector &ext, uint64_t offset) {
 }
 
 void ObjectStoreImitator::Object::verify_extents() {
-  // std::cout << "verifying extents:\n";
+  std::cout << "Verifying extents:\n";
+  uint64_t prev{0};
   for (auto &[l_off, ext] : extent_map) {
-    // std::cout << l_off << " " << ext.offset << " " << ext.length
-    //           << std::endl;
+    std::cout << "logical offset: " << l_off
+              << ", extent offset: " << ext.offset
+              << ", extent length: " << ext.length << std::endl;
+
     ceph_assert(ext.is_valid());
     ceph_assert(ext.length > 0);
+
+    // Making sure that extents don't overlap
+    ceph_assert(prev <= l_off);
+    prev = l_off + ext.length;
   }
 }
 
