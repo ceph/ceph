@@ -21,7 +21,7 @@ namespace crimson::osd {
 RepRequest::RepRequest(crimson::net::ConnectionRef&& conn,
 		       Ref<MOSDRepOp> &&req)
   : conn{std::move(conn)},
-    req{req}
+    req{std::move(req)}
 {}
 
 void RepRequest::print(std::ostream& os) const

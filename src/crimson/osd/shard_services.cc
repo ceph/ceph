@@ -38,9 +38,12 @@ PerShardState::PerShardState(
   ceph::mono_time startup_time,
   PerfCounters *perf,
   PerfCounters *recoverystate_perf,
-  crimson::os::FuturizedStore &store)
+  crimson::os::FuturizedStore &store,
+  OSDState &osd_state)
   : whoami(whoami),
     store(store.get_sharded_store()),
+    osd_state(osd_state),
+    osdmap_gate("PerShardState::osdmap_gate"),
     perf(perf), recoverystate_perf(recoverystate_perf),
     throttler(crimson::common::local_conf()),
     next_tid(
@@ -121,7 +124,6 @@ OSDSingletonState::OSDSingletonState(
   crimson::mon::Client &monc,
   crimson::mgr::Client &mgrc)
   : whoami(whoami),
-    osdmap_gate("OSDSingletonState::osdmap_gate"),
     cluster_msgr(cluster_msgr),
     public_msgr(public_msgr),
     monc(monc),
