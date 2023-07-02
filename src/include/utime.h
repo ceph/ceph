@@ -56,7 +56,7 @@ public:
     return (tv.tv_sec == 0) && (tv.tv_nsec == 0);
   }
 
-  void normalize() {
+  constexpr void normalize() {
     if (tv.tv_nsec > 1000000000ul) {
       tv.tv_sec = cap_to_u32_max(tv.tv_sec + tv.tv_nsec / (1000000000ul));
       tv.tv_nsec %= 1000000000ul;
@@ -64,12 +64,12 @@ public:
   }
 
   // cons
-  utime_t() { tv.tv_sec = 0; tv.tv_nsec = 0; }
-  utime_t(time_t s, int n) { tv.tv_sec = s; tv.tv_nsec = n; normalize(); }
-  utime_t(const struct ceph_timespec &v) {
+  constexpr utime_t() { tv.tv_sec = 0; tv.tv_nsec = 0; }
+  constexpr utime_t(time_t s, int n) { tv.tv_sec = s; tv.tv_nsec = n; normalize(); }
+  constexpr utime_t(const struct ceph_timespec &v) {
     decode_timeval(&v);
   }
-  utime_t(const struct timespec v)
+  constexpr utime_t(const struct timespec v)
   {
     // NOTE: this is used by ceph_clock_now() so should be kept
     // as thin as possible.
@@ -125,9 +125,9 @@ public:
   }
 
   // accessors
-  time_t        sec()  const { return tv.tv_sec; }
-  long          usec() const { return tv.tv_nsec/1000; }
-  int           nsec() const { return tv.tv_nsec; }
+  constexpr time_t  sec()  const { return tv.tv_sec; }
+  constexpr long    usec() const { return tv.tv_nsec/1000; }
+  constexpr int     nsec() const { return tv.tv_nsec; }
 
   // ref accessors/modifiers
   __u32&         sec_ref()  { return tv.tv_sec; }
@@ -187,7 +187,7 @@ public:
     t->tv_sec = tv.tv_sec;
     t->tv_nsec = tv.tv_nsec;
   }
-  void decode_timeval(const struct ceph_timespec *t) {
+  constexpr void decode_timeval(const struct ceph_timespec *t) {
     tv.tv_sec = t->tv_sec;
     tv.tv_nsec = t->tv_nsec;
   }
@@ -223,7 +223,7 @@ public:
   }
 
   // cast to double
-  operator double() const {
+  constexpr operator double() const {
     return (double)sec() + ((double)nsec() / 1000000000.0f);
   }
   operator ceph_timespec() const {
