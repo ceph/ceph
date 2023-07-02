@@ -919,6 +919,8 @@ seastar::future<> PG::submit_error_log(
   ceph_tid_t rep_tid,
   eversion_t &version)
 {
+  logger().debug("{}: {} rep_tid: {} error: {}",
+                 __func__, *m, rep_tid, e);
   const osd_reqid_t &reqid = m->get_reqid();
   mempool::osd_pglog::list<pg_log_entry_t> log_entries;
   log_entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR,
@@ -961,6 +963,9 @@ seastar::future<> PG::submit_error_log(
         peering_state.get_pg_trim_to(),
         peering_state.get_min_last_complete_ondisk());
       waiting_on.insert(peer);
+      logger().debug("submit_error_log: sending log"
+        " missing request (rep_tid: {} entries: {})"
+        " to osd {}", rep_tid, log_entries, peer.osd);
       return shard_services.send_to_osd(peer.osd,
                                         std::move(log_m),
                                         get_osdmap_epoch());
@@ -1033,6 +1038,7 @@ PG::do_osd_ops(
         std::move(reply));
     },
     [m, &op_info, obc, this] (const std::error_code& e) {
+    logger().error("do_osd_ops_execute {} got error: {}", *m, e);
     return seastar::do_with(eversion_t(), [m, &op_info, obc, e, this](auto &version) {
       auto fut = seastar::now();
       epoch_t epoch = get_osdmap_epoch();
