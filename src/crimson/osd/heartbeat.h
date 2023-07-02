@@ -52,8 +52,8 @@ public:
   std::optional<seastar::future<>> ms_dispatch(
       crimson::net::ConnectionRef conn, MessageRef m) override;
   void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) override;
-  void ms_handle_connect(crimson::net::ConnectionRef conn) override;
-  void ms_handle_accept(crimson::net::ConnectionRef conn) override;
+  void ms_handle_connect(crimson::net::ConnectionRef conn, seastar::shard_id) override;
+  void ms_handle_accept(crimson::net::ConnectionRef conn, seastar::shard_id, bool is_replace) override;
 
   void print(std::ostream&) const;
 private:
@@ -189,9 +189,8 @@ class Heartbeat::Connection {
   void connected() {
     set_connected();
   }
-  void accepted(crimson::net::ConnectionRef);
-  void replaced();
-  void reset();
+  bool accepted(crimson::net::ConnectionRef, bool is_replace);
+  void reset(bool is_replace=false);
   seastar::future<> send(MessageURef msg);
   void validate();
   // retry connection if still pending
@@ -199,6 +198,7 @@ class Heartbeat::Connection {
 
  private:
   void set_connected();
+  void set_unconnected();
   void connect();
 
   const osd_id_t peer;
@@ -239,18 +239,14 @@ class Heartbeat::Connection {
   crimson::net::ConnectionRef conn;
   bool is_connected = false;
 
- friend std::ostream& operator<<(std::ostream& os, const Connection& c) {
-   if (c.type == type_t::front) {
-     return os << "con_front(osd." << c.peer << ")";
-   } else {
-     return os << "con_back(osd." << c.peer << ")";
-   }
- }
+  friend std::ostream& operator<<(std::ostream& os, const Connection& c) {
+    if (c.type == type_t::front) {
+      return os << "con_front(osd." << c.peer << ")";
+    } else {
+      return os << "con_back(osd." << c.peer << ")";
+    }
+  }
 };
-
-#if FMT_VERSION >= 90000
-template <> struct fmt::formatter<Heartbeat::Connection> : fmt::ostream_formatter {};
-#endif
 
 /*
  * Track the ping history and ping reply (the pong) from the same session, clean up
@@ -425,29 +421,12 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   void send_heartbeat(
       clock::time_point, ceph::signedspan, std::vector<seastar::future<>>&);
   seastar::future<> handle_reply(crimson::net::ConnectionRef, Ref<MOSDPing>);
-  void handle_reset(crimson::net::ConnectionRef conn, bool is_replace) {
-    for_each_conn([&] (auto& _conn) {
-      if (_conn.matches(conn)) {
-        if (is_replace) {
-          _conn.replaced();
-        } else {
-          _conn.reset();
-        }
-      }
-    });
-  }
-  void handle_connect(crimson::net::ConnectionRef conn) {
-    for_each_conn([&] (auto& _conn) {
-      if (_conn.matches(conn)) {
-        _conn.connected();
-      }
-    });
-  }
-  void handle_accept(crimson::net::ConnectionRef conn) {
-    for_each_conn([&] (auto& _conn) {
-      _conn.accepted(conn);
-    });
-  }
+
+  void handle_reset(crimson::net::ConnectionRef conn, bool is_replace);
+
+  void handle_connect(crimson::net::ConnectionRef conn);
+
+  void handle_accept(crimson::net::ConnectionRef conn, bool is_replace);
 
  private:
   entity_addr_t get_peer_addr(type_t type) override;
@@ -469,8 +448,14 @@ class Heartbeat::Peer final : private Heartbeat::ConnectionListener {
   bool pending_send = false;
   Connection con_front;
   Connection con_back;
+
+  friend std::ostream& operator<<(std::ostream& os, const Peer& p) {
+    return os << "peer(osd." << p.peer << ")";
+  }
 };
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<Heartbeat> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<Heartbeat::Connection> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<Heartbeat::Peer> : fmt::ostream_formatter {};
 #endif

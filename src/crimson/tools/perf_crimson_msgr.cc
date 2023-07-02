@@ -174,7 +174,9 @@ static seastar::future<> run(
       seastar::future<> init(const entity_addr_t& addr) {
         return seastar::smp::submit_to(msgr_sid, [addr, this] {
           // server msgr is always with nonce 0
-          msgr = crimson::net::Messenger::create(entity_name_t::OSD(msgr_sid), lname, 0);
+          msgr = crimson::net::Messenger::create(
+              entity_name_t::OSD(msgr_sid),
+              lname, 0, true);
           msgr->set_default_policy(crimson::net::SocketPolicy::stateless_server(0));
           msgr->set_auth_client(&dummy_auth);
           msgr->set_auth_server(&dummy_auth);
@@ -301,7 +303,10 @@ static seastar::future<> run(
         return nr_depth - depth.current();
       }
 
-      void ms_handle_connect(crimson::net::ConnectionRef conn) override {
+      void ms_handle_connect(
+          crimson::net::ConnectionRef conn,
+          seastar::shard_id new_shard) override {
+        ceph_assert_always(new_shard == seastar::this_shard_id());
         conn_stats.connected_time = mono_clock::now();
       }
       std::optional<seastar::future<>> ms_dispatch(
@@ -336,7 +341,9 @@ static seastar::future<> run(
       seastar::future<> init() {
         return container().invoke_on_all([] (auto& client) {
           if (client.is_active()) {
-            client.msgr = crimson::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid);
+            client.msgr = crimson::net::Messenger::create(
+                entity_name_t::OSD(client.sid),
+                client.lname, client.sid, true);
             client.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
             client.msgr->set_auth_client(&client.dummy_auth);
             client.msgr->set_auth_server(&client.dummy_auth);

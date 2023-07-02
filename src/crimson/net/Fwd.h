@@ -39,8 +39,6 @@ using ConnectionLRef = seastar::shared_ptr<Connection>;
 using ConnectionFRef = seastar::foreign_ptr<ConnectionLRef>;
 using ConnectionRef = ::crimson::local_shared_foreign_ptr<ConnectionLRef>;
 
-class SocketConnection;
-
 class Dispatcher;
 class ChainedDispatchers;
 constexpr std::size_t NUM_DISPATCHERS = 4u;
@@ -48,5 +46,7 @@ using dispatchers_t = boost::container::small_vector<Dispatcher*, NUM_DISPATCHER
 
 class Messenger;
 using MessengerRef = seastar::shared_ptr<Messenger>;
+
+using MessageFRef = seastar::foreign_ptr<MessageURef>;
 
 } // namespace crimson::net
