@@ -46,9 +46,6 @@ class BufferedRecoveryMessages;
 
 namespace crimson::osd {
 
-// seastar::sharded puts start_single on core 0
-constexpr core_id_t PRIMARY_CORE = 0;
-
 class PGShardManager;
 
 /**
@@ -59,6 +56,7 @@ class PGShardManager;
 class PerShardState {
   friend class ShardServices;
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
@@ -68,6 +66,9 @@ class PerShardState {
   const int whoami;
   crimson::os::FuturizedStore::Shard &store;
   crimson::common::CephContext cct;
+
+  OSDState &osd_state;
+  OSD_OSDMapGate osdmap_gate;
 
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
@@ -189,7 +190,8 @@ public:
     ceph::mono_time startup_time,
     PerfCounters *perf,
     PerfCounters *recoverystate_perf,
-    crimson::os::FuturizedStore &store);
+    crimson::os::FuturizedStore &store,
+    OSDState& osd_state);
 };
 
 /**
@@ -201,6 +203,7 @@ public:
 class OSDSingletonState : public md_config_obs_t {
   friend class ShardServices;
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
@@ -219,8 +222,6 @@ private:
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
 
-  OSDState osd_state;
-
   SharedLRU<epoch_t, OSDMap> osdmaps;
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
 
@@ -229,7 +230,6 @@ private:
   void update_map(cached_map_t new_osdmap) {
     osdmap = std::move(new_osdmap);
   }
-  OSD_OSDMapGate osdmap_gate;
 
   crimson::net::Messenger &cluster_msgr;
   crimson::net::Messenger &public_msgr;
@@ -281,9 +281,6 @@ private:
   void requeue_pg_temp();
   seastar::future<> send_pg_temp();
 
-  // TODO: add config to control mapping
-  PGShardMapping pg_to_shard_mapping{0, seastar::smp::count};
-
   std::set<pg_t> pg_created;
   seastar::future<> send_pg_created(pg_t pgid);
   seastar::future<> send_pg_created();
@@ -322,11 +319,13 @@ private:
  */
 class ShardServices : public OSDMapService {
   friend class PGShardManager;
+  friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
 
   PerShardState local_state;
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
+  PGShardMapping& pg_to_shard_mapping;
 
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
@@ -369,9 +368,11 @@ public:
   template <typename... PSSArgs>
   ShardServices(
     seastar::sharded<OSDSingletonState> &osd_singleton_state,
+    PGShardMapping& pg_to_shard_mapping,
     PSSArgs&&... args)
     : local_state(std::forward<PSSArgs>(args)...),
-      osd_singleton_state(osd_singleton_state) {}
+      osd_singleton_state(osd_singleton_state),
+      pg_to_shard_mapping(pg_to_shard_mapping) {}
 
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
@@ -381,10 +382,7 @@ public:
 
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
-    return with_singleton(
-      [pgid](auto &osstate) {
-      osstate.pg_to_shard_mapping.remove_pg(pgid);
-    });
+    return pg_to_shard_mapping.remove_pg(pgid);
   }
 
   crimson::common::CephContext *get_cct() {
