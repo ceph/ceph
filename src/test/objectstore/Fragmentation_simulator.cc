@@ -168,30 +168,48 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
   int generate_txns(ObjectStore::CollectionHandle &ch,
                     ObjectStoreImitator *os) override {
 
-    hobject_t h;
-    h.oid = fmt::format("obj");
-    h.set_hash(1);
-    h.pool = 1;
-    ghobject_t obj(h);
+    hobject_t h1;
+    h1.oid = fmt::format("obj1");
+    h1.set_hash(1);
+    h1.pool = 1;
+    ghobject_t obj1(h1);
+
+    hobject_t h2;
+    h2.oid = fmt::format("obj2");
+    h2.set_hash(2);
+    h2.pool = 1;
+    ghobject_t obj2(h2);
 
     std::vector<ObjectStore::Transaction> tls;
 
     ObjectStore::Transaction t1;
-    t1.create(ch->get_cid(), obj);
+    t1.create(ch->get_cid(), obj1);
     tls.emplace_back(std::move(t1));
 
-    gen_type rng(0);
+    ObjectStore::Transaction t2;
+    t2.create(ch->get_cid(), obj2);
+    tls.emplace_back(std::move(t2));
+
+    gen_type rng(time(0));
     boost::uniform_int<> u_size(0, _1Mb * 4);
     boost::uniform_int<> u_offset(0, _1Mb);
 
-    for (unsigned i{0}; i < 100; ++i) {
-      ObjectStore::Transaction t2;
+    for (unsigned i{0}; i < 200; ++i) {
+      ObjectStore::Transaction t3;
 
       auto size = u_size(rng);
       auto offset = u_offset(rng);
 
-      t2.write(ch->get_cid(), obj, offset, size, make_bl(size, 'c'));
-      tls.emplace_back(std::move(t2));
+      t3.write(ch->get_cid(), obj1, offset, size, make_bl(size, 'c'));
+      tls.emplace_back(std::move(t3));
+
+      ObjectStore::Transaction t4;
+
+      size = u_size(rng);
+      offset = u_offset(rng);
+
+      t4.write(ch->get_cid(), obj2, offset, size, make_bl(size, 'c'));
+      tls.emplace_back(std::move(t4));
     }
 
     os->queue_transactions(ch, tls);
@@ -209,7 +227,7 @@ TEST_P(FragmentationSimulator, SimpleCWGenerator) {
 }
 
 TEST_P(FragmentationSimulator, RandomCWGenerator) {
-  init(GetParam(), _1Mb * 8);
+  init(GetParam(), _1Mb * 16);
   add_generator(std::make_shared<RandomCWGenerator>());
   begin_simulation_with_generators();
 }
