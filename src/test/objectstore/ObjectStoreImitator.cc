@@ -18,7 +18,6 @@
 // ---------- Object -----------
 
 void ObjectStoreImitator::Object::punch_hole(uint64_t offset, uint64_t length,
-                                             uint64_t min_alloc_size,
                                              PExtentVector &old_extents) {
   if (extent_map.empty())
     return;
@@ -204,6 +203,28 @@ void ObjectStoreImitator::print_per_object_fragmentation() {
     }
     double avg = coll_total / coll_ref->objects.size();
     std::cout << "Average obj fragmentation " << avg << std::endl;
+  }
+}
+
+void ObjectStoreImitator::print_per_access_fragmentation() {
+  for (auto &[_, coll_ref] : coll_map) {
+    for (auto &[id, read_ops] : coll_ref->read_ops) {
+      unsigned blks{0}, jmps{0};
+      for (auto &op : read_ops) {
+        blks += op.blks;
+        jmps += op.jmps;
+      }
+
+      double avg_total_blks = (double)blks / read_ops.size();
+      double avg_jmps = (double)jmps / read_ops.size();
+      double avg_jmps_per_blk = (double)jmps / (double)blks;
+
+      std::cout << "Object: " << id.hobj.oid.name
+                << ", average total blks read: " << avg_total_blks
+                << ", average total jumps: " << avg_jmps
+                << ", average jumps per block: " << avg_jmps_per_blk
+                << std::endl;
+    }
   }
 }
 
@@ -497,16 +518,63 @@ void ObjectStoreImitator::_assign_nid(ObjectRef &o) {
 int ObjectStoreImitator::_do_zero(CollectionRef &c, ObjectRef &o,
                                   uint64_t offset, size_t length) {
   PExtentVector old_extents;
-  o->punch_hole(offset, length, min_alloc_size, old_extents);
+  o->punch_hole(offset, length, old_extents);
   alloc->release(old_extents);
   return 0;
 }
 
 int ObjectStoreImitator::_do_read(Collection *c, ObjectRef &o, uint64_t offset,
-                                  size_t len, ceph::buffer::list &bl,
+                                  size_t length, ceph::buffer::list &bl,
                                   uint32_t op_flags, uint64_t retry_count) {
-  auto data = std::string(len, 'a');
+  auto data = std::string(length, 'a');
   bl.append(data);
+
+  // Keeping track of read ops to evaluate per-access fragmentation
+  ReadOp op(offset, length);
+  bluestore_pextent_t last_ext;
+  uint64_t end = length + offset;
+
+  auto it = o->extent_map.lower_bound(offset);
+  if ((it == o->extent_map.end() || it->first > offset) &&
+      it != o->extent_map.begin()) {
+    it = std::prev(it);
+
+    auto diff = offset - it->first;
+    if (diff < it->second.length) {
+      // end not in this extent
+      if (end > it->first + it->second.length) {
+        op.blks += div_round_up(it->second.length - diff, min_alloc_size);
+      } else { // end is within this extent so we take up the entire length
+        op.blks += div_round_up(length, min_alloc_size);
+      }
+
+      last_ext = it->second;
+      it++;
+    }
+  }
+
+  while (it != o->extent_map.end() && it->first < end) {
+    auto extent = it->second;
+    if (last_ext.length > 0 &&
+        last_ext.offset + last_ext.length != extent.offset) {
+      op.jmps++;
+    }
+
+    if (extent.length > length) {
+      op.blks += div_round_up(length, min_alloc_size);
+      break;
+    }
+
+    op.blks += div_round_up(extent.length, min_alloc_size);
+    length -= extent.length;
+    it++;
+  }
+
+  c->read_ops[o->oid].push_back(op);
+  // std::cout << "blks: " << op.blks << ", jmps: " << op.jmps
+  //           << ", offset: " << op.offset << ", length: " << op.length
+  //           << std::endl;
+
   return bl.length();
 }
 
@@ -532,7 +600,7 @@ int ObjectStoreImitator::_do_write(CollectionRef &c, ObjectRef &o,
   length = p2align(length, min_alloc_size);
 
   PExtentVector punched;
-  o->punch_hole(offset, length, min_alloc_size, punched);
+  o->punch_hole(offset, length, punched);
   alloc->release(punched);
 
   // all writes will trigger an allocation
@@ -639,7 +707,7 @@ void ObjectStoreImitator::_do_truncate(CollectionRef &c, ObjectRef &o,
     return;
 
   PExtentVector old_extents;
-  o->punch_hole(offset, o->size - offset, min_alloc_size, old_extents);
+  o->punch_hole(offset, o->size - offset, old_extents);
   o->size = offset;
   alloc->release(old_extents);
 }

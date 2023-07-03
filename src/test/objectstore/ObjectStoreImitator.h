@@ -50,18 +50,29 @@ private:
            uint64_t nid_ = 0, uint64_t size_ = 0)
         : c(c_), oid(oid_), exists(exists_), nid(nid_), size(size_) {}
 
-    void punch_hole(uint64_t offset, uint64_t length, uint64_t min_alloc_size,
+    void punch_hole(uint64_t offset, uint64_t length,
                     PExtentVector &old_extents);
     void verify_extents();
     void append(PExtentVector &ext, uint64_t offset);
     uint64_t ext_length();
   };
-
   typedef boost::intrusive_ptr<Object> ObjectRef;
+
+  struct ReadOp {
+    uint64_t offset;
+    uint64_t length;
+    unsigned blks;
+    unsigned
+        jmps; // # of times we have to stop iterating over continuous extents
+    ReadOp(uint64_t offset = 0, uint64_t length = 0, unsigned blks = 0,
+           unsigned jmps = 0)
+        : offset(offset), length(length), blks(blks), jmps(jmps) {}
+  };
 
   struct Collection : public CollectionImpl {
     bluestore_cnode_t cnode;
     std::map<ghobject_t, ObjectRef> objects;
+    std::unordered_map<ghobject_t, std::vector<ReadOp>> read_ops;
 
     ceph::shared_mutex lock = ceph::make_shared_mutex(
         "FragmentationSimulator::Collection::lock", true, false);
@@ -160,8 +171,6 @@ private:
   int _clone(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo);
   int _clone_range(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo,
                    uint64_t srcoff, uint64_t length, uint64_t dstoff);
-  int read(CollectionHandle &c, const ghobject_t &oid, uint64_t offset,
-           size_t len, ceph::buffer::list &bl, uint32_t op_flags = 0) override;
 
   // Helpers
 
@@ -171,7 +180,6 @@ private:
                 uint32_t fadvise_flags);
   int _do_alloc_write(CollectionRef c, ObjectRef &o, bufferlist &bl,
                       uint64_t offset, uint64_t length);
-
   void _do_truncate(CollectionRef &c, ObjectRef &o, uint64_t offset);
   int _do_zero(CollectionRef &c, ObjectRef &o, uint64_t offset, size_t length);
   int _do_clone_range(CollectionRef &c, ObjectRef &oldo, ObjectRef &newo,
@@ -210,12 +218,16 @@ public:
   void print_status();
   void verify_objects(CollectionHandle &ch);
 
-  // Generate metrics for per-object fragmentation, defined by:
-  // frag_score = 1 - sum((size proportion of each extents / object size) ^
-  // index of each extent in a vector sorted by descending length).
-  // This should only be called after the  generators are finished as it will
-  // attempt to change an object's extents.
+  // Generate metrics for per-object fragmentation (how fragmented are each
+  // object's extents), defined by: frag_score = 1 - sum((size proportion of
+  // each extents / object size) ^ index of each extent in a vector sorted by
+  // descending length + 1). This should only be called after the  generators
+  // are finished as it will attempt to change an object's extents.
   void print_per_object_fragmentation();
+
+  // Genereate metrisc for per-access fragmentation, which is jumps/blocks read.
+  // Jumps are how many times we have to stop reading continuous extents
+  void print_per_access_fragmentation();
 
   // Overrides
 
@@ -223,6 +235,8 @@ public:
   int queue_transactions(CollectionHandle &ch, std::vector<Transaction> &tls,
                          TrackedOpRef op = TrackedOpRef(),
                          ThreadPool::TPHandle *handle = NULL) override;
+  int read(CollectionHandle &c, const ghobject_t &oid, uint64_t offset,
+           size_t len, ceph::buffer::list &bl, uint32_t op_flags = 0) override;
   CollectionHandle open_collection(const coll_t &cid) override;
   CollectionHandle create_new_collection(const coll_t &cid) override;
   void set_collection_commit_queue(const coll_t &cid,

@@ -96,6 +96,7 @@ int FragmentationSimulator::begin_simulation_with_generators() {
   generators.clear();
   os->print_status();
   os->print_per_object_fragmentation();
+  os->print_per_access_fragmentation();
   return 0;
 }
 
@@ -190,13 +191,17 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     t2.create(ch->get_cid(), obj2);
     tls.emplace_back(std::move(t2));
 
+    os->queue_transactions(ch, tls);
+    os->verify_objects(ch);
+
     gen_type rng(time(0));
     boost::uniform_int<> u_size(0, _1Mb * 4);
     boost::uniform_int<> u_offset(0, _1Mb);
 
     for (unsigned i{0}; i < 200; ++i) {
-      ObjectStore::Transaction t3;
+      tls.clear();
 
+      ObjectStore::Transaction t3;
       auto size = u_size(rng);
       auto offset = u_offset(rng);
 
@@ -204,16 +209,28 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
       tls.emplace_back(std::move(t3));
 
       ObjectStore::Transaction t4;
-
       size = u_size(rng);
       offset = u_offset(rng);
 
       t4.write(ch->get_cid(), obj2, offset, size, make_bl(size, 'c'));
       tls.emplace_back(std::move(t4));
+
+      os->queue_transactions(ch, tls);
+      os->verify_objects(ch);
+
+      bufferlist dummy;
+
+      size = u_size(rng);
+      offset = u_offset(rng);
+      os->read(ch, obj1, offset, size, dummy);
+
+      dummy.clear();
+
+      size = u_size(rng);
+      offset = u_offset(rng);
+      os->read(ch, obj2, offset, size, dummy);
     }
 
-    os->queue_transactions(ch, tls);
-    os->verify_objects(ch);
     return 0;
   }
 };
