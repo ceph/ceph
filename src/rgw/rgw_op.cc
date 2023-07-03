@@ -2200,8 +2200,9 @@ void RGWGetObj::execute(optional_yield y)
   gc_invalidate_time = ceph_clock_now();
   gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
 
-  bool need_decompress;
-  int64_t ofs_x, end_x;
+  bool need_decompress = false;
+  int64_t ofs_x = 0, end_x = 0;
+  bool encrypted = false;
 
   RGWGetObj_CB cb(this);
   RGWGetObj_Filter* filter = (RGWGetObj_Filter *)&cb;
@@ -2301,11 +2302,17 @@ void RGWGetObj::execute(optional_yield y)
     ldpp_dout(this, 0) << "ERROR: failed to decode compression info, cannot decompress" << dendl;
     goto done_err;
   }
-  if (need_decompress) {
-      s->obj_size = cs_info.orig_size;
-      s->object->set_obj_size(cs_info.orig_size);
-      decompress.emplace(s->cct, &cs_info, partial_content, filter);
-      filter = &*decompress;
+
+  // where encryption and compression are combined, compression was applied to
+  // the data before encryption. if the system header rgwx-skip-decrypt is
+  // present, we have to skip the decompression filter too
+  encrypted = attrs.count(RGW_ATTR_CRYPT_MODE);
+
+  if (need_decompress && (!encrypted || !skip_decrypt)) {
+    s->obj_size = cs_info.orig_size;
+    s->object->set_obj_size(cs_info.orig_size);
+    decompress.emplace(s->cct, &cs_info, partial_content, filter);
+    filter = &*decompress;
   }
 
   attr_iter = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
