@@ -221,7 +221,7 @@ public:
   // Generate metrics for per-object fragmentation (how fragmented are each
   // object's extents), defined by: frag_score = 1 - sum((size proportion of
   // each extents / object size) ^ index of each extent in a vector sorted by
-  // descending length + 1). This should only be called after the  generators
+  // descending length). This should only be called after the  generators
   // are finished as it will attempt to change an object's extents.
   void print_per_object_fragmentation();
 
