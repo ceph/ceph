@@ -1603,7 +1603,7 @@ Supported Features
 
 .. _feature_resharding:
 
-Resharding
+resharding
 ~~~~~~~~~~
 
 This feature allows buckets to be resharded in a multisite configuration
