@@ -3873,7 +3873,7 @@ options:
 - name: memstore_device_bytes
   type: size
   level: advanced
-  default: 1_G
+  default: 20_G
   with_legacy: true
 - name: memstore_page_set
   type: bool
