@@ -173,6 +173,31 @@ int create_directory_p(const DoutPrefixProvider *dpp, const fs::path& p) {
   return 0;
 }
 
+void get_luarocks_config(const bp::filesystem::path& process,
+    const std::string& luarocks_path,
+    const bp::environment& env, std::string& output) {
+  bp::ipstream is;
+  auto cmd = process.string();
+  cmd.append(" config");
+  output.append("Lua CMD: ");
+  output.append(cmd);
+
+  try {
+    bp::child c(cmd, env, bp::std_in.close(), (bp::std_err & bp::std_out) > is, bp::start_dir(luarocks_path));
+    std::string line;
+    do {
+      if (!line.empty()) {
+        output.append("\n\t").append(line);
+      }
+    } while (c.running() && std::getline(is, line));
+
+    c.wait();
+    output.append("\n\t").append("exit code: ").append(std::to_string(c.exit_code()));
+  } catch (const std::runtime_error& err) {
+    output.append("\n\t").append(err.what());
+  }
+}
+
 int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                      optional_yield y, const std::string& luarocks_path,
                      packages_t& failed_packages, std::string& install_dir) {
@@ -201,6 +226,7 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
       luarocks_path << ". error: " << rc << dendl; 
     return rc;
   }
+  
 
   // create a temporary sub-directory to install all luarocks packages
   std::string tmp_path_template = luarocks_path;// fs::temp_directory_path();
@@ -213,51 +239,47 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     return rc;
   }
   install_dir.assign(tmp_luarocks_path);
-  
-  {  
-    bp::ipstream is;
-    const auto cmd = p.string() + " config";
-    bp::child c(cmd, bp::std_in.close(), (bp::std_err & bp::std_out) > is);
-    
-    std::string lines = std::string("Lua CMD: ") + cmd;
-    std::string line;
-    
-    do {
-      if (!line.empty()) {
-        lines.append("\n\t");
-        lines.append(line);
-      }
-    } while (c.running() && std::getline(is, line));
 
-    c.wait();
-    line = "exit code: " + std::to_string(c.exit_code());
-    lines.append("\n\t");
-    lines.append(line);
-    ldpp_dout(dpp, 20) << lines << dendl;
+  // get a handle to the current environment
+  auto env = boost::this_process::environment();
+  bp::environment _env = env;
+  _env["HOME"] = luarocks_path;
+
+  if (dpp->get_cct()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+    std::string output;
+    get_luarocks_config(p, luarocks_path, _env, output);
+    ldpp_dout(dpp, 20) << output << dendl;
   }
 
   // the lua rocks install dir will be created by luarocks the first time it is called
   for (const auto& package : packages) {
     bp::ipstream is;
-    const auto cmd = p.string() + " install --no-doc --no-manifest --check-lua-versions --lua-version " + CEPH_LUA_VERSION + " --tree " + install_dir + " --deps-mode one " + package;
-    bp::child c(cmd, bp::std_in.close(), (bp::std_err & bp::std_out) > is);
+    auto cmd = p.string();
+    cmd.append(" install --no-doc --lua-version ").
+      append(CEPH_LUA_VERSION).
+      append(" --tree ").
+      append(install_dir).
+      append(" --deps-mode one ").
+      append(package);
+    bp::child c(cmd, _env, bp::std_in.close(), (bp::std_err & bp::std_out) > is, bp::start_dir(luarocks_path));
 
-    // once package reload is supported, code should yield when reading output
-    std::string lines = std::string("Lua CMD: ") + cmd;
-    std::string line;
-
-    do {
-      if (!line.empty()) {
-        lines.append("\n\t");
-        lines.append(line);
-      }
-    } while (c.running() && std::getline(is, line));
+    if (dpp->get_cct()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
+      // TODO: yield when reading output
+      std::string lines = std::string("Lua CMD: ");
+      lines.append(cmd);
+      std::string line;
+      do {
+        if (!line.empty()) {
+          lines.append("\n\t").append(line);
+        }
+      } while (c.running() && std::getline(is, line));
+      ldpp_dout(dpp, 20) << lines << dendl;
+    }
 
     c.wait();
     if (c.exit_code()) {
       failed_packages.insert(package);
     }
-    ldpp_dout(dpp, 20) << lines << dendl;
   }
   
   return 0;

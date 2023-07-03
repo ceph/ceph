@@ -283,7 +283,8 @@ BuildRequires:  librabbitmq-devel
 BuildRequires:  librdkafka-devel
 %endif
 %if 0%{with lua_packages}
-BuildRequires:  %{luarocks_package_name}
+Requires:	lua-devel
+Requires:  %{luarocks_package_name}
 %endif
 %if 0%{with make_check}
 BuildRequires:  hostname
