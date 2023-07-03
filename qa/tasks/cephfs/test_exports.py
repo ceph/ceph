@@ -694,3 +694,25 @@ class TestKillExports(CephFSTestCase):
 
             # for multiple tests
             self.mount_a.remount()
+
+    def test_client_eviction(self):
+        # modify the timeout so that we don't have to wait too long
+        timeout = 30
+        self.fs.set_session_timeout(timeout)
+        self.fs.set_session_autoclose(timeout + 5)
+
+        kill_export_at = [9, 10]
+
+        exporter_rank = 0
+        importer_rank = 1
+
+        for kill in kill_export_at:
+            log.info(f"kill_export_at: {kill}")
+            self._run_kill_export(kill, exporter_rank, importer_rank)
+
+            client_id = self.mount_a.get_global_id()
+            self.wait_until_evicted(client_id, importer_rank, timeout + 10)
+            time.sleep(1)
+
+            # failed if buggy
+            self.mount_a.ls()
