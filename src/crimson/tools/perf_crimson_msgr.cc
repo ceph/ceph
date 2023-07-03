@@ -87,6 +87,7 @@ struct client_config {
   unsigned num_clients;
   unsigned num_conns;
   unsigned depth;
+  bool skip_core_0;
 
   std::string str() const {
     std::ostringstream out;
@@ -97,6 +98,7 @@ struct client_config {
         << ", num_clients=" << num_clients
         << ", num_conns=" << num_conns
         << ", depth=" << depth
+        << ", skip_core_0=" << skip_core_0
         << ")";
     return out.str();
   }
@@ -116,6 +118,7 @@ struct client_config {
     conf.num_conns = options["conns-per-client"].as<unsigned>();
     ceph_assert_always(conf.num_conns > 0);
     conf.depth = options["depth"].as<unsigned>();
+    conf.skip_core_0 = options["client-skip-core-0"].as<bool>();
     return conf;
   }
 };
@@ -589,7 +592,6 @@ static seastar::future<> run(
           msg_len{msg_len},
           nr_depth{_depth} {
         if (is_active()) {
-          assert(sid > 0);
           for (unsigned i = 0; i < num_conns; ++i) {
             conn_states.emplace_back(nr_depth);
           }
@@ -644,7 +646,6 @@ static seastar::future<> run(
       // should start messenger at this shard?
       bool is_active() {
         ceph_assert(seastar::this_shard_id() == sid);
-        ceph_assert(seastar::smp::count > num_clients);
         return sid + num_clients >= seastar::smp::count;
       }
 
@@ -1107,7 +1108,11 @@ static seastar::future<> run(
     if (mode == perf_mode_t::both) {
       logger().info("\nperf settings:\n  smp={}\n  {}\n  {}\n",
                     seastar::smp::count, client_conf.str(), server_conf.str());
-      ceph_assert(seastar::smp::count > client_conf.num_clients);
+      if (client_conf.skip_core_0) {
+        ceph_assert(seastar::smp::count > client_conf.num_clients);
+      } else {
+        ceph_assert(seastar::smp::count >= client_conf.num_clients);
+      }
       ceph_assert(client_conf.num_clients > 0);
       ceph_assert(seastar::smp::count > server_conf.core + client_conf.num_clients);
       return seastar::when_all_succeed(
@@ -1128,7 +1133,11 @@ static seastar::future<> run(
     } else if (mode == perf_mode_t::client) {
       logger().info("\nperf settings:\n  smp={}\n  {}\n",
                     seastar::smp::count, client_conf.str());
-      ceph_assert(seastar::smp::count > client_conf.num_clients);
+      if (client_conf.skip_core_0) {
+        ceph_assert(seastar::smp::count > client_conf.num_clients);
+      } else {
+        ceph_assert(seastar::smp::count >= client_conf.num_clients);
+      }
       ceph_assert(client_conf.num_clients > 0);
       return client->init(
       ).then([client, addr = client_conf.server_addr] {
@@ -1178,6 +1187,8 @@ int main(int argc, char** argv)
      "client block size")
     ("depth", bpo::value<unsigned>()->default_value(512),
      "client io depth per job")
+    ("client-skip-core-0", bpo::value<bool>()->default_value(true),
+     "client skip core 0")
     ("server-fixed-cpu", bpo::value<bool>()->default_value(true),
      "server is in the fixed cpu mode, non-fixed doesn't support the mode both")
     ("server-core", bpo::value<unsigned>()->default_value(1),
