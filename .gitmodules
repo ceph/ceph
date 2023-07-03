@@ -75,6 +75,3 @@
 [submodule "src/jaegertracing/opentelemetry-cpp"]
 	path = src/jaegertracing/opentelemetry-cpp
 	url = https://github.com/open-telemetry/opentelemetry-cpp.git
-[submodule "src/boost_redis"]
-	path = src/boost_redis
-	url = https://github.com/boostorg/redis.git
