@@ -2223,11 +2223,7 @@ private:
   uuid_d fsid;
   int path_fd = -1;  ///< open handle to $path
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
-  bool mounted = false;
 
-  bool init_to_mount = false;
-  bool init_to_db = false;
-  bool init_to_bluefs = false;
   // Set of variables to track initialization state.
   // Used to optimize init
   struct
@@ -2242,15 +2238,13 @@ private:
     bool bluefs_env = false;
     rwstate bluefs = off;
     bool db_env = false;
-    rwstate freelist_alloc = off;
+    rwstate fm_alloc = off;
     rwstate db = off;
-    rwstate object = off;
+    rwstate mount = off;
   } state;
   // store open_db options:
   bool db_was_opened_read_only = true;
   bool need_to_destage_allocation_file = false;
-  int _open_base();
-  int _close_base();
 
   ///< rwlock to protect coll_map/new_coll_map
   ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");
@@ -2284,7 +2278,6 @@ private:
   KVSyncThread kv_sync_thread;
   ceph::mutex kv_lock = ceph::make_mutex("BlueStore::kv_lock");
   ceph::condition_variable kv_cond;
-  bool _kv_only = false;
   bool kv_sync_started = false;
   bool kv_stop = false;
   bool kv_finalize_started = false;
@@ -2663,18 +2656,24 @@ private:
 
   int _create_bluefs_vselector(BlueFSVolumeSelector* &vselector);
   int _prepare_bluefs_devices(bool create);
-  void _minimal_close_bluefs();
+  int _open_bluefs_env();
+  void _close_bluefs_env();
   int _open_bluefs(bool read_only);
   int _create_bluefs();
   void _close_bluefs();
-
   bool _is_bluefs();
+  int _open_base();
+  int _close_base();
+  int _alloc_fill();
+  int _alloc_rw();
+  int _alloc_close();
+  void _full_close();
 
   int _create_rocksdb_fs();
   int _open_rocksdb_fs(bool read_only);
   int _open_rocksdb_env();
   int _prepare_db_environment();
-
+  void _close_db_environment();
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
    * hold the rocksdb's file lock.
@@ -2689,7 +2688,7 @@ private:
   int _write_out_fm_meta(uint64_t target_size);
   int _create_alloc();
   int _init_alloc(bool read_only);
-  void _close_alloc();
+  int _alloc_open();
   int _open_collections();
   void _fsck_collections(int64_t* errors);
   void _close_collections();
@@ -2932,19 +2931,17 @@ public:
 private:
   int _mount();
 public:
-  int mount() override {
-    return _mount();
-  }
+  int mount() override;
   int umount() override;
 
-  int create_db();
-  int open_db(bool read_only = false, bool to_repair = false);
-  int close_db();
+  int open_db(bool read_only = false);
+  // special half-open prepare db for resharding and for repair
+  int open_db_prepare();
   KeyValueDB* get_db();
 
   int open_bluefs(bool read_only = false);
-  int close_bluefs();
   BlueFS* get_bluefs();
+  void close();
 
   int write_meta(const std::string& key, const std::string& value) override;
   int read_meta(const std::string& key, std::string *value) override;

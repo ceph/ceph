@@ -904,8 +904,16 @@ int BlueFS::_bdev_read_random(uint8_t ndev, uint64_t off, uint64_t len,
 int BlueFS::mount(bool write_enabled)
 {
   dout(1) << __func__ << " " << (write_enabled ? "RW" : "RO") << dendl;
+  // do not allow jumping stright into r-w mount
+  ceph_assert(!(mounted == false && write_enabled == true));
+  if (read_only && write_enabled) {
+    //transition RO->RW
+  }
   read_only = !write_enabled;
-
+  if (mounted) {
+    dout(1) << __func__ << " already mounted" << dendl;
+    return 0;
+  }
   _init_logger();
   int r = _open_super();
   if (r < 0) {
@@ -936,11 +944,7 @@ int BlueFS::mount(bool write_enabled)
     dout(30) << __func__ << " noting alloc for " << p.second->fnode << dendl;
     for (auto& q : p.second->fnode.extents) {
       bool is_shared = is_shared_alloc(q.bdev);
-      ceph_assert(!is_shared || (is_shared && shared_alloc));
-      if (is_shared && shared_alloc->need_init && shared_alloc->a) {
-        shared_alloc->bluefs_used += q.length;
-        alloc[q.bdev]->init_rm_free(q.offset, q.length);
-      } else if (!is_shared) {
+      if (!is_shared) {
         alloc[q.bdev]->init_rm_free(q.offset, q.length);
       }
     }
@@ -964,6 +968,7 @@ int BlueFS::mount(bool write_enabled)
            << dendl;
   // update log size
   logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
+  mounted = true;
   return 0;
 
  out:
@@ -1007,6 +1012,7 @@ void BlueFS::umount(bool avoid_compact)
   nodes.dir_map.clear();
   super = bluefs_super_t();
   _shutdown_logger();
+  mounted = false;
 }
 
 int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)

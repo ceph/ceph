@@ -401,6 +401,7 @@ private:
   std::unique_ptr<BlueFSVolumeSelector> vselector;
 
   bool read_only = true;
+  bool mounted = false;
   bluefs_shared_alloc_context_t* shared_alloc = nullptr;
   unsigned shared_alloc_id = unsigned(-1);
   inline bool is_shared_alloc(unsigned id) const {

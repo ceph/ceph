@@ -739,8 +739,11 @@ static void copy_simple_bitmap_to_allocator(SimpleBitmap* sbmap, Allocator* dest
 //---------------------------------------------------------
 int BlueStore::read_allocation_from_drive_on_startup()
 {
+  int r = _open_db(true);
+  if (r != 0) {
+    return r;
+  }
   int ret = 0;
-
   ret = _open_collections();
   if (ret < 0) {
     return ret;
@@ -882,14 +885,14 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
   dout(5) << __func__ << dendl;
   int ret = 0;
   uint64_t memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
-  ret = _open_db_and_around(true, false);
+  ret = _open_db(true);
   if (ret < 0) {
     return ret;
   }
 
   ret = _open_collections();
   if (ret < 0) {
-    _close_db_and_around();
+    _full_close();
     return ret;
   }
 
@@ -902,7 +905,7 @@ int BlueStore::read_allocation_from_drive_for_bluestore_tool()
 	    << " seconds; insert_count=" << stats.insert_count
 	    << "; extent_count=" << stats.extent_count << dendl;
     _shutdown_cache();
-    _close_db_and_around();
+    _full_close();
   });
 
   {
@@ -1091,7 +1094,7 @@ int BlueStore::verify_rocksdb_allocations(Allocator *allocator)
 int BlueStore::db_cleanup(int ret)
 {
   _shutdown_cache();
-  _close_db_and_around();
+  _full_close();
   return ret;
 }
 
@@ -1106,7 +1109,7 @@ int BlueStore::push_allocation_to_rocksdb()
   }
 
   dout(5) << "calling open_db_and_around() in read/write mode" << dendl;
-  int ret = _open_db_and_around(false);
+  int ret = _open_db(false);
   if (ret < 0) {
     return ret;
   }
@@ -1146,7 +1149,7 @@ int BlueStore::push_allocation_to_rocksdb()
   // close db/fm/allocator and start fresh
   db_cleanup(0);
   dout(5) << "calling open_db_and_around() in read-only mode" << dendl;
-  ret = _open_db_and_around(true);
+  ret = _open_db(true);
   if (ret < 0) {
     return db_cleanup(ret);
   }
@@ -1404,7 +1407,6 @@ int FileFreelistManager::init_alloc(bool read_only)
   BlueStore* bs = dynamic_cast<BlueStore*>(store);
   ceph_assert(bs);
   ceph_assert(bs->alloc);
-  ceph_assert(bs->db);
   int r = 0;
   if (read_only) {
     uint64_t num = 0, bytes = 0;
@@ -1415,7 +1417,7 @@ int FileFreelistManager::init_alloc(bool read_only)
       bytes += length;
       return true;
     };
-    enumerate(bs->db, next_extent);
+    enumerate(nullptr, next_extent);
     utime_t duration = ceph_clock_now() - start_time;
     dout(5) << __func__ << "::num_entries=" << num << " free_size=" << bytes << " alloc_size="
 	    << bs->alloc->get_capacity() - bytes << " time=" << duration << " seconds" << dendl;

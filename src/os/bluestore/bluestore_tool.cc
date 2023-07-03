@@ -266,7 +266,7 @@ static void bluefs_import(
   f.close();
   bs->fsync(h);
   bs->close_writer(h);
-  bluestore.close_bluefs();
+  bluestore.close();
   return;
 }
 
@@ -1054,7 +1054,7 @@ int main(int argc, char **argv)
       }
     }
 
-    bluestore.close_db();
+    bluestore.close();
   } else  if (action == "bluefs-stats") {
     AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
     ceph_assert(admin_socket);
@@ -1081,7 +1081,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
     cout << std::string(out.c_str(), out.length()) << std::endl;
-     bluestore.close_db();
+     bluestore.close();
   } else if (action == "reshard") {
     auto get_ctrl = [&](size_t& val) {
       if (!resharding_ctrl.empty()) {
@@ -1114,7 +1114,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db(false, true);
+    int r = bluestore.open_db_prepare();
     if (r < 0) {
       cerr << "error opening db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1129,11 +1129,11 @@ int main(int argc, char **argv)
     } else {
       cout << "reshard success" << std::endl;
     }
-    bluestore.close_db();
+    bluestore.close();
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
-    int r = bluestore.open_db(true, false);
+    int r = bluestore.open_db(true);
     if (r < 0) {
       cerr << "error opening db: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1144,7 +1144,7 @@ int main(int argc, char **argv)
     ceph_assert(rocks_db);
     std::string sharding;
     bool res = rocks_db->get_sharding(sharding);
-    bluestore.close_db();
+    bluestore.close();
     if (!res) {
       cerr << "failed to retrieve sharding def" << std::endl;
       exit(EXIT_FAILURE);

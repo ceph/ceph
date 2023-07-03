@@ -4645,7 +4645,11 @@ BlueStore::~BlueStore()
 {
   cct->_conf.remove_observer(this);
   _shutdown_logger();
-  ceph_assert(!mounted);
+  ceph_assert(state.mount == state.off);
+  ceph_assert(state.db == state.off);
+  ceph_assert(state.fm_alloc == state.off);
+  ceph_assert(state.bluefs == state.off);
+  ceph_assert(state.base == state.off);
   ceph_assert(db == NULL);
   ceph_assert(bluefs == NULL);
   ceph_assert(fsid_fd < 0);
@@ -5377,6 +5381,7 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 int BlueStore::_open_path()
 {
   // sanity check(s)
+  dout(5) << __func__ << " start" << dendl;
   ceph_assert(path_fd < 0);
   path_fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_DIRECTORY|O_CLOEXEC));
   if (path_fd < 0) {
@@ -5385,6 +5390,7 @@ int BlueStore::_open_path()
 	 << dendl;
     return r;
   }
+  dout(5) << __func__ << " done" << dendl;
   return 0;
 }
 
@@ -5687,6 +5693,8 @@ int BlueStore::_open_fm(bool read_only)
   fm = FreelistManager::create(this, freelist_type, PREFIX_ALLOC);
   ceph_assert(fm);
   {
+    //TODO: is read_only doing anything now ?
+    //TODO: is db used ?
     r = fm->init(db, read_only,
       [&](const std::string& key, std::string* result) {
         return read_meta(key, result);
@@ -5738,10 +5746,31 @@ int BlueStore::_write_out_fm_meta(uint64_t target_size)
   return r;
 }
 
+int BlueStore::_alloc_open()
+{
+  if (alloc) {
+    dout(5) << __func__ << " already open" << dendl;
+    return 0;
+  }
+  dout(5) << __func__ << " start" << dendl;
+  int r = _open_base();
+  if (r == 0)
+    r = _create_alloc();
+  if (r != 0) {
+    dout(5) << __func__ << " fail" << dendl;
+  } else {
+    dout(5) << __func__ << " done" << dendl;
+  }
+  return r;
+}
+
+// This is used both for mkfs() and for any subsequent open/mount
+// It only creates in-memory Allocator object
 int BlueStore::_create_alloc()
 {
   ceph_assert(alloc == NULL);
   ceph_assert(shared_alloc.a == NULL);
+  ceph_assert(bdev);
   ceph_assert(bdev->get_size());
 
   uint64_t alloc_size = min_alloc_size;
@@ -5794,47 +5823,18 @@ int BlueStore::_create_alloc()
 
 int BlueStore::_init_alloc(bool read_only)
 {
-  int r;
-  if (read_only) {
-    r = _create_alloc();
-    if (r < 0) {
-      return r;
-    }
-    ceph_assert(alloc);
-    ceph_assert(fm);
-    r = fm->init_alloc(true);
-    dout(1) << __func__
-	    << " allocator type " << alloc->get_type()
-	    << ", capacity 0x" << alloc->get_capacity()
-	    << ", block size 0x" << alloc->get_block_size()
-	    << ", free 0x" << alloc->get_free()
-	    << ", fragmentation " << alloc->get_fragmentation()
-	    << std::dec << dendl;
-  }
-  else
-  {
-    r = fm->init_alloc(false);
-  }
-  return r;
-}
-
-void BlueStore::_close_alloc()
-{
-  ceph_assert(bdev);
-  bdev->discard_drain();
-
+  dout(5) << __func__ << (read_only ? " ro" : "rw") << dendl;
   ceph_assert(alloc);
-  alloc->shutdown();
-  delete alloc;
-
-  ceph_assert(shared_alloc.a);
-  if (alloc != shared_alloc.a) {
-    shared_alloc.a->shutdown();
-    delete shared_alloc.a;
-  }
-
-  shared_alloc.reset();
-  alloc = nullptr;
+  ceph_assert(fm);
+  int r = fm->init_alloc(read_only);
+  dout(1) << __func__
+	  << " allocator type " << alloc->get_type()
+	  << ", capacity 0x" << alloc->get_capacity()
+	  << ", block size 0x" << alloc->get_block_size()
+	  << ", free 0x" << alloc->get_free()
+	  << ", fragmentation " << alloc->get_fragmentation()
+	  << std::dec << dendl;
+  return r;
 }
 
 int BlueStore::_open_fsid(bool create)
@@ -6014,6 +6014,7 @@ bool BlueStore::test_mount_in_use()
    Layers of initialization
 
    1. open bluefs RO
+      -> BlueStore::open_bluefs(true)
    - allows export bluefs content
    - allows show sharding
    - allows print bluefs replay log
@@ -6023,6 +6024,7 @@ bool BlueStore::test_mount_in_use()
    2. prepare db env (BlueRockEnv gluer, merge operator)
 
    3. open db RO
+      -> BlueStore::open_db(true)
    - allows ceph-kvstore-tool RO operations
    - allows recover allocations from db
 
@@ -6030,90 +6032,31 @@ bool BlueStore::test_mount_in_use()
    - allows ceph-objectstore-tool export PG (mount RO)
 
    1. open bluefs RW
+      -> BlueStore::open_bluefs(false)
    - allows compact bluefs log
    - allows import file to bluefs
    - allows write allocation file
 
    2. prepare db env (BlueRockEnv gluer, merge operator)
+      -> BlueStore::open_db_prepare()
    - allows RocksDB repair procedure
+   - allows reshard procedure
 
    3. open db RW
+      -> BlueStore::open_db(false)
    - allows all ops for ceph-kvstore-tool
    Opening RocksDB RW requires initialized allocations.
 
    4. open BlueStore RW
+      -> BlueStore::mount(rw)
    - allows bluestore full mount
    Opening BlueStore RW requires initialized allocations.
-
-   open_bluefs(ro/rw)
-   open_db(ro/rw/repair)
-   open_bluestore(ro/rw)
-
-   close_bluestore();
-   close_db();
-   close_bluefs();
-
 
    Open is done from state 0 to some desired state,
    in case of failure all steps are reverted.
    Close is done from current state to state 0.
-
-   InitializeAllocation()
-   Case A. Allocations from DB
-   1) Requires BlueFS and DB not initialized
-   2) Opens BlueFS RO
-   3) Opens DB RO
-   4) Creates AllocationManager
-   5) Reads allocations
-   6) Leaves AllocationManager active
-   7) Closes DB
-   This leaves BlueFS in RO mode.
-   Further transitions for BlueFS RO->RW will be done by promotion.
-
-   Case B. Allocations from File
-   1) Requires BlueFS not initialized
-   2) Opens BlueFS RO
-   3) Reads AllocationFile
-   If AllocationFile problem, recover:
-   4) Opens DB RO
-   5) Iterate through Onodes to recover allocations
-   6) Close DB
-
-
-   Elements
-   1. BlueStore basics
-   No distinction between RO/RW.
-      - read / lock fsid
-      - read super meta
-      - open bdev
-   2. BlueFS RO/RW
-   BlueFS must be in RO mode until shared alloc is initialized.
-
-
-   init Base
---> able to check BlueStore ID
-   open BlueFS RO
---> able to do some bluefs stuff
-   open DB env
-   open DB RO
---> able to list keys
-   init freelist
-   init shared alloc
---> able to do fsck
--->                                -->
-   upgrade BlueFS RO->RW              open BlueStore RO
-   upgrade DB RO->RW
---> able to do DB ops
-
-
-BlueEnv:
-- base (0/1)
-- bluefs (0/RO/RW)
-- DB env (0/1)
-- freelist & shared_alloc (0/RO/RW)
-- DB (0/RO/RW)
-- BlueStore (0/RO/RW)
- */
+   -> BlueStore::close()
+*/
 
 /**
  * Creates bluefs, adds relevant block devices:
@@ -6122,7 +6065,9 @@ BlueEnv:
  */
 int BlueStore::_prepare_bluefs_devices(bool create)
 {
+  dout(5) << __func__ << " create=" << create << dendl;
   int r;
+  ceph_assert(!bluefs);
   bluefs = new BlueFS(cct);
 
   string bfn;
@@ -6270,8 +6215,46 @@ int BlueStore::_create_bluefs_vselector(BlueFSVolumeSelector* &vselector)
   return r;
 }
 
-int BlueStore::_open_bluefs(bool read_only)
+// Initialization dependency tree
+// X < Y means that X requires Y to process
+
+// alloc open < base(bdev)
+
+// bluefs ro < bluefs env
+// bluefs ro < alloc open
+// bluefs rw < bluefs ro
+// bluefs rw < alloc fill
+
+// alloc fill < alloc open
+// alloc fill @ bitmap < db ro
+// alloc fill @ file,ok < db fs ro
+// alloc fill @ file,bad < db ro
+// alloc fill < bluefs ro (needs shared allocs bluefs uses)
+
+// alloc rw < alloc fill
+// alloc rw @ file < db fs rw
+// alloc rw @ bitmap < db rw
+
+// db fs ro @ posix < base
+// db fs rw @ posix < base
+// db fs ro @ bluefs < bluefs ro
+// db fs rw @ bluefs < bluefs rw
+
+// db ro < db fs ro
+// db rw < db fs rw
+// mount ro < db ro
+// mount rw < db rw
+
+// creates bluefs object, initializes devices, sets volume selector
+int BlueStore::_open_bluefs_env()
 {
+  if (state.bluefs_env) {
+    dout(5) << __func__ << " already open" << dendl;
+    return 0;
+  }
+  dout(5) << __func__ << dendl;
+  ceph_assert(_is_bluefs());
+  ceph_assert(!bluefs);
   int r = _prepare_bluefs_devices(false);
   if (r < 0) {
     return r;
@@ -6283,13 +6266,50 @@ int BlueStore::_open_bluefs(bool read_only)
     return r;
   }
   bluefs->set_volume_selector(vselector);
-  r = bluefs->mount(!read_only);
-  if (r >= 0) {
-    state.bluefs = read_only ? state.ro : state.rw;
-  } else {
-    derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
+  state.bluefs_env = true;
+  dout(5) << __func__ << " done" << dendl;
+  return r;
+}
+
+// deletes bluefs object
+void BlueStore::_close_bluefs_env()
+{
+  if (!state.bluefs_env) {
+    dout(5) << __func__ << " already closed" << dendl;
+    return;
   }
-  ceph_assert_always(bluefs->maybe_verify_layout(bluefs_layout) == 0);
+  ceph_assert(state.bluefs == state.off);
+  ceph_assert(bluefs);
+  delete bluefs;
+  bluefs = nullptr;
+  state.bluefs_env = false;
+  dout(5) << __func__ << " done" << dendl;
+}
+
+int BlueStore::_open_bluefs(bool read_only)
+{
+  dout(5) << __func__ << (read_only ? " ro" : "rw") << dendl;
+  int r = 0;
+  if (read_only) {
+    r = _alloc_open();
+    if (r == 0)
+      _open_bluefs_env();
+    if (r == 0)
+      bluefs->mount(!read_only);
+    if (r == 0)
+      state.bluefs = state.ro;
+  } else {
+    r = _alloc_fill();
+    if (r == 0)
+      bluefs->mount(!read_only);
+    if (r == 0)
+      state.bluefs = state.rw;
+  }
+  if (r == 0)
+    ceph_assert_always(bluefs->maybe_verify_layout(bluefs_layout) == 0);
+  if (r < 0) {
+    derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
+  }
   return r;
 }
 
@@ -6299,6 +6319,7 @@ int BlueStore::_create_bluefs()
   if (r < 0) {
     return r;
   }
+  state.bluefs_env = true;
   bluefs->mkfs(fsid, bluefs_layout);
   BlueFSVolumeSelector* vselector = nullptr;
   r = _create_bluefs_vselector(vselector);
@@ -6307,24 +6328,29 @@ int BlueStore::_create_bluefs()
     return r;
   }
   bluefs->set_volume_selector(vselector);
-  r = bluefs->mount(true);
+  // double call to mount to have distinct RO and RW steps
+  r = bluefs->mount(false);
+  if (r == 0) {
+    r = bluefs->mount(true);
+  }
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
   ceph_assert_always(bluefs->maybe_verify_layout(bluefs_layout) == 0);
+  state.bluefs = state.rw;
   return r;
 }
 
 void BlueStore::_close_bluefs()
 {
+  dout(5) << __func__ << dendl;
+  if (state.bluefs == state.off) {
+    dout(5) << __func__ << " is already off" << dendl;
+    return;
+  }
   bluefs->umount();
-  _minimal_close_bluefs();
-}
-
-void BlueStore::_minimal_close_bluefs()
-{
-  delete bluefs;
-  bluefs = NULL;
+  state.bluefs = state.off;
+  dout(5) << __func__ << " done" << dendl;
 }
 
 bool BlueStore::_is_bluefs()
@@ -6350,12 +6376,25 @@ bool BlueStore::_is_bluefs()
 
 int BlueStore::_open_base()
 {
-  dout(10) << __func__ << dendl;
   if (state.base == true) {
     // was already opened
-    dout(10) << __func__ << " already opened" << dendl;
+    dout(20) << __func__ << " already opened" << dendl;
     return 0;
   }
+  // check type
+  {
+    string type;
+    int r = read_meta("type", &type);
+    if (r < 0) {
+      derr << __func__ << " failed to load os-type: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    if (type != "bluestore") {
+      derr << __func__ << " expected bluestore, but type is " << type << dendl;
+      return -EIO;
+    }
+  }
+  dout(10) << __func__ << dendl;
   int r = _open_path();
   if (r < 0)
     return r;
@@ -6376,10 +6415,15 @@ int BlueStore::_open_base()
   if (r < 0)
     goto out_fsid;
 
-  // TODO here read superblock.meta
+  r = _open_superblock_meta();
+  if (r < 0)
+    goto out_bdev;
+
   state.base = true;
   dout(10) << __func__ << " done" << dendl;
   return 0;
+ out_bdev:
+  _close_bdev();
  out_fsid:
   _close_fsid();
  out_path:
@@ -6391,204 +6435,169 @@ int BlueStore::_open_base()
 int BlueStore::_close_base()
 {
   if (state.base == false) {
-    // already closed
+    dout(5) << __func__ << " already closed" << dendl;
     return 0;
   }
+  dout(5) << __func__ << " start" << dendl;
   // there is no closing of superblock.meta
-  _close_bdev();
-  _close_fsid();
-  _close_path();
+  if (bdev != nullptr)
+    _close_bdev();
+  if (fsid_fd != -1)
+    _close_fsid();
+  if (path_fd != -1)
+    _close_path();
   state.base = false;
+  dout(5) << __func__ << " done" << dendl;
   return 0;
 }
 
-int BlueStore::_init_fm_and_alloc()
+// Fill BLOCK allocator with allocations used by BlueStore's Onodes.
+// BlueFS allocations are put by BlueFS::_replay().
+// It also initializes fm.
+int BlueStore::_alloc_fill()
 {
-  // If already inited, exit.
-  // We require bluefs either closed or read-only.
-  // We require db either closed or read-only.
-
-  if (state.bluefs == rw) {
-    //error
+  if (state.fm_alloc == state.ro) {
+    dout(10) << __func__ << " already done" << dendl;
+    return 0;
   }
-  if (state.rocksdb == rw) {
-    //error
+  if (state.fm_alloc == state.rw) {
+    dout(10) << __func__ << " already rw" << dendl;
+    return 0;
   }
-  if (state.bluefs == off) {
-    _open_bluefs(true); //read only
-  }
-  ceph_assert(state.bluefs == ro);
-  if (state.rocksdb == off) {
-    _open_db(true);
-  }
-  ceph_assert(state.db == ro);
-
-  r = _open_super_meta();
-  if (r < 0) {
-    goto out_db;
-  }
-
-  r = _open_fm(nullptr, true);
-  if (r < 0)
-    goto out_db;
-
-  r = _init_alloc(&zone_adjustments);
-  if (r < 0)
-    goto out_fm;
-
-  // when we switch rocksdb from ro to rw apply
-  // Just before we finally mount bluestore rw,
-  // call post_init_alloc.
-
-}
-
-/*
-* opens both DB and dependant super_meta, FreelistManager and allocator
-* in the proper order
-*/
-int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
-{
-  dout(5) << __func__ << "::NCB::read_only=" << read_only << ", to_repair=" << to_repair << dendl;
-  {
-    string type;
-    int r = read_meta("type", &type);
-    if (r < 0) {
-      derr << __func__ << " failed to load os-type: " << cpp_strerror(r)
-        << dendl;
-      return r;
-    }
-
-    if (type != "bluestore") {
-      derr << __func__ << " expected bluestore, but type is " << type << dendl;
-      return -EIO;
-    }
-  }
-
-  // SMR devices may require a freelist adjustment, but that can only happen after
-  // the db is read-write. we'll stash pending changes here.
-  std::map<uint64_t, uint64_t> zone_adjustments;
-
-  int r = _open_base();
-  if (r < 0)
-    return r;
-
-  r = _open_superblock_meta();
-  if (r < 0)
-    goto out_base;
-
-  // GBH: can probably skip open_db step in REad-Only mode when operating in NULL-FM mode
-  // (might need to open if failed to restore from file)
-
-  // open in read-only first to read FM list and init allocator
-  // as they might be needed for some BlueFS procedures
-  r = _open_db(true);
-  if (r < 0)
-    goto out_base;
-
-  r = _open_fm(true);
-  if (r < 0)
-    goto out_db;
-
-  r = _init_alloc(true /*read-only*/);
-  if (r < 0)
-    goto out_fm;
-
-  // Re-open in the proper mode(s).
-
-  // Can't simply bypass second open for read-only mode as we need to
-  // load allocated extents from bluefs into allocator.
-  // And now it's time to do that
-  //
-  _close_db();
-  if (bluefs) {
-    _close_bluefs();
-  }
-  if (to_repair) {
-    r = _repair_db();
+  dout(5) << __func__ << " start" << dendl;
+  int r = _alloc_open();
+  if (r == 0)
+    r = _open_fm(true);
+  ceph_assert(!freelist_type.empty());
+  if (freelist_type == "null") {
+    if (r == 0)
+      r = _open_rocksdb_fs(true);
+    // If allocation file cannot be read
+    // this one will request transition to _open_db(read-only)
+    if (r == 0)
+      r = _init_alloc(true);
   } else {
-    r = _open_db(read_only);
+    //bitmap && zoned
+    if (r == 0)
+      r = _open_db(true);
+    if (r == 0)
+      r = _init_alloc(true);
   }
-  if (r < 0) {
-    goto out_alloc;
-  }
-  //nid / blob needs DB
-  _read_db_dynamic_values();
-  _setup_settings();
-
-  if (!read_only) {
-    fm->init_alloc(false);
-  }
-
-  // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  // we can't change bluestore allocation so no need to invlidate allocation-file
-  if (fm->is_null_manager() && !read_only && !to_repair) {
-    // Now that we load the allocation map we need to invalidate the file as new allocation won't be reflected
-    // Changes to the allocation map (alloc/release) are not updated inline and will only be stored on umount()
-    // This means that we should not use the existing file on failure case (unplanned shutdown) and must resort
-    //  to recovery from RocksDB::ONodes
-    r = invalidate_allocation_file_on_bluefs();
-    if (r != 0) {
-      derr << __func__ << "::NCB::invalidate_allocation_file_on_bluefs() failed!" << dendl;
-      goto out_alloc;
+  if (r == 0) {
+    // ask bluefs for allocations that are occupied by it
+    if (_is_bluefs()) {
+      ceph_assert(bluefs);
+      ceph_assert(alloc);
+      ceph_assert(alloc == shared_alloc.a);
+      bluefs->foreach_block_extents(
+	bluefs_layout.shared_bdev,
+	[&] (uint64_t start, uint32_t len) {
+	  alloc->init_rm_free(start, len);
+	}
+      );
     }
   }
-
-  // when function is called in repair mode (to_repair=true) we skip db->open()/create()
-  if (!is_db_rotational() && !read_only && !to_repair && cct->_conf->bluestore_allocation_from_file
-#ifdef HAVE_LIBZBD
-      && !bdev->is_smr()
-#endif
-    ) {
-    dout(5) << __func__ << "::NCB::Commit to Null-Manager" << dendl;
-    commit_to_null_manager();
-    need_to_destage_allocation_file = true;
-    dout(10) << __func__ << "::NCB::need_to_destage_allocation_file was set" << dendl;
+  if (r == 0) {
+    dout(5) << __func__ << " done" << dendl;
+    state.fm_alloc = state.ro;
+  } else {
+    derr << __func__ << " fail" << dendl;
   }
-
-  return 0;
-
-out_alloc:
-  _close_alloc();
-out_fm:
- out_db:
-  if (db)
-    _close_db();
-  if (fm) {
-    // inverted db/fm destruction order
-    // we are using implementation quirks of null vs zoned/bitmap
-    // null requires db to be closed for shutdown()
-    // zoned/bitmap have shutdown() a no-op
-    _close_fm();
-  }
-  if (bluefs) {
-    _close_bluefs();
-  }
- out_base:
-  _close_base();
   return r;
 }
 
-void BlueStore::_close_db_and_around()
+// Prepare BLOCK allocator for serving new allocs
+int BlueStore::_alloc_rw()
 {
-  if (db) {
-    _close_db();
+  dout(5) << __func__ << " start" << dendl;
+  int r = _alloc_fill();
+  if (freelist_type == "null") {
+    if (r == 0)
+      r = _open_rocksdb_fs(false);
+    if (r == 0)
+      r = _init_alloc(false);
+  } else {
+    //bitmap && zoned
+    if (r == 0)
+      r = _open_db(false);
+    if (r == 0)
+      r = _init_alloc(false);
   }
-  _close_around_db();
+  if (r == 0) {
+    dout(5) << __func__ << " done" << dendl;
+    state.fm_alloc = state.rw;
+  } else {
+    derr << __func__ << " fail" << dendl;
+  }
+  return r;
 }
 
-void BlueStore::_close_around_db()
+// Closes BLOCK alloc. In addition closed fm.
+int BlueStore::_alloc_close()
 {
-  _close_fm();
-  if (bluefs) {
-    _close_bluefs();
+  if (state.fm_alloc == state.off) {
+    dout(10) << __func__ << " is off" << dendl;
+    return 0;
   }
-  _close_alloc();
+  dout(5) << __func__ << " start" << dendl;
+  ceph_assert(state.mount != state.rw);
+  // It seems thinkable to run objectstore in ro mode,
+  // without fm & alloc. For simplicity we make it illegal.
+  ceph_assert(state.mount != state.ro);
+  // DB in r-w mode might want to allocate space. We cannot have that.
+  ceph_assert(state.db != state.rw);
+  // It seems thinkable to have DB operate without alloc/fm.
+  // Disable for simplicity
+  ceph_assert(state.db != state.ro);
+
+  // The order of operations must be:
+  // 1. discard_drain
+  // 2. close_fm
+  // 3. close_alloc
+  // When freelist==none fm will snoop allocations in alloc.
+  // Alloc in turn must first get back regions already not used,
+  // but not yet free = all those waiting in discard queue.
+
+  // Freelist==none will write allocations to bluefs.
+  // ceph_assert(state.bluefs == state.rw);
+
+  // For Freelist==none, must drain before capturing allocation
+  ceph_assert(bdev);
+  bdev->discard_drain();
+  // fm is checked, because _alloc_close
+  // can be called in failed initialization
+  if (fm) {
+    _close_fm();
+  }
+
+  ceph_assert(alloc);
+  alloc->shutdown();
+  delete alloc;
+
+  ceph_assert(shared_alloc.a);
+  if (alloc != shared_alloc.a) {
+    shared_alloc.a->shutdown();
+    delete shared_alloc.a;
+  }
+
+  shared_alloc.reset();
+  alloc = nullptr;
+
+  state.fm_alloc = state.off;
+  dout(5) << __func__ << " done" << dendl;
+  return 0;
+}
+
+void BlueStore::_full_close() {
+  dout(5) << __func__ << " start" << dendl;
+  // close_object? aka umount?
+  _close_db();
+  _close_db_environment();
+  _alloc_close();
+  _close_bluefs();
+  _close_bluefs_env();
   _close_base();
-}
-
-/* gets access to bluefs supporting RocksDB */
-BlueFS* BlueStore::get_bluefs() {
-  return bluefs;
+  dout(5) << __func__ << " done" << dendl;
 }
 
 /**
@@ -6640,12 +6649,14 @@ int BlueStore::_create_rocksdb_fs()
  */
 int BlueStore::_open_rocksdb_fs(bool read_only)
 {
-  bool do_bluefs;
-  int r = _is_bluefs(false, &do_bluefs);
-  if (do_bluefs) {
+  dout(5) << __func__ << (read_only ? " ro" : " rw") << dendl;
+  int r = 0;
+  if (_is_bluefs())
     r = _open_bluefs(read_only);
-  }
-  _open_rocksdb_env();
+  if (r == 0)
+    r = _open_rocksdb_env();
+  if (r < 0)
+    derr << __func__ << " failed: " << cpp_strerror(r) << dendl;
   return r;
 }
 
@@ -6676,6 +6687,11 @@ int BlueStore::_open_rocksdb_env()
  */
 int BlueStore::_prepare_db_environment()
 {
+  if (state.db_env) {
+    dout(5) << __func__ << " already done" << dendl;
+    return 0;
+  }
+  dout(5) << __func__ << dendl;
   ceph_assert(!db);
   std::string fn = "db";
   std::string kv_backend = "rocksdb";
@@ -6750,7 +6766,23 @@ int BlueStore::_prepare_db_environment()
   }
   db->init(options);
   dout(1) << __func__ << " options=" << options << dendl;
+  state.db_env = true;
+  dout(5) << __func__ << " done" << dendl;
   return 0;
+}
+
+void BlueStore::_close_db_environment()
+{
+  if (!state.db_env) {
+    dout(5) << __func__ << " already closed" << dendl;
+    return;
+  }
+  dout(5) << __func__ << dendl;
+  ceph_assert(db);
+  delete db;
+  db = nullptr;
+  state.db_env = false;
+  dout(5) << __func__ << " done" << dendl;
 }
 
 /**
@@ -6783,12 +6815,26 @@ int BlueStore::_create_db()
     return -EIO;
   }
   dout(1) << __func__ << " success" << dendl;
+  state.db = state.rw;
   return 0;
 }
 
+// In read only mode db requires:
+// - bluefs RO || RW
+// In read write mode db requires:
+// - bluefs RW
+// - alloc-fm RO || RW
 int BlueStore::_open_db(bool read_only)
 {
-  dout(10) << __func__ << " read_only=" << read_only << dendl;
+  dout(5) << __func__ << " " << (read_only ? "ro" : "rw") << dendl;
+  if (state.db == (read_only ? state.ro : state.rw)) {
+    dout(5) << __func__ << " already " << (read_only ? "ro" : "rw") << dendl;
+    return 0;
+  }
+  if (state.db != state.off) {
+    dout(5) << __func__ << " must change db mode" << dendl;
+    _close_db();
+  }
   int r;
   std::string sharding_def;
   r = _open_rocksdb_fs(read_only);
@@ -6816,6 +6862,7 @@ int BlueStore::_open_db(bool read_only)
     _close_db();
     return -EIO;
   }
+  state.db = read_only ? state.ro : state.rw;
   dout(1) << __func__ << " success" << dendl;
   return 0;
 }
@@ -6843,6 +6890,10 @@ int BlueStore::_repair_db()
 
 void BlueStore::_close_db()
 {
+  if (state.db == state.off) {
+    dout(5) << __func__ << " already closed" << dendl;
+    return;
+  }
   dout(10) << __func__ << ":read_only=" << db_was_opened_read_only
            << " fm=" << fm
            << " destage_alloc_file=" << need_to_destage_allocation_file
@@ -6852,7 +6903,7 @@ void BlueStore::_close_db()
   bool do_destage = !db_was_opened_read_only && need_to_destage_allocation_file;
   if (do_destage && is_statfs_recoverable()) {
     auto t = db->get_transaction();
-    store_statfs_t s;
+   store_statfs_t s;
     if (per_pool_stat_collection) {
       KeyValueDB::Iterator it = db->get_iterator(PREFIX_STAT, KeyValueDB::ITERATOR_NOCACHE);
       uint64_t pool_id;
@@ -6894,37 +6945,43 @@ void BlueStore::_close_db()
     dout(10) << __func__ << " statfs persisted." << dendl;
     ceph_assert(r >= 0);
   }
-  ceph_assert(db);
-  delete db;
-  db = nullptr;
+  db->close();
+  state.db = state.off;
 }
 
-int BlueStore::create_db()
+int BlueStore::open_db(bool read_only)
 {
-  dout(5) << __func__ << dendl;
-  int r = _create_db();
-  return r;
-}
-
-int BlueStore::open_db(bool read_only, bool to_repair)
-{
-  dout(5) << __func__ << " " << (read_only ? "RO" : "RW")
-	  << " mode:" << (to_repair ? "repair" : "normal") << dendl;
-  ceph_assert(!init_to_mount && !init_to_db && !init_to_bluefs);
-  int r = _open_db_and_around(read_only, to_repair);
+  dout(5) << __func__ << " " << (read_only ? "RO" : "RW") << dendl;
+  int r = _open_db(read_only);
   if (r == 0) {
-    init_to_db = true;
+    dout(5) << __func__ << " done" << dendl;
+  } else {
+    derr << __func__ << " fail" << dendl;
+    _full_close();
   }
   return r;
 }
 
-int BlueStore::close_db()
+// There is a problem with DB repair functionality.
+// When fm == bitmap it is risky to trust existing allocations.
+// When fm == null it is risky to recover allocations.
+// The best solution would be repair DB without touching BLOCK.
+// For now, the db_repair procedure should be considered broken.
+int BlueStore::open_db_prepare()
 {
-  dout(5) << __func__ << dendl;
-  ceph_assert(init_to_db);
-  _close_db_and_around();
-  init_to_db = false;
-  return 0;
+  dout(5) << __func__ << " start" << dendl;
+  int r = _open_base();
+  if (r == 0)
+    r = _alloc_rw();
+  if (r == 0)
+    r = _repair_db();
+  if (r == 0) {
+    dout(5) << __func__ << " done" << dendl;
+  } else {
+    derr << __func__ << " fail" << dendl;
+    _full_close();
+  }
+  return r;
 }
 
 KeyValueDB* BlueStore::get_db()
@@ -6932,24 +6989,43 @@ KeyValueDB* BlueStore::get_db()
   return db;
 }
 
+// this opens exactly bluefs and fails if no bluefs exists
 int BlueStore::open_bluefs(bool read_only)
 {
   dout(5) << __func__ << " mode=" << (read_only ? "RO" : "RW") << dendl;
-  ceph_assert(!init_to_mount && !init_to_db && !init_to_bluefs);
-  int r = _open_bluefs(read_only);
+  int r = 0;
+  if (!_is_bluefs())
+    r = -EINVAL;
+  if (!state.base && r == 0)
+    r = _open_base();
+  if (!alloc && r == 0)
+    r = _alloc_open();
+  if (!state.bluefs_env && r == 0)
+    r = _open_bluefs_env();
+  // r-w requires full initialization of allocators.
+  if (!read_only && r == 0) {
+    // we will not use BlueStore side of shared alloc, so open in ro
+    r = _alloc_fill();
+  }
   if (r == 0) {
-    init_to_bluefs = true;
+    r = _open_bluefs(read_only);
+  }
+  if (r == 0) {
+    dout(5) << __func__ << " done" << dendl;
+  } else {
+    derr << __func__ << " fail" << dendl;
+    _full_close();
   }
   return r;
 }
 
-int BlueStore::close_bluefs()
-{
-  dout(5) << __func__ << dendl;
-  ceph_assert(init_to_bluefs);
-  _minimal_close_bluefs();
-  init_to_bluefs = false;
-  return 0;
+/* gets access to bluefs supporting RocksDB */
+BlueFS* BlueStore::get_bluefs() {
+  return bluefs;
+}
+
+void BlueStore::close() {
+  _full_close();
 }
 
 void BlueStore::_dump_alloc_on_failure()
@@ -7244,11 +7320,11 @@ int BlueStore::mkfs()
 
   r = _open_fsid(true);
   if (r < 0)
-    goto out_path_fd;
+    goto out_close_base;
 
   r = _lock_fsid();
   if (r < 0)
-    goto out_close_fsid;
+    goto out_close_base;
 
   r = _read_fsid(&old_fsid);
   if (r < 0 || old_fsid.is_zero()) {
@@ -7264,7 +7340,7 @@ int BlueStore::mkfs()
       derr << __func__ << " on-disk fsid " << old_fsid
 	   << " != provided " << fsid << dendl;
       r = -EINVAL;
-      goto out_close_fsid;
+      goto out_close_base;
     }
     fsid = old_fsid;
   }
@@ -7273,23 +7349,23 @@ int BlueStore::mkfs()
 				   cct->_conf->bluestore_block_size,
 				   cct->_conf->bluestore_block_create);
   if (r < 0)
-    goto out_close_fsid;
+    goto out_close_base;
   if (cct->_conf->bluestore_bluefs) {
     r = _setup_block_symlink_or_file("block.wal", cct->_conf->bluestore_block_wal_path,
 	cct->_conf->bluestore_block_wal_size,
 	cct->_conf->bluestore_block_wal_create);
     if (r < 0)
-      goto out_close_fsid;
+      goto out_close_base;
     r = _setup_block_symlink_or_file("block.db", cct->_conf->bluestore_block_db_path,
 	cct->_conf->bluestore_block_db_size,
 	cct->_conf->bluestore_block_db_create);
     if (r < 0)
-      goto out_close_fsid;
+      goto out_close_base;
   }
 
   r = _open_bdev(true);
   if (r < 0)
-    goto out_close_fsid;
+    goto out_close_base;
 
   // choose freelist manager
 #ifdef HAVE_LIBZBD
@@ -7336,7 +7412,7 @@ int BlueStore::mkfs()
 	 << " is not power of 2 aligned!"
 	 << dendl;
     r = -EINVAL;
-    goto out_close_bdev;
+    goto out_close_base;
   }
 
   // make sure min_alloc_size is >= and aligned with block size
@@ -7346,12 +7422,12 @@ int BlueStore::mkfs()
 	 << " is less or not aligned with block_size: 0x"
 	 << block_size << std::dec <<  dendl;
     r = -EINVAL;
-    goto out_close_bdev;
+    goto out_close_base;
   }
 
   r = _create_alloc();
   if (r < 0) {
-    goto out_close_bdev;
+    goto out_close_base;
   }
 
   reserved = _get_ondisk_reserved();
@@ -7388,47 +7464,39 @@ int BlueStore::mkfs()
   // this is so late because we also write freelist type
   r = _init_superblock_meta();
   if (r < 0)
-    goto out_close_fm;
+    goto out_close_db;
 
   r = write_meta("kv_backend", cct->_conf->bluestore_kvbackend);
   if (r < 0)
-    goto out_close_fm;
+    goto out_close_db;
 
   r = write_meta("bluefs", stringify(bluefs ? 1 : 0));
   if (r < 0)
-    goto out_close_fm;
+    goto out_close_db;
 
   if (fsid != old_fsid) {
     r = _write_fsid();
     if (r < 0) {
       derr << __func__ << " error writing fsid: " << cpp_strerror(r) << dendl;
-      goto out_close_fm;
+      goto out_close_db;
     }
   }
 
- out_close_fm:
  out_close_db:
-  if (db)
-    _close_db();
-  if (fm) {
-    // inverted db/fm destruction order
-    // we are using implementation quirks of null vs zoned/bitmap
-    // null requires db to be closed for shutdown()
-    // zoned/bitmap have shutdown() a no-op
-    _close_fm();
-  }
-  if (bluefs) {
-    _close_bluefs();
-  }
-
+  _close_db();
+  _close_db_environment();
  out_close_alloc:
-  _close_alloc();
- out_close_bdev:
-  _close_bdev();
- out_close_fsid:
-  _close_fsid();
- out_path_fd:
-  _close_path();
+  // mark as initialized to enable cleanup
+  state.fm_alloc = state.rw;
+  _alloc_close();
+
+  _close_bluefs();
+  _close_bluefs_env();
+
+ out_close_base:
+  // mark as open, so we can reuse _close_base
+  state.base = true;
+  _close_base();
 
   if (r == 0 &&
       cct->_conf->bluestore_fsck_on_mkfs) {
@@ -7467,7 +7535,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     return -EIO;
   }
   dout(5) << __func__ << "::NCB::calling open_db_and_around(read-only)" << dendl;
-  r = _open_db_and_around(true);
+  r = open_db(true);
   if (r < 0) {
     return r;
   }
@@ -7529,7 +7597,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     dout(0) << __func__ << " success" << dendl;
   }
 
-  _close_db_and_around();
+  _full_close();
   return r;
 }
 
@@ -7546,12 +7614,13 @@ int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
     return -EIO;
   }
 
-  int r = _open_db_and_around(true);
+  //int r = open_db(true);
+  int r = open_bluefs(false);
   if (r < 0) {
     return r;
   }
   auto close_db = make_scope_guard([&] {
-    _close_db_and_around();
+    _full_close();
   });
   uint64_t used_space = 0;
   for(auto src_id : devs_source) {
@@ -7603,12 +7672,12 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     return -EIO;
   }
 
-  int r = _open_db_and_around(true);
+  int r = open_db(true);
   if (r < 0) {
     return r;
   }
   auto close_db = make_scope_guard([&] {
-    _close_db_and_around();
+    _full_close();
   });
 
   string link_db;
@@ -7737,7 +7806,7 @@ int BlueStore::_set_bdev_label_size(const string& path, uint64_t size)
 
 int BlueStore::expand_devices(ostream& out)
 {
-  int r = _open_db_and_around(true);
+  int r = open_db(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding DB/WAL..." << std::endl;
@@ -7788,24 +7857,24 @@ int BlueStore::expand_devices(ostream& out)
       alloc->init_add_free(size0, size - size0);
       need_to_destage_allocation_file = true;
     }
-    _close_db_and_around();
+    _full_close();
 
     // mount in read/write to sync expansion changes
     r = _mount();
     ceph_assert(r == 0);
     umount();
   } else {
-    _close_db_and_around();
+    _full_close();
   }
   return r;
 }
 
 int BlueStore::dump_bluefs_sizes(ostream& out)
 {
-  int r = _open_db_and_around(true);
+  int r = open_db(true);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
-  _close_db_and_around();
+  _full_close();
   return r;
 }
 
@@ -7838,8 +7907,7 @@ bool BlueStore::has_null_manager() const
 int BlueStore::_mount()
 {
   dout(5) << __func__ << "NCB:: path " << path << dendl;
-
-  _kv_only = false;
+  bool mounted = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     dout(5) << __func__ << "::NCB::calling fsck()" << dendl;
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
@@ -7859,13 +7927,19 @@ int BlueStore::_mount()
   }
 
   dout(5) << __func__ << "::NCB::calling open_db_and_around(read/write)" << dendl;
-  int r = _open_db_and_around(false);
+  int r = open_db(false);
   if (r < 0) {
     return r;
   }
+
+  // load nid / blob
+  _read_db_dynamic_values();
+  // setup various variables
+  _setup_settings();
+
   auto close_db = make_scope_guard([&] {
     if (!mounted) {
-      _close_db_and_around();
+      _full_close();
     }
   });
 
@@ -7924,20 +7998,26 @@ int BlueStore::_mount()
     }
   }
 
+  // only rw for now
+  state.mount = state.rw;
   mounted = true;
   return 0;
 }
 
+int BlueStore::mount()
+{
+  return _mount();
+}
+
 int BlueStore::umount()
 {
-  ceph_assert(_kv_only || mounted);
+  dout(5) << __func__ << " start" << dendl;
+  ceph_assert(state.mount != state.off);
   _osr_drain_all();
-
-  mounted = false;
 
   ceph_assert(alloc);
 
-  if (!_kv_only) {
+  if (true) {
     mempool_thread.shutdown();
 #ifdef HAVE_LIBZBD
     if (bdev->is_smr()) {
@@ -7953,7 +8033,8 @@ int BlueStore::umount()
     }
     dout(20) << __func__ << " closing" << dendl;
   }
-  _close_db_and_around();
+  state.mount = state.off;
+  _full_close();
   // disable fsck on fast-shutdown
   if (cct->_conf->bluestore_fsck_on_umount && !m_fast_shutdown) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_umount_deep);
@@ -7964,6 +8045,7 @@ int BlueStore::umount()
       return -EIO;
     }
   }
+  dout(5) << __func__ << " done" << dendl;
   return 0;
 }
 
@@ -9280,12 +9362,12 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
 
   // in deep mode we need R/W write access to be able to replay deferred ops
   const bool read_only = !(repair || depth == FSCK_DEEP);
-  int r = _open_db_and_around(read_only);
+  int r = open_db(read_only);
   if (r < 0) {
     return r;
   }
   auto close_db = make_scope_guard([&] {
-    _close_db_and_around();
+    _full_close();
   });
 
   if (!read_only) {
