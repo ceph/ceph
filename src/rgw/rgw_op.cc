@@ -4199,7 +4199,11 @@ void RGWPutObj::execute(optional_yield y)
     if (encrypt != nullptr) {
       filter = &*encrypt;
     }
-    if (compression_type != "none") {
+    // a zonegroup feature is required to combine compression and encryption
+    const RGWZoneGroup& zonegroup = s->penv.site->get_zonegroup();
+    const bool compress_encrypted = zonegroup.supports(rgw::zone_features::compress_encrypted);
+    if (compression_type != "none" &&
+        (encrypt == nullptr || compress_encrypted)) {
       plugin = get_compressor_plugin(s, compression_type);
       if (!plugin) {
         ldpp_dout(this, 1) << "Cannot load plugin for compression type "
