@@ -358,31 +358,13 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
-    char namebuf[64 * 1024];
-    int ret;
-    ssize_t buflen = listxattr(location.c_str(), namebuf, sizeof(namebuf));
-    if (buflen < 0) {
-        ret = errno;
-        ldpp_dout(dpp, 0) << "ERROR: could not get attributes for key: " << key << ": " << ret << dendl;
-        return -ret;
-    }
-    char *keyptr = namebuf;
-    while (buflen > 0) {
-        ssize_t keylen;
-
-        keylen = strlen(keyptr) + 1;
-        std::string attr_name(keyptr);
-        std::string::size_type prefixloc = key.find(ATTR_PREFIX);
-        if (prefixloc == std::string::npos) {
-            buflen -= keylen;
-            keyptr += keylen;
-            continue;
+    for (auto& it : attrs) {
+        std::string attr_val;
+        attr_val = get_attr(dpp, key, it.first);
+        if (attr_val.empty()) {
+            return -EINVAL;
         }
-        std::string attr_value = get_attr(dpp, key, attr_name);
-        bufferlist bl_value;
-        ceph::encode(attr_value, bl_value);
-        attrs.emplace(std::move(attr_name), std::move(bl_value));
-
+        ceph::encode(attr_val, it.second);
     }
     return 0;
 }
@@ -392,14 +374,13 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
-    for (auto& [attr_name, attr_val_bl] : attrs) {
-        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): attr_name = " << attr_name << " attr_val_bl length: " << attr_val_bl.length() << dendl;
-        if (attr_val_bl.length() != 0) {
-            auto ret = set_attr(dpp, key, attr_name, attr_val_bl.c_str());
-            if (ret < 0) {
-                ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << attr_name << " key: " << key << dendl;
-                return ret;
-            }
+    for (auto& it : attrs) {
+        std::string attr_val;
+        ceph::decode(attr_val, it.second);
+        auto ret = set_attr(dpp, key, it.first, attr_val);
+        if (ret < 0) {
+            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << it.first << " key: " << key << dendl;
+            return ret;
         }
     }
     return 0;
