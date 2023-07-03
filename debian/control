@@ -72,7 +72,6 @@ Build-Depends: automake,
                libre2-dev,
                libutf8proc-dev (>= 2.2.0),
                librdkafka-dev,
-               luarocks,
                libthrift-dev (>= 0.13.0),
                libyaml-cpp-dev (>= 0.6),
                libzstd-dev <pkg.ceph.check>,
@@ -919,6 +918,8 @@ Section: libs
 Depends: librados2 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
+         liblua5.3-dev,
+         luarocks,
 Description: RADOS Gateway client library
  RADOS is a distributed object store used by the Ceph distributed
  storage system.  This package provides a REST gateway to the
