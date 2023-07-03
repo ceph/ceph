@@ -121,12 +121,12 @@ void ObjectStoreImitator::Object::append(PExtentVector &ext, uint64_t offset) {
 }
 
 void ObjectStoreImitator::Object::verify_extents() {
-  std::cout << "Verifying extents:\n";
+  // std::cout << "Verifying extents:\n";
   uint64_t prev{0};
   for (auto &[l_off, ext] : extent_map) {
-    std::cout << "logical offset: " << l_off
-              << ", extent offset: " << ext.offset
-              << ", extent length: " << ext.length << std::endl;
+    // std::cout << "logical offset: " << l_off
+    //           << ", extent offset: " << ext.offset
+    //           << ", extent length: " << ext.length << std::endl;
 
     ceph_assert(ext.is_valid());
     ceph_assert(ext.length > 0);
@@ -176,7 +176,7 @@ void ObjectStoreImitator::print_per_object_fragmentation() {
     double coll_total{0};
     for (auto &[id, obj] : coll_ref->objects) {
       double frag_score{1};
-      unsigned i{2};
+      unsigned i{1};
       uint64_t ext_size = 0;
 
       PExtentVector extents;
