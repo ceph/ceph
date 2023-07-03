@@ -12,7 +12,8 @@ import sys
 
 from datetime import datetime, timedelta
 from nose import with_setup, SkipTest
-from nose.tools import eq_ as eq, assert_raises, assert_not_equal
+from nose.tools import (eq_ as eq, assert_raises, assert_not_equal,
+                        assert_greater_equal)
 from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
@@ -603,6 +604,9 @@ class TestImage(object):
 
     def test_block_name_prefix(self):
         assert_not_equal(b'', self.image.block_name_prefix())
+
+    def test_data_pool_id(self):
+        assert_greater_equal(self.image.data_pool_id(), 0)
 
     def test_create_timestamp(self):
         timestamp = self.image.create_timestamp()
