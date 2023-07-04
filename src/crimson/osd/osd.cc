@@ -379,8 +379,6 @@ seastar::future<> OSD::start()
     }).then([this] {
       return shard_dispatchers.start(
         std::ref(*this),
-        whoami,
-        std::ref(store),
         std::ref(pg_to_shard_mappings));
     });
   }).then([this] {
@@ -1040,7 +1038,7 @@ seastar::future<> OSD::ShardDispatcher::_handle_osd_map(Ref<MOSDMap> m)
       pg_shard_manager.get_meta_coll().store_superblock(t, osd.superblock);
       pg_shard_manager.set_superblock(osd.superblock);
       logger().debug("OSD::handle_osd_map: do_transaction...");
-      return store.get_sharded_store().do_transaction(
+      return osd.store.get_sharded_store().do_transaction(
 	pg_shard_manager.get_meta_coll().collection(),
 	std::move(t));
     });
@@ -1056,7 +1054,7 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
   Ref<MOSDMap> m)
 {
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
-  logger().info("osd.{}: committed_osd_maps({}, {})", whoami, first, last);
+  logger().info("osd.{}: committed_osd_maps({}, {})", osd.whoami, first, last);
   // advance through the new maps
   return seastar::do_for_each(boost::make_counting_iterator(first),
                               boost::make_counting_iterator(last + 1),
@@ -1068,8 +1066,8 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
       return pg_shard_manager.update_map(std::move(o));
     }).then([this] {
       if (get_shard_services().get_up_epoch() == 0 &&
-	  osd.osdmap->is_up(whoami) &&
-	  osd.osdmap->get_addrs(whoami) == osd.public_msgr->get_myaddrs()) {
+	  osd.osdmap->is_up(osd.whoami) &&
+	  osd.osdmap->get_addrs(osd.whoami) == osd.public_msgr->get_myaddrs()) {
 	return pg_shard_manager.set_up_epoch(
 	  osd.osdmap->get_epoch()
 	).then([this] {
@@ -1083,15 +1081,15 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
     });
   }).then([m, this] {
     auto fut = seastar::now();
-    if (osd.osdmap->is_up(whoami)) {
-      const auto up_from = osd.osdmap->get_up_from(whoami);
+    if (osd.osdmap->is_up(osd.whoami)) {
+      const auto up_from = osd.osdmap->get_up_from(osd.whoami);
       logger().info("osd.{}: map e {} marked me up: up_from {}, bind_epoch {}, state {}",
-                    whoami, osd.osdmap->get_epoch(), up_from, osd.bind_epoch,
+                    osd.whoami, osd.osdmap->get_epoch(), up_from, osd.bind_epoch,
 		    pg_shard_manager.get_osd_state_string());
       if (osd.bind_epoch < up_from &&
-          osd.osdmap->get_addrs(whoami) == osd.public_msgr->get_myaddrs() &&
+          osd.osdmap->get_addrs(osd.whoami) == osd.public_msgr->get_myaddrs() &&
           pg_shard_manager.is_booting()) {
-        logger().info("osd.{}: activating...", whoami);
+        logger().info("osd.{}: activating...", osd.whoami);
         fut = pg_shard_manager.set_active().then([this] {
           osd.beacon_timer.arm_periodic(
             std::chrono::seconds(local_conf()->osd_beacon_report_interval));
@@ -1110,15 +1108,15 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
       return check_osdmap_features().then([this] {
         // yay!
         logger().info("osd.{}: committed_osd_maps: broadcasting osdmaps up"
-                      " to {} epoch to pgs", whoami, osd.osdmap->get_epoch());
+                      " to {} epoch to pgs", osd.whoami, osd.osdmap->get_epoch());
         return pg_shard_manager.broadcast_map_to_pgs(osd.osdmap->get_epoch());
       });
     });
   }).then([m, this] {
     if (pg_shard_manager.is_active()) {
-      logger().info("osd.{}: now active", whoami);
-      if (!osd.osdmap->exists(whoami) ||
-	  osd.osdmap->is_stop(whoami)) {
+      logger().info("osd.{}: now active", osd.whoami);
+      if (!osd.osdmap->exists(osd.whoami) ||
+	  osd.osdmap->is_stop(osd.whoami)) {
         return osd.shutdown();
       }
       if (osd.should_restart()) {
@@ -1127,17 +1125,17 @@ seastar::future<> OSD::ShardDispatcher::committed_osd_maps(
         return seastar::now();
       }
     } else if (pg_shard_manager.is_preboot()) {
-      logger().info("osd.{}: now preboot", whoami);
+      logger().info("osd.{}: now preboot", osd.whoami);
 
       if (m->get_source().is_mon()) {
         return osd._preboot(
           m->cluster_osdmap_trim_lower_bound, m->newest_map);
       } else {
-        logger().info("osd.{}: start_boot", whoami);
+        logger().info("osd.{}: start_boot", osd.whoami);
         return osd.start_boot();
       }
     } else {
-      logger().info("osd.{}: now {}", whoami,
+      logger().info("osd.{}: now {}", osd.whoami,
 		    pg_shard_manager.get_osd_state_string());
       // XXX
       return seastar::now();
@@ -1379,8 +1377,9 @@ seastar::future<> OSD::ShardDispatcher::handle_peering_op(
 
 seastar::future<> OSD::ShardDispatcher::check_osdmap_features()
 {
-  return store.write_meta("require_osd_release",
-                          stringify((int)osd.osdmap->require_osd_release));
+  return osd.store.write_meta(
+      "require_osd_release",
+      stringify((int)osd.osdmap->require_osd_release));
 }
 
 seastar::future<> OSD::prepare_to_stop()
