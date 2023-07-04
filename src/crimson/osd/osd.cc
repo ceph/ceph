@@ -777,9 +777,7 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
       case MSG_OSD_PG_UPDATE_LOG_MISSING:
       case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
       {
-        return conn.get_foreign().then([this, m = std::move(m)](auto f_conn) {
-          return shard_dispatchers.local().ms_dispatch(std::move(f_conn), std::move(m));
-        });
+        return shard_dispatchers.local().ms_dispatch(conn, std::move(m));
       }
       default:
       {
@@ -793,7 +791,7 @@ OSD::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
 
 seastar::future<>
 OSD::ShardDispatcher::ms_dispatch(
-  crimson::net::ConnectionFRef f_conn,
+   crimson::net::ConnectionRef conn,
    MessageRef m)
 {
   if (seastar::this_shard_id() != PRIMARY_CORE) {
@@ -801,14 +799,18 @@ OSD::ShardDispatcher::ms_dispatch(
     case CEPH_MSG_OSD_MAP:
     case MSG_COMMAND:
     case MSG_OSD_MARK_ME_DOWN:
-      return container().invoke_on(PRIMARY_CORE,
-      [f_conn = std::move(f_conn), m = std::move(m)]
-      (auto& local_dispatcher) mutable {
-        return local_dispatcher.ms_dispatch(std::move(f_conn), std::move(m));
+      // FIXME: order is not guaranteed in this path
+      return conn.get_foreign(
+      ).then([this, m=std::move(m)](auto f_conn) {
+        return container().invoke_on(PRIMARY_CORE,
+            [f_conn=std::move(f_conn), m=std::move(m)]
+            (auto& local_dispatcher) mutable {
+          auto conn = make_local_shared_foreign(std::move(f_conn));
+          return local_dispatcher.ms_dispatch(conn, std::move(m));
+        });
       });
     }
   }
-  crimson::net::ConnectionRef conn = make_local_shared_foreign(std::move(f_conn));
 
   switch (m->get_type()) {
   case CEPH_MSG_OSD_MAP:
