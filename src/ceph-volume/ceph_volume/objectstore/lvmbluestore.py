@@ -293,6 +293,7 @@ class LvmBlueStore(BlueStore):
         Return a path if possible, failing to do that a ``None``, since some of
         these devices are optional.
         """
+        # TODO(guits): this should be moved in a new function get_device_uuid_from_lv()
         osd_block_lv = None
         for lv in osd_lvs:
             if lv.tags.get('ceph.type') == 'block':

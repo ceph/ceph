@@ -544,7 +544,14 @@ class TestSizeSpecificFormatting(object):
 
 
 class TestAllowLoopDevsWarning(object):
+    def setup(self):
+        disk.AllowLoopDevices.allow = False
+        disk.AllowLoopDevices.warned = False
+        if os.environ.get('CEPH_VOLUME_ALLOW_LOOP_DEVICES'):
+            os.environ.pop('CEPH_VOLUME_ALLOW_LOOP_DEVICES')
+
     def test_loop_dev_warning(self, fake_call, caplog):
+        disk.AllowLoopDevices.warned = False
         assert disk.allow_loop_devices() is False
         assert not caplog.records
         os.environ['CEPH_VOLUME_ALLOW_LOOP_DEVICES'] = "y"

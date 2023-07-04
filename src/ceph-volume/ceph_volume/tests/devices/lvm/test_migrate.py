@@ -524,7 +524,8 @@ class TestNew(object):
     def mock_prepare_dmcrypt(self, *args, **kwargs):
         return '/dev/mapper/' + kwargs['mapping']
 
-    def test_newdb_non_root(self):
+    @patch('os.getuid', return_value=1)
+    def test_newdb_non_root(self, m_getuid):
         with pytest.raises(Exception) as error:
             migrate.NewDB(argv=[
                 '--osd-id', '1',
