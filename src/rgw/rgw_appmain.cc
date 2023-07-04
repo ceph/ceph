@@ -551,22 +551,14 @@ void rgw::AppMain::init_lua()
   rgw::sal::Driver* driver = env.driver;
   int r{0};
   std::string path = g_conf().get_val<std::string>("rgw_luarocks_location");
-  if (!path.empty()) {
-    path += "/" + g_conf()->name.to_str();
-  }
-  env.lua.luarocks_path = path;
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
-  std::string output;
   r = rgw::lua::install_packages(dpp, driver, null_yield, path,
-                                 failed_packages, output);
+                                 failed_packages, env.lua.luarocks_path);
   if (r < 0) {
     dout(1) << "WARNING: failed to install lua packages from allowlist. error: " << r
             << dendl;
-  }
-  if (!output.empty()) {
-    dout(10) << "INFO: lua packages installation output: \n" << output << dendl;
   }
   for (const auto &p : failed_packages) {
     dout(5) << "WARNING: failed to install lua package: " << p

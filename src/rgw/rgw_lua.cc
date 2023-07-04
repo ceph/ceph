@@ -154,19 +154,34 @@ int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optio
   return lua_mgr->list_packages(dpp, y, packages);
 }
 
+namespace fs = std::filesystem;
+
+// similar to to the "mkdir -p" command
+int create_directory_p(const DoutPrefixProvider *dpp, const fs::path& p) {
+  std::error_code ec;
+  fs::path total_path;
+  for (const auto& pp : p) {
+    total_path /= pp;
+    auto should_create = !fs::exists(total_path, ec);
+    if (ec) {
+      ldpp_dout(dpp, 1) << "cannot check if " << total_path << 
+        " directory exists. error: " << ec.message() << dendl;
+      return -ec.value();
+    }
+    if (should_create) {
+      if (!create_directory(total_path, ec)) {
+        ldpp_dout(dpp, 1) << "failed to create  " << total_path << 
+          " directory. error: " << ec.message() << dendl;
+        return -ec.value();
+      }
+    }
+  }
+  return 0;
+}
+
 int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                      optional_yield y, const std::string& luarocks_path,
-                     packages_t& failed_packages, std::string& output) {
-  // luarocks directory cleanup
-  std::error_code ec;
-  if (std::filesystem::remove_all(luarocks_path, ec)
-      == static_cast<std::uintmax_t>(-1) &&
-      ec != std::errc::no_such_file_or_directory) {
-    output.append("failed to clear luarocks directory: ");
-    output.append(ec.message());
-    output.append("\n");
-    return ec.value();
-  }
+                     packages_t& failed_packages, std::string& install_dir) {
 
   packages_t packages;
   auto ret = list_packages(dpp, driver, y, packages);
@@ -175,29 +190,50 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     return 0;
   }
   if (ret < 0) {
-    output.append("failed to get lua package list");
+    ldpp_dout(dpp, 1) << "Lua ERROR: failed to get package list. error: " << ret << dendl;
     return ret;
   }
   // verify that luarocks exists
   const auto p = bp::search_path("luarocks");
   if (p.empty()) {
-    output.append("failed to find luarocks");
+    ldpp_dout(dpp, 1) << "Lua ERROR: failed to find luarocks" << dendl;
     return -ECHILD;
   }
+
+  // create the luarocks parent directory
+  auto rc = create_directory_p(dpp, luarocks_path);
+  if (rc < 0) {
+    ldpp_dout(dpp, 1) << "Lua ERROR: failed to recreate luarocks directory: " <<
+      luarocks_path << ". error: " << rc << dendl; 
+    return rc;
+  }
+
+  // create a temporary sub-directory to install all luarocks packages
+  std::string tmp_path_template = luarocks_path;// fs::temp_directory_path();
+  tmp_path_template.append("/XXXXXX");
+  const auto tmp_luarocks_path = mkdtemp(tmp_path_template.data());
+  if (!tmp_luarocks_path) { 
+    const auto rc = -errno;
+    ldpp_dout(dpp, 1) << "Lua ERROR: failed to create temporary directory from template: " << 
+      tmp_path_template << ". error: " << rc << dendl;
+    return rc;
+  }
+  install_dir.assign(tmp_luarocks_path);
 
   // the lua rocks install dir will be created by luarocks the first time it is called
   for (const auto& package : packages) {
     bp::ipstream is;
-    const auto cmd = p.string() + " install --lua-version " + CEPH_LUA_VERSION + " --tree " + luarocks_path + " --deps-mode one " + package;
+    const auto cmd = p.string() + " install --lua-version " + CEPH_LUA_VERSION + " --tree " + install_dir + " --deps-mode one " + package;
     bp::child c(cmd, bp::std_in.close(), (bp::std_err & bp::std_out) > is);
 
     // once package reload is supported, code should yield when reading output
-    std::string line = std::string("CMD: ") + cmd;
+    std::string lines = std::string("Lua CMD: ") + cmd;
+    std::string line;
 
     do {
       if (!line.empty()) {
-        output.append(line);
-        output.append("\n");
+        lines.append("\n\t");
+        lines.append(line);
       }
     } while (c.running() && std::getline(is, line));
 
@@ -205,12 +241,38 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     if (c.exit_code()) {
       failed_packages.insert(package);
     }
+    ldpp_dout(dpp, 20) << lines << dendl;
   }
+  
+  // luarocks directory cleanup
+  /*std::error_code ec;
+  if (fs::remove_all(luarocks_path, ec)
+      == static_cast<std::uintmax_t>(-1) &&
+      ec != std::errc::no_such_file_or_directory) {
+    ldpp_dout(dpp, 1) << "Lua ERROR: failed to clear luarocks directory: " <<
+      luarocks_path << ". error: " << ec.message() << dendl; 
+    return -ec.value();
+  }*/
+  /*auto rc = create_directory_p(dpp, luarocks_path);
+  if (rc < 0) {
+    ldpp_dout(dpp, 1) << "Lua ERROR: failed to recreate luarocks directory: " <<
+      luarocks_path << ". error: " << rc << dendl; 
+    return rc;
+  }*/
+
+  // switch temporary install directory to luarocks one
+  /*fs::rename(tmp_luarocks_path, luarocks_path, ec);
+  if (ec) {
+    ldpp_dout(dpp, 1) << "Lua ERROR: failed to switch between temp directory: " <<
+      tmp_luarocks_path << " and luarocks directory: " << luarocks_path << 
+      " . error: " << ec.message() << dendl; 
+    return -ec.value();
+  }*/
 
   return 0;
 }
 
-#endif
+#endif // WITH_RADOSGW_LUA_PACKAGES
 
 }
 
