@@ -5,7 +5,6 @@ import random
 from argparse import ArgumentError
 from mock import MagicMock, patch
 
-from ceph_volume.api import lvm
 from ceph_volume.devices.lvm import batch
 from ceph_volume.util import arg_validators
 
@@ -77,14 +76,14 @@ class TestBatch(object):
                        devices=devs,
                        db_devices=[],
                        wal_devices=[],
-                       bluestore=True,
+                       objectstore='bluestore',
                        block_db_size="1G",
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
                       )
         b = batch.Batch([])
-        plan = b.get_plan(args)
         b.args = args
+        plan = b.get_deployment_layout()
         report = b._create_report(plan)
         json.loads(report)
 
@@ -103,14 +102,15 @@ class TestBatch(object):
                        devices=devs,
                        db_devices=fast_devs,
                        wal_devices=[],
-                       bluestore=True,
+                       objectstore='bluestore',
                        block_db_size="1G",
+                       block_db_slots=1.0,
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
                       )
         b = batch.Batch([])
-        plan = b.get_plan(args)
         b.args = args
+        plan = b.get_deployment_layout()
         report = b._create_report(plan)
         json.loads(report)
 
@@ -121,6 +121,7 @@ class TestBatch(object):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         devs = [mock_device_generator() for _ in range(5)]
         fast_devs = [mock_device_generator()]
+        fast_devs[0].available_lvm = False
         very_fast_devs = [mock_device_generator()]
         very_fast_devs[0].available_lvm = False
         args = factory(data_slots=1,
@@ -131,14 +132,15 @@ class TestBatch(object):
                        devices=devs,
                        db_devices=fast_devs,
                        wal_devices=very_fast_devs,
-                       bluestore=True,
+                       objectstore='bluestore',
                        block_db_size="1G",
+                       block_db_slots=5,
                        dmcrypt=True,
                        data_allocate_fraction=1.0,
                       )
         b = batch.Batch([])
-        plan = b.get_plan(args)
         b.args = args
+        plan = b.get_deployment_layout()
         report = b._create_report(plan)
         json.loads(report)
 
@@ -250,35 +252,50 @@ class TestBatch(object):
         for (_, _, slot_size, _) in fasts:
             assert slot_size == expected_slot_size
 
-    def test_get_physical_fast_allocs_abs_size_multi_pvs_per_vg(self, factory,
-                                               conf_ceph_stub,
-                                               mock_devices_available):
+    def test_get_physical_fast_allocs_abs_size_multi_pvs_per_vg(self,
+                                                                factory,
+                                                                conf_ceph_stub,
+                                                                mock_device_generator,
+                                                                mock_devices_available_multi_pvs_per_vg):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
-        args = factory(block_db_slots=None, get_block_db_size=None)
-        dev_size = 21474836480
-        num_devices = len(mock_devices_available)
+        data_devices = []
+        # existing_osds = sum([len(dev.lvs) for dev in mock_devices_available_multi_pvs_per_vg])
+        for i in range(len(mock_devices_available_multi_pvs_per_vg)+2):
+            data_devices.append(mock_device_generator(name='data',
+                                                      vg_name=f'vg_foo_data{str(i)}',
+                                                      lv_name=f'lv_foo_data{str(i)}'))
+        args = factory(block_db_slots=None,
+                       block_db_size=None,
+                       devices=[dev.lv_path for dev in data_devices])
+        dev_size = 53687091200
+        num_devices = len(mock_devices_available_multi_pvs_per_vg)
         vg_size = dev_size * num_devices
-        vg_name = 'vg_foo'
-        for dev in mock_devices_available:
-            dev.vg_name = vg_name
-            dev.vg_size = [vg_size]
-            dev.vg_free = dev.vg_size
-            dev.vgs = [lvm.VolumeGroup(vg_name=dev.vg_name, lv_name=dev.lv_name)]
-        slots_per_device = 2
-        slots_per_vg = slots_per_device * num_devices
-        fasts = batch.get_physical_fast_allocs(mock_devices_available,
-                                              'block_db', slots_per_device, 2, args)
-        expected_slot_size = int(vg_size / slots_per_vg)
+        vg_free = vg_size
+        for dev in mock_devices_available_multi_pvs_per_vg:
+            for lv in dev.lvs:
+                vg_free -= lv.lv_size[0]
+            dev.vg_size = [vg_size]  # override the `vg_size` set in mock_device() since it's 1VG that has multiple PVs
+        for dev in mock_devices_available_multi_pvs_per_vg:
+            dev.vg_free = [vg_free]  # override the `vg_free` set in mock_device() since it's 1VG that has multiple PVs
+        b = batch.Batch([])
+        b.args = args
+        new_osds = len(data_devices) - len(mock_devices_available_multi_pvs_per_vg)
+        fasts = b.fast_allocations(mock_devices_available_multi_pvs_per_vg,
+                                   len(data_devices),
+                                   new_osds,
+                                   'block_db')
+        expected_slot_size = int(vg_size / len(data_devices))
         for (_, _, slot_size, _) in fasts:
             assert slot_size == expected_slot_size
 
-    def test_batch_fast_allocations_one_block_db_length(self, factory, conf_ceph_stub,
-                                                  mock_lv_device_generator):
+    def test_batch_fast_allocations_one_block_db_length(self,
+                                                        factory, conf_ceph_stub,
+                                                        mock_device_generator):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
 
         b = batch.Batch([])
-        db_lv_devices = [mock_lv_device_generator()]
-        fast = b.fast_allocations(db_lv_devices, 1, 0, 'block_db')
+        db_device = [mock_device_generator()]
+        fast = b.fast_allocations(db_device, 1, 1, 'block_db')
         assert len(fast) == 1
 
     @pytest.mark.parametrize('occupied_prior', range(7))
@@ -293,22 +310,24 @@ class TestBatch(object):
                                                       mock_device_generator):
         conf_ceph_stub('[global]\nfsid=asdf-lkjh')
         occupied_prior = min(occupied_prior, slots)
-        devs = [mock_device_generator() for _ in range(num_devs)]
+        devs = [mock_device_generator(lv_name=f'foo{n}') for n in range(slots)]
+        dev_paths = [dev.path for dev in devs]
+        fast_devs = [mock_device_generator(lv_name=f'ssd{n}') for n in range(num_devs)]
         already_assigned = 0
         while already_assigned < occupied_prior:
             dev_i = random.randint(0, num_devs - 1)
-            dev = devs[dev_i]
+            dev = fast_devs[dev_i]
             if len(dev.lvs) < occupied_prior:
                 dev.lvs.append('foo')
                 dev.path = '/dev/bar'
-                already_assigned = sum([len(d.lvs) for d in devs])
-        args = factory(block_db_slots=None, get_block_db_size=None)
-        expected_num_osds = max(len(devs) * slots - occupied_prior, 0)
-        fast = batch.get_physical_fast_allocs(devs,
+                already_assigned = sum([len(dev.lvs) for dev in fast_devs])
+        args = factory(block_db_slots=None, get_block_db_size=None, devices=dev_paths)
+        expected_num_osds = max(len(fast_devs) * slots - occupied_prior, 0)
+        fast = batch.get_physical_fast_allocs(fast_devs,
                                               'block_db', slots,
                                               expected_num_osds, args)
         assert len(fast) == expected_num_osds
-        expected_assignment_on_used_devices = sum([slots - len(d.lvs) for d in devs if len(d.lvs) > 0])
+        expected_assignment_on_used_devices = sum([slots - len(d.lvs) for d in fast_devs if len(d.lvs) > 0])
         assert len([f for f in fast if f[0] == '/dev/bar']) == expected_assignment_on_used_devices
         assert len([f for f in fast if f[0] != '/dev/bar']) == expected_num_osds - expected_assignment_on_used_devices
 
