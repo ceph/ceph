@@ -108,6 +108,7 @@ OSD::OSD(int id, uint32_t nonce,
     log_client(cluster_msgr.get(), LogClient::NO_FLAGS),
     clog(log_client.create_channel())
 {
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
                     std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
     msgr.get()->set_auth_server(monc.get());
