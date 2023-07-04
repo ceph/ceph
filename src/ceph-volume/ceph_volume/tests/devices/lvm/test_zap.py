@@ -139,17 +139,6 @@ class TestEnsureAssociatedLVs(object):
         out, err = capsys.readouterr()
         assert "Zapping successful for OSD: 1" in err
 
-    def test_block_and_partition_are_found(self, monkeypatch):
-        monkeypatch.setattr(zap.disk, 'get_device_from_partuuid', lambda x: '/dev/sdb1')
-        tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=block'
-        osd = api.Volume(
-            lv_name='volume1', lv_uuid='y', vg_name='', lv_path='/dev/VolGroup/block', lv_tags=tags)
-        volumes = []
-        volumes.append(osd)
-        result = zap.ensure_associated_lvs(volumes)
-        assert '/dev/sdb1' in result
-        assert '/dev/VolGroup/block' in result
-
     def test_journal_is_found(self, fake_call):
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=journal'
         osd = api.Volume(
@@ -211,7 +200,6 @@ class TestEnsureAssociatedLVs(object):
     def test_ensure_associated_lvs(self, m_get_lvs):
         zap.ensure_associated_lvs([], lv_tags={'ceph.osd_id': '1'})
         calls = [
-            call(tags={'ceph.type': 'journal', 'ceph.osd_id': '1'}),
             call(tags={'ceph.type': 'db', 'ceph.osd_id': '1'}),
             call(tags={'ceph.type': 'wal', 'ceph.osd_id': '1'})
         ]
