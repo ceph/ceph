@@ -460,16 +460,23 @@ First we should add the following packages to the allowlist:
 
 ::
 
-  # radosgw-admin script-package add --package=luajson
+  # radosgw-admin script-package add --package=lua-cjson --allow-compilation
   # radosgw-admin script-package add --package=luasocket --allow-compilation
 
 
-Then, do a restart for the radosgw and upload the following script to the ``postrequest`` context:
+Then, run a server to listen on the Unix socket. For example, use "netcat":
+
+::
+
+  # rm -f /tmp/socket       
+  # nc -vklU /tmp/socket
+
+And last, do a restart for the radosgw and upload the following script to the ``postrequest`` context:
 
 .. code-block:: lua
 
   if Request.RGWOp == "get_obj" then
-    local json = require("json")
+    local json = require("cjson")
     local socket = require("socket")
     local unix = require("socket.unix")
     local s = assert(unix())
