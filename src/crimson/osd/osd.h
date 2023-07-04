@@ -80,8 +80,7 @@ public:
     ~ShardDispatcher() = default;
 
     // Dispatcher methods
-    seastar::future<> ms_dispatch(crimson::net::ConnectionFRef,
-                                                 MessageRef);
+    seastar::future<> ms_dispatch(crimson::net::ConnectionRef, MessageRef);
 
   private:
     bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
