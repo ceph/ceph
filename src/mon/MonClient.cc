@@ -675,6 +675,11 @@ void MonClient::_finish_auth(int auth_err)
   if (!auth_err && active_con) {
     ceph_assert(auth);
     _check_auth_tickets();
+  } else if (auth_err == -EAGAIN && !active_con) {
+    ldout(cct,10) << __func__ 
+                  << " auth returned EAGAIN, reopening the session to try again"
+                  << dendl;
+    _reopen_session();
   }
   auth_cond.notify_all();
 }
