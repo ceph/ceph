@@ -1,0 +1,61 @@
+<div class="container-fluid">
+  <div class="row mx-0">
+    <cd-card cardTitle="Daemons"
+             i18n-title
+             link="/rgw/daemons"
+             class="col-sm-2 px-3 d-flex"
+             aria-label="Daemons card">
+      <span class="ms-4 me-4">
+        <h1 class="text-center">{{ rgwDaemonCount }}</h1>
+      </span>
+    </cd-card>
+
+    <cd-card cardTitle="Zoning"
+             i18n-title
+             class="col-sm-2 px-3 d-flex"
+             aria-label="Details card">
+      <span class="ms-4 me-4 text-center">
+        <h3>{{ rgwRealmCount }} Realms</h3>
+        <h3>{{ rgwZonegroupCount }} Zonegroups</h3>
+        <h3>{{ rgwZoneCount }} Zones</h3>
+      </span>
+    </cd-card>
+
+    <cd-card cardTitle="Buckets"
+             i18n-title
+             class="col-sm-2 px-3 d-flex"
+             aria-label="Details card">
+      <span class="ms-4 me-4 text-center">
+        <h2>{{ rgwBucketCount }} Buckets</h2>
+        <h2>{{ objectCount }} Objects</h2>
+      </span>
+    </cd-card>
+
+    <cd-card cardTitle="Users"
+             i18n-title
+             class="col-sm-2 px-3 d-flex"
+             aria-label="Details card">
+      <span class="ms-4 me-4 text-center">
+        <h1>{{ UserCount }}</h1>
+      </span>
+    </cd-card>
+
+    <cd-card cardTitle="Used Capacity"
+             i18n-title
+             class="col-sm-2 px-3 d-flex"
+             aria-label="Details card">
+      <span class="ms-4 me-4 text-center">
+        <h1>{{ totalPoolUsedBytes | dimlessBinary}}</h1>
+      </span>
+    </cd-card>
+
+    <cd-card cardTitle="Avg Object Size"
+             i18n-title
+             class="col-sm-2 px-3 d-flex"
+             aria-label="Details card">
+      <span class="ms-4 me-4 text-center">
+        <h1>{{ averageObjectSize | dimlessBinary}}</h1>
+      </span>
+    </cd-card>
+  </div>
+</div>
