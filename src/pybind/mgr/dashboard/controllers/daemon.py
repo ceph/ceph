@@ -2,10 +2,12 @@
 
 from typing import Optional
 
+from orchestrator_api import OrchClient, OrchFeature
+
+from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.exception import handle_orchestrator_error
-from ..services.orchestrator import OrchClient, OrchFeature
 from . import APIDoc, APIRouter, RESTController
 from ._version import APIVersion
 from .orchestrator import raise_if_no_orchestrator
@@ -28,6 +30,6 @@ class Daemon(RESTController):
         if container_image == '' and action != 'redeploy':
             container_image = None
 
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         res = orch.daemons.action(action=action, daemon_name=daemon_name, image=container_image)
         return res

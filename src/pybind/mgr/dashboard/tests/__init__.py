@@ -361,7 +361,7 @@ def patch_orch(available: bool, missing_features: Optional[List[str]] = None,
                hosts: Optional[List[HostSpec]] = None,
                inventory: Optional[List[dict]] = None,
                daemons: Optional[List[DaemonDescription]] = None):
-    with mock.patch('dashboard.controllers.orchestrator.OrchClient.instance') as instance:
+    with mock.patch('orchestrator_api.OrchClient.instance') as instance:
         fake_client = mock.Mock()
         fake_client.available.return_value = available
         fake_client.get_missing_features.return_value = missing_features

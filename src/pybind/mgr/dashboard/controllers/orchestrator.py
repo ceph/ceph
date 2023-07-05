@@ -2,9 +2,10 @@
 
 from functools import wraps
 
+from orchestrator_api import OrchClient
+
 from .. import mgr
 from ..exceptions import DashboardException
-from ..services.orchestrator import OrchClient
 from . import APIDoc, Endpoint, EndpointDoc, ReadPermission, RESTController, UIRouter
 
 STATUS_SCHEMA = {
@@ -17,7 +18,7 @@ def raise_if_no_orchestrator(features=None):
     def inner(method):
         @wraps(method)
         def _inner(self, *args, **kwargs):
-            orch = OrchClient.instance()
+            orch = OrchClient(mgr).instance(mgr)
             if not orch.available():
                 raise DashboardException(code='orchestrator_status_unavailable',  # pragma: no cover
                                          msg='Orchestrator is unavailable',
@@ -45,7 +46,7 @@ class Orchestrator(RESTController):
     @EndpointDoc("Display Orchestrator Status",
                  responses={200: STATUS_SCHEMA})
     def status(self):
-        return OrchClient.instance().status()
+        return OrchClient(mgr).instance(mgr).status()
 
     @Endpoint()
     def get_name(self):

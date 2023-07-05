@@ -9,6 +9,7 @@ from typing import NamedTuple, Optional, no_type_check
 
 import cherrypy
 import rbd
+from orchestrator_api import OrchClient
 
 from .. import mgr
 from ..controllers.pool import RBDPool
@@ -16,7 +17,6 @@ from ..controllers.service import Service
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_rados_error, handle_rbd_error, serialize_dashboard_exception
-from ..services.orchestrator import OrchClient
 from ..services.rbd import rbd_call
 from ..tools import ViewCache
 from . import APIDoc, APIRouter, BaseController, CreatePermission, Endpoint, \
@@ -643,7 +643,7 @@ class RbdMirroringStatus(BaseController):
     @ReadPermission
     def status(self):
         status = {'available': True, 'message': None}
-        orch_status = OrchClient.instance().status()
+        orch_status = OrchClient(mgr).instance(mgr).status()
 
         # if the orch is not available we can't create the service
         # using dashboard.

@@ -2,10 +2,11 @@ import inspect
 import unittest
 from unittest import mock
 
+# from .. import mgr
 from orchestrator import Orchestrator as OrchestratorBase
+from orchestrator_api import OrchFeature
 
 from ..controllers.orchestrator import Orchestrator
-from ..services.orchestrator import OrchFeature
 from ..tests import ControllerTestCase
 
 
@@ -17,7 +18,7 @@ class OrchestratorControllerTest(ControllerTestCase):
     def setup_server(cls):
         cls.setup_controllers([Orchestrator])
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_status_get(self, instance):
         status = {'available': False, 'description': ''}
 

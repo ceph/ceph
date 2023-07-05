@@ -302,7 +302,7 @@ class RbdMirroringStatusControllerTest(ControllerTestCase):
     def setup_server(cls):
         cls.setup_controllers([RbdMirroringStatus, Orchestrator])
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_status(self, instance):
         status = {'available': False, 'description': ''}
         fake_client = mock.Mock()

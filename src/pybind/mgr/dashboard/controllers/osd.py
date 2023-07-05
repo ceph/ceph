@@ -7,13 +7,13 @@ from typing import Any, Dict, List, Optional, Union
 
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError  # type: ignore
 from mgr_util import get_most_recent_rate
+from orchestrator_api import OrchClient, OrchFeature
 
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_orchestrator_error, handle_send_command_error
-from ..services.orchestrator import OrchClient, OrchFeature
 from ..services.osd import HostStorageSummary, OsdDeploymentOptions
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
@@ -183,7 +183,7 @@ class Osd(RESTController):
 
     @staticmethod
     def get_removing_osds() -> Optional[List[int]]:
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         if orch.available(features=[OrchFeature.OSD_GET_REMOVE_STATUS]):
             return [osd.osd_id for osd in orch.osds.removing_status()]
         return None
@@ -294,7 +294,7 @@ class Osd(RESTController):
         except ValueError:
             raise DashboardException(
                 component='osd', http_status_code=400, msg='Invalid parameter(s)')
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         if check:
             logger.info('Check for removing osd.%s...', svc_id)
             check = self._check_delete([svc_id])
@@ -363,7 +363,7 @@ class Osd(RESTController):
             weight=float(weight))
 
     def _create_predefined_drive_group(self, data):
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         option = OsdDeploymentOptions(data[0]['option'])
         if option in list(OsdDeploymentOptions):
             try:
@@ -399,7 +399,7 @@ class Osd(RESTController):
     @handle_orchestrator_error('osd')
     def _create_with_drive_groups(self, drive_groups):
         """Create OSDs with DriveGroups."""
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         try:
             dg_specs = [DriveGroupSpec.from_json(dg) for dg in drive_groups]
             orch.osds.create(dg_specs)
@@ -508,7 +508,7 @@ class OsdUi(Osd):
     @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
     @handle_orchestrator_error('host')
     def deployment_options(self):
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         hdds = 0
         ssds = 0
         nvmes = 0

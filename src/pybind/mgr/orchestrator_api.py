@@ -5,19 +5,17 @@ from functools import wraps
 from typing import Any, Dict, List, Optional, Tuple
 
 from ceph.deployment.service_spec import ServiceSpec
+from mgr_module import MgrModule
 from orchestrator import DaemonDescription, DeviceLightLoc, HostSpec, \
     InventoryFilter, OrchestratorClientMixin, OrchestratorError, OrchResult, \
     ServiceDescription, raise_if_exception
-
-from .. import mgr
-from ._paginate import ListPaginator
 
 logger = logging.getLogger('orchestrator')
 
 
 # pylint: disable=abstract-method
 class OrchestratorAPI(OrchestratorClientMixin):
-    def __init__(self):
+    def __init__(self, mgr):
         super(OrchestratorAPI, self).__init__()
         self.set_mgr(mgr)  # type: ignore
 
@@ -98,19 +96,10 @@ class InventoryManager(ResourceManager):
 class ServiceManager(ResourceManager):
     def list(self,
              service_type: Optional[str] = None,
-             service_name: Optional[str] = None,
-             offset: int = 0, limit: int = -1,
-             sort: str = '+service_name', search: str = '') -> Tuple[List[Dict[Any, Any]], int]:
+             service_name: Optional[str] = None) -> List[Dict[Any, Any]] :
         services = self.api.describe_service(service_type, service_name)
         services = [service.to_dict() for service in services.result]
-        paginator = ListPaginator(offset, limit, sort, search,
-                                  input_list=services,
-                                  searchable_params=['service_name', 'status.running',
-                                                     'status.last_refreshed', 'status.size'],
-                                  sortable_params=['service_name', 'status.running',
-                                                   'status.last_refreshed', 'status.size'],
-                                  default_sort='+service_name')
-        return list(paginator.list()), paginator.get_count()
+        return services
 
     @wait_api_result
     def get(self, service_name: str) -> ServiceDescription:
@@ -175,14 +164,13 @@ class OrchClient(object):
     _instance = None
 
     @classmethod
-    def instance(cls):
-        # type: () -> OrchClient
+    def instance(cls, mgr: MgrModule) -> 'OrchClient':
         if cls._instance is None:
-            cls._instance = cls()
+            cls._instance = OrchClient(mgr)
         return cls._instance
 
-    def __init__(self):
-        self.api = OrchestratorAPI()
+    def __init__(self, mgr: MgrModule):
+        self.api = OrchestratorAPI(mgr)
 
         self.hosts = HostManger(self.api)
         self.inventory = InventoryManager(self.api)

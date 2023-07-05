@@ -11,6 +11,7 @@ except ImportError:
     import unittest.mock as mock
 
 from mgr_module import ERROR_MSG_NO_INPUT_FILE
+from orchestrator_api import OrchClient
 
 from .. import mgr
 from ..controllers.iscsi import Iscsi, IscsiTarget, IscsiUi
@@ -18,7 +19,6 @@ from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..services.exception import handle_request_error
 from ..services.iscsi_client import IscsiClient
-from ..services.orchestrator import OrchClient
 from ..tests import CLICommandTestMixin, CmdException, ControllerTestCase, KVStoreMockMixin
 from ..tools import NotificationQueue, TaskManager
 
@@ -81,7 +81,7 @@ class IscsiTestController(ControllerTestCase, KVStoreMockMixin):
     def setup_server(cls):
         NotificationQueue.start_queue()
         TaskManager.init()
-        OrchClient.instance().available = lambda: False
+        OrchClient(mgr).instance(mgr).available = lambda: False
         mgr.rados.side_effect = None
         cls.setup_controllers([Iscsi, IscsiTarget])
 

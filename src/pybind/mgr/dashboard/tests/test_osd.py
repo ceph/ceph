@@ -317,7 +317,7 @@ class OsdTest(ControllerTestCase):
         res = self.json_body()
         self.assertIn(data['data']['svc_id'], res['detail'])
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_osd_create_with_drive_groups(self, instance):
         # without orchestrator service
         fake_client = mock.Mock()
@@ -342,7 +342,7 @@ class OsdTest(ControllerTestCase):
                                    data_devices=DeviceSelection(rotational=True))]
         fake_client.osds.create.assert_called_with(dg_specs)
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_osd_create_with_invalid_drive_groups(self, instance):
         # without orchestrator service
         fake_client = mock.Mock()
@@ -407,7 +407,7 @@ class OsdTest(ControllerTestCase):
         res = self.json_body()
         return res
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_deployment_options(self, instance):
         fake_client = mock.Mock()
         instance.return_value = fake_client
@@ -434,7 +434,7 @@ class OsdTest(ControllerTestCase):
         self.assertFalse(res['options'][OsdDeploymentOptions.THROUGHPUT]['available'])
         self.assertEqual(res['recommended_option'], None)
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_deployment_options_throughput(self, instance):
         fake_client = mock.Mock()
         instance.return_value = fake_client
@@ -454,7 +454,7 @@ class OsdTest(ControllerTestCase):
         self.assertFalse(res['options'][OsdDeploymentOptions.IOPS]['available'])
         assert res['recommended_option'] == OsdDeploymentOptions.THROUGHPUT
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_deployment_options_with_hdds_and_nvmes(self, instance):
         fake_client = mock.Mock()
         instance.return_value = fake_client
@@ -474,7 +474,7 @@ class OsdTest(ControllerTestCase):
         self.assertTrue(res['options'][OsdDeploymentOptions.IOPS]['available'])
         assert res['recommended_option'] == OsdDeploymentOptions.COST_CAPACITY
 
-    @mock.patch('dashboard.controllers.orchestrator.OrchClient.instance')
+    @mock.patch('orchestrator_api.OrchClient.instance')
     def test_deployment_options_iops(self, instance):
         fake_client = mock.Mock()
         instance.return_value = fake_client

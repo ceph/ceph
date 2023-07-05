@@ -9,13 +9,13 @@ from typing import Dict, List, Optional
 import cherrypy
 from mgr_util import merge_dicts
 from orchestrator import HostSpec
+from orchestrator_api import OrchClient, OrchFeature
 
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.exception import handle_orchestrator_error
-from ..services.orchestrator import OrchClient, OrchFeature
 from ..tools import TaskManager, merge_list_of_dicts_by_key, str_to_bool
 from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, \
     ReadPermission, RESTController, Task, UIRouter, UpdatePermission, \
@@ -163,7 +163,7 @@ def merge_hosts_by_hostname(ceph_hosts, orch_hosts):
 
 
 def populate_service_instances(hostname, services):
-    orch = OrchClient.instance()
+    orch = OrchClient(mgr).instance(mgr)
     if orch.available():
         services = (daemon['daemon_type']
                     for daemon in (d.to_dict()
@@ -199,7 +199,7 @@ def get_hosts(sources=None):
                 }) for server in mgr.list_servers()
         ]
     if from_orchestrator:
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         if orch.available():
             return merge_hosts_by_hostname(ceph_hosts, orch.hosts.list())
     for host in ceph_hosts:
@@ -267,7 +267,7 @@ def get_inventories(hosts: Optional[List[str]] = None,
     do_refresh = False
     if refresh is not None:
         do_refresh = str_to_bool(refresh)
-    orch = OrchClient.instance()
+    orch = OrchClient(mgr).instance(mgr)
     inventory_hosts = [host.to_json()
                        for host in orch.inventory.list(hosts=hosts, refresh=do_refresh)]
     device_osd_map = get_device_osd_map()
@@ -286,7 +286,7 @@ def get_inventories(hosts: Optional[List[str]] = None,
 def add_host(hostname: str, addr: Optional[str] = None,
              labels: Optional[List[str]] = None,
              status: Optional[str] = None):
-    orch_client = OrchClient.instance()
+    orch_client = OrchClient(mgr).instance(mgr)
     host = Host()
     host.check_orchestrator_host_op(orch_client, hostname)
     orch_client.hosts.add(hostname, addr, labels)
@@ -306,7 +306,7 @@ class Host(RESTController):
     @RESTController.MethodMap(version=APIVersion(1, 2))
     def list(self, sources=None, facts=False):
         hosts = get_hosts(sources)
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         if str_to_bool(facts):
             if orch.available():
                 if not orch.get_missing_features(['get_facts']):
@@ -350,7 +350,7 @@ class Host(RESTController):
     @host_task('remove', {'hostname': '{hostname}'})
     @allow_empty_body
     def delete(self, hostname):  # pragma: no cover - requires realtime env
-        orch_client = OrchClient.instance()
+        orch_client = OrchClient(mgr).instance(mgr)
         self.check_orchestrator_host_op(orch_client, hostname, False)
         orch_client.hosts.remove(hostname)
 
@@ -412,7 +412,7 @@ class Host(RESTController):
         ``ABC1234DEF567-1R1234_ABC8DE0Q``.
         :param duration: The duration in seconds how long the LED should flash.
         """
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         TaskManager.current_task().set_progress(0)
         orch.blink_device_light(hostname, device, 'ident', True)
         for i in range(int(duration)):
@@ -425,7 +425,7 @@ class Host(RESTController):
     @RESTController.Resource('GET')
     @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
     def daemons(self, hostname: str) -> List[dict]:
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         daemons = orch.services.list_daemons(hostname=hostname)
         return [d.to_dict() for d in daemons]
 
@@ -467,7 +467,7 @@ class Host(RESTController):
         :param force: Force enter maintenance mode.
         :param drain: Drain host
         """
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         host = get_host(hostname)
 
         if maintenance:
@@ -512,7 +512,7 @@ class HostUi(BaseController):
         :return: A list of all host labels.
         """
         labels = []
-        orch = OrchClient.instance()
+        orch = OrchClient(mgr).instance(mgr)
         if orch.available():
             for host in orch.hosts.list():
                 labels.extend(host.labels)

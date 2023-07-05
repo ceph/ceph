@@ -5,6 +5,7 @@ import logging
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import cherrypy
+from orchestrator_api import OrchClient
 
 from .. import mgr
 from ..exceptions import DashboardException
@@ -12,7 +13,6 @@ from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.auth import AuthManager, JwtManager
 from ..services.ceph_service import CephService
-from ..services.orchestrator import OrchClient
 from ..services.rgw_client import NoRgwDaemonsException, RgwClient
 from ..tools import json_str_to_object, str_to_bool
 from . import APIDoc, APIRouter, BaseController, CreatePermission, \
@@ -119,7 +119,7 @@ class RgwStatus(BaseController):
             instance = RgwClient.admin_instance(daemon_name=daemon_name)
             result = instance.migrate_to_multisite(realm_name, zonegroup_name, zone_name,
                                                    zonegroup_endpoints, zone_endpoints, user)
-            orch = OrchClient.instance()
+            orch = OrchClient(mgr).instance(mgr)
             daemons = orch.services.list_daemons(service_name='rgw')
             for daemon in daemons:
                 orch.daemons.action(action='reload', daemon_name=daemon.daemon_id)

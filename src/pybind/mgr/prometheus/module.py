@@ -1,4 +1,5 @@
 import cherrypy
+import logging
 import yaml
 from collections import defaultdict
 from pkg_resources import packaging  # type: ignore
@@ -13,6 +14,8 @@ from collections import namedtuple
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
+# import orchestrator_api
+from orchestrator_api import OrchClient
 from rbd import RBD
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
@@ -1120,7 +1123,8 @@ class Module(MgrModule):
             host = cast(str, server.get('hostname', ''))
             for service in cast(List[ServiceInfoT], server.get('services', [])):
                 ret.update({(service['id'], service['type']): (host,
-                                                               service.get('ceph_version', 'unknown'),
+                                                               service.get(
+                                                                   'ceph_version', 'unknown'),
                                                                service.get('name', ''))})
         return ret
 
@@ -1282,7 +1286,16 @@ class Module(MgrModule):
 
         # Populate other servers metadata
         for key, value in servers.items():
+            orch = OrchClient(self).instance(self)
+            daemons = orch.services.list_daemons()
+            dlist = [d.daemon_id for d in daemons]
+            logger = logging.getLogger("fck")
+            logger.info("dlist: {}".format(dlist))
             service_id, service_type = key
+            for dlist1 in dlist:
+                if "foo" in dlist1:
+                    logger.info("eni mane %s", dlist1.split(".")[2])
+            logger.info("ideeee %s", service_id)
             if service_type == 'rgw':
                 hostname, version, name = value
                 self.metrics['rgw_metadata'].set(
