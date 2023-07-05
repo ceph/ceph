@@ -773,6 +773,36 @@ TEST(LibRadosAio, SimpleStat) {
   rados_aio_release(my_completion2);
 }
 
+TEST(LibRadosAio, OperateMtime)
+{
+  AioTestData test_data;
+  ASSERT_EQ("", test_data.init());
+
+  time_t set_mtime = 1457129052;
+  {
+    rados_write_op_t op = rados_create_write_op();
+    rados_write_op_create(op, LIBRADOS_CREATE_IDEMPOTENT, nullptr);
+    rados_completion_t completion;
+    ASSERT_EQ(0, rados_aio_create_completion2(nullptr, nullptr, &completion));
+    ASSERT_EQ(0, rados_aio_write_op_operate(op, test_data.m_ioctx, completion,
+                                            "foo", &set_mtime, 0));
+    {
+      TestAlarm alarm;
+      ASSERT_EQ(0, rados_aio_wait_for_complete(completion));
+    }
+    ASSERT_EQ(0, rados_aio_get_return_value(completion));
+    rados_aio_release(completion);
+    rados_release_write_op(op);
+  }
+  {
+    uint64_t size;
+    time_t mtime;
+    ASSERT_EQ(0, rados_stat(test_data.m_ioctx, "foo", &size, &mtime));
+    EXPECT_EQ(0, size);
+    EXPECT_EQ(set_mtime, mtime);
+  }
+}
+
 TEST(LibRadosAio, SimpleStatNS) {
   AioTestData test_data;
   rados_completion_t my_completion;

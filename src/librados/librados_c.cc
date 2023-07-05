@@ -19,6 +19,7 @@
 #include "librados/librados_c.h"
 #include "librados/AioCompletionImpl.h"
 #include "librados/IoCtxImpl.h"
+#include "librados/ObjectOperationImpl.h"
 #include "librados/PoolAsyncCompletionImpl.h"
 #include "librados/RadosClient.h"
 #include "librados/RadosXattrIter.h"
@@ -3569,7 +3570,7 @@ LIBRADOS_C_API_BASE_DEFAULT(rados_break_lock);
 extern "C" rados_write_op_t LIBRADOS_C_API_DEFAULT_F(rados_create_write_op)()
 {
   tracepoint(librados, rados_create_write_op_enter);
-  rados_write_op_t retval = new (std::nothrow)::ObjectOperation;
+  rados_write_op_t retval = new (std::nothrow) librados::ObjectOperationImpl;
   tracepoint(librados, rados_create_write_op_exit, retval);
   return retval;
 }
@@ -3579,17 +3580,22 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_release_write_op)(
   rados_write_op_t write_op)
 {
   tracepoint(librados, rados_release_write_op_enter, write_op);
-  delete (::ObjectOperation*)write_op;
+  delete static_cast<librados::ObjectOperationImpl*>(write_op);
   tracepoint(librados, rados_release_write_op_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_release_write_op);
+
+static ::ObjectOperation* to_object_operation(rados_write_op_t write_op)
+{
+  return &static_cast<librados::ObjectOperationImpl*>(write_op)->o;
+}
 
 extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_set_flags)(
   rados_write_op_t write_op,
   int flags)
 {
   tracepoint(librados, rados_write_op_set_flags_enter, write_op, flags);
-  ((::ObjectOperation *)write_op)->set_last_op_flags(get_op_flags(flags));
+  to_object_operation(write_op)->set_last_op_flags(get_op_flags(flags));
   tracepoint(librados, rados_write_op_set_flags_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_set_flags);
@@ -3599,7 +3605,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_version)(
   uint64_t ver)
 {
   tracepoint(librados, rados_write_op_assert_version_enter, write_op, ver);
-  ((::ObjectOperation *)write_op)->assert_version(ver);
+  to_object_operation(write_op)->assert_version(ver);
   tracepoint(librados, rados_write_op_assert_version_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_assert_version);
@@ -3608,7 +3614,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_assert_exists)(
   rados_write_op_t write_op)
 {
   tracepoint(librados, rados_write_op_assert_exists_enter, write_op);
-  ((::ObjectOperation *)write_op)->stat(nullptr, nullptr, nullptr);
+  to_object_operation(write_op)->stat(nullptr, nullptr, nullptr);
   tracepoint(librados, rados_write_op_assert_exists_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_assert_exists);
@@ -3622,7 +3628,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_cmpext)(
 {
   tracepoint(librados, rados_write_op_cmpext_enter, write_op, cmp_buf,
 	     cmp_len, off, prval);
-  ((::ObjectOperation *)write_op)->cmpext(off, cmp_len, cmp_buf, prval);
+  to_object_operation(write_op)->cmpext(off, cmp_len, cmp_buf, prval);
   tracepoint(librados, rados_write_op_cmpext_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_cmpext);
@@ -3637,10 +3643,10 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_cmpxattr)(
   tracepoint(librados, rados_write_op_cmpxattr_enter, write_op, name, comparison_operator, value, value_len);
   bufferlist bl;
   bl.append(value, value_len);
-  ((::ObjectOperation *)write_op)->cmpxattr(name,
-					    comparison_operator,
-					    CEPH_OSD_CMPXATTR_MODE_STRING,
-					    bl);
+  to_object_operation(write_op)->cmpxattr(name,
+					  comparison_operator,
+					  CEPH_OSD_CMPXATTR_MODE_STRING,
+					  bl);
   tracepoint(librados, rados_write_op_cmpxattr_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_cmpxattr);
@@ -3671,7 +3677,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_cmp)(
   int *prval)
 {
   tracepoint(librados, rados_write_op_omap_cmp_enter, write_op, key, comparison_operator, val, val_len, prval);
-  rados_c_omap_cmp((::ObjectOperation *)write_op, key, comparison_operator,
+  rados_c_omap_cmp(to_object_operation(write_op), key, comparison_operator,
                    val, strlen(key), val_len, prval);
   tracepoint(librados, rados_write_op_omap_cmp_exit);
 }
@@ -3687,7 +3693,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_cmp2)(
   int *prval)
 {
   tracepoint(librados, rados_write_op_omap_cmp_enter, write_op, key, comparison_operator, val, val_len, prval);
-  rados_c_omap_cmp((::ObjectOperation *)write_op, key, comparison_operator,
+  rados_c_omap_cmp(to_object_operation(write_op), key, comparison_operator,
                    val, key_len, val_len, prval);
   tracepoint(librados, rados_write_op_omap_cmp_exit);
 }
@@ -3702,7 +3708,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_setxattr)(
   tracepoint(librados, rados_write_op_setxattr_enter, write_op, name, value, value_len);
   bufferlist bl;
   bl.append(value, value_len);
-  ((::ObjectOperation *)write_op)->setxattr(name, bl);
+  to_object_operation(write_op)->setxattr(name, bl);
   tracepoint(librados, rados_write_op_setxattr_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_setxattr);
@@ -3712,7 +3718,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_rmxattr)(
   const char *name)
 {
   tracepoint(librados, rados_write_op_rmxattr_enter, write_op, name);
-  ((::ObjectOperation *)write_op)->rmxattr(name);
+  to_object_operation(write_op)->rmxattr(name);
   tracepoint(librados, rados_write_op_rmxattr_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_rmxattr);
@@ -3723,8 +3729,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_create)(
   const char* category) // unused
 {
   tracepoint(librados, rados_write_op_create_enter, write_op, exclusive);
-  ::ObjectOperation *oo = (::ObjectOperation *) write_op;
-  oo->create(!!exclusive);
+  to_object_operation(write_op)->create(!!exclusive);
   tracepoint(librados, rados_write_op_create_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_create);
@@ -3738,7 +3743,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_write)(
   tracepoint(librados, rados_write_op_write_enter, write_op, buffer, len, offset);
   bufferlist bl;
   bl.append(buffer,len);
-  ((::ObjectOperation *)write_op)->write(offset, bl);
+  to_object_operation(write_op)->write(offset, bl);
   tracepoint(librados, rados_write_op_write_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_write);
@@ -3751,7 +3756,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_write_full)(
   tracepoint(librados, rados_write_op_write_full_enter, write_op, buffer, len);
   bufferlist bl;
   bl.append(buffer,len);
-  ((::ObjectOperation *)write_op)->write_full(bl);
+  to_object_operation(write_op)->write_full(bl);
   tracepoint(librados, rados_write_op_write_full_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_write_full);
@@ -3766,7 +3771,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_writesame)(
   tracepoint(librados, rados_write_op_writesame_enter, write_op, buffer, data_len, write_len, offset);
   bufferlist bl;
   bl.append(buffer, data_len);
-  ((::ObjectOperation *)write_op)->writesame(offset, write_len, bl);
+  to_object_operation(write_op)->writesame(offset, write_len, bl);
   tracepoint(librados, rados_write_op_writesame_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_writesame);
@@ -3779,7 +3784,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_append)(
   tracepoint(librados, rados_write_op_append_enter, write_op, buffer, len);
   bufferlist bl;
   bl.append(buffer,len);
-  ((::ObjectOperation *)write_op)->append(bl);
+  to_object_operation(write_op)->append(bl);
   tracepoint(librados, rados_write_op_append_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_append);
@@ -3788,7 +3793,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_remove)(
   rados_write_op_t write_op)
 {
   tracepoint(librados, rados_write_op_remove_enter, write_op);
-  ((::ObjectOperation *)write_op)->remove();
+  to_object_operation(write_op)->remove();
   tracepoint(librados, rados_write_op_remove_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_remove);
@@ -3798,7 +3803,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_truncate)(
   uint64_t offset)
 {
   tracepoint(librados, rados_write_op_truncate_enter, write_op, offset);
-  ((::ObjectOperation *)write_op)->truncate(offset);
+  to_object_operation(write_op)->truncate(offset);
   tracepoint(librados, rados_write_op_truncate_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_truncate);
@@ -3809,7 +3814,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_zero)(
   uint64_t len)
 {
   tracepoint(librados, rados_write_op_zero_enter, write_op, offset, len);
-  ((::ObjectOperation *)write_op)->zero(offset, len);
+  to_object_operation(write_op)->zero(offset, len);
   tracepoint(librados, rados_write_op_zero_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_zero);
@@ -3825,7 +3830,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_exec)(
   tracepoint(librados, rados_write_op_exec_enter, write_op, cls, method, in_buf, in_len, prval);
   bufferlist inbl;
   inbl.append(in_buf, in_len);
-  ((::ObjectOperation *)write_op)->call(cls, method, inbl, NULL, NULL, prval);
+  to_object_operation(write_op)->call(cls, method, inbl, NULL, NULL, prval);
   tracepoint(librados, rados_write_op_exec_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_exec);
@@ -3845,7 +3850,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_set)(
     bl.append(vals[i], lens[i]);
     entries[keys[i]] = bl;
   }
-  ((::ObjectOperation *)write_op)->omap_set(entries);
+  to_object_operation(write_op)->omap_set(entries);
   tracepoint(librados, rados_write_op_omap_set_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_set);
@@ -3866,7 +3871,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_set2)(
     string key(keys[i], key_lens[i]);
     entries[key] = bl;
   }
-  ((::ObjectOperation *)write_op)->omap_set(entries);
+  to_object_operation(write_op)->omap_set(entries);
   tracepoint(librados, rados_write_op_omap_set_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_set2);
@@ -3881,7 +3886,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_rm_keys)(
     tracepoint(librados, rados_write_op_omap_rm_keys_entry, keys[i]);
   }
   std::set<std::string> to_remove(keys, keys + keys_len);
-  ((::ObjectOperation *)write_op)->omap_rm_keys(to_remove);
+  to_object_operation(write_op)->omap_rm_keys(to_remove);
   tracepoint(librados, rados_write_op_omap_rm_keys_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_rm_keys);
@@ -3897,7 +3902,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_rm_keys2)(
   for(size_t i = 0; i < keys_len; i++) {
     to_remove.emplace(keys[i], key_lens[i]);
   }
-  ((::ObjectOperation *)write_op)->omap_rm_keys(to_remove);
+  to_object_operation(write_op)->omap_rm_keys(to_remove);
   tracepoint(librados, rados_write_op_omap_rm_keys_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_rm_keys2);
@@ -3911,8 +3916,8 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_rm_range2)(
 {
   tracepoint(librados, rados_write_op_omap_rm_range_enter,
              write_op, key_begin, key_end);
-  ((::ObjectOperation *)write_op)->omap_rm_range({key_begin, key_begin_len},
-                                                 {key_end, key_end_len});
+  to_object_operation(write_op)->omap_rm_range({key_begin, key_begin_len},
+                                               {key_end, key_end_len});
   tracepoint(librados, rados_write_op_omap_rm_range_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_rm_range2);
@@ -3921,7 +3926,7 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_omap_clear)(
   rados_write_op_t write_op)
 {
   tracepoint(librados, rados_write_op_omap_clear_enter, write_op);
-  ((::ObjectOperation *)write_op)->omap_clear();
+  to_object_operation(write_op)->omap_clear();
   tracepoint(librados, rados_write_op_omap_clear_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_omap_clear);
@@ -3932,8 +3937,8 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_set_alloc_hint)(
   uint64_t expected_write_size)
 {
   tracepoint(librados, rados_write_op_set_alloc_hint_enter, write_op, expected_object_size, expected_write_size);
-  ((::ObjectOperation *)write_op)->set_alloc_hint(expected_object_size,
-                                                  expected_write_size, 0);
+  to_object_operation(write_op)->set_alloc_hint(expected_object_size,
+                                                expected_write_size, 0);
   tracepoint(librados, rados_write_op_set_alloc_hint_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_set_alloc_hint);
@@ -3945,9 +3950,9 @@ extern "C" void LIBRADOS_C_API_DEFAULT_F(rados_write_op_set_alloc_hint2)(
   uint32_t flags)
 {
   tracepoint(librados, rados_write_op_set_alloc_hint2_enter, write_op, expected_object_size, expected_write_size, flags);
-  ((::ObjectOperation *)write_op)->set_alloc_hint(expected_object_size,
-                                                  expected_write_size,
-						  flags);
+  to_object_operation(write_op)->set_alloc_hint(expected_object_size,
+                                                expected_write_size,
+						flags);
   tracepoint(librados, rados_write_op_set_alloc_hint2_exit);
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_write_op_set_alloc_hint2);
@@ -3961,18 +3966,15 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_write_op_operate)(
 {
   tracepoint(librados, rados_write_op_operate_enter, write_op, io, oid, mtime, flags);
   object_t obj(oid);
-  ::ObjectOperation *oo = (::ObjectOperation *) write_op;
+  auto oimpl = static_cast<librados::ObjectOperationImpl*>(write_op);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
-  ceph::real_time *prt = NULL;
-  ceph::real_time rt;
-
   if (mtime) {
-    rt = ceph::real_clock::from_time_t(*mtime);
-    prt = &rt;
+    oimpl->rt = ceph::real_clock::from_time_t(*mtime);
+    oimpl->prt = &oimpl->rt;
   }
 
-  int retval = ctx->operate(obj, oo, prt, translate_flags(flags));
+  int retval = ctx->operate(obj, &oimpl->o, oimpl->prt, translate_flags(flags));
   tracepoint(librados, rados_write_op_operate_exit, retval);
   return retval;
 }
@@ -3987,18 +3989,15 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_write_op_operate2)(
 {
   tracepoint(librados, rados_write_op_operate2_enter, write_op, io, oid, ts, flags);
   object_t obj(oid);
-  ::ObjectOperation *oo = (::ObjectOperation *) write_op;
+  auto oimpl = static_cast<librados::ObjectOperationImpl*>(write_op);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
 
-  ceph::real_time *prt = NULL;
-  ceph::real_time rt;
-
   if (ts) {
-    rt = ceph::real_clock::from_timespec(*ts);
-    prt = &rt;
+    oimpl->rt = ceph::real_clock::from_timespec(*ts);
+    oimpl->prt = &oimpl->rt;
   }
 
-  int retval = ctx->operate(obj, oo, prt, translate_flags(flags));
+  int retval = ctx->operate(obj, &oimpl->o, oimpl->prt, translate_flags(flags));
   tracepoint(librados, rados_write_op_operate_exit, retval);
   return retval;
 }
@@ -4014,10 +4013,16 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_aio_write_op_operate)(
 {
   tracepoint(librados, rados_aio_write_op_operate_enter, write_op, io, completion, oid, mtime, flags);
   object_t obj(oid);
-  ::ObjectOperation *oo = (::ObjectOperation *) write_op;
+  auto oimpl = static_cast<librados::ObjectOperationImpl*>(write_op);
   librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
   librados::AioCompletionImpl *c = (librados::AioCompletionImpl*)completion;
-  int retval = ctx->aio_operate(obj, oo, c, ctx->snapc, translate_flags(flags));
+
+  if (mtime) {
+    oimpl->rt = ceph::real_clock::from_time_t(*mtime);
+    oimpl->prt = &oimpl->rt;
+  }
+
+  int retval = ctx->aio_operate(obj, &oimpl->o, c, ctx->snapc, oimpl->prt, translate_flags(flags));
   tracepoint(librados, rados_aio_write_op_operate_exit, retval);
   return retval;
 }
