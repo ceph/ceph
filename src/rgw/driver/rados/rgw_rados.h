@@ -422,7 +422,6 @@ class RGWRados
 			 RGWObjManifest** pmanifest, optional_yield y);
 
   int update_placement_map();
-  int store_bucket_info(RGWBucketInfo& info, std::map<std::string, bufferlist> *pattrs, RGWObjVersionTracker *objv_tracker, bool exclusive);
 
   void remove_rgw_head_obj(librados::ObjectWriteOperation& op);
   void cls_obj_check_prefix_exist(librados::ObjectOperation& op, const std::string& prefix, bool fail_if_exist);
@@ -781,7 +780,7 @@ public:
       int read(int64_t ofs, int64_t end, bufferlist& bl, optional_yield y, const DoutPrefixProvider *dpp);
       int iterate(const DoutPrefixProvider *dpp, int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
       int get_attr(const DoutPrefixProvider *dpp, const char *name, bufferlist& dest, optional_yield y);
-    };
+    }; // struct RGWRados::Object::Read
 
     struct Write {
       RGWRados::Object *target;
@@ -827,7 +826,7 @@ public:
       const req_state* get_req_state() {
         return nullptr;  /* XXX dang Only used by LTTng, and it handles null anyway */
       }
-    };
+    }; // struct RGWRados::Object::Write
 
     struct Delete {
       RGWRados::Object *target;
@@ -861,7 +860,7 @@ public:
       explicit Delete(RGWRados::Object *_target) : target(_target) {}
 
       int delete_obj(optional_yield y, const DoutPrefixProvider *dpp);
-    };
+    }; // struct RGWRados::Object::Delete
 
     struct Stat {
       RGWRados::Object *source;
@@ -882,16 +881,15 @@ public:
         State() : completion(NULL), ret(0) {}
       } state;
 
-
       explicit Stat(RGWRados::Object *_source) : source(_source) {}
 
       int stat_async(const DoutPrefixProvider *dpp);
       int wait(const DoutPrefixProvider *dpp);
-      int stat();
+
     private:
       int finish(const DoutPrefixProvider *dpp);
-    };
-  };
+    }; // struct RGWRados::Object::Stat
+  }; // class RGWRados::Object
 
   class Bucket {
     RGWRados *store;
@@ -939,12 +937,14 @@ public:
       }
 
       int guard_reshard(const DoutPrefixProvider *dpp, const rgw_obj& obj_instance, BucketShard **pbs, std::function<int(BucketShard *)> call, optional_yield y);
+
     public:
 
-      UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target), obj(_obj),
-                                                              bs(target->get_store()) {
-                                                                blind = (target->get_bucket_info().layout.current_index.layout.type == rgw::BucketIndexType::Indexless);
-                                                              }
+      UpdateIndex(RGWRados::Bucket *_target, const rgw_obj& _obj) : target(_target),
+								    obj(_obj),
+								    bs(target->get_store()) {
+	blind = target->get_bucket_info().layout.current_index.layout.type == rgw::BucketIndexType::Indexless;
+      }
 
       int get_bucket_shard(BucketShard **pbs, const DoutPrefixProvider *dpp, optional_yield y) {
         if (!bs_initialized) {
@@ -967,7 +967,7 @@ public:
 
       int prepare(const DoutPrefixProvider *dpp, RGWModifyOp, const std::string *write_tag, optional_yield y);
       int complete(const DoutPrefixProvider *dpp, int64_t poolid, uint64_t epoch, uint64_t size,
-                   uint64_t accounted_size, ceph::real_time& ut,
+                   uint64_t accounted_size, const ceph::real_time& ut,
                    const std::string& etag, const std::string& content_type,
                    const std::string& storage_class,
                    bufferlist *acl_bl, RGWObjCategory category,
@@ -987,7 +987,7 @@ public:
       const std::string *get_optag() { return &optag; }
 
       bool is_prepared() { return prepared; }
-    }; // class UpdateIndex
+    }; // class RGWRados::Bucket::UpdateIndex
 
     class List {
     protected:
@@ -1051,8 +1051,8 @@ public:
       rgw_obj_key& get_next_marker() {
         return next_marker;
       }
-    }; // class List
-  }; // class Bucket
+    }; // class RGWRados::Bucket::List
+  }; // class RGWRados::Bucket
 
   int on_last_entry_in_listing(const DoutPrefixProvider *dpp,
                                RGWBucketInfo& bucket_info,
