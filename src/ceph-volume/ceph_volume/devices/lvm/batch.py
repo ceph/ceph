@@ -247,6 +247,11 @@ class Batch(object):
             help='bluestore objectstore (default)',
         )
         parser.add_argument(
+            '--bluestore-rdr',
+            action='store_true',
+            help='Use the bluestore-rdr objectstore. (Experimental).',
+        )
+        parser.add_argument(
             '--filestore',
             action='store_true',
             help='filestore objectstore',
@@ -420,13 +425,18 @@ class Batch(object):
 
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if not self.args.bluestore and not self.args.filestore:
+        if not self.args.bluestore \
+            and not self.args.bluestore_rdr \
+            and not self.args.filestore:
             self.args.bluestore = True
+
+        for objectstore in ['filestore', 'bluestore', 'bluestore_rdr']:
+            if self.args.__dict__.get(objectstore,):
+                self.args.objectstore = objectstore.replace('_', '-')
 
         if (self.args.auto and not self.args.db_devices and not
             self.args.wal_devices and not self.args.journal_devices):
             self._sort_rotational_disks()
-
         self._check_slot_args()
 
         ensure_disjoint_device_lists(self.args.devices,
@@ -453,6 +463,8 @@ class Batch(object):
         defaults = common.get_default_args()
         global_args = [
             'bluestore',
+            'objectstore',
+            'bluestore_rdr',
             'filestore',
             'dmcrypt',
             'crush_device_class',
