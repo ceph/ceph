@@ -11356,7 +11356,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt,
 
 int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
                                int64_t request_offset, uint64_t request_size,
-                               int64_t offset, uint64_t size, Inode *in)
+                               int64_t offset, uint64_t size, Inode *in,
+                               bool encrypted)
 {
   utime_t lat;
   uint64_t totalwritten;
@@ -11380,7 +11381,10 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
 
   // extend file?
   if (request_size + request_offset > in->effective_size()) {
-    in->set_effective_size(request_size + request_offset);
+    if (encrypted) {
+      in->set_effective_size(request_size + request_offset);
+      in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+    }
     ldout(cct, 7) << "in->effective_size()=" << in->effective_size() << dendl;
     in->size = offset + size;
     in->mark_caps_dirty(CEPH_CAP_FILE_WR);
@@ -11417,7 +11421,7 @@ void Client::C_Write_Finisher::finish_io(int r)
       }
     }
 
-    r = clnt->_write_success(f, start, fpos, req_ofs, req_size, offset, size, in);
+    r = clnt->_write_success(f, start, fpos, req_ofs, req_size, offset, size, in, encrypted);
   }
 
   iofinished = true;
@@ -11744,7 +11748,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
                         start, f, in, fpos,
                         request_offset, request_size,
                         offset, size,
-                        do_fsync, syncdataonly));
+                        do_fsync, syncdataonly, !!denc));
 
     cwf_iofinish->CWF = cwf.get();
   }
@@ -11849,7 +11853,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 success:
 
   // do not get here if non-blocking caller (onfinish != nullptr)
-  r = _write_success(f, start, fpos, request_offset, request_size, offset, size, in);
+  r = _write_success(f, start, fpos, request_offset, request_size, offset, size, in, !!denc);
 
   if (r >= 0 && do_fsync) {
     int64_t r1;
