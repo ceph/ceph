@@ -1,6 +1,7 @@
 import pytest
 from ceph_volume.devices import raw
-from mock.mock import patch
+from ceph_volume.util import arg_validators
+from mock.mock import patch, MagicMock
 
 
 class TestRaw(object):
@@ -95,3 +96,18 @@ class TestPrepare(object):
         with pytest.raises(Exception):
             raw.prepare.Prepare(argv=['--bluestore', '--data', '/dev/foo']).main()
         m_rollback_osd.assert_called()
+
+    def test_main_bluestore_mutually_exclusive(self):
+        with pytest.raises(SystemExit) as e:
+            arg_validators.ValidRawDevice = MagicMock()
+            r = raw.prepare.Prepare(['--data', '/dev/sdfoo', '--bluestore', '--bluestore-rdr'])
+            r.main()
+        assert e.match('--bluestore and --bluestore-rdr are mutually exclusive.')
+
+    def test_main_objectstore_default(self):
+        arg_validators.ValidRawDevice = MagicMock()
+        r = raw.prepare.Prepare(['--data', '/dev/sdfoo'])
+        r.safe_prepare = MagicMock()
+        r.main()
+        assert r.args.bluestore
+        assert not r.args.bluestore_rdr

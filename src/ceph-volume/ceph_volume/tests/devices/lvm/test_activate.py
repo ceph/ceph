@@ -3,6 +3,8 @@ from copy import deepcopy
 from ceph_volume.devices.lvm import activate
 from ceph_volume.api import lvm as api
 from ceph_volume.tests.conftest import Capture
+from mock import MagicMock, call
+from argparse import Namespace
 
 
 class Args(object):
@@ -338,7 +340,28 @@ class TestActivateFlags(object):
         parsed_args = capture.calls[0]['args'][0]
         assert parsed_args.filestore is False
         assert parsed_args.bluestore is True
+        
+    def test_main_bluestore_mutually_exclusive(self, capsys):
+        with pytest.raises(SystemExit) as e:
+            activate.Activate(['--bluestore', '--bluestore-rdr']).main()
+        stdout, stderr = capsys.readouterr()
+        assert e.match('--bluestore and --bluestore-rdr are mutually exclusive.')
 
+    def test_main_bluestore_rdr(self, capsys):
+        a = activate.Activate(['--bluestore-rdr'])
+        a.activate = MagicMock()
+        a.main()
+        expected_call = call(Namespace(activate_all=False,
+                                       auto_detect_objectstore=False,
+                                       bluestore=True,
+                                       bluestore_rdr=True,
+                                       filestore=False,
+                                       no_systemd=False,
+                                       no_tmpfs=False,
+                                       objectstore='bluestore',
+                                       osd_fsid=None,
+                                       osd_id=None))
+        assert a.activate.mock_calls == [expected_call]
 
 class TestActivateAll(object):
 

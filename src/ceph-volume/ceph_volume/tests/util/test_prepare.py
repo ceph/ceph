@@ -165,6 +165,22 @@ class TestOsdMkfsBluestore(object):
         assert '--bluestore-block-db-path' in fake_call.calls[0]['args'][0]
         assert '/dev/smm2' in fake_call.calls[0]['args'][0]
 
+    def test_objectstore_is_bluestore(self, fake_call, monkeypatch):
+        monkeypatch.setattr(system, 'chown', lambda path: True)
+        prepare.osd_mkfs_bluestore(1, 'asdf', objectstore='bluestore')
+        calls_args = fake_call.calls[0]['args'][0]
+        assert '--osd-objectstore' in fake_call.calls[0]['args'][0]
+        index_of_osd_objectstore = calls_args.index('--osd-objectstore')
+        assert calls_args[index_of_osd_objectstore+1] == 'bluestore'
+
+    def test_objectstore_is_bluestore_rdr(self, fake_call, monkeypatch):
+        monkeypatch.setattr(system, 'chown', lambda path: True)
+        prepare.osd_mkfs_bluestore(1, 'asdf', objectstore='bluestore-rdr')
+        calls_args = fake_call.calls[0]['args'][0]
+        assert '--osd-objectstore' in fake_call.calls[0]['args'][0]
+        index_of_osd_objectstore = calls_args.index('--osd-objectstore')
+        assert calls_args[index_of_osd_objectstore+1] == 'bluestore-rdr'
+
 
 class TestMountOSD(object):
 

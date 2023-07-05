@@ -81,7 +81,14 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
         )
 
 
-def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
+def prepare_bluestore(block,
+                      wal,
+                      db,
+                      secrets,
+                      tags,
+                      osd_id,
+                      fsid,
+                      objectstore):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -116,7 +123,8 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
         osd_id, fsid,
         keyring=cephx_secret,
         wal=wal,
-        db=db
+        db=db,
+        objectstore=objectstore
     )
 
 
@@ -351,7 +359,7 @@ class Prepare(object):
                 self.osd_id,
                 osd_fsid,
             )
-        elif self.args.bluestore:
+        elif self.args.bluestore or self.args.bluestore_rdr:
             try:
                 vg_name, lv_name = self.args.data.split('/')
                 block_lv = api.get_single_lv(filters={'lv_name': lv_name,
@@ -392,6 +400,7 @@ class Prepare(object):
                 tags,
                 self.osd_id,
                 osd_fsid,
+                self.args.objectstore
             )
 
     def main(self):
@@ -436,6 +445,13 @@ class Prepare(object):
                 raise SystemExit('--journal is required when using --filestore')
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if not self.args.bluestore and not self.args.filestore:
+        if self.args.bluestore and self.args.bluestore_rdr:
+            raise SystemExit('--bluestore and --bluestore-rdr are mutually exclusive.')
+        if not self.args.bluestore \
+            and not self.args.bluestore_rdr \
+            and not self.args.filestore:
             self.args.bluestore = True
+        for objectstore in ['filestore', 'bluestore', 'bluestore_rdr']:
+            if self.args.__dict__.get(objectstore,):
+                self.args.objectstore = objectstore.replace('_', '-')
         self.safe_prepare()

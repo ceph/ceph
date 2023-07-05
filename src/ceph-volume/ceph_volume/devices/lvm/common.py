@@ -88,6 +88,10 @@ bluestore_args = {
         'action': 'store_true',
         'help': 'Use the bluestore objectstore',
     },
+    '--bluestore-rdr': {
+        'action': 'store_true',
+        'help': 'Use the bluestore-rdr objectstore. (Experimental).',
+    },
     '--block.db': {
         'dest': 'block_db',
         'help': 'Path to bluestore block.db logical volume or device',

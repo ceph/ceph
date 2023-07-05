@@ -35,7 +35,14 @@ def prepare_dmcrypt(key, device, device_type, fsid):
 
     return '/dev/mapper/{}'.format(mapping)
 
-def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
+def prepare_bluestore(block,
+                      wal,
+                      db,
+                      secrets,
+                      osd_id,
+                      fsid,
+                      tmpfs,
+                      objectstore):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -65,7 +72,8 @@ def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
         osd_id, fsid,
         keyring=cephx_secret,
         wal=wal,
-        db=db
+        db=db,
+        objectstore=objectstore
     )
 
 
@@ -124,6 +132,7 @@ class Prepare(object):
         self.osd_id = prepare_utils.create_id(
             osd_fsid, json.dumps(secrets))
 
+
         prepare_bluestore(
             self.args.data,
             wal,
@@ -132,6 +141,7 @@ class Prepare(object):
             self.osd_id,
             osd_fsid,
             tmpfs,
+            self.args.objectstore
         )
 
     def main(self):
@@ -157,9 +167,14 @@ class Prepare(object):
             print(sub_command_help)
             return
         self.args = parser.parse_args(self.argv)
-        if not self.args.bluestore:
-            terminal.error('must specify --bluestore (currently the only supported backend)')
-            raise SystemExit(1)
+        if self.args.bluestore and self.args.bluestore_rdr:
+            raise SystemExit('--bluestore and --bluestore-rdr are mutually exclusive.')
+        if not self.args.bluestore and not self.args.bluestore_rdr:
+            self.args.bluestore = True
+        for objectstore in ['bluestore', 'bluestore_rdr']:
+            if self.args.__dict__.get(objectstore,):
+                self.args.objectstore = objectstore.replace('_', '-')
+
         if self.args.dmcrypt and not os.getenv('CEPH_VOLUME_DMCRYPT_SECRET'):
             terminal.error('encryption was requested (--dmcrypt) but environment variable ' \
                            'CEPH_VOLUME_DMCRYPT_SECRET is not set, you must set ' \

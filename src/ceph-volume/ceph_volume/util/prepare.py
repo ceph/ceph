@@ -410,7 +410,7 @@ def get_osdspec_affinity():
     return os.environ.get('CEPH_VOLUME_OSDSPEC_AFFINITY', '')
 
 
-def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
+def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False, objectstore='bluestore'):
     """
     Create the files for the OSD to function. A normal call will look like:
 
@@ -432,7 +432,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     base_command = [
         'ceph-osd',
         '--cluster', conf.cluster,
-        '--osd-objectstore', 'bluestore',
+        '--osd-objectstore', objectstore,
         '--mkfs',
         '-i', osd_id,
         '--monmap', monmap,

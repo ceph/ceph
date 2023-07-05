@@ -328,6 +328,17 @@ class TestBatch(object):
         osds = batch.get_lvm_osds(mock_lvs, args)
         assert len(osds) == 1
 
+    def test_main_default_bluestore(self, capsys):
+        b = batch.Batch([])
+        b.args.devices = MagicMock()
+        b.args.yes = True
+        b._check_slot_args = MagicMock()
+        b._execute = MagicMock()
+        b.get_plan = MagicMock()
+        b.main()
+        assert b.args.bluestore
+        assert not b.args.filestore
+        assert not b.args.bluestore_rdr
 
 class TestBatchOsd(object):
 

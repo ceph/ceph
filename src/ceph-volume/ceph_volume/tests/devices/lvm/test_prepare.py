@@ -58,6 +58,36 @@ class TestPrepare(object):
         stdout, stderr = capsys.readouterr()
         assert 'Prepare an OSD by assigning an ID and FSID' in stdout
 
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.util.arg_validators.Device')
+    def test_main_bluestore_mutually_exclusive(self, m_device, m_has_bs_label, capsys):
+        m_device.return_value = MagicMock(exists=True,
+                                          has_fs=False,
+                                          used_by_ceph=False,
+                                          has_partitions=False,
+                                          has_gpt_headers=False)
+        with pytest.raises(SystemExit) as e:
+            lvm.prepare.Prepare(['--data', '/dev/sdfoo', '--bluestore', '--bluestore-rdr']).main()
+        stdout, stderr = capsys.readouterr()
+        assert e.match('--bluestore and --bluestore-rdr are mutually exclusive.')
+
+    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
+    @patch('ceph_volume.util.arg_validators.Device')
+    def test_main_no_objectstore_passed(self, m_device, m_has_bs_label, capsys):
+        m_device.return_value = MagicMock(exists=True,
+                                          has_fs=False,
+                                          used_by_ceph=False,
+                                          has_partitions=False,
+                                          has_gpt_headers=False)
+        p = lvm.prepare.Prepare(['--data', '/dev/sdfoo'])
+        p.safe_prepare = MagicMock()
+        p.main()
+        stdout, stderr = capsys.readouterr()
+        assert p.args.bluestore
+        assert not p.args.bluestore_rdr
+        assert not p.args.filestore
+        assert p.args.objectstore == 'bluestore'
+
     def test_main_shows_full_help(self, capsys):
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=['--help']).main()
@@ -116,7 +146,7 @@ class TestPrepare(object):
         assert expected in str(error.value)
 
     @patch('ceph_volume.devices.lvm.prepare.api.is_ceph_device')
-    def test_safe_prepare_osd_already_created(self, m_is_ceph_device):
+    def test_safe_prepare_osd_already_created(self, m_is_ceph_device, capsys):
         m_is_ceph_device.return_value = True
         with pytest.raises(RuntimeError) as error:
             prepare = lvm.prepare.Prepare(argv=[])
@@ -124,8 +154,8 @@ class TestPrepare(object):
             prepare.args.data = '/dev/sdfoo'
             prepare.get_lv = Mock()
             prepare.safe_prepare()
-            expected = 'skipping {}, it is already prepared'.format('/dev/sdfoo')
-            assert expected in str(error.value)
+        expected = 'skipping {}, it is already prepared'.format('/dev/sdfoo')
+        assert expected in str(error.value)
 
     def test_setup_device_device_name_is_none(self):
         result = lvm.prepare.Prepare([]).setup_device(device_type='data', device_name=None, tags={'ceph.type': 'data'}, size=0, slots=None)
