@@ -3695,8 +3695,12 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 	 if ((endoff >= (loff_t)in->max_size ||
 	      endoff > (loff_t)(in->size << 1)) &&
 	     endoff > (loff_t)in->wanted_max_size) {
-	   ldout(cct, 10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
-	   in->wanted_max_size = endoff;
+           ldout(cct, 10) << "wanted_max_size " << in->wanted_max_size << " -> " << endoff << dendl;
+           uint64_t want = endoff;
+           if (in->fscrypt_auth.size()) {
+             want = fscrypt_block_start(endoff + FSCRYPT_BLOCK_SIZE - 1);
+           }
+	   in->wanted_max_size = want;
 	 }
 	 if (in->wanted_max_size > in->max_size &&
 	     in->wanted_max_size > in->requested_max_size)
