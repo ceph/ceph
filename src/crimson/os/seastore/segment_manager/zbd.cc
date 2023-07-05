@@ -16,7 +16,7 @@ SET_SUBSYS(seastore_device);
 #define SECT_SHIFT	9
 #define RESERVED_ZONES 	1
 // limit the max padding buf size to 1MB
-#define MAX_PADDING_SIZE 1048576
+#define MAX_PADDING_SIZE 4194304
 
 using z_op = crimson::os::seastore::segment_manager::zbd::zone_op;
 template <> struct fmt::formatter<z_op>: fmt::formatter<std::string_view> {
