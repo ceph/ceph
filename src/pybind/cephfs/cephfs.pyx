@@ -1169,7 +1169,8 @@ cdef class LibCephFS(object):
         cdef:
             char* _path = path
             char* _name = name
-        ret = ceph_rmsnap(self.cluster, _path, _name)
+        with nogil:
+            ret = ceph_rmsnap(self.cluster, _path, _name)
         if ret < 0:
             raise make_ex(ret, "rmsnap error")
         return 0
@@ -1188,7 +1189,8 @@ cdef class LibCephFS(object):
         cdef:
             char* _path = path
             snap_info info
-        ret = ceph_get_snap_info(self.cluster, _path, &info)
+        with nogil:
+            ret = ceph_get_snap_info(self.cluster, _path, &info)
         if ret < 0:
             raise make_ex(ret, "snap_info error")
         md = {}
@@ -1353,7 +1355,8 @@ cdef class LibCephFS(object):
         self.require_state("mounted")
         path = cstr(path, 'path')
         cdef char* _path = path
-        ret = ceph_rmdir(self.cluster, _path)
+        with nogil:
+            ret = ceph_rmdir(self.cluster, _path)
         if ret < 0:
             raise make_ex(ret, "error in rmdir {}".format(path.decode('utf-8')))
 
