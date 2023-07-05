@@ -358,8 +358,7 @@ public:
    * @invariant This function is only called on a Leader.
    *
    * @param m An update message
-   * @returns 'true' if the update message was handled (e.g., a command that
-   *	      went through); 'false' otherwise.
+   * @returns 'true' if the pending state should be proposed; 'false' otherwise.
    */
   virtual bool prepare_update(MonOpRequestRef op) = 0;
   /**
