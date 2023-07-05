@@ -714,14 +714,13 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
   //Accumulating data from backend store into rgw_get_obj_max_req_size sized chunks and then writing to cache
   if (write_to_cache) {
     const std::lock_guard l(d3n_get_data.d3n_lock);
-    Attrs attrs;
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
-      filter->get_cache_driver()->put(save_dpp, this->oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
+      filter->get_cache_driver()->put(save_dpp, this->oid, bl, bl.length(), source->get_attrs()); 
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
       ofs += bl_len;
 
-      filter->get_cache_driver()->put(save_dpp, this->oid, bl, bl.length(), attrs); // need attrs for just chunk? -Sam
+      filter->get_cache_driver()->put(save_dpp, this->oid, bl, bl.length(), source->get_attrs());
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
       uint64_t rem_space = rgw_get_obj_max_req_size - bl_rem.length();
       uint64_t len_to_copy = rem_space > bl.length() ? bl.length() : rem_space;
@@ -733,7 +732,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       if (bl_rem.length() == g_conf()->rgw_get_obj_max_req_size) {
         ofs += bl_rem.length();
 
-        filter->get_cache_driver()->put(save_dpp, this->oid, bl_rem, bl_rem.length(), attrs); // need attrs for just chunk? -Sam
+        filter->get_cache_driver()->put(save_dpp, this->oid, bl_rem, bl_rem.length(), source->get_attrs());
 
         bl_rem.clear();
         bl_rem = std::move(bl);
@@ -792,6 +791,7 @@ int D4NFilterWriter::prepare(optional_yield y)
 
 int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 {
+  /*
   int append_dataReturn = driver->get_cache_driver()->append_data(save_dpp, obj->get_key().get_oid(), data);
 
   if (append_dataReturn < 0) {
@@ -799,7 +799,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation succeeded." << dendl;
   }
-
+*/
   return next->process(std::move(data), offset);
 }
 
@@ -880,14 +880,14 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   baseAttrs.insert(attrs.begin(), attrs.end());
 
-  int set_attrsReturn = driver->get_cache_driver()->set_attrs(save_dpp, obj->get_key().get_oid(), baseAttrs);
+/*  int set_attrsReturn = driver->get_cache_driver()->set_attrs(save_dpp, obj->get_key().get_oid(), baseAttrs);
 
   if (set_attrsReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation failed." << dendl;
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
   }
-  
+  */
   return ret;
 }
 
