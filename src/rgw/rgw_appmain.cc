@@ -550,29 +550,29 @@ void rgw::AppMain::init_lua()
 {
   rgw::sal::Driver* driver = env.driver;
   int r{0};
-  std::string path = g_conf().get_val<std::string>("rgw_luarocks_location");
+  std::string install_dir;
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
-  r = rgw::lua::install_packages(dpp, driver, null_yield, path,
-                                 failed_packages, env.lua.luarocks_path);
+  r = rgw::lua::install_packages(dpp, driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
+                                 failed_packages, install_dir);
   if (r < 0) {
-    dout(1) << "WARNING: failed to install lua packages from allowlist. error: " << r
+    ldpp_dout(dpp, 5) << "WARNING: failed to install Lua packages from allowlist. error: " << r
             << dendl;
   }
   for (const auto &p : failed_packages) {
-    dout(5) << "WARNING: failed to install lua package: " << p
+    ldpp_dout(dpp, 5) << "WARNING: failed to install Lua package: " << p
             << " from allowlist" << dendl;
   }
 #endif
 
-  env.lua.manager = env.driver->get_lua_manager();
-
+  env.lua.manager = env.driver->get_lua_manager(install_dir);
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
-      rgw::lua::Background>(driver, dpp->get_cct(), path);
+      rgw::lua::Background>(driver, dpp->get_cct(), env.lua.manager.get());
     lua_background->start();
     env.lua.background = lua_background.get();
+    static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(dpp);
   }
 } /* init_lua */
 
@@ -580,6 +580,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
+    static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
   }
 
   for (auto& fe : fes) {

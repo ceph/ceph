@@ -997,7 +997,7 @@ class DaosStore : public StoreDriver {
   }
   virtual std::string get_host_id() { return ""; }
 
-  virtual std::unique_ptr<LuaManager> get_lua_manager() override;
+  std::unique_ptr<LuaManager> get_lua_manager(const DoutPrefixProvider *dpp = nullptr, const std::string& luarocks_path = "") override;
   virtual std::unique_ptr<RGWRole> get_role(
       std::string name, std::string tenant, std::string path = "",
       std::string trust_policy = "", std::string max_session_duration_str = "",

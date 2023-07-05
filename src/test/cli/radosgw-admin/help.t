@@ -185,12 +185,13 @@
     topic get                  get a bucket notifications topic
     topic rm                   remove a bucket notifications topic
     topic stats                get a bucket notifications persistent topic stats (i.e. reservations, entries & size)
-    script put                 upload a lua script to a context
-    script get                 get the lua script of a context
-    script rm                  remove the lua scripts of a context
-    script-package add         add a lua package to the scripts allowlist
-    script-package rm          remove a lua package from the scripts allowlist
-    script-package list        get the lua packages allowlist
+    script put                 upload a Lua script to a context
+    script get                 get the Lua script of a context
+    script rm                  remove the Lua scripts of a context
+    script-package add         add a Lua package to the scripts allowlist
+    script-package rm          remove a Lua package from the scripts allowlist
+    script-package list        get the Lua packages allowlist
+    script-package reload      install/remove Lua packages according to allowlist
     notification list          list bucket notifications configuration
     notification get           get a bucket notifications configuration
     notification rm            remove a bucket notifications configuration
@@ -370,7 +371,7 @@
   
   Script options:
      --context                 context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata
-     --package                 name of the lua package that should be added/removed to/from the allowlist
+     --package                 name of the Lua package that should be added/removed to/from the allowlist
      --allow-compilation       package is allowed to compile C code as part of its installation
   
   Bucket check olh/unlinked options:

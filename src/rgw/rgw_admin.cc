@@ -316,12 +316,13 @@ void usage()
   cout << "  topic get                  get a bucket notifications topic\n";
   cout << "  topic rm                   remove a bucket notifications topic\n";
   cout << "  topic stats                get a bucket notifications persistent topic stats (i.e. reservations, entries & size)\n";
-  cout << "  script put                 upload a lua script to a context\n";
-  cout << "  script get                 get the lua script of a context\n";
-  cout << "  script rm                  remove the lua scripts of a context\n";
-  cout << "  script-package add         add a lua package to the scripts allowlist\n";
-  cout << "  script-package rm          remove a lua package from the scripts allowlist\n";
-  cout << "  script-package list        get the lua packages allowlist\n";
+  cout << "  script put                 upload a Lua script to a context\n";
+  cout << "  script get                 get the Lua script of a context\n";
+  cout << "  script rm                  remove the Lua scripts of a context\n";
+  cout << "  script-package add         add a Lua package to the scripts allowlist\n";
+  cout << "  script-package rm          remove a Lua package from the scripts allowlist\n";
+  cout << "  script-package list        get the Lua packages allowlist\n";
+  cout << "  script-package reload      install/remove Lua packages according to allowlist\n";
   cout << "  notification list          list bucket notifications configuration\n";
   cout << "  notification get           get a bucket notifications configuration\n";
   cout << "  notification rm            remove a bucket notifications configuration\n";
@@ -493,7 +494,7 @@ void usage()
   cout << "   --notification-id         bucket notifications id\n";
   cout << "\nScript options:\n";
   cout << "   --context                 context in which the script runs. one of: "+LUA_CONTEXT_LIST+"\n";
-  cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
+  cout << "   --package                 name of the Lua package that should be added/removed to/from the allowlist\n";
   cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
   cout << "\nBucket check olh/unlinked options:\n";
   cout << "   --min-age-hours           minimum age of unlinked objects to consider for bucket check unlinked (default: 1)\n";
@@ -857,7 +858,8 @@ enum class OPT {
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
-  SCRIPT_PACKAGE_LIST
+  SCRIPT_PACKAGE_LIST,
+  SCRIPT_PACKAGE_RELOAD
 };
 
 }
@@ -1096,6 +1098,7 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
+  { "script-package reload", OPT::SCRIPT_PACKAGE_RELOAD },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -10732,7 +10735,7 @@ next:
       cerr << "ERROR: cannot specify tenant in background context" << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
@@ -10750,7 +10753,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     std::string script;
     const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc == -ENOENT) {
@@ -10774,7 +10777,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
@@ -10785,16 +10788,16 @@ next:
   if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
-      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::add_package(dpp(), driver, null_yield, *script_package, bool(allow_compilation));
     if (rc < 0) {
-      cerr << "ERROR: failed to add lua package: " << script_package << " .error: " << rc << std::endl;
+      cerr << "ERROR: failed to add Lua package: " << script_package << " .error: " << rc << std::endl;
       return -rc;
     }
 #else
-    cerr << "ERROR: adding lua packages is not permitted" << std::endl;
+    cerr << "ERROR: adding Lua packages is not permitted" << std::endl;
     return EPERM;
 #endif
   }
@@ -10802,7 +10805,7 @@ next:
   if (opt_cmd == OPT::SCRIPT_PACKAGE_RM) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
-      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::remove_package(dpp(), driver, null_yield, *script_package);
@@ -10811,11 +10814,11 @@ next:
       return 0;
     }
     if (rc < 0) {
-      cerr << "ERROR: failed to remove lua package: " << script_package << " .error: " << rc << std::endl;
+      cerr << "ERROR: failed to remove Lua package: " << script_package << " .error: " << rc << std::endl;
       return -rc;
     }
 #else
-    cerr << "ERROR: removing lua packages in not permitted" << std::endl;
+    cerr << "ERROR: removing Lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
   }
@@ -10825,9 +10828,9 @@ next:
     rgw::lua::packages_t packages;
     const auto rc = rgw::lua::list_packages(dpp(), driver, null_yield, packages);
     if (rc == -ENOENT) {
-      std::cout << "no lua packages in allowlist" << std::endl;
+      std::cout << "no Lua packages in allowlist" << std::endl;
     } else if (rc < 0) {
-      cerr << "ERROR: failed to read lua packages allowlist. error: " << rc << std::endl;
+      cerr << "ERROR: failed to read Lua packages allowlist. error: " << rc << std::endl;
       return rc;
     } else {
       for (const auto& package : packages) {
@@ -10835,11 +10838,23 @@ next:
       }
     }
 #else
-    cerr << "ERROR: listing lua packages in not permitted" << std::endl;
+    cerr << "ERROR: listing Lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
   }
 
+  if (opt_cmd == OPT::SCRIPT_PACKAGE_RELOAD) {
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    const auto rc = rgw::lua::reload_packages(dpp(), driver, null_yield);
+    if (rc < 0) {
+      cerr << "ERROR: failed to reload Lua packages. error: " << rc << std::endl;
+      return rc;
+    }
+#else
+    cerr << "ERROR: reloading Lua packages in not permitted" << std::endl;
+    return EPERM;
+#endif
+  }
   return 0;
 }
 

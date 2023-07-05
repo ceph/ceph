@@ -396,8 +396,8 @@ class Driver {
     virtual const RGWSyncModuleInstanceRef& get_sync_module() = 0;
     /** Get the ID of the current host */
     virtual std::string get_host_id() = 0;
-    /** Get a Lua script manager for running lua scripts */
-    virtual std::unique_ptr<LuaManager> get_lua_manager() = 0;
+    /** Get a Lua script manager for running lua scripts and reloading packages */
+    virtual std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) = 0;
     /** Get an IAM Role by name etc. */
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
@@ -1514,6 +1514,12 @@ public:
   virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) = 0;
   /** List lua packages */
   virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) = 0;
+  /** Reload lua packages */
+  virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+  /** Get the path to the loarocks install location **/
+  virtual const std::string& luarocks_path() const = 0;
+  /** Set the path to the loarocks install location **/
+  virtual void set_luarocks_path(const std::string& path) = 0;
 };
 
 /** @} namespace rgw::sal in group RGWSAL */

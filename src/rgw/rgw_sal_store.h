@@ -410,7 +410,18 @@ class StoreZone : public Zone {
 };
 
 class StoreLuaManager : public LuaManager {
+protected:
+  std::string _luarocks_path;
 public:
+  const std::string& luarocks_path() const override {
+    return _luarocks_path;
+  }
+  void set_luarocks_path(const std::string& path) override {
+    _luarocks_path = path;
+  }
+  StoreLuaManager() = default;
+  StoreLuaManager(const std::string& __luarocks_path) :
+    _luarocks_path(__luarocks_path) {}
   virtual ~StoreLuaManager() = default;
 };
 
