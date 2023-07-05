@@ -226,6 +226,7 @@ namespace rgw {
       ~file();
     };
 
+    // coverity[missing_lock:SUPPRESS]
     struct directory {
 
       static constexpr uint32_t FLAG_NONE =     0x0000;
