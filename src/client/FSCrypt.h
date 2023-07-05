@@ -121,6 +121,14 @@ struct FSCryptPolicy {
 
   virtual ~FSCryptPolicy() {}
 
+  void init(const struct fscrypt_policy_v2& policy) {
+    version = policy.version;
+    contents_encryption_mode = policy.contents_encryption_mode;
+    filenames_encryption_mode = policy.filenames_encryption_mode;
+    flags = policy.flags;
+    memcpy(master_key_identifier.raw, policy.master_key_identifier, sizeof(master_key_identifier.raw));
+  }
+
   void decode(bufferlist::const_iterator& env_bl) {
     uint32_t v;
 
