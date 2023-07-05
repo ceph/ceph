@@ -29,6 +29,49 @@ export class FormatterService {
   }
 
   /**
+   * Converts a value from one set of units to another using a conversion factor
+   * @param n The value to be converted
+   * @param units The data units of the value
+   * @param targetedUnits The wanted data units to convert to
+   * @param conversionFactor The factor of convesion
+   * @param unitsArray An ordered array containing the data units
+   * @param decimals The number of decimals on the returned value
+   * @returns Returns a string of the given value formated to the targeted data units.
+   */
+  formatNumberFromTo(
+    n: any,
+    units: any,
+    targetedUnits: string,
+    conversionFactor: number,
+    unitsArray: string[],
+    decimals: number = 1
+  ): string {
+    if (_.isString(n)) {
+      n = Number(n);
+    }
+    if (!_.isNumber(n)) {
+      return '-';
+    }
+    const unitsArrayLowerCase = unitsArray.map((str) => str.toLowerCase());
+    if (
+      !unitsArrayLowerCase.includes(units.toLowerCase()) ||
+      !unitsArrayLowerCase.includes(targetedUnits.toLowerCase())
+    ) {
+      return `${n} ${units}`;
+    }
+    const index =
+      unitsArrayLowerCase.indexOf(units.toLowerCase()) -
+      unitsArrayLowerCase.indexOf(targetedUnits.toLocaleLowerCase());
+    const convertedN =
+      index > 0
+        ? n * Math.pow(conversionFactor, index)
+        : n / Math.pow(conversionFactor, Math.abs(index));
+    let result = _.round(convertedN, decimals).toString();
+    result = `${result} ${targetedUnits}`;
+    return result;
+  }
+
+  /**
    * Convert the given value into bytes.
    * @param {string} value The value to be converted, e.g. 1024B, 10M, 300KiB or 1ZB.
    * @param error_value The value returned in case the regular expression did not match. Defaults to
