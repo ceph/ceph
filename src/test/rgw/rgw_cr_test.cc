@@ -55,12 +55,14 @@ struct TempPool {
     fmt::format("{}-{}-{}", ::time(nullptr), ::getpid(),num++);
 
   TempPool() {
-    auto r = store->getRados()->get_rados_handle()->pool_create(name.c_str());
+    [[maybe_unused]] auto r =
+        store->getRados()->get_rados_handle()->pool_create(name.c_str());
     assert(r == 0);
   }
 
   ~TempPool() {
-    auto r = store->getRados()->get_rados_handle()->pool_delete(name.c_str());
+    [[maybe_unused]] auto r =
+        store->getRados()->get_rados_handle()->pool_delete(name.c_str());
     assert(r == 0);
   }
 
@@ -70,8 +72,9 @@ struct TempPool {
 
   operator librados::IoCtx() {
     librados::IoCtx ioctx;
-    auto r = store->getRados()->get_rados_handle()->ioctx_create(name.c_str(),
-								 ioctx);
+    [[maybe_unused]] auto r =
+        store->getRados()->get_rados_handle()->ioctx_create(name.c_str(),
+                                                            ioctx);
     assert(r == 0);
     return ioctx;
   }
