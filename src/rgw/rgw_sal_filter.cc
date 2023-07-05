@@ -432,9 +432,9 @@ const RGWSyncModuleInstanceRef& FilterDriver::get_sync_module()
   return next->get_sync_module();
 }
 
-std::unique_ptr<LuaManager> FilterDriver::get_lua_manager()
+std::unique_ptr<LuaManager> FilterDriver::get_lua_manager(const std::string& luarocks_path)
 {
-  std::unique_ptr<LuaManager> nm = next->get_lua_manager();
+  std::unique_ptr<LuaManager> nm = next->get_lua_manager(luarocks_path);
 
   return std::make_unique<FilterLuaManager>(std::move(nm));
 }
@@ -1317,6 +1317,19 @@ int FilterLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yiel
                                    rgw::lua::packages_t& packages)
 {
   return next->list_packages(dpp, y, packages);
+}
+
+int FilterLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->reload_packages(dpp, y);
+}
+
+const std::string& FilterLuaManager::luarocks_path() const {
+  return next->luarocks_path();
+}
+
+void FilterLuaManager::set_luarocks_path(const std::string& path) {
+  next->set_luarocks_path(path);
 }
 
 } } // namespace rgw::sal

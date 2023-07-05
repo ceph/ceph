@@ -198,7 +198,7 @@ class RadosStore : public StoreDriver {
     virtual int meta_remove(const DoutPrefixProvider* dpp, std::string& metadata_key, optional_yield y) override;
     virtual const RGWSyncModuleInstanceRef& get_sync_module() { return rados->get_sync_module(); }
     virtual std::string get_host_id() { return rados->host_id; }
-    virtual std::unique_ptr<LuaManager> get_lua_manager() override;
+    std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
 					      std::string path="",
@@ -889,19 +889,43 @@ public:
 };
 
 class RadosLuaManager : public StoreLuaManager {
+  class PackagesWatcher : public librados::WatchCtx2, public DoutPrefixProvider {
+    RadosLuaManager* const parent;
+  public:
+    PackagesWatcher(RadosLuaManager* _parent) : 
+      parent(_parent) {}
+    ~PackagesWatcher() override = default;
+    void handle_notify(uint64_t notify_id, uint64_t cookie,
+                   uint64_t notifier_id, bufferlist& bl) override;
+    void handle_error(uint64_t cookie, int err) override;
+   
+    // DoutPrefixProvider iterface
+    CephContext* get_cct() const override;
+    unsigned get_subsys() const override;
+    std::ostream& gen_prefix(std::ostream& out) const override;
+  };
+
   RadosStore* const store;
   rgw_pool pool;
+  librados::IoCtx& ioctx;
+  PackagesWatcher packages_watcher;
+  void ack_reload(const DoutPrefixProvider* dpp, uint64_t notify_id, uint64_t cookie, int reload_status);
+  void handle_reload_notify(const DoutPrefixProvider* dpp, optional_yield y, uint64_t notify_id, uint64_t cookie);
+  uint64_t watch_handle = 0;
 
 public:
-  RadosLuaManager(RadosStore* _s);
-  virtual ~RadosLuaManager() = default;
+  RadosLuaManager(RadosStore* _s, const std::string& _luarocks_path);
+  ~RadosLuaManager() override = default;
 
-  virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script);
-  virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script);
-  virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key);
-  virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name);
-  virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name);
-  virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages);
+  int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
+  int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
+  int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
+  int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
+  int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
+  int watch_reload(const DoutPrefixProvider* dpp);
+  int unwatch_reload(const DoutPrefixProvider* dpp);
 };
 
 class RadosOIDCProvider : public RGWOIDCProvider {

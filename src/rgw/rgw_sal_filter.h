@@ -264,7 +264,7 @@ public:
 			  std::string& metadata_key, optional_yield y) override;
   virtual const RGWSyncModuleInstanceRef& get_sync_module() override;
   virtual std::string get_host_id() override { return next->get_host_id(); }
-  virtual std::unique_ptr<LuaManager> get_lua_manager() override;
+  virtual std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					    std::string tenant,
 					    std::string path="",
@@ -896,6 +896,10 @@ public:
   virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
+  virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
+  const std::string& luarocks_path() const override;
+  void set_luarocks_path(const std::string& path) override;
+
 };
 
 } } // namespace rgw::sal

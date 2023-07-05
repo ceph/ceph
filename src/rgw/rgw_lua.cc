@@ -97,7 +97,7 @@ int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const
 
 namespace bp = boost::process;
 
-int add_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name, bool allow_compilation)
+int add_package(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name, bool allow_compilation)
 {
   // verify that luarocks can load this package
   const auto p = bp::search_path("luarocks");
@@ -133,25 +133,19 @@ int add_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optiona
     return ret;
   }
 
-  auto lua_mgr = driver->get_lua_manager();
-
-  return lua_mgr->add_package(dpp, y, package_name);
+  return driver->get_lua_manager("")->add_package(dpp, y, package_name);
 }
 
 int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, const std::string& package_name)
 {
-  auto lua_mgr = driver->get_lua_manager();
-
-  return lua_mgr->remove_package(dpp, y, package_name);
+  return driver->get_lua_manager("")->remove_package(dpp, y, package_name);
 }
 
 namespace bp = boost::process;
 
 int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, packages_t& packages)
 {
-  auto lua_mgr = driver->get_lua_manager();
-
-  return lua_mgr->list_packages(dpp, y, packages);
+  return driver->get_lua_manager("")->list_packages(dpp, y, packages);
 }
 
 namespace fs = std::filesystem;
@@ -244,32 +238,12 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     ldpp_dout(dpp, 20) << lines << dendl;
   }
   
-  // luarocks directory cleanup
-  /*std::error_code ec;
-  if (fs::remove_all(luarocks_path, ec)
-      == static_cast<std::uintmax_t>(-1) &&
-      ec != std::errc::no_such_file_or_directory) {
-    ldpp_dout(dpp, 1) << "Lua ERROR: failed to clear luarocks directory: " <<
-      luarocks_path << ". error: " << ec.message() << dendl; 
-    return -ec.value();
-  }*/
-  /*auto rc = create_directory_p(dpp, luarocks_path);
-  if (rc < 0) {
-    ldpp_dout(dpp, 1) << "Lua ERROR: failed to recreate luarocks directory: " <<
-      luarocks_path << ". error: " << rc << dendl; 
-    return rc;
-  }*/
-
-  // switch temporary install directory to luarocks one
-  /*fs::rename(tmp_luarocks_path, luarocks_path, ec);
-  if (ec) {
-    ldpp_dout(dpp, 1) << "Lua ERROR: failed to switch between temp directory: " <<
-      tmp_luarocks_path << " and luarocks directory: " << luarocks_path << 
-      " . error: " << ec.message() << dendl; 
-    return -ec.value();
-  }*/
-
   return 0;
+}
+
+int reload_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y)
+{
+  return driver->get_lua_manager("")->reload_packages(dpp, y);
 }
 
 #endif // WITH_RADOSGW_LUA_PACKAGES

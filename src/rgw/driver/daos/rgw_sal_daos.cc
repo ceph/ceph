@@ -880,8 +880,8 @@ const std::string& DaosZone::get_current_period_id() {
   return current_period->get_id();
 }
 
-std::unique_ptr<LuaManager> DaosStore::get_lua_manager() {
-  return std::make_unique<DaosLuaManager>(this);
+std::unique_ptr<LuaManager> DaosStore::get_lua_manager(const DoutPrefixProvider *dpp, const std::string& luarocks_path) {
+  return std::make_unique<DaosLuaManager>(this, dpp, luarocks_path);
 }
 
 int DaosObject::get_obj_state(const DoutPrefixProvider* dpp,

@@ -784,7 +784,7 @@ int execute(
   int rc = 0;
   try {
     open_standard_libs(L);
-    set_package_path(L, s->penv.lua.luarocks_path);
+    set_package_path(L, s->penv.lua.manager->luarocks_path());
 
     create_debug_action(L, s->cct);  
   
