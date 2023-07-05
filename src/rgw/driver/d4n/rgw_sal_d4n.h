@@ -127,6 +127,7 @@ class D4NFilterObject : public FilterObject {
 	  private:
 	    D4NFilterDriver* filter; // don't need -Sam ?
 	    std::string oid;
+	    D4NFilterObject* source;
 	    RGWGetDataCB* client_cb;
 	    uint64_t ofs = 0, len = 0;
 	    bufferlist bl_rem;
@@ -135,8 +136,9 @@ class D4NFilterObject : public FilterObject {
 	    bool write_to_cache{true};
 
 	  public:
-	    D4NFilterGetCB(D4NFilterDriver* _filter, std::string& _oid) : filter(_filter), 
-									  oid(_oid) {}
+	    D4NFilterGetCB(D4NFilterDriver* _filter, std::string& _oid, D4NFilterObject* _source) : filter(_filter), 
+									  oid(_oid), 
+								          source(_source) {}
 
 	    const DoutPrefixProvider* save_dpp;
 
@@ -153,7 +155,7 @@ class D4NFilterObject : public FilterObject {
 										   source(_source) 
         {
 	  std::string oid = source->get_bucket()->get_marker() + "_" + source->get_key().get_oid();
-          cb = std::make_unique<D4NFilterGetCB>(source->driver, oid); 
+          cb = std::make_unique<D4NFilterGetCB>(source->driver, oid, source); 
 	}
 	virtual ~D4NFilterReadOp() = default;
 
