@@ -140,6 +140,8 @@ class Notify : public seastar::enable_shared_from_this<Notify> {
     [this] { do_notify_timeout(); }
   };
 
+  ~Notify();
+
   /// (gid,cookie) -> reply_bl for everyone who acked the notify
   std::multiset<notify_reply_t> notify_replies;
 
