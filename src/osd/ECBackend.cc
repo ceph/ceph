@@ -1351,11 +1351,6 @@ void ECBackend::handle_sub_read_reply(
 
 void ECBackend::ReadPipeline::complete_read_op(ReadOp &rop)
 {
-  return [this,
-    cct=(CephContext*)nullptr,
-    // params
-    &rop
-  ] {
   map<hobject_t, read_request_t>::iterator reqiter =
     rop.to_read.begin();
   map<hobject_t, read_result_t>::iterator resiter =
@@ -1379,7 +1374,6 @@ void ECBackend::ReadPipeline::complete_read_op(ReadOp &rop)
     rop.on_complete->complete(rop.priority);
     rop.on_complete = nullptr;
   }
-  }();
 }
 
 struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
@@ -1398,13 +1392,6 @@ void ECBackend::ReadPipeline::filter_read_op(
   const OSDMapRef& osdmap,
   ReadOp &op)
 {
-  return [this,
-    get_parent=[this] (auto...) { return this->get_parent();},
-    cct=(CephContext*)nullptr,
-    // params
-    &op,
-    &osdmap
-  ] {
   set<hobject_t> to_cancel;
   for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
        i != op.source_to_obj.end();
@@ -1478,7 +1465,6 @@ void ECBackend::ReadPipeline::filter_read_op(
         new FinishReadOp(*this, op.tid)),
       1);
   }
-  }();
 }
 
 void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
@@ -1507,9 +1493,6 @@ void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
 
 void ECBackend::ReadPipeline::on_change()
 {
-  return [this,
-    cct=(CephContext*)nullptr
-  ] {
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {
@@ -1525,7 +1508,6 @@ void ECBackend::ReadPipeline::on_change()
   tid_to_read_map.clear();
   shard_to_read_map.clear();
   in_progress_client_reads.clear();
-  }();
 }
 
 void ECBackend::RMWPipeline::on_change()
@@ -1844,21 +1826,6 @@ void ECBackend::ReadPipeline::start_read_op(
   bool for_recovery,
   GenContext<int> *on_complete)
 {
-  return [this,
-    get_parent=[this] (auto...) { return this->get_parent();},
-    do_read_op=[this] (auto&&... args) {
-      return this->do_read_op(std::forward<decltype(args)>(args)...);
-    },
-    cct=(CephContext*)nullptr,
-    // params
-    priority,
-    _op=std::move(_op),
-    do_redundant_reads,
-    for_recovery,
-    on_complete,
-    &want_to_read,
-    &to_read
-  ] {
   ceph_tid_t tid = get_parent()->get_tid();
   ceph_assert(!tid_to_read_map.count(tid));
   auto &op = tid_to_read_map.emplace(
@@ -1878,19 +1845,10 @@ void ECBackend::ReadPipeline::start_read_op(
     op.trace.event("start ec read");
   }
   do_read_op(op);
-  }();
 }
 
 void ECBackend::ReadPipeline::do_read_op(ReadOp &op)
 {
-  return [this,
-    get_parent=[this] (auto...) { return this->get_parent();},
-    get_osdmap_epoch=[this] (auto...) { return this->get_osdmap_epoch(); }, // get_parent() basically
-    &sinfo=this->sinfo,
-    cct=(CephContext*)nullptr,
-    // params
-    &op
-  ] {
   int priority = op.priority;
   ceph_tid_t tid = op.tid;
 
@@ -1960,7 +1918,6 @@ void ECBackend::ReadPipeline::do_read_op(ReadOp &op)
   if (!m.empty()) {
     get_parent()->send_message_osd_cluster(m, get_osdmap_epoch());
   }
-  }();
 
   dout(10) << __func__ << ": started " << op << dendl;
 }
