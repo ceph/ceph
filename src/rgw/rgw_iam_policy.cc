@@ -532,6 +532,8 @@ boost::optional<Principal> ParseState::parse_principal(string&& s,
 }
 
 bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
+  assert(s);
+
   auto k = pp->tokens.lookup(s, l);
   Policy& p = pp->policy;
   bool is_action = false;
@@ -565,9 +567,9 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 			   std::string_view{s, l}));
       return false;
     }
-  } else if (w->id == TokenID::Principal && s && *s == '*') {
+  } else if (w->id == TokenID::Principal && *s == '*') {
     t->princ.emplace(Principal::wildcard());
-  } else if (w->id == TokenID::NotPrincipal && s && *s == '*') {
+  } else if (w->id == TokenID::NotPrincipal && *s == '*') {
     t->noprinc.emplace(Principal::wildcard());
   } else if ((w->id == TokenID::Action) ||
 	     (w->id == TokenID::NotAction)) {
