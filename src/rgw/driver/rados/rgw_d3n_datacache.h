@@ -3,16 +3,16 @@
 
 #pragma once
 
-#include "rgw_rados.h"
+#include <aio.h>
 #include <curl/curl.h>
 
 #include "rgw_common.h"
+#include "rgw_rados.h"
 
 #include <unistd.h>
 #include <signal.h>
 #include "include/Context.h"
 #include "include/lru.h"
-#include "rgw_d3n_cacherequest.h"
 
 
 /*D3nDataCache*/
@@ -240,7 +240,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
     if (d->rgwrados->d3n_data_cache->get(oid, len)) {
       // Read From Cache
       ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): READ FROM CACHE: oid=" << read_obj.oid << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << ", len=" << len << dendl;
-      auto completed = d->aio->get(ref.obj, rgw::Aio::d3n_cache_op(dpp, d->yield, read_ofs, len, d->rgwrados->d3n_data_cache->cache_location), cost, id);
+      auto completed = d->aio->get(ref.obj, rgw::d3n::cache_read_op(dpp, d->yield, read_ofs, len, d->rgwrados->d3n_data_cache->cache_location), cost, id);
       r = d->flush(std::move(completed));
       if (r < 0) {
         lsubdout(g_ceph_context, rgw, 0) << "D3nDataCache: " << __func__ << "(): Error: failed to drain/flush, r= " << r << dendl;
