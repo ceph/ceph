@@ -7951,31 +7951,26 @@ void OSD::trim_maps(epoch_t oldest, bool skip_maps)
   if (min <= superblock.oldest_map)
     return;
 
-  int num = 0;
+  // Trim from the superblock's oldest_map up to `min`.
+  // Break if we have exceeded the txn target size.
+  // If skip_maps is true, we will trim up `min` unconditionally.
   ObjectStore::Transaction t;
-  for (epoch_t e = superblock.oldest_map; e < min; ++e) {
-    dout(20) << " removing old osdmap epoch " << e << dendl;
-    t.remove(coll_t::meta(), get_osdmap_pobject_name(e));
-    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
-    superblock.oldest_map = e + 1;
-    num++;
-    if (num >= cct->_conf->osd_target_transaction_size) {
+  while (superblock.oldest_map < min) {
+    dout(20) << " removing old osdmap epoch " << superblock.oldest_map << dendl;
+    t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.oldest_map));
+    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.oldest_map));
+    ++superblock.oldest_map;
+    if (t.get_num_ops() > cct->_conf->osd_target_transaction_size) {
       service.publish_superblock(superblock);
       write_superblock(cct, superblock, t);
-      int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+      int tr = store->queue_transaction(service.meta_ch, t.claim_and_reset(), nullptr);
       ceph_assert(tr == 0);
-      num = 0;
-      if (!skip_maps) {
-	// skip_maps leaves us with a range of old maps if we fail to remove all
-	// of them before moving superblock.oldest_map forward to the first map
-	// in the incoming MOSDMap msg. so we should continue removing them in
-	// this case, even we could do huge series of delete transactions all at
-	// once.
-	break;
+      if (skip_maps == false) {
+        break;
       }
     }
   }
-  if (num > 0) {
+  if (t.get_num_ops() > 0) {
     service.publish_superblock(superblock);
     write_superblock(cct, superblock, t);
     int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
@@ -8103,6 +8098,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       m->put();
       return;
     }
+    // The superblock's oldest_map should be moved forward (skipped)
+    // to the `first` osdmap of the incoming MOSDMap message.
+    // Trim all of the skipped osdmaps before updating the oldest_map.
     skip_maps = true;
   }
 
