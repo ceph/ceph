@@ -3114,12 +3114,24 @@ void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 	continue;
       }
       if (newstate >= MDSMap::STATE_ACTIVE) {
-	if (oldstate < MDSMap::STATE_ACTIVE) {
-	  // kick new requests
-	  kick_requests(session.get());
-	  kick_flushing_caps(session.get());
-	  signal_context_list(session->waiting_for_open);
-	  wake_up_session_caps(session.get(), true);
+	if (oldstate <= MDSMap::STATE_ACTIVE && newstate != oldstate) {
+          // flush the delayed caps in case this MDS is stopping
+          for (auto p = delayed_list.begin(); p != delayed_list.end(); ) {
+            Inode *in = *p;
+            ++p;
+            if (!mount_aborted && in->auth_cap->session == session.get()) {
+              in->delay_cap_item.remove_myself();
+              check_caps(in, CHECK_CAPS_NODELAY);
+	    }
+          }
+
+	  if (oldstate < MDSMap::STATE_ACTIVE) {
+	    // kick new requests
+	    kick_requests(session.get());
+	    kick_flushing_caps(session.get());
+	    signal_context_list(session->waiting_for_open);
+	    wake_up_session_caps(session.get(), true);
+	  }
 	}
 	connect_mds_targets(mds);
       }
