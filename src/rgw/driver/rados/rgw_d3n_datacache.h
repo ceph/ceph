@@ -3,16 +3,16 @@
 
 #pragma once
 
-#include "rgw_rados.h"
+#include <aio.h>
 #include <curl/curl.h>
 
 #include "rgw_common.h"
+#include "rgw_rados.h"
 
 #include <unistd.h>
 #include <signal.h>
 #include "include/Context.h"
 #include "include/lru.h"
-#include "rgw_d3n_cacherequest.h"
 
 
 /*D3nDataCache*/
