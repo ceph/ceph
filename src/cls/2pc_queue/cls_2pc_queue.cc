@@ -55,6 +55,36 @@ static int cls_2pc_queue_get_capacity(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+static int cls_2pc_queue_get_topic_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_queue_get_stats_ret op_ret;
+
+  // get head
+  cls_queue_head head;
+  auto ret = queue_read_head(hctx, head);
+  if (ret < 0) {
+    return ret;
+  }
+  const auto remaining_size = (head.tail.offset >= head.front.offset) ?
+                              (head.queue_size - head.tail.offset) + (head.front.offset - head.max_head_size) :
+                              head.front.offset - head.tail.offset;
+  op_ret.queue_size = head.queue_size - head.max_head_size - remaining_size;
+
+  cls_2pc_urgent_data urgent_data;
+  try {
+    auto in_iter = head.bl_urgent_data.cbegin();
+    decode(urgent_data, in_iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(1, "ERROR: cls_2pc_queue_get_committed_entries: failed to decode header of queue: %s", err.what());
+    return -EINVAL;
+  }
+  op_ret.queue_entries = urgent_data.committed_entries;
+
+  encode(op_ret, *out);
+
+  return 0;
+}
+
 static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   cls_2pc_queue_reserve_op res_op;
   try {
@@ -112,7 +142,7 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   cls_2pc_reservations::iterator last_reservation;
   std::tie(last_reservation, result) = urgent_data.reservations.emplace(std::piecewise_construct,
           std::forward_as_tuple(urgent_data.last_id),
-          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now()));
+          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now(), res_op.entries));
   if (!result) {
     // an old reservation that was never committed or aborted is in the map
     // caller should try again assuming other IDs are ok
@@ -148,7 +178,7 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
     }
     std::tie(std::ignore, result) = xattr_reservations.emplace(std::piecewise_construct,
           std::forward_as_tuple(urgent_data.last_id),
-          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now()));
+          std::forward_as_tuple(res_op.size, ceph::coarse_real_clock::now(), res_op.entries));
     if (!result) {
       // an old reservation that was never committed or aborted is in the map
       // caller should try again assuming other IDs are ok
@@ -268,6 +298,7 @@ static int cls_2pc_queue_commit(cls_method_context_t hctx, bufferlist *in, buffe
   }
 
   urgent_data.reserved_size -= res.size;
+  urgent_data.committed_entries += res.entries;
 
   if (xattr_reservations.empty()) {
     // remove the reservation from urgent data
@@ -577,6 +608,7 @@ CLS_INIT(2pc_queue)
   cls_handle_t h_class;
   cls_method_handle_t h_2pc_queue_init;
   cls_method_handle_t h_2pc_queue_get_capacity;
+  cls_method_handle_t h_2pc_queue_get_topic_stats;
   cls_method_handle_t h_2pc_queue_reserve;
   cls_method_handle_t h_2pc_queue_commit;
   cls_method_handle_t h_2pc_queue_abort;
@@ -589,6 +621,7 @@ CLS_INIT(2pc_queue)
 
   cls_register_cxx_method(h_class, TPC_QUEUE_INIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_init, &h_2pc_queue_init);
   cls_register_cxx_method(h_class, TPC_QUEUE_GET_CAPACITY, CLS_METHOD_RD, cls_2pc_queue_get_capacity, &h_2pc_queue_get_capacity);
+  cls_register_cxx_method(h_class, TPC_QUEUE_GET_TOPIC_STATS, CLS_METHOD_RD, cls_2pc_queue_get_topic_stats, &h_2pc_queue_get_topic_stats);
   cls_register_cxx_method(h_class, TPC_QUEUE_RESERVE, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_reserve, &h_2pc_queue_reserve);
   cls_register_cxx_method(h_class, TPC_QUEUE_COMMIT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_commit, &h_2pc_queue_commit);
   cls_register_cxx_method(h_class, TPC_QUEUE_ABORT, CLS_METHOD_RD | CLS_METHOD_WR, cls_2pc_queue_abort, &h_2pc_queue_abort);
