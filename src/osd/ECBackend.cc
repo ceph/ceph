@@ -1379,7 +1379,7 @@ struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
   ECBackend *ec;
   ceph_tid_t tid;
   FinishReadOp(ECBackend *ec, ceph_tid_t tid) : ec(ec), tid(tid) {}
-  void finish(ThreadPool::TPHandle &handle) override {
+  void finish(ThreadPool::TPHandle&) override {
     auto ropiter = ec->tid_to_read_map.find(tid);
     ceph_assert(ropiter != ec->tid_to_read_map.end());
     ec->complete_read_op(ropiter->second);
