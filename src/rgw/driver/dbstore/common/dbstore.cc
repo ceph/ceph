@@ -1427,7 +1427,7 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   if (r < 0)
     return r;
 
-  if (!astate->exists) {
+  if (!astate || !astate->exists) {
     return -ENOENT;
   }
 
@@ -1451,17 +1451,15 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   bool reading_from_head = (ofs < head_data_size);
 
   if (reading_from_head) {
-    if (astate) { // && astate->prefetch_data)?
-      if (!ofs && astate->data.length() >= len) {
-        bl = astate->data;
-        return bl.length();
-      }
+    if (!ofs && astate->data.length() >= len) {
+      bl = astate->data;
+      return bl.length();
+    }
 
-      if (ofs < astate->data.length()) {
-        unsigned copy_len = std::min((uint64_t)head_data_size - ofs, len);
-        astate->data.begin(ofs).copy(copy_len, bl);
-        return bl.length();
-      }
+    if (ofs < astate->data.length()) {
+      unsigned copy_len = std::min((uint64_t)head_data_size - ofs, len);
+      astate->data.begin(ofs).copy(copy_len, bl);
+      return bl.length();
     }
   }
 
