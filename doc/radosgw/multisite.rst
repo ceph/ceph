@@ -46,6 +46,26 @@ configurations for the Ceph Object Gateway:
   a global object namespace. This global object namespace ensures unique
   object IDs across zonegroups and zones.
 
+  It can be useful to create multiple zonegroups in cases where isolation of
+  the RADOS object data is desirable when those datasets exist in a shared
+  namespace of users and buckets. It might be that you have several connected
+  sites that share storage, but only require a single backup for purposes of
+  disaster recovery.  In such a case, it could make sense to create several
+  zonegroups with only two zones each to avoid replicating all objects to all
+  zones.
+
+  In other cases, it might make more sense to isolate RADOS object data in
+  separate realms, with each having a single zonegroup. Zonegroups provide
+  flexibility by making it possible to control the isolation of data and
+  metadata separately.
+
+  Metadata (for example, users and buckets) replicates to all zonegroups, but
+  object data replicates only within a single zonegroup. A bucket is "owned" by
+  the zonegrup that created it (except in cases in which the
+  ``LocationConstraint`` has overridden this upon creation of the bucket). Any
+  request for data in that bucket that are sent to other zonegroups redirect to
+  the zonegroup where the bucket resides.
+
 - **Multiple Realms:** Beginning with the Kraken release, the Ceph Object
   Gateway supports "realms", which are containers for zonegroups. Realms make
   it possible to set policies that apply to multiple zonegroups. Realms have a
@@ -54,6 +74,7 @@ configurations for the Ceph Object Gateway:
   define multiple namespaces and multiple configurations (this means that each
   realm can have a configuration that is distinct from the configuration of
   other realms).
+
 
 Diagram - Replication of Object Data Between Zones
 --------------------------------------------------
