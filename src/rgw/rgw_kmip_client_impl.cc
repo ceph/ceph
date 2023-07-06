@@ -243,11 +243,7 @@ RGWKmipHandleBuilder::build() const
 
   failed = 0;
 Done:
-  if (!failed)
-    ;
-  else if (!r)
-    ;
-  else {
+  if(failed && r) {
     kmip_free_handle_stuff(r);
     delete r;
     r = 0;

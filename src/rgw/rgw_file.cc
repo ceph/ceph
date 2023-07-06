@@ -383,6 +383,7 @@ namespace rgw {
 	/* implies !rgw_fh, so also !LOCKED */
 	return -ENOENT;
       }
+      assert(rgw_fh);
 
       if (bs.num_entries > 1) {
 	unref(bkt_fh); /* return stat_bucket ref */
@@ -449,6 +450,7 @@ namespace rgw {
 
     /* ENOENT when raced with other s3 gateway */
     if (! rc || rc == -ENOENT) {
+      // coverity[var_deref_op:SUPPRESS]
       rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
       fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
 		      RGWFileHandle::FHCache::FLAG_LOCK);

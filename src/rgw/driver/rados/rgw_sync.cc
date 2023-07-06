@@ -81,13 +81,14 @@ int RGWBackoffControlCR::operate(const DoutPrefixProvider *dpp) {
     // retry the operation until it succeeds
     while (true) {
       yield {
-	std::lock_guard l{lock};
+        std::lock_guard l{lock};
         cr = alloc_cr();
         cr->get();
         call(cr);
       }
       {
-	std::lock_guard l{lock};
+        std::lock_guard l{lock};
+        // coverity[var_deref_model:SUPPRESS]
         cr->put();
         cr = NULL;
       }
