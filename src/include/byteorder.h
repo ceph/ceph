@@ -24,7 +24,7 @@ public:
     v = boost::endian::native_to_little(nv);
     return *this;
   }
-  operator T() const { return boost::endian::little_to_native(v); }
+  constexpr operator T() const { return boost::endian::little_to_native(v); }
   friend inline bool operator==(ceph_le a, ceph_le b) {
     return a.v == b.v;
   }
