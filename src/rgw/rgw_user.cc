@@ -4,6 +4,7 @@
 #include "rgw_sal_rados.h"
 
 #include "include/types.h"
+#include "common/errno.h"
 #include "rgw_user.h"
 
 // until everything is moved from rgw_common
