@@ -168,7 +168,6 @@ public:
       func.release()->complete(std::move(results));
     }
   };
-  std::list<ClientAsyncReadStatus> in_progress_client_reads;
   void objects_read_async(
     const hobject_t &hoid,
     const std::list<std::pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -176,13 +175,7 @@ public:
     Context *on_complete,
     bool fast_read = false) override;
 
-  void kick_reads() {
-    while (in_progress_client_reads.size() &&
-	   in_progress_client_reads.front().is_complete()) {
-      in_progress_client_reads.front().run();
-      in_progress_client_reads.pop_front();
-    }
-  }
+  void kick_reads();
 
 private:
   friend struct ECRecoveryHandle;
@@ -292,12 +285,6 @@ private:
     const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m);
-  void get_all_avail_shards(
-    const hobject_t &hoid,
-    const std::set<pg_shard_t> &error_shards,
-    std::set<int> &have,
-    std::map<shard_id_t, pg_shard_t> &shards,
-    bool for_recovery);
 
 public:
   /**
@@ -403,28 +390,86 @@ public:
     ReadOp(const ReadOp &) = default;
     ReadOp(ReadOp &&) = default;
   };
-  friend struct FinishReadOp;
-  void filter_read_op(
-    const OSDMapRef& osdmap,
-    ReadOp &op);
-  void complete_read_op(ReadOp &rop);
-  friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
 
-  std::map<ceph_tid_t, ReadOp> tid_to_read_map;
-  std::map<pg_shard_t, std::set<ceph_tid_t> > shard_to_read_map;
-  void start_read_op(
-    int priority,
-    std::map<hobject_t, std::set<int>> &want_to_read,
-    std::map<hobject_t, read_request_t> &to_read,
-    OpRequestRef op,
-    bool do_redundant_reads,
-    bool for_recovery,
-    GenContext<int> *on_complete);
+  struct ReadPipeline {
+    void objects_read_and_reconstruct(
+      ECBackend& ecbackend,
+      const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
+      > &reads,
+      bool fast_read,
+      GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
 
-  void do_read_op(ReadOp &rop);
-  int send_all_remaining_reads(
-    const hobject_t &hoid,
-    ReadOp &rop);
+    void filter_read_op(
+      const OSDMapRef& osdmap,
+      ReadOp &op);
+
+    void complete_read_op(ReadOp &rop);
+
+    void start_read_op(
+      int priority,
+      std::map<hobject_t, std::set<int>> &want_to_read,
+      std::map<hobject_t, read_request_t> &to_read,
+      OpRequestRef op,
+      bool do_redundant_reads,
+      bool for_recovery,
+      GenContext<int> *on_complete);
+
+    void do_read_op(ReadOp &rop);
+
+    int send_all_remaining_reads(
+      const hobject_t &hoid,
+      ReadOp &rop);
+
+    void on_change();
+
+    void kick_reads();
+
+    std::map<ceph_tid_t, ReadOp> tid_to_read_map;
+    std::map<pg_shard_t, std::set<ceph_tid_t> > shard_to_read_map;
+    std::list<ClientAsyncReadStatus> in_progress_client_reads;
+
+    CephContext* cct;
+    ceph::ErasureCodeInterfaceRef ec_impl;
+    const ECUtil::stripe_info_t& sinfo;
+    PGBackend::Listener* parent;
+    // TODO: lay an interface down here
+    ECBackend& ec_backend;
+
+    PGBackend::Listener *get_parent() const { return parent; }
+    const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+    epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
+    const pg_info_t &get_info() { return get_parent()->get_info(); }
+
+    ReadPipeline(CephContext* cct,
+                ceph::ErasureCodeInterfaceRef ec_impl,
+                const ECUtil::stripe_info_t& sinfo,
+                PGBackend::Listener* parent,
+                ECBackend& ec_backend)
+      : cct(cct),
+        ec_impl(std::move(ec_impl)),
+        sinfo(sinfo),
+        parent(parent),
+        ec_backend(ec_backend) {
+    }
+
+    int get_remaining_shards(
+      const hobject_t &hoid,
+      const std::set<int> &avail,
+      const std::set<int> &want,
+      const read_result_t &result,
+      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read,
+      bool for_recovery);
+
+    void get_all_avail_shards(
+      const hobject_t &hoid,
+      const std::set<pg_shard_t> &error_shards,
+      std::set<int> &have,
+      std::map<shard_id_t, pg_shard_t> &shards,
+      bool for_recovery);
+
+    friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
+    friend struct FinishReadOp;
+  } read_pipeline;
 
 
   /**
@@ -724,14 +769,6 @@ public:
     bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
     ); ///< @return error code, 0 on success
-
-  int get_remaining_shards(
-    const hobject_t &hoid,
-    const std::set<int> &avail,
-    const std::set<int> &want,
-    const read_result_t &result,
-    std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read,
-    bool for_recovery);
 
   int objects_get_attrs(
     const hobject_t &hoid,
