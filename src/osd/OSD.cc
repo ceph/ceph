@@ -7959,7 +7959,10 @@ void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
     t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
     superblock.oldest_map = e + 1;
     num++;
-    if (num >= cct->_conf->osd_target_transaction_size && num >= nreceived) {
+    // make sure we at least keep pace with incoming maps
+    // even if we exceed osd_target_transaction_size.
+    if (num >= cct->_conf->osd_target_transaction_size &&
+        num >= nreceived) {
       service.publish_superblock(superblock);
       write_superblock(cct, superblock, t);
       int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
@@ -8224,7 +8227,6 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (superblock.oldest_map) {
-    // make sure we at least keep pace with incoming maps
     trim_maps(m->cluster_osdmap_trim_lower_bound,
               last - first + 1, skip_maps);
     pg_num_history.prune(superblock.oldest_map);
