@@ -235,6 +235,58 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
   }
 };
 
+// Testing the Imitator with multiple threads
+struct MultiThreadedCWGenerator
+    : public FragmentationSimulator::WorkloadGenerator {
+  std::string name() override { return "MultiThreadedCW"; }
+  int generate_txns(ObjectStore::CollectionHandle &ch,
+                    ObjectStoreImitator *os) override {
+
+    auto t1 = std::thread([&]() {
+      hobject_t h1;
+      h1.oid = fmt::format("obj1");
+      h1.set_hash(1);
+      h1.pool = 1;
+      ghobject_t obj1(h1);
+
+      ObjectStore::Transaction t_create;
+      t_create.create(ch->get_cid(), obj1);
+      os->queue_transaction(ch, std::move(t_create));
+
+      ObjectStore::Transaction t_write;
+      t_write.write(ch->get_cid(), obj1, 0, _1Mb, make_bl(_1Mb, 'a'));
+      os->queue_transaction(ch, std::move(t_write));
+
+      bufferlist bl;
+      os->read(ch, obj1, 0, _1Mb, bl);
+    });
+
+    auto t2 = std::thread([&]() {
+      hobject_t h2;
+      h2.oid = fmt::format("obj2");
+      h2.set_hash(2);
+      h2.pool = 1;
+      ghobject_t obj2(h2);
+
+      ObjectStore::Transaction t_create;
+      t_create.create(ch->get_cid(), obj2);
+      os->queue_transaction(ch, std::move(t_create));
+
+      ObjectStore::Transaction t_write;
+      t_write.write(ch->get_cid(), obj2, 0, _1Mb, make_bl(_1Mb, 'a'));
+      os->queue_transaction(ch, std::move(t_write));
+
+      bufferlist bl;
+      os->read(ch, obj2, 0, _1Mb, bl);
+    });
+
+    t1.join();
+    t2.join();
+
+    return 0;
+  }
+};
+
 // ----------- Tests -----------
 
 TEST_P(FragmentationSimulator, SimpleCWGenerator) {
@@ -246,6 +298,12 @@ TEST_P(FragmentationSimulator, SimpleCWGenerator) {
 TEST_P(FragmentationSimulator, RandomCWGenerator) {
   init(GetParam(), _1Mb * 16);
   add_generator(std::make_shared<RandomCWGenerator>());
+  begin_simulation_with_generators();
+}
+
+TEST_P(FragmentationSimulator, MultiThreadedCWGenerator) {
+  init(GetParam(), _1Mb * 4);
+  add_generator(std::make_shared<MultiThreadedCWGenerator>());
   begin_simulation_with_generators();
 }
 
