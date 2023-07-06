@@ -17317,14 +17317,22 @@ mds_rank_t Client::_get_random_up_mds() const
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
-  std::set<mds_rank_t> up;
+  std::set<mds_rank_t> up, stopping, valid;
   mdsmap->get_up_mds_set(up);
+  mdsmap->get_mds_set(stopping, MDSMap::STATE_STOPPING);
 
-  if (up.empty())
-    return MDS_RANK_NONE;
-  std::set<mds_rank_t>::const_iterator p = up.begin();
-  for (int n = rand() % up.size(); n; n--)
-    ++p;
+  // Try to skip the stopping MDSs
+  std::set_difference(up.begin(), up.end(), stopping.begin(), stopping.end(),
+                      std::inserter(valid, valid.end()));
+  if (valid.empty()) {
+    if (stopping.empty())
+      return MDS_RANK_NONE;
+
+    valid = std::move(stopping); // use any stopping mds (probably rank 0)
+  }
+
+  auto p = valid.begin();
+  std::advance(p, ceph::util::generate_random_number<uint64_t>(0, valid.size()));
   return *p;
 }
 
