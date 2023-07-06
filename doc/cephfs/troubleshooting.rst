@@ -21,6 +21,133 @@ We can get hints about what's going on by dumping the MDS cache ::
 If high logging levels are set on the MDS, that will almost certainly hold the
 information we need to diagnose and solve the issue.
 
+Stuck during recovery
+=====================
+
+Stuck in up:replay
+------------------
+
+If your MDS is stuck in ``up:replay`` then it is likely that the journal is
+very long. Did you see ``MDS_HEALTH_TRIM`` cluster warnings saying the MDS is
+behind on trimming its journal? If the journal has grown very large, it can
+take hours to read the journal. There is no working around this but there
+are things you can do to speed things along:
+
+Reduce MDS debugging to 0. Even at the default settings, the MDS logs some
+messages to memory for dumping if a fatal error is encountered. You can avoid
+this:
+
+.. code:: bash
+
+   ceph config set mds debug_mds 0
+   ceph config set mds debug_ms 0
+   ceph config set mds debug_monc 0
+
+Note if the MDS fails then there will be virtually no information to determine
+why. If you can calculate when ``up:replay`` will complete, you should restore
+these configs just prior to entering the next state:
+
+.. code:: bash
+
+   ceph config rm mds debug_mds
+   ceph config rm mds debug_ms
+   ceph config rm mds debug_monc
+
+Once you've got replay moving along faster, you can calculate when the MDS will
+complete. This is done by examining the journal replay status:
+
+.. code:: bash
+
+   $ ceph tell mds.<fs_name>:0 status | jq .replay_status
+   {
+     "journal_read_pos": 4195244,
+     "journal_write_pos": 4195244,
+     "journal_expire_pos": 4194304,
+     "num_events": 2,
+     "num_segments": 2
+   }
+
+Replay completes when the ``journal_read_pos`` reaches the
+``journal_write_pos``. The write position will not change during replay. Track
+the progression of the read position to compute the expected time to complete.
+
+
+Avoiding recovery roadblocks
+----------------------------
+
+When trying to urgently restore your file system during an outage, here are some
+things to do:
+
+* **Deny all reconnect to clients.** This effectively blocklists all existing
+  CephFS sessions so all mounts will hang or become unavailable.
+
+.. code:: bash
+
+   ceph config set mds mds_deny_all_reconnect true
+
+  Remember to undo this after the MDS becomes active.
+
+.. note:: This does not prevent new sessions from connecting. For that, see the ``refuse_client_session`` file system setting.
+
+* **Extend the MDS heartbeat grace period**. This avoids replacing an MDS that appears
+  "stuck" doing some operation. Sometimes recovery of an MDS may involve an
+  operation that may take longer than expected (from the programmer's
+  perspective). This is more likely when recovery is already taking a longer than
+  normal amount of time to complete (indicated by your reading this document).
+  Avoid unnecessary replacement loops by extending the heartbeat graceperiod:
+
+.. code:: bash
+
+   ceph config set mds mds_heartbeat_reset_grace 3600
+
+  This has the effect of having the MDS continue to send beacons to the monitors
+  even when its internal "heartbeat" mechanism has not been reset (beat) in one
+  hour. Note the previous mechanism for achieving this was via the
+  `mds_beacon_grace` monitor setting.
+
+* **Disable open file table prefetch.** Normally, the MDS will prefetch
+  directory contents during recovery to heat up its cache. During long
+  recovery, the cache is probably already hot **and large**. So this behavior
+  can be undesirable. Disable using:
+
+.. code:: bash
+
+   ceph config set mds mds_oft_prefetch_dirfrags false
+
+* **Turn off clients.** Clients reconnecting to the newly ``up:active`` MDS may
+  cause new load on the file system when it's just getting back on its feet.
+  There will likely be some general maintenance to do before workloads should be
+  resumed. For example, expediting journal trim may be advisable if the recovery
+  took a long time because replay was reading a overly large journal.
+
+  You can do this manually or use the new file system tunable:
+
+.. code:: bash
+
+   ceph fs set <fs_name> refuse_client_session true
+
+  That prevents any clients from establishing new sessions with the MDS.
+
+
+
+Expediting MDS journal trim
+===========================
+
+If your MDS journal grew too large (maybe your MDS was stuck in up:replay for a
+long time!), you will want to have the MDS trim its journal more frequently.
+You will know the journal is too large because of ``MDS_HEALTH_TRIM`` warnings.
+
+The main tunable available to do this is to modify the MDS tick interval. The
+"tick" interval drives several upkeep activities in the MDS. It is strongly
+recommended no significant file system load be present when modifying this tick
+interval. This setting only affects an MDS in ``up:active``. The MDS does not
+trim its journal during recovery.
+
+.. code:: bash
+
+   ceph config set mds mds_tick_interval 2
+
+
 RADOS Health
 ============
 
