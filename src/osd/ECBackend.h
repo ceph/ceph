@@ -399,9 +399,14 @@ public:
       bool fast_read,
       GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
 
+    template <class F>
     void filter_read_op(
       const OSDMapRef& osdmap,
-      ReadOp &op);
+      ReadOp &op,
+      F&& on_erase);
+
+    template <class F>
+    void check_recovery_sources(const OSDMapRef& osdmap, F&& on_erase);
 
     void complete_read_op(ReadOp &rop);
 
