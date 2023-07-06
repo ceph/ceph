@@ -6491,6 +6491,8 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
     if (r < 0)
       return r;
 
+    // astate can be modified by append_atomic_test
+    // coverity[check_after_deref:SUPPRESS]
     if (astate && astate->prefetch_data) {
       if (!ofs && astate->data.length() >= len) {
         bl = astate->data;
@@ -6606,6 +6608,8 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     if (r < 0)
       return r;
 
+    // astate can be modified by append_atomic_test
+    // coverity[check_after_deref:SUPPRESS]
     if (astate &&
         obj_ofs < astate->data.length()) {
       unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
