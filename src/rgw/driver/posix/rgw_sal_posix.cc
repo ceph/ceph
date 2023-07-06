@@ -13,6 +13,7 @@
  *
  */
 
+#include "common/errno.h"
 #include "rgw_sal_posix.h"
 #include <dirent.h>
 #include <sys/stat.h>
