@@ -434,9 +434,9 @@ Default Quotas
 You can set default quotas in the config.  These defaults are used when
 creating a new user and have no effect on existing users. If the
 relevant default quota is set in config, then that quota is set on the
-new user, and that quota is enabled.  See ``rgw bucket default quota max objects``,
-``rgw bucket default quota max size``, ``rgw user default quota max objects``, and
-``rgw user default quota max size`` in `Ceph Object Gateway Config Reference`_
+new user, and that quota is enabled.  See ``rgw_bucket_default_quota_max_objects``,
+``rgw_bucket_default_quota_max_size``, ``rgw_user_default_quota_max_objects``, and
+``rgw_user_default_quota_max_size`` in `Ceph Object Gateway Config Reference`_
 
 Quota Cache
 -----------
@@ -444,8 +444,8 @@ Quota Cache
 Quota statistics are cached on each RGW instance.  If there are multiple
 instances, then the cache can keep quotas from being perfectly enforced, as
 each instance will have a different view of quotas.  The options that control
-this are ``rgw bucket quota ttl``, ``rgw user quota bucket sync interval`` and
-``rgw user quota sync interval``.  The higher these values are, the more
+this are ``rgw_bucket_quota_ttl``, ``rgw_user_quota_bucket_sync_interval`` and
+``rgw_user_quota_sync_interval``.  The higher these values are, the more
 efficient quota operations are, but the more out-of-sync multiple instances
 will be.  The lower these values are, the closer to perfect enforcement
 multiple instances will achieve.  If all three are 0, then quota caching is
@@ -647,7 +647,7 @@ Usage
 The Ceph Object Gateway logs usage for each user. You can track
 user usage within date ranges too.
 
-- Add ``rgw enable usage log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service. 
+- Add ``rgw_enable_usage_log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service. 
 
 Options include: 
 
