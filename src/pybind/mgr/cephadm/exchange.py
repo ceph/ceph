@@ -87,8 +87,8 @@ class DeployMeta:
         deployed_by: Optional[List[str]] = None,
         rank: Optional[int] = None,
         rank_generation: Optional[int] = None,
-        extra_container_args: Optional[List[str]] = None,
-        extra_entrypoint_args: Optional[List[str]] = None,
+        extra_container_args: Optional[List[Union[str, Dict[str, Any]]]] = None,
+        extra_entrypoint_args: Optional[List[Union[str, Dict[str, Any]]]] = None,
     ):
         self.data = dict(init_data or {})
         # set fields

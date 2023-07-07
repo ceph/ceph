@@ -10,7 +10,14 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
-from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec, MONSpec
+from ceph.deployment.service_spec import (
+    ArgumentList,
+    CephExporterSpec,
+    GeneralArgList,
+    MONSpec,
+    RGWSpec,
+    ServiceSpec,
+)
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from mgr_util import build_url, merge_dicts
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
@@ -61,8 +68,8 @@ class CephadmDaemonDeploySpec:
                  ports: Optional[List[int]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[ArgumentList] = None,
+                 extra_entrypoint_args: Optional[ArgumentList] = None,
                  ):
         """
         A data struction to encapsulate `cephadm deploy ...
@@ -102,6 +109,15 @@ class CephadmDaemonDeploySpec:
 
         self.extra_container_args = extra_container_args
         self.extra_entrypoint_args = extra_entrypoint_args
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
+            for v in value:
+                tname = str(type(v))
+                if 'ArgumentSpec' not in tname:
+                    raise TypeError(f"{name} is not all ArgumentSpec values: {v!r}(is {type(v)} in {value!r}")
+
+        super().__setattr__(name, value)
 
     def name(self) -> str:
         return '%s.%s' % (self.daemon_type, self.daemon_id)
@@ -146,8 +162,8 @@ class CephadmDaemonDeploySpec:
             ports=self.ports,
             rank=self.rank,
             rank_generation=self.rank_generation,
-            extra_container_args=self.extra_container_args,
-            extra_entrypoint_args=self.extra_entrypoint_args,
+            extra_container_args=cast(GeneralArgList, self.extra_container_args),
+            extra_entrypoint_args=cast(GeneralArgList, self.extra_entrypoint_args),
         )
 
     @property

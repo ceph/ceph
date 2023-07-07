@@ -30,8 +30,19 @@ except ImportError:
 import yaml
 
 from ceph.deployment import inventory
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, \
-    IscsiServiceSpec, IngressSpec, SNMPGatewaySpec, MDSSpec, TunedProfileSpec
+from ceph.deployment.service_spec import (
+    ArgumentList,
+    ArgumentSpec,
+    GeneralArgList,
+    IngressSpec,
+    IscsiServiceSpec,
+    MDSSpec,
+    NFSServiceSpec,
+    RGWSpec,
+    SNMPGatewaySpec,
+    ServiceSpec,
+    TunedProfileSpec,
+)
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
 from ceph.utils import datetime_to_str, str_to_datetime
@@ -932,8 +943,8 @@ class DaemonDescription(object):
                  deployed_by: Optional[List[str]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  ) -> None:
 
         #: Host is at the same granularity as InventoryHost
@@ -998,8 +1009,23 @@ class DaemonDescription(object):
 
         self.is_active = is_active
 
-        self.extra_container_args = extra_container_args
-        self.extra_entrypoint_args = extra_entrypoint_args
+        self.extra_container_args: Optional[ArgumentList] = None
+        self.extra_entrypoint_args: Optional[ArgumentList] = None
+        if extra_container_args:
+            self.extra_container_args = ArgumentSpec.from_general_args(
+                extra_container_args)
+        if extra_entrypoint_args:
+            self.extra_entrypoint_args = ArgumentSpec.from_general_args(
+                extra_entrypoint_args)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
+            for v in value:
+                tname = str(type(v))
+                if 'ArgumentSpec' not in tname:
+                    raise TypeError(f"{name} is not all ArgumentSpec values: {v!r}(is {type(v)} in {value!r}")
+
+        super().__setattr__(name, value)
 
     @property
     def status(self) -> Optional[DaemonDescriptionStatus]:
