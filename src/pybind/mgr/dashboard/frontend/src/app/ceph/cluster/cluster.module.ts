@@ -57,6 +57,7 @@ import { ServiceDetailsComponent } from './services/service-details/service-deta
 import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
+import { UpgradeComponent } from './upgrade/upgrade.component';
 
 @NgModule({
   imports: [
@@ -116,7 +117,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
     OsdFlagsIndivModalComponent,
     PlacementPipe,
     CreateClusterComponent,
-    CreateClusterReviewComponent
+    CreateClusterReviewComponent,
+    UpgradeComponent
   ],
   providers: [NgbActiveModal]
 })

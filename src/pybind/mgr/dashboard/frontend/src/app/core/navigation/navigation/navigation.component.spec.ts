@@ -111,7 +111,12 @@ describe('NavigationComponent', () => {
       [['osd'], ['.tc_submenuitem_osds', '.tc_submenuitem_crush']],
       [
         ['configOpt'],
-        ['.tc_submenuitem_configuration', '.tc_submenuitem_modules', '.tc_submenuitem_users']
+        [
+          '.tc_submenuitem_configuration',
+          '.tc_submenuitem_modules',
+          '.tc_submenuitem_users',
+          '.tc_submenuitem_upgrade'
+        ]
       ],
       [['log'], ['.tc_submenuitem_log']],
       [['prometheus'], ['.tc_submenuitem_monitoring']],
