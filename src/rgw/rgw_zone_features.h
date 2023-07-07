@@ -29,6 +29,11 @@ inline constexpr bool supports(std::string_view feature) {
   return false;
 }
 
+// static list of features enabled by default on new zonegroups
+inline constexpr std::initializer_list<std::string_view> enabled = {
+  resharding,
+};
+
 
 // enable string_view overloads for find() contains() etc
 struct feature_less : std::less<std::string_view> {

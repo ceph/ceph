@@ -81,10 +81,12 @@ int RGWZoneGroup::create_default(const DoutPrefixProvider *dpp, optional_yield y
   default_zone.id = zone_params.get_id();
   master_zone = default_zone.id;
 
-  // enable all supported features
-  enabled_features.insert(rgw::zone_features::supported.begin(),
-                          rgw::zone_features::supported.end());
-  default_zone.supported_features = enabled_features;
+  // initialize supported zone features
+  default_zone.supported_features.insert(rgw::zone_features::supported.begin(),
+                                         rgw::zone_features::supported.end());
+  // enable default zonegroup features
+  enabled_features.insert(rgw::zone_features::enabled.begin(),
+                          rgw::zone_features::enabled.end());
   
   r = create(dpp, y);
   if (r < 0 && r != -EEXIST) {
@@ -886,8 +888,8 @@ static int create_default_zonegroup(const DoutPrefixProvider* dpp,
   info.is_master = true;
 
   // enable all supported features
-  info.enabled_features.insert(rgw::zone_features::supported.begin(),
-                               rgw::zone_features::supported.end());
+  info.enabled_features.insert(rgw::zone_features::enabled.begin(),
+                               rgw::zone_features::enabled.end());
 
   // add the zone to the zonegroup
   bool is_master = true;

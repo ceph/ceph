@@ -1595,11 +1595,11 @@ On creation of new zones and zonegroups, all known features are supported/enable
 Supported Features
 ------------------
 
-+---------------------------+---------+
-| Feature                   | Release |
-+===========================+=========+
-| :ref:`feature_resharding` | Reef    |
-+---------------------------+---------+
++---------------------------+---------+----------+
+| Feature                   | Release | Default  |
++===========================+=========+==========+
+| :ref:`feature_resharding` | Reef    | Enabled  |
++---------------------------+---------+----------+
 
 .. _feature_resharding:
 
