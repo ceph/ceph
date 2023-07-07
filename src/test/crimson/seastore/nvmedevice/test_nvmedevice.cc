@@ -57,7 +57,8 @@ TEST_F(nvdev_test_t, write_and_verify_test)
 {
   run_async([this] {
     device.reset(new random_block_device::nvme::NVMeBlockDevice(dev_path));
-    local_conf().set_val("seastore_cbjournal_size", "1000000").get();
+    local_conf().set_val("seastore_cbjournal_size", "1048576").get();
+    device->start().get();
     device->mkfs(
       device_config_t{
 	true,
@@ -74,19 +75,20 @@ TEST_F(nvdev_test_t, write_and_verify_test)
     uint8_t value = generator();
     memset(original_data.data, value, BUF_SIZE);
     uint64_t bl_length = 0;
+    Device& d = device->get_sharded_device();
     {
       bufferlist bl;
       encode(original_data, bl);
       bl_length = bl.length();
       auto write_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
       bl.begin().copy(bl_length, write_buf.c_str());
-      device->write(0, std::move(write_buf)).unsafe_get();
+      ((RBMDevice*)&d)->write(0, std::move(write_buf)).unsafe_get();
     }
 
     nvdev_test_block_t read_data;
     {
       auto read_buf = ceph::bufferptr(buffer::create_page_aligned(BLK_SIZE));
-      device->read(0, read_buf).unsafe_get();
+      ((RBMDevice*)&d)->read(0, read_buf).unsafe_get();
       bufferlist bl;
       bl.push_back(read_buf);
       auto bliter = bl.cbegin();
@@ -94,7 +96,8 @@ TEST_F(nvdev_test_t, write_and_verify_test)
     }
 
     int ret = memcmp(original_data.data, read_data.data, BUF_SIZE);
-    device->close().unsafe_get();
+    ((RBMDevice*)&d)->close().unsafe_get();
+    device->stop().get();
     ASSERT_TRUE(ret == 0);
     device.reset(nullptr);
   });
