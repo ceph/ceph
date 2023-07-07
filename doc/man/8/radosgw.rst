@@ -100,10 +100,10 @@ tcp and through unix domain socket:
 	[client.radosgw.gateway]
 	host = {hostname}
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
-	rgw socket path = ""
-	log file = /var/log/ceph/client.radosgw.gateway.log
-	rgw frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
-	rgw print continue = false
+	rgw_socket_path = ""
+	log_file = /var/log/ceph/client.radosgw.gateway.log
+	rgw_frontends = fastcgi socket_port=9000 socket_host=0.0.0.0
+	rgw_print_continue = false
 
 #. Add the following content in the gateway configuration file:
 
@@ -155,9 +155,9 @@ tcp and through unix domain socket:
 	[client.radosgw.gateway]
 	host = {hostname}
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
-	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
-	log file = /var/log/ceph/client.radosgw.gateway.log
-	rgw print continue = false
+	rgw_socket_path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
+	log_file = /var/log/ceph/client.radosgw.gateway.log
+	rgw_print_continue = false
 
 #. Add the following content in the gateway configuration file:
 
@@ -223,11 +223,11 @@ which case it is accounted under the operating user.
 Following is an example configuration::
 
         [client.radosgw.gateway]
-            rgw enable usage log = true
-            rgw usage log tick interval = 30
-            rgw usage log flush threshold = 1024
-            rgw usage max shards = 32
-            rgw usage max user shards = 1
+            rgw_enable_usage_log = true
+            rgw_usage_log_tick_interval = 30
+            rgw_usage_log_flush_threshold = 1024
+            rgw_usage_max_shards = 32
+            rgw_usage_max_user_shards = 1
 
 
 The total number of shards determines how many total objects hold the
