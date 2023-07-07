@@ -7039,7 +7039,7 @@ void OSDMap::check_health(CephContext *cct,
     }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " OSDs or CRUSH {nodes, device-classes} have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      ss << detail.size() << " OSDs or CRUSH {nodes, device-classes} have {NOUP|NODOWN|NOIN|NOOUT} flags set";
       auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str(), detail.size());
       d.detail.swap(detail);
     }
