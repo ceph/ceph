@@ -488,6 +488,12 @@ public:
     return dirty_from_or_retired_at;
   }
 
+  /// Return true if extent is fully loaded or is about to be fully loaded (call 
+  /// wait_io() in this case)
+  bool is_fully_loaded() const {
+    return ptr.has_value();
+  }
+
   /**
    * get_paddr
    *
@@ -496,8 +502,18 @@ public:
    */
   paddr_t get_paddr() const { return poffset; }
 
-  /// Returns length of extent
-  virtual extent_len_t get_length() const { return ptr.length(); }
+  /// Returns length of extent data in disk
+  extent_len_t get_length() const {
+    return length;
+  }
+
+  extent_len_t get_loaded_length() const {
+    if (ptr.has_value()) {
+      return ptr->length();
+    } else {
+      return 0;
+    }
+  }
 
   /// Returns version, get_version() == 0 iff is_clean()
   extent_version_t get_version() const {
@@ -513,8 +529,14 @@ public:
   }
 
   /// Get ref to raw buffer
-  bufferptr &get_bptr() { return ptr; }
-  const bufferptr &get_bptr() const { return ptr; }
+  bufferptr &get_bptr() {
+    assert(ptr.has_value());
+    return *ptr;
+  }
+  const bufferptr &get_bptr() const {
+    assert(ptr.has_value());
+    return *ptr;
+  }
 
   /// Compare by paddr
   friend bool operator< (const CachedExtent &a, const CachedExtent &b) {
@@ -594,6 +616,11 @@ private:
     return extent_index_hook.is_linked();
   }
 
+  /// set bufferptr
+  void set_bptr(ceph::bufferptr &&nptr) {
+    ptr = nptr;
+  }
+
   /// Returns true if the extent part of the open transaction
   bool is_pending_in_trans(transaction_id_t id) const {
     return is_pending() && pending_for_transaction == id;
@@ -617,8 +644,11 @@ private:
    */
   journal_seq_t dirty_from_or_retired_at;
 
-  /// Actual data contents
-  ceph::bufferptr ptr;
+  /// cache data contents, std::nullopt if no data in cache
+  std::optional<ceph::bufferptr> ptr;
+
+  /// disk data length
+  extent_len_t length;
 
   /// number of deltas since initial write
   extent_version_t version = 0;
@@ -664,30 +694,64 @@ protected:
   trans_view_set_t mutation_pendings;
 
   CachedExtent(CachedExtent &&other) = delete;
-  CachedExtent(ceph::bufferptr &&ptr) : ptr(std::move(ptr)) {}
+  CachedExtent(ceph::bufferptr &&_ptr) : ptr(std::move(_ptr)) {
+    length = ptr->length();
+    assert(length > 0);
+  }
+
+  /// construct new CachedExtent, will deep copy the buffer
   CachedExtent(const CachedExtent &other)
     : state(other.state),
       dirty_from_or_retired_at(other.dirty_from_or_retired_at),
-      ptr(other.ptr.c_str(), other.ptr.length()),
+      length(other.get_length()),
+      version(other.version),
+      poffset(other.poffset) {
+      if (other.is_fully_loaded()) {
+        ptr = std::make_optional<ceph::bufferptr>
+          (other.ptr->c_str(), other.ptr->length());
+      } else {
+        // the extent must be fully loaded before CoW
+        assert(length == 0); // in case of root
+      }
+  }
+
+  struct share_buffer_t {};
+  /// construct new CachedExtent, will shallow copy the buffer
+  CachedExtent(const CachedExtent &other, share_buffer_t)
+    : state(other.state),
+      dirty_from_or_retired_at(other.dirty_from_or_retired_at),
+      ptr(other.ptr),
+      length(other.get_length()),
       version(other.version),
       poffset(other.poffset) {}
 
-  struct share_buffer_t {};
-  CachedExtent(const CachedExtent &other, share_buffer_t) :
-    state(other.state),
-    dirty_from_or_retired_at(other.dirty_from_or_retired_at),
-    ptr(other.ptr),
-    version(other.version),
-    poffset(other.poffset) {}
+  // 0 length is only possible for the RootBlock
+  struct zero_length_t {};
+  CachedExtent(zero_length_t) : ptr(ceph::bufferptr(0)), length(0) {};
 
   struct retired_placeholder_t{};
-  CachedExtent(retired_placeholder_t) : state(extent_state_t::INVALID) {}
+  CachedExtent(retired_placeholder_t, extent_len_t _length)
+    : state(extent_state_t::INVALID),
+      length(_length) {
+    assert(length > 0);
+  }
+
+  /// no buffer extent, for lazy read
+  CachedExtent(extent_len_t _length) : length(_length) {
+    assert(length > 0);
+  }
 
   friend class Cache;
   template <typename T, typename... Args>
   static TCachedExtentRef<T> make_cached_extent_ref(
     Args&&... args) {
     return new T(std::forward<Args>(args)...);
+  }
+
+  template <typename T>
+  static TCachedExtentRef<T> make_placeholder_cached_extent_ref(
+    extent_len_t length) {
+    return new T(length);
   }
 
   void reset_prior_instance() {
@@ -913,12 +977,14 @@ private:
   uint16_t pos = std::numeric_limits<uint16_t>::max();
 };
 
+using get_child_ertr = crimson::errorator<
+  crimson::ct_error::input_output_error>;
 template <typename T>
 struct get_child_ret_t {
-  std::variant<child_pos_t, seastar::future<TCachedExtentRef<T>>> ret;
+  std::variant<child_pos_t, get_child_ertr::future<TCachedExtentRef<T>>> ret;
   get_child_ret_t(child_pos_t pos)
     : ret(std::move(pos)) {}
-  get_child_ret_t(seastar::future<TCachedExtentRef<T>> child)
+  get_child_ret_t(get_child_ertr::future<TCachedExtentRef<T>> child)
     : ret(std::move(child)) {}
 
   bool has_child() const {
@@ -930,7 +996,7 @@ struct get_child_ret_t {
     return std::get<0>(ret);
   }
 
-  seastar::future<TCachedExtentRef<T>> &get_child_fut() {
+  get_child_ertr::future<TCachedExtentRef<T>> &get_child_fut() {
     ceph_assert(ret.index() == 1);
     return std::get<1>(ret);
   }
@@ -993,14 +1059,10 @@ using backref_pin_list_t = std::list<BackrefMappingRef>;
  * the Cache interface boundary.
  */
 class RetiredExtentPlaceholder : public CachedExtent {
-  extent_len_t length;
 
 public:
   RetiredExtentPlaceholder(extent_len_t length)
-    : CachedExtent(CachedExtent::retired_placeholder_t{}),
-      length(length) {}
-
-  extent_len_t get_length() const final { return length; }
+    : CachedExtent(CachedExtent::retired_placeholder_t{}, length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     ceph_assert(0 == "Should never happen for a placeholder");
