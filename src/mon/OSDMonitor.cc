@@ -12990,6 +12990,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (pp->snap_exists(snapname.c_str())) {
       ss << "pool " << poolstr << " snap " << snapname << " already exists";
     } else {
+      if (const auto& fsmap = mon.mdsmon()->get_fsmap(); fsmap.pool_in_use(pool)) {
+	dout(20) << "pool-level snapshots have been disabled for pools "
+		    "attached to an fs - poolid:" << pool << dendl;
+	err = -EOPNOTSUPP;
+	goto reply;
+      }
       pp->add_snap(snapname.c_str(), ceph_clock_now());
       pp->set_snap_epoch(pending_inc.epoch);
       ss << "created pool " << poolstr << " snap " << snapname;
