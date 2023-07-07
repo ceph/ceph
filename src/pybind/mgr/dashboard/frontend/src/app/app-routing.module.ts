@@ -45,6 +45,7 @@ import { ChangePasswordGuardService } from './shared/services/change-password-gu
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
+import { UpgradeComponent } from './ceph/cluster/upgrade/upgrade.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -281,6 +282,11 @@ const routes: Routes = [
             ]
           }
         ]
+      },
+      {
+        path: 'upgrade',
+        component: UpgradeComponent,
+        data: { breadcrumbs: 'Cluster/Upgrade' }
       },
       {
         path: 'perf_counters/:type/:id',
