@@ -125,12 +125,12 @@ int MetaTool::main(string& mode,
       return r;
     }
 
-    auto fs = fsmap->get_filesystem(role_selector.get_ns());
-    assert(fs != nullptr);
+    auto& fs = fsmap->get_filesystem(role_selector.get_ns());
+    auto& mds_map = fs.get_mds_map();
 
     // prepare io for meta pool
-    int64_t const pool_id = fs->mds_map.get_metadata_pool();
-    features = fs->mds_map.get_up_features();
+    int64_t const pool_id = mds_map.get_metadata_pool();
+    features = mds_map.get_up_features();
     if (features == 0)
       features = CEPH_FEATURES_SUPPORTED_DEFAULT;
     else if (features != CEPH_FEATURES_SUPPORTED_DEFAULT) {
@@ -152,7 +152,7 @@ int MetaTool::main(string& mode,
     output.dup(io_meta);
 
     // prepare io for data pool
-    for (const auto p : fs->mds_map.get_data_pools()) {
+    for (const auto p : mds_map.get_data_pools()) {
       r = rados.pool_reverse_lookup(p, &pool_name);
       if (r < 0) {
         cerr << "Pool " << pool_id << " named in MDS map not found in RADOS!" << std::endl;
