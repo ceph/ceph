@@ -2059,6 +2059,8 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 
   auto now_is = ceph_clock_now();
 
+  m_scrub_job->s_is_deep = m_is_deep;
+
   if (m_active) {
     // report current scrub info, including updated duration
 

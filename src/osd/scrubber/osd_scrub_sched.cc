@@ -681,6 +681,7 @@ void ScrubQueue::ScrubJob::dump(ceph::Formatter* f) const
   f->dump_stream("deadline") << schedule.deadline;
   f->dump_bool("forced",
 	       schedule.scheduled_at == PgScrubber::scrub_must_stamp());
+  f->dump_string("scrub_type", (s_is_deep ? "deep" : "shallow"));
   f->close_section();
 }
 

@@ -209,6 +209,8 @@ class ScrubQueue {
      */
     scrub_schedule_t schedule;
 
+    bool s_is_deep;
+
     /// pg to be scrubbed
     const spg_t pgid;
 
