@@ -370,6 +370,11 @@ class Migrations:
         return RGWSpec.from_json(new_spec)
 
     def rgw_spec_needs_migration(self, spec: Dict[Any, Any]) -> bool:
+        if 'spec' not in spec:
+            # if users allowed cephadm to set up most of the
+            # attributes, it's possible there is no "spec" section
+            # inside the spec. In that case, no migration is needed
+            return False
         return 'rgw_frontend_type' in spec['spec'] \
             and spec['spec']['rgw_frontend_type'] is not None \
             and spec['spec']['rgw_frontend_type'].strip() not in ['beast', 'civetweb']
