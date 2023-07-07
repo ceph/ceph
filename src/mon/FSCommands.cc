@@ -328,13 +328,22 @@ public:
       return -EINVAL;
     }
     string val;
-    string interr;
-    int64_t n = 0;
     if (!cmd_getval(cmdmap, "val", val)) {
       return -EINVAL;
     }
+
+    return set_val(mon, fsmap, op, cmdmap, ss, fsp, var, val);
+  }
+};
+
+int FileSystemCommandHandler::set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRef op,
+            const cmdmap_t& cmdmap, std::ostream &ss, Filesystem const* fsp,
+            std::string var, std::string val)
+{
+  {
+    std::string interr;
     // we got a string.  see if it contains an int.
-    n = strict_strtoll(val.c_str(), 10, &interr);
+    int64_t n = strict_strtoll(val.c_str(), 10, &interr);
     if (var == "max_mds") {
       // NOTE: see also "mds set_max_mds", which can modify the same field.
       if (interr.length()) {
@@ -762,10 +771,9 @@ public:
       ss << "unknown variable " << var;
       return -EINVAL;
     }
-
-    return 0;
   }
-};
+  return 0;
+}
 
 class CompatSetHandler : public FileSystemCommandHandler
 {
