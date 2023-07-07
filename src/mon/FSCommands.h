@@ -52,6 +52,8 @@ protected:
 
   virtual std::string const &get_prefix() const {return prefix;}
 
+  int set_val(Monitor *mon, FSMap& fsmap, MonOpRequestRef op, const cmdmap_t& cmdmap, std::ostream &ss, Filesystem const* fsp, std::string var, std::string val);
+
 public:
   FileSystemCommandHandler(const std::string &prefix_)
     : prefix(prefix_)
