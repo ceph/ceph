@@ -155,9 +155,9 @@ tcp and through unix domain socket:
 	[client.radosgw.gateway]
 	host = {hostname}
 	keyring = /etc/ceph/ceph.client.radosgw.keyring
-	rgw socket path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
-	log file = /var/log/ceph/client.radosgw.gateway.log
-	rgw print continue = false
+	rgw_socket_path = /var/run/ceph/ceph.radosgw.gateway.fastcgi.sock
+	log_file = /var/log/ceph/client.radosgw.gateway.log
+	rgw_print_continue = false
 
 #. Add the following content in the gateway configuration file:
 
