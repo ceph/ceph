@@ -368,8 +368,6 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
       if (g_conf().get_val<Option::size_t>("rgw_max_chunk_size") !=
         g_conf().get_val<Option::size_t>("rgw_obj_stripe_size")) {
         lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires that the chunk_size equals stripe_size)" << dendl;
-      } else if (!g_conf().get_val<bool>("rgw_beast_enable_async")) {
-	      lsubdout(cct, rgw_datacache, 0) << "rgw_d3n:  WARNING: D3N DataCache disabling (D3N requires yield context - rgw_beast_enable_async=true)" << dendl;
       } else {
         cfg.filter_name = "d3n";
       }
