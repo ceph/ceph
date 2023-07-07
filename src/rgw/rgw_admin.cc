@@ -5150,9 +5150,9 @@ int main(int argc, const char **argv)
         zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
 
         zonegroup.enabled_features = enable_features;
-        if (zonegroup.enabled_features.empty()) { // enable all features by default
-          zonegroup.enabled_features.insert(rgw::zone_features::supported.begin(),
-                                            rgw::zone_features::supported.end());
+        if (zonegroup.enabled_features.empty()) { // enable features by default
+          zonegroup.enabled_features.insert(rgw::zone_features::enabled.begin(),
+                                            rgw::zone_features::enabled.end());
         }
         for (const auto& feature : disable_features) {
           auto i = zonegroup.enabled_features.find(feature);
