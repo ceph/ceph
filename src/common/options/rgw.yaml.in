@@ -2412,7 +2412,7 @@ options:
   long_desc: Length of time (in milliseconds) in which the master zone aggregates
     all the metadata changes that occurred, before sending notifications to all the
     other zones.
-  default: 200
+  default: 0
   services:
   - rgw
   with_legacy: true

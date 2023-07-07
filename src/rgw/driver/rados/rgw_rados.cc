@@ -1208,9 +1208,11 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   }
 
   if (svc.zone->is_meta_master()) {
-    auto md_log = svc.mdlog->get_log(current_period.get_id());
-    meta_notifier = new RGWMetaNotifier(this, md_log);
-    meta_notifier->start();
+    if (cct->_conf->rgw_md_notify_interval_msec) {
+      auto md_log = svc.mdlog->get_log(current_period.get_id());
+      meta_notifier = new RGWMetaNotifier(this, md_log);
+      meta_notifier->start();
+    }
   }
 
   /* init it anyway, might run sync through radosgw-admin explicitly */

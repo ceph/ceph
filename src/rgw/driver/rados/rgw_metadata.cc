@@ -198,6 +198,10 @@ int RGWMetadataLog::unlock(const DoutPrefixProvider *dpp, int shard_id, string& 
 
 void RGWMetadataLog::mark_modified(int shard_id)
 {
+  if (!cct->_conf->rgw_md_notify_interval_msec) {
+    return;
+  }
+
   lock.get_read();
   if (modified_shards.find(shard_id) != modified_shards.end()) {
     lock.unlock();
