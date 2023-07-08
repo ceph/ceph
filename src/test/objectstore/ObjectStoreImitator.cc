@@ -1041,7 +1041,6 @@ void ObjectStoreImitator::_do_remove_collection(CollectionRef *c) {
 int ObjectStoreImitator::_create_collection(const coll_t &cid, unsigned bits,
                                             CollectionRef *c) {
   int r;
-  bufferlist bl;
 
   {
     std::unique_lock l(coll_lock);
@@ -1057,7 +1056,6 @@ int ObjectStoreImitator::_create_collection(const coll_t &cid, unsigned bits,
     new_coll_map.erase(p);
   }
 
-  encode((*c)->cnode, bl);
   r = 0;
 
 out:

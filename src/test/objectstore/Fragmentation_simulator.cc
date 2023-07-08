@@ -7,6 +7,7 @@
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/hobject.h"
+#include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/buffer_fwd.h"
 #include "os/ObjectStore.h"
@@ -34,8 +35,6 @@ static bufferlist make_bl(size_t len, char c) {
 
 class FragmentationSimulator : public ::testing::TestWithParam<std::string> {
 public:
-  static boost::intrusive_ptr<CephContext> cct;
-
   struct WorkloadGenerator {
     virtual int generate_txns(ObjectStore::CollectionHandle &ch,
                               ObjectStoreImitator *os) = 0;
@@ -51,12 +50,15 @@ public:
   void init(const std::string &alloc_type, uint64_t size,
             uint64_t min_alloc_size = 4096);
 
-  static void TearDownTestSuite() { cct.reset(); }
+  static void TearDownTestSuite() {}
   static void SetUpTestSuite() {}
   void TearDown() final {}
 
   FragmentationSimulator() = default;
-  ~FragmentationSimulator() = default;
+  ~FragmentationSimulator() {
+    if (os != nullptr)
+      delete os;
+  }
 
 private:
   ObjectStoreImitator *os;
@@ -158,6 +160,7 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
 
     os->queue_transactions(ch, tls);
     os->verify_objects(ch);
+    tls.clear();
     return 0;
   }
 };
@@ -231,11 +234,14 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
       os->read(ch, obj2, offset, size, dummy);
     }
 
+    tls.clear();
     return 0;
   }
 };
 
-// Testing the Imitator with multiple threads
+// Testing the Imitator with multiple threads. We're mainly testing for
+// Collection correctness, as only one thread can act on an object at once in
+// BlueStore
 struct MultiThreadedCWGenerator
     : public FragmentationSimulator::WorkloadGenerator {
   std::string name() override { return "MultiThreadedCW"; }
@@ -312,16 +318,12 @@ TEST_P(FragmentationSimulator, MultiThreadedCWGenerator) {
 INSTANTIATE_TEST_SUITE_P(Allocator, FragmentationSimulator,
                          ::testing::Values("stupid", "bitmap", "avl", "btree"));
 
-boost::intrusive_ptr<CephContext> FragmentationSimulator::cct;
-
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
-  FragmentationSimulator::cct =
+  auto cct =
       global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
                   CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(FragmentationSimulator::cct->get());
-
-  FragmentationSimulator::cct->_conf->bluestore_clone_cow = false;
+  common_init_finish(g_ceph_context);
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

@@ -32,7 +32,7 @@ private:
   class Collection;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
 
-  struct Object : public RefCountedObject {
+  struct Object : public RefCountedObjectSafe {
     Collection *c;
     ghobject_t oid;
     bool exists;
@@ -114,7 +114,7 @@ private:
       if (!create)
         return nullptr;
 
-      return objects[oid] = new Object(this, oid);
+      return objects[oid] = ceph::make_ref<Object>(this, oid);
     }
 
     bool flush_commit(Context *c) override { return false; }
