@@ -49,6 +49,8 @@ import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { TelemetryNotificationComponent } from './telemetry-notification/telemetry-notification.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { WizardComponent } from './wizard/wizard.component';
+import { CardComponent } from './card/card.component';
+import { CardRowComponent } from './card-row/card-row.component';
 
 @NgModule({
   imports: [
@@ -101,7 +103,9 @@ import { WizardComponent } from './wizard/wizard.component';
     WizardComponent,
     CustomLoginBannerComponent,
     CdLabelComponent,
-    ColorClassFromTextPipe
+    ColorClassFromTextPipe,
+    CardComponent,
+    CardRowComponent
   ],
   providers: [],
   exports: [
@@ -131,7 +135,9 @@ import { WizardComponent } from './wizard/wizard.component';
     MotdComponent,
     WizardComponent,
     CustomLoginBannerComponent,
-    CdLabelComponent
+    CdLabelComponent,
+    CardComponent,
+    CardRowComponent
   ]
 })
 export class ComponentsModule {}

@@ -286,8 +286,19 @@ const routes: Routes = [
       },
       {
         path: 'upgrade',
+        canActivate: [ModuleStatusGuardService],
         component: UpgradeComponent,
-        data: { breadcrumbs: 'Cluster/Upgrade' }
+        data: {
+          moduleStatusGuardConfig: {
+            uiApiPath: 'orchestrator',
+            redirectTo: 'error',
+            backend: 'cephadm',
+            section: 'orch',
+            section_info: 'Orchestrator',
+            header: 'Orchestrator is not available'
+          },
+          breadcrumbs: 'Cluster/Upgrade'
+        }
       },
       {
         path: 'perf_counters/:type/:id',
