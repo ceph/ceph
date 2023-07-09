@@ -2,49 +2,51 @@
  Adding/Removing OSDs
 ======================
 
-When you have a cluster up and running, you may add OSDs or remove OSDs
-from the cluster at runtime.
+When a cluster is up and running, it is possible to add or remove OSDs. 
 
 Adding OSDs
 ===========
 
-When you want to expand a cluster, you may add an OSD at runtime. With Ceph, an
-OSD is generally one Ceph ``ceph-osd`` daemon for one storage drive within a
-host machine. If your host has multiple storage drives, you may map one
-``ceph-osd`` daemon for each drive.
+OSDs can be added to a cluster in order to expand the cluster's capacity and
+resilience. Typically, an OSD is a Ceph ``ceph-osd`` daemon running on one
+storage drive within a host machine. But if your host machine has multiple
+storage drives, you may map one ``ceph-osd`` daemon for each drive on the
+machine.
 
-Generally, it's a good idea to check the capacity of your cluster to see if you
-are reaching the upper end of its capacity. As your cluster reaches its ``near
-full`` ratio, you should add one or more OSDs to expand your cluster's capacity.
+It's a good idea to check the capacity of your cluster so that you know when it
+approaches its capacity limits. If your cluster has reached its ``near full``
+ratio, then you should add OSDs to expand your cluster's capacity.
 
-.. warning:: Do not let your cluster reach its ``full ratio`` before
-   adding an OSD. OSD failures that occur after the cluster reaches
-   its ``near full`` ratio may cause the cluster to exceed its
-   ``full ratio``.
+.. warning:: Do not add an OSD after your cluster has reached its ``full
+   ratio``. OSD failures that occur after the cluster reaches its ``near full
+   ratio`` might cause the cluster to exceed its ``full ratio``.
 
-Deploy your Hardware
---------------------
 
-If you are adding a new host when adding a new OSD,  see `Hardware
+Deploying your Hardware
+-----------------------
+
+If you are also adding a new host when adding a new OSD, see `Hardware
 Recommendations`_ for details on minimum recommendations for OSD hardware. To
-add an OSD host to your cluster, first make sure you have an up-to-date version
-of Linux installed, and you have made some initial preparations for your
-storage drives.  See `Filesystem Recommendations`_ for details.
+add an OSD host to your cluster, begin by making sure that an appropriate 
+version of Linux has been installed on the host machine and that all initial
+preparations for your storage drives have been carried out. For details, see
+`Filesystem Recommendations`_.
 
-Add your OSD host to a rack in your cluster, connect it to the network
-and ensure that it has network connectivity. See the `Network Configuration
-Reference`_ for details.
+Next, add your OSD host to a rack in your cluster, connect the host to the
+network, and ensure that the host has network connectivity. For details, see
+`Network Configuration Reference`_.
+
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
 .. _Filesystem Recommendations: ../../configuration/filesystem-recommendations
 .. _Network Configuration Reference: ../../configuration/network-config-ref
 
-Install the Required Software
------------------------------
+Installing the Required Software
+--------------------------------
 
-For manually deployed clusters, you must install Ceph packages
-manually. See `Installing Ceph (Manual)`_ for details.
-You should configure SSH to a user with password-less authentication
+If your cluster has been manually deployed, you will need to install Ceph
+software packages manually. For details, see `Installing Ceph (Manual)`_.
+Configure SSH for the appropriate user to have both passwordless authentication
 and root permissions.
 
 .. _Installing Ceph (Manual): ../../../install
@@ -53,48 +55,56 @@ and root permissions.
 Adding an OSD (Manual)
 ----------------------
 
-This procedure sets up a ``ceph-osd`` daemon, configures it to use one drive,
-and configures the cluster to distribute data to the OSD. If your host has
-multiple drives, you may add an OSD for each drive by repeating this procedure.
+The following procedure sets up a ``ceph-osd`` daemon, configures this OSD to
+use one drive, and configures the cluster to distribute data to the OSD. If
+your host machine has multiple drives, you may add an OSD for each drive on the
+host by repeating this procedure.
 
-To add an OSD, create a data directory for it, mount a drive to that directory,
-add the OSD to the cluster, and then add it to the CRUSH map.
+As the following procedure will demonstrate, adding an OSD involves creating a
+metadata directory for it, configuring a data storage drive, adding the OSD to
+the cluster, and then adding it to the CRUSH map.
 
-When you add the OSD to the CRUSH map, consider the weight you give to the new
-OSD. Hard drive capacity grows 40% per year, so newer OSD hosts may have larger
-hard drives than older hosts in the cluster (i.e., they may have greater
-weight).
+When you add the OSD to the CRUSH map, you will need to consider the weight you
+assign to the new OSD. Since storage drive capacities increase over time, newer
+OSD hosts are likely to have larger hard drives than the older hosts in the
+cluster have and therefore might have greater weight as well.
 
-.. tip:: Ceph prefers uniform hardware across pools. If you are adding drives
-   of dissimilar size, you can adjust their weights. However, for best
-   performance, consider a CRUSH hierarchy with drives of the same type/size.
+.. tip:: Ceph works best with uniform hardware across pools. It is possible to
+   add drives of dissimilar size and then adjust their weights accordingly.
+   However, for best performance, consider a CRUSH hierarchy that has drives of
+   the same type and size. It is better to add larger drives uniformly to
+   existing hosts. This can be done incrementally, replacing smaller drives
+   each time the new drives are added.
 
-#. Create the OSD. If no UUID is given, it will be set automatically when the
-   OSD starts up. The following command will output the OSD number, which you
-   will need for subsequent steps:
+#. Create the new OSD by running a command of the following form. If you opt
+   not to specify a UUID in this command, the UUID will be set automatically
+   when the OSD starts up. The OSD number, which is needed for subsequent
+   steps, is found in the command's output:
 
    .. prompt:: bash $
 
       ceph osd create [{uuid} [{id}]]
 
-   If the optional parameter {id} is given it will be used as the OSD id.
-   Note, in this case the command may fail if the number is already in use.
+   If the optional parameter {id} is specified it will be used as the OSD ID.
+   However, if the ID number is already in use, the command will fail.
 
-   .. warning:: In general, explicitly specifying {id} is not recommended.
-      IDs are allocated as an array, and skipping entries consumes some extra
-      memory. This can become significant if there are large gaps and/or
-      clusters are large. If {id} is not specified, the smallest available is
-      used.
+   .. warning:: Explicitly specifying the ``{id}`` parameter is not
+      recommended. IDs are allocated as an array, and any skipping of entries
+      consumes extra memory. This memory consumption can become significant if
+      there are large gaps or if clusters are large. By leaving the ``{id}``
+      parameter unspecified, we ensure that Ceph uses the smallest ID number
+      available and that these problems are avoided.
 
-#. Create the default directory on your new OSD:
+#. Create the default directory for your new OSD by running commands of the
+   following form:
 
    .. prompt:: bash $
 
       ssh {new-osd-host}
       sudo mkdir /var/lib/ceph/osd/ceph-{osd-number}
 
-#. If the OSD is for a drive other than the OS drive, prepare it
-   for use with Ceph, and mount it to the directory you just created:
+#. If the OSD will be created on a drive other than the OS drive, prepare it
+   for use with Ceph. Run commands of the following form:
 
    .. prompt:: bash $
 
@@ -102,41 +112,49 @@ weight).
       sudo mkfs -t {fstype} /dev/{drive}
       sudo mount -o user_xattr /dev/{hdd} /var/lib/ceph/osd/ceph-{osd-number}
 
-#. Initialize the OSD data directory:
+#. Initialize the OSD data directory by running commands of the following form:
 
    .. prompt:: bash $
 
       ssh {new-osd-host}
       ceph-osd -i {osd-num} --mkfs --mkkey
 
-   The directory must be empty before you can run ``ceph-osd``.
+   Make sure that the directory is empty before running ``ceph-osd``.
 
-#. Register the OSD authentication key. The value of ``ceph`` for
-   ``ceph-{osd-num}`` in the path is the ``$cluster-$id``.  If your
-   cluster name differs from ``ceph``, use your cluster name instead:
+#. Register the OSD authentication key by running a command of the following
+   form:
 
    .. prompt:: bash $
 
       ceph auth add osd.{osd-num} osd 'allow *' mon 'allow rwx' -i /var/lib/ceph/osd/ceph-{osd-num}/keyring
 
-#. Add the OSD to the CRUSH map so that the OSD can begin receiving data. The
-   ``ceph osd crush add`` command allows you to add OSDs to the CRUSH hierarchy
-   wherever you wish. If you specify at least one bucket, the command
-   will place the OSD into the most specific bucket you specify, *and* it will
-   move that bucket underneath any other buckets you specify. **Important:** If
-   you specify only the root bucket, the command will attach the OSD directly
-   to the root, but CRUSH rules expect OSDs to be inside of hosts.
+   This presentation of the command has ``ceph-{osd-num}`` in the listed path
+   because many clusters have the name ``ceph``. However, if your cluster name
+   is not ``ceph``, then the string ``ceph`` in ``ceph-{osd-num}`` needs to be
+   replaced with your cluster name. For example, if your cluster name is
+   ``cluster1``, then the path in the command should be
+   ``/var/lib/ceph/osd/cluster1-{osd-num}/keyring``.
 
-   Execute the following:
+#. Add the OSD to the CRUSH map by running the following command. This allows
+   the OSD to begin receiving data. The ``ceph osd crush add`` command can add
+   OSDs to the CRUSH hierarchy wherever you want. If you specify one or more
+   buckets, the command places the OSD in the most specific of those buckets,
+   and it moves that bucket underneath any other buckets that you have
+   specified. **Important:** If you specify only the root bucket, the command
+   will attach the OSD directly to the root, but CRUSH rules expect OSDs to be
+   inside of hosts. If the OSDs are not inside hosts, the OSDS will likely not
+   receive any data.
 
    .. prompt:: bash $
 
       ceph osd crush add {id-or-name} {weight}  [{bucket-type}={bucket-name} ...]
 
-   You may also decompile the CRUSH map, add the OSD to the device list, add the
-   host as a bucket (if it's not already in the CRUSH map), add the device as an
-   item in the host, assign it a weight, recompile it and set it. See
-   `Add/Move an OSD`_ for details.
+   Note that there is another way to add a new OSD to the CRUSH map: decompile
+   the CRUSH map, add the OSD to the device list, add the host as a bucket (if
+   it is not already in the CRUSH map), add the device as an item in the host,
+   assign the device a weight, recompile the CRUSH map, and set the CRUSH map.
+   For details, see `Add/Move an OSD`_. This is rarely necessary with recent
+   releases (this sentence was written the month that Reef was released).
 
 
 .. _rados-replacing-an-osd:
@@ -144,52 +162,56 @@ weight).
 Replacing an OSD
 ----------------
 
-.. note:: If the instructions in this section do not work for you, try the
-   instructions in the cephadm documentation: :ref:`cephadm-replacing-an-osd`.
+.. note:: If the procedure in this section does not work for you, try the
+   instructions in the ``cephadm`` documentation:
+   :ref:`cephadm-replacing-an-osd`.
 
-When disks fail, or if an administrator wants to reprovision OSDs with a new
-backend, for instance, for switching from FileStore to BlueStore, OSDs need to
-be replaced. Unlike `Removing the OSD`_, replaced OSD's id and CRUSH map entry
-need to be keep intact after the OSD is destroyed for replacement.
+Sometimes OSDs need to be replaced: for example, when a disk fails, or when an
+administrator wants to reprovision OSDs with a new back end (perhaps when
+switching from Filestore to BlueStore). Replacing an OSD differs from `Removing
+the OSD`_ in that the replaced OSD's ID and CRUSH map entry must be kept intact
+after the OSD is destroyed for replacement.
 
-#. Make sure it is safe to destroy the OSD:
+
+#. Make sure that it is safe to destroy the OSD:
 
    .. prompt:: bash $
 
       while ! ceph osd safe-to-destroy osd.{id} ; do sleep 10 ; done
 
-#. Destroy the OSD first:
+#. Destroy the OSD:
 
    .. prompt:: bash $
 
       ceph osd destroy {id} --yes-i-really-mean-it
 
-#. Zap a disk for the new OSD, if the disk was used before for other purposes.
-   It's not necessary for a new disk:
+#. *Optional*: If the disk that you plan to use is not a new disk and has been
+   used before for other purposes, zap the disk:
 
    .. prompt:: bash $
 
       ceph-volume lvm zap /dev/sdX
 
-#. Prepare the disk for replacement by using the previously destroyed OSD id:
+#. Prepare the disk for replacement by using the ID of the OSD that was
+   destroyed in previous steps:
 
    .. prompt:: bash $
 
       ceph-volume lvm prepare --osd-id {id} --data /dev/sdX
 
-#. And activate the OSD:
+#. Finally, activate the OSD:
 
    .. prompt:: bash $
 
       ceph-volume lvm activate {id} {fsid}
 
-Alternatively, instead of preparing and activating, the device can be recreated
-in one call, like:
+Alternatively, instead of carrying out the final two steps (preparing the disk
+and activating the OSD), you can re-create the OSD by running a single command
+of the following form:
 
    .. prompt:: bash $
 
       ceph-volume lvm create --osd-id {id} --data /dev/sdX
-
 
 Starting the OSD
 ----------------
