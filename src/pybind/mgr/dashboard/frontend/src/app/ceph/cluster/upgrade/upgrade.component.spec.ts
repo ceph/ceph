@@ -7,9 +7,13 @@ import { BehaviorSubject, of } from 'rxjs';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
-import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { HealthService } from '~/app/shared/api/health.service';
 import { SharedModule } from '~/app/shared/shared.module';
+import { LogsComponent } from '../logs/logs.component';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { ToastrModule } from 'ngx-toastr';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
@@ -47,9 +51,9 @@ describe('UpgradeComponent', () => {
   };
 
   configureTestBed({
-    imports: [HttpClientTestingModule, SharedModule],
+    imports: [HttpClientTestingModule, SharedModule, NgbNavModule, ToastrModule.forRoot()],
+    declarations: [UpgradeComponent, LogsComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    declarations: [UpgradeComponent],
     providers: [UpgradeService, { provide: SummaryService, useClass: SummaryServiceMock }]
   });
 
@@ -59,6 +63,15 @@ describe('UpgradeComponent', () => {
     upgradeInfoSpy = spyOn(TestBed.inject(UpgradeService), 'list').and.callFake(() => of(null));
     getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
     getHealthSpy.and.returnValue(of(healthPayload));
+    const upgradeInfoPayload = {
+      image: 'quay.io/ceph-test/ceph',
+      registry: 'quay.io',
+      versions: ['18.1.0', '18.1.1', '18.1.2']
+    };
+    upgradeInfoSpy.and.returnValue(of(upgradeInfoPayload));
+    spyOn(TestBed.inject(AuthStorageService), 'getPermissions').and.callFake(() => ({
+      configOpt: { read: true }
+    }));
     fixture.detectChanges();
   });
 
@@ -67,16 +80,12 @@ describe('UpgradeComponent', () => {
   });
 
   it('should load the view once check for upgrade is done', () => {
-    const upgradeInfoPayload = {
-      image: 'quay.io/ceph-test/ceph',
-      registry: 'quay.io',
-      versions: ['18.1.0', '18.1.1', '18.1.2']
-    };
-    upgradeInfoSpy.and.returnValue(of(upgradeInfoPayload));
     component.ngOnInit();
     fixture.detectChanges();
-    const firstCellSpan = fixture.debugElement.nativeElement.querySelector('span');
-    expect(firstCellSpan.textContent).toBe('Current Version');
+    const firstCellSpan = fixture.debugElement.nativeElement.querySelector(
+      'cd-card[cardTitle="New Version"] .card-title'
+    );
+    expect(firstCellSpan.textContent).toContain('New Version');
   });
 
   it('should show button to Upgrade if a new version is available', () => {
@@ -108,11 +117,15 @@ describe('UpgradeComponent', () => {
   });
 
   it('should show the loading screen while the api call is pending', () => {
-    const loading = fixture.debugElement.nativeElement.querySelector('h3');
-    expect(loading.textContent).toBe('Checking for upgrades ');
+    upgradeInfoSpy.and.returnValue(of(null));
+    component.ngOnInit();
+    fixture.detectChanges();
+    const loading = fixture.debugElement.nativeElement.querySelector('#newVersionAvailable');
+    expect(loading.textContent).toContain('Checking for upgrade');
   });
 
   it('should upgrade only when there are more than 1 mgr', () => {
+    // Only one mgr in payload
     const upgradeInfoPayload = {
       image: 'quay.io/ceph-test/ceph',
       registry: 'quay.io',
@@ -145,5 +158,14 @@ describe('UpgradeComponent', () => {
     component.ngOnInit();
     fixture.detectChanges();
     expect(upgradeBtn.disabled).toBeFalsy();
+  });
+
+  it('should show the error message when the upgrade fetch fails', () => {
+    upgradeInfoSpy.and.returnValue(of(null));
+    component.errorMessage = 'Failed to retrieve';
+    component.ngOnInit();
+    fixture.detectChanges();
+    const loading = fixture.debugElement.nativeElement.querySelector('#upgrade-status-error');
+    expect(loading.textContent).toContain('Failed to retrieve');
   });
 });

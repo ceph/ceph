@@ -6,7 +6,7 @@
        class="nav-tabs"
        cdStatefulTab="logs"
        [cdStatefulTabDefault]="defaultTab"
-       [hidden]="hideNavLinks">
+       [hidden]="!showNavLinks">
     <ng-container ngbNavItem="cluster-logs">
       <a ngbNavLink
          i18n>Cluster Logs</a>
@@ -15,19 +15,20 @@
              *ngIf="clog">
           <div class="btn-group"
                role="group"
-               *ngIf="clog.length && !hideClusterLogs">
+               *ngIf="clog.length && showClusterLogs">
             <cd-download-button [objectItem]="clog"
                                 [textItem]="clogText"
                                 fileName="cluster_log"
-                                *ngIf="!hideDwnldCpyBtn">
+                                *ngIf="showDownloadCopyButton">
             </cd-download-button>
             <cd-copy-2-clipboard-button
                     [source]="clogText"
                     [byId]="false"
-                    *ngIf="!hideDwnldCpyBtn">
+                    *ngIf="showDownloadCopyButton">
             </cd-copy-2-clipboard-button>
           </div>
-          <div class="card-body">
+          <div class="card-body"
+               [ngClass]="{'overflow-auto': scrollable}">
             <p *ngFor="let line of clog">
               <span class="timestamp">{{ line.stamp | cdDate }}</span>
               <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
@@ -45,19 +46,19 @@
          i18n>Audit Logs</a>
       <ng-template ngbNavContent>
         <div class="card bg-light mb-3"
-             *ngIf="audit_log && !hideAuditLogs">
+             *ngIf="audit_log && showAuditLogs">
           <div class="btn-group"
                role="group"
                *ngIf="audit_log.length">
             <cd-download-button [objectItem]="audit_log"
                                 [textItem]="auditLogText"
                                 fileName="audit_log"
-                                *ngIf="!hideDwnldCpyBtn">
+                                *ngIf="showDownloadCopyButton">
             </cd-download-button>
             <cd-copy-2-clipboard-button
                     [source]="auditLogText"
                     [byId]="false"
-                    *ngIf="!hideDwnldCpyBtn">
+                    *ngIf="showDownloadCopyButton">
             </cd-copy-2-clipboard-button>
           </div>
           <div class="card-body">
@@ -77,7 +78,7 @@
       <a ngbNavLink
          i18n>Daemon Logs</a>
       <ng-template ngbNavContent>
-        <ng-container *ngIf="!hideDaemonLogs && lokiServiceStatus$ | async as lokiServiceStatus ; else daemonLogsTpl ">
+        <ng-container *ngIf="showDaemonLogs && lokiServiceStatus$ | async as lokiServiceStatus ; else daemonLogsTpl ">
           <div *ngIf="promtailServiceStatus$ | async as promtailServiceStatus; else daemonLogsTpl">
             <cd-grafana i18n-title
                         title="Daemon logs"
@@ -97,7 +98,7 @@
 
 <ng-template #logFiltersTpl>
   <div class="row mb-3"
-       *ngIf="!hideFilterTools">
+       *ngIf="showFilterTools">
   <div class="col-lg-10 d-flex">
     <div class="col-sm-1 me-3">
       <label for="logs-priority"
