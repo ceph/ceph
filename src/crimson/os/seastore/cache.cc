@@ -225,9 +225,9 @@ void Cache::register_metrics()
           "cache",
           {
             sm::make_counter(
-              "trans_invalidated",
+              "trans_invalidated_by_extent",
               counter,
-              sm::description("total number of transaction invalidated"),
+              sm::description("total number of transactions invalidated by extents"),
               {src_label, ext_label}
             ),
           }
@@ -295,6 +295,12 @@ void Cache::register_metrics()
       metrics.add_group(
         "cache",
         {
+          sm::make_counter(
+            "trans_invalidated",
+            efforts.total_trans_invalidated,
+            sm::description("total number of transactions invalidated"),
+            {src_label}
+          ),
           sm::make_counter(
             "invalidated_delta_bytes",
             efforts.mutate_delta_bytes,
@@ -843,6 +849,7 @@ void Cache::mark_transaction_conflicted(
 
   auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
                              t.get_src());
+  ++efforts.total_trans_invalidated;
 
   auto& counter = get_by_ext(efforts.num_trans_invalidated,
                              conflicting_extent.get_type());
