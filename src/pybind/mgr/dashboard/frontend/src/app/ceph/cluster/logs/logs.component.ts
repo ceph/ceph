@@ -16,19 +16,21 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 })
 export class LogsComponent implements OnInit, OnDestroy {
   @Input()
-  hideClusterLogs = false;
+  showClusterLogs = true;
   @Input()
-  hideAuditLogs = false;
+  showAuditLogs = true;
   @Input()
-  hideDaemonLogs = false;
+  showDaemonLogs = true;
   @Input()
-  hideNavLinks = false;
+  showNavLinks = true;
   @Input()
-  hideFilterTools = false;
+  showFilterTools = true;
   @Input()
-  hideDwnldCpyBtn = false;
+  showDownloadCopyButton = true;
   @Input()
   defaultTab = '';
+  @Input()
+  scrollable = false;
 
   contentData: any;
   clog: Array<any>;
