@@ -8,6 +8,8 @@ import { NgbNav, NgbNavChangeEvent } from '@ng-bootstrap/ng-bootstrap';
 export class StatefulTabDirective implements OnInit {
   @Input()
   cdStatefulTab: string;
+  @Input()
+  cdStatefulTabDefault = '';
 
   private localStorage = window.localStorage;
 
@@ -15,7 +17,8 @@ export class StatefulTabDirective implements OnInit {
 
   ngOnInit() {
     // Is an activate tab identifier stored in the local storage?
-    const activeId = this.localStorage.getItem(`tabset_${this.cdStatefulTab}`);
+    const activeId =
+      this.cdStatefulTabDefault || this.localStorage.getItem(`tabset_${this.cdStatefulTab}`);
     if (activeId) {
       this.nav.select(activeId);
     }

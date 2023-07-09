@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
+import { Component, Input, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
@@ -15,6 +15,21 @@ import { Icons } from '~/app/shared/enum/icons.enum';
   styleUrls: ['./logs.component.scss']
 })
 export class LogsComponent implements OnInit, OnDestroy {
+  @Input()
+  hideClusterLogs = false;
+  @Input()
+  hideAuditLogs = false;
+  @Input()
+  hideDaemonLogs = false;
+  @Input()
+  hideNavLinks = false;
+  @Input()
+  hideFilterTools = false;
+  @Input()
+  hideDwnldCpyBtn = false;
+  @Input()
+  defaultTab = '';
+
   contentData: any;
   clog: Array<any>;
   audit_log: Array<any>;
