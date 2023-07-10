@@ -9756,7 +9756,7 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
     if (mdr->is_batch_head()) {
       mdr->release_batch_op()->forward(who);
     } else {
-      mds->forward_message_mds(mdr->release_client_request(), who);
+      mds->forward_message_mds(mdr, who);
     }
     if (mds->logger) mds->logger->inc(l_mds_forward);
   } else if (mdr->internal_op >= 0) {
