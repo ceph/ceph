@@ -154,7 +154,8 @@ class D4NFilterObject : public FilterObject {
 	D4NFilterReadOp(std::unique_ptr<ReadOp> _next, D4NFilterObject* _source) : FilterReadOp(std::move(_next)),
 										   source(_source) 
         {
-	  std::string oid = source->get_bucket()->get_marker() + "_" + source->get_key().get_oid();
+	  //std::string oid = source->get_bucket()->get_marker() + "_" + source->get_key().get_oid(); // How to use in redis driver? -Sam
+          std::string oid = source->get_oid();
           cb = std::make_unique<D4NFilterGetCB>(source->driver, oid, source); 
 	}
 	virtual ~D4NFilterReadOp() = default;
