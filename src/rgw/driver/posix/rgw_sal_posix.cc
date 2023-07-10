@@ -392,6 +392,17 @@ int POSIXDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::s
   return get_bucket(dpp, u, b, bucket, y);
 }
 
+std::string POSIXDriver::zone_unique_trans_id(const uint64_t unique_num)
+{
+  char buf[41]; /* 2 + 21 + 1 + 16 (timestamp can consume up to 16) + 1 */
+  time_t timestamp = time(NULL);
+
+  snprintf(buf, sizeof(buf), "tx%021llx-%010llx",
+           (unsigned long long)unique_num,
+           (unsigned long long)timestamp);
+
+  return std::string(buf);
+}
 std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
@@ -688,36 +699,102 @@ int POSIXBucket::fill_cache(
 int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
 		      int max, ListResults& results, optional_yield y)
 {
+  std::string next_marker;
+  ldpp_dout(dpp, 0) << "C3PO 1 prefix: \"" << params.prefix << "\" delim: \"" << params.delim << "\"" << " marker: \"" << params.marker << "\"" << dendl;
   // Names are url_encoded, so encode prefix and delimiter
-  params.prefix = url_encode(params.prefix);
-  params.delim = url_encode(params.delim);
+  // Names seem to not be url_encoded in cache
+  //params.prefix = url_encode(params.prefix);
+  //params.delim = url_encode(params.delim);
 
   int ret = driver->get_bucket_cache()->list_bucket(
     dpp, this, params, max, [&](const rgw_bucket_dir_entry& bde) -> int
       {
-	if (!bde.key.name.starts_with(params.prefix)) {
-	  // Prefix doesn't match; skip
-	  ldpp_dout(dpp, 0) << "C3PO name: " << bde.key.name << " prefix: \"" << params.prefix << "\"" << dendl;
+  ldpp_dout(dpp, 0) << "C3PO 2 name: " << bde.key.name << " prefix: " << params.prefix << " delim: \"" << params.delim << "\"" << " marker: \"" << params.marker << "\"" << dendl;
+        if (!params.marker.empty() && params.marker == bde.key.name) {
+	  // Skip marker
+            ldpp_dout(dpp, 0) << "C3PO 2.1 name: " << bde.key.name << " prefix: \""
+                << params.prefix << "\"" << dendl;
 	  return 0;
 	}
-	//if (bde.key.name.find(params.delim) == std::string_view::npos) {
-	//// Delimiter doesn't match; skip
-	//return 0;
-	//}
-	results.objs.push_back(bde);
-	return 0;
+	if (!params.prefix.empty()) {
+	  // We have a prefix, only match
+          if (!bde.key.name.starts_with(params.prefix)) {
+            // Prefix doesn't match; skip
+            ldpp_dout(dpp, 0) << "C3PO 3.0 name: " << bde.key.name << " prefix: \""
+                << params.prefix << "\"" << dendl;
+            return 0;
+          }
+	  if (params.delim.empty()) {
+	    // No delimiter, add matches
+            ldpp_dout(dpp, 0) << "C3PO 3.1 name: " << bde.key.name << " prefix: \""
+                << params.prefix << "\"" << dendl;
+            results.objs.push_back(bde);
+            return 1;
+          }
+            ldpp_dout(dpp, 0) << "C3PO 3.2 name: " << bde.key.name << " prefix: \""
+                << params.prefix << "\"" << dendl;
+          const int delim_pos = bde.key.name.find(params.delim, params.prefix.size());
+          if (delim_pos >= 0) {
+            std::string prefix_key =
+                bde.key.name.substr(0, delim_pos + params.delim.length());
+            ldpp_dout(dpp, 0) << "C3PO 3.3 name: " << bde.key.name << " prefix_key: \""
+                << prefix_key << "\"" << dendl;
+	    next_marker = prefix_key;
+	    if (!results.common_prefixes.contains(prefix_key)) {
+              results.common_prefixes[prefix_key] = true;
+              return 1;
+	    }
+          }
+	  return 0;
+        }
+        if (!params.delim.empty()) {
+	  // Delimiter, but no prefix
+	    ldpp_dout(dpp, 0) << "C3PO 4.0 name: " << bde.key.name << " delim: \"" << params.delim << "\"" << dendl;
+	  auto delim_pos = bde.key.name.find(params.delim) ;
+          if (delim_pos == std::string_view::npos) {
+	    ldpp_dout(dpp, 0) << "C3PO 4.1 name: " << bde.key.name << " delim: \"" << params.delim << "\"" << dendl;
+	    // Delimiter doesn't match, insert
+	    next_marker = bde.key.name;
+            results.objs.push_back(bde);
+            return 1;
+          }
+          std::string prefix_key =
+              bde.key.name.substr(0, delim_pos + params.delim.length());
+          ldpp_dout(dpp, 0) << "C3PO 4.2 name: " << bde.key.name
+                            << " prefix_key: \"" << prefix_key << "\"" << dendl;
+          if (!params.marker.empty() && params.marker == prefix_key) {
+            // Skip marker
+            ldpp_dout(dpp, 0) << "C3PO 2.1 name: " << bde.key.name << " prefix_key: \""
+                << prefix_key << "\"" << dendl;
+            return 0;
+          }
+          next_marker = prefix_key;
+          if (!results.common_prefixes.contains(prefix_key)) {
+            results.common_prefixes[prefix_key] = true;
+            return 1;
+          }
+        }
+
+        results.objs.push_back(bde);
+	return 1;
     });
 
+  ldpp_dout(dpp, 0) << "C3PO 5 ret: " << ret << dendl;
   if (ret < 0) {
     if (ret == -EAGAIN) {
-      return ret;
+  ldpp_dout(dpp, 0) << "C3PO 6 next_marker=" << next_marker << dendl;
+      results.is_truncated = true;
+      results.next_marker.name = next_marker;
+      return 0;
     }
+  ldpp_dout(dpp, 0) << "C3PO 7" << dendl;
     ldpp_dout(dpp, 0) << "ERROR: could not list bucket " << get_name() << ": "
       << cpp_strerror(ret) << dendl;
     results.objs.clear();
     return ret;
   }
 
+  ldpp_dout(dpp, 0) << "C3PO 8" << dendl;
   return 0;
 }
 
@@ -2173,12 +2250,17 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char* name, bufferlist& dest, optional_yield y)
 {
   ldpp_dout(dpp, 0) << "Revan 1 " << name << dendl;
-  if (!rgw::sal::get_attr(source->get_attrs(), name, dest)) {
+  if (!source->exists(dpp)) {
   ldpp_dout(dpp, 0) << "Revan 2 " << name << dendl;
+    return -ENOENT;
+  }
+  ldpp_dout(dpp, 0) << "Revan 3 " << name << dendl;
+  if (!rgw::sal::get_attr(source->get_attrs(), name, dest)) {
+  ldpp_dout(dpp, 0) << "Revan 4 " << name << dendl;
     return -ENODATA;
   }
 
-  ldpp_dout(dpp, 0) << "Revan 3 " << name << dendl;
+  ldpp_dout(dpp, 0) << "Revan 5 " << name << dendl;
   return 0;
 }
 

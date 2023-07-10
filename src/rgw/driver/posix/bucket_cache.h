@@ -381,19 +381,24 @@ public:
 
     using namespace LMDBSafe;
 
+  ldpp_dout(dpp, 0) << "BD 1 prefix: \"" << params.prefix << "\" delim: \"" << params.delim << "\"" << dendl;
     int rc __attribute__((unused)) = 0;
     GetBucketResult gbr =
       get_bucket(sal_bucket->get_name(), BucketCache<D, B>::FLAG_LOCK);
     auto [b /* BucketCacheEntry */, flags] = gbr;
+  ldpp_dout(dpp, 0) << "BD 2 " << dendl;
     if (b /* XXX again, can this fail? */) {
+  ldpp_dout(dpp, 0) << "BD 3 " << dendl;
       if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
 	/* bulk load into lmdb cache */
 	rc = fill(dpp, b, sal_bucket, FLAG_NONE);
+  ldpp_dout(dpp, 0) << "BD 4 rc=" << rc << dendl;
       }
       /* display them */
       b->mtx.unlock();
       /*! LOCKED */
 
+  ldpp_dout(dpp, 0) << "BD 5 " << dendl;
       auto txn = b->env->getROTransaction();
       auto cursor=txn->getCursor(b->dbi);
       MDBOutVal key, data;
@@ -419,36 +424,44 @@ public:
 	  abort();
 	}
 	bde.meta.mtime = ceph::real_clock::from_timespec(ts);
-	(void) each_func(bde);
-	++count;
+	count += each_func(bde);
       };
 
       auto marker = params.marker.name;
+  ldpp_dout(dpp, 0) << "BD 6 marker=" << marker << dendl;
       if (! marker.empty()) {
 	MDBInVal k(marker);
 	auto rc = cursor.lower_bound(k, key, data);
+  ldpp_dout(dpp, 0) << "BD 7 rc=" << rc << dendl;
 	if (rc == MDB_NOTFOUND) {
 	  /* no key sorts after k/marker, so there is nothing to do */
 	  return 0;
 	}
+  ldpp_dout(dpp, 0) << "BD 8" << dendl;
 	proc_result();
       } else {
 	/* position at start of index */
 	auto rc = cursor.get(key, data, MDB_FIRST);
+  ldpp_dout(dpp, 0) << "BD 9 rc=" << rc << dendl;
 	if (rc == MDB_SUCCESS) {
 	  proc_result();
 	}
       }
+  ldpp_dout(dpp, 0) << "BD 9" << dendl;
       while(cursor.get(key, data, MDB_NEXT) == MDB_SUCCESS) {
+  ldpp_dout(dpp, 0) << "BD 10" << dendl;
 	if (count >= max) {
+  ldpp_dout(dpp, 0) << "BD 11" << dendl;
 	  return -EAGAIN;
 	  break;
 	}
+  ldpp_dout(dpp, 0) << "BD 12" << dendl;
 	proc_result();
       }
       lru.unref(b, cohort::lru::FLAG_NONE);
     }
 
+  ldpp_dout(dpp, 0) << "BD 13" << dendl;
     return 0;
   } /* list_bucket */
 
