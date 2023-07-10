@@ -1438,6 +1438,7 @@ private:
     io_stat_t fresh;
     io_stat_t fresh_ool_written;
     counter_by_extent_t<uint64_t> num_trans_invalidated;
+    uint64_t total_trans_invalidated = 0;
     uint64_t num_ool_records = 0;
     uint64_t ool_record_bytes = 0;
   };
