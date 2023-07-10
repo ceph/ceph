@@ -45,3 +45,5 @@ set_target_properties(ceph_crypto_isal PROPERTIES
   SOVERSION 1
   INSTALL_RPATH "")
 install(TARGETS ceph_crypto_isal DESTINATION ${crypto_plugin_dir})
+
+add_subdirectory(md5)

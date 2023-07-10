@@ -1,0 +1,3 @@
+add_executable(unittest_isal_md5 test_isal_md5.cc)
+add_ceph_unittest(unittest_isal_md5)
+target_link_libraries(unittest_isal_md5 isal_md5)
