@@ -658,7 +658,7 @@ int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* c
 {
   ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): file_path=" << file_path << dendl;
   aio_cb.reset(new struct aiocb);
-  memset(aio_cb.get(), 0, sizeof(struct aiocb));
+  /*memset(aio_cb.get(), 0, sizeof(struct aiocb));
   aio_cb->aio_fildes = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_RDONLY|O_CLOEXEC|O_BINARY));
 
   if (aio_cb->aio_fildes < 0) {
@@ -668,8 +668,8 @@ int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* c
   }
 
   if (cct->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL) {
-      posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
-  }
+     posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
+  }*/
 
   bufferptr bp(read_len);
   aio_cb->aio_buf = bp.c_str();
@@ -687,12 +687,14 @@ int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* c
 
 void RedisDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
 {
+  namespace net = boost::asio;
+
   auto p = std::unique_ptr<Completion>{static_cast<Completion*>(sigval.sival_ptr)};
   auto op = std::move(p->user_data);
   const int ret = -aio_error(op.aio_cb.get());
   boost::system::error_code ec;
   if (ret < 0) {
-      ec.assign(-ret, boost::system::system_category());
+    ec.assign(-ret, boost::system::system_category());
   }
 
   ceph::async::dispatch(std::move(p), ec, std::move(op.result));
@@ -709,8 +711,39 @@ template <typename ExecutionContext, typename CompletionToken>
 auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
                 off_t read_ofs, off_t read_len, CompletionToken&& token)
 {
+  namespace net = boost::asio;
+  namespace resp3 = aedis::resp3;
+  using aedis::resp3::request;
+  using aedis::adapt;
+  using aedis::operation;
+
   std::string location = partition_info.location + key;
   ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
+
+  std::string host = "127.0.0.1";
+  std::string port = "6379";
+
+  aedis::connection conn{ctx};
+
+  net::ip::tcp::resolver resv{ctx};
+  auto const res = resv.resolve(host, port);
+
+  auto on_exec = [&](auto ec, auto)
+  {
+     if (ec) {
+	conn.cancel(operation::run);
+	//return log(ec, "on_exec: ");
+     }
+
+     //std::cout << "PING: " << std::get<1>(resp) << std::endl;
+  };
+	
+  std::tuple<aedis::ignore, std::string, aedis::ignore> resp;
+
+  resp3::request req;
+  req.push("HELLO", 3);
+  req.push("PING");
+  req.push("QUIT");
 
   using Op = AsyncReadOp;
   using Signature = typename Op::Signature;
@@ -719,11 +752,20 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
   auto& op = p->user_data;
 
   int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
+
+  net::dispatch(
+    conn.get_executor(),
+    [&conn, &req, &resp] { return conn.async_exec(req, adapt(resp), net::deferred); });
+    //(net::use_future).get();
+
+  dout(0) << "Sam: " << std::get<1>(resp) << dendl;
+  /*
+
   if (0 == ret) {
     ret = ::aio_read(op.aio_cb.get());
   }
 //  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
- /* if(ret < 0) {
+  if(ret < 0) {
       auto ec = boost::system::error_code{-ret, boost::system::system_category()};
       ceph::async::post(std::move(p), ec, bufferlist{});
   } else {
