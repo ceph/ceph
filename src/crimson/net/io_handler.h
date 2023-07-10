@@ -447,7 +447,10 @@ public:
   seastar::future<> do_send_keepalive();
 
   seastar::future<> to_new_sid(
-      seastar::shard_id new_sid, ConnectionFRef);
+      crosscore_t::seq_t cc_seq,
+      seastar::shard_id new_sid,
+      ConnectionFRef,
+      std::optional<bool> is_replace);
 
   void dispatch_reset(bool is_replace);
 

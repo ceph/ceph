@@ -136,17 +136,17 @@ class SyntheticDispatcher final
 
   void ms_handle_accept(
       crimson::net::ConnectionRef conn,
-      seastar::shard_id new_shard,
+      seastar::shard_id prv_shard,
       bool is_replace) final {
     logger().info("{} - Connection:{}", __func__, *conn);
-    assert(new_shard == seastar::this_shard_id());
+    assert(prv_shard == seastar::this_shard_id());
   }
 
   void ms_handle_connect(
       crimson::net::ConnectionRef conn,
-      seastar::shard_id new_shard) final {
+      seastar::shard_id prv_shard) final {
     logger().info("{} - Connection:{}", __func__, *conn);
-    assert(new_shard == seastar::this_shard_id());
+    assert(prv_shard == seastar::this_shard_id());
   }
 
   void ms_handle_reset(crimson::net::ConnectionRef con, bool is_replace) final;
