@@ -34,7 +34,7 @@ namespace file::listing {
 namespace bi = boost::intrusive;
 namespace sf = std::filesystem; 
 
-typedef bi::link_mode<bi::normal_link> link_mode; /* XXX normal */
+typedef bi::link_mode<bi::safe_link> link_mode; /* XXX normal */
 typedef bi::avl_set_member_hook<link_mode> member_hook_t;
 
 template <typename D, typename B>
@@ -151,6 +151,13 @@ public:
 
 	//std::cout << fmt::format("reclaim {}!", name) << std::endl;
 	bc->un->remove_watch(name);
+#if 1
+	// depends on safe_link
+	if (! name_hook.is_linked()) {
+	  // this should not happen!
+	  abort();
+	}
+#endif
 	bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
 
 	/* discard lmdb data associated with this bucket */
