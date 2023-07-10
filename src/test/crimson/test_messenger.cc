@@ -122,10 +122,10 @@ static seastar::future<> test_echo(unsigned rounds,
 
       void ms_handle_accept(
           crimson::net::ConnectionRef conn,
-          seastar::shard_id new_shard,
+          seastar::shard_id prv_shard,
           bool is_replace) override {
         logger().info("server accepted {}", *conn);
-        ceph_assert(new_shard == seastar::this_shard_id());
+        ceph_assert(prv_shard == seastar::this_shard_id());
         ceph_assert(!is_replace);
       }
 
@@ -196,8 +196,8 @@ static seastar::future<> test_echo(unsigned rounds,
 
       void ms_handle_connect(
           crimson::net::ConnectionRef conn,
-          seastar::shard_id new_shard) override {
-        assert(new_shard == seastar::this_shard_id());
+          seastar::shard_id prv_shard) override {
+        assert(prv_shard == seastar::this_shard_id());
         auto session = seastar::make_shared<PingSession>();
         auto [i, added] = sessions.emplace(conn, session);
         std::ignore = i;
@@ -937,9 +937,9 @@ class FailoverSuite : public Dispatcher {
 
   void ms_handle_accept(
       ConnectionRef conn,
-      seastar::shard_id new_shard,
+      seastar::shard_id prv_shard,
       bool is_replace) override {
-    assert(new_shard == seastar::this_shard_id());
+    assert(prv_shard == seastar::this_shard_id());
     auto result = interceptor.find_result(conn);
     if (result == nullptr) {
       logger().error("Untracked accepted connection: {}", *conn);
@@ -964,8 +964,8 @@ class FailoverSuite : public Dispatcher {
 
   void ms_handle_connect(
       ConnectionRef conn,
-      seastar::shard_id new_shard) override {
-    assert(new_shard == seastar::this_shard_id());
+      seastar::shard_id prv_shard) override {
+    assert(prv_shard == seastar::this_shard_id());
     auto result = interceptor.find_result(conn);
     if (result == nullptr) {
       logger().error("Untracked connected connection: {}", *conn);
@@ -1533,9 +1533,9 @@ class FailoverSuitePeer : public Dispatcher {
 
   void ms_handle_accept(
       ConnectionRef conn,
-      seastar::shard_id new_shard,
+      seastar::shard_id prv_shard,
       bool is_replace) override {
-    assert(new_shard == seastar::this_shard_id());
+    assert(prv_shard == seastar::this_shard_id());
     logger().info("[TestPeer] got accept from Test");
     ceph_assert(!tracked_conn ||
                 tracked_conn->is_closed() ||
@@ -1693,9 +1693,9 @@ class FailoverTestPeer : public Dispatcher {
 
   void ms_handle_accept(
       ConnectionRef conn,
-      seastar::shard_id new_shard,
+      seastar::shard_id prv_shard,
       bool is_replace) override {
-    assert(new_shard == seastar::this_shard_id());
+    assert(prv_shard == seastar::this_shard_id());
     cmd_conn = conn;
   }
 

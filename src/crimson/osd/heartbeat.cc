@@ -238,9 +238,9 @@ void Heartbeat::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replac
 
 void Heartbeat::ms_handle_connect(
     crimson::net::ConnectionRef conn,
-    seastar::shard_id new_shard)
+    seastar::shard_id prv_shard)
 {
-  ceph_assert_always(seastar::this_shard_id() == new_shard);
+  ceph_assert_always(seastar::this_shard_id() == prv_shard);
   auto peer = conn->get_peer_id();
   if (conn->get_peer_type() != entity_name_t::TYPE_OSD ||
       peer == entity_name_t::NEW) {
@@ -254,10 +254,10 @@ void Heartbeat::ms_handle_connect(
 
 void Heartbeat::ms_handle_accept(
     crimson::net::ConnectionRef conn,
-    seastar::shard_id new_shard,
+    seastar::shard_id prv_shard,
     bool is_replace)
 {
-  ceph_assert_always(seastar::this_shard_id() == new_shard);
+  ceph_assert_always(seastar::this_shard_id() == prv_shard);
   auto peer = conn->get_peer_id();
   if (conn->get_peer_type() != entity_name_t::TYPE_OSD ||
       peer == entity_name_t::NEW) {

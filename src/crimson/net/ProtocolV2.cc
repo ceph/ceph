@@ -1003,6 +1003,8 @@ void ProtocolV2::execute_connecting()
             }
 
             auto cc_seq = crosscore.prepare_submit();
+            // there are 2 hops with dispatch_connect()
+            crosscore.prepare_submit();
             logger().info("{} connected: gs={}, pgs={}, cs={}, "
                           "client_cookie={}, server_cookie={}, {}, new_sid={}, "
                           "send {} IOHandler::dispatch_connect()",
@@ -1797,6 +1799,8 @@ void ProtocolV2::execute_establishing(SocketConnectionRef existing_conn) {
 
     // set io_handler to a new shard
     auto cc_seq = crosscore.prepare_submit();
+    // there are 2 hops with dispatch_accept()
+    crosscore.prepare_submit();
     auto new_io_shard = frame_assembler->get_socket_shard_id();
     logger().debug("{} send {} IOHandler::dispatch_accept({})",
                    conn, cc_seq, new_io_shard);
@@ -1968,6 +1972,8 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       // set io_handler to a new shard
       // we should prevent parallel switching core attemps
       auto cc_seq = crosscore.prepare_submit();
+      // there are 2 hops with dispatch_accept()
+      crosscore.prepare_submit();
       logger().debug("{} send {} IOHandler::dispatch_accept({})",
                      conn, cc_seq, new_io_shard);
       ConnectionFRef conn_fref = seastar::make_foreign(
