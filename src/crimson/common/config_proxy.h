@@ -105,8 +105,8 @@ public:
   void get_defaults_bl(ceph::buffer::list *bl) {
     get_config().get_defaults_bl(get_config_values(), bl);
   }
-  // required by sharded<>
   seastar::future<> start();
+  // required by sharded<>
   seastar::future<> stop() {
     return seastar::make_ready_future<>();
   }

@@ -632,8 +632,11 @@ seastar::future<int> do_test(seastar::app_template& app)
                                               CEPH_ENTITY_TYPE_CLIENT,
                                               &cluster,
                                               &conf_file_list);
-  return crimson::common::sharded_conf().start(init_params.name, cluster)
-  .then([conf_file_list] {
+  return crimson::common::sharded_conf().start(
+    init_params.name, cluster
+  ).then([] {
+    return local_conf().start();
+  }).then([conf_file_list] {
     return local_conf().parse_config_files(conf_file_list);
   }).then([&app] {
     auto&& config = app.configuration();
