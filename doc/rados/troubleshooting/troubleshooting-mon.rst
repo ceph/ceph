@@ -222,7 +222,7 @@ What if the state is ``probing``?
   single-monitor cluster (never do this in production), the monitor will pass
   through the probing state almost instantaneously.  In a multi-monitor
   cluster, the monitors will stay in this state until they find enough monitors
-  to form a quorum -- this means that if you have 2 out of 3 monitors down, the
+  to form a quorum |---| this means that if you have 2 out of 3 monitors down, the
   one remaining monitor will stay in this state indefinitely until you bring
   one of the other monitors up.
 
@@ -636,3 +636,6 @@ Finally, you should reach out to us on the mailing lists, on IRC or file
 a new issue on the `tracker`_.
 
 .. _tracker: http://tracker.ceph.com/projects/ceph/issues/new
+
+.. |---|   unicode:: U+2014 .. EM DASH
+   :trim:
