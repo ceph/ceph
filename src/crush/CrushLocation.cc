@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <vector>
+#include <boost/algorithm/string/trim.hpp>
 
 #include "CrushLocation.h"
 #include "CrushWrapper.h"
@@ -90,7 +91,7 @@ int CrushLocation::update_from_hook()
 
   std::string out;
   bl.begin().copy(bl.length(), out);
-  out.erase(out.find_last_not_of(" \n\r\t")+1);
+  boost::algorithm::trim_right_if(out, boost::algorithm::is_any_of(" \n\r\t"));
   return _parse(out);
 }
 
