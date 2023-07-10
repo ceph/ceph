@@ -7948,6 +7948,9 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
 void OSD::trim_maps(epoch_t oldest, bool skip_maps)
 {
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
+  dout(20) <<  __func__ << ": min=" << min << " oldest_map="
+           << superblock.oldest_map << " skip_maps=" << skip_maps
+           << dendl;
   if (min <= superblock.oldest_map)
     return;
 
