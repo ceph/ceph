@@ -1082,17 +1082,21 @@ int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
   DBOpParams params = {};
   rgw::sal::Attrs *attrs;
   map<string, bufferlist>::iterator iter;
+  RGWObjState* state;
 
-  ret = get_object_impl(dpp, params);
+  store->InitializeParams(dpp, &params);
+  InitializeParamsfromObject(dpp, &params);
+  ret = get_state(dpp, &state, true);
 
-  if (ret) {
-    ldpp_dout(dpp, 0) <<"get_object_impl failed err:(" <<ret<<")" << dendl;
+  if (ret && !state->exists) {
+    ldpp_dout(dpp, 0) <<"get_state failed err:(" <<ret<<")" << dendl;
     goto out;
   }
 
   /* For now lets keep it simple..rmattrs & setattrs ..
    * XXX: Check rgw_rados::set_attrs
    */
+  params.op.obj.state = *state;
   attrs = &params.op.obj.state.attrset;
   if (rmattrs) {
     for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
@@ -1104,7 +1108,10 @@ int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
   }
 
   params.op.query_str = "attrs";
-  params.op.obj.state.mtime = real_clock::now();
+  /* As per https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html, 
+   * the only way for users to modify object metadata is to make a copy of the object and
+   * set the metadata.
+   * Hence do not update mtime for any other attr changes */
 
   ret = store->ProcessOp(dpp, "UpdateObject", &params);
 
