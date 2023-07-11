@@ -148,7 +148,7 @@ function install_pkg_on_ubuntu {
 
 function install_boost_on_ubuntu {
     ci_debug "Running install_boost_on_ubuntu() in install-deps.sh"
-    local ver=1.79
+    local ver=1.82
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
@@ -163,7 +163,7 @@ function install_boost_on_ubuntu {
     fi
     local codename=$1
     local project=libboost
-    local sha1=892ab89e76b91b505ffbf083f6fb7f2a666d4132
+    local sha1=2804368f5b807ba8334b0ccfeb8af191edeb996f
     install_pkg_on_ubuntu \
         $project \
         $sha1 \
