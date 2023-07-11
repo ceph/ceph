@@ -69,19 +69,14 @@ public:
   public:
     ShardDispatcher(
       OSD& osd,
-      int whoami,
-      crimson::os::FuturizedStore& store,
       PGShardMapping& pg_to_shard_mapping)
     : pg_shard_manager(osd.osd_singleton_state,
                        osd.shard_services, pg_to_shard_mapping),
-      osd(osd),
-      whoami(whoami),
-      store(store) {}
+      osd(osd) {}
     ~ShardDispatcher() = default;
 
     // Dispatcher methods
-    seastar::future<> ms_dispatch(crimson::net::ConnectionFRef,
-                                                 MessageRef);
+    seastar::future<> ms_dispatch(crimson::net::ConnectionRef, MessageRef);
 
   private:
     bool require_mon_peer(crimson::net::Connection *conn, Ref<Message> m);
@@ -135,8 +130,6 @@ public:
   private:
     crimson::osd::PGShardManager pg_shard_manager;
     OSD& osd;
-    const int whoami;
-    crimson::os::FuturizedStore& store;
   };
 
   const int whoami;
