@@ -276,6 +276,15 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     return remove_entry(dpp, key);
 }
 
+int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data)
+{
+    std::string location = partition_info.location + key;
+
+    //TODO - Implement append_data
+
+    return 0;
+}
+
 int SSDDriver::AsyncWriteRequest::prepare_libaio_write_op(const DoutPrefixProvider *dpp, bufferlist& bl, unsigned int len, std::string key, std::string cache_location)
 {
     std::string location = cache_location + key;
@@ -523,6 +532,11 @@ void SSDCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
     cache_driver->get_async(dpp, y.get_io_context(), key, ofs, len, bind_executor(ex, SSDDriver::libaio_handler{aio, r}));
+}
+
+void SSDCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
+{
+    //TODO - implement cache_aio_write
 }
 
 } } // namespace rgw::cache
