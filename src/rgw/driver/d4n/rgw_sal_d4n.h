@@ -22,7 +22,6 @@
 #include "common/dout.h" 
 #include "rgw_aio_throttle.h"
 
-#include "rgw_redis_driver.h"
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
 
@@ -54,6 +53,7 @@ class D4NFilterDriver : public FilterDriver {
       cacheBlock = new rgw::d4n::CacheBlock();
       policyDriver = new rgw::d4n::PolicyDriver(io_context, "lfuda");
     }
+    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
     virtual ~D4NFilterDriver() {
       delete cacheDriver;
       delete objDir; 
@@ -61,6 +61,8 @@ class D4NFilterDriver : public FilterDriver {
       delete cacheBlock;
       delete policyDriver;
     }
+
+    virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
