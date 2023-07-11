@@ -77,7 +77,11 @@
   map and unmap images in namespaces using the `image-spec` syntax since then
   but the corresponding option available in most other commands was missing.
 * RGW: Compression is now supported for objects uploaded with Server-Side Encryption.
-  When both are enabled, compression is applied before encryption.
+  When both are enabled, compression is applied before encryption. Earlier releases
+  of multisite do not replicate such objects correctly, so all zones must upgrade to
+  Reef before enabling the `compress-encrypted` zonegroup feature: see
+  https://docs.ceph.com/en/reef/radosgw/multisite/#zone-features and note the
+  security considerations.
 * RGW: the "pubsub" functionality for storing bucket notifications inside Ceph
   is removed. Together with it, the "pubsub" zone should not be used anymore.
   The REST operations, as well as radosgw-admin commands for manipulating

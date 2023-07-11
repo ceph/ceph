@@ -7,6 +7,9 @@ Compression
 The Ceph Object Gateway supports server-side compression of uploaded objects,
 using any of Ceph's existing compression plugins.
 
+.. note:: The Reef release added a :ref:`feature_compress_encrypted` zonegroup
+   feature to enable compression with `Server-Side Encryption`_.
+
 
 Configuration
 =============
@@ -84,4 +87,5 @@ The ``size_utilized`` and ``size_kb_utilized`` fields represent the total
 size of compressed data, in bytes and kilobytes respectively.
 
 
+.. _`Server-Side Encryption`: ../encryption
 .. _`Multisite Configuration`: ../multisite
