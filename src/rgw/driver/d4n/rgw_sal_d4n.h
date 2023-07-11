@@ -22,7 +22,6 @@
 #include "common/dout.h" 
 #include "rgw_aio_throttle.h"
 
-#include "rgw_redis_driver.h"
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
 
@@ -37,24 +36,9 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::PolicyDriver* policyDriver;
 
   public:
-    D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
-    {
-      rgw::cache::Partition partition_info;
-      partition_info.location = "RedisCache"; // figure out how to fill rest of partition information -Sam
+    D4NFilterDriver(Driver* _next);
 
-      cacheDriver = new rgw::cache::RedisDriver(partition_info); // change later -Sam
-      objDir = new rgw::d4n::ObjectDirectory();
-      blockDir = new rgw::d4n::BlockDirectory();
-      cacheBlock = new rgw::d4n::CacheBlock();
-      policyDriver = new rgw::d4n::PolicyDriver("lfuda");
-    }
-    virtual ~D4NFilterDriver() {
-      delete cacheDriver;
-      delete objDir; 
-      delete blockDir; 
-      delete cacheBlock;
-      delete policyDriver;
-    }
+    virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
