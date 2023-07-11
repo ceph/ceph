@@ -982,8 +982,8 @@ class CephNvmeof(object):
         mounts['/etc/ceph/ceph.client.admin.keyring'] = '/etc/ceph/keyring:z'  # TODO: FIXME
         mounts[os.path.join(data_dir, 'ceph-nvmeof.conf')] = '/src/ceph-nvmeof.conf:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config'
-        # mounts[log_dir] = '/var/log:z' # TODO: would we need a logdir?
-        mounts['/dev'] = '/dev'
+        mounts['/dev/hugepages'] = '/dev/hugepages'
+        mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
         return mounts
 
     @staticmethod
@@ -1062,7 +1062,7 @@ class CephNvmeof(object):
     @staticmethod
     def get_sysctl_settings() -> List[str]:
         return [
-            'vm.nr_hugepages = 2048',
+            'vm.nr_hugepages = 4096',
         ]
 
 
@@ -6389,7 +6389,7 @@ def command_deploy(ctx):
                       ports=daemon_ports)
     elif daemon_type == CephNvmeof.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
-        uid, gid = 65534, 65534  # TODO: check this
+        uid, gid = 167, 167  # TODO: need to get properly the uid/gid
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
                       config=config, keyring=keyring,

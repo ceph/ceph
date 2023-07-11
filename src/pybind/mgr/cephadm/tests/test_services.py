@@ -371,7 +371,8 @@ rpc_socket = /var/tmp/spdk.sock
 timeout = 60
 log_level = WARN
 conn_retries = 10
-transports = tcp\n"""
+transports = tcp
+transport_tcp_options = {{"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7}}\n"""
 
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, NvmeofServiceSpec(service_id=pool,
