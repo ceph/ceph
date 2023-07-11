@@ -746,4 +746,8 @@ void RedisCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, option
 {
 }
 
+int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
+{
+  return 0;
+}
 } } // namespace rgw::cache
