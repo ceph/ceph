@@ -2284,7 +2284,7 @@ Then run the following:
 
         if action == 'rotate-key':
             if d.daemon_type not in ['mgr', 'osd', 'mds',
-                                     'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi', 'nvmeof']:
+                                     'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi']:
                 raise OrchestratorError(
                     f'key rotation not supported for {d.daemon_type}'
                 )
@@ -2662,8 +2662,6 @@ Then run the following:
                 deps = [self.iscsi_service.get_trusted_ips(iscsi_spec)]
             else:
                 deps = [self.get_mgr_ip()]
-        elif daemon_type == 'nvmeof':
-            deps = []  # TODO(redo)
         elif daemon_type == 'prometheus':
             # for prometheus we add the active mgr as an explicit dependency,
             # this way we force a redeploy after a mgr failover
