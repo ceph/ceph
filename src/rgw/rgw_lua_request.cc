@@ -405,8 +405,10 @@ struct GrantsMetaTable : public EmptyMetaTable {
   static std::string TableName() {return "Grants";}
   static std::string Name() {return TableName() + "Meta";}
 
+  using Type = ACLGrantMap;
+
   static int IndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto map = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -420,58 +422,18 @@ struct GrantsMetaTable : public EmptyMetaTable {
   }
   
   static int PairsClosure(lua_State* L) {
-    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    auto map = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
     ceph_assert(map);
     lua_pushlightuserdata(L, map);
-    lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
-    lua_pushnil(L);                                 // indicate this is the first call
-    // return stateless_iter, nil
+    lua_pushcclosure(L, next<Type, GrantMetaTable>, ONE_UPVAL);  // push the "next()" function
+    lua_pushnil(L);                                                 // indicate this is the first call
+    // return next, nil
 
     return TWO_RETURNVALS;
   }
   
-  static int stateless_iter(lua_State* L) {
-    // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
-    auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ACLGrantMap::iterator next_it;
-    if (lua_isnil(L, -1)) {
-      next_it = map->begin();
-    } else {
-      const char* index = luaL_checkstring(L, 2);
-      const auto it = map->find(std::string(index));
-      ceph_assert(it != map->end());
-      next_it = std::next(it);
-    }
-
-    if (next_it == map->end()) {
-      // index of the last element was provided
-      lua_pushnil(L);
-      lua_pushnil(L);
-      return TWO_RETURNVALS;
-      // return nil, nil
-    }
-
-    while (next_it->first.empty()) {
-      // this is a multimap and the next element does not have a unique key
-      ++next_it;
-      if (next_it == map->end()) {
-        // index of the last element was provided
-        lua_pushnil(L);
-        lua_pushnil(L);
-        return TWO_RETURNVALS;
-        // return nil, nil
-      }
-    }
-
-    pushstring(L, next_it->first);
-    create_metatable<GrantMetaTable>(L, false, &(next_it->second));
-    // return key, value
-    
-    return TWO_RETURNVALS;
-  }
-
   static int LenClosure(lua_State* L) {
-    const auto map = reinterpret_cast<ACLGrantMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+    const auto map = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 
     lua_pushinteger(L, map->size());
 

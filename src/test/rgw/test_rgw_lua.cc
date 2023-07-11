@@ -485,10 +485,144 @@ TEST(TestRGWLua, Metadata)
   ASSERT_EQ(rc, 0);
 }
 
+TEST(TestRGWLua, WriteMetadata)
+{
+  const std::string script = R"(
+    -- change existing entry
+    Request.HTTP.Metadata["hello"] = "earth"
+    -- add new entry
+    Request.HTTP.Metadata["goodbye"] = "mars"
+    -- delete existing entry
+    Request.HTTP.Metadata["foo"] = nil
+    -- delete missing entry
+    Request.HTTP.Metadata["venus"] = nil
+
+    assert(Request.HTTP.Metadata["hello"] == "earth")
+    assert(Request.HTTP.Metadata["goodbye"] == "mars")
+    assert(Request.HTTP.Metadata["foo"] == nil)
+    assert(Request.HTTP.Metadata["venus"] == nil)
+  )";
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["hello"] = "world";
+  s.info.x_meta_map["foo"] = "bar";
+  s.info.x_meta_map["ka"] = "boom";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
+TEST(TestRGWLua, MetadataIterateWrite)
+{
+  const std::string script = R"(
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      print(k,v)
+      if tostring(k) == "c" then
+        Request.HTTP.Metadata["c"] = nil
+        print("'c' is deleted and 'd' is skipped")
+      end
+    end
+    assert(counter == 6)
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      print(k,v)
+      if tostring(k) == "d" then
+        Request.HTTP.Metadata["e"] = nil
+        print("'e' is deleted")
+      end
+    end
+    assert(counter == 5)
+  )";
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["a"] = "1";
+  s.info.x_meta_map["b"] = "2";
+  s.info.x_meta_map["c"] = "3";
+  s.info.x_meta_map["d"] = "4";
+  s.info.x_meta_map["e"] = "5";
+  s.info.x_meta_map["f"] = "6";
+  s.info.x_meta_map["g"] = "7";
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+  ASSERT_EQ(s.info.x_meta_map.count("c"), 0);
+}
+
+TEST(TestRGWLua, MetadataIterator)
+{
+
+  DEFINE_REQ_STATE;
+  s.info.x_meta_map["a"] = "1";
+  s.info.x_meta_map["b"] = "2";
+  s.info.x_meta_map["c"] = "3";
+  s.info.x_meta_map["d"] = "4";
+  s.info.x_meta_map["e"] = "5";
+  s.info.x_meta_map["f"] = "6";
+  s.info.x_meta_map["g"] = "7";
+  
+  std::string script = R"(
+    print("nested loop")
+    counter = 0
+    for k1,v1 in pairs(Request.HTTP.Metadata) do
+      print(tostring(k1)..","..v1.." outer loop "..tostring(counter))
+      for k2,v2 in pairs(Request.HTTP.Metadata) do
+        print(k2,v2)
+      end
+      counter = counter + 1
+    end
+  )";
+
+  auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  script = R"(
+    print("break loop")
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      counter = counter + 1
+      print(k,v)
+      if counter == 3 then
+        break
+      end
+      counter = counter + 1
+    end
+    print("full loop")
+    for k,v in pairs(Request.HTTP.Metadata) do
+      print(k,v)
+    end
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_NE(rc, 0);
+  
+  script = R"(
+    print("2 loops")
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      print(k,v)
+      counter = counter + 1
+    end
+    assert(counter == #Request.HTTP.Metadata)
+    counter = 0
+    for k,v in pairs(Request.HTTP.Metadata) do
+      print(k,v)
+      counter = counter + 1
+    end
+    assert(counter == #Request.HTTP.Metadata)
+  )";
+
+  rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
+  ASSERT_EQ(rc, 0);
+}
+
 TEST(TestRGWLua, Acl)
 {
   const std::string script = R"(
-    function print_grant(g)
+    function print_grant(k, g)
+      print("Grant Key: " .. tostring(k))
       print("Grant Type: " .. g.Type)
       print("Grant Group Type: " .. g.GroupType)
       print("Grant Referer: " .. g.Referer)
@@ -501,15 +635,16 @@ TEST(TestRGWLua, Acl)
     assert(Request.UserAcl.Owner.DisplayName == "jack black", Request.UserAcl.Owner.DisplayName)
     assert(Request.UserAcl.Owner.User.Id == "black", Request.UserAcl.Owner.User.Id)
     assert(Request.UserAcl.Owner.User.Tenant == "jack", Request.UserAcl.Owner.User.Tenant)
-    assert(#Request.UserAcl.Grants == 5)
-    print_grant(Request.UserAcl.Grants[""])
+    assert(#Request.UserAcl.Grants == 7)
+    print_grant("", Request.UserAcl.Grants[""])
     for k, v in pairs(Request.UserAcl.Grants) do
-      print_grant(v)
-      if k == "john$doe" then
+      if tostring(k) == "john$doe" then
         assert(v.Permission == 4)
-      elseif k == "jane$doe" then
+      elseif tostring(k) == "jane$doe" then
         assert(v.Permission == 1)
-      else
+      elseif tostring(k) == "kill$bill" then
+        assert(v.Permission == 6 or v.Permission == 7)
+      elseif tostring(k) ~= "" then
         assert(false)
       end
     end
@@ -521,17 +656,21 @@ TEST(TestRGWLua, Acl)
   owner.set_name("jack black");
   s.user_acl.reset(new RGWAccessControlPolicy(g_cct));
   s.user_acl->set_owner(owner);
-  ACLGrant grant1, grant2, grant3, grant4, grant5;
+  ACLGrant grant1, grant2, grant3, grant4, grant5, grant6_1, grant6_2;
   grant1.set_canon(rgw_user("jane", "doe"), "her grant", 1);
   grant2.set_group(ACL_GROUP_ALL_USERS ,2);
   grant3.set_referer("http://localhost/ref2", 3);
   grant4.set_canon(rgw_user("john", "doe"), "his grant", 4);
   grant5.set_group(ACL_GROUP_AUTHENTICATED_USERS, 5);
+  grant6_1.set_canon(rgw_user("kill", "bill"), "his grant", 6);
+  grant6_2.set_canon(rgw_user("kill", "bill"), "her grant", 7);
   s.user_acl->get_acl().add_grant(&grant1);
   s.user_acl->get_acl().add_grant(&grant2);
   s.user_acl->get_acl().add_grant(&grant3);
   s.user_acl->get_acl().add_grant(&grant4);
   s.user_acl->get_acl().add_grant(&grant5);
+  s.user_acl->get_acl().add_grant(&grant6_1);
+  s.user_acl->get_acl().add_grant(&grant6_2);
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
@@ -1087,6 +1226,36 @@ TEST(TestRGWLuaBackground, TableIterate)
   EXPECT_EQ(get_table_value<double>(lua_background, "key3"), 42.2);
   EXPECT_TRUE(get_table_value<bool>(lua_background, "key4"));
   EXPECT_EQ(get_table_value<long long int>(lua_background, "size"), 5);
+}
+
+TEST(TestRGWLuaBackground, TableIterateWrite)
+{
+  MAKE_STORE;
+  TestBackground lua_background(store.get(), "");
+
+  const std::string request_script = R"(
+    RGW["a"] = 1
+    RGW["b"] = 2
+    RGW["c"] = 3
+    RGW["d"] = 4
+    RGW["e"] = 5
+    counter = 0 
+    for k, v in pairs(RGW) do
+      counter = counter + 1
+      print(k, v)
+      if tostring(k) == "c" then
+        RGW["c"] = nil
+      end
+    end
+    assert(counter == 4)
+  )";
+
+  DEFINE_REQ_STATE;
+  pe.lua.background = &lua_background;
+
+  const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, request_script);
+  ASSERT_EQ(rc, 0);
+  EXPECT_EQ(lua_background.get_table_value("c"), TestBackground::empty_table_value);
 }
 
 TEST(TestRGWLuaBackground, TableIncrement)
