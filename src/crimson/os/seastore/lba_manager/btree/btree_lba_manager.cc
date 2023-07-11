@@ -670,7 +670,8 @@ BtreeLBAManager::update_refcount_ret
 BtreeLBAManager::update_refcount(
   Transaction &t,
   laddr_t addr,
-  int delta)
+  int delta,
+  bool cascade_remove)
 {
   LOG_PREFIX(BtreeLBAManager::update_refcount);
   TRACET("laddr={}, delta={}", t, addr, delta);
@@ -684,11 +685,11 @@ BtreeLBAManager::update_refcount(
       return out;
     },
     nullptr
-  ).si_then([&t, addr, delta, FNAME, this](auto result) {
+  ).si_then([&t, addr, delta, FNAME, this, cascade_remove](auto result) {
     DEBUGT("laddr={}, delta={} done -- {}", t, addr, delta, result);
     auto fut = ref_iertr::make_ready_future<
       std::optional<std::pair<paddr_t, extent_len_t>>>();
-    if (!result.refcount && result.pladdr.is_laddr()) {
+    if (!result.refcount && result.pladdr.is_laddr() && cascade_remove) {
       fut = _decref_intermediate(
 	t,
 	result.pladdr.get_laddr(),

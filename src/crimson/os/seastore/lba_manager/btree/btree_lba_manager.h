@@ -266,14 +266,15 @@ public:
 
   ref_ret decref_extent(
     Transaction &t,
-    laddr_t addr) final {
-    return update_refcount(t, addr, -1);
+    laddr_t addr,
+    bool cascade_remove) final {
+    return update_refcount(t, addr, -1, cascade_remove);
   }
 
   ref_ret incref_extent(
     Transaction &t,
     laddr_t addr) final {
-    return update_refcount(t, addr, 1);
+    return update_refcount(t, addr, 1, false);
   }
 
   ref_ret incref_extent(
@@ -346,7 +347,8 @@ private:
   update_refcount_ret update_refcount(
     Transaction &t,
     laddr_t addr,
-    int delta);
+    int delta,
+    bool cascade_remove);
 
   /**
    * _update_mapping
