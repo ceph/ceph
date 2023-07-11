@@ -1126,14 +1126,17 @@ class NvmeofServiceSpec(ServiceSpec):
                  tgt_path: Optional[str] = None,
                  timeout: Optional[int] = 60,
                  conn_retries: Optional[int] = 10,
-                 transports: Optional[str] = "tcp",
+                 transports: Optional[str] = 'tcp',
+                 transport_tcp_options: Optional[Dict[str, int]] =
+                 {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
+                 tgt_cmd_extra_args: Optional[str] = None,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
                  config: Optional[Dict[str, str]] = None,
                  networks: Optional[List[str]] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
                  ):
         assert service_type == 'nvmeof'
@@ -1171,8 +1174,12 @@ class NvmeofServiceSpec(ServiceSpec):
         self.timeout = timeout
         #: ``conn_retries`` ceph connection retries number
         self.conn_retries = conn_retries
-        #: ``transports`` TODO
+        #: ``transports`` tcp
         self.transports = transports
+        #: List of extra arguments for transports in the form opt=value
+        self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
+        #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
+        self.tgt_cmd_extra_args = tgt_cmd_extra_args
 
     def get_port_start(self) -> List[int]:
         return [5500, 4420, 8009]
