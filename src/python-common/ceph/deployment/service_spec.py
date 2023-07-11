@@ -1026,7 +1026,7 @@ class NvmeofServiceSpec(ServiceSpec):
         self.transports = transports
 
     def get_port_start(self) -> List[int]:
-        return [self.port or 5500]
+        return [5500, 4420, 8009]
 
     def validate(self) -> None:
         #  TODO: what other parameters should be validated as part of this function?
