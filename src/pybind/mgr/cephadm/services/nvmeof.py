@@ -1,5 +1,4 @@
 import errno
-import json
 import logging
 from typing import List, cast, Optional
 
@@ -47,7 +46,7 @@ class NvmeofService(CephService):
         daemon_spec.keyring = keyring
         daemon_spec.extra_files = {'ceph-nvmeof.conf': gw_conf}
         daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
-        daemon_spec.deps = []  # TODO: which gw parameters will require a reconfig?
+        daemon_spec.deps = []
         return daemon_spec
 
     def config_dashboard(self, daemon_descrs: List[DaemonDescription]) -> None:
@@ -79,25 +78,8 @@ class NvmeofService(CephService):
         Called after the daemon is removed.
         """
         logger.debug(f'Post remove daemon {self.TYPE}.{daemon.daemon_id}')
-
         # TODO: remove config for dashboard nvmeof gateways if any
-        # needed to know if we have ssl stuff for nvmeof in ceph config
-        nvmeof_config_dict = {}
-        ret, nvmeof_config, err = self.mgr.mon_command({
-            'prefix': 'config-key dump',
-            'key': 'nvmeof',
-        })
-        if nvmeof_config:
-            nvmeof_config_dict = json.loads(nvmeof_config)
-
-        # remove nvmeof cert and key from ceph config
-        for nvmeof_key, value in nvmeof_config_dict.items():
-            if f'nvmeof/client.{daemon.name()}/' in nvmeof_key:
-                ret, out, err = self.mgr.mon_command({
-                    'prefix': 'config-key rm',
-                    'key': nvmeof_key,
-                })
-                logger.info(f'{nvmeof_key} removed from ceph config')
+        # and any certificates being used for mTLS
 
     def purge(self, service_name: str) -> None:
         """Removes configuration

@@ -1041,10 +1041,10 @@ class CephNvmeof(object):
 
     @staticmethod
     def get_version(ctx: CephadmContext, container_id: str) -> Optional[str]:
-        out, err, ret = call_throws(ctx, [
-            ctx.container_engine.path, 'inspect',
-            '--format', '{{index .Config.Labels "io.ceph.version"}}',
-            ctx.image])
+        out, err, ret = call(ctx,
+                             [ctx.container_engine.path, 'inspect',
+                              '--format', '{{index .Config.Labels "io.ceph.version"}}',
+                              ctx.image])
         version = None
         if ret == 0:
             version = out.strip()
@@ -4111,7 +4111,7 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
         lines = HAproxy.get_sysctl_settings()
     elif daemon_type == 'keepalived':
         lines = Keepalived.get_sysctl_settings()
-    elif daemon_type == 'nvmeof':
+    elif daemon_type == CephNvmeof.daemon_type:
         lines = CephNvmeof.get_sysctl_settings()
     lines = filter_sysctl_settings(ctx, lines)
 
