@@ -11,6 +11,7 @@
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_connection_priv.h"
+#include "osd/object_state_fmt.h"
 
 namespace {
   seastar::logger& logger() {
@@ -226,11 +227,13 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
           return pg->with_locked_obc(
             m->get_hobj(), op_info,
             [this, pg, &ihref](auto obc) mutable {
-              return ihref.enter_stage<interruptor>(pp(*pg).process, *this
-            ).then_interruptible([this, pg, obc, &ihref]() mutable {
-              return do_process(ihref, pg, obc);
+              logger().debug("{}: got obc {}", *this, obc->obs);
+              return ihref.enter_stage<interruptor>(
+                pp(*pg).process, *this
+              ).then_interruptible([this, pg, obc, &ihref]() mutable {
+                return do_process(ihref, pg, obc);
+              });
             });
-          });
         });
       }
     });

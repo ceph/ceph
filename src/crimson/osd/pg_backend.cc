@@ -1338,13 +1338,19 @@ PGBackend::omap_get_header(
   OSDOp& osd_op,
   object_stat_sum_t& delta_stats) const
 {
-  return omap_get_header(coll, ghobject_t{os.oi.soid}).safe_then_interruptible(
-    [&delta_stats, &osd_op] (ceph::bufferlist&& header) {
-      osd_op.outdata = std::move(header);
-      delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
-      delta_stats.num_rd++;
-      return seastar::now();
-    });
+  if (os.oi.is_omap()) {
+    return omap_get_header(coll, ghobject_t{os.oi.soid}).safe_then_interruptible(
+      [&delta_stats, &osd_op] (ceph::bufferlist&& header) {
+        osd_op.outdata = std::move(header);
+        delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+        delta_stats.num_rd++;
+        return seastar::now();
+      });
+  } else {
+    // no omap? return empty data but not ENOENT. This is imporant for
+    // the case when the object is being creating due to to may_write().
+    return seastar::now();
+  }
 }
 
 PGBackend::ll_read_ierrorator::future<>
