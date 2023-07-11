@@ -28,7 +28,7 @@ public:
   virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) override;
   virtual rgw::AioResultList get_async (const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
   virtual int put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
-  virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) = 0;
+  virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data);
   virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key) override;
   virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
   virtual int set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) override;
@@ -65,7 +65,7 @@ public:
   auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
                   off_t read_ofs, off_t read_len, CompletionToken&& token);
 protected:
-  static std::unordered_map<std::string, Partition> partitions;
+  inline static std::unordered_map<std::string, Partition> partitions;
   std::unordered_map<std::string, Entry> entries;
   Partition partition_info;
   uint64_t free_space;
