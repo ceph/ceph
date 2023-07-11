@@ -83,6 +83,9 @@ public:
   virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) override;
   virtual int list_zones(std::list<std::string>& zone_ids) override
     { return next->list_zones(zone_ids); }
+  bool supports(std::string_view feature) const override {
+    return next->supports(feature);
+  }
   virtual std::unique_ptr<ZoneGroup> clone() override {
     std::unique_ptr<ZoneGroup> nzg = next->clone();
     return std::make_unique<FilterZoneGroup>(std::move(nzg));

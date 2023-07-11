@@ -471,6 +471,9 @@ public:
     return 0;
   }
   const RGWZoneGroup& get_group() { return group; }
+  bool supports(std::string_view feature) const override {
+    return group.supports(features);
+  }
   virtual std::unique_ptr<ZoneGroup> clone() override {
     return std::make_unique<MotrZoneGroup>(store, group);
   }

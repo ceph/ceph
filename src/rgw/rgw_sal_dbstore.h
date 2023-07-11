@@ -300,6 +300,9 @@ protected:
       zone_ids.clear();
       return 0;
     }
+    bool supports(std::string_view feature) const override {
+      return group->supports(feature);
+    }
     virtual std::unique_ptr<ZoneGroup> clone() override {
       std::unique_ptr<RGWZoneGroup>zg = std::make_unique<RGWZoneGroup>(*group.get());
       return std::make_unique<DBZoneGroup>(store, std::move(zg));
