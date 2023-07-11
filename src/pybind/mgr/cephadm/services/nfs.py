@@ -116,18 +116,7 @@ class NFSService(CephService):
                 "haproxy_hosts": [],
             }
             if spec.enable_haproxy_protocol:
-                # NB: Ideally, we would limit the list to IPs on hosts running
-                # haproxy/ingress only, but due to the nature of cephadm today
-                # we'd "only know the set of haproxy hosts after they've been
-                # deployed" (quoth @adk7398). As it is today we limit the list
-                # of hosts we know are managed by cephadm. That ought to be
-                # good enough to prevent acceping haproxy protocol messages
-                # from "rouge" systems that are not under our control. At
-                # least until we learn otherwise.
-                context["haproxy_hosts"] = [
-                    self.mgr.inventory.get_addr(h)
-                    for h in self.mgr.inventory.keys()
-                ]
+                context["haproxy_hosts"] = self._haproxy_hosts()
                 logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
@@ -311,3 +300,17 @@ class NFSService(CephService):
             stderr=subprocess.PIPE,
             timeout=10
         )
+
+    def _haproxy_hosts(self) -> List[str]:
+        # NB: Ideally, we would limit the list to IPs on hosts running
+        # haproxy/ingress only, but due to the nature of cephadm today
+        # we'd "only know the set of haproxy hosts after they've been
+        # deployed" (quoth @adk7398). As it is today we limit the list
+        # of hosts we know are managed by cephadm. That ought to be
+        # good enough to prevent acceping haproxy protocol messages
+        # from "rouge" systems that are not under our control. At
+        # least until we learn otherwise.
+        return [
+            self.mgr.inventory.get_addr(h)
+            for h in self.mgr.inventory.keys()
+        ]
