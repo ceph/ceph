@@ -276,6 +276,14 @@ public:
     return update_refcount(t, addr, 1);
   }
 
+  ref_ret incref_extent(
+    Transaction &t,
+    laddr_t addr,
+    int delta) final {
+    ceph_assert(delta > 0);
+    return update_refcount(t, addr, delta, false);
+  }
+
   /**
    * init_cached_extent
    *

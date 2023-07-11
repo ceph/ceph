@@ -130,6 +130,16 @@ public:
     laddr_t addr) = 0;
 
   /**
+   * Increments ref count on extent
+   *
+   * @return returns resulting refcount
+   */
+  virtual ref_ret incref_extent(
+    Transaction &t,
+    laddr_t addr,
+    int delta) = 0;
+
+  /**
    * Should be called after replay on each cached extent.
    * Implementation must initialize the LBAMapping on any
    * LogicalCachedExtent's and may also read in any dependent
