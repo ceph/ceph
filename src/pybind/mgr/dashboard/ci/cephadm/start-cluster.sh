@@ -2,19 +2,6 @@
 
 set -eEx
 
-cleanup() {
-    set +x
-    if [[ -n "$JENKINS_HOME" ]]; then
-        echo "Starting cleanup..."
-        kcli delete plan -y ceph || true
-        kcli delete network ceph-dashboard -y
-        kcli delete pool ceph-dashboard -y
-        rm -rf ${HOME}/.kcli
-        docker container prune -f
-        echo "Cleanup completed."
-    fi
-}
-
 on_error() {
     set +x
     if [ "$1" != "0" ]; then
@@ -41,7 +28,6 @@ on_error() {
 }
 
 trap 'on_error $? $LINENO' ERR
-trap 'cleanup $? $LINENO' EXIT
 
 sed -i '/ceph-node-/d' $HOME/.ssh/known_hosts || true
 
