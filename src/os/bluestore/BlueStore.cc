@@ -94,13 +94,13 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Onode, bluestore_on
 
 // bluestore_cache_other
 MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Buffer, bluestore_buffer_exp,
-			      bluestore_Buffer);
+			      bluestore_cache_buffer);
 MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Extent, bluestore_extent_exp,
-			      bluestore_Extent);
+			      bluestore_extent);
 MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::Blob, bluestore_blob_exp,
-			      bluestore_Blob);
+			      bluestore_blob);
 MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::SharedBlob, bluestore_shared_blob_exp,
-			      bluestore_SharedBlob);
+			      bluestore_shared_blob);
 
 // bluestore_txc
 MEMPOOL_DEFINE_OBJECT_FACTORY(ceph::experimental::BlueStore::TransContext, bluestore_transcontext_exp,
