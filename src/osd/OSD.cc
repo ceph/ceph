@@ -7947,6 +7947,22 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
 
 void OSD::trim_maps(epoch_t oldest, bool skip_maps)
 {
+  /* There's a possible leak here. skip_maps is set to true if the received
+   * MOSDMap message indicates that there's a discontinuity between
+   * the Monitor cluster's stored set of maps and our set of stored
+   * maps such that there is a "gap". This happens generally when an OSD
+   * is down for a while and the cluster has trimmed maps in the mean time.
+   *
+   * Because the superblock cannot represent two discontinuous sets of maps,
+   * OSD::handle_osd_map unconditionally sets superblock.oldest_map to the first
+   * map in the message. OSD::trim_maps here, however, will only trim up to
+   * service.map_cache.cached_key_lower_bound() resulting in the maps between
+   * service.map_cache.cached_key_lower_bound() and MOSDMap::get_first() being
+   * leaked. Note, trimming past service.map_cache.cached_key_lower_bound()
+   * here won't work as there may still be PGs with those map epochs recorded.
+   *
+   * Fixing this is future work: https://tracker.ceph.com/issues/61962
+   */
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
   dout(20) <<  __func__ << ": min=" << min << " oldest_map="
            << superblock.oldest_map << " skip_maps=" << skip_maps
