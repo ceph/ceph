@@ -13,6 +13,8 @@
  *
  */
 
+#include "rgw_redis_driver.h"
+#include "rgw_ssd_driver.h"
 #include "rgw_sal_d4n.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -34,6 +36,30 @@ static inline Object* nextObject(Object* t)
     return nullptr;
   
   return dynamic_cast<FilterObject*>(t)->get_next();
+}
+
+D4NFilterDriver::D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
+{
+  rgw::cache::Partition partition_info;
+  partition_info.location = g_conf()->rgw_d3n_l1_datacache_persistent_path;
+  partition_info.name = "d4n";
+  partition_info.type = "read-cache";
+  partition_info.size = g_conf()->rgw_d3n_l1_datacache_size;
+
+  cacheDriver = new rgw::cache::SSDDriver(partition_info);
+  objDir = new rgw::d4n::ObjectDirectory();
+  blockDir = new rgw::d4n::BlockDirectory();
+  cacheBlock = new rgw::d4n::CacheBlock();
+  policyDriver = new rgw::d4n::PolicyDriver("lfuda");
+}
+
+ D4NFilterDriver::~D4NFilterDriver()
+ {
+    delete cacheDriver;
+    delete objDir; 
+    delete blockDir; 
+    delete cacheBlock;
+    delete policyDriver;
 }
 
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
