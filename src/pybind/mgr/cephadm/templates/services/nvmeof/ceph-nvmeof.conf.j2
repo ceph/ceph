@@ -25,6 +25,9 @@ timeout = {{ spec.timeout }}
 log_level = {{ log_level }}
 conn_retries = {{ spec.conn_retries }}
 transports = {{ spec.transports }}
-{% if tgt_cmd_extra_args %}
-tgt_cmd_extra_args = {{ tgt_cmd_extra_args }}
+{% if transport_tcp_options %}
+transport_tcp_options = {{ transport_tcp_options }}
+{% endif %}
+{% if spec.tgt_cmd_extra_args %}
+tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args | tojson }}
 {% endif %}
