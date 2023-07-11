@@ -9,6 +9,7 @@
 #include "crimson/os/seastore/segment_manager/zbd.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/os/seastore/logging.h"
+#include "crimson/common/errorator-loop.h"
 #include "include/buffer.h"
 
 SET_SUBSYS(seastore_device);
@@ -269,36 +270,53 @@ static write_ertr::future<> do_write(
 }
 
 static write_ertr::future<> do_writev(
+  device_id_t device_id,
   seastar::file &device,
   uint64_t offset,
   bufferlist&& bl,
   size_t block_size)
 {
   LOG_PREFIX(ZBDSegmentManager::do_writev);
-  DEBUG("offset {} len {}",
-    offset,
-    bl.length());
+  DEBUG("{} offset {} len {}",
+    device_id_printer_t{device_id}, offset, bl.length());
   // writev requires each buffer to be aligned to the disks' block
   // size, we need to rebuild here
   bl.rebuild_aligned(block_size);
   
-  std::vector<iovec> iov;
-  bl.prepare_iov(&iov);
-  return device.dma_write(
-    offset,
-    std::move(iov)
-  ).handle_exception(
-    [FNAME](auto e) -> write_ertr::future<size_t> {
-      ERROR("dma_write got error {}",
-	e);
-      return crimson::ct_error::input_output_error::make();
-    }
-  ).then([bl=std::move(bl)/* hold the buf until the end of io */](size_t written)
-	 -> write_ertr::future<> {
-    if (written != bl.length()) {
-      return crimson::ct_error::input_output_error::make();
-    }
-    return write_ertr::now();
+  return seastar::do_with(
+    bl.prepare_iovs(),
+    std::move(bl),
+    [&device, device_id, offset, FNAME](auto& iovs, auto& bl)
+  {
+    return write_ertr::parallel_for_each(
+      iovs,
+      [&device, device_id, offset, FNAME](auto& p)
+    {
+      auto off = offset + p.offset;
+      auto len = p.length;
+      auto& iov = p.iov;
+      DEBUG("{} poffset={}~{} dma_write ...",
+	    device_id_printer_t{device_id},
+            off, len);
+      return device.dma_write(off, std::move(iov)
+      ).handle_exception(
+        [FNAME, device_id, off, len](auto e) -> write_ertr::future<size_t>
+      {
+        ERROR("{} poffset={}~{} dma_write got error -- {}",
+	      device_id_printer_t{device_id}, off, len, e);
+        return crimson::ct_error::input_output_error::make();
+      }).then([FNAME, device_id, off, len](size_t written) -> write_ertr::future<> {
+        if (written != len) {
+          ERROR("{} poffset={}~{} dma_write len={} inconsistent",
+		device_id_printer_t{device_id}, off, len, written);
+          return crimson::ct_error::input_output_error::make();
+        }
+        DEBUG("{} poffset={}~{} dma_write done",
+	      device_id_printer_t{device_id},
+              off, len);
+        return write_ertr::now();
+      });
+    });
   });
 }
 
@@ -692,6 +710,7 @@ Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
     bl.length());
   stats.data_write.increment(bl.length());
   return do_writev(
+    get_device_id(),
     device, 
     get_offset(addr), 
     std::move(bl), 
