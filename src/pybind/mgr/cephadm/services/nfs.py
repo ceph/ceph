@@ -1,4 +1,5 @@
 import errno
+import ipaddress
 import logging
 import os
 import subprocess
@@ -310,7 +311,21 @@ class NFSService(CephService):
         # good enough to prevent acceping haproxy protocol messages
         # from "rouge" systems that are not under our control. At
         # least until we learn otherwise.
-        return [
-            self.mgr.inventory.get_addr(h)
-            for h in self.mgr.inventory.keys()
-        ]
+        cluster_ips: List[str] = []
+        for host in self.mgr.inventory.keys():
+            default_addr = self.mgr.inventory.get_addr(host)
+            cluster_ips.append(default_addr)
+            nets = self.mgr.cache.networks.get(host)
+            if not nets:
+                continue
+            for subnet, iface in nets.items():
+                ip_subnet = ipaddress.ip_network(subnet)
+                if ipaddress.ip_address(default_addr) in ip_subnet:
+                    continue  # already present
+                if ip_subnet.is_loopback or ip_subnet.is_link_local:
+                    continue  # ignore special subnets
+                addrs: List[str] = sum((addr_list for addr_list in iface.values()), [])
+                if addrs:
+                    # one address per interface/subnet is enough
+                    cluster_ips.append(addrs[0])
+        return cluster_ips
