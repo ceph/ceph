@@ -39,11 +39,11 @@ int ClientIO::init_env(CephContext *cct)
     const auto& value = header->value();
 
     if (field == beast::http::field::content_length) {
-      env.set("CONTENT_LENGTH", value.to_string());
+      env.set("CONTENT_LENGTH", std::string(value));
       continue;
     }
     if (field == beast::http::field::content_type) {
-      env.set("CONTENT_TYPE", value.to_string());
+      env.set("CONTENT_TYPE", std::string(value));
       continue;
     }
 
@@ -62,26 +62,26 @@ int ClientIO::init_env(CephContext *cct)
     }
     *dest = '\0';
 
-    env.set(buf, value.to_string());
+    env.set(buf, std::string(value));
   }
 
   int major = request.version() / 10;
   int minor = request.version() % 10;
   env.set("HTTP_VERSION", std::to_string(major) + '.' + std::to_string(minor));
 
-  env.set("REQUEST_METHOD", request.method_string().to_string());
+  env.set("REQUEST_METHOD", std::string(request.method_string()));
 
   // split uri from query
   auto uri = request.target();
   auto pos = uri.find('?');
   if (pos != uri.npos) {
     auto query = uri.substr(pos + 1);
-    env.set("QUERY_STRING", query.to_string());
+    env.set("QUERY_STRING", std::string(query));
     uri = uri.substr(0, pos);
   }
-  env.set("SCRIPT_URI", uri.to_string());
+  env.set("SCRIPT_URI", std::string(uri));
 
-  env.set("REQUEST_URI", request.target().to_string());
+  env.set("REQUEST_URI", std::string(request.target()));
 
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", local_endpoint.port());
