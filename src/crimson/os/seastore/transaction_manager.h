@@ -253,7 +253,9 @@ public:
   /// Remove refcount for offset
   ref_ret dec_ref(
     Transaction &t,
-    laddr_t offset);
+    laddr_t offset) {
+    return _dec_ref(t, offset, true);
+  }
 
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
@@ -384,7 +386,7 @@ public:
         [this, &t, original_laddr, original_paddr,
 	original_len, intermediate_base, intermediate_key]
         (auto &ret, auto &count, auto &original_bptr, auto &remaps) {
-        return dec_ref(t, original_laddr
+        return _dec_ref(t, original_laddr, false
         ).si_then([this, &t, &original_bptr, &ret, &count,
 		   &remaps, intermediate_base, intermediate_key,
                    original_laddr, original_paddr, original_len](auto) {
@@ -731,6 +733,12 @@ private:
     Transaction &t,
     ExtentPlacementManager::dispatch_result_t dispatch_result,
     std::optional<journal_seq_t> seq_to_trim = std::nullopt);
+
+  /// Remove refcount for offset
+  ref_ret _dec_ref(
+    Transaction &t,
+    laddr_t offset,
+    bool cascade_remove);
 
   /**
    * pin_to_extent
