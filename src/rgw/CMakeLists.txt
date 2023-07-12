@@ -117,6 +117,7 @@ set(librgw_common_srcs
   rgw_role.cc
   rgw_sal.cc
   rgw_sal_filter.cc
+  rgw_redis_driver.cc
   rgw_ssd_driver.cc
   rgw_string.cc
   rgw_tag.cc
@@ -200,7 +201,6 @@ set(librgw_common_srcs
   driver/rados/sync_fairness.cc)
 
 list(APPEND librgw_common_srcs
-  driver/d4n/d4n_directory.cc
   driver/immutable_config/store.cc
   driver/json_config/store.cc
   driver/rados/config/impl.cc
@@ -226,11 +226,6 @@ if(WITH_RADOSGW_MOTR)
 endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_common_srcs rgw_sal_daos.cc)
-endif()
-if(WITH_RADOSGW_D4N)
-  list(APPEND librgw_common_srcs driver/d4n/d4n_directory.cc)
-  list(APPEND librgw_common_srcs driver/d4n/d4n_datacache.cc)
-  list(APPEND librgw_common_srcs driver/d4n/rgw_sal_d4n.cc)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
@@ -558,13 +553,13 @@ target_link_libraries(rgw
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
-  OpenSSL::SSL
   PUBLIC
   RapidJSON::RapidJSON
   dmclock::dmclock)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
+  target_link_libraries(rgw PRIVATE OpenSSL::SSL)
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
