@@ -145,6 +145,11 @@ def main():
     outfile = pwd + '/' + FILE_NAME
     exec_cmd('dd if=/dev/urandom of=%s bs=1M count=7' % (outfile))
 
+    # get file size
+    stat_result = os.stat(outfile)
+    file_size = stat_result.st_size
+    log.debug("file size is: %d", file_size)
+
     # create user
     exec_cmd('radosgw-admin user create --uid %s --display-name %s --access-key %s --secret %s'
             % (USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY))
@@ -174,7 +179,7 @@ def main():
     object_name = json_op['name']
 
     # get num parts of the cached object, 7MB is the size of the object, 4MB is the chunk size used in d3n filter
-    object_size = 7340032
+    object_size = file_size
     chunk_size = 4194304
     num_parts = int(object_size/chunk_size)
     if object_size%chunk_size > 0:
