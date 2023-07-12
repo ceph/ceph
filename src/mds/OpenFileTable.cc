@@ -755,8 +755,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
   auto decode_func = [this](unsigned idx, inodeno_t ino, bufferlist &bl) {
     auto p = bl.cbegin();
 
-    size_t count = loaded_anchor_map.size();
-    auto it = loaded_anchor_map.emplace_hint(loaded_anchor_map.end(),
+    auto [it, inserted] = loaded_anchor_map.emplace(
 					    std::piecewise_construct,
 					    std::make_tuple(ino),
 					    std::make_tuple());
@@ -769,8 +768,9 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
     anchor.auth = MDS_RANK_NONE;
 
 
-    if (loaded_anchor_map.size() > count)
+    if (inserted) {
       ++omap_num_items[idx];
+    }
   };
 
   if (op_r < 0) {
