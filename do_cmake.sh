@@ -31,7 +31,7 @@ if [ -r /etc/os-release ]; then
             PYBUILD="3.7"
           fi
           ;;
-      rhel|centos)
+      rocky|rhel|centos)
           MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
           if [ "$MAJOR_VER" -ge "9" ] ; then
               PYBUILD="3.9"
