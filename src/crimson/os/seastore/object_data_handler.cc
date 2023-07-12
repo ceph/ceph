@@ -741,14 +741,15 @@ operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan
         std::nullopt,
         std::nullopt);
     } else {
+      extent_len_t off = pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([prepend_len](auto left_extent) {
+      ).si_then([prepend_len, off](auto left_extent) {
         return get_iertr::make_ready_future<operate_ret_bare>(
           std::nullopt,
           std::make_optional(bufferptr(
             left_extent->get_bptr(),
-            0,
+            off,
             prepend_len)));
       });
     }
@@ -769,9 +770,10 @@ operate_ret operate_left(context_t ctx, LBAMappingRef &pin, const overwrite_plan
         std::move(left_to_write_extent),
         std::nullopt);
     } else {
+      extent_len_t off = pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
-      ).si_then([prepend_offset=extent_len, prepend_len,
+      ).si_then([prepend_offset=extent_len + off, prepend_len,
                  left_to_write_extent=std::move(left_to_write_extent)]
                 (auto left_extent) mutable {
         return get_iertr::make_ready_future<operate_ret_bare>(
@@ -822,7 +824,10 @@ operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_pla
         std::nullopt,
         std::nullopt);
     } else {
-      auto append_offset = overwrite_plan.data_end - right_pin_begin;
+      auto append_offset =
+	overwrite_plan.data_end
+	- right_pin_begin
+	+ pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
       ).si_then([append_offset, append_len](auto right_extent) {
@@ -851,7 +856,10 @@ operate_ret operate_right(context_t ctx, LBAMappingRef &pin, const overwrite_pla
         std::move(right_to_write_extent),
         std::nullopt);
     } else {
-      auto append_offset = overwrite_plan.data_end - right_pin_begin;
+      auto append_offset =
+	overwrite_plan.data_end
+	- right_pin_begin
+	+ pin->get_intermediate_offset();
       return ctx.tm.read_pin<ObjectDataBlock>(
 	ctx.t, pin->duplicate()
       ).si_then([append_offset, append_len,
@@ -1013,7 +1021,7 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 	      bl.append(
 	        bufferptr(
 	          extent->get_bptr(),
-	          0,
+		  pin.get_intermediate_offset(),
 	          size - pin_offset
 	      ));
               bl.append_zero(append_len);
@@ -1363,19 +1371,30 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		    } else {
 		      auto key = pin->get_key();
 		      bool is_indirect = pin->is_indirect();
+                      extent_len_t off = pin->get_intermediate_offset();
+		      DEBUGT("reading {}~{}, indirect: {}, "
+			"intermediate offset: {}, current: {}, end: {}",
+			ctx.t,
+			key,
+			pin->get_length(),
+			is_indirect,
+			off,
+			current,
+			end);
 		      return ctx.tm.read_pin<ObjectDataBlock>(
 			ctx.t,
 			std::move(pin)
-		      ).si_then([&ret, &current, end, key, is_indirect](auto extent) {
+		      ).si_then([&ret, &current, end, key, off,
+				is_indirect](auto extent) {
 			ceph_assert(
 			  is_indirect
-			    ? (key + extent->get_length()) >= end
+			    ? (key - off + extent->get_length()) >= end
 			    : (extent->get_laddr() + extent->get_length()) >= end);
 			ceph_assert(end > current);
 			ret.append(
 			  bufferptr(
 			    extent->get_bptr(),
-			    current - (is_indirect ? key : extent->get_laddr()),
+			    off + current - (is_indirect ? key : extent->get_laddr()),
 			    end - current));
 			current = end;
 			return seastar::now();
