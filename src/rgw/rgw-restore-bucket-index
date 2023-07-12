@@ -97,12 +97,15 @@ usage() {
 Usage: $0 -b <bucketname> [-l <rados-ls-file>] [-p <pool>] [-y]
 
 where:
-  -b <bucketname>     Required - name of the bucket to operate on
-  -l <rados-ls-file>  Optional - file containing the output of 'rados ls -p <pool>'
-  -p <pool>           Optional - data pool; if not provided will be inferred from bucket and zone information
-  -y                  Optional - proceed with restoring without confirming with the user
-                      USE WITH CAUTION.
-  -d                  Optional - run with debugging output
+  -b <bucketname>      Required - name of the bucket to operate on
+  -l <rados-ls-file>   Optional - file containing the output of 'rados ls -p <pool>'
+  -r <realm-name>      Optional - specify the realm if not applying to the default realm"
+  -g <zonegroup-name>  Optional - specify the zonegroup if not applying to the default zonegroup"
+  -z <zone-name>       Optional - specify the zone if not applying to the default zone"
+  -p <pool>            Optional - data pool; if not provided will be inferred from bucket and zone information
+  -y                   Optional - proceed with restoring without confirming with the user
+                       USE WITH CAUTION.
+  -d                   Optional - run with debugging output
 EOF
   super_exit
 }
@@ -128,7 +131,7 @@ get_pool() {
     plmt_class=STANDARD
   fi
 
-  radosgw-admin zone get >$zone_info 2>/dev/null
+  radosgw-admin zone get $multisite_spec >$zone_info 2>/dev/null
   pool=$(jq -r ".placement_pools [] | select(.key | contains(\"${plmt_pool}\")) .val .storage_classes.${plmt_class}.data_pool" $zone_info)
 
   if [ -z "$pool" ] ;then
@@ -140,10 +143,11 @@ get_pool() {
 
 export bucket=""
 pool=""
+multisite_spec=""
 lsoutput=""
 debug=0
 
-while getopts "b:l:p:yd" o; do
+while getopts "b:l:p:r:g:z:yd" o; do
     case "${o}" in
 	b)
 	    bucket="${OPTARG}"
@@ -159,6 +163,15 @@ while getopts "b:l:p:yd" o; do
 	    ;;
 	p)
 	    pool="${OPTARG}"
+	    ;;
+	r)
+	    multisite_spec="$multisite_spec --rgw-realm=${OPTARG}"
+	    ;;
+	g)
+	    multisite_spec="$multisite_spec --rgw-zonegroup=${OPTARG}"
+	    ;;
+	z)
+	    multisite_spec="$multisite_spec --rgw-zone=${OPTARG}"
 	    ;;
 	y)
 	    echo "NOTICE: This tool is currently considered EXPERIMENTAL."
@@ -236,7 +249,7 @@ if [ -z "$bucket" ]; then
 fi
 
 # read bucket entry metadata
-eval "radosgw-admin metadata get bucket:$bucket $debugging_rgwadmin >$bkt_entry"
+eval "radosgw-admin metadata get bucket:$bucket $debugging_rgwadmin $multisite_spec >$bkt_entry"
 export marker=$(jq -r ".data.bucket.marker" $bkt_entry)
 export bucket_id=$(jq -r ".data.bucket.bucket_id" $bkt_entry)
 if [ -z "$marker" -o -z "$bucket_id" ] ;then
@@ -249,7 +262,7 @@ echo marker is $marker
 echo bucket_id is $bucket_id
 
 # read bucket instance metadata
-eval "radosgw-admin metadata get bucket.instance:${bucket}:$bucket_id $debugging_rgwadmin >$bkt_inst"
+eval "radosgw-admin metadata get bucket.instance:${bucket}:$bucket_id $multisite_spec $debugging_rgwadmin >$bkt_inst"
 
 # examine number of bucket index shards
 num_shards=$(jq ".data.bucket_info.num_shards" $bkt_inst)
@@ -326,7 +339,7 @@ if [ -z "$proceed" ] ;then
     done
 fi
 
-eval "radosgw-admin object reindex --bucket=$bucket --objects-file=$obj_list_ver --yes-i-really-mean-it $debugging_rgwadmin"
+eval "radosgw-admin object reindex --bucket=$bucket --objects-file=$obj_list_ver $multisite_spec --yes-i-really-mean-it $debugging_rgwadmin"
 
 clean
 echo Done
