@@ -2252,7 +2252,7 @@ class TestIngressService:
             '        Enable_RQUOTA = false;\n'
             '        Protocols = 4;\n'
             '        NFS_Port = 2049;\n'
-            '        HAProxy_Hosts = 192.168.122.111, 192.168.122.222;\n'
+            '        HAProxy_Hosts = 192.168.122.111, 10.10.2.20, 192.168.122.222;\n'
             '}\n'
             '\n'
             'NFSv4 {\n'
@@ -2324,6 +2324,31 @@ class TestIngressService:
 
         ingress_svc = cephadm_module.cephadm_services['ingress']
         nfs_svc = cephadm_module.cephadm_services['nfs']
+
+        # add host network info to one host to test the behavior of
+        # adding all known-good addresses of the host to the list.
+        cephadm_module.cache.update_host_networks('host1', {
+            # this one is additional
+            '10.10.2.0/24': {
+                'eth1': ['10.10.2.20']
+            },
+            # this is redundant and will be skipped
+            '192.168.122.0/24': {
+                'eth0': ['192.168.122.111']
+            },
+            # this is a link-local address and will be ignored
+            "fe80::/64": {
+                "veth0": [
+                    "fe80::8cf5:25ff:fe1c:d963"
+                ],
+                "eth0": [
+                    "fe80::c7b:cbff:fef6:7370"
+                ],
+                "eth1": [
+                    "fe80::7201:25a7:390b:d9a7"
+                ]
+            },
+        })
 
         haproxy_generated_conf, _ = ingress_svc.haproxy_generate_config(
             CephadmDaemonDeploySpec(
