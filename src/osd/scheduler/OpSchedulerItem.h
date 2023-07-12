@@ -669,7 +669,7 @@ struct fmt::formatter<ceph::osd::scheduler::OpSchedulerItem> {
 	    ? fmt::format(" reserved_pushes {}", opsi.get_reserved_pushes())
 	    : "";
 
-    return format_to(
+    return fmt::format_to(
 	ctx.out(), "OpSchedulerItem({} {} class_id {} prio {}{} cost {} e{}{})",
 	opsi.get_ordering_token(), opsi.qitem->print(),
 	static_cast<class_t>(opsi.get_scheduler_class()), opsi.get_priority(),
