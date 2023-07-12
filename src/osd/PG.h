@@ -518,7 +518,7 @@ public:
   void clear_publish_stats() override;
   void clear_primary_state() override;
 
-  epoch_t oldest_stored_osdmap() override;
+  epoch_t cluster_osdmap_trim_lower_bound() override;
   OstreamTemp get_clog_error() override;
   OstreamTemp get_clog_info() override;
   OstreamTemp get_clog_debug() override;

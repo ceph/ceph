@@ -665,7 +665,7 @@ void PeeringState::start_peering_interval(
     psdout(10) << __func__ << ": check_new_interval output: "
 	       << debug.str() << dendl;
     if (new_interval) {
-      if (osdmap->get_epoch() == pl->oldest_stored_osdmap() &&
+      if (osdmap->get_epoch() == pl->cluster_osdmap_trim_lower_bound() &&
 	  info.history.last_epoch_clean < osdmap->get_epoch()) {
 	psdout(10) << " map gap, clearing past_intervals and faking" << dendl;
 	// our information is incomplete and useless; someone else was clean
@@ -953,7 +953,9 @@ static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
 
 void PeeringState::check_past_interval_bounds() const
 {
-  auto oldest_epoch = pl->oldest_stored_osdmap();
+  // cluster_osdmap_trim_lower_bound gives us a bound on needed
+  // intervals, see doc/dev/osd_internals/past_intervals.rst
+  auto oldest_epoch = pl->cluster_osdmap_trim_lower_bound();
   auto rpib = get_required_past_interval_bounds(
     info,
     oldest_epoch);
