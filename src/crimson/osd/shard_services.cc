@@ -711,16 +711,16 @@ seastar::future<> OSDSingletonState::send_incremental_map(
 {
   logger().info("{}: first osdmap: {} "
                 "superblock's oldest map: {}",
-                __func__, first, superblock.oldest_map);
-  if (first >= superblock.oldest_map) {
+                __func__, first, superblock.get_oldest_map());
+  if (first >= superblock.get_oldest_map()) {
     return load_map_bls(
-      first, superblock.newest_map
+      first, superblock.get_newest_map()
     ).then([this, &conn, first](auto&& bls) {
       auto m = crimson::make_message<MOSDMap>(
 	monc.get_fsid(),
 	osdmap->get_encoding_features());
       m->cluster_osdmap_trim_lower_bound = first;
-      m->newest_map = superblock.newest_map;
+      m->newest_map = superblock.get_newest_map();
       m->maps = std::move(bls);
       return conn.send(std::move(m));
     });
@@ -736,8 +736,8 @@ seastar::future<> OSDSingletonState::send_incremental_map(
        *       See: OSD::handle_osd_map for how classic updates the
        *       cluster's trim lower bound.
        */
-      m->cluster_osdmap_trim_lower_bound = superblock.oldest_map;
-      m->newest_map = superblock.newest_map;
+      m->cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
+      m->newest_map = superblock.get_newest_map();
       m->maps.emplace(osdmap->get_epoch(), std::move(bl));
       return conn.send(std::move(m));
     });

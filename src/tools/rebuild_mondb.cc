@@ -216,7 +216,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   // osdmap starts at 1. if we have a "0" first_committed, then there is nothing
   // to trim. and "1 osdmaps trimmed" in the output message is misleading. so
   // let's make it an exception.
-  for (auto e = first_committed; first_committed && e < sb.oldest_map; e++) {
+  for (auto e = first_committed; first_committed && e < sb.get_oldest_map(); e++) {
     t->erase(prefix, e);
     t->erase(prefix, ms.combine_strings("full", e));
     ntrimmed++;
@@ -225,7 +225,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   // because PaxosService::put_last_committed() set it to last_committed, if it
   // is zero. which breaks OSDMonitor::update_from_paxos(), in which we believe
   // that latest_full should always be greater than last_committed.
-  if (first_committed == 0 && sb.oldest_map < sb.newest_map) {
+  if (first_committed == 0 && sb.get_oldest_map() < sb.get_newest_map()) {
     first_committed = 1;
   } else if (ntrimmed) {
     first_committed += ntrimmed;
@@ -240,8 +240,8 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
 
   auto ch = fs.open_collection(coll_t::meta());
   OSDMap osdmap;
-  for (auto e = std::max(last_committed+1, sb.oldest_map);
-       e <= sb.newest_map; e++) {
+  for (auto e = std::max(last_committed+1, sb.get_oldest_map());
+       e <= sb.get_newest_map(); e++) {
     bool have_crc = false;
     uint32_t crc = -1;
     uint64_t features = 0;
