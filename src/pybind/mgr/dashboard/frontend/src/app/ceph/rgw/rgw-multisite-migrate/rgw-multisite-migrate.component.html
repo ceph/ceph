@@ -108,28 +108,35 @@
         </div>
       </div>
       <div class="form-group row">
-        <label class="cd-col-form-label"
-               for="users"
-               i18n>System User</label>
+        <label class="cd-col-form-label required"
+               for="access_key"
+               i18n>Access key</label>
         <div class="cd-col-form-input">
-          <select id="users"
-                  name="users"
-                  class="form-select"
-                  formControlName="users">
-          <option i18n
-                  *ngIf="users === null"
-                  [ngValue]="null">Loading...</option>
-          <option i18n
-                  *ngIf="users !== null"
-                  [ngValue]="null">-- Select a user --</option>
-          <option *ngFor="let user of users"
-                  [value]="user.user_id">{{ user.user_id }}</option>
-          </select>
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g."
+                 id="access_key"
+                 name="access_key"
+                 formControlName="access_key">
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="access_key"
+               i18n>Secret key</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="e.g."
+                 id="secret_key"
+                 name="secret_key"
+                 formControlName="secret_key">
         </div>
       </div>
     </div>
     <div class="modal-footer">
       <cd-form-button-panel (submitActionEvent)="submit()"
+                            [submitText]="actionLabels.MIGRATE"
                             [form]="multisiteMigrateForm"></cd-form-button-panel>
     </div>
     </form>

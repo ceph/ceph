@@ -11,8 +11,9 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { RgwRealm, RgwZone, RgwZonegroup } from '../models/rgw-multisite';
+import { RgwRealm, RgwZone, RgwZonegroup, SystemKey } from '../models/rgw-multisite';
 import { ModalService } from '~/app/shared/services/modal.service';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 
 @Component({
   selector: 'cd-rgw-multisite-migrate',
@@ -51,6 +52,7 @@ export class RgwMultisiteMigrateComponent implements OnInit {
     public notificationService: NotificationService,
     public rgwZonegroupService: RgwZonegroupService,
     public rgwRealmService: RgwRealmService,
+    public rgwDaemonService: RgwDaemonService,
     public modalService: ModalService
   ) {
     this.createForm();
@@ -133,7 +135,8 @@ export class RgwMultisiteMigrateComponent implements OnInit {
           Validators.required
         ]
       ),
-      users: new FormControl(null)
+      access_key: new FormControl(null),
+      secret_key: new FormControl(null)
     });
   }
 
@@ -159,9 +162,6 @@ export class RgwMultisiteMigrateComponent implements OnInit {
     this.zoneNames = this.zoneList.map((zone) => {
       return zone['name'];
     });
-    this.rgwZoneService.getUserList('default').subscribe((users: any) => {
-      this.users = users.filter((user: any) => user['system'] === true);
-    });
   }
 
   submit() {
@@ -170,17 +170,20 @@ export class RgwMultisiteMigrateComponent implements OnInit {
     this.realm.name = values['realmName'];
     this.zonegroup = new RgwZonegroup();
     this.zonegroup.name = values['zonegroupName'];
-    this.zonegroup.endpoints = this.checkUrlArray(values['zonegroup_endpoints']);
+    this.zonegroup.endpoints = values['zonegroup_endpoints'];
     this.zone = new RgwZone();
     this.zone.name = values['zoneName'];
-    this.zone.endpoints = this.checkUrlArray(values['zone_endpoints']);
-    const user = values['users'];
-    this.rgwMultisiteService.migrate(this.realm, this.zonegroup, this.zone, user).subscribe(
+    this.zone.endpoints = values['zone_endpoints'];
+    this.zone.system_key = new SystemKey();
+    this.zone.system_key.access_key = values['access_key'];
+    this.zone.system_key.secret_key = values['secret_key'];
+    this.rgwMultisiteService.migrate(this.realm, this.zonegroup, this.zone).subscribe(
       () => {
         this.notificationService.show(
           NotificationType.success,
           $localize`${this.actionLabels.MIGRATE} done successfully`
         );
+        this.notificationService.show(NotificationType.success, `Daemon restart scheduled`);
         this.submitAction.emit();
         this.activeModal.close();
       },
@@ -188,15 +191,5 @@ export class RgwMultisiteMigrateComponent implements OnInit {
         this.notificationService.show(NotificationType.error, $localize`Migration failed`);
       }
     );
-  }
-
-  checkUrlArray(endpoints: string) {
-    let endpointsArray = [];
-    if (endpoints.includes(',')) {
-      endpointsArray = endpoints.split(',');
-    } else {
-      endpointsArray.push(endpoints);
-    }
-    return endpointsArray;
   }
 }

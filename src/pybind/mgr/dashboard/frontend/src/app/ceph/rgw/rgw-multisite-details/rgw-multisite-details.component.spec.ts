@@ -6,6 +6,7 @@ import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details.component';
+import { RouterTestingModule } from '@angular/router/testing';
 
 describe('RgwMultisiteDetailsComponent', () => {
   let component: RgwMultisiteDetailsComponent;
@@ -15,7 +16,13 @@ describe('RgwMultisiteDetailsComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [RgwMultisiteDetailsComponent],
-      imports: [HttpClientTestingModule, TreeModule, SharedModule, ToastrModule.forRoot()]
+      imports: [
+        HttpClientTestingModule,
+        TreeModule,
+        SharedModule,
+        ToastrModule.forRoot(),
+        RouterTestingModule
+      ]
     }).compileComponents();
   });
 
