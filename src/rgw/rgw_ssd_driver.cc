@@ -15,6 +15,8 @@ namespace efs = std::experimental::filesystem;
 
 namespace rgw { namespace cache {
 
+constexpr std::string ATTR_PREFIX = "user.rgw.";
+
 std::optional<Partition> SSDDriver::get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type)
 {
     std::string key = name + type;
@@ -422,13 +424,31 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
-    for (auto& it : attrs) {
-        std::string attr_val;
-        attr_val = get_attr(dpp, key, it.first);
-        if (attr_val.empty()) {
-            return -EINVAL;
+    char namebuf[64 * 1024];
+    int ret;
+    ssize_t buflen = listxattr(location.c_str(), namebuf, sizeof(namebuf));
+    if (buflen < 0) {
+        ret = errno;
+        ldpp_dout(dpp, 0) << "ERROR: could not get attributes for key: " << key << ": " << ret << dendl;
+        return -ret;
+    }
+    char *keyptr = namebuf;
+    while (buflen > 0) {
+        ssize_t keylen;
+
+        keylen = strlen(keyptr) + 1;
+        std::string attr_name(keyptr);
+        std::string::size_type prefixloc = key.find(ATTR_PREFIX);
+        if (prefixloc == std::string::npos) {
+            buflen -= keylen;
+            keyptr += keylen;
+            continue;
         }
-        ceph::encode(attr_val, it.second);
+        std::string attr_value = get_attr(dpp, key, attr_name);
+        bufferlist bl_value;
+        ceph::encode(attr_value, bl_value);
+        attrs.emplace(std::move(attr_name), std::move(bl_value));
+
     }
     return 0;
 }
