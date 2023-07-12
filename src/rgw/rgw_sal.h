@@ -1500,6 +1500,8 @@ public:
   virtual int get_zone_by_name(const std::string& name, std::unique_ptr<Zone>* zone) = 0;
   /** List zones in zone group by ID */
   virtual int list_zones(std::list<std::string>& zone_ids) = 0;
+  /// Return true if the given feature is enabled in the zonegroup.
+  virtual bool supports(std::string_view feature) const = 0;
   /** Clone a copy of this zonegroup. */
   virtual std::unique_ptr<ZoneGroup> clone() = 0;
 };
