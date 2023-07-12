@@ -4,6 +4,7 @@ import logging as log
 import json
 import uuid
 import botocore
+import time
 from common import exec_cmd, create_user, boto_connect
 from botocore.config import Config
 
@@ -61,7 +62,7 @@ def main():
     connection.ObjectVersion(bucket.name, key, version_id).delete()
     # bucket index should now be empty
     out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME}')
-    json_out = json.loads(out)
+    json_out = json.loads(out.replace(b'\x80', b'0x80'))
     assert len(json_out) == 0, 'bucket index was not empty after all objects were deleted'
 
     (_out, ret) = exec_cmd(f'rados -p {DATA_POOL} ls | grep {key}', check_retcode=False)
@@ -71,12 +72,13 @@ def main():
     log.debug('TEST: verify that index entries and OLH objects are cleaned up after index linking error\n')
     key = str(uuid.uuid4())
     try:
-        exec_cmd('ceph config set client.rgw rgw_debug_inject_set_olh_err 2')
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        time.sleep(1)
         bucket.Object(key).delete()
     finally:
-        exec_cmd('ceph config rm client.rgw rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
     out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME}')
-    json_out = json.loads(out)
+    json_out = json.loads(out.replace(b'\x80', b'0x80'))
     assert len(json_out) == 0, 'bucket index was not empty after op failed'
     (_out, ret) = exec_cmd(f'rados -p {DATA_POOL} ls | grep {key}', check_retcode=False)
     assert ret != 0, 'olh object was not cleaned up'
@@ -88,13 +90,14 @@ def main():
     put_resp = bucket.put_object(Key=key, Body=b"data")
     connection.BucketVersioning(BUCKET_NAME).enable()
     try:
-        exec_cmd('ceph config set client.rgw rgw_debug_inject_set_olh_err 2')
+        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
+        time.sleep(1)
         # expected to fail due to the above error injection
         bucket.put_object(Key=key, Body=b"new data")
     except Exception as e:
         log.debug(e)
     finally:
-        exec_cmd('ceph config rm client.rgw rgw_debug_inject_set_olh_err')
+        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
     get_resp = bucket.Object(key).get()
     assert put_resp.e_tag == get_resp['ETag'], 'get did not return null version with correct etag'
         
