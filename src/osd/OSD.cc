@@ -11190,7 +11190,7 @@ void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
   OSDShard* sdata = osd->shards[shard_index];
   assert (NULL != sdata);
 
-  dout(20) << __func__ << " " << item << dendl;
+  dout(20) << fmt::format("{} {}", __func__, item) << dendl;
 
   bool empty = true;
   {
