@@ -929,6 +929,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       err = -EINVAL;
       goto reply_no_propose;
     }
+    if (strategy == pending_map.strategy) {
+      err = 0;
+      goto reply_no_propose;
+    }
     pending_map.strategy = strategy;
     pending_map.last_changed = ceph_clock_now();
   } else if (prefix == "mon add disallowed_leader") {
