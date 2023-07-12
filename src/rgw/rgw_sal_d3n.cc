@@ -167,7 +167,7 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(obj_max_req_size);
       r_obj.oid = oid_in_cache;
       ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
-      if (filter->get_d3n_cache()->get(oid_in_cache, obj_max_req_size)) {
+      if ((part_len != obj_max_req_size) && filter->get_d3n_cache()->get(oid_in_cache, obj_max_req_size)) {
         // Read From Cache
         auto completed = aio->get(r_obj, rgw::d3n::cache_read_op(dpp, y, read_ofs, len_to_read, filter->get_d3n_cache()->cache_location), cost, id);
         ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
