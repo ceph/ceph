@@ -761,7 +761,9 @@ private:
     return cache->get_absent_extent<T>(
       t,
       pref.get_val(),
-      pref.get_length(),
+      pref.is_indirect() ?
+	pref.get_intermediate_length() :
+	pref.get_length(),
       [pin=std::move(pin)]
       (T &extent) mutable {
 	assert(!extent.has_laddr());
@@ -801,7 +803,9 @@ private:
       type,
       pref.get_val(),
       pref.get_key(),
-      pref.get_length(),
+      pref.is_indirect() ?
+	pref.get_intermediate_length() :
+	pref.get_length(),
       [pin=std::move(pin)](CachedExtent &extent) mutable {
 	auto &lextent = static_cast<LogicalCachedExtent&>(extent);
 	assert(!lextent.has_laddr());
