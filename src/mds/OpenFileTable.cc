@@ -44,8 +44,10 @@ static std::ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
 }
 
 OpenFileTable::OpenFileTable(MDSRank *m) : mds(m) {
-  PerfCountersBuilder b(mds->cct, "oft", l_oft_first, l_oft_last);
+  auto threshold = g_conf().get_val<uint64_t>("osd_deep_scrub_large_omap_object_key_threshold");
+  MAX_ITEMS_PER_OBJ = (threshold >> 1); /* divide it to stay well away from the threshold */
 
+  PerfCountersBuilder b(mds->cct, "oft", l_oft_first, l_oft_last);
   b.add_u64(l_oft_omap_total_objs, "omap_total_objs");
   b.add_u64(l_oft_omap_total_kv_pairs, "omap_total_kv_pairs");
   b.add_u64(l_oft_omap_total_updates, "omap_total_updates");

@@ -70,8 +70,8 @@ protected:
   friend class C_IO_OFT_Journal;
   friend class C_OFT_OpenInoFinish;
 
-  uint64_t MAX_ITEMS_PER_OBJ = g_conf().get_val<uint64_t>("osd_deep_scrub_large_omap_object_key_threshold");
-  static const unsigned MAX_OBJECTS = 1024; // (1024 * osd_deep_scrub_large_omap_object_key_threshold) items at most
+  uint64_t MAX_ITEMS_PER_OBJ;
+  static const unsigned MAX_OBJECTS = 1024; // (1024 * MAX_ITEMS_PER_OBJ) items at most
 
   static const int DIRTY_NEW	= -1;
   static const int DIRTY_UNDEF	= -2;
