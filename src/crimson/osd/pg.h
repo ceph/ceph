@@ -761,6 +761,7 @@ private:
   PGActivationBlocker wait_for_active_blocker;
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
+  friend class ECRepRequest;
   friend class ClientRequest;
   friend struct CommonClientRequest;
   friend class PGAdvanceMap;

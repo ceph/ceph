@@ -51,6 +51,7 @@
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/osd_operations/client_request.h"
+#include "crimson/osd/osd_operations/ecrep_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
@@ -846,6 +847,20 @@ OSD::do_ms_dispatch(
   case MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY:
     return handle_update_log_missing_reply(conn, boost::static_pointer_cast<
       MOSDPGUpdateLogMissingReply>(m));
+  case MSG_OSD_EC_WRITE:
+    [[fallthrough]];
+  case MSG_OSD_EC_WRITE_REPLY:
+    [[fallthrough]];
+  case MSG_OSD_EC_READ:
+    [[fallthrough]];
+  case MSG_OSD_EC_READ_REPLY:
+    return handle_some_ec_messages(conn, m);
+#if 0
+  case MSG_OSD_PG_PUSH:
+    [[fallthrough]];
+  case MSG_OSD_PG_PUSH_REPLY:
+    return handle_ec_messages(conn, m);
+#endif
   default:
     return std::nullopt;
   }
@@ -1315,6 +1330,19 @@ bool OSD::should_restart() const
     return false;
   }
 }
+
+template <class MessageRefT>
+seastar::future<>
+OSD::handle_some_ec_messages(crimson::net::ConnectionRef conn, MessageRefT&& m)
+{
+  m->decode_payload();
+  //m->set_features(conn->get_features());
+  (void) pg_shard_manager.start_pg_operation<ECRepRequest>(
+    std::move(conn),
+    std::forward<MessageRefT>(m));
+  return seastar::now();
+}
+
 
 seastar::future<> OSD::restart()
 {
