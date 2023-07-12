@@ -350,3 +350,27 @@ class TestSingleReport(object):
         assert result['0'][0]['lv_tags'] == tags
         assert result['0'][0]['path'] == '/dev/VolGroup/lv'
         assert result['0'][0]['devices'] == []
+
+    def test_report_a_ceph_lv_with_two_devices_with_same_lv_name(self, monkeypatch):
+        tags = 'ceph.osd_id=0,ceph.type=data'
+        lv1 = api.Volume(lv_name='lv', vg_name='group1', lv_uuid='aaaa',
+                         lv_path='/dev/group1/lv', lv_tags=tags)
+        lv2 = api.Volume(lv_name='lv', vg_name='group2', lv_uuid='bbbb',
+                         lv_path='/dev/group2/lv', lv_tags=tags)
+        volumes = []
+        volumes.append(lv1, lv2)
+        monkeypatch.setattr(lvm.listing.api, 'get_lvs', lambda **kwargs:
+                            volumes)
+
+        listing = lvm.listing.List([])
+        listing._pvs = [
+            {'lv_uuid': 'ffff', 'pv_name': '/dev/sda1', 'pv_tags': '',
+             'pv_uuid': ''},
+            {'lv_uuid': 'ffff', 'pv_name': '/dev/sdb1', 'pv_tags': '',
+             'pv_uuid': ''}]
+
+        result = listing.single_report('group1/lv')
+        assert result['0'][0]['name'] == 'lv'
+        assert result['0'][0]['lv_tags'] == tags
+        assert result['0'][0]['path'] == '/dev/group1/lv'
+        assert result['0'][0]['devices'] == []
