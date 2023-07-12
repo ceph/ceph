@@ -62,6 +62,10 @@ public:
 
     ostream &print(ostream &rhs) const final { return rhs; }
 
+    std::string print() const final {
+      return std::string();
+    }
+
     std::optional<OpRequestRef> maybe_get_op() const final {
       return std::nullopt;
     }
