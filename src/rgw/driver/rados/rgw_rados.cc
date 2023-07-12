@@ -630,7 +630,7 @@ RGWDataSyncStatusManager* RGWRados::get_data_sync_manager(const rgw_zone_id& sou
 int RGWRados::get_required_alignment(const DoutPrefixProvider *dpp, const rgw_pool& pool, uint64_t *alignment)
 {
   IoCtx ioctx;
-  int r = open_pool_ctx(dpp, pool, ioctx, false);
+  int r = open_pool_ctx(dpp, pool, ioctx, false, true);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: open_pool_ctx() returned " << r << dendl;
     return r;
@@ -1400,10 +1400,10 @@ int RGWRados::open_notif_pool_ctx(const DoutPrefixProvider *dpp)
 }
 
 int RGWRados::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
-			    bool mostly_omap)
+			    bool mostly_omap, bool bulk)
 {
   constexpr bool create = true; // create the pool if it doesn't exist
-  return rgw_init_ioctx(dpp, get_rados_handle(), pool, io_ctx, create, mostly_omap);
+  return rgw_init_ioctx(dpp, get_rados_handle(), pool, io_ctx, create, mostly_omap, bulk);
 }
 
 /**** logs ****/
@@ -2380,7 +2380,7 @@ int RGWRados::get_obj_head_ioctx(const DoutPrefixProvider *dpp,
     return -EIO;
   }
 
-  int r = open_pool_ctx(dpp, pool, *ioctx, false);
+  int r = open_pool_ctx(dpp, pool, *ioctx, false, true);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: unable to open data-pool=" << pool.to_str() <<
       " for obj=" << obj << " with error-code=" << r << dendl;
@@ -6493,7 +6493,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
     auto iter = state.io_ctxs.find(read_obj.pool);
     if (iter == state.io_ctxs.end()) {
       state.cur_ioctx = &state.io_ctxs[read_obj.pool];
-      r = store->open_pool_ctx(dpp, read_obj.pool, *state.cur_ioctx, false);
+      r = store->open_pool_ctx(dpp, read_obj.pool, *state.cur_ioctx, false, true);
       if (r < 0) {
         ldpp_dout(dpp, 20) << "ERROR: failed to open pool context for pool=" << read_obj.pool << " r=" << r << dendl;
         return r;
@@ -8111,7 +8111,7 @@ int RGWRados::pool_iterate_begin(const DoutPrefixProvider *dpp, const rgw_pool& 
   librados::IoCtx& io_ctx = ctx.io_ctx;
   librados::NObjectIterator& iter = ctx.iter;
 
-  int r = open_pool_ctx(dpp, pool, io_ctx, false);
+  int r = open_pool_ctx(dpp, pool, io_ctx, false, false);
   if (r < 0)
     return r;
 
@@ -8125,7 +8125,7 @@ int RGWRados::pool_iterate_begin(const DoutPrefixProvider *dpp, const rgw_pool& 
   librados::IoCtx& io_ctx = ctx.io_ctx;
   librados::NObjectIterator& iter = ctx.iter;
 
-  int r = open_pool_ctx(dpp, pool, io_ctx, false);
+  int r = open_pool_ctx(dpp, pool, io_ctx, false, false);
   if (r < 0)
     return r;
 
