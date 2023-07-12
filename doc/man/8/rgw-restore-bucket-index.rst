@@ -56,6 +56,21 @@ Command-Line Arguments
    bucket. If omitted the utility will try to determine the data pool
    on its own.
 
+.. option:: -r <realm-name>
+
+   Optional, specify the realm if the restoration is not being applied
+   to the default realm.
+
+.. option:: -g <zonegroup-name>
+
+   Optional, specify the zonegroup if the restoration is not being applied
+   to the default zonegroup.
+
+.. option:: -z <zone-name>
+
+   Optional, specify the zone if the restoration is not being applied
+   to the default zone.
+
 .. option:: -l <rados-ls-output-file>
 
    Optional, specify a file containing the output of a rados listing
