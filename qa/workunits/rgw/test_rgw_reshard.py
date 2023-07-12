@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-import errno
 import time
 import logging as log
 import json
