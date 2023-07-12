@@ -105,7 +105,7 @@ void D3nDataCache::init(CephContext *_cct) {
   struct aioinit ainit{0};
   ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_threads");
   ainit.aio_num = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_num");
-  ainit.aio_idle_time = 120;
+  ainit.aio_idle_time = 10;
   aio_init(&ainit);
 #endif
 }
