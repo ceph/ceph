@@ -3493,9 +3493,11 @@ public:
         manifest_bl = std::move(iter->second);
         src_attrs.erase(iter);
 
-        // if the source object was encrypted, preserve the original object's
-        // part lengths
-        if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) {
+        // if the source object was encrypted, preserve the part lengths from
+        // the original object's manifest in RGW_ATTR_CRYPT_PARTS. if the object
+        // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
+        if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
+            !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
           std::vector<size_t> parts_len;
           int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
                                                               parts_len);
