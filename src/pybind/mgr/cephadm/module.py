@@ -103,7 +103,7 @@ os._exit = os_exit_noop   # type: ignore
 
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'quay.io/ceph/ceph'
+DEFAULT_IMAGE = 'quay.io/ceph/ceph:v18'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
