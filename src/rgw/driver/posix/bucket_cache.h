@@ -162,7 +162,12 @@ public:
 
 	/* discard lmdb data associated with this bucket */
 	auto txn = env->getRWTransaction();
-	mdb_drop(*txn, dbi, 0); /* apparently, does not require commit */
+	mdb_drop(*txn, dbi, 0);
+	txn->commit();
+	/* LMDB applications don't "normally" close database handles,
+	 * but doing so (atomically) is supported, and we must as
+	 * we continually recycle them */
+	mdb_dbi_close(*env, dbi); // return db handle
       } /* ! deleted */
     }
     return true;
@@ -527,8 +532,8 @@ public:
 	{
 	  /* yikes, cache blown */
 	  ulk.lock();
-	  mdb_drop(*txn, b->dbi, 0); /* apparently, does not require
-				   * commit */
+	  mdb_drop(*txn, b->dbi, 0);
+	  txn->commit();
 	  b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 	  return 0; /* don't process any more events in this batch */
 	}
