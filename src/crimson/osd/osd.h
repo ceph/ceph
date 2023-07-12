@@ -238,6 +238,10 @@ private:
   seastar::future<> handle_pg_pct(
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGPCT> m);
+  template <class MessageRefT>
+  seastar::future<> handle_some_ec_messages(
+    crimson::net::ConnectionRef conn,
+    MessageRefT&& m);
 
   std::vector<DaemonHealthMetric> get_health_metrics();
 
