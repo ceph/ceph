@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -ex
 
-if [ -d .git ]; then
+if [ -e .git ]; then
     git submodule update --init --recursive
 fi
 
