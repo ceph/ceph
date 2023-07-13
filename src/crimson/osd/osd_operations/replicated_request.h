@@ -66,7 +66,7 @@ public:
   > tracking_events;
 
 private:
-  ClientRequest::PGPipeline &pp(PG &pg);
+  ClientRequest::PGPipeline &client_pp(PG &pg);
 
   crimson::net::ConnectionRef conn;
   PipelineHandle handle;

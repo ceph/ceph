@@ -49,6 +49,9 @@ public:
   std::tuple<
     PGPeeringPipeline::Process::BlockingEvent
   > tracking_events;
+
+private:
+  PGPeeringPipeline &peering_pp(PG &pg);
 };
 
 }

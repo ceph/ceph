@@ -49,7 +49,7 @@ ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
 }
 
-ClientRequest::PGPipeline &LogMissingRequest::pp(PG &pg)
+ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
 }

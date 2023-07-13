@@ -64,7 +64,7 @@ public:
   > tracking_events;
 
 private:
-  ClientRequest::PGPipeline &pp(PG &pg);
+  ClientRequest::PGPipeline &client_pp(PG &pg);
 
   crimson::net::ConnectionRef conn;
   // must be after `conn` to ensure the ConnectionPipeline's is alive
