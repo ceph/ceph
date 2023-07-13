@@ -5827,6 +5827,13 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
     }
   }
 
+  // just in case the caps was released just before we get the revoke msg
+  if (!check && m->get_op() == CEPH_CAP_OP_REVOKE) {
+    cap->wanted = 0; // don't let check_caps skip sending a response to MDS
+    check = true;
+    flags = CHECK_CAPS_NODELAY;
+  }
+
   if (check)
     check_caps(in, flags);
 
