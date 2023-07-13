@@ -736,7 +736,7 @@ update:
   mon.kvmon()->propose_pending();
   paxos.unplug();
   force_immediate_propose();
-  wait_for_finished_proposal(
+  wait_for_commit(
     op,
     new Monitor::C_Command(
       mon, op, 0, ss.str(), odata,
