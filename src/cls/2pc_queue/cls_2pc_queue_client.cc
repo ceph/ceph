@@ -226,10 +226,11 @@ void cls_2pc_queue_list_reservations(ObjectReadOperation& op, bufferlist* obl, i
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_LIST_RESERVATIONS, in, obl, prval);
 }
 
-void cls_2pc_queue_remove_entries(ObjectWriteOperation& op, const std::string& end_marker) {
+void cls_2pc_queue_remove_entries(ObjectWriteOperation& op, const std::string& end_marker, uint64_t entries_to_remove) {
   bufferlist in;
-  cls_queue_remove_op rem_op;
+  cls_2pc_queue_remove_op rem_op;
   rem_op.end_marker = end_marker;
+  rem_op.entries_to_remove = entries_to_remove;
   encode(rem_op, in);
   op.exec(TPC_QUEUE_CLASS, TPC_QUEUE_REMOVE_ENTRIES, in);
 }
