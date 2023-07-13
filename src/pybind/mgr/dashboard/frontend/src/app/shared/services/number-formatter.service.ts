@@ -27,24 +27,42 @@ export class NumberFormatterService {
     units: string,
     targetedUnits: string,
     factor: number,
-    labels: string[]
+    labels: string[],
+    decimals: number = 1
   ): any {
-    return this.formatter.formatNumberFromTo(value, units, targetedUnits, factor, labels);
+    return this.formatter.formatNumberFromTo(value, units, targetedUnits, factor, labels, decimals);
   }
 
-  formatBytesFromTo(value: any, units: string, targetedUnits: string): any {
-    return this.formatFromTo(value, units, targetedUnits, 1024, this.bytesLabels);
+  formatBytesFromTo(value: any, units: string, targetedUnits: string, decimals: number = 1): any {
+    return this.formatFromTo(value, units, targetedUnits, 1024, this.bytesLabels, decimals);
   }
 
-  formatBytesPerSecondFromTo(value: any, units: string, targetedUnits: string): any {
-    return this.formatFromTo(value, units, targetedUnits, 1024, this.bytesPerSecondLabels);
+  formatBytesPerSecondFromTo(
+    value: any,
+    units: string,
+    targetedUnits: string,
+    decimals: number = 1
+  ): any {
+    return this.formatFromTo(
+      value,
+      units,
+      targetedUnits,
+      1024,
+      this.bytesPerSecondLabels,
+      decimals
+    );
   }
 
-  formatSecondsFromTo(value: any, units: string, targetedUnits: string): any {
-    return this.formatFromTo(value, units, targetedUnits, 1000, this.secondsLabels);
+  formatSecondsFromTo(value: any, units: string, targetedUnits: string, decimals: number = 1): any {
+    return this.formatFromTo(value, units, targetedUnits, 1000, this.secondsLabels, decimals);
   }
 
-  formatUnitlessFromTo(value: any, units: string, targetedUnits: string): any {
-    return this.formatFromTo(value, units, targetedUnits, 1000, this.unitlessLabels);
+  formatUnitlessFromTo(
+    value: any,
+    units: string,
+    targetedUnits: string,
+    decimals: number = 1
+  ): any {
+    return this.formatFromTo(value, units, targetedUnits, 1000, this.unitlessLabels, decimals);
   }
 }
