@@ -157,10 +157,7 @@ echo "using gcc : mingw32 : ${MINGW_CXX} ;" > user-config.jam
 # Workaround for https://github.com/boostorg/thread/issues/156
 # Older versions of mingw provided a different pthread lib.
 sed -i 's/lib$(libname)GC2.a/lib$(libname).a/g' ./libs/thread/build/Jamfile.v2
-sed -i 's/mthreads/pthreads/g' ./tools/build/src/tools/gcc.py
 sed -i 's/mthreads/pthreads/g' ./tools/build/src/tools/gcc.jam
-
-sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.py
 sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.jam
 
 export PTW32_INCLUDE=${PTW32Include}
