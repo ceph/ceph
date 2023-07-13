@@ -3935,6 +3935,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",purged_snapdirs";
   if (f & CEPH_OSDMAP_PGLOG_HARDLIMIT)
     s += ",pglog_hardlimit";
+  if (f & CEPH_OSDMAP_NOAUTOSCALE)
+    s += ",noautoscale";
   if (s.length())
     s.erase(0, 1);
   return s;
