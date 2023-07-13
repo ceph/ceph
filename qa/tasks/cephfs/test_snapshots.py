@@ -566,40 +566,40 @@ class TestMonSnapsAndFsPools(CephFSTestCase):
         """
         test_pool_name = 'snap-test-pool'
         base_cmd = f'osd pool create {test_pool_name}'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, 0)
 
         self.fs.rados(["mksnap", "snap3"], pool=test_pool_name)
 
         base_cmd = f'fs add_data_pool {self.fs.name} {test_pool_name}'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, errno.EOPNOTSUPP)
 
         # cleanup
         self.fs.rados(["rmsnap", "snap3"], pool=test_pool_name)
         base_cmd = f'osd pool delete {test_pool_name}'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
 
     def test_using_pool_with_snap_fails_fs_creation(self):
         """
         Test that using a pool with snaps for fs creation fails
         """
         base_cmd = 'osd pool create test_data_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, 0)
         base_cmd = 'osd pool create test_metadata_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, 0)
 
         self.fs.rados(["mksnap", "snap4"], pool='test_data_pool')
 
         base_cmd = 'fs new testfs test_metadata_pool test_data_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         self.assertEqual(ret, errno.EOPNOTSUPP)
 
         # cleanup
         self.fs.rados(["rmsnap", "snap4"], pool='test_data_pool')
         base_cmd = 'osd pool delete test_data_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
         base_cmd = 'osd pool delete test_metadata_pool'
-        ret = self.run_cluster_cmd_result(base_cmd)
+        ret = self.get_ceph_cmd_result(args=base_cmd, check_status=False)
