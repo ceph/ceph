@@ -1210,6 +1210,11 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
     Inode *diri = dir->parent_inode;
     clear_dir_complete_and_ordered(diri, false);
     dn = link(dir, dname, in, dn);
+
+    if (old_dentry) {
+      dn->is_renaming = false;
+      signal_cond_list(waiting_for_rename);
+    }
   }
 
   update_dentry_lease(dn, dlease, from, session);
@@ -7136,7 +7141,8 @@ bool Client::_dentry_valid(const Dentry *dn)
 }
 
 int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
-		    const UserPerm& perms, std::string* alternate_name)
+                    const UserPerm& perms, std::string* alternate_name,
+                    bool is_rename)
 {
   int r = 0;
   Dentry *dn = NULL;
@@ -7214,6 +7220,19 @@ relookup:
       }
     } else {
       ldout(cct, 20) << " no cap on " << dn->inode->vino() << dendl;
+    }
+
+    // In rare case during the rename if another thread tries to
+    // lookup the dst dentry, it may get an inconsistent result
+    // that both src dentry and dst dentry will link to the same
+    // inode at the same time.
+    // Will wait the rename to finish and try it again.
+    if (!is_rename && dn->is_renaming) {
+      ldout(cct, 1) << __func__ << " dir " << *dir
+                    << " rename is on the way, will wait for dn '"
+                    << dname << "'" << dendl;
+      wait_on_list(waiting_for_rename);
+      goto relookup;
     }
   } else {
     // can we conclude ENOENT locally?
@@ -14406,12 +14425,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->old_dentry_drop = CEPH_CAP_FILE_SHARED;
     req->old_dentry_unless = CEPH_CAP_FILE_EXCL;
 
+    de->is_renaming = true;
     req->set_dentry(de);
     req->dentry_drop = CEPH_CAP_FILE_SHARED;
     req->dentry_unless = CEPH_CAP_FILE_EXCL;
 
     InodeRef oldin, otherin;
-    res = _lookup(fromdir, fromname, 0, &oldin, perm);
+    res = _lookup(fromdir, fromname, 0, &oldin, perm, nullptr, true);
     if (res < 0)
       goto fail;
 
@@ -14420,7 +14440,7 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     req->set_old_inode(oldinode);
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
-    res = _lookup(todir, toname, 0, &otherin, perm);
+    res = _lookup(todir, toname, 0, &otherin, perm, nullptr, true);
     switch (res) {
     case 0:
       {
@@ -14448,6 +14468,12 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   res = make_request(req, perm, &target);
   ldout(cct, 10) << "rename result is " << res << dendl;
+
+  // if rename fails it will miss waking up the waiters
+  if (op == CEPH_MDS_OP_RENAME && de->is_renaming) {
+    de->is_renaming = false;
+    signal_cond_list(waiting_for_rename);
+  }
 
   // renamed item from our cache
 
