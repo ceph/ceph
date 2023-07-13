@@ -31,7 +31,7 @@ Create NFS Ganesha Cluster
 
 .. code:: bash
 
-    $ nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] [--ingress-mode {default|keepalive-only}] [--port <int>]
+    $ ceph nfs cluster create <cluster_id> [<placement>] [--ingress] [--virtual_ip <value>] [--ingress-mode {default|keepalive-only|haproxy-standard|haproxy-protocol}] [--port <int>]
 
 This creates a common recovery pool for all NFS Ganesha daemons, new user based on
 ``cluster_id``, and a common NFS Ganesha config RADOS object.
