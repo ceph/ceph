@@ -9991,7 +9991,7 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
   // osd bench test. This is later used to setup mclock.
   if ((op_queue_type_t::mClockScheduler == osd_op_queue_type()) &&
       (cct->_conf.get_val<bool>("osd_mclock_skip_benchmark") == false) &&
-      (!unsupported_objstore_for_qos())) {
+      (store->get_type() != "memstore")) {
     std::string max_capacity_iops_config;
     bool force_run_benchmark =
       cct->_conf.get_val<bool>("osd_mclock_force_run_benchmark_on_init");
@@ -10089,8 +10089,7 @@ bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
 {
   // Override options only if the scheduler enabled is mclock and the
   // underlying objectstore is supported by mclock
-  if (op_queue_type_t::mClockScheduler == osd_op_queue_type() &&
-      !unsupported_objstore_for_qos()) {
+  if (op_queue_type_t::mClockScheduler == osd_op_queue_type()) {
     static const std::map<std::string, uint64_t> recovery_qos_defaults {
       {"osd_recovery_max_active", 0},
       {"osd_recovery_max_active_hdd", 3},
@@ -10191,8 +10190,7 @@ void OSD::maybe_override_sleep_options_for_qos()
 {
   // Override options only if the scheduler enabled is mclock and the
   // underlying objectstore is supported by mclock
-  if (op_queue_type_t::mClockScheduler == osd_op_queue_type() &&
-      !unsupported_objstore_for_qos()) {
+  if (op_queue_type_t::mClockScheduler == osd_op_queue_type()) {
     // Override the various sleep settings
     // Disable recovery sleep
     cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
@@ -10221,8 +10219,7 @@ void OSD::maybe_override_cost_for_qos()
 {
   // If the scheduler enabled is mclock, override the default PG deletion cost
   // so that mclock can meet the QoS goals.
-  if (op_queue_type_t::mClockScheduler == osd_op_queue_type() &&
-      !unsupported_objstore_for_qos()) {
+  if (op_queue_type_t::mClockScheduler == osd_op_queue_type()) {
     uint64_t pg_delete_cost = 15728640;
     cct->_conf.set_val("osd_pg_delete_cost", std::to_string(pg_delete_cost));
   }
@@ -10285,14 +10282,6 @@ void OSD::mon_cmd_set_config(const std::string &key, const std::string &val)
                                                val, update_shard);
   dout(10) << __func__ << " Set " << key << " = " << val << dendl;
   monc->start_mon_command(vcmd, {}, nullptr, nullptr, on_finish);
-}
-
-bool OSD::unsupported_objstore_for_qos()
-{
-  static const std::vector<std::string> unsupported_objstores = { "filestore" };
-  return std::find(unsupported_objstores.begin(),
-                   unsupported_objstores.end(),
-                   store->get_type()) != unsupported_objstores.end();
 }
 
 op_queue_type_t OSD::osd_op_queue_type() const
