@@ -89,6 +89,9 @@ class List(object):
             # determine whether a parent is bluestore, we should err on the side of not reporting
             # the child so as not to give a false negative.
             info_device = [info for info in info_devices if info['NAME'] == dev][0]
+            if info_device['TYPE'] == 'lvm':
+                # lvm devices are not raw devices
+                continue
             if 'PKNAME' in info_device and info_device['PKNAME'] != "":
                 parent = info_device['PKNAME']
                 try:
