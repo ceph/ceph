@@ -557,10 +557,6 @@ public:
       op->mark_event(service_name + ":wait_for_finished_proposal");
     waiting_for_finished_proposal.push_back(c);
   }
-  void wait_for_finished_proposal_ctx(Context *c) {
-    MonOpRequestRef o;
-    wait_for_finished_proposal(o, c);
-  }
 
   /**
    * Wait for us to become active
