@@ -49,7 +49,7 @@ ConnectionPipeline &RepRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
 }
 
-ClientRequest::PGPipeline &RepRequest::pp(PG &pg)
+ClientRequest::PGPipeline &RepRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
 }
@@ -61,7 +61,7 @@ seastar::future<> RepRequest::with_pg(
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
     logger().debug("{}: pg present", *this);
-    return this->template enter_stage<interruptor>(pp(*pg).await_map
+    return this->template enter_stage<interruptor>(client_pp(*pg).await_map
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
         PG_OSDMapGate::OSDMapBlocker::BlockingEvent
