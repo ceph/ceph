@@ -698,7 +698,7 @@ int POSIXBucket::list(const DoutPrefixProvider* dpp, ListParams& params,
 
   if (ret < 0) {
     if (ret == -EAGAIN) {
-      return ret;
+      return 0;
     }
     ldpp_dout(dpp, 0) << "ERROR: could not list bucket " << get_name() << ": "
       << cpp_strerror(ret) << dendl;

@@ -34,7 +34,7 @@ namespace file::listing {
 namespace bi = boost::intrusive;
 namespace sf = std::filesystem; 
 
-typedef bi::link_mode<bi::normal_link> link_mode; /* XXX normal */
+typedef bi::link_mode<bi::safe_link> link_mode; /* XXX normal */
 typedef bi::avl_set_member_hook<link_mode> member_hook_t;
 
 template <typename D, typename B>
@@ -151,11 +151,23 @@ public:
 
 	//std::cout << fmt::format("reclaim {}!", name) << std::endl;
 	bc->un->remove_watch(name);
+#if 1
+	// depends on safe_link
+	if (! name_hook.is_linked()) {
+	  // this should not happen!
+	  abort();
+	}
+#endif
 	bc->cache.remove(hk, this, bucket_avl_cache::FLAG_NONE);
 
 	/* discard lmdb data associated with this bucket */
 	auto txn = env->getRWTransaction();
-	mdb_drop(*txn, dbi, 0); /* apparently, does not require commit */
+	mdb_drop(*txn, dbi, 0);
+	txn->commit();
+	/* LMDB applications don't "normally" close database handles,
+	 * but doing so (atomically) is supported, and we must as
+	 * we continually recycle them */
+	mdb_dbi_close(*env, dbi); // return db handle
       } /* ! deleted */
     }
     return true;
@@ -295,7 +307,13 @@ public:
 	lat.lock->unlock();
 	/* LOCKED */
       } else {
-	/* BucketCacheEntry not in cache, we need to create it */
+	/* BucketCacheEntry not in cache */
+	if (! (flags & BucketCache<D, B>::FLAG_CREATE)) {
+	  /* the caller does not want to instantiate a new cache
+	   * entry (i.e., only wants to notify on an existing one) */
+	  return result;
+	}
+	/* we need to create it */
 	b = static_cast<BucketCacheEntry<D, B>*>(
 	  lru.insert(&fac, cohort::lru::Edge::MRU, iflags));
 	if (b) [[likely]] {
@@ -383,7 +401,8 @@ public:
 
     int rc __attribute__((unused)) = 0;
     GetBucketResult gbr =
-      get_bucket(sal_bucket->get_name(), BucketCache<D, B>::FLAG_LOCK);
+      get_bucket(sal_bucket->get_name(),
+		 BucketCache<D, B>::FLAG_LOCK | BucketCache<D, B>::FLAG_CREATE);
     auto [b /* BucketCacheEntry */, flags] = gbr;
     if (b /* XXX again, can this fail? */) {
       if (! (b->flags & BucketCacheEntry<D, B>::FLAG_FILLED)) {
@@ -447,7 +466,7 @@ public:
 	proc_result();
       }
       lru.unref(b, cohort::lru::FLAG_NONE);
-    }
+    } /* b */
 
     return 0;
   } /* list_bucket */
@@ -513,8 +532,8 @@ public:
 	{
 	  /* yikes, cache blown */
 	  ulk.lock();
-	  mdb_drop(*txn, b->dbi, 0); /* apparently, does not require
-				   * commit */
+	  mdb_drop(*txn, b->dbi, 0);
+	  txn->commit();
 	  b->flags &= ~BucketCacheEntry<D, B>::FLAG_FILLED;
 	  return 0; /* don't process any more events in this batch */
 	}
@@ -525,6 +544,7 @@ public:
 	}
       } /* all events */
       txn->commit();
+      lru.unref(b, cohort::lru::FLAG_NONE);
     } /* b */
     return rc;
   } /* notify */
