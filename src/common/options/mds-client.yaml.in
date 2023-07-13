@@ -315,6 +315,8 @@ options:
   default: true
   services:
   - mds_client
+  flags:
+  - startup
   with_legacy: true
 - name: client_force_lazyio
   type: bool
