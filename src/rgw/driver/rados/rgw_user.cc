@@ -1393,10 +1393,10 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
 
     old_info = user->get_info();
     set_populated();
-  }
 
-  if (user_id.empty()) {
-    user_id = user->get_id();
+    if (user_id.empty()) {
+      user_id = user->get_id();
+    }
   }
   op_state.set_initialized();
 
