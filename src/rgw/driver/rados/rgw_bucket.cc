@@ -63,7 +63,7 @@ static void parse_bucket(const string& bucket,
   /*
    * deal with the possible tenant:bucket:bucket_instance case
    */
-  if (tenant_name->empty()) {
+  if (tenant_name->empty() && bucket_instance) {
     pos = bucket_instance->find(':');
     if (pos >= 0) {
       *tenant_name = *bucket_name;
