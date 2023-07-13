@@ -49,4 +49,10 @@ def create_parser(prog, description):
         action='store_true',
         help='Enable device encryption via dm-crypt',
     )
+    parser.add_argument(
+        '--osd-id',
+        help='Reuse an existing OSD id',
+        default=None,
+        type=arg_validators.valid_osd_id,
+    )
     return parser
