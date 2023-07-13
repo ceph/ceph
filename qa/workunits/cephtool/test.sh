@@ -1508,7 +1508,7 @@ function test_mon_osd()
   done
 
   for f in noup nodown noin noout noscrub nodeep-scrub nobackfill \
-	  norebalance norecover notieragent
+	  norebalance norecover notieragent noautoscale
   do
     ceph osd set $f
     ceph osd unset $f
