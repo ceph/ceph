@@ -285,7 +285,7 @@ placement. The normal weights associated with each device in the CRUSH map are
 set in accordance with the device size and indicate how much data should be
 stored where. However, because CRUSH is a probabilistic pseudorandom placement
 process, there is always some variation from this ideal distribution (in the
-same way that rolling a die sixty times will likely not result in exactly ten
+same way that rolling a dice sixty times will likely not result in exactly ten
 ones and ten sixes). Weight sets allow the cluster to perform numerical
 optimization based on the specifics of your cluster (for example: hierarchy,
 pools) to achieve a balanced distribution.
