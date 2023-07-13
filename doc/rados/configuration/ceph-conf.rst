@@ -4,91 +4,92 @@
  Configuring Ceph
 ==================
 
-When Ceph services start, the initialization process activates a series
-of daemons that run in the background. A :term:`Ceph Storage Cluster` runs 
-at a minimum three types of daemons:
+When Ceph services start, the initialization process activates a series of
+daemons that run in the background. A :term:`Ceph Storage Cluster` runs at
+least three types of daemons:
 
 - :term:`Ceph Monitor` (``ceph-mon``)
 - :term:`Ceph Manager` (``ceph-mgr``)
 - :term:`Ceph OSD Daemon` (``ceph-osd``)
 
 Ceph Storage Clusters that support the :term:`Ceph File System` also run at
-least one :term:`Ceph Metadata Server` (``ceph-mds``). Clusters that
-support :term:`Ceph Object Storage` run Ceph RADOS Gateway daemons
-(``radosgw``) as well.
+least one :term:`Ceph Metadata Server` (``ceph-mds``). Clusters that support
+:term:`Ceph Object Storage` run Ceph RADOS Gateway daemons (``radosgw``).
 
-Each daemon has a number of configuration options, each of which has a
-default value.  You may adjust the behavior of the system by changing these
-configuration options.  Be careful to understand the consequences before
+Each daemon has a number of configuration options, each of which has a default
+value. You may adjust the behavior of the system by changing these
+configuration options. Be careful to understand the consequences before
 overriding default values, as it is possible to significantly degrade the
-performance and stability of your cluster.  Also note that default values
-sometimes change between releases, so it is best to review the version of
-this documentation that aligns with your Ceph release.
+performance and stability of your cluster. Note too that default values
+sometimes change between releases. For this reason, it is best to review the
+version of this documentation that applies to your Ceph release.
 
 Option names
 ============
 
-All Ceph configuration options have a unique name consisting of words
-formed with lower-case characters and connected with underscore
-(``_``) characters.
+Each of the Ceph configuration options has a unique name that consists of words
+formed with lowercase characters and connected with underscore characters
+(``_``).
 
-When option names are specified on the command line, either underscore
-(``_``) or dash (``-``) characters can be used interchangeable (e.g.,
+When option names are specified on the command line, underscore (``_``) and
+dash (``-``) characters can be used interchangeably (for example,
 ``--mon-host`` is equivalent to ``--mon_host``).
 
-When option names appear in configuration files, spaces can also be
-used in place of underscore or dash.  We suggest, though, that for
-clarity and convenience you consistently use underscores, as we do
+When option names appear in configuration files, spaces can also be used in
+place of underscores or dashes. However, for the sake of clarity and
+convenience, we suggest that you consistently use underscores, as we do
 throughout this documentation.
 
 Config sources
 ==============
 
-Each Ceph daemon, process, and library will pull its configuration
-from several sources, listed below.  Sources later in the list will
-override those earlier in the list when both are present.
+Each Ceph daemon, process, and library pulls its configuration from one or more
+of the several sources listed below. Sources that occur later in the list
+override those that occur earlier in the list (when both are present).
 
 - the compiled-in default value
 - the monitor cluster's centralized configuration database
 - a configuration file stored on the local host
 - environment variables
-- command line arguments
-- runtime overrides set by an administrator
+- command-line arguments
+- runtime overrides that are set by an administrator
 
 One of the first things a Ceph process does on startup is parse the
-configuration options provided via the command line, environment, and
-local configuration file.  The process will then contact the monitor
-cluster to retrieve configuration stored centrally for the entire
-cluster.  Once a complete view of the configuration is available, the
-daemon or process startup will proceed.
+configuration options provided via the command line, via the environment, and
+via the local configuration file. Next, the process contacts the monitor
+cluster to retrieve centrally-stored configuration for the entire cluster.
+After a complete view of the configuration is available, the startup of the
+daemon or process will commence.
 
 .. _bootstrap-options:
 
 Bootstrap options
 -----------------
 
-Some configuration options affect the process's ability to contact the
-monitors, to authenticate, and to retrieve the cluster-stored configuration.
-For this reason, these options might need to be stored locally on the node, and
-set by means of a local configuration file. These options include the
-following:
+Bootstrap options are configuration options that affect the process's ability
+to contact the monitors, to authenticate, and to retrieve the cluster-stored
+configuration.  For this reason, these options might need to be stored locally
+on the node, and set by means of a local configuration file. These options
+include the following:
 
 .. confval:: mon_host
 .. confval:: mon_host_override
 
 - :confval:`mon_dns_srv_name`
-- ``mon_data``, ``osd_data``, ``mds_data``, ``mgr_data``, and
-  similar options that define which local directory the daemon
-  stores its data in.
-- :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be used to
-  specify the authentication credential to use to authenticate with
-  the monitor.  Note that in most cases the default keyring location
-  is in the data directory specified above.
+- :confval:`mon_data`, :confval:`osd_data`, :confval:`mds_data`, 
+  :confval:`mgr_data`, and similar options that define which local directory
+  the daemon stores its data in.
+- :confval:`keyring`, :confval:`keyfile`, and/or :confval:`key`, which can be 
+  used to specify the authentication credential to use to authenticate with the
+  monitor. Note that in most cases the default keyring location is in the data
+  directory specified above.
 
-In most cases, the default values of these options are suitable. There is one
-exception to this: the :confval:`mon_host` option that identifies the addresses
-of the cluster's monitors.  When DNS is used to identify monitors, a local Ceph
-configuration file can be avoided entirely.
+In most cases, there is no reason to modify the default values of these
+options. However, there is one exception to this: the :confval:`mon_host`
+option that identifies the addresses of the cluster's monitors. But when DNS is
+used to identify monitors, a local Ceph configuration file can be avoided
+entirely.
+
 
 Skipping monitor config
 -----------------------
