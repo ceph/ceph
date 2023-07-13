@@ -158,7 +158,7 @@ class TestSessionMap(CephFSTestCase):
         if mon_caps is None:
             mon_caps = "allow r"
 
-        out = self.fs.mon_manager.raw_cluster_cmd(
+        out = self.get_ceph_cmd_stdout(
             "auth", "get-or-create", "client.{name}".format(name=id_name),
             "mds", mds_caps,
             "osd", osd_caps,

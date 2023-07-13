@@ -156,12 +156,11 @@ class MonCapTester:
 
         fs is any fs object so that ceph commands can be exceuted.
         """
-        get_cluster_cmd_op = fs.mon_manager.raw_cluster_cmd
-        keyring = get_cluster_cmd_op(args=f'auth get client.{client_id}')
+        keyring = fs.get_ceph_cmd_stdout(args=f'auth get client.{client_id}')
         moncap = get_mon_cap_from_keyring(keyring)
         keyring_path = fs.admin_remote.mktemp(data=keyring)
 
-        fsls = get_cluster_cmd_op(
+        fsls = fs.get_ceph_cmd_stdout(
             args=f'fs ls --id {client_id} -k {keyring_path}')
         log.info(f'output of fs ls cmd run by client.{client_id} -\n{fsls}')
 
