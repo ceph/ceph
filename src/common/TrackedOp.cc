@@ -85,7 +85,7 @@ void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
   std::lock_guard history_lock(ops_history_lock);
   if (shutdown)
     return;
-  double opduration = op->get_duration();
+  double opduration = op->get_duration(&now);
   duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
   if (opduration >= history_slow_op_threshold.load()) {
@@ -101,7 +101,7 @@ void OpHistory::cleanup(utime_t now)
 	 (now - arrived.begin()->first >
 	  (double)(history_duration.load()))) {
     duration.erase(make_pair(
-	arrived.begin()->second->get_duration(),
+	arrived.begin()->second->get_duration(&now),
 	arrived.begin()->second));
     arrived.erase(arrived.begin());
   }
@@ -504,7 +504,7 @@ void TrackedOp::dump(utime_t now, Formatter *f) const
   f->dump_string("description", get_desc());
   f->dump_stream("initiated_at") << get_initiated();
   f->dump_float("age", now - get_initiated());
-  f->dump_float("duration", get_duration());
+  f->dump_float("duration", get_duration(&now));
   {
     f->open_object_section("type_data");
     _dump(f);

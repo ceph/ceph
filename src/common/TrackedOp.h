@@ -370,12 +370,16 @@ public:
     return initiated_at;
   }
 
-  double get_duration() const {
+  double get_duration(const utime_t *now=NULL) const {
     std::lock_guard l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
-    else
-      return ceph_clock_now() - get_initiated();
+    else {
+      if (now == nullptr)
+	return ceph_clock_now() - get_initiated();
+      else
+	return now - get_initiated();
+    }
   }
 
   void mark_event(std::string_view event, utime_t stamp=ceph_clock_now());
