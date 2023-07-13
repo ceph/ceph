@@ -29,11 +29,10 @@ def device_formatter(devices):
     return ''.join(lines)
 
 
-def ensure_disjoint_device_lists(data, db=[], wal=[], journal=[]):
+def ensure_disjoint_device_lists(data, db=[], wal=[]):
     # check that all device lists are disjoint with each other
     if not all([set(data).isdisjoint(set(db)),
                 set(data).isdisjoint(set(wal)),
-                set(data).isdisjoint(set(journal)),
                 set(db).isdisjoint(set(wal))]):
         raise Exception('Device lists are not disjoint')
 
@@ -221,13 +220,6 @@ class Batch(object):
             help='Devices to provision OSDs wal volumes',
         )
         parser.add_argument(
-            '--journal-devices',
-            nargs='*',
-            type=arg_validators.ValidBatchDevice(),
-            default=[],
-            help='Devices to provision OSDs journal volumes',
-        )
-        parser.add_argument(
             '--auto',
             action='store_true',
             help=('deploy multi-device OSDs if rotational and non-rotational drives '
@@ -245,11 +237,6 @@ class Batch(object):
             '--bluestore',
             action='store_true',
             help='bluestore objectstore (default)',
-        )
-        parser.add_argument(
-            '--filestore',
-            action='store_true',
-            help='filestore objectstore',
         )
         parser.add_argument(
             '--report',
@@ -323,25 +310,6 @@ class Batch(object):
             type=int,
             help='Provision slots on WAL device, can remain unoccupied'
         )
-        def journal_size_in_mb_hack(size):
-            # TODO give user time to adjust, then remove this
-            if size and size[-1].isdigit():
-                mlogger.warning('DEPRECATION NOTICE')
-                mlogger.warning('--journal-size as integer is parsed as megabytes')
-                mlogger.warning('A future release will parse integers as bytes')
-                mlogger.warning('Add a "M" to explicitly pass a megabyte size')
-                size += 'M'
-            return disk.Size.parse(size)
-        parser.add_argument(
-            '--journal-size',
-            type=journal_size_in_mb_hack,
-            help='Override the "osd_journal_size" value, in megabytes'
-        )
-        parser.add_argument(
-            '--journal-slots',
-            type=int,
-            help='Provision slots on journal device, can remain unoccupied'
-        )
         parser.add_argument(
             '--prepare',
             action='store_true',
@@ -356,7 +324,7 @@ class Batch(object):
         )
         self.args = parser.parse_args(argv)
         self.parser = parser
-        for dev_list in ['', 'db_', 'wal_', 'journal_']:
+        for dev_list in ['', 'db_', 'wal_']:
             setattr(self, '{}usable'.format(dev_list), [])
 
     def report(self, plan):
@@ -395,7 +363,7 @@ class Batch(object):
         '''
         Helper for legacy auto behaviour.
         Sorts drives into rotating and non-rotating, the latter being used for
-        db or journal.
+        db.
         '''
         mlogger.warning('DEPRECATION NOTICE')
         mlogger.warning('You are using the legacy automatic disk sorting behavior')
@@ -408,10 +376,7 @@ class Batch(object):
             # no need for additional sorting, we'll only deploy standalone on ssds
             return
         self.args.devices = rotating
-        if self.args.filestore:
-            self.args.journal_devices = ssd
-        else:
-            self.args.db_devices = ssd
+        self.args.db_devices = ssd
 
     @decorators.needs_root
     def main(self):
@@ -420,19 +385,18 @@ class Batch(object):
 
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if not self.args.bluestore and not self.args.filestore:
+        if not self.args.bluestore:
             self.args.bluestore = True
 
         if (self.args.auto and not self.args.db_devices and not
-            self.args.wal_devices and not self.args.journal_devices):
+            self.args.wal_devices):
             self._sort_rotational_disks()
 
         self._check_slot_args()
 
         ensure_disjoint_device_lists(self.args.devices,
                                      self.args.db_devices,
-                                     self.args.wal_devices,
-                                     self.args.journal_devices)
+                                     self.args.wal_devices)
 
         plan = self.get_plan(self.args)
 
@@ -453,7 +417,6 @@ class Batch(object):
         defaults = common.get_default_args()
         global_args = [
             'bluestore',
-            'filestore',
             'dmcrypt',
             'crush_device_class',
             'no_systemd',
@@ -473,8 +436,6 @@ class Batch(object):
         if args.bluestore:
             plan = self.get_deployment_layout(args, args.devices, args.db_devices,
                                               args.wal_devices)
-        elif args.filestore:
-            plan = self.get_deployment_layout(args, args.devices, args.journal_devices)
         return plan
 
     def get_deployment_layout(self, args, devices, fast_devices=[],
@@ -500,7 +461,8 @@ class Batch(object):
             return plan
         requested_osds = args.osds_per_device * len(phys_devs) + len(lvm_devs)
 
-        fast_type = 'block_db' if args.bluestore else 'journal'
+        if args.bluestore:
+            fast_type = 'block_db'
         fast_allocations = self.fast_allocations(fast_devices,
                                                  requested_osds,
                                                  num_osds,

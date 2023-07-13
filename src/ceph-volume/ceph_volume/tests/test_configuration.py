@@ -19,7 +19,7 @@ tabbed_conf = """
 
 class TestConf(object):
 
-    def setup(self):
+    def setup_method(self):
         self.conf_file = StringIO(dedent("""
         [foo]
         default = 0

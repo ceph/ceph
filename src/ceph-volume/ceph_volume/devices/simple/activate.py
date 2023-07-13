@@ -9,7 +9,6 @@ from textwrap import dedent
 from ceph_volume import process, decorators, terminal, conf
 from ceph_volume.util import system, disk
 from ceph_volume.util import encryption as encryption_utils
-from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.systemd import systemctl
 
 
@@ -36,29 +35,15 @@ class Activate(object):
         try:
             objectstore = json_config['type']
         except KeyError:
-            if {'data', 'journal'}.issubset(set(devices)):
-                logger.warning(
-                    '"type" key not found, assuming "filestore" since journal key is present'
-                )
-                objectstore = 'filestore'
-            else:
-                logger.warning(
-                    '"type" key not found, assuming "bluestore" since journal key is not present'
-                )
-                objectstore = 'bluestore'
+            logger.warning(
+                '"type" key not found, assuming "bluestore" since journal key is not present'
+            )
+            objectstore = 'bluestore'
 
         # Go through all the device combinations that are absolutely required,
         # raise an error describing what was expected and what was found
         # otherwise.
-        if objectstore == 'filestore':
-            if {'data', 'journal'}.issubset(set(devices)):
-                return True
-            else:
-                found = [i for i in devices if i in ['data', 'journal']]
-                mlogger.error("Required devices (data, and journal) not present for filestore")
-                mlogger.error('filestore devices found: %s', found)
-                raise RuntimeError('Unable to activate filestore OSD due to missing devices')
-        else:
+        if objectstore == 'bluestore':
             # This is a bit tricky, with newer bluestore we don't need data, older implementations
             # do (e.g. with ceph-disk). ceph-volume just uses a tmpfs that doesn't require data.
             if {'block', 'data'}.issubset(set(devices)):
@@ -176,19 +161,14 @@ class Activate(object):
                 "be skipped, consider cleaning legacy "
                 "json file {}".format(osd_metadata['fsid'], args.json_config))
 
-        journal_device = self.get_device(osd_metadata.get('journal', {}).get('uuid'))
         block_device = self.get_device(osd_metadata.get('block', {}).get('uuid'))
         block_db_device = self.get_device(osd_metadata.get('block.db', {}).get('uuid'))
         block_wal_device = self.get_device(osd_metadata.get('block.wal', {}).get('uuid'))
 
         if not system.device_is_mounted(data_device, destination=osd_dir):
-            if osd_metadata.get('type') == 'filestore':
-                prepare_utils.mount_osd(data_device, osd_id)
-            else:
-                process.run(['mount', '-v', data_device, osd_dir])
+            process.run(['mount', '-v', data_device, osd_dir])
 
         device_map = {
-            'journal': journal_device,
             'block': block_device,
             'block.db': block_db_device,
             'block.wal': block_wal_device

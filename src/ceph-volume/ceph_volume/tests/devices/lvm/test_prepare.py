@@ -1,7 +1,7 @@
 import pytest
 from ceph_volume.devices import lvm
 from ceph_volume.api import lvm as api
-from mock.mock import patch, Mock, MagicMock
+from mock.mock import patch, Mock
 
 
 class TestLVM(object):
@@ -62,58 +62,8 @@ class TestPrepare(object):
         with pytest.raises(SystemExit):
             lvm.prepare.Prepare(argv=['--help']).main()
         stdout, stderr = capsys.readouterr()
-        assert 'Use the filestore objectstore' in stdout
         assert 'Use the bluestore objectstore' in stdout
         assert 'A physical device or logical' in stdout
-
-
-    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
-    def test_excludes_filestore_bluestore_flags(self, m_has_bs_label, fake_call, capsys, device_info):
-        device_info()
-        with pytest.raises(SystemExit):
-            lvm.prepare.Prepare(argv=['--data', '/dev/sdfoo', '--filestore', '--bluestore']).main()
-        stdout, stderr = capsys.readouterr()
-        expected = 'Cannot use --filestore (filestore) with --bluestore (bluestore)'
-        assert expected in stderr
-
-
-    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
-    def test_excludes_other_filestore_bluestore_flags(self, m_has_bs_label, fake_call, capsys, device_info):
-        device_info()
-        with pytest.raises(SystemExit):
-            lvm.prepare.Prepare(argv=[
-                '--bluestore', '--data', '/dev/sdfoo',
-                '--journal', '/dev/sf14',
-            ]).main()
-        stdout, stderr = capsys.readouterr()
-        expected = 'Cannot use --bluestore (bluestore) with --journal (filestore)'
-        assert expected in stderr
-
-    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
-    def test_excludes_block_and_journal_flags(self, m_has_bs_label, fake_call, capsys, device_info):
-        device_info()
-        with pytest.raises(SystemExit):
-            lvm.prepare.Prepare(argv=[
-                '--bluestore', '--data', '/dev/sdfoo', '--block.db', 'vg/ceph1',
-                '--journal', '/dev/sf14',
-            ]).main()
-        stdout, stderr = capsys.readouterr()
-        expected = 'Cannot use --block.db (bluestore) with --journal (filestore)'
-        assert expected in stderr
-
-    @patch('ceph_volume.util.arg_validators.Device')
-    @patch('ceph_volume.util.disk.has_bluestore_label', return_value=False)
-    def test_journal_is_required_with_filestore(self, m_has_bs_label, m_device, is_root, monkeypatch, device_info):
-        m_device.return_value = MagicMock(exists=True,
-                                          has_fs=False,
-                                          used_by_ceph=False,
-                                          has_partitions=False,
-                                          has_gpt_headers=False)
-        monkeypatch.setattr("os.path.exists", lambda path: True)
-        with pytest.raises(SystemExit) as error:
-            lvm.prepare.Prepare(argv=['--filestore', '--data', '/dev/sdfoo']).main()
-        expected = '--journal is required when using --filestore'
-        assert expected in str(error.value)
 
     @patch('ceph_volume.devices.lvm.prepare.api.is_ceph_device')
     def test_safe_prepare_osd_already_created(self, m_is_ceph_device):
