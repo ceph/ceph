@@ -97,6 +97,8 @@ Batch::Batch(const executor_type& ex, std::chrono::nanoseconds batch_timeout)
 
 void Batch::complete(MD5_HASH_CTX* ctx, MD5_HASH_CTX* submit_ctx)
 {
+  --pending_count;
+
   error_code ec;
   if (int err = hash_ctx_error(ctx);
       err != HASH_CTX_ERROR_NONE) {
@@ -138,6 +140,8 @@ void Batch::init_async_hash(
     flag |= HASH_LAST;
   }
 
+  ++pending_count;
+
   // submit the ctx and maybe complete a batch
   auto submit_ctx = &digest.ctx;
   auto ctx = ::md5_ctx_mgr_submit(&mgr, submit_ctx, input.data(), input.size(),
@@ -152,8 +156,9 @@ void Batch::init_async_hash(
       // on a successful completion, flush results for the rest of the batch
       flush(submit_ctx);
     }
-  } else if (batch_timeout.count()) {
-    // results pending on a full batch, arm the timeout
+  } else if (pending_count == 1 &&
+             batch_timeout.count()) {
+    // if we just started a new batch, arm the timeout
     timer.expires_after(batch_timeout);
     timer.async_wait([this] (error_code ec) {
           if (!ec) {

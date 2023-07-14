@@ -101,6 +101,7 @@ class Batch {
   MD5_HASH_CTX_MGR mgr;
   executor_type ex;
   boost::asio::steady_timer timer;
+  uint32_t pending_count = 0;
   std::chrono::nanoseconds batch_timeout;
 
   void complete(MD5_HASH_CTX* ctx, MD5_HASH_CTX* submit_ctx);
