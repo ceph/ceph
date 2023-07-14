@@ -7,6 +7,7 @@
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
 #include "BtreeAllocator.h"
+#include "Btree2Allocator.h"
 #include "HybridAllocator.h"
 #include "common/debug.h"
 #include "common/admin_socket.h"
@@ -185,6 +186,11 @@ Allocator *Allocator::create(
   } else if (type == "hybrid") {
     return new HybridAvlAllocator(cct, size, block_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+      name);
+  }  else if (type == "hybrid_btree2") {
+    return new HybridBtree2Allocator(cct, size, block_size,
+      cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+      cct->_conf.get_val<double>("bluestore_btree2_alloc_weight_factor"),
       name);
   }
   if (alloc == nullptr) {
