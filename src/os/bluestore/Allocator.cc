@@ -7,6 +7,7 @@
 #include "BitmapAllocator.h"
 #include "AvlAllocator.h"
 #include "BtreeAllocator.h"
+#include "Btree2Allocator.h"
 #include "HybridAllocator.h"
 #ifdef HAVE_LIBZBD
 #include "ZonedAllocator.h"
@@ -196,6 +197,11 @@ Allocator *Allocator::create(
     return new ZonedAllocator(cct, size, block_size, zone_size, first_sequential_zone,
 			      name);
 #endif
+  }  else if (type == "hybrid_btree2") {
+    return new HybridBtree2Allocator(cct, size, block_size,
+      cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
+      cct->_conf.get_val<double>("bluestore_btree2_alloc_weight_factor"),
+      name);
   }
   if (alloc == nullptr) {
     lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
