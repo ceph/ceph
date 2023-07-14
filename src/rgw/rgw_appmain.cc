@@ -474,6 +474,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       constexpr auto batch_timeout = std::chrono::milliseconds(20);
       md5.emplace(boost::asio::make_strand(context_pool->get_executor()),
                   batch_timeout);
+      env.md5 = &*md5;
     }
     else if (framework == "rgw-nfs") {
       fe = new RGWLibFrontend(env, config);

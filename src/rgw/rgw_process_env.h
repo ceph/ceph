@@ -9,6 +9,9 @@ class ActiveRateLimiter;
 class OpsLogSink;
 class RGWREST;
 
+namespace ceph::async_md5 {
+class Batch;
+}
 namespace rgw {
   class SiteConfig;
 }
@@ -51,5 +54,7 @@ struct RGWProcessEnv {
   rgw::flight::FlightServer* flight_server = nullptr;
   rgw::flight::FlightStore* flight_store = nullptr;
 #endif
+
+  ceph::async_md5::Batch* md5 = nullptr;
 };
 

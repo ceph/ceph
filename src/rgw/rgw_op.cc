@@ -22,6 +22,8 @@
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
 #include "common/perf_counters_key.h"
+#include "common/async/blocked_completion.h"
+#include "async_md5.h"
 #include "rgw_tracer.h"
 
 #include "rgw_rados.h"
@@ -4131,15 +4133,32 @@ int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
   return 0;
 }
 
+static int async_hash(const DoutPrefixProvider* dpp,
+                      ceph::async_md5::Batch& batch,
+                      ceph::async_md5::Digest& digest,
+                      std::string_view input, bool last,
+                      optional_yield y)
+{
+  boost::system::error_code ec;
+  if (y) {
+    batch.async_hash(digest, input, last, y.get_yield_context()[ec]);
+  } else {
+    batch.async_hash(digest, input, last, ceph::async::use_blocked[ec]);
+  }
+  if (ec) {
+    const int ret = -EIO;
+    ldpp_dout(dpp, 1) << "async_hash failed with " << ec.message()
+        << ", returning " << ret << dendl;
+    return ret;
+  }
+  return 0;
+}
+
 void RGWPutObj::execute(optional_yield y)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  ceph::async_md5::Digest digest;
   bufferlist bl, aclbl, bs;
   int len;
   
@@ -4396,7 +4415,11 @@ void RGWPutObj::execute(optional_yield y)
     }
 
     if (need_calc_md5) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      const auto input = std::string_view{data.c_str(), data.length()};
+      op_ret = async_hash(this, *s->penv.md5, digest, input, false, y);
+      if (op_ret < 0) {
+        return;
+      }
     }
 
     op_ret = filter->process(std::move(data), ofs);
@@ -4436,7 +4459,12 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
-  hash.Final(m);
+  // finalize the etag
+  op_ret = async_hash(this, *s->penv.md5, digest, "", true, y);
+  if (op_ret < 0) {
+    return;
+  }
+  etag = digest.as_hex();
 
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
@@ -4464,11 +4492,7 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-
-  etag = calc_md5;
-
-  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+  if (supplied_md5_b64 && etag != supplied_md5) {
     op_ret = -ERR_BAD_DIGEST;
     return;
   }
