@@ -195,7 +195,7 @@ Allocator *Allocator::create(
 
 void Allocator::release(const PExtentVector& release_vec)
 {
-  interval_set<uint64_t> release_set;
+  release_set_t release_set;
   for (auto e : release_vec) {
     release_set.insert(e.offset, e.length);
   }

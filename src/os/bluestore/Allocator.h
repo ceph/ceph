@@ -17,7 +17,11 @@
 #include "include/ceph_assert.h"
 #include "bluestore_types.h"
 
+typedef interval_set<uint64_t> release_set_t;
+typedef release_set_t::value_type release_set_entry_t;
+
 class Allocator {
+
 public:
   Allocator(std::string_view name,
 	    int64_t _capacity,
@@ -49,7 +53,7 @@ public:
 
   /* Bulk release. Implementations may override this method to handle the whole
    * set at once. This could save e.g. unnecessary mutex dance. */
-  virtual void release(const interval_set<uint64_t>& release_set) = 0;
+  virtual void release(const release_set_t& release_set) = 0;
   void release(const PExtentVector& release_set);
 
   virtual void dump() = 0;
