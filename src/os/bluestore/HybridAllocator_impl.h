@@ -39,8 +39,9 @@ int64_t HybridAllocatorBase<T>::allocate(
 
   // try bitmap first to avoid unneeded contiguous extents split if
   // desired amount is less than shortes range in AVL
-  bool primary_first = !(bmap_alloc && bmap_alloc->get_free() &&
-    want < T::_lowest_size_available());
+  bool primary_first = !(bmap_alloc &&
+                         bmap_alloc->get_free() &&
+                         want < T::_lowest_size_available());
 
   int64_t res = _allocate_or_rollback(primary_first,
     want, unit, max_alloc_size, hint, extents);
