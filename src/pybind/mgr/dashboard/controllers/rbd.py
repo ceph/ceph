@@ -11,6 +11,7 @@ import cherrypy
 import rbd
 
 from .. import mgr
+from ..controllers.pool import RBDPool
 from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -205,9 +206,19 @@ class RbdStatus(BaseController):
         status = {'available': True, 'message': None}
         if not CephService.get_pool_list('rbd'):
             status['available'] = False
-            status['message'] = 'No RBD pools in the cluster. Please create a pool '\
-                                'with the "rbd" application label.'  # type: ignore
+            status['message'] = 'No Block Pool is available in the cluster. Please click ' \
+                                'on \"Configure Default Pool\" button to ' \
+                                'get started.'  # type: ignore
         return status
+
+    @Endpoint('POST')
+    @EndpointDoc('Configure Default Block Pool')
+    @CreatePermission
+    def configure(self):
+        rbd_pool = RBDPool()
+
+        if not CephService.get_pool_list('rbd'):
+            rbd_pool.create('rbd')
 
 
 @APIRouter('/block/image/{image_spec}/snap', Scope.RBD_IMAGE)

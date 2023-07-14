@@ -96,9 +96,11 @@ const routes: Routes = [
       moduleStatusGuardConfig: {
         uiApiPath: 'block/rbd',
         redirectTo: 'error',
-        header: 'No RBD pools available',
-        button_name: 'Create RBD pool',
-        button_route: '/pool/create'
+        header: $localize`Block Pool is not configured`,
+        button_name: $localize`Configure Default pool`,
+        button_route: '/pool/create',
+        component: 'Default Pool',
+        uiConfig: true
       },
       breadcrumbs: 'Images'
     },
@@ -154,10 +156,10 @@ const routes: Routes = [
       moduleStatusGuardConfig: {
         uiApiPath: 'block/mirroring',
         redirectTo: 'error',
-        header: $localize`RBD mirroring is not configured`,
-        button_name: $localize`Configure RBD Mirroring`,
-        button_title: $localize`This will create rbd-mirror service and a replicated RBD pool`,
-        component: 'RBD Mirroring',
+        header: $localize`Block Mirroring is not configured`,
+        button_name: $localize`Configure Block Mirroring`,
+        button_title: $localize`This will create \"rbd-mirror\" service and a replicated Block pool`,
+        component: 'Block Mirroring',
         uiConfig: true
       },
       breadcrumbs: 'Mirroring'
