@@ -140,6 +140,7 @@ case "$DEVICE" in
         ;;
     *)
         npx cypress run $CYPRESS_ARGS --browser $DEVICE --headless || stop 1
+        npm run merge-reports && npm run mochawesome-report
         ;;
 esac
 

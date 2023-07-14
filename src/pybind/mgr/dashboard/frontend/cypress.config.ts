@@ -10,9 +10,13 @@ export default defineConfig({
   projectId: 'k7ab29',
   reporter: 'cypress-multi-reporters',
   reporterOptions: {
-    reporterEnabled: 'spec, mocha-junit-reporter',
-    mochaJunitReporterReporterOptions: {
-      mochaFile: 'cypress/reports/results-[hash].xml',
+    reporterEnabled: 'mochawesome',
+    mochawesomeReporterOptions: {
+      reportDir: 'cypress/reports/mochawesome',
+      overwrite: false,
+      saveJson: true,
+      saveHtml: false,
+      quiet: true
     },
   },
   retries: 1,
