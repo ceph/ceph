@@ -10,6 +10,7 @@
 #include "HybridAllocator.h"
 #include "common/debug.h"
 #include "common/admin_socket.h"
+
 #define dout_subsys ceph_subsys_bluestore
 using TOPNSPC::common::cmd_getval;
 
@@ -182,7 +183,7 @@ Allocator *Allocator::create(
   } else if (type == "btree") {
     return new BtreeAllocator(cct, size, block_size, name);
   } else if (type == "hybrid") {
-    return new HybridAllocator(cct, size, block_size,
+    return new HybridAvlAllocator(cct, size, block_size,
       cct->_conf.get_val<uint64_t>("bluestore_hybrid_alloc_mem_cap"),
       name);
   }
