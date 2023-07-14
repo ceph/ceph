@@ -2057,7 +2057,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     @profile_method()
-    def get_all_perf_counters(self, prio_limit: int = PRIO_USEFUL,
+    def get_unlabeled_perf_counters(self, prio_limit: int = PRIO_USEFUL,
                               services: Sequence[str] = ("mds", "mon", "osd",
                                                          "rbd-mirror", "rgw",
                                                          "tcmu-runner")) -> Dict[str, dict]:
