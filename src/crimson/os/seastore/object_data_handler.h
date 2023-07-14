@@ -19,10 +19,12 @@ namespace crimson::os::seastore {
 struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
   using Ref = TCachedExtentRef<ObjectDataBlock>;
 
-  ObjectDataBlock(ceph::bufferptr &&ptr)
+  explicit ObjectDataBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
-  ObjectDataBlock(const ObjectDataBlock &other)
+  explicit ObjectDataBlock(const ObjectDataBlock &other)
     : LogicalCachedExtent(other) {}
+  explicit ObjectDataBlock(extent_len_t length)
+    : LogicalCachedExtent(length) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new ObjectDataBlock(*this));
