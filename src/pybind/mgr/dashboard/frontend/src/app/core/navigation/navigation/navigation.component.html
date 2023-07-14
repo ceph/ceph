@@ -174,6 +174,12 @@
                      class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
             </a>
           </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_upgrade"
+              *ngIf="permissions.configOpt.read">
+            <a i18n
+               routerLink="/upgrade">Upgrade</a>
+          </li>
         </ul>
       </li>
 
