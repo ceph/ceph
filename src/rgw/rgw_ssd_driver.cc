@@ -458,13 +458,14 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
-    for (auto& it : attrs) {
-        std::string attr_val;
-        ceph::decode(attr_val, it.second);
-        auto ret = set_attr(dpp, key, it.first, attr_val);
-        if (ret < 0) {
-            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << it.first << " key: " << key << dendl;
-            return ret;
+    for (auto& [attr_name, attr_val_bl] : attrs) {
+        ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): attr_name = " << attr_name << " attr_val_bl length: " << attr_val_bl.length() << dendl;
+        if (attr_val_bl.length() != 0) {
+            auto ret = set_attr(dpp, key, attr_name, attr_val_bl.c_str());
+            if (ret < 0) {
+                ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << attr_name << " key: " << key << dendl;
+                return ret;
+            }
         }
     }
     return 0;
