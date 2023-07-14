@@ -636,6 +636,59 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrepareRemoteImageNotPrimaryLocalL
   ASSERT_EQ(0, ctx.wait());
 }
 
+TEST_F(TestMockImageReplayerBootstrapRequest, PrepareRemoteImageDNELocalLinked) {
+  InSequence seq;
+
+  // prepare local image
+  MockPrepareLocalImageRequest mock_prepare_local_image_request;
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_prepare_local_image_request, mock_state_builder,
+              m_local_image_ctx->id, m_local_image_ctx->name, 0);
+
+  // prepare remote image
+  MockPrepareRemoteImageRequest mock_prepare_remote_image_request;
+  expect_send(mock_prepare_remote_image_request, mock_state_builder,
+              "remote mirror uuid", m_remote_image_ctx->id, -ENOENT);
+  expect_is_local_primary(mock_state_builder, false);
+  expect_is_linked(mock_state_builder, true);
+
+  C_SaferCond ctx;
+  MockThreads mock_threads(m_threads);
+  MockInstanceWatcher mock_instance_watcher;
+  MockBootstrapRequest *request = create_request(
+    &mock_threads, &mock_instance_watcher, "global image id",
+    "local mirror uuid", &ctx);
+  request->send();
+  ASSERT_EQ(-ENOLINK, ctx.wait());
+}
+
+TEST_F(TestMockImageReplayerBootstrapRequest, PrepareRemoteImageDNELocalLinkedCanceled) {
+  InSequence seq;
+
+  // prepare local image
+  MockPrepareLocalImageRequest mock_prepare_local_image_request;
+  MockStateBuilder mock_state_builder;
+  expect_send(mock_prepare_local_image_request, mock_state_builder,
+              m_local_image_ctx->id, m_local_image_ctx->name, 0);
+
+  // prepare remote image
+  MockPrepareRemoteImageRequest mock_prepare_remote_image_request;
+  expect_send(mock_prepare_remote_image_request, mock_state_builder,
+              "remote mirror uuid", m_remote_image_ctx->id, -ENOENT);
+  expect_is_local_primary(mock_state_builder, false);
+  expect_is_linked(mock_state_builder, true);
+
+  C_SaferCond ctx;
+  MockThreads mock_threads(m_threads);
+  MockInstanceWatcher mock_instance_watcher;
+  MockBootstrapRequest *request = create_request(
+    &mock_threads, &mock_instance_watcher, "global image id",
+    "local mirror uuid", &ctx);
+  request->cancel();
+  request->send();
+  ASSERT_EQ(-ENOLINK, ctx.wait());
+}
+
 TEST_F(TestMockImageReplayerBootstrapRequest, OpenLocalImageError) {
   InSequence seq;
 
