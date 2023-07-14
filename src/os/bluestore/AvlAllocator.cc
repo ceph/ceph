@@ -324,7 +324,7 @@ int AvlAllocator::_allocate(
   return 0;
 }
 
-void AvlAllocator::_release(const interval_set<uint64_t>& release_set)
+void AvlAllocator::_release(const release_set_t& release_set)
 {
   for (auto p = release_set.begin(); p != release_set.end(); ++p) {
     const auto offset = p.get_start();
@@ -417,7 +417,7 @@ int64_t AvlAllocator::allocate(
   return _allocate(want, unit, max_alloc_size, hint, extents);
 }
 
-void AvlAllocator::release(const interval_set<uint64_t>& release_set) {
+void AvlAllocator::release(const release_set_t& release_set) {
   std::lock_guard l(lock);
   _release(release_set);
 }
