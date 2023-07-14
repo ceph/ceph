@@ -120,6 +120,11 @@ def _install_deps(tempdir):
     """Install dependencies with pip."""
     # TODO we could explicitly pass a python version here
     log.info("Installing dependencies")
+    # best effort to disable compilers, packages in the zipapp
+    # must be pure python.
+    env = os.environ.copy()
+    env['CC'] = '/bin/false'
+    env['CXX'] = '/bin/false'
     # apparently pip doesn't have an API, just a cli.
     subprocess.check_call(
         [
@@ -127,11 +132,14 @@ def _install_deps(tempdir):
             "-m",
             "pip",
             "install",
+            "--no-binary",
+            ":all:",
             "--requirement",
             "requirements.txt",
             "--target",
             tempdir,
-        ]
+        ],
+        env=env,
     )
 
 
