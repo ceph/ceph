@@ -266,7 +266,9 @@ protected:
 
   uint64_t _lowest_size_available() {
     auto rs = range_size_tree.begin();
-    return rs != range_size_tree.end() ? rs->length() : std::numeric_limits<uint16_t>::max();
+    return rs != range_size_tree.end() ?
+      rs->length() :
+      std::numeric_limits<uint64_t>::max();
   }
 
   int64_t _allocate(

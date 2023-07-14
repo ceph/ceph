@@ -173,7 +173,9 @@ private:
 
   uint64_t _lowest_size_available() const {
     auto rs = range_size_tree.begin();
-    return rs != range_size_tree.end() ? rs->size : 0;
+    return rs != range_size_tree.end() ?
+      rs->size :
+      std::numeric_limits<uint64_t>::max();
   }
 
   int64_t _allocate(
