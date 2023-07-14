@@ -1,7 +1,6 @@
 #ifndef CEPH_REDISDRIVER_H
 #define CEPH_REDISDRIVER_H
 
-#include <aedis.hpp>
 #include <aio.h>
 #include "common/async/completion.h"
 #include "rgw_common.h"
