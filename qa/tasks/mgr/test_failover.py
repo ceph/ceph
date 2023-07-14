@@ -146,3 +146,37 @@ class TestFailover(MgrTestCase):
             timeout=60
         )
         self.assertEqual(self.mgr_cluster.get_active_id(), original_active)
+
+class TestLibCephSQLiteFailover(MgrTestCase):
+    MGRS_REQUIRED = 1
+
+    def setUp(self):
+        super(TestLibCephSQLiteFailover, self).setUp()
+        self.setup_mgrs()
+
+    def get_libcephsqlite(self):
+        mgr_map = self.mgr_cluster.get_mgr_map()
+        addresses = self.mgr_cluster.get_registered_clients('libcephsqlite', mgr_map=mgr_map)
+        self.assertEqual(len(addresses), 1)
+        return addresses[0]
+
+    def test_maybe_reonnect(self):
+        """
+        That the devicehealth module can recover after losing its libcephsqlite lock.
+        """
+
+        # make sure the database is populated and loaded by the module
+        self.mgr_cluster.mon_manager.ceph("device scrape-health-metrics")
+
+        oldaddr = self.get_libcephsqlite()
+        self.mgr_cluster.mon_manager.ceph(f"osd blocklist add {oldaddr['addr']}/{oldaddr['nonce']}")
+
+        def test():
+            self.mgr_cluster.mon_manager.ceph("device scrape-health-metrics")
+            newaddr = self.get_libcephsqlite()
+            return oldaddr != newaddr
+
+        self.wait_until_true(
+            test,
+            timeout=30
+        )
