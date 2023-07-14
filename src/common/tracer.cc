@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "common/ceph_context.h"
-#include "global/global_context.h"
 #include "tracer.h"
 #include "common/debug.h"
 
@@ -11,10 +10,9 @@
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
 
-#define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
-#define dout_prefix *_dout << "opentelemetry_jaeger_tracing "
+#define dout_prefix (*_dout << "otel_tracing: ")
 
 namespace tracing {
 
@@ -23,17 +21,13 @@ const jspan Tracer::noop_span = noop_tracer->StartSpan("noop");
 
 using bufferlist = ceph::buffer::list;
 
-Tracer::Tracer(opentelemetry::nostd::string_view service_name) {
-  init(service_name);
-}
-
-void Tracer::init(opentelemetry::nostd::string_view service_name) {
+void Tracer::init(CephContext* _cct, opentelemetry::nostd::string_view service_name) {
+  ceph_assert(_cct);
+  cct = _cct;
   if (!tracer) {
-    dout(3) << "tracer was not loaded, initializing tracing" << dendl;
+    ldout(cct, 3) << "tracer was not loaded, initializing tracing" << dendl;
     opentelemetry::exporter::jaeger::JaegerExporterOptions exporter_options;
-    if (g_ceph_context) {
-      exporter_options.server_port = g_ceph_context->_conf.get_val<int64_t>("jaeger_agent_port");
-    }
+    exporter_options.server_port = cct->_conf.get_val<int64_t>("jaeger_agent_port");
     const opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
     const auto jaeger_resource = opentelemetry::sdk::resource::Resource::Create(std::move(opentelemetry::sdk::resource::ResourceAttributes{{"service.name", service_name}}));
     auto jaeger_exporter = std::unique_ptr<opentelemetry::sdk::trace::SpanExporter>(new opentelemetry::exporter::jaeger::JaegerExporter(exporter_options));
@@ -45,44 +39,52 @@ void Tracer::init(opentelemetry::nostd::string_view service_name) {
 }
 
 jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name) {
+  ceph_assert(cct);
   if (is_enabled()) {
-    dout(20) << "start trace for " << trace_name << " " << dendl;
+    ceph_assert(tracer);
+    ldout(cct, 20) << "start trace for " << trace_name << " " << dendl;
     return tracer->StartSpan(trace_name);
   }
   return noop_span;
 }
 
 jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool trace_is_enabled) {
-  dout(20) << "start trace enabled " << trace_is_enabled << " " << dendl;
+  ceph_assert(cct);
+  ldout(cct, 20) << "start trace enabled " << trace_is_enabled << " " << dendl;
   if (trace_is_enabled) {
-    dout(20) << "start trace for " << trace_name << " " << dendl;
+    ceph_assert(tracer);
+    ldout(cct, 20) << "start trace for " << trace_name << " " << dendl;
     return tracer->StartSpan(trace_name);
   }
   return noop_tracer->StartSpan(trace_name);
 }
 
 jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span) {
+  ceph_assert(cct);
   if (is_enabled() && parent_span->IsRecording()) {
+    ceph_assert(tracer);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_span->GetContext();
-    dout(20) << "adding span " << span_name << " " << dendl;
+    ldout(cct, 20) << "adding span " << span_name << " " << dendl;
     return tracer->StartSpan(span_name, span_opts);
   }
   return noop_span;
 }
 
 jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
+  ceph_assert(cct);
   if (is_enabled() && parent_ctx.IsValid()) {
+    ceph_assert(tracer);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_ctx;
-    dout(20) << "adding span " << span_name << " " << dendl;
+    ldout(cct, 20) << "adding span " << span_name << " " << dendl;
     return tracer->StartSpan(span_name, span_opts);
   }
   return noop_span;
 }
 
 bool Tracer::is_enabled() const {
-  return g_ceph_context->_conf->jaeger_tracing_enable;
+  return cct->_conf->jaeger_tracing_enable;
 }
 
 void encode(const jspan_context& span_ctx, bufferlist& bl, uint64_t f) {
@@ -123,3 +125,4 @@ void decode(jspan_context& span_ctx, bufferlist::const_iterator& bl) {
 } // namespace tracing
 
 #endif // HAVE_JAEGER
+

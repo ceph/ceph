@@ -164,7 +164,7 @@ CctCleaner cleaner(g_cct);
 tracing::Tracer tracer;
 
 #define DEFINE_REQ_STATE RGWProcessEnv pe; RGWEnv e; req_state s(g_cct, pe, &e, 0);
-#define INIT_TRACE tracer.init("test"); \
+#define INIT_TRACE tracer.init(g_cct, "test"); \
                    s.trace = tracer.start_trace("test", true);
 
 TEST(TestRGWLua, EmptyScript)
