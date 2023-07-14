@@ -347,10 +347,6 @@ void ImageReplayer<I>::bootstrap() {
   ceph_assert(!m_peers.empty());
   m_remote_image_peer = *m_peers.begin();
 
-  if (on_start_interrupted(m_lock)) {
-    return;
-  }
-
   ceph_assert(m_state_builder == nullptr);
   auto ctx = create_context_callback<
       ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
@@ -363,6 +359,13 @@ void ImageReplayer<I>::bootstrap() {
 
   request->get();
   m_bootstrap_request = request;
+
+  // proceed even if stop was requested to allow for m_delete_requested
+  // to get set; cancel() would prevent BootstrapRequest from going into
+  // image sync
+  if (m_stop_requested) {
+    request->cancel();
+  }
   locker.unlock();
 
   update_mirror_image_status(false, boost::none);
@@ -376,6 +379,14 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     std::lock_guard locker{m_lock};
     m_bootstrap_request->put();
     m_bootstrap_request = nullptr;
+  }
+
+  // set m_delete_requested early to ensure that in case remote
+  // image no longer exists local image gets deleted even if start
+  // is interrupted
+  if (r == -ENOLINK) {
+    dout(5) << "remote image no longer exists" << dendl;
+    m_delete_requested = true;
   }
 
   if (on_start_interrupted()) {
@@ -392,7 +403,6 @@ void ImageReplayer<I>::handle_bootstrap(int r) {
     on_start_fail(r, "split-brain detected");
     return;
   } else if (r == -ENOLINK) {
-    m_delete_requested = true;
     on_start_fail(0, "remote image no longer exists");
     return;
   } else if (r == -ERESTART) {
