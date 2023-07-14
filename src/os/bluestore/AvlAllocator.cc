@@ -177,6 +177,11 @@ void AvlAllocator::_remove_from_tree(uint64_t start, uint64_t size)
   ceph_assert(size != 0);
   ceph_assert(size <= num_free);
 
+  //FIXME minor: techically this is wrong since find should return end()
+  // if exact matching offset isn't found. Which might be the case when we're
+  // trying to remove a subchunk from the middle of existing chunk.
+  // But it looks like avl containers tolerate this thing and return the chunk
+  // before the 'start' offset.
   auto rs = range_tree.find(range_t{start, end}, range_tree.key_comp());
   /* Make sure we completely overlap with someone */
   if (rs == range_tree.end() ||
@@ -360,6 +365,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
                            uint64_t max_mem,
                            std::string_view name) :
   Allocator(name, device_size, block_size),
+  cct(cct),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
   range_size_alloc_free_pct(
@@ -368,8 +374,7 @@ AvlAllocator::AvlAllocator(CephContext* cct,
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_ff_max_search_count")),
   max_search_bytes(
     cct->_conf.get_val<Option::size_t>("bluestore_avl_alloc_ff_max_search_bytes")),
-  range_count_cap(max_mem / sizeof(range_seg_t)),
-  cct(cct)
+  range_count_cap(max_mem / sizeof(range_seg_t))
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << get_capacity() << "/"
                  << get_block_size() << std::dec << dendl;

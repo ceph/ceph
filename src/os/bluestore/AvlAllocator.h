@@ -229,6 +229,21 @@ private:
     // i.e. (range_count_cap > 0)
     ceph_assert(false);
   }
+  // to be overriden by Hybrid wrapper
+  virtual uint64_t _get_spilled_over() const {
+    return 0;
+  }
+  virtual uint64_t _spillover_allocate(uint64_t want,
+                                      uint64_t unit,
+                                      uint64_t max_alloc_size,
+                                      int64_t  hint,
+                                      PExtentVector* extents) {
+    // this should be overriden when range count cap is present,
+    // i.e. (range_count_cap > 0)
+    ceph_assert(false);
+    return 0;
+  }
+
 protected:
   // called when extent to be released/marked free
   virtual void _add_to_tree(uint64_t start, uint64_t size);
