@@ -6,6 +6,7 @@
 #include <mutex>
 
 #include "AvlAllocator.h"
+#include "Btree2Allocator.h"
 #include "BitmapAllocator.h"
 
 template <typename PrimaryAllocator>
@@ -73,7 +74,6 @@ protected:
     return bmap_alloc;
   }
 private:
-
   void _spillover_range(uint64_t start, uint64_t end) override;
   uint64_t _spillover_allocate(uint64_t want,
     uint64_t unit,
@@ -122,3 +122,30 @@ public:
   const char* get_type() const override;
 };
 
+
+class HybridBtree2Allocator : public HybridAllocatorBase<Btree2Allocator>
+{
+public:
+  HybridBtree2Allocator(CephContext* cct,
+    int64_t device_size,
+    int64_t _block_size,
+    uint64_t max_mem,
+    double weight_factor,
+    std::string_view name) :
+      HybridAllocatorBase<Btree2Allocator>(cct,
+					  device_size,
+					  _block_size,
+					  max_mem,
+					  name) {
+    set_weight_factor(weight_factor);
+  }
+  const char* get_type() const override;
+
+  int64_t allocate(
+    uint64_t want,
+    uint64_t unit,
+    uint64_t max_alloc_size,
+    int64_t  hint,
+    PExtentVector* extents) override;
+  void release(const release_set_t& release_set) override;
+};
