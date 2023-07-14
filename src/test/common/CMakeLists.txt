@@ -316,12 +316,16 @@ target_link_libraries(unittest_dns_resolve global)
 add_ceph_unittest(unittest_dns_resolve)
 endif()
 
+# We're getting an ICE when trying to compile this test using mingw-gcc and
+# recent Boost versions. Note that mingw-llvm works fine.
+if (NOT WIN32 OR (NOT(CMAKE_CXX_COMPILER_ID STREQUAL GNU)))
 add_executable(unittest_back_trace
   test_back_trace.cc)
 set_source_files_properties(test_back_trace.cc PROPERTIES
   COMPILE_FLAGS -fno-inline)
 add_ceph_unittest(unittest_back_trace)
 target_link_libraries(unittest_back_trace ceph-common)
+endif()
 
 add_executable(unittest_hostname
     test_hostname.cc)
