@@ -208,31 +208,32 @@ A Ceph daemon has the ability to emit a set of perf counter instances with varyi
 For example, the below counters show the number of put requests for different users on different buckets::
 
   {
-    "rgw": {
-        "labels": {
-            "Bucket: "bkt1",
-            "User: "user1",
-        },
-        "counters": {
-            "put": 1,
-        },
-    },
-    "rgw": {
-        "labels": {
-        },
-        "counters": {
-            "put": 4,
-        },
-    },
-    "rgw": {
-        "labels": {
-            "Bucket: "bkt1",
-            "User: "user2",
-        },
-        "counters": {
-            "put": 3,
-        },
-    }
+      "rgw": [
+          {
+              "labels": {
+                  "Bucket: "bkt1",
+                  "User: "user1",
+              },
+              "counters": {
+                  "put": 1,
+              },
+          },
+          {
+              "labels": {},
+              "counters": {
+                  "put": 4,
+              },
+          },
+          {
+              "labels": {
+                  "Bucket: "bkt1",
+                  "User: "user2",
+              },
+              "counters": {
+                  "put": 3,
+              },
+          },
+      ]
   }
 
 All labeled and unlabeled perf counters can be viewed with ``ceph daemon {daemon id} counter dump``. 
