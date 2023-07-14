@@ -167,7 +167,7 @@ class CephfsConnectionPool(object):
             logger.debug("CephFS mounting...")
             self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
             logger.debug("Connection to cephfs '{0}' complete".format(self.fs_name))
-            self.mgr._ceph_register_client(self.fs.get_addrs())
+            self.mgr._ceph_register_client(None, self.fs.get_addrs(), False)
 
         def disconnect(self) -> None:
             try:
@@ -176,7 +176,7 @@ class CephfsConnectionPool(object):
                 logger.info("disconnecting from cephfs '{0}'".format(self.fs_name))
                 addrs = self.fs.get_addrs()
                 self.fs.shutdown()
-                self.mgr._ceph_unregister_client(addrs)
+                self.mgr._ceph_unregister_client(None, addrs)
                 self.fs = None
             except Exception as e:
                 logger.debug("disconnect: ({0})".format(e))
