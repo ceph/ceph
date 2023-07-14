@@ -492,6 +492,7 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
     completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
   }
 
+  ldpp_dout(dpp, 20) << "D4NFilterObject::returning from flush:: " << dendl;
   return 0;
 }
 
@@ -499,7 +500,8 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
                         RGWGetDataCB* cb, optional_yield y) 
 {
   const uint64_t window_size = g_conf()->rgw_get_obj_window_size;
-  std::string oid = source->get_key().get_oid();
+  //std::string oid = source->get_key().get_oid();
+  std::string oid = source->get_bucket()->get_marker() + "_" + source->get_key().get_oid();
 
   ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << "oid: " << oid << " ofs: " << ofs << " end: " << end << dendl;
 
@@ -516,43 +518,61 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   //len_to_read is the actual length read from a part/ chunk in cache, while part_len is the length of the chunk/ part in cache 
   uint64_t cost = 0, len_to_read = 0, part_len = 0;
 
-  if (y) {
-    aio = rgw::make_throttle(window_size, y);
+  aio = rgw::make_throttle(window_size, y);
 
-    ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << "obj_max_req_size " << obj_max_req_size << 
-      " num_parts " << num_parts << " adjusted_start_offset: " << adjusted_start_ofs << " len: " << len << dendl;
+  ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << "obj_max_req_size " << obj_max_req_size << 
+    " num_parts " << num_parts << " adjusted_start_offset: " << adjusted_start_ofs << " len: " << len << dendl;
 
-    this->offset = ofs;
+  this->offset = ofs;
 
-    do {
-      uint64_t id = adjusted_start_ofs;
-      if (start_part_num == (num_parts - 1)) {
-        len_to_read = len;
-        part_len = len;
-        cost = len;
-      } else {
-        len_to_read = obj_max_req_size;
-        cost = obj_max_req_size;
-        part_len = obj_max_req_size;
+  do {
+    uint64_t id = adjusted_start_ofs;
+    if (start_part_num == (num_parts - 1)) {
+      len_to_read = len;
+      part_len = len;
+      cost = len;
+    } else {
+      len_to_read = obj_max_req_size;
+      cost = obj_max_req_size;
+      part_len = obj_max_req_size;
+    }
+    if (start_part_num == 0) {
+      len_to_read -= diff_ofs;
+      id += diff_ofs;
+    }
+
+    uint64_t read_ofs = diff_ofs; //read_ofs is the actual offset to start reading from the current part/ chunk
+    ceph::bufferlist bl;
+    rgw_raw_obj r_obj;
+    r_obj.oid = oid;
+
+    ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << 
+oid << " length to read is: " << len_to_read << " part num: " << start_part_num << 
+" read_ofs: " << read_ofs << " part len: " << part_len << dendl;
+
+    if (source->driver->get_cache_driver()->key_exists(dpp, oid)) { 
+      // Read From Cache
+      auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid, read_ofs, len_to_read, cost, id); 
+
+      ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid << dendl;
+
+      auto r = flush(dpp, std::move(completed));
+
+      if (r < 0) {
+        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, r= " << r << dendl;
+        return r;
       }
-      if (start_part_num == 0) {
-        len_to_read -= diff_ofs;
-        id += diff_ofs;
-      }
-
-      uint64_t read_ofs = diff_ofs; //read_ofs is the actual offset to start reading from the current part/ chunk
-      ceph::bufferlist bl;
-      rgw_raw_obj r_obj;
-      r_obj.oid = oid;
-
+    } else {
+      #if 0
+      //for ranged requests, for last part, the whole part might exist in the cache
       ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << 
-	oid << " length to read is: " << len_to_read << " part num: " << start_part_num << 
-	" read_ofs: " << read_ofs << " part len: " << part_len << dendl;
+  oid << " length to read is: " << len_to_read << " part num: " << start_part_num << 
+  " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-      if (source->driver->get_cache_driver()->get(dpp, oid, ofs, part_len, bl, source->get_attrs()) == 0) { 
+      if (source->driver->get_cache_driver()->get(dpp, oid, ofs, obj_max_req_size, bl, source->get_attrs()) == 0) {
         // Read From Cache
-        auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
-			   read_ofs, len_to_read, oid), cost, id); 
+  auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
+          read_ofs, len_to_read, oid), cost, id); 
 
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid << dendl;
 
@@ -562,50 +582,34 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
           ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, r= " << r << dendl;
           return r;
         }
-      } else {
-        //for ranged requests, for last part, the whole part might exist in the cache
-        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << 
-	  oid << " length to read is: " << len_to_read << " part num: " << start_part_num << 
-	  " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
-
-        if (source->driver->get_cache_driver()->get(dpp, oid, ofs, obj_max_req_size, bl, source->get_attrs()) == 0) {
-          // Read From Cache
-	  auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
-			     read_ofs, len_to_read, oid), cost, id); 
-
-          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid << dendl;
-
-          auto r = flush(dpp, std::move(completed));
-
-          if (r < 0) {
-            ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, r= " << r << dendl;
-            return r;
-          }
-        } else {
-          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid << dendl;
-
-          auto r = drain(dpp);
-
-          if (r < 0) {
-            ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to drain, r= " << r << dendl;
-            return r;
-          }
-
-          break;
-        }
-      }
-
-      if (start_part_num == (num_parts - 1)) {
+      
+      } 
+      #endif  
+      {
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid << dendl;
-        return drain(dpp);
-      } else {
-        adjusted_start_ofs += obj_max_req_size;
-      }
 
-      start_part_num += 1;
-      len -= obj_max_req_size;
-    } while (start_part_num < num_parts);
-  }
+        auto r = drain(dpp);
+
+        if (r < 0) {
+          ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Error: failed to drain, r= " << r << dendl;
+          return r;
+        }
+
+        break;
+      }
+    }
+
+    if (start_part_num == (num_parts - 1)) {
+      ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: draining data for oid: " << oid << dendl;
+      return drain(dpp);
+    } else {
+      adjusted_start_ofs += obj_max_req_size;
+    }
+
+    start_part_num += 1;
+    len -= obj_max_req_size;
+  } while (start_part_num < num_parts);
+
 
   ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Fetching object from backend store" << dendl;
 
