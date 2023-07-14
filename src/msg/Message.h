@@ -591,8 +591,19 @@ MURef<T> make_message(Args&&... args) {
 }
 }
 
-#if FMT_VERSION >= 90000
-template <std::derived_from<Message> M> struct fmt::formatter<M> : fmt::ostream_formatter {};
-#endif
+template <std::derived_from<Message> M>
+struct fmt::formatter<M> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const M& m, FormatContext& ctx) const {
+    std::ostringstream oss;
+    m.print(oss);
+    if (auto ver = m.get_header().version; ver) {
+      return fmt::format_to(ctx.out(), "{} v{}", oss.str(), ver);
+    } else {
+      return fmt::format_to(ctx.out(), "{}", oss.str());
+    }
+  }
+};
 
 #endif
