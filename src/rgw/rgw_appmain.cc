@@ -529,7 +529,7 @@ void rgw::AppMain::init_tracepoints()
 {
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(dpp->get_cct());
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(dpp->get_cct());
-  tracing::rgw::tracer.init("rgw");
+  tracing::rgw::tracer.init(dpp->get_cct(), "rgw");
 } /* init_tracepoints() */
 
 void rgw::AppMain::init_notification_endpoints()

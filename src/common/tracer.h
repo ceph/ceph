@@ -19,13 +19,13 @@ class Tracer {
  private:
   const static opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> noop_tracer;
   const static jspan noop_span;
+  CephContext* cct = nullptr;;
   opentelemetry::nostd::shared_ptr<opentelemetry::trace::Tracer> tracer;
 
  public:
   Tracer() = default;
-  Tracer(opentelemetry::nostd::string_view service_name);
 
-  void init(opentelemetry::nostd::string_view service_name);
+  void init(CephContext* _cct, opentelemetry::nostd::string_view service_name);
 
   bool is_enabled() const;
   // creates and returns a new span with `trace_name`
