@@ -14,6 +14,8 @@
 #include <algorithm>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
+#define META_POOL_ID ((uint64_t)-1ull)
+
 /**
  * ObjectStoreImitator will simulate how BlueStore does IO (as of the time
  * the simulator is written) and assess the defragmentation levels of different
