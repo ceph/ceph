@@ -267,6 +267,7 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
   }
 
   std::vector<ObjectRef> ovec(i.objects.size());
+  uint64_t prev_pool_id = META_POOL_ID;
 
   for (int pos = 0; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
@@ -278,6 +279,13 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
 
     // collection operations
     CollectionRef &c = cvec[op->cid];
+
+    // validate all collections are in the same pool
+    spg_t pgid;
+    if (!!c && c->cid.is_pg(&pgid)) {
+      ceph_assert(prev_pool_id == pgid.pool() || prev_pool_id == META_POOL_ID);
+      prev_pool_id = pgid.pool();
+    }
 
     switch (op->op) {
     case Transaction::OP_RMCOLL: {
