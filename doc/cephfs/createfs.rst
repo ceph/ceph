@@ -8,10 +8,17 @@ Creating pools
 A Ceph file system requires at least two RADOS pools, one for data and one for metadata.
 When configuring these pools, you might consider:
 
-- Using a higher replication level for the metadata pool, as any data loss in
-  this pool can render the whole file system inaccessible.
-- Using lower-latency storage such as SSDs for the metadata pool, as this will
-  directly affect the observed latency of file system operations on clients.
+- We recommend configuring *at least* 3 replicas for the metadata pool,
+  as data loss in this pool can render the entire file system inaccessible.
+  Configuring 4 would not be extreme, especially since the metadata pool's
+  capacity requirements are quite modest.
+- We recommend the fastest feasible low-latency storage devices (NVMe, Optane,
+  or at the very least SAS/SATA SSD) for the metadata pool, as this will
+  directly affect the latency of client file system operations.
+- We strongly suggest that the CephFS metadata pool be provisioned on dedicated
+  SSD / NVMe OSDs. This ensures that high client workload does not adversely
+  impact metadata operations. See :ref:`device_classes` to configure pools this
+  way.
 - The data pool used to create the file system is the "default" data pool and
   the location for storing all inode backtrace information, used for hard link
   management and disaster recovery. For this reason, all inodes created in

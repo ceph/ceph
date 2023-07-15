@@ -221,6 +221,8 @@ To view the contents of the rules, run the following command:
 
    ceph osd crush rule dump
 
+.. _device_classes:
+
 Device classes
 --------------
 
