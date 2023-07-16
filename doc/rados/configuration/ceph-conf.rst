@@ -94,27 +94,26 @@ entirely.
 Skipping monitor config
 -----------------------
 
-Pass the option ``--no-mon-config`` to any process to skip the step that
-retrieves configuration information from the cluster monitors. This is useful
-in cases where configuration is managed entirely via configuration files, or
-when the monitor cluster is down and some maintenance activity needs to be
-done.
-
+The option ``--no-mon-config`` can be passed in any command in order to skip
+the step that retrieves configuration information from the cluster's monitors.
+Skipping this retrieval step can be useful in cases where configuration is
+managed entirely via configuration files, or when maintenance activity needs to
+be done but the monitor cluster is down.
 
 .. _ceph-conf-file:
-
 
 Configuration sections
 ======================
 
-Any given process or daemon has a single value for each configuration
-option.  However, values for an option may vary across different
-daemon types even daemons of the same type.  Ceph options that are
-stored in the monitor configuration database or in local configuration
-files are grouped into sections to indicate which daemons or clients
-they apply to.
+Each of the configuration options associated with a single process or daemon
+has a single value. However, the values for a configuration option can vary
+across daemon types, and can vary even across different daemons of the same
+type. Ceph options that are stored in the monitor configuration database or in
+local configuration files are grouped into sections |---| so-called "configuration
+sections" |---| to indicate which daemons or clients they apply to.
 
-These sections include:
+
+These sections include the following:
 
 .. confsec:: global
 
@@ -157,41 +156,40 @@ These sections include:
 
 .. confsec:: client
 
-   Settings under ``client`` affect all Ceph Clients
-   (e.g., mounted Ceph File Systems, mounted Ceph Block Devices,
-   etc.) as well as Rados Gateway (RGW) daemons.
+   Settings under ``client`` affect all Ceph clients
+   (for example, mounted Ceph File Systems, mounted Ceph Block Devices)
+   as well as RADOS Gateway (RGW) daemons.
 
    :example: ``objecter_inflight_ops = 512``
 
 
-Sections may also specify an individual daemon or client name.  For example,
+Configuration sections can also specify an individual daemon or client name. For example,
 ``mon.foo``, ``osd.123``, and ``client.smith`` are all valid section names.
 
 
-Any given daemon will draw its settings from the global section, the
-daemon or client type section, and the section sharing its name.
-Settings in the most-specific section take precedence, so for example
-if the same option is specified in both :confsec:`global`, :confsec:`mon`, and
-``mon.foo`` on the same source (i.e., in the same configurationfile),
-the ``mon.foo`` value will be used.
+Any given daemon will draw its settings from the global section, the daemon- or
+client-type section, and the section sharing its name. Settings in the
+most-specific section take precedence so precedence: for example, if the same
+option is specified in both :confsec:`global`, :confsec:`mon`, and ``mon.foo``
+on the same source (i.e. that is, in the same configuration file), the
+``mon.foo`` setting will be used.
 
 If multiple values of the same configuration option are specified in the same
-section, the last value wins.
+section, the last value specified takes precedence.
 
-Note that values from the local configuration file always take
-precedence over values from the monitor configuration database,
-regardless of which section they appear in.
-
+Note that values from the local configuration file always take precedence over
+values from the monitor configuration database, regardless of the section in 
+which they appear.
 
 .. _ceph-metavariables:
 
 Metavariables
 =============
 
-Metavariables simplify Ceph Storage Cluster configuration
-dramatically. When a metavariable is set in a configuration value,
-Ceph expands the metavariable into a concrete value at the time the
-configuration value is used. Ceph metavariables are similar to variable expansion in the Bash shell.
+Metavariables dramatically simplify Ceph storage cluster configuration. When a
+metavariable is set in a configuration value, Ceph expands the metavariable at
+the time the configuration value is used. In this way, Ceph metavariables
+behave similarly to the way that variable expansion works in the Bash shell.
 
 Ceph supports the following metavariables: 
 
@@ -205,7 +203,7 @@ Ceph supports the following metavariables:
 
 .. describe:: $type
 
-   Expands to a daemon or process type (e.g., ``mds``, ``osd``, or ``mon``)
+   Expands to a daemon or process type (for example, ``mds``, ``osd``, or ``mon``)
 
    :example: ``/var/lib/ceph/$type``
 
@@ -234,33 +232,32 @@ Ceph supports the following metavariables:
    :example: ``/var/run/ceph/$cluster-$name-$pid.asok``
 
 
-
-The Configuration File
-======================
+Ceph configuration file
+=======================
 
 On startup, Ceph processes search for a configuration file in the
 following locations:
 
-#. ``$CEPH_CONF`` (*i.e.,* the path following the ``$CEPH_CONF``
+#. ``$CEPH_CONF`` (that is, the path following the ``$CEPH_CONF``
    environment variable)
-#. ``-c path/path``  (*i.e.,* the ``-c`` command line argument)
+#. ``-c path/path``  (that is, the ``-c`` command line argument)
 #. ``/etc/ceph/$cluster.conf``
 #. ``~/.ceph/$cluster.conf``
-#. ``./$cluster.conf`` (*i.e.,* in the current working directory)
+#. ``./$cluster.conf`` (that is, in the current working directory)
 #. On FreeBSD systems only, ``/usr/local/etc/ceph/$cluster.conf``
 
-where ``$cluster`` is the cluster's name (default ``ceph``).
+Here ``$cluster`` is the cluster's name (default: ``ceph``).
 
-The Ceph configuration file uses an *ini* style syntax. You can add comment
-text after a pound sign (#) or a semi-colon (;).  For example:
+The Ceph configuration file uses an ``ini`` style syntax. You can add "comment
+text" after a pound sign (#) or a semi-colon semicolon (;). For example:
 
 .. code-block:: ini
 
-	# <--A number (#) sign precedes a comment.
-	; A comment may be anything.
-	# Comments always follow a semi-colon (;) or a pound (#) on each line.
-	# The end of the line terminates a comment.
-	# We recommend that you provide comments in your configuration file(s).
+    # <--A number (#) sign number sign (#) precedes a comment.
+    ; A comment may be anything.
+    # Comments always follow a semi-colon semicolon (;) or a pound sign (#) on each line.
+    # The end of the line terminates a comment.
+    # We recommend that you provide comments in your configuration file(s).
 
 
 .. _ceph-conf-settings:
@@ -269,23 +266,22 @@ Config file section names
 -------------------------
 
 The configuration file is divided into sections. Each section must begin with a
-valid configuration section name (see `Configuration sections`_, above)
-surrounded by square brackets. For example,
+valid configuration section name (see `Configuration sections`_, above) that is
+surrounded by square brackets. For example:
 
 .. code-block:: ini
 
-	[global]
-	debug_ms = 0
-	
-	[osd]
-	debug_ms = 1
+    [global]
+    debug_ms = 0
+    
+    [osd]
+    debug_ms = 1
 
-	[osd.1]
-	debug_ms = 10
+    [osd.1]
+    debug_ms = 10
 
-	[osd.2]
-	debug_ms = 10
-
+    [osd.2]
+    debug_ms = 10
 
 Config file option values
 -------------------------
@@ -692,3 +688,6 @@ These changes are as follows:
   all options would be set as though they were within the :confsec:`global` section. This is
   now discouraged. Since Octopus, only a single option is allowed for
   configuration files without a section name.
+
+.. |---|   unicode:: U+2014 .. EM DASH
+   :trim:
