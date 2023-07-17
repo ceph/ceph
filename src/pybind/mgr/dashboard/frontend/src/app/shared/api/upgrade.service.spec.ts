@@ -57,4 +57,11 @@ describe('UpgradeService', () => {
       expectedVersions
     );
   });
+
+  it('should start the upgrade', () => {
+    service.start('18.1.0').subscribe();
+    const req = httpTesting.expectOne('api/cluster/upgrade/start');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual({ version: '18.1.0' });
+  });
 });

@@ -41,4 +41,8 @@ export class UpgradeService extends ApiClient {
     upgradeInfo.versions = upgradableVersions;
     return upgradeInfo;
   }
+
+  start(version: string) {
+    return this.http.post(`${this.baseURL}/start`, { version: version });
+  }
 }

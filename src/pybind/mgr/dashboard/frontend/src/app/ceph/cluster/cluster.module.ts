@@ -58,6 +58,7 @@ import { ServiceFormComponent } from './services/service-form/service-form.compo
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
 import { UpgradeComponent } from './upgrade/upgrade.component';
+import { UpgradeStartModalComponent } from './upgrade/upgrade-form/upgrade-start-modal.component';
 
 @NgModule({
   imports: [
@@ -118,7 +119,8 @@ import { UpgradeComponent } from './upgrade/upgrade.component';
     PlacementPipe,
     CreateClusterComponent,
     CreateClusterReviewComponent,
-    UpgradeComponent
+    UpgradeComponent,
+    UpgradeStartModalComponent
   ],
   providers: [NgbActiveModal]
 })

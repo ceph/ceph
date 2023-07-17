@@ -40,6 +40,7 @@
                     id="upgrade"
                     aria-label="Upgrade now"
                     [disabled]="(healthData.mgr_map | mgrSummary).total <= 1"
+                    (click)="startUpgradeModal()"
                     i18n>Upgrade now</button>
           </div>
         </ng-container>
