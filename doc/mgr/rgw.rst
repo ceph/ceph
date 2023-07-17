@@ -25,7 +25,7 @@ supports both passing the arguments through the cmd line or as a spec file:
 
 .. prompt:: bash #
 
-  rgw realm bootstrap [--realm-name] [--zonegroup-name] [--zone-name] [--port] [--placement] [--start-radosgw]
+  ceph rgw realm bootstrap [--realm-name] [--zonegroup-name] [--zone-name] [--port] [--placement] [--start-radosgw]
 
 The command supports providing the configuration through a spec file (`-i option`):
 
