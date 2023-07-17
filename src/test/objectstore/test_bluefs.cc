@@ -1179,6 +1179,7 @@ TEST(BlueFS, test_shared_alloc) {
   auto num_files = logger->get(l_bluefs_num_files);
   fs.umount();
   fs.mount();
+  logger = fs.get_perf_counters();
   ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
   fs.umount();
 }
@@ -1256,6 +1257,7 @@ TEST(BlueFS, test_shared_alloc_sparse) {
   fs.umount();
 
   fs.mount();
+  logger = fs.get_perf_counters();
   ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
   fs.umount();
 }
@@ -1327,6 +1329,7 @@ TEST(BlueFS, test_4k_shared_alloc) {
   fs.umount();
 
   fs.mount();
+  logger = fs.get_perf_counters();
   ASSERT_EQ(num_files, logger->get(l_bluefs_num_files));
   fs.umount();
 }
