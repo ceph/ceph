@@ -363,6 +363,7 @@ set(rgw_a_srcs
   rgw_loadgen_process.cc
   rgw_log.cc
   rgw_lua_request.cc
+  rgw_md5.cc
   rgw_opa.cc
   rgw_os_lib.cc
   rgw_period_pusher.cc
