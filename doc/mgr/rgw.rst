@@ -33,7 +33,7 @@ The command supports providing the configuration through a spec file (`-i option
 
   ceph rgw realm bootstrap -i myrgw.yaml
 
-Following is an example of RGW mutlisite spec file:
+Following is an example of RGW multisite spec file:
 
 .. code-block:: yaml
 
