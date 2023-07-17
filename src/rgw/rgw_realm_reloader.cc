@@ -118,7 +118,10 @@ void RGWRealmReloader::reload()
       DriverManager::Config cfg;
       cfg.store_name = "rados";
       cfg.filter_name = "none";
+      JSONFormattable sal_config;
+      sal_config.set("type", "rados");
       env.driver = DriverManager::get_storage(&dp, cct, cfg,
+          sal_config,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,
           cct->_conf->rgw_enable_quota_threads,

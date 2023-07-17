@@ -1114,6 +1114,11 @@ static int read_or_create_default_zone(const DoutPrefixProvider* dpp,
       return r;
     }
   }
+  r = info.sal_config.set("type", "rados");
+  if (r < 0) {
+    ldpp_dout(dpp,0) << "ERROR: failed to set driver configuration to rados for default zone: " << cpp_strerror(r) << dendl;
+    return r;
+  }
   return r;
 }
 

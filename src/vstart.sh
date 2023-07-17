@@ -859,6 +859,13 @@ $CCLIENTDEBUG
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
+
+        ; rgw backend store = dbstore
+        ; dbstore_db_dir = /home/ali/dbstore_dir
+        ; dbstore_config_uri = file://$HOME/dbstore_dir/dbstore-config.db
+        ; debug rgw dbstore = 20
+        rgw config store = rados
+
         $(format_conf "${extra_conf}")
 EOF
 	do_rgw_conf
@@ -1785,11 +1792,13 @@ do_rgw()
     for n in $(seq 1 $CEPH_NUM_RGW); do
         rgw_name="client.rgw.${current_port}"
 
-        ceph_adm auth get-or-create $rgw_name \
-            mon 'allow rw' \
-            osd 'allow rwx' \
-            mgr 'allow rw' \
-            >> "$keyring_fn"
+        if [ "$CEPH_NUM_MON" -gt 0 ]; then
+            ceph_adm auth get-or-create $rgw_name \
+                mon 'allow rw' \
+                osd 'allow rwx' \
+                mgr 'allow rw' \
+                >> "$keyring_fn"
+        fi
 
         debug echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
         run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \

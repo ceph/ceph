@@ -2918,7 +2918,7 @@ static int bucket_sync_status(rgw::sal::Driver* driver, const RGWBucketInfo& inf
   return 0;
 }
 
-static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
+static void parse_json_formattable_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
   int level = 0;
   string cur_conf;
@@ -3488,6 +3488,8 @@ int main(int argc, const char **argv)
   map<string, string, ltstr_nocase> tier_config_add;
   map<string, string, ltstr_nocase> tier_config_rm;
 
+  map<string, string, ltstr_nocase> sal_config;
+
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
   boost::optional<string> data_extra_pool;
@@ -3933,9 +3935,11 @@ int main(int argc, const char **argv)
       tier_type = val;
       tier_type_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--tier-config", (char*)NULL)) {
-      parse_tier_config_param(val, tier_config_add);
+      parse_json_formattable_config_param(val, tier_config_add);
     } else if (ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*)NULL)) {
-      parse_tier_config_param(val, tier_config_rm);
+      parse_json_formattable_config_param(val, tier_config_rm);
+    } else if (ceph_argparse_witharg(args, i, &val, "--sal-config", (char*)NULL)) {
+      parse_json_formattable_config_param(val, sal_config);
     } else if (ceph_argparse_witharg(args, i, &val, "--index-pool", (char*)NULL)) {
       index_pool = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--data-pool", (char*)NULL)) {
@@ -4271,6 +4275,8 @@ int main(int argc, const char **argv)
       cerr << "couldn't init config storage provider" << std::endl;
       return EIO;
     }
+    JSONFormattable sal_config;
+    sal_config.set("type", "rados");
 
     if (raw_storage_op) {
       driver = DriverManager::get_raw_storage(dpp(),
@@ -4280,6 +4286,7 @@ int main(int argc, const char **argv)
       driver = DriverManager::get_storage(dpp(),
 					g_ceph_context,
 					cfg,
+					sal_config,
 					false,
 					false,
 					false,
@@ -5778,6 +5785,14 @@ int main(int argc, const char **argv)
           }
         }
 
+        for (auto a : sal_config) {
+          int r = zone_params.sal_config.set(a.first, a.second);
+          if (r < 0) {
+            cerr << "ERROR: failed to set sal configuration: " << a.first << std::endl;
+            return EINVAL;
+          }
+        }
+
         if (zone_params.realm_id.empty()) {
           RGWRealm realm;
           int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
@@ -6059,6 +6074,15 @@ int main(int argc, const char **argv)
             zone_params.tier_config.erase(rm.first);
             need_zone_update = true;
           }
+        }
+
+        for (auto a : sal_config) {
+          ret = zone_params.sal_config.set(a.first, a.second);
+          if (ret < 0) {
+            cerr << "ERROR: failed to set sal configuration: " << a.first << std::endl;
+            return EINVAL;
+          }
+          need_zone_update = true;
         }
 
         if (need_zone_update) {
