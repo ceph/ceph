@@ -16,6 +16,7 @@
 #include <fmt/core.h>
 #include <gtest/gtest.h>
 #include <iostream>
+#include <string>
 
 constexpr uint64_t _1Kb = 1024;
 constexpr uint64_t _1Mb = 1024 * _1Kb;
@@ -291,6 +292,78 @@ struct MultiThreadedCWGenerator
 
     return 0;
   }
+};
+
+// Replay ops from OSD on the Simulator
+struct OpsReplayer : public FragmentationSimulator::WorkloadGenerator {
+  std::string name() override { return "OpsReplayer"; }
+  int generate_txns(ObjectStore::CollectionHandle &ch,
+                    ObjectStoreImitator *os) override {
+    std::unordered_map<std::string, std::string> row;
+    std::vector<std::string> col_names;
+    std::string line, col;
+
+    std::getline(f, line);
+    std::istringstream stream(line);
+    // init column names
+    while (stream >> col) {
+      if (col != "|") {
+        row[col] = "";
+        col_names.push_back(col);
+      }
+    }
+
+    // skipping over '---'
+    std::getline(f, line);
+
+    std::vector<ObjectStore::Transaction> tls;
+    while (std::getline(f, line)) {
+      stream.str(line);
+      for (unsigned i{0}; stream >> col; i++) {
+        row[col_names[i]] = col;
+      }
+
+      hobject_t h;
+      h.oid = row["name"];
+      ghobject_t oid(h);
+
+      std::string op_type = row["op_type"];
+      ObjectStore::Transaction t;
+      if (op_type == "truncate") {
+        uint64_t offset = std::stoi(row["offset"]);
+        t.truncate(ch->get_cid(), oid, offset);
+      } else {
+        std::string offset_extent = row["offset/extent"];
+        auto tilde_pos = offset_extent.find('~');
+        uint64_t offset = std::stoi(offset_extent.substr(0, tilde_pos));
+        uint64_t extent = std::stoi(offset_extent.substr(tilde_pos + 1));
+
+        if (op_type == "write") {
+          t.write(ch->get_cid(), oid, offset, extent, make_bl('x', extent));
+        } else if (op_type == "read") {
+          bufferlist bl;
+          os->read(ch, oid, offset, extent, bl);
+        } else if (op_type == "zero") {
+          t.zero(ch->get_cid(), oid, offset, extent);
+        }
+      }
+
+      if (op_type != "read")
+        tls.emplace_back(std::move(t));
+    }
+
+    os->queue_transactions(ch, tls);
+
+    return 0;
+  }
+
+  bool init_src(std::string path) {
+    f.open(path);
+    return f.is_open();
+  }
+
+private:
+  std::ifstream f;
 };
 
 // ----------- Tests -----------
