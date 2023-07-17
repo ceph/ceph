@@ -340,6 +340,7 @@ BuildRequires:	python%{python3_pkgversion}-pyOpenSSL
 BuildRequires:	socat
 BuildRequires:	python%{python3_pkgversion}-asyncssh
 BuildRequires:	python%{python3_pkgversion}-natsort
+BuildRequires:	python%{python3_pkgversion}-pandas
 %endif
 %if 0%{?suse_version}
 BuildRequires:  libthrift-devel >= 0.13.0
@@ -462,6 +463,7 @@ BuildRequires:	xmlsec1-nss
 BuildRequires:	xmlsec1-openssl
 BuildRequires:	xmlsec1-openssl-devel
 BuildRequires:	python%{python3_pkgversion}-cherrypy
+BuildRequires:	python%{python3_pkgversion}-pandas
 BuildRequires:	python%{python3_pkgversion}-routes
 BuildRequires:	python%{python3_pkgversion}-scipy
 BuildRequires:	python%{python3_pkgversion}-werkzeug
@@ -678,6 +680,7 @@ Requires:       python%{python3_pkgversion}-grpcio-tools
 %endif
 %if 0%{?fedora} || 0%{?rhel} || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
+Requires:       python%{python3_pkgversion}-pandas
 Requires:       python%{python3_pkgversion}-routes
 %if 0%{?weak_deps}
 Recommends:     python%{python3_pkgversion}-saml
@@ -730,6 +733,7 @@ Requires:       python%{python3_pkgversion}-dateutil
 Requires:       python%{python3_pkgversion}-setuptools
 %if 0%{?fedora} || 0%{?rhel} >= 8 || 0%{?openEuler}
 Requires:       python%{python3_pkgversion}-cherrypy
+Requires:       python%{python3_pkgversion}-pandas
 Requires:       python%{python3_pkgversion}-pyyaml
 Requires:       python%{python3_pkgversion}-werkzeug
 %endif
@@ -784,6 +788,7 @@ Group:          System/Filesystems
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{python3_pkgversion}-asyncssh
 Requires:       python%{python3_pkgversion}-natsort
+Requires:       python%{python3_pkgversion}-pandas
 Requires:       cephadm = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires:       openssh
@@ -794,6 +799,7 @@ Requires:       python%{python3_pkgversion}-Jinja2
 Requires:       openssh-clients
 Requires:       python%{python3_pkgversion}-cherrypy
 Requires:       python%{python3_pkgversion}-jinja2
+Requires:       python%{python3_pkgversion}-pandas
 %endif
 %description mgr-cephadm
 ceph-mgr-cephadm is a ceph-mgr module for orchestration functions using
@@ -1973,6 +1979,7 @@ fi
 %{_datadir}/ceph/mgr/iostat
 %{_datadir}/ceph/mgr/localpool
 %{_datadir}/ceph/mgr/mds_autoscaler
+%{_datadir}/ceph/mgr/mds_partitioner
 %{_datadir}/ceph/mgr/mirroring
 %{_datadir}/ceph/mgr/nfs
 %{_datadir}/ceph/mgr/orchestrator
