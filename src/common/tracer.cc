@@ -10,7 +10,7 @@
 #include "opentelemetry/sdk/trace/tracer_provider.h"
 #include "opentelemetry/exporters/jaeger/jaeger_exporter.h"
 
-#define dout_subsys ceph_subsys_osd
+#define dout_subsys ceph_subsys_trace
 #undef dout_prefix
 #define dout_prefix (*_dout << "otel_tracing: ")
 
