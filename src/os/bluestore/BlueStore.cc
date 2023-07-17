@@ -5137,6 +5137,8 @@ void BlueStore::Collection::split_cache(
 				 << dendl;
 	  }
 	}
+	cache->rm_blob();
+	dest->cache->add_blob();
 	SharedBlob* sb = b->shared_blob.get();
 	if (sb->coll == dest) {
 	  ldout(store->cct, 20) << __func__ << "  already moved " << *sb
@@ -5160,6 +5162,8 @@ void BlueStore::Collection::split_cache(
 	b.second->last_encoded_id = -1;
       }
       for (auto& e : o->extent_map.extent_map) {
+	cache->rm_extent();
+	dest->cache->add_extent();
 	Blob* tb = e.blob.get();
 	if (tb->last_encoded_id == -1) {
 	  rehome_blob(tb);
