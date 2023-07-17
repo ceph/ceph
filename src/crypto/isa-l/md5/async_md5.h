@@ -71,9 +71,15 @@ class Batch {
   using executor_type = boost::asio::any_io_executor;
   executor_type get_executor() const noexcept { return ex; }
 
+  /// Callback function to observe the size of processed batches, and whether
+  /// they were triggered by batch_timeout.
+  using on_batch_cb = void(*)(uint32_t batch_size, bool timeout,
+                              void* on_batch_arg);
+
   /// Construct the manager to run on the given executor.
   Batch(const executor_type& ex,
-        std::chrono::nanoseconds batch_timeout);
+        std::chrono::nanoseconds batch_timeout,
+        on_batch_cb on_batch, void* on_batch_arg);
 
   /// Issue an asynchronous request to hash the input bytes and update the
   /// digest. Pass last=true to indicate that the digest should be finalized.
@@ -103,10 +109,12 @@ class Batch {
   boost::asio::steady_timer timer;
   uint32_t pending_count = 0;
   std::chrono::nanoseconds batch_timeout;
+  on_batch_cb on_batch;
+  void* on_batch_arg;
 
   void complete(MD5_HASH_CTX* ctx, MD5_HASH_CTX* submit_ctx);
 
-  void flush(MD5_HASH_CTX* submit_ctx);
+  void flush(MD5_HASH_CTX* submit_ctx, bool timeout);
 
   void init_async_hash(boost::asio::any_completion_handler<void(error_code)> handler,
                        Digest& digest, std::string_view input, bool last);
@@ -139,7 +147,8 @@ class Batch {
       BOOST_ASIO_HANDLER_LOCATION((__FILE__, __LINE__, "initiate_async_flush"));
       boost::asio::dispatch(self->ex,
         [self=self, h=std::move(handler)] () mutable {
-          self->flush(nullptr);
+          constexpr bool timeout = false;
+          self->flush(nullptr, timeout);
           boost::asio::post(boost::asio::bind_executor(self->ex, std::move(h)));
         });
     }

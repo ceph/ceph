@@ -14,6 +14,7 @@
 
 #include "async_md5.h"
 #include <optional>
+#include <vector>
 #include <boost/asio.hpp>
 #include <gtest/gtest.h>
 
@@ -24,11 +25,27 @@ auto capture(std::optional<error_code>& e)
   return [&e] (error_code ec) { e = ec; };
 }
 
+struct batch_entry {
+  uint32_t batch_size = 0;
+  bool timeout = false;
+
+  auto operator<=>(const batch_entry&) const = default;
+};
+using batch_vector = std::vector<batch_entry>;
+
+void on_batch(uint32_t batch_size, bool timeout, void* arg)
+{
+  auto& batches = *static_cast<batch_vector*>(arg);
+  batches.push_back({batch_size, timeout});
+}
+
 TEST(isal_md5, flush)
 {
   boost::asio::io_context ctx;
   const auto timeout = std::chrono::nanoseconds(0);
-  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout};
+  batch_vector batches;
+  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout,
+                                    on_batch, &batches};
 
   ceph::async_md5::Digest digest1;
   ceph::async_md5::Digest digest2;
@@ -52,6 +69,7 @@ TEST(isal_md5, flush)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
   EXPECT_FALSE(ec3);
+  EXPECT_TRUE(batches.empty());
 
   mgr.async_flush(boost::asio::detached);
 
@@ -68,6 +86,8 @@ TEST(isal_md5, flush)
   ASSERT_TRUE(ec3);
   EXPECT_FALSE(*ec3);
   EXPECT_EQ("bee397acc400449ea3a35ed3fc87fea1", digest3.as_hex());
+  ASSERT_EQ(1, batches.size());
+  EXPECT_EQ(batch_entry(3, false), batches[0]);
 }
 
 TEST(isal_md5, timeout)
@@ -76,7 +96,9 @@ TEST(isal_md5, timeout)
   // specify a batch_timeout and verify that async_hash() eventually completes
   // without a full batch or manual flush
   const auto timeout = std::chrono::milliseconds(10);
-  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout};
+  batch_vector batches;
+  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout,
+                                    on_batch, &batches};
 
   constexpr std::string_view buffer = "aaaaaaaa";
   ceph::async_md5::Digest digest;
@@ -87,6 +109,7 @@ TEST(isal_md5, timeout)
   ASSERT_FALSE(ctx.stopped());
 
   EXPECT_FALSE(ec); // does not complete immediately
+  EXPECT_TRUE(batches.empty());
 
   ctx.run_one(); // wait for timer
   ctx.poll();
@@ -95,13 +118,16 @@ TEST(isal_md5, timeout)
   ASSERT_TRUE(ec);
   EXPECT_FALSE(*ec);
   EXPECT_EQ("3dbe00a167653a1aaee01d93e77e730e", digest.as_hex());
+  ASSERT_EQ(1, batches.size());
+  EXPECT_EQ(batch_entry(1, true), batches[0]);
 }
 
 TEST(isal_md5, batch)
 {
   boost::asio::io_context ctx;
   const auto timeout = std::chrono::nanoseconds(0);
-  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout};
+  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout,
+                                    nullptr, nullptr};
 
   constexpr std::string_view buffer = "aaaaaaaa";
 
@@ -142,7 +168,8 @@ TEST(isal_md5, batch_cross_executor)
   // run the Batch on a 'server ctx'
   boost::asio::io_context sctx;
   const auto timeout = std::chrono::nanoseconds(0);
-  auto mgr = ceph::async_md5::Batch{sctx.get_executor(), timeout};
+  auto mgr = ceph::async_md5::Batch{sctx.get_executor(), timeout,
+                                    nullptr, nullptr};
 
   // use a 'client ctx' for the completions
   boost::asio::io_context cctx;
@@ -203,7 +230,8 @@ TEST(isal_md5, batch_thread_pool)
   // run the Batch on a strand executor
   const auto timeout = std::chrono::milliseconds(10);
   auto strand = boost::asio::make_strand(ctx);
-  auto mgr = ceph::async_md5::Batch{strand, timeout};
+  auto mgr = ceph::async_md5::Batch{strand, timeout,
+                                    nullptr, nullptr};
 
   constexpr std::string_view buffer = "aaaaaaaa";
 
@@ -235,7 +263,8 @@ TEST(isal_md5, multi_buffer)
 {
   boost::asio::io_context ctx;
   const auto timeout = std::chrono::nanoseconds(0);
-  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout};
+  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout,
+                                    nullptr, nullptr};
 
   // calculate the hash digest over a sequence of buffers
   constexpr std::string_view buffers[] = {"aaa", "aaa", "aa"};
@@ -279,7 +308,8 @@ TEST(isal_md5, empty_last_buffer)
 {
   boost::asio::io_context ctx;
   const auto timeout = std::chrono::nanoseconds(0);
-  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout};
+  auto mgr = ceph::async_md5::Batch{ctx.get_executor(), timeout,
+                                    nullptr, nullptr};
 
   constexpr std::string_view buffer = "aaaaaaaa";
   ceph::async_md5::Digest digest;

@@ -89,8 +89,10 @@ std::string Digest::as_hex() const
 }
 
 
-Batch::Batch(const executor_type& ex, std::chrono::nanoseconds batch_timeout)
-    : ex(ex), timer(ex), batch_timeout(batch_timeout)
+Batch::Batch(const executor_type& ex, std::chrono::nanoseconds batch_timeout,
+             on_batch_cb on_batch, void* on_batch_arg)
+    : ex(ex), timer(ex), batch_timeout(batch_timeout),
+      on_batch(on_batch), on_batch_arg(on_batch_arg)
 {
   ::md5_ctx_mgr_init(&mgr);
 }
@@ -117,11 +119,18 @@ void Batch::complete(MD5_HASH_CTX* ctx, MD5_HASH_CTX* submit_ctx)
   }
 }
 
-void Batch::flush(MD5_HASH_CTX* submit_ctx)
+void Batch::flush(MD5_HASH_CTX* submit_ctx, bool timeout)
 {
   BOOST_ASIO_HANDLER_LOCATION((__FILE__, __LINE__, __func__));
+  uint32_t count = (submit_ctx ? 1 : 0);
+
   while (MD5_HASH_CTX* ctx = ::md5_ctx_mgr_flush(&mgr)) {
     complete(ctx, submit_ctx);
+    ++count;
+  }
+
+  if (count && on_batch) {
+    on_batch(count, timeout, on_batch_arg);
   }
 }
 
@@ -154,7 +163,8 @@ void Batch::init_async_hash(
 
     if (result == HASH_CTX_ERROR_NONE) {
       // on a successful completion, flush results for the rest of the batch
-      flush(submit_ctx);
+      constexpr bool timeout = false;
+      flush(submit_ctx, timeout);
     }
   } else if (pending_count == 1 &&
              batch_timeout.count()) {
@@ -162,7 +172,8 @@ void Batch::init_async_hash(
     timer.expires_after(batch_timeout);
     timer.async_wait([this] (error_code ec) {
           if (!ec) {
-            flush(nullptr);
+            constexpr bool timeout = true;
+            flush(nullptr, timeout);
           }
         });
   }
