@@ -916,7 +916,7 @@ void LeaderWatcher<I>::handle_notify_heartbeat(int r) {
     return;
   }
 
-  if (r < 0 && r != -ETIMEDOUT) {
+  if (r < 0 && (r != -ETIMEDOUT && r != -EBADMSG)) {
     derr << "error notifying heartbeat: " << cpp_strerror(r)
          <<  ", releasing leader" << dendl;
     release_leader_lock();
