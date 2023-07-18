@@ -100,6 +100,7 @@ int FragmentationSimulator::begin_simulation_with_generators() {
   os->print_status();
   os->print_per_object_fragmentation();
   os->print_per_access_fragmentation();
+  os->print_allocator_profile();
   return 0;
 }
 

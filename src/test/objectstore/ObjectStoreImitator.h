@@ -190,7 +190,15 @@ private:
                ceph::buffer::list &bl, uint32_t op_flags = 0,
                uint64_t retry_count = 0);
 
+  void release_alloc(PExtentVector &old_extents);
+  int64_t allocate_alloc(uint64_t want_size, uint64_t block_size,
+                         uint64_t max_alloc_size, int64_t hint,
+                         PExtentVector *extents);
+
   // Members
+
+  double alloc_time = 0.0;
+  uint64_t alloc_ops = 0;
 
   boost::scoped_ptr<Allocator> alloc;
   std::atomic<uint64_t> nid_last = {0};
@@ -215,11 +223,10 @@ public:
         min_alloc_size(min_alloc_size_) {}
 
   ~ObjectStoreImitator() = default;
-
   void init_alloc(const std::string &alloc_type, uint64_t size);
-  void print_status();
-  void verify_objects(CollectionHandle &ch);
 
+  void verify_objects(CollectionHandle &ch);
+  void print_status();
   // Generate metrics for per-object fragmentation (how fragmented are each
   // object's extents), defined by: frag_score = 1 - sum((size proportion of
   // each extents / object size) ^ index of each extent in a vector sorted by
@@ -231,6 +238,8 @@ public:
   // Jumps are how many times we have to stop reading continuous extents
   void print_per_access_fragmentation();
 
+  // Print allocator average latency
+  void print_allocator_profile();
   // Overrides
 
   // This is often not called directly but through queue_transaction

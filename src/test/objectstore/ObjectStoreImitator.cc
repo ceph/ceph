@@ -5,6 +5,7 @@
  * Author: Tri Dao, daominhtri0503@gmail.com
  */
 #include "test/objectstore/ObjectStoreImitator.h"
+#include "common/Clock.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "include/intarith.h"
@@ -14,6 +15,26 @@
 
 #define dout_context cct
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
+// ---------- Allocator ----------
+
+void ObjectStoreImitator::release_alloc(PExtentVector &old_extents) {
+  utime_t start = ceph_clock_now();
+  alloc->release(old_extents);
+  alloc_ops++;
+  alloc_time += static_cast<double>(ceph_clock_now() - start);
+}
+
+int64_t ObjectStoreImitator::allocate_alloc(uint64_t want_size,
+                                            uint64_t block_size,
+                                            uint64_t max_alloc_size,
+                                            int64_t hint,
+                                            PExtentVector *extents) {
+  utime_t start = ceph_clock_now();
+  int64_t ret =
+      alloc->allocate(want_size, block_size, max_alloc_size, hint, extents);
+  alloc_time += static_cast<double>(ceph_clock_now() - start);
+  return ret;
+}
 
 // ---------- Object -----------
 
@@ -226,6 +247,13 @@ void ObjectStoreImitator::print_per_access_fragmentation() {
                 << std::endl;
     }
   }
+}
+
+void ObjectStoreImitator::print_allocator_profile() {
+  double avg = alloc_time / alloc_ops;
+  std::cout << "Total alloc ops latency: " << alloc_time
+            << ", total ops: " << alloc_ops
+            << ", average alloc op latency: " << avg << std::endl;
 }
 
 // ------- Transactions -------
@@ -527,7 +555,7 @@ int ObjectStoreImitator::_do_zero(CollectionRef &c, ObjectRef &o,
                                   uint64_t offset, size_t length) {
   PExtentVector old_extents;
   o->punch_hole(offset, length, old_extents);
-  alloc->release(old_extents);
+  release_alloc(old_extents);
   return 0;
 }
 
@@ -609,7 +637,7 @@ int ObjectStoreImitator::_do_write(CollectionRef &c, ObjectRef &o,
 
   PExtentVector punched;
   o->punch_hole(offset, length, punched);
-  alloc->release(punched);
+  release_alloc(punched);
 
   // all writes will trigger an allocation
   int r = _do_alloc_write(c, o, bl, offset, length);
@@ -655,14 +683,14 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
   PExtentVector prealloc;
 
   int64_t prealloc_left =
-      alloc->allocate(need, min_alloc_size, need, 0, &prealloc);
+      allocate_alloc(need, min_alloc_size, need, 0, &prealloc);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
     derr << __func__ << " failed to allocate 0x" << std::hex << need
          << " allocated 0x" << (prealloc_left < 0 ? 0 : prealloc_left)
          << " min_alloc_size 0x" << min_alloc_size << " available 0x "
          << alloc->get_free() << std::dec << dendl;
     if (prealloc.size())
-      alloc->release(prealloc);
+      release_alloc(prealloc);
 
     return -ENOSPC;
   }
@@ -700,7 +728,7 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
       ++prealloc_pos;
     }
 
-    alloc->release(old_extents);
+    release_alloc(old_extents);
   }
 
   ceph_assert(prealloc_pos == prealloc.end());
@@ -717,7 +745,7 @@ void ObjectStoreImitator::_do_truncate(CollectionRef &c, ObjectRef &o,
   PExtentVector old_extents;
   o->punch_hole(offset, o->size - offset, old_extents);
   o->size = offset;
-  alloc->release(old_extents);
+  release_alloc(old_extents);
 }
 
 int ObjectStoreImitator::_rename(CollectionRef &c, ObjectRef &oldo,
