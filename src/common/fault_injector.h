@@ -14,11 +14,13 @@
 
 #pragma once
 
+#include <thread>
 #include <type_traits>
 #include <boost/type_traits/has_equal_to.hpp>
 #include <boost/type_traits/has_left_shift.hpp>
 #include <variant>
 #include "include/ceph_assert.h"
+#include "common/ceph_time.h"
 #include "common/dout.h"
 
 /// @file
@@ -34,13 +36,20 @@ struct InjectError {
   const DoutPrefixProvider* dpp = nullptr;
 };
 
+/// Injects a delay before returning success.
+struct InjectDelay {
+  /// duration of the delay
+  ceph::timespan duration;
+  /// an optional log channel to print a message
+  const DoutPrefixProvider* dpp = nullptr;
+};
+
 /** @class FaultInjector
  * @brief Used to instrument a code path with deterministic fault injection
  * by making one or more calls to check().
  *
  * A default-constructed FaultInjector contains no failure. It can also be
- * constructed with a failure of type InjectAbort or InjectError, along with
- * a location to inject that failure.
+ * constructed with a failure type and a location to inject that failure.
  *
  * The contained failure can be overwritten with a call to inject() or clear().
  * This is not thread-safe with respect to other member functions on the same
@@ -67,6 +76,10 @@ class FaultInjector {
   constexpr FaultInjector(Key location, InjectError e)
     : location(std::move(location)), failure(e) {}
 
+  /// Construct with an injected delay at the given location.
+  constexpr FaultInjector(Key location, InjectDelay d)
+    : location(std::move(location)), failure(d) {}
+
   /// Inject an assertion failure at the given location.
   void inject(Key location, InjectAbort a) {
     this->location = std::move(location);
@@ -77,6 +90,12 @@ class FaultInjector {
   void inject(Key location, InjectError e) {
     this->location = std::move(location);
     this->failure = e;
+  }
+
+  /// Injecte a delay at the given location.
+  void inject(Key location, InjectDelay d) {
+    this->location = std::move(location);
+    this->failure = d;
   }
 
   /// Clear any injected failure.
@@ -110,6 +129,14 @@ class FaultInjector {
         }
         return 0;
       }
+      int operator()(const InjectDelay& e) const {
+        if (check_location == this_location) {
+          ldpp_dout(e.dpp, -1) << "Injecting delay=" << e.duration
+              << " at location=" << this_location << dendl;
+          std::this_thread::sleep_for(e.duration);
+        }
+        return 0;
+      }
     };
     return std::visit(visitor{location, this->location}, failure);
   }
@@ -131,5 +158,5 @@ class FaultInjector {
 
   using Empty = std::monostate; // empty state for std::variant
 
-  std::variant<Empty, InjectAbort, InjectError> failure;
+  std::variant<Empty, InjectAbort, InjectError, InjectDelay> failure;
 };

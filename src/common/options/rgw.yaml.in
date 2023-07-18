@@ -2638,6 +2638,26 @@ options:
   - rgw
   - rgw
   min: 30
+- name: rgw_debug_inject_set_olh_err
+  type: uint
+  level: dev
+  desc: Whether to inject errors between rados olh modification initialization and
+    bucket index instance linking. The value determines the error code. This exists
+    for development and testing purposes to help simulate cases where bucket index
+    entries aren't cleaned up by the request thread after an error scenario.
+  default: 0
+  with_legacy: true
+  services:
+  - rgw
+- name: rgw_debug_inject_olh_cancel_modification_err
+  type: bool
+  level: dev
+  desc: Whether to inject an error to simulate a failure to cancel olh
+    modification. This exists for development and testing purposes.
+  default: false
+  with_legacy: true
+  services:
+  - rgw
 - name: rgw_reshard_batch_size
   type: uint
   level: advanced
