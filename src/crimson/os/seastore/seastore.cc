@@ -1187,41 +1187,53 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
   ceph::os::Transaction&& _t)
 {
-  // repeat_with_internal_context ensures ordering via collection lock
-  return repeat_with_internal_context(
-    _ch,
-    std::move(_t),
-    Transaction::src_t::MUTATE,
-    "do_transaction",
-    op_type_t::TRANSACTION,
-    [this](auto &ctx) {
-      return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
-        return seastar::do_with(std::vector<OnodeRef>(ctx.iter.objects.size()),
-          std::vector<OnodeRef>(),
-          [this, &ctx](auto& onodes, auto& d_onodes) mutable {
-          return trans_intr::repeat(
-            [this, &ctx, &onodes, &d_onodes]() mutable
-            -> tm_iertr::future<seastar::stop_iteration>
-            {
-              if (ctx.iter.have_op()) {
-                return _do_transaction_step(
-                  ctx, ctx.ch, onodes, d_onodes, ctx.iter
-                ).si_then([] {
+  auto f =
+      [this](auto &ctx) {
+        return with_trans_intr(*ctx.transaction, [&, this](auto &t) {
+          return seastar::do_with(std::vector<OnodeRef>(ctx.iter.objects.size()),
+            std::vector<OnodeRef>(),
+            [this, &ctx](auto& onodes, auto& d_onodes) mutable {
+            return trans_intr::repeat(
+              [this, &ctx, &onodes, &d_onodes]() mutable
+              -> tm_iertr::future<seastar::stop_iteration>
+              {
+                if (ctx.iter.have_op()) {
+                  return _do_transaction_step(
+                    ctx, ctx.ch, onodes, d_onodes, ctx.iter
+                  ).si_then([] {
+                    return seastar::make_ready_future<seastar::stop_iteration>(
+                      seastar::stop_iteration::no);
+                  });
+                } else {
                   return seastar::make_ready_future<seastar::stop_iteration>(
-                    seastar::stop_iteration::no);
-                });
-              } else {
-                return seastar::make_ready_future<seastar::stop_iteration>(
-                  seastar::stop_iteration::yes);
-              };
-            }).si_then([this, &ctx, &d_onodes] {
-              return onode_manager->write_dirty(*ctx.transaction, d_onodes);
-            });
-        }).si_then([this, &ctx] {
-          return transaction_manager->submit_transaction(*ctx.transaction);
+                    seastar::stop_iteration::yes);
+                };
+              }).si_then([this, &ctx, &d_onodes] {
+                return onode_manager->write_dirty(*ctx.transaction, d_onodes);
+              });
+          }).si_then([this, &ctx] {
+            return transaction_manager->submit_transaction(*ctx.transaction);
+          });
         });
-      });
-    });
+      };
+    ceph::os::Transaction::iterator i = _t.begin();
+    if (i.decode_op()->op == ceph::os::Transaction::OP_WRITE)  {
+      // repeat_with_internal_context ensures ordering via collection lock
+      return repeat_with_internal_context(
+        _ch,
+        std::move(_t),
+        Transaction::src_t::MUTATE,
+        "write_transaction",
+        op_type_t::WRITE,
+        f);
+    }
+    return repeat_with_internal_context(
+      _ch,
+      std::move(_t),
+      Transaction::src_t::MUTATE,
+      "do_transaction",
+      op_type_t::TRANSACTION,
+      f);
 }
 
 
