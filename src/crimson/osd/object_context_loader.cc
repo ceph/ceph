@@ -82,11 +82,11 @@ using crimson::common::local_conf;
 
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_and_clone_obc(
+  ObjectContextLoader::with_clone_obc_direct(
     hobject_t oid,
     with_both_obc_func_t&& func)
   {
-    LOG_PREFIX(ObjectContextLoader::with_head_and_clone_obc);
+    LOG_PREFIX(ObjectContextLoader::with_clone_obc_direct);
     assert(!oid.is_head());
     return with_obc<RWState::RWREAD>(
       oid.get_head(),
@@ -227,7 +227,7 @@ using crimson::common::local_conf;
                                                  with_obc_func_t&&);
 
   template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_and_clone_obc<RWState::RWWRITE>(
+  ObjectContextLoader::with_clone_obc_direct<RWState::RWWRITE>(
     hobject_t,
     with_both_obc_func_t&&);
 }
