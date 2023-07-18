@@ -396,7 +396,9 @@ struct MDRequestImpl : public MutationImpl {
   std::unique_ptr<BatchOp> release_batch_op();
 
   void print(std::ostream &out) const override;
-  void dump(ceph::Formatter *f) const override;
+  void dump_with_mds_lock(ceph::Formatter* f) const {
+    return _dump(f, true);
+  }
 
   ceph::cref_t<MClientRequest> release_client_request();
   void reset_peer_request(const ceph::cref_t<MMDSPeerRequest>& req=nullptr);
@@ -453,7 +455,10 @@ struct MDRequestImpl : public MutationImpl {
   bool waited_for_osdmap = false;
 
 protected:
-  void _dump(ceph::Formatter *f) const override;
+  void _dump(ceph::Formatter *f) const override {
+    _dump(f, false);
+  }
+  void _dump(ceph::Formatter *f, bool has_mds_lock) const;
   void _dump_op_descriptor(std::ostream& stream) const override;
 };
 
