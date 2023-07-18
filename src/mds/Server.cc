@@ -4392,6 +4392,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
   }
 
   MutationImpl::LockOpVec lov;
+  lov.add_rdlock(&cur->snaplock);
 
   unsigned mask = req->head.args.open.mask;
   if (mask) {
@@ -4563,11 +4564,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (!excl && !dnl->is_null()) {
     // it existed.
     ceph_assert(mdr.get()->is_rdlocked(&dn->lock));
-
-    MutationImpl::LockOpVec lov;
-    lov.add_rdlock(&dnl->get_inode()->snaplock);
-    if (!mds->locker->acquire_locks(mdr, lov))
-      return;
 
     handle_client_open(mdr);
     return;
