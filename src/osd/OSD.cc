@@ -7930,40 +7930,30 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-void OSD::trim_maps(epoch_t oldest, bool skip_maps)
+void OSD::trim_maps(epoch_t oldest)
 {
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
   dout(20) <<  __func__ << ": min=" << min << " oldest_map="
-           << superblock.get_oldest_map() << " skip_maps=" << skip_maps
-           << dendl;
+           << superblock.get_oldest_map() << dendl;
   if (min <= superblock.get_oldest_map())
     return;
 
   // Trim from the superblock's oldest_map up to `min`.
   // Break if we have exceeded the txn target size.
-  // If skip_maps is true, we will trim up `min` unconditionally.
   ObjectStore::Transaction t;
-  while (superblock.superblock.get_oldest_map() < min) {
-    dout(20) << " removing old osdmap epoch " << superblock.superblock.get_oldest_map() << dendl;
-    t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.superblock.get_oldest_map()));
-    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.superblock.get_oldest_map()));
+  while (superblock.get_oldest_map() < min &&
+         t.get_num_ops() < cct->_conf->osd_target_transaction_size) {
+    dout(20) << " removing old osdmap epoch " << superblock.get_oldest_map() << dendl;
+    t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.get_oldest_map()));
+    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.get_oldest_map()));
     superblock.maps.erase(superblock.get_oldest_map());
-    if (t.get_num_ops() > cct->_conf->osd_target_transaction_size) {
-      service.publish_superblock(superblock);
-      write_superblock(cct, superblock, t);
-      int tr = store->queue_transaction(service.meta_ch, t.claim_and_reset(), nullptr);
-      ceph_assert(tr == 0);
-      if (skip_maps == false) {
-        break;
-      }
-    }
   }
-  if (t.get_num_ops() > 0) {
-    service.publish_superblock(superblock);
-    write_superblock(cct, superblock, t);
-    int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
-    ceph_assert(tr == 0);
-  }
+
+  service.publish_superblock(superblock);
+  write_superblock(cct, superblock, t);
+  int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+  ceph_assert(tr == 0);
+
   // we should not trim past service.map_cache.cached_key_lower_bound() 
   // as there may still be PGs with those map epochs recorded.
   ceph_assert(min <= service.map_cache.cached_key_lower_bound());
@@ -8068,8 +8058,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  // missing some?
-  bool skip_maps = false;
   if (first > superblock.get_newest_map() + 1) {
     dout(10) << "handle_osd_map message skips epochs "
 	     << superblock.get_newest_map() + 1 << ".." << (first-1) << dendl;
@@ -8087,10 +8075,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       m->put();
       return;
     }
-    // The superblock's oldest_map should be moved forward (skipped)
-    // to the `first` osdmap of the incoming MOSDMap message.
-    // Trim all of the skipped osdmaps before updating the oldest_map.
-    skip_maps = true;
   }
 
   ObjectStore::Transaction t;
@@ -8211,7 +8195,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (!superblock.maps.empty()) {
-    trim_maps(m->cluster_osdmap_trim_lower_bound, skip_maps);
+    trim_maps(m->cluster_osdmap_trim_lower_bound);
     pg_num_history.prune(superblock.get_oldest_map());
   }
   superblock.insert_osdmap_epochs(first, last);
