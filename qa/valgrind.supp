@@ -184,20 +184,19 @@
    fun:*GetStackTrace*
 }
 {
-   tcmalloc: param points to uninit bytes under call_init (jammy)
+   tcmalloc: param points to uninit bytes under call_init (centos9) or call_init.part.0 (jammy)
    Memcheck:Param
    write(buf)
    fun:syscall
    obj:*libunwind*
-   obj:*libunwind*
-   obj:*libunwind*
+   ...
    obj:*libunwind*
    fun:_ULx86_64_step
    obj:*tcmalloc*
    obj:*tcmalloc*
    obj:*tcmalloc*
    obj:*tcmalloc*
-   fun:call_init.part.0
+   fun:call_init*
 }
 {
 	tcmalloc: string
