@@ -119,7 +119,20 @@ int ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header, bool top)
 	     << ", conflicting tag " << header->get_tag() << dendl;
     return -CEPHFS_EEXIST;
   }
-
+  if (header->get_scrub_mdsdir()) {
+    filepath fp;
+    mds_rank_t rank;
+    rank = mdcache->mds->get_nodeid();
+    if(rank >= 0 && rank < MAX_MDS) {
+      fp.set_path("", MDS_INO_MDSDIR(rank));
+    }
+    int r = _enqueue(mdcache->get_inode(fp.get_ino()), header, true);
+    if (r < 0) {
+      return r;
+    }
+    //to make sure mdsdir is always on the top
+    top = false;
+  }
   int r = _enqueue(in, header, top);
   if (r < 0)
     return r;
@@ -654,11 +667,6 @@ void ScrubStack::scrub_status(Formatter *f) {
   for (auto& p : scrubbing_map) {
     have_more = false;
     auto& header = p.second;
-
-    if (mdcache->get_inode(header->get_origin())->is_mdsdir() 
-    && header->get_scrub_mdsdir() && header->get_tag().empty()) {
-      continue;
-    }
 
     std::string tag(header->get_tag());
     f->open_object_section(tag.c_str()); // scrub id

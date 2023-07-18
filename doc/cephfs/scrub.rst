@@ -151,6 +151,6 @@ Evaluate strays using recursive scrub
     ceph tell mds.<fsname>:0 scrub start ~mdsdir recursive
 
 - ``~mdsdir`` is not enqueued by default when scrubbing at the CephFS root. In order to perform stray evaluation
-  at root, run scrub with flag ``scrub_mdsdir``::
+  at root, run scrub with flags ``scrub_mdsdir`` and ``recursive``::
 
-    ceph tell mds.<fsname>:0 scrub start / scrub_mdsdir
+    ceph tell mds.<fsname>:0 scrub start / recursive,scrub_mdsdir
