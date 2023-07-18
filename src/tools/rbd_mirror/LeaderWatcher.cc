@@ -452,6 +452,7 @@ void LeaderWatcher<I>::handle_post_release_leader_lock(int r,
   ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
 
+  m_retry_attempts = 0;
   notify_lock_released();
 }
 
@@ -879,6 +880,15 @@ void LeaderWatcher<I>::notify_lock_released() {
 template <typename I>
 void LeaderWatcher<I>::handle_notify_lock_released(int r) {
   dout(10) << "r=" << r << dendl;
+
+  if (r == -EBUSY  && m_retry_attempts < m_cct->_conf.get_val<uint64_t>(
+	"rbd_retry_attempts")) {
+    std::lock_guard locker{m_lock};
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    notify_lock_released();
+    return;
+  }
 
   Context *on_finish = nullptr;
   {
