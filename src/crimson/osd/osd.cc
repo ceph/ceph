@@ -940,7 +940,6 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
     return seastar::now();
   }
   // missing some?
-  bool skip_maps = false;
   epoch_t start = superblock.get_newest_map() + 1;
   if (first > start) {
     logger().info("handle_osd_map message skips epochs {}..{}",
@@ -956,8 +955,6 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
       return get_shard_services().osdmap_subscribe(
         m->cluster_osdmap_trim_lower_bound - 1, true);
     }
-    skip_maps = true;
-    start = first;
   }
 
   return seastar::do_with(ceph::os::Transaction{},
