@@ -469,12 +469,7 @@ void MDRequestImpl::print(ostream &out) const
   out << ")";
 }
 
-void MDRequestImpl::dump(Formatter *f) const
-{
-  _dump(f);
-}
-
-void MDRequestImpl::_dump(Formatter *f) const
+void MDRequestImpl::_dump(Formatter *f, bool has_mds_lock) const
 {
   std::lock_guard l(lock);
   f->dump_string("flag_point", _get_state_string());
@@ -519,6 +514,27 @@ void MDRequestImpl::_dump(Formatter *f) const
       f->dump_object("event", i);
     }
     f->close_section(); // events
+  }
+
+  if (has_mds_lock) {
+    f->open_array_section("locks");
+    for (auto& l : locks) {
+      f->open_object_section("lock");
+      {
+        auto* mdsco = l.lock->get_parent();
+        f->dump_object("object", *mdsco);
+        CachedStackStringStream css;
+        *css << *mdsco;
+        f->dump_string("object_string", css->strv());
+        f->dump_object("lock", *l.lock);
+        f->dump_int("flags", l.flags);
+        f->dump_int("wrlock_target", l.wrlock_target);
+      }
+      f->close_section();
+    }
+    f->close_section();
+  } else {
+    f->dump_null("locks");
   }
 }
 
