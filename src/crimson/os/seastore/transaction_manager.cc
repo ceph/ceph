@@ -10,6 +10,7 @@
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/lba_manager/btree/lba_btree_node.h"
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
+#include "crimson/os/seastore/object_data_handler.h"
 
 /*
  * TransactionManager logs
@@ -528,13 +529,80 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   }
 }
 
+bool support_shadow_extent(const CachedExtent &extent) {
+  return extent.get_type() == extent_types_t::OBJECT_DATA_BLOCK;
+}
+
 TransactionManager::promote_extent_ret
 TransactionManager::promote_extent(
   Transaction &t,
   CachedExtentRef extent)
 {
-  // TODO
-  return rewrite_extent_iertr::make_ready_future();
+  LOG_PREFIX(TransactionManager::promote_extent);
+  assert(epm->get_main_backend_type() == backend_type_t::SEGMENTED);
+  assert(epm->is_cold_device(extent->get_paddr().get_device_id()));
+
+  DEBUGT("promote extent: {}", t, *extent);
+
+  if (!support_shadow_extent(*extent)) {
+    auto mtime = extent->get_modify_time();
+    if (mtime == NULL_TIME) {
+      mtime = seastar::lowres_system_clock::now(); // XXX: is it appropriate?
+    }
+    return rewrite_extent(
+      t,
+      extent,
+      INIT_GENERATION,
+      mtime);
+  }
+  assert(extent->is_logical());
+
+  t.get_rewrite_version_stats().increment(extent->get_version());
+  cache->retire_extent(t, extent);
+
+  auto lextent = extent->cast<LogicalCachedExtent>();
+  auto cold_ext = cache->alloc_remapped_extent_by_type(
+    t,
+    extent->get_type(),
+    lextent->get_laddr(),
+    extent->get_paddr(),
+    extent->get_length(),
+    lextent->get_laddr(),
+    extent->get_bptr())->cast<LogicalCachedExtent>();
+  cold_ext->set_modify_time(extent->get_modify_time());
+
+  return lba_manager->alloc_shadow_extent(
+    t,
+    lextent->get_laddr(),
+    lextent->get_length(),
+    cold_ext->get_paddr(),
+    cold_ext.get()
+  ).si_then([lextent, cold_ext, &t, this, FNAME](auto mapping) {
+    ceph_assert(mapping->is_shadow_mapping());
+    DEBUGT("alloc_shadow_extent mapping: {}", t, *mapping);
+
+    cold_ext->set_laddr(mapping->get_key());
+
+    auto promote_ext = cache->alloc_new_extent_by_type(
+      t,
+      lextent->get_type(),
+      lextent->get_length(),
+      placement_hint_t::HOT,
+      INIT_GENERATION)->cast<LogicalCachedExtent>();
+    lextent->get_bptr().copy_out(
+      0,
+      lextent->get_length(),
+      promote_ext->get_bptr().c_str());
+    promote_ext->set_laddr(lextent->get_laddr());
+    promote_ext->set_modify_time(lextent->get_modify_time());
+
+    return lba_manager->update_mapping(
+      t,
+      lextent->get_laddr(),
+      lextent->get_paddr(),
+      promote_ext->get_paddr(),
+      promote_ext.get());
+  });
 }
 
 TransactionManager::demote_region_ret
