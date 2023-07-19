@@ -1470,6 +1470,10 @@ private:
 	     src2 == Transaction::src_t::CLEANER_MAIN));
     assert(!(src1 == Transaction::src_t::CLEANER_COLD &&
 	     src2 == Transaction::src_t::CLEANER_COLD));
+    assert(!(src1 == Transaction::src_t::PROMOTE &&
+	     src2 == Transaction::src_t::PROMOTE));
+    assert(!(src1 == Transaction::src_t::DEMOTE &&
+	     src2 == Transaction::src_t::DEMOTE));
     assert(!(src1 == Transaction::src_t::TRIM_ALLOC &&
              src2 == Transaction::src_t::TRIM_ALLOC));
 

@@ -140,6 +140,8 @@ void Cache::register_metrics()
     {src_t::TRIM_ALLOC, sm::label_instance("src", "TRIM_ALLOC")},
     {src_t::CLEANER_MAIN, sm::label_instance("src", "CLEANER_MAIN")},
     {src_t::CLEANER_COLD, sm::label_instance("src", "CLEANER_COLD")},
+    {src_t::PROMOTE, sm::label_instance("src", "PROMOTE")},
+    {src_t::DEMOTE, sm::label_instance("src", "DEMOTE")},
   };
   assert(labels_by_src.size() == (std::size_t)src_t::MAX);
 
@@ -625,6 +627,10 @@ void Cache::register_metrics()
            src2 == Transaction::src_t::CLEANER_MAIN) ||
           (src1 == Transaction::src_t::CLEANER_COLD &&
            src2 == Transaction::src_t::CLEANER_COLD) ||
+          (src1 == Transaction::src_t::PROMOTE &&
+           src2 == Transaction::src_t::PROMOTE) ||
+          (src1 == Transaction::src_t::DEMOTE &&
+           src2 == Transaction::src_t::DEMOTE) ||
           (src1 == Transaction::src_t::TRIM_ALLOC &&
            src2 == Transaction::src_t::TRIM_ALLOC)) {
         continue;

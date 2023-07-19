@@ -405,6 +405,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "CLEANER_MAIN";
   case transaction_type_t::CLEANER_COLD:
     return os << "CLEANER_COLD";
+  case transaction_type_t::PROMOTE:
+    return os << "PROMOTE";
+  case transaction_type_t::DEMOTE:
+    return os << "DEMOTE";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:
