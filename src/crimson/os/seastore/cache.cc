@@ -40,11 +40,12 @@ std::ostream &operator<<(std::ostream &out, const backref_entry_t &ent) {
 Cache::Cache(
   ExtentPlacementManager &epm)
   : epm(epm),
-    lru(crimson::common::get_conf<Option::size_t>(
-	  "seastore_cache_lru_size"))
+    memory_cache(create_memory_cache(
+      crimson::common::get_conf<Option::size_t>(
+	"seastore_cache_lru_size")))
 {
   LOG_PREFIX(Cache::Cache);
-  INFO("created, lru_size={}", lru.get_capacity());
+  INFO("created");
   register_metrics();
   segment_providers_by_device_id.resize(DEVICE_ID_MAX, nullptr);
 }
@@ -488,20 +489,6 @@ void Cache::register_metrics()
         stats.dirty_bytes,
         sm::description("total bytes of dirty extents")
       ),
-      sm::make_counter(
-	"cache_lru_size_bytes",
-	[this] {
-	  return lru.get_current_contents_bytes();
-	},
-	sm::description("total bytes pinned by the lru")
-      ),
-      sm::make_counter(
-	"cache_lru_size_extents",
-	[this] {
-	  return lru.get_current_contents_extents();
-	},
-	sm::description("total extents pinned by the lru")
-      ),
     }
   );
 
@@ -729,7 +716,7 @@ void Cache::mark_dirty(CachedExtentRef ref)
     return;
   }
 
-  lru.remove_from_lru(*ref);
+  memory_cache->remove_from_cache(*ref);
   ref->state = CachedExtent::extent_state_t::DIRTY;
   add_to_dirty(ref);
 }
@@ -762,7 +749,7 @@ void Cache::remove_extent(CachedExtentRef ref)
   if (ref->is_dirty()) {
     remove_from_dirty(ref);
   } else if (!ref->is_placeholder()) {
-    lru.remove_from_lru(*ref);
+    memory_cache->remove_from_cache(*ref);
   }
   extents.erase(*ref);
 }
@@ -805,7 +792,7 @@ void Cache::commit_replace_extent(
     intrusive_ptr_release(&*prev);
     intrusive_ptr_add_ref(&*next);
   } else {
-    lru.remove_from_lru(*prev);
+    memory_cache->remove_from_cache(*prev);
     add_to_dirty(next);
   }
 
@@ -1648,13 +1635,11 @@ Cache::close_ertr::future<> Cache::close()
 {
   LOG_PREFIX(Cache::close);
   INFO("close with {}({}B) dirty, dirty_from={}, alloc_from={}, "
-       "{}({}B) lru, totally {}({}B) indexed extents",
+       "totally {}({}B) indexed extents",
        dirty.size(),
        stats.dirty_bytes,
        get_oldest_dirty_from().value_or(JOURNAL_SEQ_NULL),
        get_oldest_backref_dirty_from().value_or(JOURNAL_SEQ_NULL),
-       lru.get_current_contents_extents(),
-       lru.get_current_contents_bytes(),
        extents.size(),
        extents.get_bytes());
   root.reset();
@@ -1667,7 +1652,7 @@ Cache::close_ertr::future<> Cache::close()
   backref_extents.clear();
   backref_entryrefs_by_seq.clear();
   assert(stats.dirty_bytes == 0);
-  lru.clear();
+  memory_cache->clear();
   return close_ertr::now();
 }
 
