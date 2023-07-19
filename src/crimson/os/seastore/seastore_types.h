@@ -1013,6 +1013,10 @@ constexpr laddr_t L_ADDR_ROOT = L_ADDR_MAX - 1;
 constexpr laddr_t L_ADDR_LBAT = L_ADDR_MAX - 2;
 constexpr size_t L_ADDR_ALIGNMENT = 4096;
 
+inline constexpr bool is_shadow_laddr(laddr_t laddr) {
+  return laddr != p2align(laddr, L_ADDR_ALIGNMENT);
+}
+
 struct __attribute((packed)) laddr_le_t {
   ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
 

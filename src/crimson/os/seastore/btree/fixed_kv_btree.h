@@ -204,6 +204,17 @@ public:
       }
       return ret;
     }
+    node_key_t get_val_end() const {
+      auto e = get_key() + get_val().len;
+      if constexpr (
+        std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
+                       node_val_t>) {
+        static_assert(node_key_alignment != 0 &&
+                      (node_key_alignment & (node_key_alignment - 1)) == 0);
+        e = p2align(e, node_key_alignment);
+      }
+      return e;
+    }
 
     bool is_end() const {
       // external methods may only resolve at a boundary if at end
@@ -223,12 +234,24 @@ public:
       assert(!is_end());
       auto val = get_val();
       auto key = get_key();
-      return std::make_unique<pin_t>(
-        ctx,
-	leaf.node,
-        leaf.pos,
-	val,
-	fixed_kv_node_meta_t<node_key_t>{ key, key + val.len, 0 });
+      if constexpr (
+        std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
+                       node_val_t>) {
+        return std::make_unique<pin_t>(
+          ctx,
+          leaf.node,
+          leaf.pos,
+          val,
+          fixed_kv_node_meta_t<node_key_t>{ key, get_val_end(), 0 },
+          key != p2align(key, node_key_alignment));
+      } else {
+        return std::make_unique<pin_t>(
+          ctx,
+          leaf.node,
+          leaf.pos,
+          val,
+          fixed_kv_node_meta_t<node_key_t>{ key, key + val.len, 0 });
+      }
     }
 
     typename leaf_node_t::Ref get_leaf_node() {
@@ -468,16 +491,35 @@ public:
       } else {
 	return iter.prev(
 	  c
-	).si_then([iter, addr](auto prev) {
-	  if ((prev.get_key() + prev.get_val().len) > addr) {
-	    return iterator_fut(
-	      interruptible::ready_future_marker{},
-	      prev);
-	  } else {
-	    return iterator_fut(
-	      interruptible::ready_future_marker{},
-	      iter);
-	  }
+	).si_then([c, iter, addr](auto prev) {
+          auto fun = [iter, addr](auto prev) {
+	    if (prev.get_val_end() > addr) {
+	      return iterator_fut(
+	        interruptible::ready_future_marker{},
+	        prev);
+	    } else {
+	      return iterator_fut(
+	        interruptible::ready_future_marker{},
+	        iter);
+	    };
+          };
+
+          if constexpr (
+            std::is_same_v<crimson::os::seastore::lba_manager::btree::lba_map_val_t,
+                           node_val_t>) {
+            if (is_shadow_laddr(prev.get_key())) {
+              // skip shadow entry
+              return prev.prev(c
+              ).si_then([fun=std::move(fun)](auto prev) {
+                return fun(prev);
+              });
+            } else {
+              return fun(prev);
+            }
+          } else {
+            boost::ignore_unused(c);
+            return fun(prev);
+          }
 	});
       }
     });

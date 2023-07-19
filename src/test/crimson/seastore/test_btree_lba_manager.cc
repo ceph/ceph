@@ -347,7 +347,7 @@ struct btree_lba_manager_test : btree_test_base {
   void complete_commit(Transaction &t) final {}
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
-    lba_manager.reset(new BtreeLBAManager(*cache));
+    lba_manager.reset(new BtreeLBAManager(*cache, false));
     return lba_manager->mkfs(t);
   }
 

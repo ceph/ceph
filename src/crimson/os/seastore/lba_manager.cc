@@ -24,8 +24,11 @@ LBAManager::update_mappings(
   });
 }
 
-LBAManagerRef lba_manager::create_lba_manager(Cache &cache) {
-  return LBAManagerRef(new btree::BtreeLBAManager(cache));
+LBAManagerRef lba_manager::create_lba_manager(
+  Cache &cache,
+  bool enable_shadow_entry) {
+  return LBAManagerRef(new btree::BtreeLBAManager(
+    cache, enable_shadow_entry));
 }
 
 }

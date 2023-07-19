@@ -1033,6 +1033,7 @@ public:
   virtual bool has_been_invalidated() const = 0;
   virtual CachedExtentRef get_parent() const = 0;
   virtual uint16_t get_pos() const = 0;
+  virtual bool is_shadow_mapping() const = 0;
 
   virtual get_child_ret_t<LogicalCachedExtent>
   get_logical_extent(Transaction &t) = 0;
@@ -1198,6 +1199,11 @@ public:
 
   void set_laddr(laddr_t nladdr) {
     laddr = nladdr;
+  }
+
+  bool is_shadow_extent() const {
+    assert(laddr != L_ADDR_NULL);
+    return is_shadow_laddr(laddr);
   }
 
   void apply_delta_and_adjust_crc(

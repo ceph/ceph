@@ -26,6 +26,7 @@
 namespace crimson::os::seastore::lba_manager::btree {
 
 class BtreeLBAMapping : public BtreeNodeMapping<laddr_t, paddr_t> {
+  bool is_shadow = false;
 public:
   BtreeLBAMapping(op_context_t<laddr_t> ctx)
     : BtreeNodeMapping(ctx) {}
@@ -34,15 +35,20 @@ public:
     CachedExtentRef parent,
     uint16_t pos,
     lba_map_val_t &val,
-    lba_node_meta_t &&meta)
+    lba_node_meta_t &&meta,
+    bool is_shadow)
     : BtreeNodeMapping(
 	c,
 	parent,
 	pos,
 	val.paddr,
 	val.len,
-	std::forward<lba_node_meta_t>(meta))
+	std::forward<lba_node_meta_t>(meta)),
+      is_shadow(is_shadow)
   {}
+  bool is_shadow_mapping() const final {
+    return is_shadow;
+  }
 };
 
 using LBABtree = FixedKVBtree<
@@ -69,8 +75,11 @@ using LBABtree = FixedKVBtree<
  */
 class BtreeLBAManager : public LBAManager {
 public:
-  BtreeLBAManager(Cache &cache)
-    : cache(cache)
+  BtreeLBAManager(
+    Cache &cache,
+    bool enable_shadow_entry)
+    : cache(cache),
+      enable_shadow_entry(enable_shadow_entry)
   {
     register_metrics();
   }
@@ -96,6 +105,13 @@ public:
     extent_len_t len,
     paddr_t addr,
     LogicalCachedExtent*) final;
+
+  alloc_extent_ret alloc_shadow_extent(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t len,
+    paddr_t paddr,
+    LogicalCachedExtent *nextent) final;
 
   ref_ret decref_extent(
     Transaction &t,
@@ -149,6 +165,7 @@ public:
 private:
   Cache &cache;
 
+  bool enable_shadow_entry;
 
   struct {
     uint64_t num_alloc_extents = 0;

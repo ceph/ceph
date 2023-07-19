@@ -222,8 +222,15 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
            t, result.refcount, *ref);
     if (result.refcount == 0) {
       cache->retire_extent(t, ref);
+      if (result.shadow_addr != P_ADDR_NULL) {
+	return cache->retire_extent_addr(
+          t, result.shadow_addr, result.length
+        ).si_then([result] {
+          return ref_iertr::make_ready_future<unsigned>(result.refcount);
+        });
+     }
     }
-    return result.refcount;
+    return ref_iertr::make_ready_future<unsigned>(result.refcount);
   });
 }
 
@@ -235,12 +242,20 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
   TRACET("{}", t, offset);
   return lba_manager->decref_extent(t, offset
   ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
-    DEBUGT("extent refcount is decremented to {} -- {}~{}, {}",
-           t, result.refcount, offset, result.length, result.addr);
+    DEBUGT("extent refcount is decremented to {} -- {}~{}, {} shadow addr {}",
+           t, result.refcount, offset, result.length,
+	   result.addr, result.shadow_addr);
     if (result.refcount == 0 && !result.addr.is_zero()) {
       return cache->retire_extent_addr(
 	t, result.addr, result.length
-      ).si_then([] {
+      ).si_then([this, result, &t] {
+	if (result.shadow_addr != P_ADDR_NULL) {
+	  return cache->retire_extent_addr(
+            t, result.shadow_addr, result.length);
+	} else {
+	  return Cache::retire_extent_iertr::now();
+	}
+      }).si_then([] {
 	return ref_ret(
 	  interruptible::ready_future_marker{},
 	  0);
@@ -639,7 +654,8 @@ TransactionManagerRef make_transaction_manager(
 {
   auto epm = std::make_unique<ExtentPlacementManager>();
   auto cache = std::make_unique<Cache>(*epm);
-  auto lba_manager = lba_manager::create_lba_manager(*cache);
+  auto lba_manager = lba_manager::create_lba_manager(
+    *cache, !secondary_devices.empty());
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
