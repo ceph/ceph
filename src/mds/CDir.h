@@ -608,8 +608,8 @@ public:
   }
   void enable_frozen_inode();
 
-  std::ostream& print_db_line_prefix(std::ostream& out) override;
-  void print(std::ostream& out) override;
+  std::ostream& print_db_line_prefix(std::ostream& out) const override;
+  void print(std::ostream& out) const override;
   void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;
   void dump_load(ceph::Formatter *f);
 

@@ -33,7 +33,7 @@
 
 using namespace std;
 
-ostream& CDentry::print_db_line_prefix(ostream& out)
+ostream& CDentry::print_db_line_prefix(ostream& out) const
 {
   return out << ceph_clock_now() << " mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
@@ -137,7 +137,7 @@ bool operator<(const CDentry& l, const CDentry& r)
 }
 
 
-void CDentry::print(ostream& out)
+void CDentry::print(ostream& out) const
 {
   out << *this;
 }

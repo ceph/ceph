@@ -137,7 +137,7 @@ public:
     batch_reqs.clear();
     server->reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
   }
-  void print(std::ostream& o) {
+  void print(std::ostream& o) const override {
     o << "[batch front=" << *mdr << "]";
   }
 };
