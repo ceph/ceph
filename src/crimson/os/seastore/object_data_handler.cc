@@ -417,7 +417,7 @@ ObjectDataHandler::write_ret do_insertions(
 	  ctx.t,
 	  region.addr,
 	  region.len
-	).si_then([&region](auto extent) {
+	).si_then([ctx, &region](auto extent) {
 	  if (extent->get_laddr() != region.addr) {
 	    logger().debug(
 	      "object_data_handler::do_insertions alloc got addr {},"
@@ -427,6 +427,15 @@ ObjectDataHandler::write_ret do_insertions(
 	  }
 	  ceph_assert(extent->get_laddr() == region.addr);
 	  ceph_assert(extent->get_length() == region.len);
+	  auto c = ctx.t.get_onode_info();
+	  auto p = c.lower_bound(extent->get_laddr());
+	  if (p == c.end() || p->laddr > extent->get_laddr()) {
+	    ceph_assert(p != c.begin());
+	    --p;
+	    ceph_assert(p->laddr <= extent->get_laddr() &&
+			p->laddr + p->length >= extent->get_laddr() + extent->get_length());
+	  }
+	  extent->set_logical_cache_info(p->laddr, p->length);
 	  auto iter = region.bl->cbegin();
 	  iter.copy(region.len, extent->get_bptr().c_str());
 	  return ObjectDataHandler::write_iertr::now();
@@ -910,6 +919,10 @@ ObjectDataHandler::clear_ret ObjectDataHandler::trim_data_reservation(
 {
   ceph_assert(!object_data.is_null());
   ceph_assert(size <= object_data.get_reserved_data_len());
+  ctx.t.update_onode_info(
+    object_data.get_reserved_data_base(),
+    object_data.get_reserved_data_len(),
+    extent_types_t::OBJECT_DATA_BLOCK);
   return seastar::do_with(
     lba_pin_list_t(),
     extent_to_write_list_t(),
@@ -1216,6 +1229,10 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
 	object_data,
 	p2roundup(offset + len, ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, len, &object_data] {
+        ctx.t.update_onode_info(
+          object_data.get_reserved_data_base(),
+	  object_data.get_reserved_data_len(),
+	  extent_types_t::OBJECT_DATA_BLOCK);
 	auto logical_offset = object_data.get_reserved_data_base() + offset;
 	return ctx.tm.get_pins(
 	  ctx.t,
@@ -1251,6 +1268,10 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	object_data,
 	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
       ).si_then([this, ctx, offset, &object_data, &bl] {
+        ctx.t.update_onode_info(
+          object_data.get_reserved_data_base(),
+	  object_data.get_reserved_data_len(),
+	  extent_types_t::OBJECT_DATA_BLOCK);
 	auto logical_offset = object_data.get_reserved_data_base() + offset;
 	return ctx.tm.get_pins(
 	  ctx.t,
@@ -1287,23 +1308,36 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 	  ceph_assert(!object_data.is_null());
 	  ceph_assert((obj_offset + len) <= object_data.get_reserved_data_len());
 	  ceph_assert(len > 0);
-	  laddr_t loffset =
-	    object_data.get_reserved_data_base() + obj_offset;
+	  auto onode_base = object_data.get_reserved_data_base();
+	  auto onode_length = object_data.get_reserved_data_len();
+	  laddr_t loffset = onode_base + obj_offset;
 	  return ctx.tm.get_pins(
 	    ctx.t,
 	    loffset,
 	    len
-	  ).si_then([ctx, loffset, len, &ret](auto _pins) {
+	  ).si_then([ctx, loffset, len, onode_base,
+		     onode_length, &ret](auto _pins) {
 	    // offset~len falls within reserved region and len > 0
 	    ceph_assert(_pins.size() >= 1);
 	    ceph_assert((*_pins.begin())->get_key() <= loffset);
+	    if (bool cached = ctx.tm.update_non_volatile_cache_if_cached(
+	          onode_base, onode_length, extent_types_t::OBJECT_DATA_BLOCK);
+		!cached) {
+	      for (auto &p : _pins) {
+		if (ctx.tm.maybe_update_non_volatile_cache(
+	              onode_base, p->get_val(), onode_length,
+		      extent_types_t::OBJECT_DATA_BLOCK)) {
+		  break;
+		}
+	      }
+	    }
 	    return seastar::do_with(
 	      std::move(_pins),
 	      loffset,
-	      [ctx, loffset, len, &ret](auto &pins, auto &current) {
+	      [ctx, loffset, len, onode_base, onode_length, &ret](auto &pins, auto &current) {
 		return trans_intr::do_for_each(
 		  pins,
-		  [ctx, loffset, len, &current, &ret](auto &pin)
+		  [ctx, loffset, len, onode_base, onode_length, &current, &ret](auto &pin)
 		  -> read_iertr::future<> {
 		    ceph_assert(current <= (loffset + len));
 		    ceph_assert(
@@ -1320,10 +1354,12 @@ ObjectDataHandler::read_ret ObjectDataHandler::read(
 		      return ctx.tm.read_pin<ObjectDataBlock>(
 			ctx.t,
 			std::move(pin)
-		      ).si_then([&ret, &current, end](auto extent) {
+		      ).si_then([&ret, &current, onode_base, onode_length, end](auto extent) {
 			ceph_assert(
 			  (extent->get_laddr() + extent->get_length()) >= end);
 			ceph_assert(end > current);
+			auto lextent = extent->template cast<ObjectDataBlock>();
+			lextent->set_logical_cache_info(onode_base, onode_length);
 			ret.append(
 			  bufferptr(
 			    extent->get_bptr(),

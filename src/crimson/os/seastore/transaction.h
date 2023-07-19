@@ -397,6 +397,7 @@ public:
     backref_tree_stats = {};
     ool_write_stats = {};
     rewrite_version_stats = {};
+    onode_info.clear();
     conflicted = false;
     if (!has_reset) {
       has_reset = true;
@@ -486,6 +487,57 @@ public:
     return trans_id;
   }
 
+  enum class onode_op_t : uint8_t {
+    NONE,
+    // no READ, since read transaction doesn't need to submit
+    PROMOTE,
+    REMOVE
+  };
+  struct onode_info_t {
+    laddr_t laddr;
+    extent_len_t length;
+    extent_types_t type;
+    mutable onode_op_t op;
+    onode_info_t(laddr_t laddr,
+		 extent_len_t lenght,
+		 extent_types_t type,
+		 onode_op_t op)
+      : laddr(laddr), length(length), type(type), op(op) {}
+    struct cmp {
+      using is_transparent = void;
+      auto operator()(const onode_info_t& l, const onode_info_t& r) const {
+	return l.laddr < r.laddr;
+      }
+      auto operator()(const onode_info_t& l, const laddr_t& r) const {
+	return l.laddr < r;
+      }
+      auto operator()(const laddr_t& l, const onode_info_t &r) const {
+	return l < r.laddr;
+      }
+    };
+  };
+  using onode_info_set_t = std::set<onode_info_t, onode_info_t::cmp>;
+
+  void update_onode_info(
+    laddr_t laddr,
+    extent_len_t length,
+    extent_types_t type,
+    onode_op_t op = onode_op_t::NONE) {
+    assert(laddr != L_ADDR_NULL);
+    auto p = onode_info.find(laddr);
+    if (p == onode_info.end()) {
+      onode_info.emplace(laddr, length, type, op);
+    } else {
+      assert(p->length == length);
+      assert(p->type == type);
+      p->op = op;
+    }
+  }
+
+  onode_info_set_t& get_onode_info() {
+    return onode_info;
+  }
+
 private:
   friend class Cache;
   friend Ref make_test_transaction();
@@ -553,6 +605,8 @@ private:
    * Set of extents retired by *this.
    */
   pextent_set_t retired_set;
+
+  onode_info_set_t onode_info;
 
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;

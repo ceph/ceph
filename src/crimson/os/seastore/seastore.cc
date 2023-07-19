@@ -1462,7 +1462,19 @@ SeaStore::Shard::_remove(
 	  });
     });
   }).si_then([this, &ctx, onode]() mutable {
-    return onode_manager->erase_onode(*ctx.transaction, onode);
+    auto onode_data = onode->get_layout().object_data.get();
+    auto laddr = onode_data.get_reserved_data_base();
+    auto len = onode_data.get_reserved_data_len();
+    return onode_manager->erase_onode(*ctx.transaction, onode
+    ).si_then([&ctx, laddr, len] {
+      if (laddr != L_ADDR_NULL) {
+	ctx.transaction->update_onode_info(
+	  laddr,
+	  len,
+	  extent_types_t::OBJECT_DATA_BLOCK,
+	  Transaction::onode_op_t::REMOVE);
+      }
+    });
   }).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(
