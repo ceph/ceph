@@ -144,16 +144,11 @@ sc::result ReservingReplicas::react(const ReservationTimeout&)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "ReservingReplicas::react(const ReservationTimeout&)" << dendl;
 
-  dout(10)
-    << "PgScrubber: " << scrbr->get_spgid()
-    << " timeout on reserving replicas (since " << entered_at
-    << ")" << dendl;
-  scrbr->get_clog()->warn()
-    << "osd." << scrbr->get_whoami()
-    << " PgScrubber: " << scrbr->get_spgid()
-    << " timeout on reserving replicsa (since " << entered_at
-    << ")";
-
+  const auto msg = fmt::format(
+      "PgScrubber: {} timeout on reserving replicas (since {})",
+      scrbr->get_spgid(), entered_at);
+  dout(5) << msg << dendl;
+  scrbr->get_clog()->warn() << "osd." << scrbr->get_whoami() << " " << msg;
   scrbr->on_replica_reservation_timeout();
   return discard_event();
 }
