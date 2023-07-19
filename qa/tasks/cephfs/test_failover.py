@@ -340,6 +340,50 @@ class TestClusterResize(CephFSTestCase):
 
         self.fs.wait_for_daemons(timeout=90)
 
+class TestFailoverBeaconHealth(CephFSTestCase):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 1
+
+    def initiate_journal_replay(self, num_files=100):
+        """ Initiate journal replay by creating files and restarting mds server."""
+
+        self.config_set("mds", "mds_delay_journal_replay_for_testing", "5000")
+        original_active = self.fs.get_active_names()[0]
+        self.mounts[0].test_files = [str(x) for x in range(num_files)]
+        self.mounts[0].create_files()
+        self.fs.fail()
+        self.fs.set_joinable()
+
+    def test_replay_beacon_estimated_time(self):
+        """
+        That beacon emits warning message with estimated time to complete replay
+        """
+        self.initiate_journal_replay()
+        self.wait_for_health("MDS_ESTIMATED_REPLAY_TIME", 60)
+
+    def test_replay_estimated_time_accuracy(self):
+        self.initiate_journal_replay(250)
+        def replay_complete():
+            health = self.ceph_cluster.mon_manager.get_mon_health(debug=False, detail=False)
+            codes = [s for s in health['checks']]
+            return 'MDS_ESTIMATED_REPLAY_TIME' not in codes
+        
+        def get_estimated_time():
+            while True:
+                health = self.ceph_cluster.mon_manager.get_mon_health(debug=False, detail=True)
+                codes = [s for s in health['checks']]
+                if 'MDS_ESTIMATED_REPLAY_TIME' in codes:
+                    message = health['checks']['MDS_ESTIMATED_REPLAY_TIME']['detail'][0]['message']
+                    time_duration = float(message.split(" ")[-1][0:-2])
+                    completion_percentage = float(message.split(" ")[2][0:-1])
+                    log.debug(f"MDS_ESTIMATED_REPLAY_TIME is present in health: {message}, duration: {time_duration}, completion_percentage: {completion_percentage}")
+                    if completion_percentage >= 50:
+                        return time_duration
+            time.sleep(1)
+        estimated_time = get_estimated_time()
+        self.wait_until_true(replay_complete, timeout=estimated_time * 1.25) # wait for 25% more time than estimated time
+            
+
 class TestFailover(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 2

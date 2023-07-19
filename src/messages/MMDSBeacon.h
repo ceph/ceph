@@ -46,6 +46,7 @@ enum mds_metric_t {
   MDS_HEALTH_CACHE_OVERSIZED,
   MDS_HEALTH_SLOW_METADATA_IO,
   MDS_HEALTH_CLIENTS_LAGGY,
+  MDS_HEALTH_ESTIMATED_REPLAY_TIME,
   MDS_HEALTH_DUMMY, // not a real health warning, for testing
 };
 
@@ -65,6 +66,7 @@ inline const char *mds_metric_name(mds_metric_t m)
   case MDS_HEALTH_CACHE_OVERSIZED: return "MDS_CACHE_OVERSIZED";
   case MDS_HEALTH_SLOW_METADATA_IO: return "MDS_SLOW_METADATA_IO";
   case MDS_HEALTH_CLIENTS_LAGGY: return "MDS_CLIENTS_LAGGY";
+  case MDS_HEALTH_ESTIMATED_REPLAY_TIME: return "MDS_ESTIMATED_REPLAY_TIME";
   case MDS_HEALTH_DUMMY: return "MDS_DUMMY";
   default:
     return "???";
@@ -101,6 +103,8 @@ inline const char *mds_metric_summary(mds_metric_t m)
     return "%num% MDSs report slow metadata IOs";
   case MDS_HEALTH_CLIENTS_LAGGY:
     return "%num% client(s) laggy due to laggy OSDs";  
+  case MDS_HEALTH_ESTIMATED_REPLAY_TIME:
+    return "%num% estimated journal reply time";  
   default:
     return "???";
   }

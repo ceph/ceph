@@ -63,7 +63,15 @@ class MDSRank;
 class LogSegment;
 class ESubtreeMap;
 
-class MDLog {
+typedef struct estimated_reply_time
+{
+  double percent_complete;
+  std::chrono::seconds estimated_time;
+  std::chrono::seconds elapsed_time;
+} estimated_reply_time_t;
+
+class MDLog
+{
 public:
   MDLog(MDSRank *m);
   ~MDLog();
@@ -153,6 +161,7 @@ public:
   void reopen(MDSContext *onopen);
   void append();
   void replay(MDSContext *onfinish);
+  estimated_reply_time_t get_replay_estimated_complete_time();
 
   void standby_trim_segments();
 
@@ -301,5 +310,8 @@ private:
   std::set<LogSegment*> expired_segments;
   std::set<LogSegment*> expiring_segments;
   uint64_t events_since_last_major_segment = 0;
+
+  // -- events --
+  ceph::coarse_mono_time replay_start_time = ceph::coarse_mono_clock::zero();
 };
 #endif
