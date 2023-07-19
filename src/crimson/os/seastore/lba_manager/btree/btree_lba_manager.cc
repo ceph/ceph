@@ -140,9 +140,11 @@ BtreeLBAManager::mkfs(
 }
 
 BtreeLBAManager::get_mappings_ret
-BtreeLBAManager::get_mappings(
+BtreeLBAManager::get_mappings_impl(
   Transaction &t,
-  laddr_t offset, extent_len_t length)
+  laddr_t offset,
+  extent_len_t length,
+  bool allow_shaodw)
 {
   LOG_PREFIX(BtreeLBAManager::get_mappings);
   TRACET("{}~{}", t, offset, length);
@@ -150,11 +152,11 @@ BtreeLBAManager::get_mappings(
   return with_btree_state<LBABtree, lba_pin_list_t>(
     cache,
     c,
-    [c, offset, length, FNAME](auto &btree, auto &ret) {
+    [c, offset, length, allow_shaodw, FNAME](auto &btree, auto &ret) {
       return LBABtree::iterate_repeat(
 	c,
 	btree.upper_bound_right(c, offset),
-	[&ret, offset, length, c, FNAME](auto &pos) {
+	[&ret, offset, length, c, allow_shaodw, FNAME](auto &pos) {
 	  if (pos.is_end() || pos.get_key() >= (offset + length)) {
 	    TRACET("{}~{} done with {} results",
 	           c.trans, offset, length, ret.size());
@@ -165,12 +167,35 @@ BtreeLBAManager::get_mappings(
 	  TRACET("{}~{} got {}, {}, repeat ...",
 	         c.trans, offset, length, pos.get_key(), pos.get_val());
 	  ceph_assert(pos.get_val_end() > offset);
-	  ret.push_back(pos.get_pin(c));
+	  auto pin = pos.get_pin(c);
+	  if (!pin->is_shadow_mapping() || allow_shaodw) {
+	    ret.push_back(std::move(pin));
+	  }
 	  return typename LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
 	});
     });
+}
+
+BtreeLBAManager::get_mappings_ret
+BtreeLBAManager::get_mappings(
+  Transaction &t,
+  laddr_t offset,
+  extent_len_t length) {
+  return get_mappings_impl(t, offset, length, false);
+}
+
+BtreeLBAManager::get_mappings_ret
+BtreeLBAManager::get_mappings_with_shadow(
+  Transaction &t,
+  laddr_t offset,
+  extent_len_t length) {
+  LOG_PREFIX(BtreeLBAManager::get_mappings_with_shadow);
+  auto new_offset = reset_shadow_mapping(offset);
+  DEBUGT("reset offset {} => {}", t, offset, new_offset);
+  offset = new_offset;
+  return get_mappings_impl(t, offset, length, true);
 }
 
 BtreeLBAManager::get_mappings_ret

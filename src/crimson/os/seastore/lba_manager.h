@@ -55,6 +55,10 @@ public:
     Transaction &t,
     laddr_list_t &&extent_lisk) = 0;
 
+  virtual get_mappings_ret get_mappings_with_shadow(
+    Transaction &t,
+    laddr_t offset, extent_len_t length) = 0;
+
   /**
    * Fetches the mapping for laddr_t
    *

@@ -95,6 +95,10 @@ public:
     Transaction &t,
     laddr_list_t &&list) final;
 
+  get_mappings_ret get_mappings_with_shadow(
+    Transaction &t,
+    laddr_t offset, extent_len_t length) final;
+
   get_mapping_ret get_mapping(
     Transaction &t,
     laddr_t offset) final;
@@ -183,6 +187,12 @@ private:
   op_context_t<laddr_t> get_context(Transaction &t) {
     return op_context_t<laddr_t>{cache, t};
   }
+
+  get_mappings_ret get_mappings_impl(
+    Transaction &t,
+    laddr_t offset,
+    extent_len_t length,
+    bool allow_shadow);
 
   seastar::metrics::metric_group metrics;
   void register_metrics();

@@ -515,7 +515,7 @@ TransactionManager::maybe_load_onode(
   extent_len_t length,
   extent_types_t type)
 {
-  return lba_manager->get_mappings(t, laddr, length
+  return lba_manager->get_mappings_with_shadow(t, laddr, length
   ).si_then([this, laddr, length, type, &t](auto pin_list) {
     LOG_PREFIX(TransactionManager::maybe_load_onode);
     for (auto &pin : pin_list) {
@@ -749,7 +749,7 @@ TransactionManager::get_extents_if_live(
     }
 
     if (is_logical_type(type)) {
-      return lba_manager->get_mappings(
+      return lba_manager->get_mappings_with_shadow(
 	t,
 	laddr,
 	len
