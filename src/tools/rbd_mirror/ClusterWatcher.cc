@@ -64,7 +64,15 @@ void ClusterWatcher::refresh_pools()
 
   if (r >= 0) {
     m_site_name = site_name;
+  } else if (r == -ETIMEDOUT  &&
+      m_retry_attempts < g_ceph_context->_conf.get_val<uint64_t>(
+        "rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    refresh_pools();
+    return;
   }
+  m_retry_attempts = 0;
 
   // TODO: perhaps use a workqueue instead, once we get notifications
   // about config changes for existing pools

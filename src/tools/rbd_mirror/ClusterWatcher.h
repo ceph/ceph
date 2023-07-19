@@ -58,6 +58,7 @@ private:
   ServicePools m_service_pools;
   PoolPeers m_pool_peers;
   std::string m_site_name;
+  uint64_t m_retry_attempts = 0;
 
   void read_pool_peers(PoolPeers *pool_peers);
 
