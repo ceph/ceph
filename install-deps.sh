@@ -477,10 +477,7 @@ function populate_wheelhouse() {
     pip $PIP_OPTS $install \
       'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
     if test $# != 0 ; then
-        # '--use-feature=fast-deps --use-deprecated=legacy-resolver' added per
-        # https://github.com/pypa/pip/issues/9818 These should be able to be
-        # removed at some point in the future.
-        pip --use-feature=fast-deps --use-deprecated=legacy-resolver $PIP_OPTS $install $@ || return 1
+        pip $PIP_OPTS $install $@ || return 1
     fi
 }
 
