@@ -522,6 +522,18 @@ TransactionManager::promote_extent(
   return rewrite_extent_iertr::make_ready_future();
 }
 
+TransactionManager::demote_region_ret
+TransactionManager::demote_region(
+  Transaction &t,
+  laddr_t laddr,
+  extent_len_t length,
+  extent_len_t max_demote_size)
+{
+  // TODO
+  return demote_region_iertr::make_ready_future<demote_region_res_t>(
+    demote_region_res_t{0, 0, false});
+}
+
 TransactionManager::get_extents_if_live_ret
 TransactionManager::get_extents_if_live(
   Transaction &t,

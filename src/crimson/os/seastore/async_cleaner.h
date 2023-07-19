@@ -349,6 +349,25 @@ public:
     CachedExtentRef extent) = 0;
 
   /**
+   * demote_region
+   *
+   * demote the logical extents promoted from the slower device.
+   */
+  struct demote_region_res_t {
+    extent_len_t proceed_size = 0;
+    extent_len_t demotion_size = 0;
+    bool completed = false;
+  };
+  using demote_region_iertr = base_iertr;
+  using demote_region_ret = demote_region_iertr::future<
+    demote_region_res_t>;
+  virtual demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length,
+    extent_len_t max_demote_size) = 0;
+
+  /**
    * get_extent_if_live
    *
    * Returns extent at specified location if still referenced by
