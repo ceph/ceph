@@ -508,6 +508,28 @@ TransactionManager::rewrite_logical_extent(
     nlextent.get());
 }
 
+TransactionManager::maybe_load_onode_ret
+TransactionManager::maybe_load_onode(
+  Transaction &t,
+  laddr_t laddr,
+  extent_len_t length,
+  extent_types_t type)
+{
+  return lba_manager->get_mappings(t, laddr, length
+  ).si_then([this, laddr, length, type, &t](auto pin_list) {
+    LOG_PREFIX(TransactionManager::maybe_load_onode);
+    for (auto &pin : pin_list) {
+      TRACET("found extent: {}", t, pin->get_key());
+      if (pin->is_shadow_mapping()) {
+        TRACET("add onode to cache: {}", t, laddr);
+	nv_cache->move_to_top(laddr, length, type);
+        return seastar::now();
+      }
+    }
+    return seastar::now();
+  });
+}
+
 TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   Transaction &t,
   CachedExtentRef extent,
