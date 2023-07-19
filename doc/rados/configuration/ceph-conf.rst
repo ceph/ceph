@@ -286,19 +286,21 @@ surrounded by square brackets. For example:
 Config file option values
 -------------------------
 
-The value of a configuration option is a string. If it is too long to
-fit in a single line, you can put a backslash (``\``) at the end of line
-as the line continuation marker, so the value of the option will be
-the string after ``=`` in current line combined with the string in the next
-line::
+The value of a configuration option is a string. If the string is too long to
+fit on a single line, you can put a backslash (``\``) at the end of the line
+and the backslash will act as a line continuation marker. In such a case, the
+value of the option will be the string after ``=`` in the current line,
+combined with the string in the next line. Here is an example::
 
   [global]
   foo = long long ago\
   long ago
 
-In the example above, the value of "``foo``" would be "``long long ago long ago``".
+In this example, the value of the "``foo``" option is "``long long ago long
+ago``".
 
-Normally, the option value ends with a new line, or a comment, like
+An option value typically ends with either a newline or a comment. For
+example:
 
 .. code-block:: ini
 
@@ -306,100 +308,108 @@ Normally, the option value ends with a new line, or a comment, like
     obscure_one = difficult to explain # I will try harder in next release
     simpler_one = nothing to explain
 
-In the example above, the value of "``obscure one``" would be "``difficult to explain``";
-and the value of "``simpler one`` would be "``nothing to explain``".
+In this example, the value of the "``obscure one``" option is "``difficult to
+explain``" and the value of the "``simpler one`` options is "``nothing to
+explain``".
 
-If an option value contains spaces, and we want to make it explicit, we
-could quote the value using single or double quotes, like
+When an option value contains spaces, it can be enclosed within single quotes
+or double quotes in order to make its scope clear and in order to make sure
+that the first space in the value is not interpreted as the end of the value.
+For example:
 
 .. code-block:: ini
 
     [global]
     line = "to be, or not to be"
 
-Certain characters are not allowed to be present in the option values directly.
-They are ``=``, ``#``, ``;`` and ``[``. If we have to, we need to escape them,
-like
+In option values, there are four characters that are treated as escape
+characters: ``=``, ``#``, ``;`` and ``[``. They are permitted to occur in an
+option value only if they are immediately preceded by the backslash character
+(``\``). For example:
 
 .. code-block:: ini
 
     [global]
     secret = "i love \# and \["
 
-Every configuration option is typed with one of the types below:
+Each configuration option falls under one of the following types:
 
 .. describe:: int
 
-   64-bit signed integer, Some SI prefixes are supported, like "K", "M", "G",
-   "T", "P", "E", meaning, respectively, 10\ :sup:`3`, 10\ :sup:`6`,
-   10\ :sup:`9`, etc.  And "B" is the only supported unit. So, "1K", "1M", "128B" and "-1" are all valid
-   option values. Some times, a negative value implies "unlimited" when it comes to
-   an option for threshold or limit.
+   64-bit signed integer. Some SI suffixes are supported, such as "K", "M",
+   "G", "T", "P", and "E" (meaning, respectively, 10\ :sup:`3`, 10\ :sup:`6`,
+   10\ :sup:`9`, etc.). "B" is the only supported unit string. Thus "1K", "1M",
+   "128B" and "-1" are all valid option values. When a negative value is
+   assigned to a threshold option, this can indicate that the option is
+   "unlimited" -- that is, that there is no threshold or limit in effect.
 
    :example: ``42``, ``-1``
 
 .. describe:: uint
 
-   It is almost identical to ``integer``. But a negative value will be rejected.
+   This differs from ``integer`` only in that negative values are not
+   permitted.
 
    :example: ``256``, ``0``
 
 .. describe:: str
 
-   Free style strings encoded in UTF-8, but some characters are not allowed. Please
-   reference the above notes for the details.
+   A string encoded in UTF-8. Certain characters are not permitted. Reference
+   the above notes for the details.
 
    :example: ``"hello world"``, ``"i love \#"``, ``yet-another-name``
 
 .. describe:: boolean
 
-   one of the two values ``true`` or ``false``. But an integer is also accepted,
-   where "0" implies ``false``, and any non-zero values imply ``true``.
+   Typically either of the two values ``true`` or ``false``. However, any
+   integer is permitted: "0" implies ``false``, and any non-zero value implies
+   ``true``.
 
    :example: ``true``, ``false``, ``1``, ``0``
 
 .. describe:: addr
 
-   a single address optionally prefixed with ``v1``, ``v2`` or ``any`` for the messenger
-   protocol. If the prefix is not specified, ``v2`` protocol is used. Please see
-   :ref:`address_formats` for more details.
+   A single address, optionally prefixed with ``v1``, ``v2`` or ``any`` for the
+   messenger protocol. If no prefix is specified, the ``v2`` protocol is used.
+   For more details, see :ref:`address_formats`.
 
    :example: ``v1:1.2.3.4:567``, ``v2:1.2.3.4:567``, ``1.2.3.4:567``, ``2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567``, ``[::1]:6789``
 
 .. describe:: addrvec
 
-   a set of addresses separated by ",". The addresses can be optionally quoted with ``[`` and ``]``.
+   A set of addresses separated by ",". The addresses can be optionally quoted
+   with ``[`` and ``]``.
 
    :example: ``[v1:1.2.3.4:567,v2:1.2.3.4:568]``, ``v1:1.2.3.4:567,v1:1.2.3.14:567``  ``[2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::567], [2409:8a1e:8fb6:aa20:1260:4bff:fe92:18f5::568]``
 
 .. describe:: uuid
 
-   the string format of a uuid defined by `RFC4122 <https://www.ietf.org/rfc/rfc4122.txt>`_.
-   And some variants are also supported, for more details, see
-   `Boost document <https://www.boost.org/doc/libs/1_74_0/libs/uuid/doc/uuid.html#String%20Generator>`_.
+   The string format of a uuid defined by `RFC4122
+   <https://www.ietf.org/rfc/rfc4122.txt>`_. Certain variants are also
+   supported: for more details, see `Boost document
+   <https://www.boost.org/doc/libs/1_74_0/libs/uuid/doc/uuid.html#String%20Generator>`_.
 
    :example: ``f81d4fae-7dec-11d0-a765-00a0c91e6bf6``
 
 .. describe:: size
 
-   denotes a 64-bit unsigned integer. Both SI prefixes and IEC prefixes are
-   supported. And "B" is the only supported unit. A negative value will be
-   rejected.
+   64-bit unsigned integer. Both SI prefixes and IEC prefixes are supported.
+   "B" is the only supported unit string. Negative values are not permitted.
 
    :example: ``1Ki``, ``1K``, ``1KiB`` and ``1B``.
 
 .. describe:: secs
 
-   denotes a duration of time. By default the unit is second if not specified.
-   Following units of time are supported:
+   Denotes a duration of time. The default unit of time is the second.
+   The following units of time are supported:
 
-              * second: "s", "sec", "second", "seconds"
-              * minute: "m", "min", "minute", "minutes"
-              * hour: "hs", "hr", "hour", "hours"
-              * day: "d", "day", "days"
-              * week: "w", "wk", "week", "weeks"
-              * month: "mo", "month", "months"
-              * year: "y", "yr", "year", "years"
+              * second: ``s``, ``sec``, ``second``, ``seconds``
+              * minute: ``m``, ``min``, ``minute``, ``minutes``
+              * hour: ``hs``, ``hr``, ``hour``, ``hours``
+              * day: ``d``, ``day``, ``days``
+              * week: ``w``, ``wk``, ``week``, ``weeks``
+              * month: ``mo``, ``month``, ``months``
+              * year: ``y``, ``yr``, ``year``, ``years``
 
    :example: ``1 m``, ``1m`` and ``1 week``
 
@@ -408,77 +418,83 @@ Every configuration option is typed with one of the types below:
 Monitor configuration database
 ==============================
 
-The monitor cluster manages a database of configuration options that
-can be consumed by the entire cluster, enabling streamlined central
-configuration management for the entire system.  The vast majority of
-configuration options can and should be stored here for ease of
-administration and transparency.
+The monitor cluster manages a database of configuration options that can be
+consumed by the entire cluster. This allows for streamlined central
+configuration management of the entire system. For ease of administration and
+transparency, the vast majority of configuration options can and should be
+stored in this database.
 
-A handful of settings may still need to be stored in local
-configuration files because they affect the ability to connect to the
-monitors, authenticate, and fetch configuration information.  In most
-cases this is limited to the ``mon_host`` option, although this can
-also be avoided through the use of DNS SRV records.
+Some settings might need to be stored in local configuration files because they
+affect the ability of the process to connect to the monitors, to authenticate,
+and to fetch configuration information. In most cases this applies only to the
+``mon_host`` option. This issue can be avoided by using DNS SRV records.
 
 Sections and masks
 ------------------
 
-Configuration options stored by the monitor can live in a global
-section, daemon type section, or specific daemon section, just like
-options in a configuration file can.
+Configuration options stored by the monitor can be stored in a global section,
+in a daemon-type section, or in a specific daemon section. In this, they are
+no different from the options in a configuration file.
 
-In addition, options may also have a *mask* associated with them to
-further restrict which daemons or clients the option applies to.
-Masks take two forms:
+In addition, options may have a *mask* associated with them to further restrict
+which daemons or clients the option applies to. Masks take two forms:
 
-#. ``type:location`` where *type* is a CRUSH property like `rack` or
-   `host`, and *location* is a value for that property.  For example,
+#. ``type:location`` where ``type`` is a CRUSH property like ``rack`` or
+   ``host``, and ``location`` is a value for that property. For example,
    ``host:foo`` would limit the option only to daemons or clients
    running on a particular host.
-#. ``class:device-class`` where *device-class* is the name of a CRUSH
-   device class (e.g., ``hdd`` or ``ssd``).  For example,
+#. ``class:device-class`` where ``device-class`` is the name of a CRUSH
+   device class (for example, ``hdd`` or ``ssd``). For example,
    ``class:ssd`` would limit the option only to OSDs backed by SSDs.
-   (This mask has no effect for non-OSD daemons or clients.)
+   (This mask has no effect on non-OSD daemons or clients.)
 
-When setting a configuration option, the `who` may be a section name,
-a mask, or a combination of both separated by a slash (``/``)
-character.  For example, ``osd/rack:foo`` would mean all OSD daemons
-in the ``foo`` rack.
+In commands that specify a configuration option, the argument of the option (in
+the following examples, this is the "who" string) may be a section name, a
+mask, or a combination of both separated by a slash character (``/``). For
+example, ``osd/rack:foo`` would refer to all OSD daemons in the ``foo`` rack.
 
-When viewing configuration options, the section name and mask are
-generally separated out into separate fields or columns to ease readability.
-
+When configuration options are shown, the section name and mask are presented
+in separate fields or columns to make them more readable.
 
 Commands
 --------
 
 The following CLI commands are used to configure the cluster:
 
-* ``ceph config dump`` will dump the entire configuration database for
-  the cluster.
+* ``ceph config dump`` dumps the entire monitor configuration
+  database for the cluster.
 
-* ``ceph config get <who>`` will dump the configuration for a specific
-  daemon or client (e.g., ``mds.a``), as stored in the monitors'
-  configuration database.
+* ``ceph config get <who>`` dumps the configuration options stored in
+  the monitor configuration database for a specific daemon or client
+  (for example, ``mds.a``).
 
-* ``ceph config set <who> <option> <value>`` will set a configuration
-  option in the monitors' configuration database.
+* ``ceph config get <who> <option>`` shows either a configuration value
+  stored in the monitor configuration database for a specific daemon or client
+  (for example, ``mds.a``), or, if that value is not present in the monitor
+  configuration database, the compiled-in default value.
 
-* ``ceph config show <who>`` will show the reported running
-  configuration for a running daemon.  These settings may differ from
-  those stored by the monitors if there are also local configuration
-  files in use or options have been overridden on the command line or
-  at run time.  The source of the option values is reported as part
-  of the output.
+* ``ceph config set <who> <option> <value>`` specifies a configuration
+  option in the monitor configuration database.
 
-* ``ceph config assimilate-conf -i <input file> -o <output file>``
-  will ingest a configuration file from *input file* and move any
-  valid options into the monitors' configuration database.  Any
-  settings that are unrecognized, invalid, or cannot be controlled by
-  the monitor will be returned in an abbreviated config file stored in
-  *output file*.  This command is useful for transitioning from legacy
-  configuration files to centralized monitor-based configuration.
+* ``ceph config show <who>`` shows the configuration for a running daemon. 
+  These settings might differ from those stored by the monitors if there are
+  also local configuration files in use or if options have been overridden on
+  the command line or at run time. The source of the values of the options is
+  displayed in the output.
 
+* ``ceph config assimilate-conf -i <input file> -o <output file>`` ingests a 
+  configuration file from *input file* and moves any valid options into the
+  monitor configuration database. Any settings that are unrecognized, are
+  invalid, or cannot be controlled by the monitor will be returned in an
+  abbreviated configuration file stored in *output file*. This command is
+  useful for transitioning from legacy configuration files to centralized
+  monitor-based configuration.
+
+Note that ``ceph config set <who> <option> <value>`` and ``ceph config get
+<who> <option>`` will not necessarily return the same values. The latter
+command will show compiled-in default values. In order to determine whether a
+configuration option is present in the monitor configuration database, run
+``ceph config dump``.
 
 Help
 ====
