@@ -678,6 +678,19 @@
 }
 
 # "Conditional jump or move depends on uninitialised value(s)" in OpenSSL
+# https://github.com/openssl/openssl/issues/19719
+{
+  uninitialized value in gcm_cipher_internal
+  Memcheck:Cond
+  ...
+  fun:gcm_cipher_internal
+  ...
+  fun:ossl_gcm_stream_final
+  fun:EVP_DecryptFinal_ex
+  ...
+}
+
+# "Conditional jump or move depends on uninitialised value(s)" in OpenSSL
 # while using aes-128-gcm with AES-NI enabled. Not observed while running
 # with `OPENSSL_ia32cap="~0x200000200000000"`.
 {
