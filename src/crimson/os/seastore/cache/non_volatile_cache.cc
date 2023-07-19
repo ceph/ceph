@@ -265,7 +265,7 @@ private:
     ceph_assert(p.second);
     stat.tracked_size += length;
     if (should_demote()) {
-      // TODO: wake up listener
+      listener->maybe_wake_background();
     }
     return b;
   }

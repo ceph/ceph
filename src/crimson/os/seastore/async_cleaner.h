@@ -433,6 +433,7 @@ struct BackgroundListener {
   virtual ~BackgroundListener() = default;
   virtual void maybe_wake_background() = 0;
   virtual void maybe_wake_blocked_io() = 0;
+  virtual void maybe_wake_promote() = 0;
   virtual state_t get_state() const = 0;
 
   bool is_ready() const {
