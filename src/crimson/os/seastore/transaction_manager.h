@@ -506,6 +506,11 @@ public:
     rewrite_gen_t target_generation,
     sea_time_point modify_time) final;
 
+  using ExtentCallbackInterface::promote_extent_ret;
+  promote_extent_ret promote_extent(
+    Transaction &t,
+    CachedExtentRef extent);
+
   using ExtentCallbackInterface::get_extents_if_live_ret;
   get_extents_if_live_ret get_extents_if_live(
     Transaction &t,

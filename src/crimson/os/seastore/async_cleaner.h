@@ -333,6 +333,22 @@ public:
     sea_time_point modify_time) = 0;
 
   /**
+   * promote_extent
+   *
+   * Promote an extent located in the slow device to the faster device.
+   * When the type of extent is ObjectDataBlock, the original extent won't
+   * be retired, so that this extent is located in two differenct devices
+   * at the same time, which is helpful to reduce the cost of cleaner process.
+   * Otherwise follow the normal rewrite process but its rewrite generation
+   * will be INIT_GENERATION, just like a new extent.
+   */
+  using promote_extent_iertr = base_iertr;
+  using promote_extent_ret = promote_extent_iertr::future<>;
+  virtual promote_extent_ret promote_extent(
+    Transaction &t,
+    CachedExtentRef extent) = 0;
+
+  /**
    * get_extent_if_live
    *
    * Returns extent at specified location if still referenced by

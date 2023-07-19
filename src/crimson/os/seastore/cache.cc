@@ -42,7 +42,10 @@ Cache::Cache(
   : epm(epm),
     memory_cache(create_memory_cache(
       crimson::common::get_conf<Option::size_t>(
-	"seastore_cache_lru_size")))
+	"seastore_cache_lru_size"),
+      crimson::common::get_conf<Option::size_t>(
+	"seastore_cache_promotion_size"),
+      &epm))
 {
   LOG_PREFIX(Cache::Cache);
   INFO("created");

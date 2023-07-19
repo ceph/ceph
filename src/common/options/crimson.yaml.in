@@ -82,6 +82,11 @@ options:
   level: advanced
   desc: Size in bytes of extents to keep in cache.
   default: 64_M
+- name: seastore_cache_promotion_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents for promotion to the hot tier.
+  default: 2_M
 - name: seastore_obj_data_write_amplification
   type: float
   level: advanced

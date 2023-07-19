@@ -591,6 +591,14 @@ public:
     return prior_instance;
   }
 
+  uint8_t get_cache_state() const {
+    return cache_state;
+  }
+
+  void set_cache_state(uint8_t state) {
+    cache_state = state;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
@@ -689,6 +697,9 @@ private:
   // the target rewrite generation for the followup rewrite
   // or the rewrite generation for the fresh write
   rewrite_gen_t rewrite_generation = NULL_GENERATION;
+
+  // opaque state to CachedExtent, used by MemoryCache
+  uint8_t cache_state = 0;
 
 protected:
   trans_view_set_t mutation_pendings;

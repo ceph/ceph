@@ -513,6 +513,15 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   }
 }
 
+TransactionManager::promote_extent_ret
+TransactionManager::promote_extent(
+  Transaction &t,
+  CachedExtentRef extent)
+{
+  // TODO
+  return rewrite_extent_iertr::make_ready_future();
+}
+
 TransactionManager::get_extents_if_live_ret
 TransactionManager::get_extents_if_live(
   Transaction &t,
