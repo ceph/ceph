@@ -131,9 +131,10 @@ class DriveSelection(object):
             if not disk.available and disk.ceph_device and disk.lvs:
                 other_osdspec_affinity = ''
                 for lv in disk.lvs:
-                    if lv['osdspec_affinity'] != self.spec.service_id:
-                        other_osdspec_affinity = lv['osdspec_affinity']
-                        break
+                    if 'osdspec_affinity' in lv.keys():
+                        if lv['osdspec_affinity'] != self.spec.service_id:
+                            other_osdspec_affinity = lv['osdspec_affinity']
+                            break
                 if other_osdspec_affinity:
                     logger.debug("{} is already used in spec {}, "
                                  "skipping it.".format(disk.path, other_osdspec_affinity))
