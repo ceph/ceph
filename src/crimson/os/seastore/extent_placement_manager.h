@@ -248,17 +248,18 @@ public:
     placement_hint_t hint,
 #ifdef UNIT_TESTS_BUILT
     rewrite_gen_t gen,
-    std::optional<paddr_t> external_paddr = std::nullopt
+    std::optional<paddr_t> external_paddr = std::nullopt,
 #else
-    rewrite_gen_t gen
+    rewrite_gen_t gen,
 #endif
+    bool is_tracked = false
   ) {
     assert(hint < placement_hint_t::NUM_HINTS);
     assert(is_target_rewrite_generation(gen));
     assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
+    gen = adjust_generation(category, type, hint, gen, is_tracked);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
@@ -286,6 +287,17 @@ public:
 	  generation_to_writer(gen)]->alloc_paddr(length);
     }
     return {addr, std::move(bp), gen};
+  }
+
+  bool is_going_to_evict(const LogicalCachedExtent &extent) {
+    auto type = extent.get_type();
+    auto gen = adjust_generation(
+      get_extent_category(type),
+      type,
+      extent.get_user_hint(),
+      extent.get_rewrite_generation(),
+      false);
+    return gen >= MIN_COLD_GENERATION;
   }
 
   /**
@@ -406,7 +418,8 @@ private:
       data_category_t category,
       extent_types_t type,
       placement_hint_t hint,
-      rewrite_gen_t gen) {
+      rewrite_gen_t gen,
+      bool is_tracked) {
     if (type == extent_types_t::ROOT) {
       gen = INLINE_GENERATION;
     } else if (get_main_backend_type() == backend_type_t::SEGMENTED &&
@@ -442,6 +455,10 @@ private:
 
     if (gen > dynamic_max_rewrite_generation) {
       gen = dynamic_max_rewrite_generation;
+    }
+
+    if (is_tracked && gen >= MIN_COLD_GENERATION) {
+      gen = MIN_COLD_GENERATION - 1;
     }
 
     return gen;

@@ -35,7 +35,8 @@ TransactionManager::TransactionManager(
     lba_manager(std::move(_lba_manager)),
     journal(std::move(_journal)),
     epm(std::move(_epm)),
-    backref_manager(std::move(_backref_manager))
+    backref_manager(std::move(_backref_manager)),
+    nv_cache(nullptr)
 {
   epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
@@ -452,6 +453,18 @@ TransactionManager::rewrite_logical_extent(
   TRACET("rewriting extent -- {}", t, *extent);
 
   auto lextent = extent->cast<LogicalCachedExtent>();
+  bool is_tracked =
+    support_non_volatile_cache() &&
+    // lextent is from hot tier
+    !epm->is_cold_device(lextent->get_paddr().get_device_id()) &&
+    // lextent will be evicted to the cold tier
+    epm->is_going_to_evict(*lextent) &&
+    // lextent is cached by non volatile cache
+    nv_cache->is_cached(
+      lextent->get_laddr(),
+      lextent->get_length(),
+      lextent->get_type());
+
   cache->retire_extent(t, extent);
   auto nlextent = cache->alloc_new_extent_by_type(
     t,
@@ -459,7 +472,8 @@ TransactionManager::rewrite_logical_extent(
     lextent->get_length(),
     lextent->get_user_hint(),
     // get target rewrite generation
-    lextent->get_rewrite_generation())->cast<LogicalCachedExtent>();
+    lextent->get_rewrite_generation(),
+    is_tracked)->cast<LogicalCachedExtent>();
   lextent->get_bptr().copy_out(
     0,
     lextent->get_length(),
@@ -588,7 +602,8 @@ TransactionManager::promote_extent(
       lextent->get_type(),
       lextent->get_length(),
       placement_hint_t::HOT,
-      INIT_GENERATION)->cast<LogicalCachedExtent>();
+      INIT_GENERATION,
+      true)->cast<LogicalCachedExtent>();
     lextent->get_bptr().copy_out(
       0,
       lextent->get_length(),

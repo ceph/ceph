@@ -925,7 +925,8 @@ struct transaction_manager_test_t :
               get_extent_category(t),
               t,
               placement_hint_t::HOT,
-              gen);
+              gen,
+	      false);
             if (expected_generations[t][gen] != epm_gen) {
               logger().error("caller: {}, extent type: {}, input generation: {}, "
 			     "expected generation : {}, adjust result from EPM: {}",

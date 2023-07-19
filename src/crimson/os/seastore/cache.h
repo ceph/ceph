@@ -870,18 +870,19 @@ public:
     placement_hint_t hint,  ///< [in] user hint
 #ifdef UNIT_TESTS_BUILT
     rewrite_gen_t gen,      ///< [in] rewrite generation
-    std::optional<paddr_t> epaddr = std::nullopt ///< [in] paddr fed by callers
+    std::optional<paddr_t> epaddr = std::nullopt,///< [in] paddr fed by callers
 #else
-    rewrite_gen_t gen
+    rewrite_gen_t gen,
 #endif
+    bool is_tracked = false
   ) {
     LOG_PREFIX(Cache::alloc_new_extent);
     SUBTRACET(seastore_cache, "allocate {} {}B, hint={}, gen={}",
               t, T::TYPE, length, hint, rewrite_gen_printer_t{gen});
 #ifdef UNIT_TESTS_BUILT
-    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen, epaddr);
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen, epaddr, is_tracked);
 #else
-    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen);
+    auto result = epm.alloc_new_extent(t, T::TYPE, length, hint, gen, is_tracked);
 #endif
     auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
@@ -958,7 +959,8 @@ public:
     extent_types_t type,   ///< [in] type tag
     extent_len_t length,   ///< [in] length
     placement_hint_t hint, ///< [in] user hint
-    rewrite_gen_t gen      ///< [in] rewrite generation
+    rewrite_gen_t gen,     ///< [in] rewrite generation
+    bool is_tracked
     );
 
   /**
