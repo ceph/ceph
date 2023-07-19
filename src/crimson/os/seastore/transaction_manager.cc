@@ -215,7 +215,7 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
   });
 }
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::dec_ret TransactionManager::dec_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
@@ -231,22 +231,24 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
 	return cache->retire_extent_addr(
           t, result.shadow_addr, result.length
         ).si_then([result] {
-          return ref_iertr::make_ready_future<unsigned>(result.refcount);
+          return ref_iertr::make_ready_future<
+	    dec_res_t>(result.refcount, result.shadow_addr);
         });
-     }
+      }
     }
-    return ref_iertr::make_ready_future<unsigned>(result.refcount);
+    return ref_iertr::make_ready_future<
+      dec_res_t>(result.refcount, P_ADDR_NULL);
   });
 }
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::dec_ret TransactionManager::dec_ref(
   Transaction &t,
   laddr_t offset)
 {
   LOG_PREFIX(TransactionManager::dec_ref);
   TRACET("{}", t, offset);
   return lba_manager->decref_extent(t, offset
-  ).si_then([this, FNAME, offset, &t](auto result) -> ref_ret {
+  ).si_then([this, FNAME, offset, &t](auto result) -> dec_ret {
     DEBUGT("extent refcount is decremented to {} -- {}~{}, {} shadow addr {}",
            t, result.refcount, offset, result.length,
 	   result.addr, result.shadow_addr);
@@ -260,26 +262,26 @@ TransactionManager::ref_ret TransactionManager::dec_ref(
 	} else {
 	  return Cache::retire_extent_iertr::now();
 	}
-      }).si_then([] {
-	return ref_ret(
+      }).si_then([result] {
+	return dec_ret(
 	  interruptible::ready_future_marker{},
-	  0);
+          dec_res_t(0, result.shadow_addr));
       });
     } else {
-      return ref_ret(
+      return dec_ret(
 	interruptible::ready_future_marker{},
-	result.refcount);
+        dec_res_t(result.refcount, result.shadow_addr));
     }
   });
 }
 
-TransactionManager::refs_ret TransactionManager::dec_ref(
+TransactionManager::decs_ret TransactionManager::dec_ref(
   Transaction &t,
   std::vector<laddr_t> offsets)
 {
   LOG_PREFIX(TransactionManager::dec_ref);
   DEBUG("{} offsets", offsets.size());
-  return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
+  return seastar::do_with(std::move(offsets), std::vector<dec_res_t>(),
       [this, &t] (auto &&offsets, auto &refcnt) {
       return trans_intr::do_for_each(offsets.begin(), offsets.end(),
         [this, &t, &refcnt] (auto &laddr) {
@@ -288,7 +290,8 @@ TransactionManager::refs_ret TransactionManager::dec_ref(
           return ref_iertr::now();
         });
       }).si_then([&refcnt] {
-        return ref_iertr::make_ready_future<std::vector<unsigned>>(std::move(refcnt));
+        return ref_iertr::make_ready_future<
+	  std::vector<dec_res_t>>(std::move(refcnt));
       });
     });
 }

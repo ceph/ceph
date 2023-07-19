@@ -165,8 +165,8 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return retire_iertr::now();
       }
     }
-    return tm.dec_ref(t, extent).si_then([addr, len, &t] (unsigned cnt) {
-      assert(cnt == 0);
+    return tm.dec_ref(t, extent).si_then([addr, len, &t] (auto res) {
+      assert(res.refcount == 0);
       SUBTRACET(seastore_onode, "retired {}B at {:#x} ...", t, len, addr);
     });
   }
