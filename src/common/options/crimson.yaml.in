@@ -87,6 +87,16 @@ options:
   level: advanced
   desc: Size in bytes of extents for promotion to the hot tier.
   default: 2_M
+- name: seastore_non_volatile_cache_capacity
+  type: size
+  level: advanced
+  desc: Size in bytes of memory used by non volatile cache
+  default: 200_M
+- name: seastore_non_volatile_cache_demote_size
+  type: size
+  level: advanced
+  desc: Size in bytes of extents to be demoted by non volatile cache
+  default: 2_M
 - name: seastore_obj_data_write_amplification
   type: float
   level: advanced

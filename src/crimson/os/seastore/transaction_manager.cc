@@ -40,6 +40,10 @@ TransactionManager::TransactionManager(
 {
   epm->set_extent_callback(this);
   journal->set_write_pipeline(&write_pipeline);
+  if (epm->has_cold_tier()) {
+    nv_cache = epm->get_non_volatile_cache();
+    ceph_assert(support_non_volatile_cache());
+  }
 }
 
 TransactionManager::mkfs_ertr::future<> TransactionManager::mkfs()
@@ -910,7 +914,8 @@ TransactionManagerRef make_transaction_manager(
 
   epm->init(std::move(journal_trimmer),
 	    std::move(cleaner),
-	    std::move(cold_segment_cleaner));
+	    std::move(cold_segment_cleaner),
+	    cache->get_memory_cache());
   epm->set_primary_device(primary_device);
 
   return std::make_unique<TransactionManager>(

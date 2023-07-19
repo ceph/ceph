@@ -600,6 +600,10 @@ public:
     return epm.get_block_size();
   }
 
+  MemoryCache *get_memory_cache() {
+    return memory_cache.get();
+  }
+
 private:
   // This is a workaround std::move_only_function not being available,
   // not really worth generalizing at this time.

@@ -7,6 +7,8 @@
 
 #include "crimson/os/seastore/async_cleaner.h"
 #include "crimson/os/seastore/cached_extent.h"
+#include "crimson/os/seastore/cache/memory_cache.h"
+#include "crimson/os/seastore/cache/non_volatile_cache.h"
 #include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/transaction.h"
@@ -187,7 +189,8 @@ public:
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
   }
 
-  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
+  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&,
+            MemoryCache *);
 
   SegmentSeqAllocator &get_ool_segment_seq_allocator() const {
     return *ool_segment_seq_allocator;
@@ -216,6 +219,10 @@ public:
 
   store_statfs_t get_stat() const {
     return background_process.get_stat();
+  }
+
+  NonVolatileCache *get_non_volatile_cache() {
+    return background_process.get_non_volatile_cache();
   }
 
   using mount_ertr = crimson::errorator<
@@ -511,7 +518,8 @@ private:
 
     void init(JournalTrimmerImplRef &&_trimmer,
               AsyncCleanerRef &&_cleaner,
-              AsyncCleanerRef &&_cold_cleaner) {
+              AsyncCleanerRef &&_cold_cleaner,
+              MemoryCache *_memory_cache) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
       main_cleaner = std::move(_cleaner);
@@ -535,11 +543,28 @@ private:
             "seastore_multiple_tiers_default_evict_ratio"),
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_fast_evict_ratio"));
+
+        ceph_assert(_memory_cache != nullptr);
+        memory_cache = _memory_cache;
+        memory_cache->set_background_callback(this);
+
+        nv_cache = create_non_volatile_cache(
+          crimson::common::get_conf<Option::size_t>(
+            "seastore_non_volatile_cache_capacity"),
+          crimson::common::get_conf<Option::size_t>(
+            "seastore_non_volatile_cache_demote_size"));
+        nv_cache->set_background_callback(this);
+      } else {
+        memory_cache = nullptr;
       }
     }
 
     journal_type_t get_journal_type() const {
       return trimmer->get_journal_type();
+    }
+
+    NonVolatileCache *get_non_volatile_cache() {
+      return nv_cache.get();
     }
 
     bool has_cold_tier() const {
@@ -559,6 +584,8 @@ private:
       main_cleaner->set_extent_callback(cb);
       if (has_cold_tier()) {
         cold_cleaner->set_extent_callback(cb);
+        memory_cache->set_extent_callback(cb);
+        nv_cache->set_extent_callback(cb);
       }
     }
 
@@ -905,6 +932,8 @@ private:
 
     JournalTrimmerImplRef trimmer;
     AsyncCleanerRef main_cleaner;
+    MemoryCache *memory_cache;
+    NonVolatileCacheRef nv_cache;
 
     /*
      * cold tier (optional, see has_cold_tier())
