@@ -83,6 +83,7 @@ private:
   cls::rbd::ChildImageSpecs m_child_images;
   std::string m_snap_name;
   uint64_t m_snap_id;
+  uint64_t m_retry_attempts = 0;
   bool m_trashed_snapshot = false;
   bool m_child_attached = false;
 
