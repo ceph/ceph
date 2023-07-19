@@ -6,6 +6,7 @@ import logging
 from io import BytesIO, StringIO
 
 from tasks.mgr.mgr_test_case import MgrTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology import contextutil
 from teuthology.exceptions import CommandFailedError
 
@@ -14,7 +15,7 @@ log = logging.getLogger(__name__)
 NFS_POOL_NAME = '.nfs'  # should match mgr_module.py
 
 # TODO Add test for cluster update when ganesha can be deployed on multiple ports.
-class TestNFS(MgrTestCase):
+class TestNFS(MgrTestCase, CephFSTestCase):
     def _cmd(self, *args):
         return self.get_ceph_cmd_stdout(args)
 
