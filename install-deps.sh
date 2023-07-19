@@ -165,8 +165,34 @@ function install_pkg_on_ubuntu {
     fi
 }
 
+boost_ver=1.75
+
+function clean_boost_on_ubuntu {
+    echo 'About to clean_boost_on_ubuntu. Continue?'
+    #read -r
+    local ver=$boost_ver
+    local installed_ver
+    installed_ver=$(apt -qq list --installed 'ceph-libboost*-dev' 2> /dev/null \
+			| grep -e 'libboost[0-9].[0-9]\+-dev' \
+			| cut -d ' ' -f 2 \
+			| cut -d '.' -f1,2)
+    ls /etc/apt/sources.list.d
+    $SUDO rm -f "/etc/apt/sources.list.d/ceph-libboost${installed_ver}.list"
+    $SUDO rm -f "/etc/apt/sources.list.d/ceph-libboost.list"
+    $SUDO rm -f "/etc/apt/sources.list.d/libboost.list"
+    $SUDO apt-get update -y
+    apt -qq list --installed 'ceph-libboost*-dev' 2> /dev/null | \
+	grep -F -v "$boost_ver" | \
+	cut -f 1 -d / | \
+	xargs "$SUDO" apt-get -y remove
+    echo 'Finished clean_boost_on_ubuntu. Continue?'
+    #read -r
+}
+
 function install_boost_on_ubuntu {
-    local ver=1.75
+    echo 'About to install_boost_on_ubuntu. Continue?'
+    #read -r
+    local ver=$boost_ver
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
@@ -203,6 +229,8 @@ function install_boost_on_ubuntu {
 	ceph-libboost-test$ver-dev \
 	ceph-libboost-thread$ver-dev \
 	ceph-libboost-timer$ver-dev
+    echo 'Finished install_boost_on_ubuntu. Continue?'
+    #read -r
 }
 
 function install_libzbd_on_ubuntu {
@@ -299,6 +327,8 @@ else
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         ensure_python3_sphinx_on_ubuntu
+	clean_boost_on_ubuntu
+	echo "Hi, my version is $VERSION!"
         case "$VERSION" in
             *Bionic*)
                 ensure_decent_gcc_on_ubuntu 9 bionic
