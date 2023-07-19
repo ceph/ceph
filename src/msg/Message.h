@@ -593,7 +593,7 @@ MURef<T> make_message(Args&&... args) {
 
 template <std::derived_from<Message> M>
 struct fmt::formatter<M> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
   auto format(const M& m, FormatContext& ctx) const {
     std::ostringstream oss;
