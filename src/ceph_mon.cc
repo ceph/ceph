@@ -356,6 +356,8 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
+  MonitorDBStore *store = new MonitorDBStore(g_conf()->mon_data);
+
   // -- mkfs --
   if (mkfs) {
 
@@ -511,9 +513,8 @@ int main(int argc, const char **argv)
     }
 
     // go
-    MonitorDBStore store(g_conf()->mon_data);
     ostringstream oss;
-    int r = store.create_and_open(oss);
+    int r = store->create_and_open(oss);
     if (oss.tellp())
       derr << oss.str() << dendl;
     if (r < 0) {
@@ -523,13 +524,13 @@ int main(int argc, const char **argv)
     }
     ceph_assert(r == 0);
 
-    Monitor mon(g_ceph_context, g_conf()->name.get_id(), &store, 0, 0, &monmap);
+    Monitor mon(g_ceph_context, g_conf()->name.get_id(), store, 0, 0, &monmap);
     r = mon.mkfs(osdmapbl);
     if (r < 0) {
       derr << argv[0] << ": error creating monfs: " << cpp_strerror(r) << dendl;
       exit(1);
     }
-    store.close();
+    store->close();
     dout(0) << argv[0] << ": created monfs at " << g_conf()->mon_data 
 	    << " for " << g_conf()->name << dendl;
     return 0;
@@ -604,8 +605,6 @@ int main(int argc, const char **argv)
 
   // set up signal handlers, now that we've daemonized/forked.
   init_async_signal_handler();
-
-  MonitorDBStore *store = new MonitorDBStore(g_conf()->mon_data);
 
   // make sure we aren't upgrading too fast
   {
