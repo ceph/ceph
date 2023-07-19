@@ -56,7 +56,9 @@ template <
   typename leaf_node_t,
   typename pin_t,
   size_t node_size,
-  bool leaf_has_children>
+  bool leaf_has_children,
+  size_t node_key_alignment>
+
 class FixedKVBtree {
   static constexpr size_t MAX_DEPTH = 16;
   using self_type = FixedKVBtree<
@@ -66,7 +68,8 @@ class FixedKVBtree {
     leaf_node_t,
     pin_t,
     node_size,
-    leaf_has_children>;
+    leaf_has_children,
+    node_key_alignment>;
 public:
   using InternalNodeRef = TCachedExtentRef<internal_node_t>;
   using LeafNodeRef = TCachedExtentRef<leaf_node_t>;
@@ -2162,7 +2165,8 @@ template <
   typename leaf_node_t,
   typename pin_t,
   size_t node_size,
-  bool leaf_has_children>
+  bool leaf_has_children,
+  size_t node_key_alignment>
 struct is_fixed_kv_tree<
   FixedKVBtree<
     node_key_t,
@@ -2171,7 +2175,33 @@ struct is_fixed_kv_tree<
     leaf_node_t,
     pin_t,
     node_size,
-    leaf_has_children>> : std::true_type {};
+    leaf_has_children,
+    node_key_alignment>> : std::true_type {};
+
+template <typename T>
+struct fixed_kv_tree_key_alignment {};
+
+template <
+  typename node_key_t,
+  typename node_val_t,
+  typename internal_node_t,
+  typename leaf_node_t,
+  typename pin_t,
+  size_t node_size,
+  bool leaf_has_children,
+  size_t node_key_alignment>
+struct fixed_kv_tree_key_alignment<
+  FixedKVBtree<
+    node_key_t,
+    node_val_t,
+    internal_node_t,
+    leaf_node_t,
+    pin_t,
+    node_size,
+    leaf_has_children,
+    node_key_alignment>> {
+  static constexpr size_t value = node_key_alignment;
+};
 
 template <
   typename tree_type_t,
@@ -2182,6 +2212,7 @@ auto with_btree(
   Cache &cache,
   op_context_t<node_key_t> c,
   F &&f) {
+  assert(cache.get_block_size() == fixed_kv_tree_key_alignment<tree_type_t>::value);
   return cache.get_root(
     c.trans
   ).si_then([f=std::forward<F>(f)](RootBlockRef croot) mutable {

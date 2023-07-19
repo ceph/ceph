@@ -766,6 +766,7 @@ constexpr paddr_t P_ADDR_MAX = paddr_t::create_const(DEVICE_ID_MAX, 0);
 constexpr paddr_t P_ADDR_NULL = P_ADDR_MAX;
 constexpr paddr_t P_ADDR_ZERO = paddr_t::create_const(DEVICE_ID_ZERO, 0);
 constexpr paddr_t P_ADDR_ROOT = paddr_t::create_const(DEVICE_ID_ROOT, 0);
+constexpr size_t P_ADDR_ALIGNMENT = 4096;
 
 inline paddr_t make_record_relative_paddr(device_off_t off) {
   return paddr_t::make_res_paddr(DEVICE_ID_RECORD_RELATIVE, off);
@@ -1010,6 +1011,7 @@ constexpr laddr_t L_ADDR_MAX = std::numeric_limits<laddr_t>::max();
 constexpr laddr_t L_ADDR_NULL = L_ADDR_MAX;
 constexpr laddr_t L_ADDR_ROOT = L_ADDR_MAX - 1;
 constexpr laddr_t L_ADDR_LBAT = L_ADDR_MAX - 2;
+constexpr size_t L_ADDR_ALIGNMENT = 4096;
 
 struct __attribute((packed)) laddr_le_t {
   ceph_le64 laddr = ceph_le64(L_ADDR_NULL);

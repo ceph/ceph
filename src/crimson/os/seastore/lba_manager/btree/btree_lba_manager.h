@@ -47,7 +47,8 @@ public:
 
 using LBABtree = FixedKVBtree<
   laddr_t, lba_map_val_t, LBAInternalNode,
-  LBALeafNode, BtreeLBAMapping, LBA_BLOCK_SIZE, true>;
+  LBALeafNode, BtreeLBAMapping, LBA_BLOCK_SIZE,
+  true, L_ADDR_ALIGNMENT>;
 
 /**
  * BtreeLBAManager

@@ -33,7 +33,8 @@ template <
   typename leaf_node_t,
   typename pin_t,
   size_t node_size,
-  bool leaf_has_children>
+  bool leaf_has_children,
+  size_t node_key_alignment>
 class FixedKVBtree;
 class BackrefManager;
 class SegmentProvider;
@@ -1602,7 +1603,8 @@ private:
     typename leaf_node_t,
     typename pin_t,
     size_t node_size,
-    bool leaf_has_children>
+    bool leaf_has_children,
+    size_t node_key_alignment>
   friend class FixedKVBtree;
 };
 using CacheRef = std::unique_ptr<Cache>;

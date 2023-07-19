@@ -34,7 +34,8 @@ template <
   typename leaf_node_t,
   typename pin_t,
   size_t node_size,
-  bool leaf_has_children>
+  bool leaf_has_children,
+  size_t node_key_alignment>
 class FixedKVBtree;
 template <typename, typename>
 class BtreeNodeMapping;
@@ -196,7 +197,8 @@ class CachedExtent
     typename leaf_node_t,
     typename pin_t,
     size_t node_size,
-    bool leaf_has_children>
+    bool leaf_has_children,
+    size_t node_key_alignment>
   friend class FixedKVBtree;
   uint32_t last_committed_crc = 0;
 
