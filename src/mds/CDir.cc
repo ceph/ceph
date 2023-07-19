@@ -180,7 +180,7 @@ ostream& operator<<(ostream& out, const CDir& dir)
 }
 
 
-void CDir::print(ostream& out) 
+void CDir::print(ostream& out) const
 {
   out << *this;
 }
@@ -188,7 +188,7 @@ void CDir::print(ostream& out)
 
 
 
-ostream& CDir::print_db_line_prefix(ostream& out) 
+ostream& CDir::print_db_line_prefix(ostream& out) const
 {
   return out << ceph_clock_now() << " mds." << mdcache->mds->get_nodeid() << ".cache.dir(" << this->dirfrag() << ") ";
 }

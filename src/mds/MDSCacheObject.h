@@ -98,8 +98,8 @@ class MDSCacheObject {
   std::string_view generic_pin_name(int p) const;
 
   // printing
-  virtual void print(std::ostream& out) = 0;
-  virtual std::ostream& print_db_line_prefix(std::ostream& out) { 
+  virtual void print(std::ostream& out) const = 0;
+  virtual std::ostream& print_db_line_prefix(std::ostream& out) const {
     return out << "mdscacheobject(" << this << ") "; 
   }
 
@@ -326,11 +326,7 @@ class MDSCacheObject {
   static uint64_t last_wait_seq;
 };
 
-std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o);
-// printer
-std::ostream& operator<<(std::ostream& out, const MDSCacheObject &o);
-
-inline std::ostream& operator<<(std::ostream& out, MDSCacheObject &o) {
+inline std::ostream& operator<<(std::ostream& out, const MDSCacheObject& o) {
   o.print(out);
   return out;
 }
