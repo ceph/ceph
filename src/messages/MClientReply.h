@@ -312,7 +312,7 @@ public:
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(openc_response_t)
 
-class MClientReply final : public SafeMessage {
+class MClientReply final : public MMDSOp {
 public:
   // reply data
   struct ceph_mds_reply_head head {};
@@ -347,9 +347,9 @@ public:
   bool is_safe() const { return head.safe; }
 
 protected:
-  MClientReply() : SafeMessage{CEPH_MSG_CLIENT_REPLY} {}
+  MClientReply() : MMDSOp{CEPH_MSG_CLIENT_REPLY} {}
   MClientReply(const MClientRequest &req, int result = 0) :
-    SafeMessage{CEPH_MSG_CLIENT_REPLY} {
+    MMDSOp{CEPH_MSG_CLIENT_REPLY} {
     memset(&head, 0, sizeof(head));
     header.tid = req.get_tid();
     head.op = req.get_op();
