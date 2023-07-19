@@ -4467,11 +4467,19 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   if (flags & CEPH_CAP_FLAG_AUTH) {
     if (in->auth_cap != &cap &&
         (!in->auth_cap || ceph_seq_cmp(in->auth_cap->mseq, mseq) < 0)) {
-      if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
-	ldout(cct, 10) << __func__ << " changing auth cap: "
-		       << "add myself to new auth MDS' flushing caps list" << dendl;
-	adjust_session_flushing_caps(in, in->auth_cap->session, mds_session);
+      if (in->auth_cap) {
+        if (in->flushing_cap_item.is_on_list()) {
+          ldout(cct, 10) << __func__ << " changing auth cap: "
+                         << "add myself to new auth MDS' flushing caps list" << dendl;
+          adjust_session_flushing_caps(in, in->auth_cap->session, mds_session);
+        }
+        if (in->dirty_cap_item.is_on_list()) {
+          ldout(cct, 10) << __func__ << " changing auth cap: "
+                         << "add myself to new auth MDS' dirty caps list" << dendl;
+          mds_session->get_dirty_list().push_back(&in->dirty_cap_item);
+        }
       }
+
       in->auth_cap = &cap;
     }
   }
