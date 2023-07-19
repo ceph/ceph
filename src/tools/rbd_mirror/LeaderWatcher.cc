@@ -189,6 +189,7 @@ void LeaderWatcher<I>::handle_shut_down_leader_lock(int r) {
     derr << "error shutting down leader lock: " << cpp_strerror(r) << dendl;
   }
 
+  m_retry_attempts = 0;
   unregister_watch();
 }
 
@@ -208,6 +209,15 @@ void LeaderWatcher<I>::unregister_watch() {
 template <typename I>
 void LeaderWatcher<I>::handle_unregister_watch(int r) {
   dout(10) << "r=" << r << dendl;
+
+  if (r == -ETIMEDOUT  && m_retry_attempts < m_cct->_conf.get_val<uint64_t>(
+	"rbd_retry_attempts")) {
+    std::lock_guard locker{m_lock};
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    unregister_watch();
+    return;
+  }
 
   if (r < 0) {
     derr << "error unregistering leader watcher for " << m_oid << " object: "
