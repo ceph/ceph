@@ -85,6 +85,10 @@ public:
     return cache->reset_transaction_preserve_handle(t);
   }
 
+  void start_background() {
+    epm->start_background();
+  }
+
   /**
    * get_pin
    *

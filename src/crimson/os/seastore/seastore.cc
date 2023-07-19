@@ -290,7 +290,9 @@ seastar::future<> SeaStore::Shard::mount_managers()
 {
   init_managers();
   return transaction_manager->mount(
-  ).handle_error(
+  ).safe_then([this] {
+    transaction_manager->start_background();
+  }).handle_error(
     crimson::ct_error::assert_all{
       "Invalid error in mount_managers"
   });
@@ -359,7 +361,10 @@ SeaStore::Shard::mkfs_managers()
   return transaction_manager->mkfs(
   ).safe_then([this] {
     init_managers();
-    return transaction_manager->mount();
+    return transaction_manager->mount(
+    ).safe_then([this] {
+      transaction_manager->start_background();
+    });
   }).safe_then([this] {
     return repeat_eagain([this] {
       return transaction_manager->with_transaction_intr(

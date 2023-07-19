@@ -155,8 +155,7 @@ TransactionManager::mount_ertr::future<> TransactionManager::mount()
     });
   }).safe_then([this] {
     return epm->open_for_write();
-  }).safe_then([FNAME, this] {
-    epm->start_background();
+  }).safe_then([FNAME] {
     INFO("completed");
   }).handle_error(
     mount_ertr::pass_further{},
