@@ -171,7 +171,7 @@ def group_devices_by_vg(devices):
 def get_lvm_fast_allocs(lvs):
     return [("{}/{}".format(d.vg_name, d.lv_name), 100.0,
              disk.Size(b=int(d.lvs[0].lv_size)), 1) for d in lvs if not
-            d.used_by_ceph]
+            d.journal_used_by_ceph]
 
 
 class Batch(object):
