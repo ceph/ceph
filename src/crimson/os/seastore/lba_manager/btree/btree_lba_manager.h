@@ -113,6 +113,14 @@ public:
     paddr_t paddr,
     LogicalCachedExtent *nextent) final;
 
+  demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length,
+    extent_len_t max_discard_size,
+    retire_promotion_func_t retire_func,
+    update_nextent_func_t update_func) final;
+
   ref_ret decref_extent(
     Transaction &t,
     laddr_t addr) final {
@@ -195,8 +203,16 @@ private:
    *
    * Updates mapping, removes if f returns nullopt
    */
+  struct update_res_t {
+    lba_map_val_t val;
+    std::optional<LBABtree::iterator> shadow_iter;
+    update_res_t() = default;
+    update_res_t(lba_map_val_t val,
+		 std::optional<LBABtree::iterator> iter)
+      : val(val), shadow_iter(iter) {}
+  };
   using _update_mapping_iertr = ref_iertr;
-  using _update_mapping_ret = ref_iertr::future<lba_map_val_t>;
+  using _update_mapping_ret = ref_iertr::future<update_res_t>;
   using update_func_t = std::function<
     lba_map_val_t(const lba_map_val_t &v)
     >;
@@ -204,7 +220,8 @@ private:
     Transaction &t,
     laddr_t addr,
     update_func_t &&f,
-    LogicalCachedExtent*);
+    LogicalCachedExtent*,
+    std::optional<LBABtree::iterator> iter = std::nullopt);
 };
 using BtreeLBAManagerRef = std::unique_ptr<BtreeLBAManager>;
 

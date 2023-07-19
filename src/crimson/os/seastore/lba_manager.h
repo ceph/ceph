@@ -96,6 +96,34 @@ public:
     paddr_t paddr,
     LogicalCachedExtent *nextent) = 0;
 
+  struct demote_region_res_t {
+    extent_len_t demote_size;
+    extent_len_t proceed_size;
+    bool completed;
+  };
+  using demote_region_iertr = base_iertr;
+  using demote_region_ret = demote_region_iertr::future<
+    demote_region_res_t>;
+  using retire_promotion_func_t = std::function<
+    base_iertr::future<>(paddr_t, extent_len_t)>;
+  using update_nextent_func_t = std::function<
+    base_iertr::future<LogicalCachedExtent*>(
+      LogicalCachedExtent*, paddr_t, extent_len_t)>;
+
+  /**
+   * Demote the shadow mapping located in given range.
+   *
+   * Move the paddr of shadow mapping to the primary mapping.
+   * Retire the original paddr of primary mapping.
+   */
+  virtual demote_region_ret demote_region(
+    Transaction &t,
+    laddr_t laddr,
+    extent_len_t length,
+    extent_len_t max_demote_size,
+    retire_promotion_func_t retire_func,
+    update_nextent_func_t update_func) = 0;
+
   struct ref_update_result_t {
     unsigned refcount = 0;
     paddr_t addr;
