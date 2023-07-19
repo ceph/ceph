@@ -76,15 +76,6 @@ int RbdMapping::init()
 
   initial_image_size = info.size;
 
-  // We're storing mapping details in the registry even for non-persistent
-  // mappings. This allows us to easily retrieve mapping details such
-  // as the rbd pool or admin socket path.
-  // We're cleaning up the registry entry when the non-persistent mapping
-  // gets disconnected or when the ceph service restarts.
-  r = save_config_to_registry(&cfg);
-  if (r < 0)
-    return r;
-
   handler = new WnbdHandler(image, cfg.devpath,
                             info.size / RBD_WNBD_BLKSIZE,
                             RBD_WNBD_BLKSIZE,
@@ -102,7 +93,7 @@ void RbdMapping::shutdown()
   dout(5) << __func__ << ": removing RBD mapping: " << cfg.devpath << dendl;
 
   int r = 0;
-  if (!cfg.persistent) {
+  if (!cfg.persistent && saved_cfg_to_registry) {
     dout(5) << __func__ << ": cleaning up non-persistent mapping: "
             << cfg.devpath << dendl;
     r = remove_config_from_registry(&cfg);
@@ -159,6 +150,18 @@ int RbdMapping::start()
   r = wait_mapped_disk(cfg);
   if (r < 0) {
     return r;
+  }
+
+  // We're storing mapping details in the registry even for non-persistent
+  // mappings. This allows us to easily retrieve mapping details such
+  // as the rbd pool or admin socket path.
+  // We're cleaning up the registry entry when the non-persistent mapping
+  // gets disconnected or when the ceph service restarts.
+  r = save_config_to_registry(&cfg);
+  if (r < 0) {
+    return r;
+  } else {
+    saved_cfg_to_registry = true;
   }
 
   if (disconnect_cbk) {

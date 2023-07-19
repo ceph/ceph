@@ -65,6 +65,7 @@ private:
   WnbdHandler* handler = nullptr;
   uint64_t watch_handle;
   WNBDWatchCtx* watch_ctx = nullptr;
+  bool saved_cfg_to_registry = false;
   disconnect_cbk_t disconnect_cbk;
 
   ceph::mutex shutdown_lock = ceph::make_mutex("RbdMapping::ShutdownLock");
