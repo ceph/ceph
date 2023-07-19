@@ -2480,9 +2480,13 @@ template<typename T>
 concept HasDoFormatTo = requires(T x, std::back_insert_iterator<fmt::memory_buffer> out) {
   { x.do_format_to(out, true) } -> std::same_as<decltype(out)>;
 };
-template <HasDoFormatTo T> struct fmt::formatter<T> : fmt::formatter<std::string_view> {
+namespace fmt {
+// placed in the fmt namespace due to an ADL bug in g++ < 12
+// (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92944).
+template <HasDoFormatTo T> struct formatter<T> : formatter<std::string_view> {
   template <typename FormatContext>
   auto format(const T& staged_iterator, FormatContext& ctx) {
     return staged_iterator.do_format_to(ctx.out(), true);
   }
 };
+}

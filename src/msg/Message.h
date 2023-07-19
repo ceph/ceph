@@ -591,9 +591,14 @@ MURef<T> make_message(Args&&... args) {
 }
 }
 
+namespace fmt {
+// placed in the fmt namespace due to an ADL bug in g++ < 12
+// (https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92944).
+// Specifically - gcc pre-12 can't handle two templated specializations of
+// the formatter if in two different namespaces.
 template <std::derived_from<Message> M>
-struct fmt::formatter<M> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+struct formatter<M> {
+  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
   template <typename FormatContext>
   auto format(const M& m, FormatContext& ctx) const {
     std::ostringstream oss;
@@ -605,5 +610,6 @@ struct fmt::formatter<M> {
     }
   }
 };
+}  // namespace fmt
 
 #endif
