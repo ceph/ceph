@@ -6832,6 +6832,9 @@ bool OSD::_is_healthy()
     if ((float)up < (float)num * cct->_conf->osd_heartbeat_min_healthy_ratio) {
       dout(1) << "is_healthy false -- only " << up << "/" << num << " up peers (less than "
 	      << int(cct->_conf->osd_heartbeat_min_healthy_ratio * 100.0) << "%)" << dendl;
+      clog->warn() << "Waiting to boot, not enough peers to stay healthy -- only "
+                    << up << "/" << num << " up peers (less than "
+                    << int(cct->_conf->osd_heartbeat_min_healthy_ratio * 100.0) << "%)";
       return false;
     }
   }
