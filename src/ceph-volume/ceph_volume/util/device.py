@@ -229,7 +229,7 @@ class Device(object):
             self.disk_api = dev
             device_type = dev.get('TYPE', '')
             # always check is this is an lvm member
-            valid_types = ['part', 'disk']
+            valid_types = ['part', 'disk', 'mpath']
             if allow_loop_devices():
                 valid_types.append('loop')
             if device_type in valid_types:
