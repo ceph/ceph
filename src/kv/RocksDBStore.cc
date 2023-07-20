@@ -1362,7 +1362,6 @@ int RocksDBStore::repair(std::ostream &out)
       derr << __func__ << " cannot finalize repair" << dendl;
       return -1;
     }
-    close();
   }
 
   if (repaired && status.ok()) {
