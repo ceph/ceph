@@ -5756,7 +5756,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   if (rgw_get_user_info_by_access_key(dpp, ctl->user, access_key_id, user_info, y) < 0) {
       ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
-      return result_t::deny(-ERR_INVALID_ACCESS_KEY);
+      return result_t::reject(-ERR_INVALID_ACCESS_KEY);
   }
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
@@ -5770,7 +5770,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   const auto iter = user_info.access_keys.find(access_key_id);
   if (iter == std::end(user_info.access_keys)) {
     ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
-    return result_t::deny(-EPERM);
+    return result_t::reject(-EPERM);
   }
   const RGWAccessKey& k = iter->second;
 
@@ -5786,7 +5786,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
 
   if (compare != 0) {
-    return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
+    return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser, boost::none, access_key_id);
