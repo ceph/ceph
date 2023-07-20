@@ -1483,6 +1483,7 @@ struct metareqid_t {
     decode(name, p);
     decode(tid, p);
   }
+  void dump(ceph::Formatter *f) const;
 
   entity_name_t name;
   uint64_t tid = 0;

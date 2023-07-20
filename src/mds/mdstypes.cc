@@ -770,6 +770,10 @@ void mds_table_pending_t::generate_test_instances(std::list<mds_table_pending_t*
   ls.back()->tid = 35434;
 }
 
+void metareqid_t::dump(ceph::Formatter* f) const {
+  f->dump_object("entity", name);
+  f->dump_unsigned("tid", tid);
+}
 
 /*
  * inode_load_vec_t
