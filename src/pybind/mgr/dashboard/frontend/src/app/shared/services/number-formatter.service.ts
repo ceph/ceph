@@ -25,7 +25,7 @@ export class NumberFormatterService {
   formatFromTo(
     value: any,
     units: string,
-    targetedUnits: string,
+    targetedUnits: string = '',
     factor: number,
     labels: string[],
     decimals: number = 1
@@ -60,7 +60,7 @@ export class NumberFormatterService {
   formatUnitlessFromTo(
     value: any,
     units: string,
-    targetedUnits: string,
+    targetedUnits: string = '',
     decimals: number = 1
   ): any {
     return this.formatFromTo(value, units, targetedUnits, 1000, this.unitlessLabels, decimals);
