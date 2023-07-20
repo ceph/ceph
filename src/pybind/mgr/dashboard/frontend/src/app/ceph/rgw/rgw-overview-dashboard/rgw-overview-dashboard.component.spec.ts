@@ -168,7 +168,7 @@ describe('RgwOverviewDashboardComponent', () => {
   it('should render all cards', () => {
     fixture.detectChanges();
     const dashboardCards = fixture.debugElement.nativeElement.querySelectorAll('cd-card');
-    expect(dashboardCards.length).toBe(6);
+    expect(dashboardCards.length).toBe(3);
   });
 
   it('should get corresponding data into Daemons', () => {

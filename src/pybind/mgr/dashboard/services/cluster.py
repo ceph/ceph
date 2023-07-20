@@ -63,6 +63,7 @@ class ClusterModel:
                                total_objects=total_objects,
                                total_pool_bytes_used=total_pool_bytes_used,
                                average_object_size=average_object_size)._asdict()
+
     @classmethod
     def get_rgw_pools(cls):
         rgw_pool_names = []
@@ -71,4 +72,3 @@ class ClusterModel:
             if 'rgw' in pool.get('application_metadata', {}):
                 rgw_pool_names.append(pool['pool_name'])
         return rgw_pool_names
-
