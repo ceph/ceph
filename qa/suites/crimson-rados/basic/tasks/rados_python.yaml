@@ -8,9 +8,13 @@ overrides:
     - \(OSD_
     - \(OBJECT_
     - \(POOL_APP_NOT_ENABLED\)
+  install:
+    ceph:
+      extra_system_packages:
+      - python3-pytest
 tasks:
 - workunit:
     timeout: 1h
     clients:
       client.0:
-        - rados/test_python.sh --eval-attr 'not (wait or tier or ec or bench or stats)'
+        - rados/test_python.sh -m 'not (wait or tier or ec or bench or stats)'

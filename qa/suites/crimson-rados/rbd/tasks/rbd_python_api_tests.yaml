@@ -3,10 +3,14 @@ overrides:
     log-ignorelist:
       - \(SLOW_OPS\)
       - slow request
+  install:
+    ceph:
+      extra_system_packages:
+      - python3-pytest
 tasks:
 - workunit:
     clients:
       client.0:
-        - rbd/test_librbd_python.sh --eval-attr 'not (SKIP_IF_CRIMSON)'
+        - rbd/test_librbd_python.sh -m 'not skip_if_crimson'
     env:
       RBD_FEATURES: "61"
