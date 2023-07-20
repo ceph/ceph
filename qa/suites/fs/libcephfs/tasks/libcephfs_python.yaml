@@ -3,6 +3,13 @@ overrides:
     disabled: true
   kclient:
     disabled: true
+  install:
+    ceph:
+      extra_system_packages:
+        deb:
+        - python3-pytest
+        rpm:
+        - python3-pytest
 tasks:
 - workunit:
     clients:
