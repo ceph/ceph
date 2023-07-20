@@ -5,11 +5,6 @@ import { Subscription } from 'rxjs';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { Permissions } from '~/app/shared/models/permissions';
-import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import {
-  FeatureTogglesMap$,
-  FeatureTogglesService
-} from '~/app/shared/services/feature-toggles.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
@@ -17,6 +12,11 @@ import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import {
+  FeatureTogglesMap$,
+  FeatureTogglesService
+} from '~/app/shared/services/feature-toggles.service';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -66,15 +66,6 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       this.daemonSub = this.rgwDaemonService.list().subscribe((data: any) => {
         this.rgwDaemonCount = data.length;
       });
-      this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
-        this.rgwRealmCount = data['realms'].length;
-      });
-      this.ZonegroupSub = this.rgwZonegroupService.list().subscribe((data: any) => {
-        this.rgwZonegroupCount = data['zonegroups'].length;
-      });
-      this.ZoneSUb = this.rgwZoneService.list().subscribe((data: any) => {
-        this.rgwZoneCount = data['zones'].length;
-      });
       this.BucketSub = this.rgwBucketService.list().subscribe((data: any) => {
         this.rgwBucketCount = data.length;
       });
@@ -86,6 +77,15 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
         this.totalPoolUsedBytes = data['total_pool_bytes_used'];
         this.averageObjectSize = data['average_object_size'];
       });
+    });
+    this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
+      this.rgwRealmCount = data['realms'].length;
+    });
+    this.ZonegroupSub = this.rgwZonegroupService.list().subscribe((data: any) => {
+      this.rgwZonegroupCount = data['zonegroups'].length;
+    });
+    this.ZoneSUb = this.rgwZoneService.list().subscribe((data: any) => {
+      this.rgwZoneCount = data['zones'].length;
     });
   }
 
