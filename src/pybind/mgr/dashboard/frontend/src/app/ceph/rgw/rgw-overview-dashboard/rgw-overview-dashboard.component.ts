@@ -3,8 +3,8 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
 
-import { HealthService } from '~/app/shared/api/health.service';
 import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
@@ -12,11 +12,9 @@ import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import {
-  FeatureTogglesMap$,
-  FeatureTogglesService
-} from '~/app/shared/services/feature-toggles.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
+import { HealthService } from '~/app/shared/api/health.service';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -26,7 +24,6 @@ import {
 export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   interval = new Subscription();
   permissions: Permissions;
-  enabledFeature$: FeatureTogglesMap$;
   rgwDaemonCount = 0;
   rgwRealmCount = 0;
   rgwZonegroupCount = 0;
@@ -44,10 +41,16 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   UserSub: Subscription;
   HealthSub: Subscription;
   BucketSub: Subscription;
+  queriesResults: any = {
+    RGW_REQUEST_PER_SECOND: '',
+    BANDWIDTH: '',
+    AVG_GET_LATENCY: '',
+    AVG_PUT_LATENCY: ''
+  };
+  timerGetPrometheusDataSub: Subscription;
 
   constructor(
     private authStorageService: AuthStorageService,
-    private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
     private refreshIntervalService: RefreshIntervalService,
     private rgwDaemonService: RgwDaemonService,
@@ -55,10 +58,10 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     private rgwZonegroupService: RgwZonegroupService,
     private rgwZoneService: RgwZoneService,
     private rgwBucketService: RgwBucketService,
-    private rgwUserService: RgwUserService
+    private rgwUserService: RgwUserService,
+    private prometheusService: PrometheusService
   ) {
     this.permissions = this.authStorageService.getPermissions();
-    this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
@@ -87,6 +90,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.ZoneSUb = this.rgwZoneService.list().subscribe((data: any) => {
       this.rgwZoneCount = data['zones'].length;
     });
+    this.getPrometheusData(this.prometheusService.lastHourDateObject);
   }
 
   ngOnDestroy() {
@@ -98,5 +102,17 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.BucketSub.unsubscribe();
     this.UserSub.unsubscribe();
     this.HealthSub.unsubscribe();
+    if (this.timerGetPrometheusDataSub) {
+      this.timerGetPrometheusDataSub.unsubscribe();
+    }
+  }
+
+  getPrometheusData(selectedTime: any) {
+    this.queriesResults = this.prometheusService.getPrometheusQueriesData(
+      selectedTime,
+      queries,
+      this.queriesResults,
+      true
+    );
   }
 }
