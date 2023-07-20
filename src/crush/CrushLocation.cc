@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <vector>
+#include <boost/algorithm/string/trim.hpp>
 
 #include "CrushLocation.h"
 #include "CrushWrapper.h"
@@ -45,9 +46,6 @@ int CrushLocation::update_from_hook()
   if (cct->_conf->crush_location_hook.length() == 0)
     return 0;
  
-#if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
-  ceph_abort_msg("crimson does not support crush_location_hook, it must stay empty");
-#else
   if (0 != access(cct->_conf->crush_location_hook.c_str(), R_OK)) {
     lderr(cct) << "the user define crush location hook: " << cct->_conf->crush_location_hook
                << " may not exist or can not access it" << dendl;
@@ -93,9 +91,8 @@ int CrushLocation::update_from_hook()
 
   std::string out;
   bl.begin().copy(bl.length(), out);
-  out.erase(out.find_last_not_of(" \n\r\t")+1);
+  boost::algorithm::trim_right_if(out, boost::algorithm::is_any_of(" \n\r\t"));
   return _parse(out);
-#endif // WITH_SEASTAR && !WITH_ALIEN
 }
 
 int CrushLocation::init_on_startup()
