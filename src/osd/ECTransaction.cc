@@ -93,19 +93,6 @@ void encode_and_write(
   }
 }
 
-bool ECTransaction::requires_overwrite(
-  uint64_t prev_size,
-  const PGTransaction::ObjectOperation &op) {
-  // special handling for truncates to 0
-  if (op.truncate && op.truncate->first == 0)
-    return false;
-  return op.is_none() &&
-    ((!op.buffer_updates.empty() &&
-      (op.buffer_updates.begin().get_off() < prev_size)) ||
-     (op.truncate &&
-      (op.truncate->first < prev_size)));
-}
-
 void ECTransaction::generate_transactions(
   WritePlan &plan,
   ErasureCodeInterfaceRef &ecimpl,
