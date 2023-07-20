@@ -39,6 +39,7 @@ void RemotePoolPoller<I>::init(Context* on_finish) {
   ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
 
+  m_retry_attempts = 0;
   get_mirror_uuid();
 }
 
@@ -80,6 +81,16 @@ void RemotePoolPoller<I>::get_mirror_uuid() {
 template <typename I>
 void RemotePoolPoller<I>::handle_get_mirror_uuid(int r) {
   dout(10) << "r=" << r << dendl;
+
+  if (r == -ETIMEDOUT  &&
+      m_retry_attempts < g_ceph_context->_conf.get_val<uint64_t>(
+        "rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    get_mirror_uuid();
+    return;
+  }
+
   std::string remote_mirror_uuid;
   if (r >= 0) {
     auto it = m_out_bl.cbegin();
@@ -116,6 +127,7 @@ void RemotePoolPoller<I>::handle_get_mirror_uuid(int r) {
     m_updated = true;
   }
 
+  m_retry_attempts = 0;
   mirror_peer_ping();
 }
 
@@ -137,6 +149,15 @@ template <typename I>
 void RemotePoolPoller<I>::handle_mirror_peer_ping(int r) {
   dout(10) << "r=" << r << dendl;
 
+  if (r == -ETIMEDOUT  &&
+      m_retry_attempts < g_ceph_context->_conf.get_val<uint64_t>(
+        "rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    mirror_peer_ping();
+    return;
+  }
+
   if (r == -EOPNOTSUPP) {
     // older OSD that doesn't support snapshot-based mirroring, so no need
     // to query remote peers
@@ -149,6 +170,7 @@ void RemotePoolPoller<I>::handle_mirror_peer_ping(int r) {
     derr << "failed to ping remote mirror peer: " << cpp_strerror(r) << dendl;
   }
 
+  m_retry_attempts = 0;
   mirror_peer_list();
 }
 
@@ -170,6 +192,15 @@ void RemotePoolPoller<I>::mirror_peer_list() {
 template <typename I>
 void RemotePoolPoller<I>::handle_mirror_peer_list(int r) {
   dout(10) << "r=" << r << dendl;
+
+  if (r == -ETIMEDOUT  &&
+      m_retry_attempts < g_ceph_context->_conf.get_val<uint64_t>(
+        "rbd_retry_attempts")) {
+    ++m_retry_attempts;
+    dout(10) << "retry_attempts=" << m_retry_attempts << dendl;
+    mirror_peer_list();
+    return;
+  }
 
   std::vector<cls::rbd::MirrorPeer> peers;
   if (r == 0) {
@@ -256,6 +287,7 @@ void RemotePoolPoller<I>::handle_task() {
   m_timer_task = nullptr;
 
   auto ctx = new LambdaContext([this](int) {
+    m_retry_attempts = 0;
     get_mirror_uuid();
   });
   m_threads->work_queue->queue(ctx);

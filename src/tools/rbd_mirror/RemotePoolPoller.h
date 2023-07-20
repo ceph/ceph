@@ -104,6 +104,7 @@ private:
 
   RemotePoolMeta m_remote_pool_meta;
   bool m_updated = false;
+  uint64_t m_retry_attempts = 0;
 
   State m_state = STATE_INITIALIZING;
   Context* m_timer_task = nullptr;

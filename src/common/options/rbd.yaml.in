@@ -441,6 +441,13 @@ options:
   default: false
   services:
   - rbd
+- name: rbd_retry_attempts
+  type: uint
+  level: advanced
+  desc: maximum retries to perform on errors such as timeout or resource busy
+  default: 3
+  services:
+  - rbd
 - name: rbd_mirroring_resync_after_disconnect
   type: bool
   level: advanced
