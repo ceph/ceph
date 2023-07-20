@@ -478,7 +478,7 @@ void MDRequestImpl::_dump(Formatter *f) const
 {
   std::lock_guard l(lock);
   f->dump_string("flag_point", _get_state_string());
-  f->dump_stream("reqid") << reqid;
+  f->dump_object("reqid", reqid);
   if (client_request) {
     f->dump_string("op_type", "client_request");
     f->open_object_section("client_info");
