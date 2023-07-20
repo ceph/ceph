@@ -343,6 +343,27 @@ else
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
+            *Jammy*)
+                [ ! $NO_BOOST_PKGS ] && \
+		    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+			  libboost-atomic-dev \
+			  libboost-chrono-dev \
+			  libboost-container-dev \
+			  libboost-context-dev \
+			  libboost-coroutine-dev \
+			  libboost-date-time-dev \
+			  libboost-filesystem-dev \
+			  libboost-iostreams-dev \
+			  libboost-program-options-dev \
+			  libboost-python-dev \
+			  libboost-random-dev \
+			  libboost-regex-dev \
+			  libboost-system-dev \
+			  libboost-test-dev \
+			  libboost-thread-dev \
+			  libboost-timer-dev \
+			  gcc
+                ;;
             *)
                 $SUDO apt-get install -y gcc
                 ;;
