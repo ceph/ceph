@@ -55,7 +55,7 @@ bool ImageDispatch<I>::read(
 template <typename I>
 bool ImageDispatch<I>::write(
     AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -65,36 +65,15 @@ bool ImageDispatch<I>::write(
   start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_write(
-    m_image_ctx, aio_comp, std::move(image_extents), std::move(bl),
-    io_context, op_flags, parent_trace);
+  ImageRequest<I>::aio_write(m_image_ctx, aio_comp, std::move(image_extents),
+                             std::move(bl), op_flags, parent_trace);
   return true;
 }
 
 template <typename I>
 bool ImageDispatch<I>::discard(
     AioCompletion* aio_comp, Extents &&image_extents,
-    uint32_t discard_granularity_bytes, IOContext io_context,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
-    DispatchResult* dispatch_result, Context** on_finish,
-    Context* on_dispatched) {
-  auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << "image_extents=" << image_extents << dendl;
-
-  start_in_flight_io(aio_comp);
-
-  *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_discard(
-    m_image_ctx, aio_comp, std::move(image_extents), discard_granularity_bytes,
-    io_context, parent_trace);
-  return true;
-}
-
-template <typename I>
-bool ImageDispatch<I>::write_same(
-    AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -104,18 +83,16 @@ bool ImageDispatch<I>::write_same(
   start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_writesame(
-    m_image_ctx, aio_comp, std::move(image_extents), std::move(bl),
-    io_context, op_flags, parent_trace);
+  ImageRequest<I>::aio_discard(m_image_ctx, aio_comp, std::move(image_extents),
+                               discard_granularity_bytes, parent_trace);
   return true;
 }
 
 template <typename I>
-bool ImageDispatch<I>::compare_and_write(
-    AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&cmp_bl,
-    bufferlist &&bl, uint64_t *mismatch_offset, IOContext io_context,
-    int op_flags, const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
+bool ImageDispatch<I>::write_same(
+    AioCompletion* aio_comp, Extents &&image_extents, bufferlist &&bl,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -124,9 +101,31 @@ bool ImageDispatch<I>::compare_and_write(
   start_in_flight_io(aio_comp);
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  ImageRequest<I>::aio_compare_and_write(
-    m_image_ctx, aio_comp, std::move(image_extents), std::move(cmp_bl),
-    std::move(bl), mismatch_offset, io_context, op_flags, parent_trace);
+  ImageRequest<I>::aio_writesame(m_image_ctx, aio_comp,
+                                 std::move(image_extents), std::move(bl),
+                                 op_flags, parent_trace);
+  return true;
+}
+
+template <typename I>
+bool ImageDispatch<I>::compare_and_write(
+    AioCompletion* aio_comp, Extents &&image_extents,
+    bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
+    int op_flags, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
+    DispatchResult* dispatch_result, Context** on_finish,
+    Context* on_dispatched) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 20) << "image_extents=" << image_extents << dendl;
+
+  start_in_flight_io(aio_comp);
+
+  *dispatch_result = DISPATCH_RESULT_COMPLETE;
+  ImageRequest<I>::aio_compare_and_write(m_image_ctx, aio_comp,
+                                         std::move(image_extents),
+                                         std::move(cmp_bl), std::move(bl),
+                                         mismatch_offset, op_flags,
+                                         parent_trace);
   return true;
 }
 

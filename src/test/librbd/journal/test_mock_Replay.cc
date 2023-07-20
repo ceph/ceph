@@ -31,8 +31,8 @@ struct ImageRequest<MockReplayImageCtx> {
   MOCK_METHOD4(aio_write, void(AioCompletion *c, const Extents &image_extents,
                                const bufferlist &bl, int op_flags));
   static void aio_write(MockReplayImageCtx *ictx, AioCompletion *c,
-                        Extents &&image_extents, bufferlist &&bl,
-                        IOContext io_context, int op_flags,
+                        Extents&& image_extents,
+                        bufferlist&& bl, int op_flags,
                         const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_write(c, image_extents, bl, op_flags);
@@ -43,7 +43,6 @@ struct ImageRequest<MockReplayImageCtx> {
   static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c,
                           Extents&& image_extents,
                           uint32_t discard_granularity_bytes,
-                          IOContext io_context,
                           const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_discard(c, image_extents, discard_granularity_bytes);
@@ -61,8 +60,8 @@ struct ImageRequest<MockReplayImageCtx> {
                                    const bufferlist &bl,
                                    int op_flags));
   static void aio_writesame(MockReplayImageCtx *ictx, AioCompletion *c,
-                            Extents&& image_extents, bufferlist &&bl,
-                            IOContext io_context, int op_flags,
+                            Extents&& image_extents,
+                            bufferlist&& bl, int op_flags,
                             const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_writesame(c, image_extents, bl, op_flags);
@@ -73,9 +72,9 @@ struct ImageRequest<MockReplayImageCtx> {
                                            uint64_t *mismatch_offset,
                                            int op_flags));
   static void aio_compare_and_write(MockReplayImageCtx *ictx, AioCompletion *c,
-                                    Extents &&image_extents, bufferlist &&cmp_bl,
-                                    bufferlist &&bl, uint64_t *mismatch_offset,
-                                    IOContext io_context, int op_flags,
+                                    Extents&& image_extents,
+                                    bufferlist&& cmp_bl, bufferlist&& bl,
+                                    uint64_t* mismatch_offset, int op_flags,
                                     const ZTracer::Trace &parent_trace) {
     ceph_assert(s_instance != nullptr);
     s_instance->aio_compare_and_write(c, image_extents, cmp_bl, bl,
