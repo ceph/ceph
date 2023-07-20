@@ -37,8 +37,8 @@ void SimpleLock::dump(ceph::Formatter *f) const {
   f->dump_int("num_wrlocks", get_num_wrlocks());
   f->dump_int("num_xlocks", get_num_xlocks());
   f->open_object_section("xlock_by");
-  if (get_xlock_by()) {
-    get_xlock_by()->dump(f);
+  if (auto mut = get_xlock_by(); mut) {
+    f->dump_object("reqid", mut->reqid);
   }
   f->close_section();
 }
