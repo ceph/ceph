@@ -8,10 +8,11 @@
 #include "crimson/common/errorator.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/os/seastore/record_scanner.h"
 
 namespace crimson::os::seastore {
 
-class SegmentManagerGroup {
+class SegmentManagerGroup : public RecordScanner {
 public:
   SegmentManagerGroup() {
     segment_managers.resize(DEVICE_ID_MAX, nullptr);
@@ -96,24 +97,6 @@ public:
     segment_tail_t>;
   read_segment_tail_ret  read_segment_tail(segment_id_t segment);
 
-  using read_ertr = SegmentManager::read_ertr;
-  using scan_valid_records_ertr = read_ertr;
-  using scan_valid_records_ret = scan_valid_records_ertr::future<
-    size_t>;
-  using found_record_handler_t = std::function<
-    scan_valid_records_ertr::future<>(
-      record_locator_t record_locator,
-      // callee may assume header and bl will remain valid until
-      // returned future resolves
-      const record_group_header_t &header,
-      const bufferlist &mdbuf)>;
-  scan_valid_records_ret scan_valid_records(
-    scan_valid_records_cursor &cursor, ///< [in, out] cursor, updated during call
-    segment_nonce_t nonce,             ///< [in] nonce for segment
-    size_t budget,                     ///< [in] max budget to use
-    found_record_handler_t &handler    ///< [in] handler for records
-  ); ///< @return used budget
-
   /*
    * read journal segment headers
    */
@@ -143,30 +126,17 @@ private:
     return device_ids.count(id) >= 1;
   }
 
-  /// read record metadata for record starting at start
-  using read_validate_record_metadata_ertr = read_ertr;
-  using read_validate_record_metadata_ret =
-    read_validate_record_metadata_ertr::future<
-      std::optional<std::pair<record_group_header_t, bufferlist>>
-    >;
+  void initialize_cursor(scan_valid_records_cursor &cursor) final;
+
   read_validate_record_metadata_ret read_validate_record_metadata(
     paddr_t start,
-    segment_nonce_t nonce);
+    segment_nonce_t nonce) final;
 
-  /// read and validate data
-  using read_validate_data_ertr = read_ertr;
-  using read_validate_data_ret = read_validate_data_ertr::future<bool>;
   read_validate_data_ret read_validate_data(
     paddr_t record_base,
     const record_group_header_t &header  ///< caller must ensure lifetime through
                                          ///  future resolution
-  );
-
-  using consume_record_group_ertr = scan_valid_records_ertr;
-  consume_record_group_ertr::future<> consume_next_records(
-      scan_valid_records_cursor& cursor,
-      found_record_handler_t& handler,
-      std::size_t& budget_used);
+  ) final;
 
   std::vector<SegmentManager*> segment_managers;
   std::set<device_id_t> device_ids;
