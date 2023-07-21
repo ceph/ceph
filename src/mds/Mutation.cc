@@ -481,6 +481,7 @@ void MDRequestImpl::dump(Formatter *f) const
 
 void MDRequestImpl::_dump(Formatter *f) const
 {
+  std::lock_guard l(lock);
   f->dump_string("flag_point", _get_state_string());
   f->dump_stream("reqid") << reqid;
   {
@@ -527,9 +528,9 @@ void MDRequestImpl::_dump(Formatter *f) const
       f->dump_string("op_type", "no_available_op_found");
     }
   }
+
   {
     f->open_array_section("events");
-    std::lock_guard l(lock);
     for (auto& i : events) {
       f->dump_object("event", i);
     }
