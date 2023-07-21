@@ -791,25 +791,23 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
         });
       }
 
+      auto require_keepalive = need_keepalive;
+      need_keepalive = false;
+      auto maybe_keepalive_ack = next_keepalive_ack;
+      next_keepalive_ack = std::nullopt;
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
+      ack_left = 0;
       return frame_assembler->write<false>(
         sweep_out_pending_msgs_to_sent(
-          need_keepalive, next_keepalive_ack, to_ack > 0)
-      ).then([this, prv_keepalive_ack=next_keepalive_ack, to_ack, &ctx] {
+          require_keepalive, maybe_keepalive_ack, to_ack > 0)
+      ).then([this, &ctx] {
         if (ctx.get_io_state() != io_state_t::open) {
           return frame_assembler->flush<false>(
           ).then([] {
             return seastar::make_ready_future<stop_t>(stop_t::no);
           });
         }
-
-        need_keepalive = false;
-        if (next_keepalive_ack == prv_keepalive_ack) {
-          next_keepalive_ack = std::nullopt;
-        }
-        assert(ack_left >= to_ack);
-        ack_left -= to_ack;
 
         // FIXME: may leak a flush if state is changed after return and before
         // the next repeat body.
