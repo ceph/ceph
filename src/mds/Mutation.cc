@@ -481,10 +481,6 @@ void MDRequestImpl::_dump(Formatter *f) const
   f->dump_object("reqid", reqid);
   if (client_request) {
     f->dump_string("op_type", "client_request");
-    f->open_object_section("client_info");
-    f->dump_stream("client") << client_request->get_orig_source();
-    f->dump_int("tid", client_request->get_tid());
-    f->close_section(); // client_info
   } else if (is_peer()) { // replies go to an existing mdr
     f->dump_string("op_type", "peer_request");
     f->open_object_section("leader_info");
