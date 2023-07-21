@@ -171,9 +171,13 @@ private:
   void set_socket(Socket *s);
 
 #ifdef UNIT_TESTS_BUILT
-  bool is_closed_clean() const override;
+  bool is_protocol_ready() const override;
 
-  bool is_closed() const override;
+  bool is_protocol_standby() const override;
+
+  bool is_protocol_closed_clean() const override;
+
+  bool is_protocol_closed() const override;
 
   // peer wins if myaddr > peeraddr
   bool peer_wins() const override;
