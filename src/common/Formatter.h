@@ -87,6 +87,7 @@ namespace ceph {
     virtual void open_object_section(std::string_view name) = 0;
     virtual void open_object_section_in_ns(std::string_view name, const char *ns) = 0;
     virtual void close_section() = 0;
+    virtual void dump_null(std::string_view name) = 0;
     virtual void dump_unsigned(std::string_view name, uint64_t u) = 0;
     virtual void dump_int(std::string_view name, int64_t s) = 0;
     virtual void dump_float(std::string_view name, double d) = 0;
@@ -156,6 +157,7 @@ namespace ceph {
     void open_object_section(std::string_view name) override;
     void open_object_section_in_ns(std::string_view name, const char *ns) override;
     void close_section() override;
+    void dump_null(std::string_view name) override;
     void dump_unsigned(std::string_view name, uint64_t u) override;
     void dump_int(std::string_view name, int64_t s) override;
     void dump_float(std::string_view name, double d) override;
@@ -228,6 +230,7 @@ namespace ceph {
     void open_object_section(std::string_view name) override;
     void open_object_section_in_ns(std::string_view name, const char *ns) override;
     void close_section() override;
+    void dump_null(std::string_view name) override;
     void dump_unsigned(std::string_view name, uint64_t u) override;
     void dump_int(std::string_view name, int64_t s) override;
     void dump_float(std::string_view name, double d) override;
@@ -284,6 +287,7 @@ namespace ceph {
     void open_object_section_with_attrs(std::string_view name, const FormatterAttrs& attrs) override;
 
     void close_section() override;
+    void dump_null(std::string_view name) override;
     void dump_unsigned(std::string_view name, uint64_t u) override;
     void dump_int(std::string_view name, int64_t s) override;
     void dump_float(std::string_view name, double d) override;
