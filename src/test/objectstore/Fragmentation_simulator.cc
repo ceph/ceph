@@ -5,22 +5,31 @@
  * Author: Tri Dao, daominhtri0503@gmail.com
  */
 #include "common/ceph_argparse.h"
+#include "common/ceph_mutex.h"
 #include "common/common_init.h"
 #include "common/hobject.h"
+
 #include "global/global_context.h"
 #include "global/global_init.h"
+#include <gtest/gtest.h>
+
+#include "include/Context.h"
 #include "include/buffer_fwd.h"
 #include "os/ObjectStore.h"
 #include "test/objectstore/ObjectStoreImitator.h"
 #include <boost/random/uniform_int.hpp>
 #include <fmt/core.h>
-#include <gtest/gtest.h>
-#include <iostream>
+#include <mutex>
 #include <string>
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_test
 
 constexpr uint64_t _1Kb = 1024;
 constexpr uint64_t _1Mb = 1024 * _1Kb;
 constexpr uint64_t _1Gb = 1024 * _1Mb;
+
+typedef boost::mt11213b gen_type;
 
 static bufferlist make_bl(size_t len, char c) {
   bufferlist bl;
@@ -35,19 +44,50 @@ static bufferlist make_bl(size_t len, char c) {
 // --------- FragmentationSimulator ----------
 
 class FragmentationSimulator : public ::testing::TestWithParam<std::string> {
+  // Context that takes an arbitrary callback
+  struct C_Callback : Context {
+    C_Callback(std::function<void()> cb) : cb(cb) {}
+
+    std::function<void()> cb;
+    void finish(int r) override { cb(); }
+  };
+
 public:
   struct WorkloadGenerator {
     virtual int generate_txns(ObjectStore::CollectionHandle &ch,
-                              ObjectStoreImitator *os) = 0;
+                              ObjectStore *os) = 0;
     virtual std::string name() = 0;
+
+    void register_txn(ObjectStore::Transaction &t) {
+      std::unique_lock l(in_flight_lock);
+      in_flight_txns++;
+      t.register_on_commit(new C_Callback([this]() -> void {
+        std::unique_lock l(in_flight_lock);
+        if (--in_flight_txns == 0) {
+          continue_cond.notify_all();
+        }
+      }));
+    }
+
+    // wait_till_finish blocks until all in-flight txns are finished
+    void wait_till_finish() {
+      std::unique_lock l(in_flight_lock);
+      continue_cond.wait(l, [this]() -> bool { return !in_flight_txns; });
+    }
 
     WorkloadGenerator() {}
     virtual ~WorkloadGenerator() {}
+
+  private:
+    unsigned in_flight_txns{0};
+    ceph::condition_variable continue_cond;
+    ceph::mutex in_flight_lock =
+        ceph::make_mutex("WorkloadGenerator::in_flight_lock");
   };
   using WorkloadGeneratorRef = std::shared_ptr<WorkloadGenerator>;
 
   void add_generator(WorkloadGeneratorRef gen);
-  int begin_simulation_with_generators();
+  int begin_simulation_with_generators(unsigned iterations);
   void init(const std::string &alloc_type, uint64_t size,
             uint64_t min_alloc_size = 4096);
 
@@ -68,30 +108,33 @@ private:
 
 void FragmentationSimulator::init(const std::string &alloc_type, uint64_t size,
                                   uint64_t min_alloc_size) {
-  std::cout << std::endl;
-  std::cout << "Initializing ObjectStoreImitator" << std::endl;
+  dout(0) << dendl;
+  dout(20) << "Initializing ObjectStoreImitator" << dendl;
   os = new ObjectStoreImitator(g_ceph_context, "", min_alloc_size);
 
-  std::cout << "Initializing allocator: " << alloc_type << ", size: 0x"
-            << std::hex << size << std::dec << "\n"
-            << std::endl;
+  dout(0) << "Initializing allocator: " << alloc_type << ", size: 0x"
+          << std::hex << size << std::dec << dendl;
   os->init_alloc(alloc_type, size);
 }
 
 void FragmentationSimulator::add_generator(WorkloadGeneratorRef gen) {
-  std::cout << "Generator: " << gen->name() << " added\n";
+  dout(5) << "Generator: " << gen->name() << " added" << dendl;
   generators.push_back(gen);
 }
 
-int FragmentationSimulator::begin_simulation_with_generators() {
-  for (auto &g : generators) {
-    ObjectStore::CollectionHandle ch =
-        os->create_new_collection(coll_t::meta());
-    ObjectStore::Transaction t;
-    t.create_collection(ch->cid, 0);
-    os->queue_transaction(ch, std::move(t));
+int FragmentationSimulator::begin_simulation_with_generators(
+    unsigned iterations) {
+  ObjectStore::CollectionHandle ch = os->create_new_collection(coll_t::meta());
 
-    int r = g->generate_txns(ch, os);
+  ObjectStore::Transaction t;
+  t.create_collection(ch->cid, 0);
+  os->queue_transaction(ch, std::move(t));
+
+  gen_type rng(time(0));
+  boost::uniform_int<> generator_idx(0, generators.size() - 1);
+
+  while (iterations--) {
+    int r = generators[generator_idx(rng)]->generate_txns(ch, os);
     if (r < 0)
       return r;
   }
@@ -101,6 +144,7 @@ int FragmentationSimulator::begin_simulation_with_generators() {
   os->print_per_object_fragmentation();
   os->print_per_access_fragmentation();
   os->print_allocator_profile();
+
   return 0;
 }
 
@@ -109,7 +153,7 @@ int FragmentationSimulator::begin_simulation_with_generators() {
 struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
   std::string name() override { return "SimpleCW"; }
   int generate_txns(ObjectStore::CollectionHandle &ch,
-                    ObjectStoreImitator *os) override {
+                    ObjectStore *os) override {
 
     std::vector<ghobject_t> objs;
     for (unsigned i{0}; i < 100; ++i) {
@@ -124,19 +168,17 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     for (unsigned i{0}; i < 100; ++i) {
       ObjectStore::Transaction t1;
       t1.create(ch->get_cid(), objs[i]);
+      register_txn(t1);
       tls.emplace_back(std::move(t1));
 
       ObjectStore::Transaction t2;
       t2.write(ch->get_cid(), objs[i], 0, _1Mb, make_bl(_1Mb, 'c'));
+      register_txn(t2);
       tls.emplace_back(std::move(t2));
     }
 
     os->queue_transactions(ch, tls);
-    os->verify_objects(ch);
-
-    // reapply
-    os->queue_transactions(ch, tls);
-    os->verify_objects(ch);
+    wait_till_finish();
     tls.clear();
 
     // Overwrite on object
@@ -148,7 +190,7 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     }
 
     os->queue_transactions(ch, tls);
-    os->verify_objects(ch);
+    wait_till_finish();
     tls.clear();
 
     for (unsigned i{0}; i < 50; ++i) {
@@ -161,18 +203,17 @@ struct SimpleCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     }
 
     os->queue_transactions(ch, tls);
-    os->verify_objects(ch);
+    wait_till_finish();
     tls.clear();
     return 0;
   }
 };
 
-typedef boost::mt11213b gen_type;
-
 struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
+  RandomCWGenerator() : WorkloadGenerator(), rng(time(0)) {}
   std::string name() override { return "RandomCW"; }
   int generate_txns(ObjectStore::CollectionHandle &ch,
-                    ObjectStoreImitator *os) override {
+                    ObjectStore *os) override {
 
     hobject_t h1;
     h1.oid = fmt::format("obj1");
@@ -197,9 +238,8 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     tls.emplace_back(std::move(t2));
 
     os->queue_transactions(ch, tls);
-    os->verify_objects(ch);
+    wait_till_finish();
 
-    gen_type rng(time(0));
     boost::uniform_int<> u_size(0, _1Mb * 4);
     boost::uniform_int<> u_offset(0, _1Mb);
 
@@ -221,7 +261,7 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
       tls.emplace_back(std::move(t4));
 
       os->queue_transactions(ch, tls);
-      os->verify_objects(ch);
+      wait_till_finish();
 
       bufferlist dummy;
 
@@ -239,6 +279,9 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     tls.clear();
     return 0;
   }
+
+private:
+  gen_type rng;
 };
 
 // Testing the Imitator with multiple threads. We're mainly testing for
@@ -248,7 +291,7 @@ struct MultiThreadedCWGenerator
     : public FragmentationSimulator::WorkloadGenerator {
   std::string name() override { return "MultiThreadedCW"; }
   int generate_txns(ObjectStore::CollectionHandle &ch,
-                    ObjectStoreImitator *os) override {
+                    ObjectStore *os) override {
 
     auto t1 = std::thread([&]() {
       hobject_t h1;
@@ -290,16 +333,18 @@ struct MultiThreadedCWGenerator
 
     t1.join();
     t2.join();
+    wait_till_finish();
 
     return 0;
   }
 };
 
 // Replay ops from OSD on the Simulator
+// Not tested
 struct OpsReplayer : public FragmentationSimulator::WorkloadGenerator {
   std::string name() override { return "OpsReplayer"; }
   int generate_txns(ObjectStore::CollectionHandle &ch,
-                    ObjectStoreImitator *os) override {
+                    ObjectStore *os) override {
     std::unordered_map<std::string, std::string> row;
     std::vector<std::string> col_names;
     std::string line, col;
@@ -317,7 +362,6 @@ struct OpsReplayer : public FragmentationSimulator::WorkloadGenerator {
     // skipping over '---'
     std::getline(f, line);
 
-    std::vector<ObjectStore::Transaction> tls;
     while (std::getline(f, line)) {
       stream.str(line);
       for (unsigned i{0}; stream >> col; i++) {
@@ -349,11 +393,11 @@ struct OpsReplayer : public FragmentationSimulator::WorkloadGenerator {
         }
       }
 
-      if (op_type != "read")
-        tls.emplace_back(std::move(t));
+      if (op_type != "read") {
+        os->queue_transaction(ch, std::move(t));
+        wait_till_finish();
+      }
     }
-
-    os->queue_transactions(ch, tls);
 
     return 0;
   }
@@ -372,25 +416,26 @@ private:
 TEST_P(FragmentationSimulator, SimpleCWGenerator) {
   init(GetParam(), _1Gb);
   add_generator(std::make_shared<SimpleCWGenerator>());
-  begin_simulation_with_generators();
+  begin_simulation_with_generators(1);
 }
 
 TEST_P(FragmentationSimulator, RandomCWGenerator) {
   init(GetParam(), _1Mb * 16);
   add_generator(std::make_shared<RandomCWGenerator>());
-  begin_simulation_with_generators();
+  begin_simulation_with_generators(1);
 }
 
 TEST_P(FragmentationSimulator, MultiThreadedCWGenerator) {
   init(GetParam(), _1Mb * 4);
   add_generator(std::make_shared<MultiThreadedCWGenerator>());
-  begin_simulation_with_generators();
+  begin_simulation_with_generators(1);
 }
 
 // ----------- main -----------
 
 INSTANTIATE_TEST_SUITE_P(Allocator, FragmentationSimulator,
-                         ::testing::Values("stupid", "bitmap", "avl", "btree"));
+                         ::testing::Values("stupid", "bitmap", "avl", "btree",
+                                           "hybrid"));
 
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
