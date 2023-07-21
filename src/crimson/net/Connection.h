@@ -121,9 +121,13 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   virtual void print(std::ostream& out) const = 0;
 
 #ifdef UNIT_TESTS_BUILT
-  virtual bool is_closed() const = 0;
+  virtual bool is_protocol_ready() const = 0;
 
-  virtual bool is_closed_clean() const = 0;
+  virtual bool is_protocol_standby() const = 0;
+
+  virtual bool is_protocol_closed() const = 0;
+
+  virtual bool is_protocol_closed_clean() const = 0;
 
   virtual bool peer_wins() const = 0;
 #endif
