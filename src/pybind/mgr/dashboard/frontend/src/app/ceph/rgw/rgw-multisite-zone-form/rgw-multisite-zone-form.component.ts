@@ -325,14 +325,4 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
         );
     }
   }
-
-  checkUrlArray(endpoints: string) {
-    let endpointsArray = [];
-    if (endpoints.includes(',')) {
-      endpointsArray = endpoints.split(',');
-    } else {
-      endpointsArray.push(endpoints);
-    }
-    return endpointsArray;
-  }
 }
