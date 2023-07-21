@@ -339,7 +339,7 @@ options:
   long_desc: The half-life for the session cap acquisition counter of caps acquired
     by readdir. This is used for throttling readdir requests from clients slow to
     release caps.
-  default: 10
+  default: 30
   services:
   - mds
   flags:
@@ -348,7 +348,7 @@ options:
   type: uint
   level: advanced
   desc: throttle point for cap acquisition decay counter
-  default: 500000
+  default: 100000
   services:
   - mds
 - name: mds_session_max_caps_throttle_ratio
