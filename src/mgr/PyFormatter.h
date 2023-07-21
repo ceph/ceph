@@ -87,6 +87,7 @@ public:
     stack.pop();
   }
   void dump_bool(std::string_view name, bool b) override;
+  void dump_null(std::string_view name) override;
   void dump_unsigned(std::string_view name, uint64_t u) override;
   void dump_int(std::string_view name, int64_t u) override;
   void dump_float(std::string_view name, double d) override;
