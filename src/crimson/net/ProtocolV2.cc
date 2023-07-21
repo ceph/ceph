@@ -2112,6 +2112,13 @@ void ProtocolV2::execute_ready()
   // I'm not responsible to shutdown the socket at READY
   is_socket_valid = false;
   trigger_state(state_t::READY, io_state_t::open);
+#ifdef UNIT_TESTS_BUILT
+  if (conn.interceptor) {
+    // FIXME: doesn't support cross-core
+    conn.interceptor->register_conn_ready(
+        conn.get_local_shared_foreign_from_this());
+  }
+#endif
 }
 
 // STANDBY state

@@ -293,13 +293,6 @@ void IOHandler::do_set_io_state(
     ceph_assert_always(protocol_is_connected == true);
     assign_frame_assembler(std::move(fa));
     dispatch_in = true;
-#ifdef UNIT_TESTS_BUILT
-    if (conn.interceptor) {
-      // FIXME: doesn't support cross-core
-      conn.interceptor->register_conn_ready(
-          conn.get_local_shared_foreign_from_this());
-    }
-#endif
   } else if (prv_state == io_state_t::open) {
     // from open
     ceph_assert_always(protocol_is_connected == true);
