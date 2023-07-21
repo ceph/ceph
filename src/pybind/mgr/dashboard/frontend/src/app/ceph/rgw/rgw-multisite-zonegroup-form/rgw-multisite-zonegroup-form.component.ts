@@ -248,7 +248,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       this.zonegroup = new RgwZonegroup();
       this.zonegroup.name = this.info.data.name;
       this.newZonegroupName = values['zonegroupName'];
-      this.zonegroup.endpoints = values['zonegroup_endpoints'];
+      this.zonegroup.endpoints = values['zonegroup_endpoints'].toString();
       this.zonegroup.placement_targets = values['placementTargets'];
       this.rgwZonegroupService
         .update(
@@ -273,16 +273,6 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
           }
         );
     }
-  }
-
-  checkUrlArray(endpoints: string) {
-    let endpointsArray = [];
-    if (endpoints.includes(',')) {
-      endpointsArray = endpoints.split(',');
-    } else {
-      endpointsArray.push(endpoints);
-    }
-    return endpointsArray;
   }
 
   addPlacementTarget() {
