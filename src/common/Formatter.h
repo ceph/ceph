@@ -249,6 +249,7 @@ namespace ceph {
     void print_spaces();
     void get_attrs_str(const FormatterAttrs *attrs, std::string& attrs_str);
     char to_lower_underscore(char c) const;
+    std::string get_xml_name(std::string_view name) const;
 
     std::stringstream m_ss, m_pending_string;
     std::deque<std::string> m_sections;
