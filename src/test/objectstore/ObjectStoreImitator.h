@@ -64,8 +64,7 @@ private:
     uint64_t offset;
     uint64_t length;
     unsigned blks;
-    unsigned
-        jmps; // # of times we have to stop iterating over continuous extents
+    unsigned jmps; // # times having to stop iterating over continuous extents
     ReadOp(uint64_t offset = 0, uint64_t length = 0, unsigned blks = 0,
            unsigned jmps = 0)
         : offset(offset), length(length), blks(blks), jmps(jmps) {}
@@ -77,11 +76,11 @@ private:
     std::unordered_map<ghobject_t, std::vector<ReadOp>> read_ops;
 
     ceph::shared_mutex lock = ceph::make_shared_mutex(
-        "FragmentationSimulator::Collection::lock", true, false);
+        "ObjectStoreImitator::Collection::lock", true, false);
 
     // Lock for 'objects'
     ceph::recursive_mutex obj_lock = ceph::make_recursive_mutex(
-        "FragmentationSimulator::Collection::obj_lock");
+        "ObjectStoreImitator::Collection::obj_lock");
 
     bool exists;
 
@@ -210,7 +209,7 @@ private:
 
   ///< rwlock to protect coll_map/new_coll_map
   ceph::shared_mutex coll_lock =
-      ceph::make_shared_mutex("FragmentationSimulator::coll_lock");
+      ceph::make_shared_mutex("ObjectStoreImitator::coll_lock");
   std::unordered_map<coll_t, CollectionRef> coll_map;
   std::unordered_map<coll_t, CollectionRef>
       new_coll_map; // store collections that is opened via open_new_collection

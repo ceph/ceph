@@ -6,6 +6,7 @@
  */
 #include "test/objectstore/ObjectStoreImitator.h"
 #include "common/Clock.h"
+#include "common/Finisher.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "include/intarith.h"
@@ -13,8 +14,10 @@
 #include <algorithm>
 #include <cmath>
 
-#define dout_context cct
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_test
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
+
 // ---------- Allocator ----------
 
 void ObjectStoreImitator::release_alloc(PExtentVector &old_extents) {
@@ -50,14 +53,13 @@ void ObjectStoreImitator::Object::punch_hole(uint64_t offset, uint64_t length,
   uint64_t re_add_key{0};
   bluestore_pextent_t re_add;
 
-  // std::cout << "current extents:\n";
-  // for (auto &[l_off, e] : extent_map) {
-  //   std::cout << "l_off " << l_off << ", off " << e.offset << ", len "
-  //             << e.length << std::endl;
-  // }
+  dout(20) << "current extents:" << dendl;
+  for (auto &[l_off, e] : extent_map) {
+    dout(20) << "l_off " << l_off << ", off " << e.offset << ", len "
+             << e.length << dendl;
+  }
 
-  // std::cout << "wants to punch: off " << offset << ", len " << length
-  //           << std::endl;
+  dout(20) << "wants to punch: off " << offset << ", len " << length << dendl;
 
   auto it = extent_map.lower_bound(offset);
   if ((it == extent_map.end() || it->first > offset) &&
@@ -66,8 +68,7 @@ void ObjectStoreImitator::Object::punch_hole(uint64_t offset, uint64_t length,
 
     // diff between where we need to punch and current position
     auto diff = offset - it->first;
-    // std::cout << "diff " << diff << " , p_off " << it->first <<
-    // std::endl;
+    dout(20) << "diff " << diff << " , p_off " << it->first << dendl;
 
     // offset will be inside this extent
     // otherwise skip over this extent and assume 'offset' has been passed
@@ -83,8 +84,8 @@ void ObjectStoreImitator::Object::punch_hole(uint64_t offset, uint64_t length,
         re_add.offset = it->second.offset + diff + length;
         re_add.length = it->second.length - diff - length;
 
-        // std::cout << "re_add: off " << re_add.offset << ", len "
-        //           << re_add.length << std::endl;
+        dout(20) << "re_add: off " << re_add.offset << ", len " << re_add.length
+                 << dendl;
       }
 
       // Modify the remaining extent's length
@@ -125,29 +126,27 @@ void ObjectStoreImitator::Object::punch_hole(uint64_t offset, uint64_t length,
   }
 
   old_extents = to_be_punched;
-  // std::cout << "to be deleted\n";
-  // for (auto e : to_be_punched) {
-  //   std::cout << "off " << e.offset << ", len " << e.length << std::endl;
-  // }
+  dout(20) << "to be deleted:" << dendl;
+  for (auto e : to_be_punched) {
+    dout(20) << "off " << e.offset << ", len " << e.length << dendl;
+  }
 }
 
 void ObjectStoreImitator::Object::append(PExtentVector &ext, uint64_t offset) {
   for (auto &e : ext) {
     ceph_assert(e.length > 0);
-    // std::cout << "adding off " << offset << ", len " << e.length
-    //           << std::endl;
+    dout(20) << "adding off " << offset << ", len " << e.length << dendl;
     extent_map[offset] = e;
     offset += e.length;
   }
 }
 
 void ObjectStoreImitator::Object::verify_extents() {
-  // std::cout << "Verifying extents:\n";
+  dout(20) << "Verifying extents:" << dendl;
   uint64_t prev{0};
   for (auto &[l_off, ext] : extent_map) {
-    // std::cout << "logical offset: " << l_off
-    //           << ", extent offset: " << ext.offset
-    //           << ", extent length: " << ext.length << std::endl;
+    dout(20) << "logical offset: " << l_off << ", extent offset: " << ext.offset
+             << ", extent length: " << ext.length << dendl;
 
     ceph_assert(ext.is_valid());
     ceph_assert(ext.length > 0);
@@ -176,13 +175,13 @@ void ObjectStoreImitator::init_alloc(const std::string &alloc_type,
 }
 
 void ObjectStoreImitator::print_status() {
-  std::cout << std::hex
-            << "Fragmentation score: " << alloc->get_fragmentation_score()
-            << " , fragmentation: " << alloc->get_fragmentation()
-            << ", allocator type " << alloc->get_type() << ", capacity 0x"
-            << alloc->get_capacity() << ", block size 0x"
-            << alloc->get_block_size() << ", free 0x" << alloc->get_free()
-            << std::dec << std::endl;
+  dout(0) << std::hex
+          << "Fragmentation score: " << alloc->get_fragmentation_score()
+          << " , fragmentation: " << alloc->get_fragmentation()
+          << ", allocator type: " << alloc->get_type() << ", capacity 0x"
+          << alloc->get_capacity() << ", block size 0x"
+          << alloc->get_block_size() << ", free 0x" << alloc->get_free()
+          << std::dec << dendl;
 }
 
 void ObjectStoreImitator::verify_objects(CollectionHandle &ch) {
@@ -197,7 +196,7 @@ void ObjectStoreImitator::print_per_object_fragmentation() {
     double coll_total{0};
     for (auto &[id, obj] : coll_ref->objects) {
       double frag_score{1};
-      unsigned i{1};
+      unsigned i{2};
       uint64_t ext_size = 0;
 
       PExtentVector extents;
@@ -218,17 +217,19 @@ void ObjectStoreImitator::print_per_object_fragmentation() {
       }
 
       coll_total += frag_score;
-      std::cout << "Object: " << id.hobj.oid.name
-                << ", hash: " << id.hobj.get_hash()
-                << " fragmentation score: " << frag_score << std::endl;
+      dout(5) << "Object: " << id.hobj.oid.name
+              << ", hash: " << id.hobj.get_hash()
+              << " fragmentation score: " << frag_score << dendl;
     }
     double avg = coll_total / coll_ref->objects.size();
-    std::cout << "Average obj fragmentation " << avg << std::endl;
+    dout(0) << "Collection average obj fragmentation: " << avg
+            << ", coll: " << coll_ref->get_cid().to_str() << dendl;
   }
 }
 
 void ObjectStoreImitator::print_per_access_fragmentation() {
   for (auto &[_, coll_ref] : coll_map) {
+    double coll_blks_read{0}, coll_jmps{0};
     for (auto &[id, read_ops] : coll_ref->read_ops) {
       unsigned blks{0}, jmps{0};
       for (auto &op : read_ops) {
@@ -236,24 +237,36 @@ void ObjectStoreImitator::print_per_access_fragmentation() {
         jmps += op.jmps;
       }
 
-      double avg_total_blks = (double)blks / read_ops.size();
+      double avg_blks_read = (double)blks / read_ops.size();
+      coll_blks_read += avg_blks_read;
+
       double avg_jmps = (double)jmps / read_ops.size();
+      coll_jmps += avg_jmps;
+
       double avg_jmps_per_blk = (double)jmps / (double)blks;
 
-      std::cout << "Object: " << id.hobj.oid.name
-                << ", average total blks read: " << avg_total_blks
-                << ", average total jumps: " << avg_jmps
-                << ", average jumps per block: " << avg_jmps_per_blk
-                << std::endl;
+      dout(5) << "Object: " << id.hobj.oid.name
+              << ", average blks read: " << avg_blks_read
+              << ", average jumps: " << avg_jmps
+              << ", average jumps per block: " << avg_jmps_per_blk << dendl;
     }
+
+    double coll_avg_blks_read = coll_blks_read / coll_ref->objects.size();
+    double coll_avg_jumps = coll_jmps / coll_ref->objects.size();
+    double coll_avg_jmps_per_blk = coll_avg_jumps / coll_avg_blks_read;
+
+    dout(0) << "Collection average total blks: " << coll_avg_blks_read
+            << ", collection average jumps: " << coll_avg_jumps
+            << ", collection average jumps per block: " << coll_avg_jmps_per_blk
+            << ", coll: " << coll_ref->get_cid().to_str() << dendl;
   }
 }
 
 void ObjectStoreImitator::print_allocator_profile() {
   double avg = alloc_time / alloc_ops;
-  std::cout << "Total alloc ops latency: " << alloc_time
-            << ", total ops: " << alloc_ops
-            << ", average alloc op latency: " << avg << std::endl;
+  dout(0) << "Total alloc ops latency: " << alloc_time
+          << ", total ops: " << alloc_ops
+          << ", average alloc op latency: " << avg << dendl;
 }
 
 // ------- Transactions -------
@@ -262,17 +275,41 @@ int ObjectStoreImitator::queue_transactions(CollectionHandle &ch,
                                             std::vector<Transaction> &tls,
                                             TrackedOpRef op,
                                             ThreadPool::TPHandle *handle) {
+  std::list<Context *> on_applied, on_commit, on_applied_sync;
+  ObjectStore::Transaction::collect_contexts(tls, &on_applied, &on_commit,
+                                             &on_applied_sync);
+  Collection *c = static_cast<Collection *>(ch.get());
+
   for (std::vector<Transaction>::iterator p = tls.begin(); p != tls.end();
        ++p) {
     _add_transaction(&(*p));
   }
 
   if (handle)
-    handle->suspend_tp_timeout();
-
-  if (handle)
     handle->reset_tp_timeout();
 
+  // Immediately complete contexts
+  for (auto c : on_applied_sync) {
+    c->complete(0);
+  }
+
+  if (!on_applied.empty()) {
+    if (c->commit_queue) {
+      c->commit_queue->queue(on_applied);
+    } else {
+      for (auto c : on_applied) {
+        c->complete(0);
+      }
+    }
+  }
+
+  if (!on_commit.empty()) {
+    for (auto c : on_commit) {
+      c->complete(0);
+    }
+  }
+
+  verify_objects(ch);
   return 0;
 }
 
@@ -607,9 +644,8 @@ int ObjectStoreImitator::_do_read(Collection *c, ObjectRef &o, uint64_t offset,
   }
 
   c->read_ops[o->oid].push_back(op);
-  // std::cout << "blks: " << op.blks << ", jmps: " << op.jmps
-  //           << ", offset: " << op.offset << ", length: " << op.length
-  //           << std::endl;
+  dout(20) << "blks: " << op.blks << ", jmps: " << op.jmps
+           << ", offset: " << op.offset << ", length: " << op.length << dendl;
 
   return bl.length();
 }
