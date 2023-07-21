@@ -311,6 +311,11 @@ void JSONFormatter::add_value(std::string_view name, std::string_view val, bool 
   }
 }
 
+void JSONFormatter::dump_null(std::string_view name)
+{
+  add_value(name, "null");
+}
+
 void JSONFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
   add_value(name, u);
@@ -469,6 +474,14 @@ void XMLFormatter::add_value(std::string_view name, T val)
   print_spaces();
   m_ss.precision(std::numeric_limits<T>::max_digits10);
   m_ss << "<" << e << ">" << val << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::dump_null(std::string_view name)
+{
+  print_spaces();
+  m_ss << "<" << get_xml_name(name) << " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:nil=\"true\" />";
   if (m_pretty)
     m_ss << "\n";
 }
@@ -843,6 +856,11 @@ void TableFormatter::add_value(std::string_view name, T val) {
   m_vec[i].push_back(std::make_pair(get_section_name(name), m_ss.str()));
   m_ss.clear();
   m_ss.str("");
+}
+
+void TableFormatter::dump_null(std::string_view name)
+{
+  add_value(name, "null");
 }
 
 void TableFormatter::dump_unsigned(std::string_view name, uint64_t u)
