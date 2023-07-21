@@ -53,9 +53,8 @@ the CLT itself.
 Current CLT members are:
 
  * Casey Bodley <cbodley@redhat.com>
- * Dan van der Ster <daniel.vanderster@cern.ch>
- * David Galloway <dgallowa@redhat.com>
- * David Orman <ormandj@iland.com>
+ * Dan van der Ster <dan.vanderster@clyso.com>
+ * David Orman <ormandj@1111systems.com>
  * Ernesto Puerta <epuerta@redhat.com>
  * Gregory Farnum <gfarnum@redhat.com>
  * Haomai Wang <haomai@xsky.com>
