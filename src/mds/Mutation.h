@@ -455,8 +455,6 @@ struct MDRequestImpl : public MutationImpl {
 protected:
   void _dump(ceph::Formatter *f) const override;
   void _dump_op_descriptor(std::ostream& stream) const override;
-private:
-  mutable ceph::spinlock msg_lock;
 };
 
 struct MDPeerUpdate {
