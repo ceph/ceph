@@ -1280,7 +1280,7 @@ class RgwMultisite:
     def update_period(self):
         rgw_update_period_cmd = ['period', 'update', '--commit']
         try:
-            exit_code, _, err = mgr.send_rgwadmin_command(rgw_update_period_cmd)
+            exit_code, _, err = mgr.send_rgwadmin_command(rgw_update_period_cmd, True, timeout=30)
             if exit_code > 0:
                 raise DashboardException(e=err, msg='Unable to update period',
                                          http_status_code=500, component='rgw')

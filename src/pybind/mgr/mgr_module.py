@@ -2351,7 +2351,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     def send_rgwadmin_command(self, args: List[str],
-                              stdout_as_json: bool = True) -> Tuple[int, Union[str, dict], str]:
+                              stdout_as_json: bool = True,
+                              timeout: Optional[int] = 10) -> Tuple[int, Union[str, dict], str]:
         try:
             cmd = [
                     'radosgw-admin',
@@ -2364,7 +2365,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=10,
+                timeout=timeout,
             )
             stdout = result.stdout.decode('utf-8')
             stderr = result.stderr.decode('utf-8')
