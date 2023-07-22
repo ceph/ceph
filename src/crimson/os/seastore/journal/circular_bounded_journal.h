@@ -135,7 +135,7 @@ public:
    * @param expected_seq
    *
    */
-  read_record_ret read_record(paddr_t offset, segment_seq_t expected_seq);
+  read_record_ret read_record(paddr_t offset, segment_nonce_t magic);
 
   read_record_ret return_record(record_group_header_t& header, bufferlist bl);
 

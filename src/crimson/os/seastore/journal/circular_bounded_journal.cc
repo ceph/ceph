@@ -117,7 +117,7 @@ RecordScanner::read_validate_record_metadata_ret CircularBoundedJournal::read_va
 {
   LOG_PREFIX(CircularBoundedJournal::read_validate_record_metadata);
   paddr_t start = cursor.seq.offset;
-  return read_record(start, 0
+  return read_record(start, nonce
   ).safe_then([FNAME, &cursor](auto ret) {
     if (!ret.has_value()) {
       return read_validate_record_metadata_ret(
@@ -234,7 +234,7 @@ Journal::replay_ret CircularBoundedJournal::replay_segment(
     [=, this, &cursor](auto &dhandler) {
       return scan_valid_records(
         cursor,
-	0,
+	cjs.get_cbj_header().magic,
         std::numeric_limits<size_t>::max(),
         dhandler).safe_then([](auto){}
       ).handle_error(
@@ -377,7 +377,7 @@ CircularBoundedJournal::return_record(record_group_header_t& header, bufferlist 
 }
 
 CircularBoundedJournal::read_record_ret
-CircularBoundedJournal::read_record(paddr_t off, segment_seq_t expected_seq)
+CircularBoundedJournal::read_record(paddr_t off, segment_nonce_t magic)
 {
   LOG_PREFIX(CircularBoundedJournal::read_record);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(off);
@@ -386,7 +386,7 @@ CircularBoundedJournal::read_record(paddr_t off, segment_seq_t expected_seq)
   DEBUG("reading record from abs addr {} read length {}", addr, read_length);
   auto bptr = bufferptr(ceph::buffer::create_page_aligned(read_length));
   return cjs.read(addr, bptr
-  ).safe_then([this, addr, bptr, expected_seq, FNAME]() mutable
+  ).safe_then([this, addr, bptr, magic, FNAME]() mutable
     -> read_record_ret {
     record_group_header_t h;
     bufferlist bl;
@@ -404,8 +404,7 @@ CircularBoundedJournal::read_record(paddr_t off, segment_seq_t expected_seq)
         h.dlength % get_block_size() != 0 ||
         addr + h.mdlength + h.dlength > get_journal_end() ||
         h.committed_to.segment_seq == NULL_SEG_SEQ ||
-        (expected_seq != NULL_SEG_SEQ &&
-         h.committed_to.segment_seq != expected_seq)) {
+	h.segment_nonce != magic) {
       return read_record_ret(
         read_record_ertr::ready_future_marker{},
         std::nullopt);
