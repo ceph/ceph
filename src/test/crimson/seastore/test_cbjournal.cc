@@ -66,6 +66,7 @@ struct entry_validator_t {
   journal_seq_t last_seq;
   record_t record;
   rbm_abs_addr addr = 0;
+  segment_nonce_t magic = 0;
 
   template <typename... T>
   entry_validator_t(T&&... entry) : record(std::forward<T>(entry)...) {}
@@ -99,7 +100,7 @@ struct entry_validator_t {
       paddr_t paddr = convert_abs_addr_to_paddr(
 	addr + offset,
 	cbj.get_device_id());
-      auto [header, buf] = *(cbj.read_record(paddr, NULL_SEG_SEQ).unsafe_get0());
+      auto [header, buf] = *(cbj.read_record(paddr, magic).unsafe_get0());
       auto record = decode_record(buf);
       validate(*record);
       offset += header.mdlength + header.dlength;
@@ -167,6 +168,7 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     entries.back().addr = 
       convert_paddr_to_abs_addr(w_result.start_seq.offset);
     entries.back().entries = 1;
+    entries.back().magic = cbj->get_cjs().get_cbj_header().magic;
     logger().debug("submit entry to addr {}", entries.back().addr);
     return entries.back().addr;
   }
