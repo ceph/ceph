@@ -38,7 +38,7 @@ protected:
       std::optional<std::pair<record_group_header_t, bufferlist>>
     >;
   virtual read_validate_record_metadata_ret read_validate_record_metadata(
-    paddr_t start,
+    scan_valid_records_cursor &cursor,
     segment_nonce_t nonce) = 0;
 
   /// read and validate data
