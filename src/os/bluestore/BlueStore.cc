@@ -17763,9 +17763,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 void BlueStore::_collect_allocation_stats(uint64_t need, uint32_t alloc_size,
                                           const PExtentVector& extents)
 {
-  alloc_stats_count++;
-  alloc_stats_fragments += extents.size();
-  alloc_stats_size += need;
+  if (alloc_size != min_alloc_size) {
+    alloc_stats_count++;
+    alloc_stats_fragments += extents.size();
+    alloc_stats_size += need;
+  }
 
   for (auto& e : extents) {
     logger->hinc(l_bluestore_allocate_hist, e.length, need);
