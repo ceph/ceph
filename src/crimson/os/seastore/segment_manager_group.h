@@ -129,7 +129,7 @@ private:
   void initialize_cursor(scan_valid_records_cursor &cursor) final;
 
   read_validate_record_metadata_ret read_validate_record_metadata(
-    paddr_t start,
+    scan_valid_records_cursor &cursor,
     segment_nonce_t nonce) final;
 
   read_validate_data_ret read_validate_data(
