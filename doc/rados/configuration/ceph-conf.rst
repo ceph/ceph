@@ -499,17 +499,11 @@ configuration option is present in the monitor configuration database, run
 Help
 ====
 
-You can get help for a particular option with:
+To get help for a particular option, run the following command:
 
 .. prompt:: bash $
 
    ceph config help <option>
-
-Note that this will use the configuration schema that is compiled into the running monitors.  If you have a mixed-version cluster (e.g., during an upgrade), you might also want to query the option schema from a specific running daemon:
-
-.. prompt:: bash $
-
-   ceph daemon <name> config help [option]
 
 For example:
 
@@ -519,7 +513,7 @@ For example:
 
 :: 
 
-  log_file - path to log file
+   log_file - path to log file
     (std::string, basic)
     Default (non-daemon):
     Default (daemon): /var/log/ceph/$cluster-$name.log
@@ -556,20 +550,29 @@ or:
       "can_update_at_runtime": false
   }
 
-The ``level`` property can be any of `basic`, `advanced`, or `dev`.
-The `dev` options are intended for use by developers, generally for
-testing purposes, and are not recommended for use by operators.
+The ``level`` property can be ``basic``, ``advanced``, or ``dev``.  The `dev`
+options are intended for use by developers, generally for testing purposes, and
+are not recommended for use by operators.
 
+.. note:: This command uses the configuration schema that is compiled into the
+   running monitors. If you have a mixed-version cluster (as might exist, for
+   example, during an upgrade), you might want to query the option schema from
+   a specific running daemon by running a command of the following form:
+
+.. prompt:: bash $
+
+   ceph daemon <name> config help [option]
 
 Runtime Changes
 ===============
 
 In most cases, Ceph permits changes to the configuration of a daemon at
-runtime. This can be used for increasing or decreasing the amount of logging
+run time. This can be used for increasing or decreasing the amount of logging
 output, for enabling or disabling debug settings, and for runtime optimization.
 
-Configuration options can be updated via the ``ceph config set`` command.  For
-example, to enable the debug log level on a specific OSD, run a command of this form:
+Use the ``ceph config set`` command to update configuration options. For
+example, to enable the most verbose  debug log level on a specific OSD, run a
+command of the following form:
 
 .. prompt:: bash $
 
@@ -578,16 +581,18 @@ example, to enable the debug log level on a specific OSD, run a command of this 
 .. note:: If an option has been customized in a local configuration file, the
    `central config
    <https://ceph.io/en/news/blog/2018/new-mimic-centralized-configuration-management/>`_
-   setting will be ignored (it has a lower priority than the local
-   configuration file).
+   setting will be ignored because it has a lower priority than the local
+   configuration file.
+
+.. note:: Log levels range from 0 to 20.
 
 Override values
 ---------------
 
-Options can be set temporarily by using the `tell` or `daemon` interfaces on
-the Ceph CLI. These *override* values are ephemeral, which means that they
-affect only the current instance of the daemon and revert to persistently
-configured values when the daemon restarts.
+Options can be set temporarily by using the Ceph CLI ``tell`` or ``daemon``
+interfaces on the Ceph CLI. These *override* values are ephemeral, which means
+that they affect only the current instance of the daemon and revert to
+persistently configured values when the daemon restarts.
 
 Override values can be set in two ways:
 
@@ -606,14 +611,14 @@ Override values can be set in two ways:
 
    The ``tell`` command can also accept a wildcard as the daemon identifier.
    For example, to adjust the debug level on all OSD daemons, run a command of
-   this form:
+   the following form:
    
    .. prompt:: bash $
 
       ceph tell osd.* config set debug_osd 20
 
 #. On the host where the daemon is running, connect to the daemon via a socket
-   in ``/var/run/ceph`` by running a command of this form:
+   in ``/var/run/ceph`` by running a command of the following form:
 
    .. prompt:: bash $
 
@@ -626,84 +631,83 @@ Override values can be set in two ways:
       ceph daemon osd.4 config set debug_osd 20
 
 .. note:: In the output of the ``ceph config show`` command, these temporary
-   values are shown with a source of ``override``.
+   values are shown to have a source of ``override``.
 
 
 Viewing runtime settings
 ========================
 
-You can see the current options set for a running daemon with the ``ceph config show`` command.  For example:
+You can see the current settings specified for a running daemon with the ``ceph
+config show`` command. For example, to see the (non-default) settings for the
+daemon ``osd.0``, run the following command:
 
 .. prompt:: bash $
 
    ceph config show osd.0
 
-will show you the (non-default) options for that daemon.  You can also look at a specific option with:
+To see a specific setting, run the following command:
 
 .. prompt:: bash $
 
    ceph config show osd.0 debug_osd
 
-or view all options (even those with default values) with:
+To see all settings (including those with default values), run the following
+command:
 
 .. prompt:: bash $
 
    ceph config show-with-defaults osd.0
 
-You can also observe settings for a running daemon by connecting to it from the local host via the admin socket.  For example:
+You can see all settings for a daemon that is currently running by connecting
+to it on the local host via the admin socket. For example, to dump all
+current settings, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon osd.0 config show
 
-will dump all current settings:
+To see non-default settings and to see where each value came from (for example,
+a config file, the monitor, or an override), run the following command:
 
 .. prompt:: bash $
 
    ceph daemon osd.0 config diff
 
-will show only non-default settings (as well as where the value came from: a config file, the monitor, an override, etc.), and:
+To see the value of a single setting, run the following command:
 
 .. prompt:: bash $
 
    ceph daemon osd.0 config get debug_osd
 
-will report the value of a single option.
 
-
-
-Changes since Nautilus
-======================
+Changes introduced in Octopus
+=============================
 
 With the Octopus release We changed the way the configuration file is parsed.
 These changes are as follows:
 
-- Repeated configuration options are allowed, and no warnings will be printed.
-  The value of the last one is used, which means that the setting last in the file
-  is the one that takes effect. Before this change, we would print warning messages
-  when lines with duplicated options were encountered, like::
+- Repeated configuration options are allowed, and no warnings will be
+  displayed. This means that the setting that comes last in the file is the one
+  that takes effect. Prior to this change, Ceph displayed warning messages when
+  lines containing duplicate options were encountered, such as::
 
     warning line 42: 'foo' in section 'bar' redefined
-
-- Invalid UTF-8 options were ignored with warning messages. But since Octopus,
-  they are treated as fatal errors.
-
-- Backslash ``\`` is used as the line continuation marker to combine the next
-  line with current one. Before Octopus, it was required to follow a backslash with
-  a non-empty line. But in Octopus, an empty line following a backslash is now allowed.
-
+- Prior to Octopus, options containing invalid UTF-8 characters were ignored
+  with warning messages. But in Octopus, they are treated as fatal errors.
+- The backslash character ``\`` is used as the line-continuation marker that
+  combines the next line with the current one. Prior to Octopus, there was a
+  requirement that any end-of-line backslash be followed by a non-empty line.
+  But in Octopus, an empty line following a backslash is allowed.
 - In the configuration file, each line specifies an individual configuration
   option. The option's name and its value are separated with ``=``, and the
-  value may be quoted using single or double quotes. If an invalid
+  value may be enclosed within single or double quotes. If an invalid
   configuration is specified, we will treat it as an invalid configuration
-  file ::
+  file::
 
     bad option ==== bad value
-
-- Before Octopus, if no section name was specified in the configuration file,
-  all options would be set as though they were within the :confsec:`global` section. This is
-  now discouraged. Since Octopus, only a single option is allowed for
-  configuration files without a section name.
-
-.. |---|   unicode:: U+2014 .. EM DASH
-   :trim:
+- Prior to Octopus, if no section name was specified in the configuration file,
+  all options would be set as though they were within the :confsec:`global`
+  section. This approach is discouraged. Since Octopus, any configuration
+  file that has no section name must contain only a single option.
+  
+.. |---|   unicode:: U+2014 .. EM DASH :trim:
