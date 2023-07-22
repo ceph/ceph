@@ -21,6 +21,7 @@
 #include <list>
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/journal/circular_journal_space.h"
+#include "crimson/os/seastore/record_scanner.h"
 
 namespace crimson::os::seastore::journal {
 
@@ -55,7 +56,7 @@ using RBMDevice = random_block_device::RBMDevice;
 
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
-class CircularBoundedJournal : public Journal {
+class CircularBoundedJournal : public Journal, RecordScanner {
 public:
   CircularBoundedJournal(
       JournalTrimmer &trimmer, RBMDevice* device, const std::string &path);
@@ -178,6 +179,27 @@ public:
     journal_seq_t tail);
 
   submit_record_ret do_submit_record(record_t &&record, OrderingHandle &handle);
+
+  void try_read_rolled_header(scan_valid_records_cursor &cursor) {
+    paddr_t addr = convert_abs_addr_to_paddr(
+      get_records_start(),
+      get_device_id());
+    cursor.seq.offset = addr;
+    cursor.seq.segment_seq += 1;
+  }
+
+  void initialize_cursor(scan_valid_records_cursor& cursor) final {};
+
+  Journal::replay_ret replay_segment(
+    cbj_delta_handler_t &handler, scan_valid_records_cursor& cursor);
+
+  read_validate_record_metadata_ret read_validate_record_metadata(
+    scan_valid_records_cursor &cursor,
+    segment_nonce_t nonce) final;
+
+  read_validate_data_ret read_validate_data(
+    paddr_t record_base,
+    const record_group_header_t &header) final;
 
   // Test interfaces
   

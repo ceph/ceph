@@ -2083,9 +2083,7 @@ struct scan_valid_records_cursor {
   }
 
   void increment_seq(segment_off_t off) {
-    auto& seg_addr = seq.offset.as_seg_paddr();
-    seg_addr.set_segment_off(
-      seg_addr.get_segment_off() + off);
+    seq.offset = seq.offset.add_offset(off);
   }
 
   void emplace_record_group(const record_group_header_t&, ceph::bufferlist&&);

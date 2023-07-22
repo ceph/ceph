@@ -26,7 +26,7 @@ RecordScanner::scan_valid_records(
     -> scan_valid_records_ertr::future<seastar::stop_iteration> {
       return [=, &handler, &cursor, &budget_used, this] {
 	if (!cursor.last_valid_header_found) {
-	  return read_validate_record_metadata(cursor.seq.offset, nonce
+	  return read_validate_record_metadata(cursor, nonce
 	  ).safe_then([=, &cursor](auto md) {
 	    if (!md) {
 	      cursor.last_valid_header_found = true;

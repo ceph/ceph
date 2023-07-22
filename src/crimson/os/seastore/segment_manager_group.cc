@@ -106,10 +106,11 @@ void SegmentManagerGroup::initialize_cursor(
 
 SegmentManagerGroup::read_validate_record_metadata_ret
 SegmentManagerGroup::read_validate_record_metadata(
-  paddr_t start,
+  scan_valid_records_cursor &cursor,
   segment_nonce_t nonce)
 {
   LOG_PREFIX(SegmentManagerGroup::read_validate_record_metadata);
+  paddr_t start = cursor.seq.offset;
   auto& seg_addr = start.as_seg_paddr();
   assert(has_device(seg_addr.get_segment_id().device_id()));
   auto& segment_manager = *segment_managers[seg_addr.get_segment_id().device_id()];
