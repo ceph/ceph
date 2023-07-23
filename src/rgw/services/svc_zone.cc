@@ -65,6 +65,21 @@ bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& sour
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
+bool RGWSI_Zone::zone_syncs_from(const RGWZone& source_zone) const
+{
+  auto target_zone = get_zone();
+  bool found = false;
+
+  for (auto s : data_sync_source_zones) {
+    if (s->id == source_zone.id) {
+      found = true;
+      break;
+    }
+  }
+  return found && target_zone.syncs_from(source_zone.name) &&
+         sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
+}
+
 int RGWSI_Zone::search_realm_with_zone(const DoutPrefixProvider *dpp,
                                        const rgw_zone_id& zid,
                                        RGWRealm *prealm,
