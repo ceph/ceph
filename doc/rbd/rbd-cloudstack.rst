@@ -117,7 +117,7 @@ To add a Ceph block device as Primary Storage, the steps include:
    
 #. Add cluster information (``cephx`` is supported).
 
-   - For **RADOS Monitor**, provide the IP address, comma separated IP addresses or DNS name of a Ceph monitor nodes. Please note that the support for comman separated multiple IP addresses of monitors are only supported from Cloudstack v4.18.0.0.
+   - For **RADOS Monitor**, provide the IP address, comma-separated IP addresses or DNS name of a Ceph monitor nodes. Please note that the support for comma-separated multiple IP addresses of monitors are only supported from Cloudstack v4.18.0.0.
    
    - For **RADOS Pool**, provide the name of an RBD pool.
    
