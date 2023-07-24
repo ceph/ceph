@@ -46,7 +46,6 @@ std::ostream &CollectionNode::print_detail_l(std::ostream &out) const
 CollectionNode::list_ret
 CollectionNode::list()
 {
-  read_to_local();
   logger().debug("CollectionNode:{}, {}", __func__, *this);
   CollectionManager::list_ret_bare list_result;
   for (auto &[coll, bits] : decoded) {
@@ -60,7 +59,6 @@ CollectionNode::list()
 CollectionNode::create_ret
 CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
 {
-  read_to_local();
   logger().debug("CollectionNode:{}", __func__);
   if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
@@ -88,8 +86,8 @@ CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
 CollectionNode::update_ret
 CollectionNode::update(coll_context_t cc, coll_t coll, unsigned bits)
 {
-  read_to_local();
-  logger().debug("CollectionNode:{}", __func__);
+  logger().debug("trans.{} CollectionNode:{} {} {}",
+    cc.t.get_trans_id(), __func__, coll, bits);
   if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
     return mut->update(cc, coll, bits);
@@ -105,8 +103,8 @@ CollectionNode::update(coll_context_t cc, coll_t coll, unsigned bits)
 CollectionNode::remove_ret
 CollectionNode::remove(coll_context_t cc, coll_t coll)
 {
-  read_to_local();
-  logger().debug("CollectionNode:{}", __func__);
+  logger().debug("trans.{} CollectionNode:{} {}",
+    cc.t.get_trans_id(),__func__, coll);
   if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
     return mut->remove(cc, coll);
