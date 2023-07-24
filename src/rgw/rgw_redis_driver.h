@@ -10,7 +10,7 @@
 
 #include <boost/redis/connection.hpp>
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw // remove -Sam
 #define dout_context g_ceph_context
 
 namespace rgw { namespace cache { 
