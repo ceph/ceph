@@ -7,7 +7,7 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
-namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
+namespace rgw { namespace cache {
 
 std::unordered_map<std::string, Partition> RedisDriver::partitions;
 

@@ -29,8 +29,8 @@ class CachePolicy {
     virtual int find_client(const DoutPrefixProvider* dpp, cpp_redis::client* client) = 0;
     virtual int exist_key(std::string key) = 0;
     virtual Address get_addr() { return addr; }
-    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) = 0;
-    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) = 0;
+    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode) = 0;
+    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode) = 0;
 };
 
 class LFUDAPolicy : public CachePolicy {
@@ -46,12 +46,12 @@ class LFUDAPolicy : public CachePolicy {
     int get_global_weight(std::string key);
     int set_min_avg_weight(size_t weight, std::string cacheLocation);
     int get_min_avg_weight();
-    CacheBlock find_victim(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode);
+    CacheBlock find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode);
 
     virtual int find_client(const DoutPrefixProvider* dpp, cpp_redis::client* client) override { return CachePolicy::find_client(dpp, client); }
     virtual int exist_key(std::string key) override { return CachePolicy::exist_key(key); }
-    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cal::CacheDriver* cacheNode) override;
-    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cal::CacheDriver* cacheNode) override;
+    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode) override;
+    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode) override;
 };
 
 class PolicyDriver {
@@ -60,7 +60,7 @@ class PolicyDriver {
 
   public:
     CachePolicy* cachePolicy;
-    rgw::cal::CacheDriver* cacheDriver; // might place elsewhere -Sam
+    rgw::cache::CacheDriver* cacheDriver; // might place elsewhere -Sam
 
     PolicyDriver(std::string _policyName) : policyName(_policyName) {}
     ~PolicyDriver() {

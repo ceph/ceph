@@ -9,7 +9,7 @@
 #include <cpp_redis/cpp_redis>
 #include "driver/d4n/d4n_directory.h"
 
-namespace rgw { namespace cal { //cal stands for Cache Abstraction Layer
+namespace rgw { namespace cache {
 
 class RedisDriver;
 
