@@ -78,7 +78,7 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'pdsh-rcmd-ssh','linux-tools-generic']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'pdsh-rcmd-ssh','perf']
             self.log.info('Installing collectl')
             collectl_location = "https://sourceforge.net/projects/collectl/files/collectl/collectl-4.3.1/collectl-4.3.1.src.tar.gz/download"
             self.first_mon.run(
