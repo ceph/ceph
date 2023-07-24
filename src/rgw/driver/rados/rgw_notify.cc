@@ -812,7 +812,7 @@ static inline bool notification_match(reservation_t& res,
         "' (unique topic: '" << topic_cfg.name <<
         "') apply to event of type: '" << to_string(event_type) << "'" << dendl;
 
-    cls_2pc_reservation::id_t res_id;
+    cls_2pc_reservation::id_t res_id = cls_2pc_reservation::NO_ID;
     if (topic_cfg.dest.persistent) {
       // TODO: take default reservation size from conf
       constexpr auto DEFAULT_RESERVATION = 4*1024U; // 4K
