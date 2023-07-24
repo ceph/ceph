@@ -46,6 +46,7 @@ enum {
 
 #include "MDSContext.h"
 #include "common/Cond.h"
+#include "common/DecayCounter.h"
 #include "common/Finisher.h"
 #include "common/Thread.h"
 
@@ -65,6 +66,7 @@ class ESubtreeMap;
 
 class MDLog {
 public:
+
   MDLog(MDSRank *m);
   ~MDLog();
 
@@ -301,5 +303,8 @@ private:
   std::set<LogSegment*> expired_segments;
   std::set<LogSegment*> expiring_segments;
   uint64_t events_since_last_major_segment = 0;
+
+  // log trimming decay counter
+  DecayCounter log_trim_counter;
 };
 #endif
