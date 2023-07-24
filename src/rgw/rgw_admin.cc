@@ -8799,7 +8799,7 @@ next:
       meta_log->init_list_entries(i, {}, {}, marker, &handle);
       bool truncated;
       do {
-	  int ret = meta_log->list_entries(dpp(), handle, 1000, entries, NULL, &truncated);
+	int ret = meta_log->list_entries(dpp(), handle, 1000, entries, NULL, &truncated, null_yield);
         if (ret < 0) {
           cerr << "ERROR: meta_log->list_entries(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -8845,7 +8845,7 @@ next:
 
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
       RGWMetadataLogInfo info;
-      meta_log->get_info(dpp(), i, &info);
+      meta_log->get_info(dpp(), i, &info, null_yield);
 
       ::encode_json("info", info, formatter.get());
 
@@ -8924,7 +8924,7 @@ next:
 
     // trim until -ENODATA
     do {
-      ret = meta_log->trim(dpp(), shard_id, {}, {}, {}, marker);
+      ret = meta_log->trim(dpp(), shard_id, {}, {}, {}, marker, null_yield);
     } while (ret == 0);
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
