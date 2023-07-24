@@ -1591,4 +1591,7 @@ void MDLog::handle_conf_change(const std::set<std::string>& changed, const MDSMa
   if (changed.count("mds_log_skip_unbounded_events")) {
     skip_unbounded_events = g_conf().get_val<bool>("mds_log_skip_unbounded_events");
   }
+  if (changed.count("mds_log_trim_decay_rate")){
+    log_trim_counter = DecayCounter(g_conf().get_val<double>("mds_log_trim_decay_rate"));
+  }
 }
