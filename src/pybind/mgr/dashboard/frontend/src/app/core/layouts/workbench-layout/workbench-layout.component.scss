@@ -1,0 +1,12 @@
+@use './src/styles/vendor/variables' as vv;
+
+.dashboard {
+  background-color: vv.$body-bg-alt;
+  margin: 0;
+  padding: 0;
+}
+
+.container-fluid {
+  overflow: auto;
+  position: absolute;
+}

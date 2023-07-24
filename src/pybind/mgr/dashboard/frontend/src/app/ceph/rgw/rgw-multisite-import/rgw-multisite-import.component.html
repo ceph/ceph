@@ -1,0 +1,56 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Import Multi-site Token</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="importTokenForm"
+          #frm="ngForm"
+          [formGroup]="importTokenForm">
+    <div class="modal-body">
+      <cd-alert-panel type="info"
+                      spacingClass="mb-3">Please create a rgw service using the secondary zone(created after submitting this form) to start the replication between zones.
+      </cd-alert-panel>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="realmToken"
+               i18n>Token
+        </label>
+        <div class="cd-col-form-input">
+          <input id="realmToken"
+                 name="realmToken"
+                 class="form-control"
+                 type="text"
+                 formControlName="realmToken">
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('realmToken', frm, 'required')"
+                i18n>This field is required.</span>
+        </div>
+      </div>
+      <div class="form-group row">
+        <label class="cd-col-form-label required"
+               for="zoneName"
+               i18n>Secondary Zone Name</label>
+        <div class="cd-col-form-input">
+          <input class="form-control"
+                 type="text"
+                 placeholder="Zone name..."
+                 id="zoneName"
+                 name="zoneName"
+                 formControlName="zoneName">
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('zoneName', frm, 'required')"
+                i18n>This field is required.</span>
+          <span class="invalid-feedback"
+                *ngIf="importTokenForm.showError('zoneName', frm, 'uniqueName')"
+                i18n>The chosen zone name is already in use.</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                            [submitText]="actionLabels.IMPORT"
+                            [form]="importTokenForm"></cd-form-button-panel>
+    </div>
+    </form>
+  </ng-container>
+</cd-modal>

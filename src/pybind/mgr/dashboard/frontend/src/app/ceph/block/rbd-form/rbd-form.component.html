@@ -1,0 +1,395 @@
+<div class="cd-col-form"
+     *cdFormLoading="loading">
+  <form name="rbdForm"
+        #formDir="ngForm"
+        [formGroup]="rbdForm"
+        novalidate>
+    <div class="card">
+      <div i18n="form title"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+      <div class="card-body">
+
+        <!-- Parent -->
+        <div class="form-group row"
+             *ngIf="rbdForm.getValue('parent')">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="name">{{ action | titlecase }} from</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   id="parent"
+                   name="parent"
+                   formControlName="parent">
+            <hr>
+          </div>
+        </div>
+
+        <!-- Name -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="name"
+                 i18n>Name</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Name..."
+                   id="name"
+                   name="name"
+                   formControlName="name"
+                   autofocus>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('name', formDir, 'required')">
+              <ng-container i18n>This field is required.</ng-container>
+            </span>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('name', formDir, 'pattern')">
+              <ng-container i18n>'/' and '@' are not allowed.</ng-container>
+            </span>
+          </div>
+        </div>
+
+        <!-- Pool -->
+        <div class="form-group row"
+             (change)="onPoolChange($event.target.value)">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': mode !== 'editing'}"
+                 for="pool"
+                 i18n>Pool</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Pool name..."
+                   id="pool"
+                   name="pool"
+                   formControlName="pool"
+                   *ngIf="mode === 'editing' || !poolPermission.read">
+            <select id="pool"
+                    name="pool"
+                    class="form-select"
+                    formControlName="pool"
+                    *ngIf="mode !== 'editing' && poolPermission.read"
+                    (change)="setPoolMirrorMode()">
+              <option *ngIf="pools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="pools !== null && pools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No rbd pools available --</option>
+              <option *ngIf="pools !== null && pools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a pool --</option>
+              <option *ngFor="let pool of pools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <span *ngIf="rbdForm.showError('pool', formDir, 'required')"
+                  class="invalid-feedback"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Namespace -->
+        <div class="form-group row"
+             *ngIf="mode !== 'editing' && rbdForm.getValue('pool') && namespaces === null">
+          <div class="cd-col-form-offset">
+            <i [ngClass]="[icons.spinner, icons.spin]"></i>
+          </div>
+        </div>
+        <div class="form-group row"
+             *ngIf="(mode === 'editing' && rbdForm.getValue('namespace')) || mode !== 'editing' && (namespaces && namespaces.length > 0 || !poolPermission.read)">
+          <label class="cd-col-form-label"
+                 for="pool">
+            Namespace
+          </label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Namespace..."
+                   id="namespace"
+                   name="namespace"
+                   formControlName="namespace"
+                   *ngIf="mode === 'editing' || !poolPermission.read">
+            <select id="namespace"
+                    name="namespace"
+                    class="form-select"
+                    formControlName="namespace"
+                    *ngIf="mode !== 'editing' && poolPermission.read">
+              <option *ngIf="pools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="pools !== null && pools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No namespaces available --</option>
+              <option *ngIf="pools !== null && pools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a namespace --</option>
+              <option *ngFor="let namespace of namespaces"
+                      [value]="namespace">{{ namespace }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Use a dedicated pool -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="useDataPool"
+                     name="useDataPool"
+                     formControlName="useDataPool"
+                     (change)="onUseDataPoolChange()">
+              <label class="custom-control-label"
+                     for="useDataPool"
+                     i18n>Use a dedicated data pool</label>
+              <cd-helper *ngIf="allDataPools.length <= 1">
+                <span i18n>You need more than one pool with the rbd application label use to use a dedicated data pool.</span>
+              </cd-helper>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data Pool -->
+        <div class="form-group row"
+             *ngIf="rbdForm.getValue('useDataPool')">
+          <label class="cd-col-form-label"
+                 for="dataPool">
+            <span [ngClass]="{'required': mode !== 'editing'}"
+                  i18n>Data pool</span>
+            <cd-helper i18n-html
+                       html="Dedicated pool that stores the object-data of the RBD.">
+            </cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="Data pool name..."
+                   id="dataPool"
+                   name="dataPool"
+                   formControlName="dataPool"
+                   *ngIf="mode === 'editing' || !poolPermission.read">
+            <select id="dataPool"
+                    name="dataPool"
+                    class="form-select"
+                    formControlName="dataPool"
+                    (change)="onDataPoolChange($event.target.value)"
+                    *ngIf="mode !== 'editing' && poolPermission.read">
+              <option *ngIf="dataPools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="dataPools !== null && dataPools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No data pools available --</option>
+              <option *ngIf="dataPools !== null && dataPools.length > 0"
+                      [ngValue]="null">-- Select a data pool --
+              </option>
+              <option *ngFor="let dataPool of dataPools"
+                      [value]="dataPool.pool_name">{{ dataPool.pool_name }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('dataPool', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Size -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="size"
+                 i18n>Size</label>
+          <div class="cd-col-form-input">
+            <input id="size"
+                   name="size"
+                   class="form-control"
+                   type="text"
+                   formControlName="size"
+                   i18n-placeholder
+                   placeholder="e.g., 10GiB"
+                   defaultUnit="GiB"
+                   cdDimlessBinary>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('size', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="rbdForm.showError('size', formDir, 'invalidSizeObject')"
+                  i18n>You have to increase the size.</span>
+          </div>
+        </div>
+
+        <!-- Features -->
+        <div class="form-group row"
+             formGroupName="features">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="features">Features</label>
+          <div class="cd-col-form-input">
+            <div class="custom-control custom-checkbox"
+                 *ngFor="let feature of featuresList">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="{{ feature.key }}"
+                     name="{{ feature.key }}"
+                     formControlName="{{ feature.key }}">
+              <label class="custom-control-label"
+                     for="{{ feature.key }}">{{ feature.desc }}</label>
+              <cd-helper *ngIf="feature.helperHtml"
+                         html="{{ feature.helperHtml }}">
+              </cd-helper>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mirroring -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="mirroring"
+                     name="mirroring"
+                     (change)="setMirrorMode()"
+                     formControlName="mirroring">
+              <label class="custom-control-label"
+                     for="mirroring">Mirroring</label>
+              <cd-helper *ngIf="mirroring === false && this.currentPoolName">
+                <span i18n>You need to enable a <b>mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
+              </cd-helper>
+            </div>
+            <div *ngIf="mirroring">
+              <div class="custom-control custom-radio ms-2"
+                   *ngFor="let option of mirroringOptions">
+                <input type="radio"
+                       class="form-check-input"
+                       [id]="option"
+                       [value]="option"
+                       name="mirroringMode"
+                       (change)="setExclusiveLock()"
+                       formControlName="mirroringMode"
+                       [attr.disabled]="(poolMirrorMode === 'pool' && option === 'snapshot') ? true : null">
+                <label class="form-check-label"
+                       [for]="option">{{ option | titlecase }}</label>
+                <cd-helper *ngIf="poolMirrorMode === 'pool' && option === 'snapshot'">
+                  <span i18n>You need to enable <b>image mirror mode</b> in the selected pool. Please <a [routerLink]="['/block/mirroring', {outlets: {modal: ['edit', currentPoolName]}}]">click here to select a mode and enable it in this pool.</a></span>
+                </cd-helper>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="rbdForm.getValue('mirroringMode') === 'snapshot' && mirroring">
+          <label class="cd-col-form-label"
+                 i18n>Schedule Interval
+          <cd-helper i18n-html
+                     html="Create Mirror-Snapshots automatically on a periodic basis. The interval can be specified in days, hours, or minutes using d, h, m suffix respectively. To create mirror snapshots, you must import or create and have available peers to mirror">
+          </cd-helper></label>
+          <div class="cd-col-form-input">
+            <input id="schedule"
+                   name="schedule"
+                   class="form-control"
+                   type="text"
+                   formControlName="schedule"
+                   i18n-placeholder
+                   placeholder="e.g., 12h or 1d or 10m"
+                   [attr.disabled]="(peerConfigured === false) ? true : null">
+          </div>
+        </div>
+
+        <!-- Advanced -->
+        <div class="row">
+          <div class="col-sm-12">
+            <a class="float-end margin-right-md"
+               (click)="advancedEnabled = true; false"
+               *ngIf="!advancedEnabled"
+               href=""
+               i18n>Advanced...</a>
+          </div>
+        </div>
+
+        <div [hidden]="!advancedEnabled">
+
+          <legend class="cd-header"
+                  i18n>Advanced</legend>
+
+          <div class="col-md-12">
+            <h4 class="cd-header"
+                i18n>Striping</h4>
+
+            <!-- Object Size -->
+            <div class="form-group row">
+              <label i18n
+                     class="cd-col-form-label"
+                     for="size">Object size<cd-helper>Objects in the Ceph Storage Cluster have a maximum configurable size (e.g., 2MB, 4MB, etc.). The object size should be large enough to accommodate many stripe units, and should be a multiple of the stripe unit.</cd-helper></label>
+              <div class="cd-col-form-input">
+                <select id="obj_size"
+                        name="obj_size"
+                        class="form-select"
+                        formControlName="obj_size">
+                  <option *ngFor="let objectSize of objectSizes"
+                          [value]="objectSize">{{ objectSize }}</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- stripingUnit -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     [ngClass]="{'required': rbdForm.getValue('stripingCount')}"
+                     for="stripingUnit"
+                     i18n>Stripe unit<cd-helper>Stripes have a configurable unit size (e.g., 64kb). The Ceph Client divides the data it will write to objects into equally sized stripe units, except for the last stripe unit. A stripe width, should be a fraction of the Object Size so that an object may contain many stripe units.</cd-helper></label>
+              <div class="cd-col-form-input">
+                <select id="stripingUnit"
+                        name="stripingUnit"
+                        class="form-select"
+                        formControlName="stripingUnit">
+                  <option i18n
+                          [ngValue]="null">-- Select stripe unit --</option>
+                  <option *ngFor="let objectSize of objectSizes"
+                          [value]="objectSize">{{ objectSize }}</option>
+                </select>
+                <span class="invalid-feedback"
+                      *ngIf="rbdForm.showError('stripingUnit', formDir, 'required')"
+                      i18n>This field is required because stripe count is defined!</span>
+                <span class="invalid-feedback"
+                      *ngIf="rbdForm.showError('stripingUnit', formDir, 'invalidStripingUnit')"
+                      i18n>Stripe unit is greater than object size.</span>
+              </div>
+            </div>
+
+            <!-- Stripe Count -->
+            <div class="form-group row">
+              <label class="cd-col-form-label"
+                     [ngClass]="{'required': rbdForm.getValue('stripingUnit')}"
+                     for="stripingCount"
+                     i18n>Stripe count<cd-helper>The Ceph Client writes a sequence of stripe units over a series of objects determined by the stripe count. The series of objects is called an object set. After the Ceph Client writes to the last object in the object set, it returns to the first object in the object set.</cd-helper></label>
+              <div class="cd-col-form-input">
+                <input id="stripingCount"
+                       name="stripingCount"
+                       formControlName="stripingCount"
+                       class="form-control"
+                       type="number">
+                <span class="invalid-feedback"
+                      *ngIf="rbdForm.showError('stripingCount', formDir, 'required')"
+                      i18n>This field is required because stripe unit is defined!</span>
+                <span class="invalid-feedback"
+                      *ngIf="rbdForm.showError('stripingCount', formDir, 'min')"
+                      i18n>Stripe count must be greater than 0.</span>
+              </div>
+            </div>
+          </div>
+
+          <cd-rbd-configuration-form [form]="rbdForm"
+                                     [initializeData]="initializeConfigData"
+                                     (changes)="getDirtyConfigurationValues = $event"></cd-rbd-configuration-form>
+        </div>
+
+      </div>
+      <div class="card-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="formDir"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+                              wrappingClass="text-right"></cd-form-button-panel>
+      </div>
+    </div>
+  </form>
+</div>

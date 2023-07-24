@@ -1,0 +1,13 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: crimson
+      mon:
+        osd pool default crimson: true
+      osd:
+        crimson seastar smp: 3
+    flavor: crimson
+  workunit:
+    env:
+      CRIMSON_COMPAT: '1'

@@ -1,0 +1,101 @@
+<ng-container *ngIf="{upgradeInfo: upgradeInfo$ | async, error: upgradeInfoError$ } as upgrade">
+  <div class="row h-25 ms-1"
+       *ngIf="!upgrade.upgradeInfoError && upgrade.upgradeInfo as upgradeInfo; else checkUpgrade">
+    <ng-container *ngIf="healthData$ | async as healthData">
+      <div class="col-lg-3 h-50 d-flex flex-column border justify-content-center align-items-center">
+        <span class="bold">Current Version</span>
+        <span class="mt-1">{{ version }}</span>
+      </div>
+      <div class="col-lg-3 h-50 d-flex flex-column border justify-content-center align-items-center">
+        <span class="bold">Cluster Status</span>
+        <ng-template #healthChecks>
+          <ul>
+            <li *ngFor="let check of healthData.health.checks">
+              <span [ngStyle]="check.severity | healthColor"
+                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
+              {{ check.type }}</span>: {{ check.summary.message }}
+            </li>
+          </ul>
+        </ng-template>
+        <div class="info-card-content-clickable mt-1"
+             [ngStyle]="healthData.health.status | healthColor"
+             [ngbPopover]="healthChecks"
+             popoverClass="info-card-popover-cluster-status">
+             {{ healthData.health.status | healthLabel | uppercase }}
+          <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
+             class="fa fa-exclamation-triangle"></i>
+        </div>
+      </div>
+      <div class="col-lg-3 h-50 d-flex flex-column border justify-content-center align-items-center">
+        <span class="bold">Upgrade Status</span>
+        <ng-container *ngIf="upgradeInfo.versions.length > 0; else noUpgradesAvailable">
+          <span class="mt-2"
+                i18n>
+          <i [ngClass]="[icons.up]"
+             class="text-info"></i>
+            Upgrade available</span>
+          <div i18n-ngbTooltip
+               [ngbTooltip]="(healthData.mgr_map | mgrSummary).total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
+            <button class="btn btn-accent mt-2"
+                    id="upgrade"
+                    aria-label="Upgrade now"
+                    [disabled]="(healthData.mgr_map | mgrSummary).total <= 1"
+                    i18n>Upgrade now</button>
+          </div>
+        </ng-container>
+      </div>
+      <div class="col-lg-3 h-50 d-flex flex-column border justify-content-center align-items-center">
+        <span class="bold">MGR Count</span>
+        <span class="mt-1">
+          <i class="text-success"
+             [ngClass]="[icons.success]"
+             *ngIf="(healthData.mgr_map | mgrSummary).total > 1; else warningIcon">
+          </i>
+          {{ (healthData.mgr_map | mgrSummary).total }}
+        </span>
+      </div>
+
+      <div class="d-flex mt-3 p-0">
+        <dl class="w-50"
+            *ngIf="fsid$ | async as fsid">
+          <dt class="bold mt-5"
+              i18n>Cluster FSID</dt>
+          <dd class="mt-2">{{ fsid }}</dd>
+          <dt class="bold mt-5"
+              i18n>Release Image</dt>
+          <dd class="mt-2">{{ upgradeInfo.image }}</dd>
+          <dt class="bold mt-5"
+              i18n>Registry</dt>
+          <dd class="mt-2">{{ upgradeInfo.registry }}</dd>
+        </dl>
+      </div>
+    </ng-container>
+  </div>
+</ng-container>
+
+<ng-template #checkUpgrade>
+  <div class="row h-75 justify-content-center align-items-center">
+    <h3 class="mt-1 bold text-center"
+        id="checking-for-upgrades"
+        i18n>Checking for upgrades
+      <i [ngClass]="[icons.spin, icons.spinner]"></i>
+    </h3>
+  </div>
+</ng-template>
+
+<ng-template #noUpgradesAvailable>
+  <span class="mt-1"
+        id="no-upgrades-available"
+        i18n>
+    <i [ngClass]="[icons.success]"
+       class="text-success"></i>
+    Cluster is up-to-date
+  </span>
+</ng-template>
+
+<ng-template #warningIcon>
+  <i class="text-warning"
+     [ngClass]="[icons.warning]"
+     title="To upgrade, you need minimum 2 mgr daemons.">
+  </i>
+</ng-template>
