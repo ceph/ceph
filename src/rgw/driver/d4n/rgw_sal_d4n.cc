@@ -944,9 +944,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
 extern "C" {
 
-rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next)
+rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, void* io_context)
 {
-  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next);
+  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next, *static_cast<boost::asio::io_context*>(io_context));
 
   return driver;
 }

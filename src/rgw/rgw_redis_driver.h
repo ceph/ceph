@@ -9,6 +9,8 @@
 #include <cpp_redis/cpp_redis>
 #include "driver/d4n/d4n_directory.h"
 
+#include <boost/redis/connection.hpp>
+
 namespace rgw { namespace cache { 
 
 class RedisDriver;
@@ -25,9 +27,10 @@ class RedisCacheAioRequest: public CacheAioRequest {
 
 class RedisDriver : public CacheDriver {
   public:
-    RedisDriver(Partition& _partition_info) : partition_info(_partition_info),
-                                              free_space(_partition_info.size), 
-				              outstanding_write_size(0) 
+    RedisDriver(boost::redis::connection& _conn, Partition& _partition_info) : conn(_conn),
+	    								     partition_info(_partition_info),
+                                              				     free_space(_partition_info.size), 
+				              				     outstanding_write_size(0)
     {
       add_partition_info(_partition_info);
     }
@@ -79,8 +82,10 @@ class RedisDriver : public CacheDriver {
                   off_t read_ofs, off_t read_len, CompletionToken&& token);
 
   protected:
+    boost::redis::connection& conn;
+
+    rgw::d4n::Address addr; // remove -Sam
     cpp_redis::client client;
-    rgw::d4n::Address addr;
     static std::unordered_map<std::string, Partition> partitions;
     std::unordered_map<std::string, Entry> entries;
     Partition partition_info;
