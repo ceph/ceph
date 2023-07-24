@@ -24,6 +24,7 @@
 #include "common/entity_name.h"
 #include "common/perf_counters.h"
 #include "common/Cond.h"
+#include "common/ceph_time.h"
 
 #include "events/ESubtreeMap.h"
 #include "events/ESegment.h"
@@ -45,7 +46,8 @@ MDLog::MDLog(MDSRank* m)
     mds(m),
     replay_thread(this),
     recovery_thread(this),
-    submit_thread(this)
+    submit_thread(this),
+    log_trim_counter(DecayCounter(g_conf().get_val<double>("mds_log_trim_decay_rate")))
 {
   debug_subtrees = g_conf().get_val<bool>("mds_debug_subtrees");
   event_large_threshold = g_conf().get_val<uint64_t>("mds_log_event_large_threshold");
@@ -67,7 +69,6 @@ MDLog::~MDLog()
     logger = 0;
   }
 }
-
 
 void MDLog::create_logger()
 {
@@ -636,10 +637,6 @@ void MDLog::trim(int m)
     return;
   }
 
-  // hack: only trim for a few seconds at a time
-  utime_t stop = ceph_clock_now();
-  stop += 2.0;
-
   int op_prio = CEPH_MSG_PRIO_LOW +
 		(CEPH_MSG_PRIO_HIGH - CEPH_MSG_PRIO_LOW) *
 		expiring_segments.size() / max_segments;
@@ -654,16 +651,39 @@ void MDLog::trim(int m)
     ceph_assert(segments.size() >= pre_segments_size);
     max_expiring_segments = std::max<unsigned>(max_expiring_segments,segments.size() - pre_segments_size);
   }
-  
+
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
+
+  auto trim_start = ceph::coarse_mono_clock::now();
+  std::optional<ceph::coarse_mono_time> trim_end;
+
+  auto log_trim_counter_start = log_trim_counter.get();
+  auto log_trim_threshold = g_conf().get_val<Option::size_t>("mds_log_trim_threshold");
+
   while (p != segments.end()) {
-    if (stop < ceph_clock_now())
+    // throttle - break out of trimmming if we've hit the threshold
+    if (log_trim_counter_start + new_expiring_segments >= log_trim_threshold) {
+      auto time_spent = std::chrono::duration<double>::zero();
+      if (trim_end) {
+	time_spent = std::chrono::duration<double>(*trim_end - trim_start);
+      }
+      dout(10) << __func__ << ": breaking out of trim loop - trimmed "
+	       << new_expiring_segments << " segment(s) in " << time_spent.count()
+	       << "s" << dendl;
       break;
+    }
 
     unsigned num_remaining_segments = (segments.size() - expired_segments.size() - expiring_segments.size());
+    dout(10) << __func__ << ": new_expiring_segments=" << new_expiring_segments
+	     << ", num_remaining_segments=" << num_remaining_segments
+	     << ", max_segments=" << max_segments << dendl;
+
     if ((num_remaining_segments <= max_segments) &&
-	(max_ev < 0 || (num_events - expiring_events - expired_events) <= (uint64_t)max_ev))
+	(max_ev < 0 || (num_events - expiring_events - expired_events) <= (uint64_t)max_ev)) {
+      dout(10) << __func__ << ": breaking out of trim loop - segments/events fell below ceiling"
+	       << " max_segments/max_ev" << dendl;
       break;
+    }
 
     // Do not trim too many segments at once for peak workload. If mds keeps creating N segments each tick,
     // the upper bound of 'num_remaining_segments - max_segments' is '2 * N'
@@ -699,6 +719,8 @@ void MDLog::trim(int m)
 
       uint64_t last_seq = ls->seq;
       try_expire(ls, op_prio);
+      log_trim_counter.hit();
+      trim_end = ceph::coarse_mono_clock::now();
 
       submit_mutex.lock();
       p = segments.lower_bound(last_seq + 1);
