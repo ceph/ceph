@@ -1329,7 +1329,6 @@ namespace rgw::sal {
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
   {
-    int ret = 0;
     /* XXX: same as AtomicWriter..consolidate code */
     parent_op.meta.mtime = mtime;
     parent_op.meta.delete_at = delete_at;
@@ -1341,9 +1340,6 @@ namespace rgw::sal {
     /* XXX: handle accounted size */
     accounted_size = total_data_size;
 
-    if (ret < 0)
-      return ret;
-
     RGWUploadPartInfo info;
     info.num = part_num;
     info.etag = etag;
@@ -1354,7 +1350,7 @@ namespace rgw::sal {
 
     DB::Object op_target(store->getDB(),
         meta_obj->get_bucket()->get_info(), meta_obj->get_obj());
-    ret = op_target.add_mp_part(dpp, info);
+    auto ret = op_target.add_mp_part(dpp, info);
     if (ret < 0) {
       return ret == -ENOENT ? -ERR_NO_SUCH_UPLOAD : ret;
     }

@@ -1303,9 +1303,6 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
 
     for(auto& entry: entries) { // logshard entries
       process_entry(entry, max_entries, dpp, y);
-      if (ret < 0) {
-        return ret;
-      }
 
       Clock::time_point now = Clock::now();
       if (logshard_lock.should_renew(now)) {
