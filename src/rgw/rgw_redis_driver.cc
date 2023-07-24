@@ -659,7 +659,7 @@ int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* c
 {
   ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): file_path=" << file_path << dendl;
   aio_cb.reset(new struct aiocb);
-  /*
+  
   memset(aio_cb.get(), 0, sizeof(struct aiocb));
   aio_cb->aio_fildes = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_RDONLY|O_CLOEXEC|O_BINARY));
 
@@ -671,7 +671,7 @@ int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* c
 
   if (cct->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL) {
       posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
-  }*/
+  }
 
   bufferptr bp(read_len);
   aio_cb->aio_buf = bp.c_str();
@@ -707,35 +707,15 @@ auto RedisDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& 
   return p;
 }
 
-boost::asio::awaitable<void> co_main(boost::redis::config& cfg, boost::asio::io_context& ctx, std::string& location)
-{
-  namespace net = boost::asio;
-  using boost::redis::connection;
-  using boost::redis::request;
-  using boost::redis::response;
-
-  auto conn = std::make_shared<connection>(ctx);
-  conn->async_run(cfg, {}, net::consign(net::detached, conn));
-
-  request req;
-  req.push("HGETALL", location);
-
-  response<std::map<std::string, std::string>> resp;
-
-  co_await conn->async_exec(req, resp, net::deferred);
-
-  conn->cancel();
-  dout(0) << "RedisCache HGETALL value: " << std::get<0>(resp).value() << dendl;
-}
-
-auto run(boost::asio::awaitable<void> op) -> int;
-
 template <typename ExecutionContext, typename CompletionToken>
 auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
                 off_t read_ofs, off_t read_len, CompletionToken&& token)
 {
   namespace net = boost::asio;
   using boost::redis::config;
+  using boost::redis::connection;
+  using boost::redis::request;
+  using boost::redis::response;
 
   std::string location = partition_info.location + key;
   config cfg;
@@ -744,12 +724,15 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
 
   ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
 
-  net::co_spawn(ctx, std::move(co_main(cfg, ctx, location)), [](std::exception_ptr p) {
-    if (p)
-      std::rethrow_exception(p);
-  });
+  connection conn{ctx};
+  request req;
+  response<std::string> resp;
 
-  ctx.run();
+  req.push("HGETALL", key);
+
+  conn.async_run(cfg, {}, net::detached);
+
+  return conn.async_exec(req, resp, std::forward<CompletionToken>(token));
 
   /*
   using Op = AsyncReadOp;
@@ -762,15 +745,14 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
   if (0 == ret) {
     ret = ::aio_read(op.aio_cb.get());
   }
-  */
-//  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
- /* if(ret < 0) {
+  
+  if(ret < 0) {
       auto ec = boost::system::error_code{-ret, boost::system::system_category()};
       ceph::async::post(std::move(p), ec, bufferlist{});
   } else {
       (void)p.release();
-  }*/
-  //return init.result.get();
+  }
+  return init.result.get();*/
 }
 
 void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
