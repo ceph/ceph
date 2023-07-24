@@ -505,7 +505,7 @@ public:
     extent_len_t length,
     Func &&extent_init_func) {
     CachedExtentRef ret;
-    LOG_PREFIX(Cache::get_extent);
+    LOG_PREFIX(Cache::get_absent_extent);
 
 #ifndef NDEBUG
     auto r = t.get_extent(offset, &ret);
