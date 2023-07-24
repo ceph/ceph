@@ -196,10 +196,10 @@ int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string 
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
 {
-  this->cct = cct;
+  namespace net = boost::asio;
+  using boost::redis::config;
 
-  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
-  addr.port = cct->_conf->rgw_d4n_port;
+  this->cct = cct;
 
   if (partition_info.location.back() != '/') {
     partition_info.location += "/";
@@ -209,6 +209,16 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
   }
+
+  config cfg;
+  cfg.addr.host = addr.host;
+  cfg.addr.port = std::to_string(addr.port);
+  
+  conn.async_run(cfg, {}, net::detached);
+
+  // remove
+  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
+  addr.port = cct->_conf->rgw_d4n_port;
 
   client.connect("127.0.0.1", 6379, nullptr);
 
@@ -712,25 +722,18 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
                 off_t read_ofs, off_t read_len, CompletionToken&& token)
 {
   namespace net = boost::asio;
-  using boost::redis::config;
   using boost::redis::connection;
   using boost::redis::request;
   using boost::redis::response;
 
   std::string location = partition_info.location + key;
-  config cfg;
-  cfg.addr.host = addr.host;
-  cfg.addr.port = std::to_string(addr.port);
 
   ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
 
-  connection conn{ctx};
   request req;
   response< std::map<std::string, std::string> > resp;
 
   req.push("HGETALL", key);
-
-  conn.async_run(cfg, {}, net::detached);
 
   return conn.async_exec(req, resp, std::forward<CompletionToken>(token));
 
