@@ -1333,3 +1333,163 @@ class TestMirroring(MirroringHelpers):
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.mount_a.run_shell(["rmdir", "l1/.snap/snap0"])
         self.mount_a.run_shell(["rmdir", "l1"])
+
+
+class TestMirroringMultiplePeersFanOut(MirroringHelpers):
+    MDSS_REQUIRED = 5
+    CLIENTS_REQUIRED = 4
+    REQUIRE_BACKUP_FILESYSTEM = True
+
+    MODULE_NAME = "mirroring"
+
+    def setUp(self):
+        super(TestMirroringMultiplePeersFanOut, self).setUp()
+        self.primary_fs_name = self.fs.name
+        self.primary_fs_id = self.fs.id
+        self.secondary_fs_name = self.backup_fs.name
+        self.secondary_fs_id = self.backup_fs.id
+        self.backup_fs1 = self.mds_cluster.newfs(name="backup_fs1")
+        self.backup_fs1_name = self.backup_fs1.name
+        self.backup_fs2 = self.mds_cluster.newfs(name="backup_fs2")
+        self.backup_fs2_name = self.backup_fs2.name
+        self.enable_mirroring_module()
+
+    def tearDown(self):
+        self.disable_mirroring_module()
+        super(TestMirroringMultiplePeersFanOut, self).tearDown()
+
+    def test_snaps_with_multiple_peers(self):
+
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{self.mount_b.client_id}",
+            'mds', 'allow rw',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={self.backup_fs.get_data_pool_name()},'
+                   f'allow rw pool={self.backup_fs.get_data_pool_name()}')
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{self.mount_c.client_id}",
+            'mds', 'allow rw',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={self.backup_fs1.get_data_pool_name()},'
+                   f'allow rw pool={self.backup_fs1.get_data_pool_name()}')
+        self.get_ceph_cmd_result(
+            'auth', 'caps', f"client.{self.mount_d.client_id}",
+            'mds', 'allow rw',
+            'mon', 'allow r',
+            'osd', f'allow rw pool={self.backup_fs2.get_data_pool_name()},'
+                   f'allow rw pool={self.backup_fs2.get_data_pool_name()}')
+
+        self.mount_b.umount_wait()
+        self.mount_b.mount_wait(cephfs_name=self.secondary_fs_name)
+
+        self.mount_c.umount_wait()
+        self.mount_c.mount_wait(cephfs_name=self.backup_fs1_name)
+
+        self.mount_d.umount_wait()
+        self.mount_d.mount_wait(cephfs_name=self.backup_fs2_name)
+
+        self.mount_a.run_shell(["mkdir", "d0"])
+        self.mount_a.create_n_files('d0/file', 50, sync=True)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+
+        self.peer_add(self.fs, "client.mirror_remote@ceph",
+                      self.secondary_fs_name)
+        self.peer_add(self.fs, "client.mirror_remote@ceph",
+                      self.backup_fs1_name)
+        self.peer_add(self.fs, "client.mirror_remote@ceph",
+                      self.backup_fs2_name)
+
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
+        time.sleep(30)
+
+        self.check_peer_status(self.fs, '/d0', 'snap0', 1,
+                               "client.mirror_remote@ceph",
+                               self.secondary_fs_name)
+        self.verify_snapshot('d0', 'snap0', self.mount_a, self.mount_b)
+
+        self.check_peer_status(self.fs, '/d0', 'snap0', 1,
+                               "client.mirror_remote@ceph",
+                               self.backup_fs1_name)
+        self.verify_snapshot('d0', 'snap0', self.mount_a, self.mount_c)
+
+        self.check_peer_status(self.fs, '/d0', 'snap0', 1,
+                               "client.mirror_remote@ceph",
+                               self.backup_fs2_name)
+        self.verify_snapshot('d0', 'snap0', self.mount_a, self.mount_d)
+
+        # some more IO
+        self.mount_a.run_shell(["mkdir", "d0/d00"])
+        self.mount_a.run_shell(["mkdir", "d0/d01"])
+
+        self.mount_a.create_n_files('d0/d00/more_file', 20, sync=True)
+        self.mount_a.create_n_files('d0/d01/some_more_file', 75, sync=True)
+
+        # take another snapshot
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap1"])
+
+        time.sleep(60)
+        self.check_peer_status(self.fs, '/d0', 'snap1', 2,
+                               "client.mirror_remote@ceph",
+                               self.secondary_fs_name)
+        self.verify_snapshot('d0', 'snap1', self.mount_a, self.mount_b)
+
+        self.check_peer_status(self.fs, '/d0', 'snap1', 2,
+                               "client.mirror_remote@ceph",
+                               self.backup_fs1_name)
+        self.verify_snapshot('d0', 'snap1', self.mount_a, self.mount_c)
+
+        self.check_peer_status(self.fs, '/d0', 'snap1', 2,
+                               "client.mirror_remote@ceph",
+                               self.backup_fs2_name)
+        self.verify_snapshot('d0', 'snap1', self.mount_a, self.mount_d)
+
+        # delete a snapshot
+        self.mount_a.run_shell(["rmdir", "d0/.snap/snap0"])
+
+        time.sleep(10)
+
+        self.check_snapshot_doesnt_exist("snap0", "d0/.snap", self.mount_b)
+        self.check_peer_status_deleted_snap(self.fs, '/d0', 1,
+                                            "client.mirror_remote@ceph",
+                                            self.secondary_fs_name)
+
+        self.check_snapshot_doesnt_exist("snap0", "d0/.snap", self.mount_c)
+        self.check_peer_status_deleted_snap(self.fs, '/d0', 1,
+                                            "client.mirror_remote@ceph",
+                                            self.backup_fs1_name)
+
+        self.check_snapshot_doesnt_exist("snap0", "d0/.snap", self.mount_d)
+        self.check_peer_status_deleted_snap(self.fs, '/d0', 1,
+                                            "client.mirror_remote@ceph",
+                                            self.backup_fs2_name)
+
+        # rename a snapshot
+        self.mount_a.run_shell(["mv", "d0/.snap/snap1", "d0/.snap/snap2"])
+
+        time.sleep(10)
+
+        self.check_snapshot_doesnt_exist("snap1", "d0/.snap", self.mount_b)
+        self.check_snapshot_exists("snap2", "d0/.snap", self.mount_b)
+        self.check_peer_status_renamed_snap(self.fs, '/d0', 1,
+                                            "client.mirror_remote@ceph",
+                                            self.secondary_fs_name)
+
+        self.check_snapshot_doesnt_exist("snap1", "d0/.snap", self.mount_c)
+        self.check_snapshot_exists("snap2", "d0/.snap", self.mount_c)
+        self.check_peer_status_renamed_snap(self.fs, '/d0', 1,
+                                            "client.mirror_remote@ceph",
+                                            self.backup_fs1_name)
+
+        self.check_snapshot_doesnt_exist("snap1", "d0/.snap", self.mount_d)
+        self.check_snapshot_exists("snap2", "d0/.snap", self.mount_d)
+        self.check_peer_status_renamed_snap(self.fs, '/d0', 1,
+                                            "client.mirror_remote@ceph",
+                                            self.backup_fs2_name)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.remove_peers(self.fs, "client.mirror_remote@ceph",
+                          [self.secondary_fs_name, self.backup_fs1_name,
+                           self.backup_fs2_name])
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
