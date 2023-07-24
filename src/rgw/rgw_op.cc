@@ -4296,7 +4296,10 @@ void RGWPutObj::execute(optional_yield y)
 
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
-    RGWCompressionInfo cs_info;
+    RGWCompressionInfo cs_info;      
+    assert(plugin != nullptr);  
+    // plugin exists when the compressor does
+    // coverity[dereference:SUPPRESS]
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = s->obj_size;
     cs_info.compressor_message = compressor->get_compressor_message();
@@ -4636,6 +4639,9 @@ void RGWPostObj::execute(optional_yield y)
     if (compressor && compressor->is_compressed()) {
       ceph::bufferlist tmp;
       RGWCompressionInfo cs_info;
+      assert(plugin != nullptr);
+      // plugin exists when the compressor does
+      // coverity[dereference:SUPPRESS]
       cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = s->obj_size;
       cs_info.compressor_message = compressor->get_compressor_message();
@@ -7761,6 +7767,9 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   if (compressor && compressor->is_compressed()) {
     ceph::bufferlist tmp;
     RGWCompressionInfo cs_info;
+    assert(plugin != nullptr);
+    // plugin exists when the compressor does
+    // coverity[dereference:SUPPRESS]
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = size;
     cs_info.compressor_message = compressor->get_compressor_message();
