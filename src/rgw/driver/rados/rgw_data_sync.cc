@@ -716,6 +716,7 @@ int RGWRemoteDataLog::init(const rgw_zone_id& _source_zone, RGWRESTConn *_conn, 
 
 void RGWRemoteDataLog::finish()
 {
+  http_manager.stop();
   stop();
 }
 
