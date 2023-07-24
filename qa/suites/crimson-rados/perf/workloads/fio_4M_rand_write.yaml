@@ -22,3 +22,10 @@ tasks:
           pg_size: 128
           pgp_size: 128
           replication: 3
+    monitoring_profiles:
+      perf:
+        nodes:
+          - osds
+        perf_cmd: 'perf'
+        args: 'stat -p {pid} -o {perf_dir}/perf_stat.{pid}'
+        pid_glob: crimson-osd.*.pid
