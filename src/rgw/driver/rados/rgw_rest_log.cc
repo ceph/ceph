@@ -91,7 +91,7 @@ void RGWOp_MDLog_List::execute(optional_yield y) {
   meta_log.init_list_entries(shard_id, {}, {}, marker, &handle);
 
   op_ret = meta_log.list_entries(this, handle, max_entries, entries,
-                                   &last_marker, &truncated);
+				 &last_marker, &truncated, y);
 
   meta_log.complete_list_entries(handle);
 }
@@ -166,7 +166,7 @@ void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
   }
   RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
 
-  op_ret = meta_log.get_info(this, shard_id, &info);
+  op_ret = meta_log.get_info(this, shard_id, &info, y);
 }
 
 void RGWOp_MDLog_ShardInfo::send_response() {
@@ -232,7 +232,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
   }
   RGWMetadataLog meta_log{s->cct, static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone, static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls, period};
 
-  op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker);
+  op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker, y);
 }
 
 void RGWOp_MDLog_Lock::execute(optional_yield y) {
