@@ -25,9 +25,10 @@ class RedisCacheAioRequest: public CacheAioRequest {
 
 class RedisDriver : public CacheDriver {
   public:
-    RedisDriver(Partition& _partition_info) : partition_info(_partition_info),
-                                              free_space(_partition_info.size), 
-				              outstanding_write_size(0) 
+    RedisDriver(boost::asio::io_context& io_context, Partition& _partition_info) : io(io_context), 
+										   partition_info(_partition_info),
+                                              					   free_space(_partition_info.size), 
+				              					   outstanding_write_size(0)
     {
       add_partition_info(_partition_info);
     }
@@ -79,8 +80,12 @@ class RedisDriver : public CacheDriver {
                   off_t read_ofs, off_t read_len, CompletionToken&& token);
 
   protected:
+    boost::redis::config cfg;
+    boost::asio::io_context& io;
+    boost::redis::connection conn{io};
+
+    rgw::d4n::Address addr; // remove -Sam
     cpp_redis::client client;
-    rgw::d4n::Address addr;
     static std::unordered_map<std::string, Partition> partitions;
     std::unordered_map<std::string, Entry> entries;
     Partition partition_info;

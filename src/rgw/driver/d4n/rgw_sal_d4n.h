@@ -26,6 +26,8 @@
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
 
+#include <boost/asio/io_context.hpp>
+
 namespace rgw { namespace sal {
 
 class D4NFilterDriver : public FilterDriver {
@@ -37,12 +39,12 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::PolicyDriver* policyDriver;
 
   public:
-    D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
+    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next)
     {
       rgw::cache::Partition partition_info;
       partition_info.location = "RedisCache"; // figure out how to fill rest of partition information -Sam
 
-      cacheDriver = new rgw::cache::RedisDriver(partition_info); // change later -Sam
+      cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
       objDir = new rgw::d4n::ObjectDirectory();
       blockDir = new rgw::d4n::BlockDirectory();
       cacheBlock = new rgw::d4n::CacheBlock();

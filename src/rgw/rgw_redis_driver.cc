@@ -91,6 +91,25 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
     find_client(dpp);
 
   try {
+    /*request req;
+    req.push("EXISTS", entry);
+
+    response<std::string> resp;
+
+    conn.async_exec(req, resp, [&](auto ec, auto) {
+      if (ec) {
+        ldpp_dout(dpp, 1) << "ERROR: RedisCache: " << __func__ << "(): can't perform Redis operation" << dendl;
+        result = false; // change to int? -Sam
+      } else
+        result = std::stoi(std::get<0>(resp).value());
+
+	  dout(0) << "Sam key_exists: " << std::stoi(std::get<0>(resp).value()) << dendl;;
+      conn.cancel();
+    }); 
+
+    io.run();
+*/
+    /*
     client.exists(keys, [&result](cpp_redis::reply &reply) {
       if (reply.is_integer()) {
         result = reply.as_integer();
@@ -196,6 +215,8 @@ int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string 
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
 {
+  namespace net = boost::asio;
+
   this->cct = cct;
 
   addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
@@ -209,6 +230,12 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
   }
+
+  //conn.async_run(cfg, {}, net::detached);
+
+  // remove
+  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
+  addr.port = cct->_conf->rgw_d4n_port;
 
   client.connect("127.0.0.1", 6379, nullptr);
 
@@ -315,6 +342,25 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   }
 
   try { // do we want key check here? -Sam
+    std::string result;
+    request req;
+    std::string newVal = value + bl_data.to_str();
+    req.push("HMSET", entry, "data", newVal);
+
+    response<std::string> resp;
+
+    /*conn.async_exec(req, resp, [&](auto ec, auto) {
+      if (ec) {
+	ldpp_dout(dpp, 1) << "ERROR: RedisCache: " << __func__ << "(): can't perform Redis operation" << dendl;
+      } else
+	result = std::get<0>(resp).value();
+
+	dout(0) << "Sam append_data: " << std::get<0>(resp).value() << dendl;
+      conn.cancel();
+    }); 
+
+    io.run();
+*/
     /* Append to existing value or set as new value */
     std::string newVal = value + bl_data.to_str();
     std::vector< std::pair<std::string, std::string> > field;
@@ -341,6 +387,10 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
 int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key) 
 {
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
+
   std::string entry = partition_info.location + key;
 
   if (!client.is_connected()) 
@@ -350,6 +400,23 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
     int exists = -2;
 
     try {
+      /*request req;
+      req.push("HEXISTS", entry, "data");
+
+      response<std::string> resp;
+
+      conn.async_exec(req, resp, [&](auto ec, auto) {
+	if (ec) {
+          ldpp_dout(dpp, 1) << "ERROR: RedisCache: " << __func__ << "(): can't perform Redis operation" << dendl;
+	  exists = -1; 
+	} else
+	  exists = std::stoi(std::get<0>(resp).value());
+
+	conn.cancel();
+      }); 
+
+      io.run();*/
+      /*
       client.hexists(entry, "data", [&exists](cpp_redis::reply &reply) {
 	if (!reply.is_null()) {
 	  exists = reply.as_integer();
