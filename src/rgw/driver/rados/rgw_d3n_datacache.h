@@ -177,6 +177,8 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
     if (r < 0)
       return r;
 
+    // astate can be modified by append_atomic_test
+    // coverity[check_after_deref:SUPPRESS]
     if (astate &&
         obj_ofs < astate->data.length()) {
       unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
