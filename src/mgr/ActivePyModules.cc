@@ -21,6 +21,8 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 
+#include <future>
+
 #include "mon/MonMap.h"
 #include "osd/OSDMap.h"
 #include "osd/osd_types.h"
@@ -297,18 +299,47 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       });
     }
   } else if (what == "mds_metadata") {
-    without_gil_t no_gil;
-    auto dmc = daemon_state.get_by_service("mds");
-    for (const auto &[key, state] : dmc) {
-      std::lock_guard l(state->lock);
-      with_gil(no_gil, [&f, &name=key.name, state=state] {
-        f.open_object_section(name.c_str());
-        f.dump_string("hostname", state->hostname);
-        for (const auto &[name, val] : state->metadata) {
-          f.dump_string(name.c_str(), val);
-        }
-        f.close_section();
-      });
+    // without_gil_t no_gil;
+    // auto dmc = daemon_state.get_by_service("mds");
+    // for (const auto &[key, state] : dmc) {
+    //   std::lock_guard l(state->lock);
+    //   with_gil(no_gil, [&f, &name=key.name, state=state] {
+    //     f.open_object_section(name.c_str());
+    //     f.dump_string("hostname", state->hostname);
+    //     for (const auto &[name, val] : state->metadata) {
+    //       f.dump_string(name.c_str(), val);
+    //     }
+    //     f.close_section();
+    //   });
+    // }
+    std::vector<std::pair<std::string, State*>> mds_states;
+    {
+      without_gil_t no_gil;
+      auto dmc = daemon_state.get_by_service("mds");
+      for (const auto &[key, state] : dmc) {
+        mds_states.emplace_back(key.name, state);
+      }
+    }
+
+    // Function to dump metadata for a single mds state
+    auto dump_metadata = [&f](const std::string& name, State* state) {
+      f.open_object_section(name.c_str());
+      f.dump_string("hostname", state->hostname);
+      for (const auto &[name, val] : state->metadata) {
+        f.dump_string(name.c_str(), val);
+      }
+      f.close_section();
+    };
+
+    // Create a thread pool to execute the dump_metadata function in parallel
+    std::vector<std::future<void>> futures;
+    for (const auto& [name, state] : mds_states) {
+      futures.emplace_back(std::async(std::launch::async, dump_metadata, name, state));
+    }
+
+    // Wait for all the tasks to complete
+    for (auto& future : futures) {
+      future.wait();
     }
   } else if (what == "pg_summary") {
     without_gil_t no_gil;
