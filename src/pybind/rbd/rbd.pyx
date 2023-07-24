@@ -1396,8 +1396,10 @@ class RBD(object):
             char *_client_name = client_name
         try:
             _uuid = <char *>realloc_chk(_uuid, _uuid_max_length)
-            ret = rbd_mirror_peer_site_add(_ioctx, _uuid, _uuid_max_length,
-                                           _direction, _site_name, _client_name)
+            with nogil:
+                ret = rbd_mirror_peer_site_add(_ioctx, _uuid, _uuid_max_length,
+                                               _direction, _site_name,
+                                               _client_name)
             if ret != 0:
                 raise make_ex(ret, 'error adding mirror peer')
             return decode_cstr(_uuid)
@@ -3131,7 +3133,11 @@ cdef class Image(object):
 
         :returns: int - the pool id
         """
-        return rbd_get_data_pool_id(self.image)
+        with nogil:
+            ret = rbd_get_data_pool_id(self.image)
+        if ret < 0:
+            raise make_ex(ret, 'error getting data pool id for image %s' % self.name)
+        return ret
 
     @requires_not_closed
     def get_parent_image_spec(self):
