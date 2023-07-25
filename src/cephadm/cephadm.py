@@ -1887,7 +1887,7 @@ def get_unit_name(fsid, daemon_type, daemon_id=None):
     # type: (str, str, Optional[Union[int, str]]) -> str
     # accept either name or type + id
     if daemon_id is not None:
-        return 'ceph-%s@%s.%s' % (fsid, daemon_type, daemon_id)
+        return DaemonIdentity(fsid, daemon_type, daemon_id).unit_name
     else:
         return 'ceph-%s@%s' % (fsid, daemon_type)
 
@@ -5803,9 +5803,8 @@ def get_deployment_type(ctx: CephadmContext, daemon_type: str, daemon_id: str) -
     deployment_type: DeploymentType = DeploymentType.DEFAULT
     if ctx.reconfig:
         deployment_type = DeploymentType.RECONFIG
-    unit_name = get_unit_name(ctx.fsid, daemon_type, daemon_id)
-    (_, state, _) = check_unit(ctx, unit_name)
     ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
+    (_, state, _) = check_unit(ctx, ident.unit_name)
     if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ident, 'bash')):
         # if reconfig was set, that takes priority over redeploy. If
         # this is considered a fresh deployment at this stage,
