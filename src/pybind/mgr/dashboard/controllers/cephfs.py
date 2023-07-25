@@ -674,3 +674,29 @@ class CephFSSubvolume(RESTController):
             )
 
         return f'Subvolume {subvol_name} created successfully'
+
+
+@APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
+@APIDoc("Cephfs Subvolume Group Management API", "CephfsSubvolumeGroup")
+class CephFSSubvolumeGroups(RESTController):
+
+    def get(self, vol_name):
+        if not vol_name:
+            raise DashboardException(
+                'Error listing subvolume groups')
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_ls',
+                                          None, {'vol_name': vol_name})
+        if error_code != 0:
+            raise DashboardException(
+                'Error listing subvolume groups')
+        subvolume_groups = json.loads(out)
+        for group in subvolume_groups:
+            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info',
+                                              None, {'vol_name': vol_name,
+                                                     'group_name': group['name']})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to get info for subvolume group {group["name"]}: {err}'
+                )
+            group['info'] = json.loads(out)
+        return subvolume_groups
