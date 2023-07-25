@@ -135,7 +135,7 @@ from cephadmlib.net_utils import (
     wrap_ipv6,
 )
 from cephadmlib.locking import FileLock
-from cephadmlib.daemon_identity import DaemonIdentity
+from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
 from cephadmlib.packagers import create_packager, Packager
 from cephadmlib.logging import cephadm_init_logging
 
@@ -3969,7 +3969,7 @@ class InitContainer(BasicContainer):
             }
         return cls(
             ctx,
-            identity=primary.identity._replace(subcomponent='init'),
+            identity=DaemonSubIdentity.from_parent(primary.identity, 'init'),
             image=opts.get('image', primary.image),
             entrypoint=opts.get('entrypoint', primary.entrypoint),
             # note: args is not inherited from primary container
