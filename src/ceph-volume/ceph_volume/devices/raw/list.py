@@ -88,18 +88,21 @@ class List(object):
             # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
             # determine whether a parent is bluestore, we should err on the side of not reporting
             # the child so as not to give a false negative.
-            for info_device in info_devices:
-                if 'PKNAME' in info_device and info_device['PKNAME'] != "":
-                    parent = info_device['PKNAME']
-                    try:
-                        if disk.has_bluestore_label(parent):
-                            logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
-                                            'device is likely a phantom Atari partition. device info: {}'.format(info_device)))
-                            continue
-                    except OSError as e:
-                        logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
-                                    'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
+            info_device = [info for info in info_devices if info['NAME'] == dev][0]
+            if info_device['TYPE'] == 'lvm':
+                # lvm devices are not raw devices
+                continue
+            if 'PKNAME' in info_device and info_device['PKNAME'] != "":
+                parent = info_device['PKNAME']
+                try:
+                    if disk.has_bluestore_label(parent):
+                        logger.warning(('ignoring child device {} whose parent {} is a BlueStore OSD.'.format(dev, parent),
+                                        'device is likely a phantom Atari partition. device info: {}'.format(info_device)))
                         continue
+                except OSError as e:
+                    logger.error(('ignoring child device {} to avoid reporting invalid BlueStore data from phantom Atari partitions.'.format(dev),
+                                'failed to determine if parent device {} is BlueStore. err: {}'.format(parent, e)))
+                    continue
 
             bs_info = _get_bluestore_info(dev)
             if bs_info is None:
