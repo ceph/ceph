@@ -322,8 +322,10 @@ class PgAutoscaler(MgrModule):
         self.config_notify()
         while not self._shutdown.is_set():
             if not self.has_noautoscale_flag():
-               self._maybe_adjust()
-               self._update_progress_events()
+                osdmap = self.get_osdmap()
+                pools = osdmap.get_pools_by_name()
+                self._maybe_adjust(osdmap, pools)
+                self._update_progress_events(osdmap, pools)
             self._shutdown.wait(timeout=self.sleep_interval)
 
     def shutdown(self) -> None:
@@ -332,6 +334,7 @@ class PgAutoscaler(MgrModule):
 
     def identify_subtrees_and_overlaps(self,
                                        osdmap: OSDMap,
+                                       pools: Dict[str, Dict[str, Any]],
                                        crush: CRUSHMap,
                                        result: Dict[int, CrushSubtreeResourceStatus],
                                        overlapped_roots: Set[int],
@@ -340,7 +343,7 @@ class PgAutoscaler(MgrModule):
               Set[int]]:
 
         # We identify subtrees and overlapping roots from osdmap
-        for pool_id, pool in osdmap.get_pools().items():
+        for pool_name, pool in pools.items():
             crush_rule = crush.get_rule_by_id(pool['crush_rule'])
             assert crush_rule is not None
             cr_name = crush_rule['rule_name']
@@ -357,7 +360,7 @@ class PgAutoscaler(MgrModule):
                         overlapped_roots.add(prev_root_id)
                         overlapped_roots.add(root_id)
                         self.log.warning("pool %s won't scale due to overlapping roots: %s",
-                                       pool['pool_name'], overlapped_roots)
+                                      pool_name, overlapped_roots)
                         self.log.warning("Please See: https://docs.ceph.com/en/"
                                          "latest/rados/operations/placement-groups"
                                          "/#automated-scaling")
@@ -368,8 +371,8 @@ class PgAutoscaler(MgrModule):
             result[root_id] = s
             s.root_ids.append(root_id)
             s.osds |= osds
-            s.pool_ids.append(pool_id)
-            s.pool_names.append(pool['pool_name'])
+            s.pool_ids.append(pool['pool'])
+            s.pool_names.append(pool_name)
             s.pg_current += pool['pg_num_target'] * pool['size']
             target_ratio = pool['options'].get('target_size_ratio', 0.0)
             if target_ratio:
@@ -377,11 +380,12 @@ class PgAutoscaler(MgrModule):
             else:
                 target_bytes = pool['options'].get('target_size_bytes', 0)
                 if target_bytes:
-                    s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool_id)
+                    s.total_target_bytes += target_bytes * osdmap.pool_raw_used_rate(pool['pool'])
         return roots, overlapped_roots
 
     def get_subtree_resource_status(self,
                                     osdmap: OSDMap,
+                                    pools: Dict[str, Dict[str, Any]],
                                     crush: CRUSHMap) -> Tuple[Dict[int, CrushSubtreeResourceStatus],
                                                               Set[int]]:
         """
@@ -394,8 +398,9 @@ class PgAutoscaler(MgrModule):
         roots: List[CrushSubtreeResourceStatus] = []
         overlapped_roots: Set[int] = set()
         # identify subtrees and overlapping roots
-        roots, overlapped_roots = self.identify_subtrees_and_overlaps(osdmap,
-                                                                      crush, result, overlapped_roots, roots)
+        roots, overlapped_roots = self.identify_subtrees_and_overlaps(
+            osdmap, pools, crush, result, overlapped_roots, roots
+        )
         # finish subtrees
         all_stats = self.get('osd_stats')
         for s in roots:
@@ -636,7 +641,7 @@ class PgAutoscaler(MgrModule):
         assert threshold >= 1.0
 
         crush_map = osdmap.get_crush()
-        root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, crush_map)
+        root_map, overlapped_roots = self.get_subtree_resource_status(osdmap, pools, crush_map)
         df = self.get('df')
         pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
 
@@ -660,34 +665,51 @@ class PgAutoscaler(MgrModule):
 
         return (ret, root_map)
 
-    def _update_progress_events(self) -> None:
+    def _get_pool_by_id(self,
+                     pools: Dict[str, Dict[str, Any]],
+                     pool_id: int) -> Optional[Dict[str, Any]]:
+        # Helper for getting pool data by pool_id
+        for pool_name, p in pools.items():
+            if p['pool'] == pool_id:
+                return p
+        self.log.debug('pool not found')
+        return None
+
+    def _update_progress_events(self,
+                                osdmap: OSDMap,
+                                pools: Dict[str, Dict[str, Any]]) -> None:
         # Update progress events if necessary
         if self.has_noautoscale_flag():
             self.log.debug("noautoscale_flag is set.")
             return
-        osdmap = self.get_osdmap()
-        pools = osdmap.get_pools()
         for pool_id in list(self._event):
             ev = self._event[pool_id]
-            pool_data = pools.get(pool_id)
-            if pool_data is None or pool_data['pg_num'] == pool_data['pg_num_target'] or ev.pg_num == ev.pg_num_target:
+            pool_data = self._get_pool_by_id(pools, pool_id)
+            if (
+                pool_data is None
+                or pool_data["pg_num"] == pool_data["pg_num_target"]
+                or ev.pg_num == ev.pg_num_target
+            ):
                 # pool is gone or we've reached our target
                 self.remote('progress', 'complete', ev.ev_id)
                 del self._event[pool_id]
                 continue
             ev.update(self, (ev.pg_num - pool_data['pg_num']) / (ev.pg_num - ev.pg_num_target))
 
-    def _maybe_adjust(self) -> None:
+    def _maybe_adjust(self,
+                      osdmap: OSDMap,
+                      pools: Dict[str, Dict[str, Any]]) -> None:
+        # Figure out which pool needs pg adjustments
         self.log.info('_maybe_adjust')
         if self.has_noautoscale_flag():
             self.log.debug("noautoscale_flag is set.")
             return
-        osdmap = self.get_osdmap()
         if osdmap.get_require_osd_release() < 'nautilus':
             return
-        pools = osdmap.get_pools_by_name()
+
         self.log.debug("pool: {0}".format(json.dumps(pools, indent=4,
                                 sort_keys=True)))
+
         ps, root_map = self._get_pool_status(osdmap, pools)
 
         # Anyone in 'warn', set the health message for them and then
