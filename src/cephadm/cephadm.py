@@ -2741,9 +2741,7 @@ def get_container(ctx: CephadmContext,
 
     return CephContainer.for_daemon(
         ctx,
-        fsid=fsid,
-        daemon_type=daemon_type,
-        daemon_id=str(daemon_id),
+        ident=DaemonIdentity(fsid, daemon_type, daemon_id),
         entrypoint=entrypoint,
         args=ceph_args + get_daemon_args(ctx, fsid, daemon_type, daemon_id),
         container_args=container_args,
@@ -3791,9 +3789,7 @@ class CephContainer(BasicContainer):
     @classmethod
     def for_daemon(cls,
                    ctx: CephadmContext,
-                   fsid: str,
-                   daemon_type: str,
-                   daemon_id: str,
+                   ident: 'DaemonIdentity',
                    entrypoint: str,
                    args: List[str] = [],
                    volume_mounts: Dict[str, str] = {},
@@ -3807,7 +3803,6 @@ class CephContainer(BasicContainer):
                    memory_request: Optional[str] = None,
                    memory_limit: Optional[str] = None,
                    ) -> 'CephContainer':
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         return cls(
             ctx,
             image=ctx.image,
@@ -4356,7 +4351,11 @@ WantedBy=ceph-{fsid}.target
                             'enabled': 'true' if enabled else 'false',
                             'state': state,
                         }
-                        c = CephContainer.for_daemon(self.ctx, self.ctx.fsid, daemon_type, daemon_id, 'bash')
+                        c = CephContainer.for_daemon(
+                            self.ctx,
+                            DaemonIdentity(self.ctx.fsid, daemon_type, daemon_id),
+                            'bash',
+                        )
                         container_id: Optional[str] = None
                         for name in (c.cname, c.old_cname):
                             if name in name_id_mapping:
@@ -5806,7 +5805,8 @@ def get_deployment_type(ctx: CephadmContext, daemon_type: str, daemon_id: str) -
         deployment_type = DeploymentType.RECONFIG
     unit_name = get_unit_name(ctx.fsid, daemon_type, daemon_id)
     (_, state, _) = check_unit(ctx, unit_name)
-    if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ctx.fsid, daemon_type, daemon_id, 'bash')):
+    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
+    if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ident, 'bash')):
         # if reconfig was set, that takes priority over redeploy. If
         # this is considered a fresh deployment at this stage,
         # mark it as a redeploy to avoid port checking
@@ -6652,7 +6652,9 @@ def get_daemon_description(ctx, fsid, name, detail=False, legacy_dir=None):
 
 
 def get_container_stats(ctx: CephadmContext, container_path: str, fsid: str, daemon_type: str, daemon_id: str) -> Tuple[str, str, int]:
-    c = CephContainer.for_daemon(ctx, fsid, daemon_type, daemon_id, 'bash')
+    c = CephContainer.for_daemon(
+        ctx, DaemonIdentity(fsid, daemon_type, daemon_id), 'bash'
+    )
     out, err, code = '', '', -1
     for name in (c.cname, c.old_cname):
         cmd = [

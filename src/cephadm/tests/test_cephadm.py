@@ -341,9 +341,11 @@ class TestCephAdm(object):
         ]
         _get_container.return_value = _cephadm.CephContainer.for_daemon(
             ctx,
-            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
-            daemon_type='grafana',
-            daemon_id='host1',
+            ident=_cephadm.DaemonIdentity(
+                fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+                daemon_type='grafana',
+                daemon_id='host1',
+            ),
             entrypoint='',
             args=[],
             container_args=[],
@@ -396,9 +398,11 @@ class TestCephAdm(object):
 
         _get_deployment_container.return_value = _cephadm.CephContainer.for_daemon(
             ctx,
-            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
-            daemon_type='mon',
-            daemon_id='test',
+            ident=_cephadm.DaemonIdentity(
+                fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+                daemon_type='mon',
+                daemon_id='test',
+            ),
             entrypoint='',
             args=[],
             container_args=[],
