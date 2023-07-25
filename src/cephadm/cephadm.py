@@ -55,6 +55,7 @@ DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:9.4.7'
 DEFAULT_HAPROXY_IMAGE = 'quay.io/ceph/haproxy:2.3'
 DEFAULT_KEEPALIVED_IMAGE = 'quay.io/ceph/keepalived:2.2.4'
+DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:0.0.1'
 DEFAULT_SNMP_GATEWAY_IMAGE = 'docker.io/maxwo/snmp-notifier:v1.2.1'
 DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
@@ -393,7 +394,7 @@ class UnauthorizedRegistryError(Error):
 class Ceph(object):
     daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror', 'ceph-exporter')
-    gateways = ('iscsi', 'nfs')
+    gateways = ('iscsi', 'nfs', 'nvmeof')
 
 ##################################
 
@@ -916,7 +917,8 @@ class CephIscsi(object):
         version = None
         out, err, code = call(ctx,
                               [ctx.container_engine.path, 'exec', container_id,
-                               '/usr/bin/python3', '-c', "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"],
+                               '/usr/bin/python3', '-c',
+                               "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"],
                               verbosity=CallVerbosity.QUIET)
         if code == 0:
             version = out.strip()
@@ -982,6 +984,133 @@ class CephIscsi(object):
         tcmu_container.entrypoint = '/usr/bin/tcmu-runner'
         tcmu_container.cname = self.get_container_name(desc='tcmu')
         return tcmu_container
+
+
+##################################
+
+
+class CephNvmeof(object):
+    """Defines a Ceph-Nvmeof container"""
+
+    daemon_type = 'nvmeof'
+    required_files = ['ceph-nvmeof.conf']
+    default_image = DEFAULT_NVMEOF_IMAGE
+
+    def __init__(self,
+                 ctx,
+                 fsid,
+                 daemon_id,
+                 config_json,
+                 image=DEFAULT_NVMEOF_IMAGE):
+        # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
+        self.ctx = ctx
+        self.fsid = fsid
+        self.daemon_id = daemon_id
+        self.image = image
+
+        # config-json options
+        self.files = dict_get(config_json, 'files', {})
+
+        # validate the supplied args
+        self.validate()
+
+    @classmethod
+    def init(cls, ctx, fsid, daemon_id):
+        # type: (CephadmContext, str, Union[int, str]) -> CephNvmeof
+        return cls(ctx, fsid, daemon_id,
+                   fetch_configs(ctx), ctx.image)
+
+    @staticmethod
+    def get_container_mounts(data_dir: str) -> Dict[str, str]:
+        mounts = dict()
+        mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
+        # mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
+        mounts['/etc/ceph/ceph.client.admin.keyring'] = '/etc/ceph/keyring:z'  # TODO: FIXME
+        mounts[os.path.join(data_dir, 'ceph-nvmeof.conf')] = '/src/ceph-nvmeof.conf:z'
+        mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config'
+        mounts['/dev/hugepages'] = '/dev/hugepages'
+        mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
+        return mounts
+
+    @staticmethod
+    def get_container_binds():
+        # type: () -> List[List[str]]
+        binds = []
+        lib_modules = ['type=bind',
+                       'source=/lib/modules',
+                       'destination=/lib/modules',
+                       'ro=true']
+        binds.append(lib_modules)
+        return binds
+
+    @staticmethod
+    def get_version(ctx: CephadmContext, container_id: str) -> Optional[str]:
+        out, err, ret = call(ctx,
+                             [ctx.container_engine.path, 'inspect',
+                              '--format', '{{index .Config.Labels "io.ceph.version"}}',
+                              ctx.image])
+        version = None
+        if ret == 0:
+            version = out.strip()
+        return version
+
+    def validate(self):
+        # type: () -> None
+        if not is_fsid(self.fsid):
+            raise Error('not an fsid: %s' % self.fsid)
+        if not self.daemon_id:
+            raise Error('invalid daemon_id: %s' % self.daemon_id)
+        if not self.image:
+            raise Error('invalid image: %s' % self.image)
+
+        # check for the required files
+        if self.required_files:
+            for fname in self.required_files:
+                if fname not in self.files:
+                    raise Error('required file missing from config-json: %s' % fname)
+
+    def get_daemon_name(self):
+        # type: () -> str
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def get_container_name(self, desc=None):
+        # type: (Optional[str]) -> str
+        cname = '%s-%s' % (self.fsid, self.get_daemon_name())
+        if desc:
+            cname = '%s-%s' % (cname, desc)
+        return cname
+
+    def create_daemon_dirs(self, data_dir, uid, gid):
+        # type: (str, int, int) -> None
+        """Create files under the container data dir"""
+        if not os.path.isdir(data_dir):
+            raise OSError('data_dir is not a directory: %s' % (data_dir))
+
+        logger.info('Creating ceph-nvmeof config...')
+        configfs_dir = os.path.join(data_dir, 'configfs')
+        makedirs(configfs_dir, uid, gid, 0o755)
+
+        # populate files from the config-json
+        populate_files(data_dir, self.files, uid, gid)
+
+    @staticmethod
+    def configfs_mount_umount(data_dir, mount=True):
+        # type: (str, bool) -> List[str]
+        mount_path = os.path.join(data_dir, 'configfs')
+        if mount:
+            cmd = 'if ! grep -qs {0} /proc/mounts; then ' \
+                  'mount -t configfs none {0}; fi'.format(mount_path)
+        else:
+            cmd = 'if grep -qs {0} /proc/mounts; then ' \
+                  'umount {0}; fi'.format(mount_path)
+        return cmd.split()
+
+    @staticmethod
+    def get_sysctl_settings() -> List[str]:
+        return [
+            'vm.nr_hugepages = 4096',
+        ]
+
 
 ##################################
 
@@ -1435,6 +1564,7 @@ def get_supported_daemons():
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
     supported_daemons.append(CephIscsi.daemon_type)
+    supported_daemons.append(CephNvmeof.daemon_type)
     supported_daemons.append(CustomContainer.daemon_type)
     supported_daemons.append(HAproxy.daemon_type)
     supported_daemons.append(Keepalived.daemon_type)
@@ -2327,6 +2457,8 @@ def update_default_image(ctx: CephadmContext) -> None:
             ctx.image = Keepalived.default_image
         if type_ == SNMPGateway.daemon_type:
             ctx.image = SNMPGateway.default_image
+        if type_ == CephNvmeof.daemon_type:
+            ctx.image = CephNvmeof.default_image
         if type_ in Tracing.components:
             ctx.image = Tracing.components[type_]['image']
     if not ctx.image:
@@ -2966,6 +3098,10 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
         ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
         ceph_iscsi.create_daemon_dirs(data_dir, uid, gid)
 
+    elif daemon_type == CephNvmeof.daemon_type:
+        ceph_nvmeof = CephNvmeof.init(ctx, fsid, daemon_id)
+        ceph_nvmeof.create_daemon_dirs(data_dir, uid, gid)
+
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, fsid, daemon_id)
         haproxy.create_daemon_dirs(data_dir, uid, gid)
@@ -3144,6 +3280,8 @@ def get_container_binds(ctx, fsid, daemon_type, daemon_id):
 
     if daemon_type == CephIscsi.daemon_type:
         binds.extend(CephIscsi.get_container_binds())
+    if daemon_type == CephNvmeof.daemon_type:
+        binds.extend(CephNvmeof.get_container_binds())
     elif daemon_type == CustomContainer.daemon_type:
         assert daemon_id
         cc = CustomContainer.init(ctx, fsid, daemon_id)
@@ -3259,6 +3397,11 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         assert daemon_id
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(HAproxy.get_container_mounts(data_dir))
+
+    if daemon_type == CephNvmeof.daemon_type:
+        assert daemon_id
+        data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
+        mounts.update(CephNvmeof.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
         assert daemon_id
@@ -3394,6 +3537,11 @@ def get_container(ctx: CephadmContext,
         name = '%s.%s' % (daemon_type, daemon_id)
         envs.extend(Keepalived.get_container_envs())
         container_args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
+    elif daemon_type == CephNvmeof.daemon_type:
+        name = '%s.%s' % (daemon_type, daemon_id)
+        container_args.extend(['--ulimit', 'memlock=-1:-1'])
+        container_args.extend(['--ulimit', 'nofile=10240'])
+        container_args.extend(['--cap-add=SYS_ADMIN', '--cap-add=CAP_SYS_NICE'])
     elif daemon_type == CephIscsi.daemon_type:
         entrypoint = CephIscsi.entrypoint
         name = '%s.%s' % (daemon_type, daemon_id)
@@ -3971,6 +4119,8 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
         lines = HAproxy.get_sysctl_settings()
     elif daemon_type == 'keepalived':
         lines = Keepalived.get_sysctl_settings()
+    elif daemon_type == CephNvmeof.daemon_type:
+        lines = CephNvmeof.get_sysctl_settings()
     lines = filter_sysctl_settings(ctx, lines)
 
     # apply the sysctl settings
@@ -6445,6 +6595,14 @@ def _dispatch_deploy(
                       config=config, keyring=keyring,
                       deployment_type=deployment_type,
                       ports=daemon_ports)
+    elif daemon_type == CephNvmeof.daemon_type:
+        config, keyring = get_config_and_keyring(ctx)
+        uid, gid = 167, 167  # TODO: need to get properly the uid/gid
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
+                      config=config, keyring=keyring,
+                      deployment_type=deployment_type,
+                      ports=daemon_ports)
     elif daemon_type in Tracing.components:
         uid, gid = 65534, 65534
         c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
@@ -6986,6 +7144,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                 version = NFSGanesha.get_version(ctx, container_id)
                             if daemon_type == CephIscsi.daemon_type:
                                 version = CephIscsi.get_version(ctx, container_id)
+                            if daemon_type == CephNvmeof.daemon_type:
+                                version = CephNvmeof.get_version(ctx, container_id)
                             elif not version:
                                 if daemon_type in Ceph.daemons:
                                     out, err, code = call(ctx,
