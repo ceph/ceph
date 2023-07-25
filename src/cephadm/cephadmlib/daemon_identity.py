@@ -39,6 +39,10 @@ class DaemonIdentity:
         name = f'ceph-{self.fsid}-{self.daemon_type}-{self.daemon_id}'
         return name.replace('.', '-')
 
+    @property
+    def unit_name(self) -> str:
+        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}'
+
     @classmethod
     def from_name(cls, fsid: str, name: str) -> 'DaemonIdentity':
         daemon_type, daemon_id = name.split('.', 1)
