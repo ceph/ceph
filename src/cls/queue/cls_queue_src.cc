@@ -129,10 +129,10 @@ int queue_init(cls_method_context_t hctx, const cls_queue_init_op& op)
   head.tail.gen = head.front.gen = 0;
   head.tail.offset = head.front.offset = head.max_head_size;
   
-  CLS_LOG(20, "INFO: init_queue_op queue actual size %lu", head.queue_size);
-  CLS_LOG(20, "INFO: init_queue_op head size %lu", head.max_head_size);
+  CLS_LOG(20, "INFO: init_queue_op queue actual size %" PRIu64 "", head.queue_size);
+  CLS_LOG(20, "INFO: init_queue_op head size %" PRIu64 "", head.max_head_size);
   CLS_LOG(20, "INFO: init_queue_op queue front offset %s", head.front.to_str().c_str());
-  CLS_LOG(20, "INFO: init_queue_op queue max urgent data size %lu", head.max_urgent_data_size);
+  CLS_LOG(20, "INFO: init_queue_op queue max urgent data size %" PRIu64 "", head.max_urgent_data_size);
 
   return queue_write_head(hctx, head);
 }
@@ -148,7 +148,7 @@ int queue_get_capacity(cls_method_context_t hctx, cls_queue_get_capacity_ret& op
 
   op_ret.queue_capacity = head.queue_size - head.max_head_size;
 
-  CLS_LOG(20, "INFO: queue_get_capacity: size of queue is %lu", op_ret.queue_capacity);
+  CLS_LOG(20, "INFO: queue_get_capacity: size of queue is %" PRIu64 "", op_ret.queue_capacity);
 
   return 0;
 }
@@ -194,7 +194,7 @@ int queue_enqueue(cls_method_context_t hctx, cls_queue_enqueue_op& op, cls_queue
     encode(data_size, bl);
     bl.claim_append(bl_data);
   
-    CLS_LOG(10, "INFO: queue_enqueue(): Total size to be written is %u and data size is %lu", bl.length(), data_size);
+    CLS_LOG(10, "INFO: queue_enqueue(): Total size to be written is %u and data size is %" PRIu64 "", bl.length(), data_size);
 
     if (head.tail.offset >= head.front.offset) {
       // check if data can fit in the remaining space in queue
@@ -308,12 +308,12 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
   string last_marker;
   do
   {
-    CLS_LOG(10, "INFO: queue_list_entries(): start_offset is %lu", start_offset);
+    CLS_LOG(10, "INFO: queue_list_entries(): start_offset is %" PRIu64 "", start_offset);
   
     bufferlist bl_chunk;
     //Read chunk size at a time, if it is less than contiguous data size, else read contiguous data size
     size_to_read = std::min(contiguous_data_size, large_chunk_size);
-    CLS_LOG(10, "INFO: queue_list_entries(): size_to_read is %lu", size_to_read);
+    CLS_LOG(10, "INFO: queue_list_entries(): size_to_read is %" PRIu64 "", size_to_read);
     if (size_to_read == 0) {
       next_marker = head.tail;
       op_ret.is_truncated = false;
@@ -328,7 +328,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
 
     //If there is leftover data from previous iteration, append new data to leftover data
     uint64_t entry_start_offset = start_offset - bl.length();
-    CLS_LOG(20, "INFO: queue_list_entries(): Entry start offset accounting for leftover data is %lu", entry_start_offset);
+    CLS_LOG(20, "INFO: queue_list_entries(): Entry start offset accounting for leftover data is %" PRIu64 "", entry_start_offset);
     bl.claim_append(bl_chunk);
     bl_chunk = std::move(bl);
 
@@ -339,7 +339,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
     auto it = bl_chunk.cbegin();
     uint64_t size_to_process = bl_chunk.length();
     do {
-      CLS_LOG(10, "INFO: queue_list_entries(): index: %u, size_to_process: %lu", index, size_to_process);
+      CLS_LOG(10, "INFO: queue_list_entries(): index: %u, size_to_process: %" PRIu64 "", index, size_to_process);
       cls_queue_entry entry;
       ceph_assert(it.get_off() == index);
       //Use the last marker saved in previous iteration as the marker for this entry
@@ -383,7 +383,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
           CLS_LOG(10, "INFO: queue_list_entries: not enough data to read entry start and data size, breaking out!");
           break;
         }
-        CLS_LOG(20, "INFO: queue_list_entries(): data size: %lu", data_size);
+        CLS_LOG(20, "INFO: queue_list_entries(): data size: %" PRIu64 "", data_size);
         index += sizeof(uint64_t);
         size_to_process -= sizeof(uint64_t);
       }
@@ -418,7 +418,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
       }
     } while(index < bl_chunk.length());
 
-    CLS_LOG(10, "INFO: num_ops: %lu and op.max is %lu, last_marker: %s and op.end_marker is %s\n",
+    CLS_LOG(10, "INFO: num_ops: %" PRIu64 " and op.max is %" PRIu64 ", last_marker: %s and op.end_marker is %s\n",
             num_ops, op.max, last_marker.c_str(), op.end_marker.c_str());
 
     if (num_ops == op.max || (!op.end_marker.empty() && op.end_marker == last_marker)) {
@@ -428,7 +428,7 @@ int queue_list_entries(cls_method_context_t hctx, const cls_queue_list_op& op, c
         next_marker = cls_queue_marker{(entry_start_offset + index), gen};
       }
       CLS_LOG(10, "INFO: queue_list_entries(): either num_ops is same as op.max or last_marker is same as op.end_marker, "
-                  "hence breaking out from outer loop with next offset: %lu", next_marker.offset);
+                  "hence breaking out from outer loop with next offset: %" PRIu64 "", next_marker.offset);
       break;
     }
 
@@ -504,14 +504,14 @@ int queue_remove_entries(cls_method_context_t hctx, const cls_queue_remove_op& o
       auto ret = cls_cxx_write_zero(hctx, head.max_head_size, len);
       if (ret < 0) {
         CLS_LOG(5, "INFO: queue_remove_entries: Failed to zero out entries");
-        CLS_LOG(10, "INFO: queue_remove_entries: Start offset = %lu", head.max_head_size);
+        CLS_LOG(10, "INFO: queue_remove_entries: Start offset = %" PRIu64 "", head.max_head_size);
         return ret;
       }
     }
   } else if ((head.front.offset == end_marker.offset) && (head.front.gen == end_marker.gen)) {
     //no-op
   } else {
-    CLS_LOG(0, "INFO: queue_remove_entries: Invalid end marker: offset = %s, gen = %lu", end_marker.to_str().c_str(), end_marker.gen);
+    CLS_LOG(0, "INFO: queue_remove_entries: Invalid end marker: offset = %s, gen = %" PRIu64 "", end_marker.to_str().c_str(), end_marker.gen);
     return -EINVAL;
   }
 

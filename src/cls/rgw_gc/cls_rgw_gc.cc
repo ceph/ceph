@@ -48,7 +48,7 @@ static int cls_rgw_gc_queue_init(cls_method_context_t hctx, bufferlist *in, buff
 
   cls_queue_init_op init_op;
 
-  CLS_LOG(10, "INFO: cls_rgw_gc_queue_init: queue size is %lu\n", op.size);
+  CLS_LOG(10, "INFO: cls_rgw_gc_queue_init: queue size is %" PRIu64 "\n", op.size);
 
   init_op.queue_size = op.size;
   init_op.max_urgent_data_size = g_ceph_context->_conf->rgw_gc_max_deferred_entries_size;

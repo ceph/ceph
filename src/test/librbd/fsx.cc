@@ -2322,7 +2322,7 @@ doread(unsigned offset, unsigned size)
 			(static_cast<long>(offset + size) > monitorstart &&
 			 (monitorend == -1 ||
 			  static_cast<long>(offset) <= monitorend))))))
-		prt("%lu read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
+		prt("%" PRIu64 " read\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
 	ret = ops->read(&ctx, offset, size, temp_buf);
@@ -2423,7 +2423,7 @@ dowrite(unsigned offset, unsigned size)
 			(static_cast<long>(offset + size) > monitorstart &&
 			 (monitorend == -1 ||
 			  static_cast<long>(offset) <= monitorend))))))
-		prt("%lu write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
+		prt("%" PRIu64 " write\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
 	ret = ops->write(&ctx, offset, size, good_buf + offset);
@@ -2468,7 +2468,7 @@ dotruncate(unsigned size)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		       (long)size <= monitorend)))
-		prt("%lu trunc\tfrom 0x%x to 0x%x\n", testcalls, oldsize, size);
+		prt("%" PRIu64 " trunc\tfrom 0x%x to 0x%x\n", testcalls, oldsize, size);
 
 	ret = ops->resize(&ctx, size);
 	if (ret < 0) {
@@ -2511,7 +2511,7 @@ do_punch_hole(unsigned offset, unsigned length)
 	if ((progressinterval && testcalls % progressinterval == 0) ||
 	    (debug && (monitorstart == -1 || monitorend == -1 ||
 		       (long)end_offset <= monitorend))) {
-		prt("%lu punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
+		prt("%" PRIu64 " punch\tfrom 0x%x to 0x%x, (0x%x bytes)\n", testcalls,
 			offset, offset+length, length);
 	}
 
@@ -2606,7 +2606,7 @@ dowritesame(unsigned offset, unsigned size)
 			(static_cast<long>(offset + size) > monitorstart &&
 			 (monitorend == -1 ||
 			  static_cast<long>(offset) <= monitorend))))))
-		prt("%lu writesame\t0x%x thru\t0x%x\tdata_size\t0x%x(0x%x bytes)\n", testcalls,
+		prt("%" PRIu64 " writesame\t0x%x thru\t0x%x\tdata_size\t0x%x(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, data_size, size);
 
 	ret = ops->writesame(&ctx, offset, size, good_buf + offset, data_size);
@@ -2667,7 +2667,7 @@ docompareandwrite(unsigned offset, unsigned size)
 			(static_cast<long>(offset + size) > monitorstart &&
 			 (monitorend == -1 ||
 			  static_cast<long>(offset) <= monitorend))))))
-		prt("%lu compareandwrite\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
+		prt("%" PRIu64 " compareandwrite\t0x%x thru\t0x%x\t(0x%x bytes)\n", testcalls,
 		    offset, offset + size - 1, size);
 
         ret = ops->compare_and_write(&ctx, offset, size, temp_buf + offset,
@@ -2740,7 +2740,7 @@ do_clone()
 		stripe_count = 2 + get_random() % 14;
 	}
 
-	prt("%lu clone\t%d order %d su %d sc %d\n", testcalls, num_clones,
+	prt("%" PRIu64 " clone\t%d order %d su %d sc %d\n", testcalls, num_clones,
 	    order, stripe_unit, stripe_count);
 
 	clone_imagename(imagename, sizeof(imagename), num_clones);
@@ -2965,7 +2965,7 @@ do_flatten()
 		return;
 	}
 	log4(OP_FLATTEN, 0, 0, 0);
-	prt("%lu flatten\n", testcalls);
+	prt("%" PRIu64 " flatten\n", testcalls);
 
 	ret = ops->flatten(&ctx);
 	if (ret < 0) {
@@ -2986,7 +2986,7 @@ docloseopen(void)
 	name = strdup(ctx.name);
 
 	if (debug)
-		prt("%lu close/open\n", testcalls);
+		prt("%" PRIu64 " close/open\n", testcalls);
 
 	ret = ops->close(&ctx);
 	if (ret < 0) {
@@ -3033,7 +3033,7 @@ test(void)
 		debug = 1;
 
 	if (!quiet && testcalls < simulatedopcount && testcalls % 100000 == 0)
-		prt("%lu...\n", testcalls);
+		prt("%" PRIu64 "...\n", testcalls);
 
 	offset = get_random();
 	if (randomoplen)
@@ -3164,7 +3164,7 @@ cleanup(int sig)
 {
 	if (sig)
 		prt("signal %d\n", sig);
-	prt("testcalls = %lu\n", testcalls);
+	prt("testcalls = %" PRIu64 "\n", testcalls);
 	exit(sig);
 }
 
@@ -3361,7 +3361,7 @@ main(int argc, char **argv)
 		case 'b':
 			simulatedopcount = getnum(optarg, &endp);
 			if (!quiet)
-				fprintf(stdout, "Will begin at operation %lu\n",
+				fprintf(stdout, "Will begin at operation %" PRIu64 "\n",
 					simulatedopcount);
 			if (simulatedopcount == 0)
 				usage();
