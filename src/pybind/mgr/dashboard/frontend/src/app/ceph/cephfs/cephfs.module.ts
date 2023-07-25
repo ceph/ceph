@@ -17,6 +17,7 @@ import { CephfsListComponent } from './cephfs-list/cephfs-list.component';
 import { CephfsTabsComponent } from './cephfs-tabs/cephfs-tabs.component';
 import { CephfsSubvolumeListComponent } from './cephfs-subvolume-list/cephfs-subvolume-list.component';
 import { CephfsSubvolumeFormComponent } from './cephfs-subvolume-form/cephfs-subvolume-form.component';
+import { CephfsSubvolumeGroupComponent } from './cephfs-subvolume-group/cephfs-subvolume-group.component';
 
 @NgModule({
   imports: [
@@ -40,7 +41,9 @@ import { CephfsSubvolumeFormComponent } from './cephfs-subvolume-form/cephfs-sub
     CephfsVolumeFormComponent,
     CephfsDirectoriesComponent,
     CephfsSubvolumeListComponent,
-    CephfsSubvolumeFormComponent
+    CephfsSubvolumeFormComponent,
+    CephfsDirectoriesComponent,
+    CephfsSubvolumeGroupComponent
   ]
 })
 export class CephfsModule {}
