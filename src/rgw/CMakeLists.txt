@@ -272,7 +272,6 @@ target_link_libraries(rgw_common
     cls_version_client
     librados
     libneorados
-    rt
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -285,11 +284,16 @@ target_link_libraries(rgw_common
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     spawn
-    ${FMT_LIB})
+    ${FMT_LIB}
+    OpenSSL::SSL)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
+
+if(UNIX AND NOT APPLE)
+  target_link_libraries(rgw_common PRIVATE rt)
+endif()
 
 if(WITH_RADOSGW_D4N)
   add_dependencies(rgw_common cpp_redis)
@@ -308,8 +312,7 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
   # used by rgw_amqp.cc
   target_link_libraries(rgw_common
     PRIVATE
-      RabbitMQ::RabbitMQ
-      OpenSSL::SSL)
+      RabbitMQ::RabbitMQ)
 endif()
 if(WITH_OPENLDAP)
   target_link_libraries(rgw_common
@@ -465,10 +468,6 @@ target_link_libraries(radosgw PRIVATE
   kmip
   ${ALLOC_LIBS})
 
-if(WITH_RADOSGW_BEAST_OPENSSL)
-  # used by rgw_asio_frontend.cc
-  target_link_libraries(radosgw PRIVATE OpenSSL::SSL)
-endif()
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
@@ -564,7 +563,6 @@ target_link_libraries(rgw
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
-  OpenSSL::SSL
   PUBLIC
   RapidJSON::RapidJSON
   dmclock::dmclock)

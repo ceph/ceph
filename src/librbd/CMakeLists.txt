@@ -298,12 +298,16 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   add_library(librbd_plugin_pwl_cache SHARED
     ${rbd_plugin_pwl_srcs})
   target_link_libraries(librbd_plugin_pwl_cache PRIVATE
-    blk
     ceph-common
     cls_rbd_client
     libneorados
     librados
     StdFilesystem::filesystem)
+
+  if(WITH_RBD_SSD_CACHE)
+    target_link_libraries(librbd_plugin_pwl_cache
+      PRIVATE blk)
+  endif()
 
   if(WITH_RBD_RWL)
     target_link_libraries(librbd_plugin_pwl_cache

@@ -29,6 +29,10 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
   set(FREEBSD ON)
   FIND_PACKAGE(Threads)
+elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+  # give preference to custom packages
+  set(CMAKE_FIND_FRAMEWORK LAST)
+  set(CMAKE_FIND_APPBUNDLE LAST)
 endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
 if(WIN32)
@@ -308,11 +312,11 @@ endif()
 option(WITH_BLUEFS "libbluefs library" OFF)
 
 CMAKE_DEPENDENT_OPTION(WITH_QATLIB "Enable QAT with qatlib" ON
-  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64|arm64" OFF)
 option(WITH_SYSTEM_QATLIB "Use system packages for qatlib" OFF)
 option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
 CMAKE_DEPENDENT_OPTION(WITH_QATZIP "Enable QATzip" ON
-  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
+  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64|arm64" OFF)
 option(WITH_SYSTEM_QATZIP "Use system packages for QATzip" OFF)
 
 if(WITH_QATDRV)
