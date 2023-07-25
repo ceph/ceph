@@ -103,6 +103,9 @@ Socket::Socket(
     side(_side),
     ephemeral_port(e_port)
 {
+  if (local_conf()->ms_tcp_nodelay) {
+    socket.set_nodelay(true);
+  }
 }
 
 Socket::~Socket()
