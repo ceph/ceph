@@ -1737,7 +1737,9 @@ class TestIscsi:
             _cephadm.get_parm.return_value = config_json
             c = _cephadm.get_container(ctx, fsid, 'iscsi', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'iscsi', 'daemon_id')
+            _cephadm.make_data_dir(
+                ctx, _cephadm.DaemonIdentity(fsid, 'iscsi', 'daemon_id')
+            )
             _cephadm.deploy_daemon_units(
                 ctx,
                 fsid,
@@ -2277,7 +2279,9 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.V2c_config
             c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            _cephadm.make_data_dir(
+                ctx, _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            )
 
             _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
@@ -2307,7 +2311,9 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.V3_no_priv_config
             c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            _cephadm.make_data_dir(
+                ctx, _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            )
 
             _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
@@ -2337,7 +2343,9 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.V3_priv_config
             c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            _cephadm.make_data_dir(
+                ctx, _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            )
 
             _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
