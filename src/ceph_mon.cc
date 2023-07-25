@@ -805,20 +805,20 @@ int main(int argc, const char **argv)
                    Messenger::Policy::stateless_server(0));
 
   // throttle client traffic
-  Throttle *client_throttler = new Throttle(g_ceph_context, "mon_client_bytes",
-					    g_conf()->mon_client_bytes);
+  Throttle client_throttler(g_ceph_context, "mon_client_bytes",
+                            g_conf()->mon_client_bytes);
   msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
-				     client_throttler, NULL);
+                              &client_throttler, NULL);
 
   // throttle daemon traffic
   // NOTE: actual usage on the leader may multiply by the number of
   // monitors if they forward large update messages from daemons.
-  Throttle *daemon_throttler = new Throttle(g_ceph_context, "mon_daemon_bytes",
-					    g_conf()->mon_daemon_bytes);
-  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, daemon_throttler,
-				     NULL);
-  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, daemon_throttler,
-				     NULL);
+  Throttle daemon_throttler(g_ceph_context, "mon_daemon_bytes",
+                            g_conf()->mon_daemon_bytes);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_OSD, &daemon_throttler,
+                              NULL);
+  msgr->set_policy_throttlers(entity_name_t::TYPE_MDS, &daemon_throttler,
+                              NULL);
 
   entity_addrvec_t bind_addrs = ipaddrs;
   entity_addrvec_t public_addrs = ipaddrs;
@@ -909,8 +909,6 @@ int main(int argc, const char **argv)
   delete mon;
   delete msgr;
   delete mgr_msgr;
-  delete client_throttler;
-  delete daemon_throttler;
 
   // cd on exit, so that gmon.out (if any) goes into a separate directory for each node.
   char s[20];
