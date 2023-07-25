@@ -98,7 +98,7 @@ class basic_sstring {
 
     template <typename string_type>
     static inline string_type to_sstring(unsigned long value) {
-        return to_sstring_sprintf<string_type>(value, "%lu");
+        return to_sstring_sprintf<string_type>(value, "%" PRIu64 "");
     }
 
     template <typename string_type>

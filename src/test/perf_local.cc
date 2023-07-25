@@ -600,7 +600,7 @@ double perf_cycles_to_nanoseconds()
     total += Cycles::to_nanoseconds(cycles);
   }
   uint64_t stop = Cycles::rdtsc();
-  // printf("Result: %lu\n", total/count);
+  // printf("Result: %" PRIu64 "\n", total/count);
   return Cycles::to_seconds(stop - start)/count;
 }
 

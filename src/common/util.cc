@@ -249,7 +249,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   get_windows_version(&ver);
 
   char version_str[64];
-  snprintf(version_str, 64, "%lu.%lu (%lu)",
+  snprintf(version_str, 64, "%" PRIu64 ".%" PRIu64 " (%" PRIu64 ")",
            ver.dwMajorVersion, ver.dwMinorVersion, ver.dwBuildNumber);
 
   char hostname[64];
