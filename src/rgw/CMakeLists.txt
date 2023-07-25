@@ -290,7 +290,6 @@ target_link_libraries(rgw_common
     cls_version_client
     librados
     libneorados
-    rt
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -309,6 +308,10 @@ target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
+
+if(UNIX AND NOT APPLE)
+  target_link_libraries(rgw_common PRIVATE rt)
+endif()
 
 if(WITH_RADOSGW_D4N)
   target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/boost_redis/include")
@@ -581,7 +584,6 @@ target_link_libraries(rgw
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
-  OpenSSL::SSL
   PUBLIC
   RapidJSON::RapidJSON
   dmclock::dmclock)

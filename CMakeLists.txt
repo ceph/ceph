@@ -29,6 +29,10 @@ if(CMAKE_SYSTEM_NAME MATCHES "Linux")
 elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
   set(FREEBSD ON)
   FIND_PACKAGE(Threads)
+elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+  # give preference to custom packages
+  set(CMAKE_FIND_FRAMEWORK LAST)
+  set(CMAKE_FIND_APPBUNDLE LAST)
 endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
 if(WIN32)

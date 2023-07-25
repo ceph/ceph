@@ -78,4 +78,4 @@ target_link_libraries(crimson-alienstore
     ${BLKID_LIBRARIES}
     ${UDEV_LIBRARIES}
     crimson
-    blk)
+    $<$<TARGET_EXISTS:blk>:blk>)

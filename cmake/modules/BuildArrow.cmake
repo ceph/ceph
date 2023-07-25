@@ -16,7 +16,7 @@ function(build_arrow)
   list(APPEND arrow_CMAKE_ARGS -DARROW_JEMALLOC=OFF)
 
   # transitive dependencies
-  list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift)
+  list(APPEND arrow_INTERFACE_LINK_LIBRARIES thrift::libthrift)
 
   if (NOT WITH_SYSTEM_UTF8PROC)
     # forward utf8proc_ROOT from build_utf8proc()
@@ -93,6 +93,17 @@ function(build_arrow)
   # don't add -Werror or debug package builds fail with:
   #warning _FORTIFY_SOURCE requires compiling with optimization (-O)
   list(APPEND arrow_CMAKE_ARGS -DBUILD_WARNING_LEVEL=PRODUCTION)
+
+  if(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+    # MacOS SDK 14 is based on the LLVM 16.
+    # Since LLVM 16 char_traits for non-char types are deprecated.
+    # https://discourse.llvm.org/t/deprecating-std-string-t-for-non-character-t/66779
+    # This is an issue that was already fixed in arrow v 13
+    # https://github.com/apache/arrow/issues/15281
+    # Hopefully, by the time LLVM18 is out and has this a hard compile error,
+    # we will have updated to a version with the fix
+    list(APPEND arrow_CMAKE_ARGS -DARROW_CXXFLAGS="-Wno-deprecated-declarations")
+  endif()
 
   # we use an external project and copy the sources to bin directory to ensure
   # that object files are built outside of the source tree.

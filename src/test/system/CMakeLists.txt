@@ -9,7 +9,7 @@ set(libsystest_srcs
   st_rados_list_objects.cc)
 add_library(systest STATIC ${libsystest_srcs})
 
-if(NOT WIN32)
+if(NOT WIN32 AND NOT APPLE)
   set(RT_LIB rt)
 endif()
 

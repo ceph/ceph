@@ -151,7 +151,7 @@ add_executable(ceph_bench_log
   ${bench_log_srcs}
   )
 target_link_libraries(ceph_bench_log global pthread ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-if(NOT WIN32)
+if(NOT WIN32 AND NOT APPLE)
   target_link_libraries(ceph_bench_log rt)
 endif()
 
@@ -168,7 +168,7 @@ add_executable(ceph_test_mutate
 target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS})
 
-if(NOT WIN32)
+if(NOT WIN32 AND WITH_BLUESTORE)
 # test_trans
 add_executable(test_trans
   test_trans.cc

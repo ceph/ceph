@@ -139,7 +139,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
       string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES Clang)
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 12) # require >= clang-12
     message(FATAL_ERROR "C++20 support requires a minimum Clang version of 12.")
   endif()
@@ -157,7 +157,8 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
     -Wno-gnu-designator
     -Wno-missing-braces
     -Wno-parentheses
-    -Wno-deprecated-register)
+    -Wno-deprecated-register
+    -Wno-reserved-user-defined-literal)
   if(FREEBSD)
     # Need to use the GNU binutils linker to get versioning right.
     string(APPEND CMAKE_EXE_LINKER_FLAGS " -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument")
@@ -165,6 +166,12 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
   endif()
   if(APPLE)
     string(APPEND CMAKE_SHARED_LINKER_FLAGS " -undefined dynamic_lookup")
+    add_compile_options(
+      $<$<COMPILE_LANGUAGE:CXX>:-Wno-deprecated-declarations>
+    )
+    add_definitions(
+      -D_LIBCPP_ENABLE_CXX20_REMOVED_TYPE_TRAITS
+    )
   endif()
 endif(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
 
