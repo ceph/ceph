@@ -276,6 +276,7 @@ class SnapSchedClient(CephfsClient):
                                   start: str,
                                   repeat: str) -> None:
         log.debug(f'Scheduled snapshot of {path} triggered')
+        set_schedule_to_inactive = False
         try:
             with self.get_schedule_db(fs_name) as conn_mgr:
                 db = conn_mgr.dbinfo.db
@@ -294,13 +295,22 @@ class SnapSchedClient(CephfsClient):
                     log.info(f'created scheduled snapshot of {path}')
                     log.debug(f'created scheduled snapshot {snap_name}')
                     sched.update_last(time, db)
+                except cephfs.ObjectNotFound:
+                    # maybe path is missing or wrong
+                    self._log_exception('create_scheduled_snapshot')
+                    log.debug(f'path {path} is probably missing or wrong; '
+                              'remember to strip off the mount point path '
+                              'prefix to provide the correct path')
+                    set_schedule_to_inactive = True
                 except cephfs.Error:
                     self._log_exception('create_scheduled_snapshot')
-                    sched.set_inactive(db)
                 except Exception:
                     # catch all exceptions cause otherwise we'll never know since this
                     # is running in a thread
                     self._log_exception('create_scheduled_snapshot')
+                finally:
+                    if set_schedule_to_inactive:
+                        sched.set_inactive(db)
         finally:
             with self.get_schedule_db(fs_name) as conn_mgr:
                 db = conn_mgr.dbinfo.db
