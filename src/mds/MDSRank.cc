@@ -926,6 +926,12 @@ void MDSRank::respawn()
   }
 }
 
+void MDSRank::abort(std::string_view msg)
+{
+  monc->flush_log();
+  ceph_abort(msg);
+}
+
 void MDSRank::damaged()
 {
   ceph_assert(whoami != MDS_RANK_NONE);
