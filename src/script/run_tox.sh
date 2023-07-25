@@ -4,6 +4,8 @@ set -e
 
 if [ `uname` = FreeBSD ]; then
     GETOPT=/usr/local/bin/getopt
+elif [ `uname` = Darwin ]; then
+  GETOPT="$(brew --prefix gnu-getopt)/bin/getopt"
 else
     GETOPT=getopt
 fi
