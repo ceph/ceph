@@ -471,7 +471,6 @@ void Inode::dump(Formatter *f) const
   f->open_array_section("caps");
   for (const auto &pair : caps) {
     f->open_object_section("cap");
-    f->dump_int("mds", pair.first);
     if (&pair.second == auth_cap)
       f->dump_int("auth", 1);
     pair.second.dump(f);
