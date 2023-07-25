@@ -19,6 +19,11 @@ GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
     'max_files': (int, '')
 }
+GET_STATFS_SCHEMA = {
+    'bytes': (int, ''),
+    'files': (int, ''),
+    'subdirs': (int, '')
+}
 
 logger = logging.getLogger("controllers.rgw")
 
@@ -460,6 +465,47 @@ class CephFS(RESTController):
         """
         cfs = self._cephfs_instance(fs_id)
         return cfs.get_quotas(path)
+
+    @RESTController.Resource('POST', path='/write_to_file')
+    @allow_empty_body
+    def write_to_file(self, fs_id, path, buf) -> None:
+        """
+        Write some data to the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the file to write.
+        :param buf: The str to write to the buf.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.write_to_file(path, buf)
+
+    @RESTController.Resource('DELETE', path='/unlink')
+    def unlink(self, fs_id, path) -> None:
+        """
+        Removes a file, link, or symbolic link.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the file or link to unlink.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.unlink(path)
+
+    @RESTController.Resource('GET', path='/statfs')
+    @EndpointDoc("Get Cephfs statfs of the specified path",
+                 parameters={
+                     'fs_id': (str, 'File System Identifier'),
+                     'path': (str, 'File System Path'),
+                 },
+                 responses={200: GET_STATFS_SCHEMA})
+    def statfs(self, fs_id, path) -> dict:
+        """
+        Get the statfs of the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory/file.
+        :return: Returns a dictionary containing 'bytes',
+        'files' and 'subdirs'.
+        :rtype: dict
+        """
+        cfs = self._cephfs_instance(fs_id)
+        return cfs.statfs(path)
 
     @RESTController.Resource('POST', path='/snapshot')
     @allow_empty_body
