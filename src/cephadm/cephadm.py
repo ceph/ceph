@@ -1883,13 +1883,21 @@ def move_files(ctx, src, dst, uid=None, gid=None):
             os.chown(dst_file, uid, gid)
 
 
-def get_unit_name(fsid, daemon_type, daemon_id=None):
-    # type: (str, str, Optional[Union[int, str]]) -> str
-    # accept either name or type + id
-    if daemon_id is not None:
-        return DaemonIdentity(fsid, daemon_type, daemon_id).unit_name
-    else:
-        return 'ceph-%s@%s' % (fsid, daemon_type)
+def get_unit_name(
+    fsid: str, daemon_type: str, daemon_id: Union[str, int]
+) -> str:
+    """Return the name of the systemd unit given an fsid, a daemon_type,
+    and the daemon_id.
+    """
+    # TODO: fully replace get_unit_name with DaemonIdentity instances
+    return DaemonIdentity(fsid, daemon_type, daemon_id).unit_name
+
+
+def get_unit_name_by_instance(fsid: str, instance: str) -> str:
+    """Return the name of the systemd unit given an fsid and the name
+    of the instance (the stuff after the @-sign and before the file extension).
+    """
+    return 'ceph-%s@%s' % (fsid, instance)
 
 
 def get_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
@@ -7251,7 +7259,7 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
             continue
         if d['style'] != 'cephadm:v1':
             continue
-        disable_systemd_service(get_unit_name(ctx.fsid, d['name']))
+        disable_systemd_service(get_unit_name_by_instance(ctx.fsid, d['name']))
 
     # cluster units
     for unit_name in ['ceph-%s.target' % ctx.fsid]:
