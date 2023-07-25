@@ -52,10 +52,50 @@ tasks:
               done
               echo $CONTENT > $OUT_FILE
               sleep infinity
+      - service_type: container
+        service_id: bar
+        placement:
+          host_pattern: '*'
+        spec:
+          image: "quay.io/fedora/fedora:latest"
+          entrypoint: "bash"
+          dirs:
+            - data
+          volume_mounts:
+            data: /var/cache/bar:z
+          init_containers:
+            # use a different image, just for checking it can be passed
+            - image: quay.io/centos/centos:latest
+              entrypoint: bash
+              entrypoint_args:
+                - argument: "-c"
+                - argument: ". /etc/os-release && echo from=$ID > /var/cache/bar/from.txt"
+              volume_mounts:
+                data: /var/cache/bar:z
+            # ensure from.txt got created, run 2nd init step
+            - entrypoint: bash
+              entrypoint_args:
+                - argument: "-c"
+                - argument: "test -f /var/cache/bar/from.txt && truncate -s 102400 /var/cache/bar/presized.dat"
+              volume_mounts:
+                data: /var/cache/bar:z
+          # end init_containers
+        extra_entrypoint_args:
+          - "/root/init_check.sh"
+        custom_configs:
+          - mount_path: "/root/init_check.sh"
+            content: |
+              set -e
+              test -f /var/cache/bar/from.txt
+              test -f /var/cache/bar/presized.dat
+              echo ok > /var/cache/bar/primary.txt
+              sleep infinity
 - cephadm.wait_for_service:
     service: mon
 - cephadm.wait_for_service:
     service: container.foo
+- cephadm.wait_for_service:
+    service: container.bar
 - exec:
     host.a:
       - |
@@ -72,3 +112,10 @@ tasks:
         # the content and where to write to with the entrypoint args, and the mounting
         # of the /etc/cephadm_testing dir with extra container args
         grep "testing_custom_containers" /etc/cephadm_testing/testing.txt
+        # Verify that container bar's init containers and primary container
+        # ran successfully
+        dir=$(find /var/lib/ceph/$FSID -maxdepth 1 -type d -name 'container.bar.*')
+        test -n "$dir"
+        grep ok ${dir}/data/primary.txt
+        grep from=centos ${dir}/data/from.txt
+        test -s ${dir}/data/presized.dat
