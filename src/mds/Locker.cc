@@ -2090,24 +2090,6 @@ void Locker::xlock_import(SimpleLock *lock)
   lock->get_parent()->auth_pin(lock);
 }
 
-void Locker::xlock_downgrade(SimpleLock *lock, MutationImpl *mut)
-{
-  dout(10) << "xlock_downgrade on " << *lock << " " << *lock->get_parent() << dendl;
-  auto it = mut->locks.find(lock);
-  if (it->is_rdlock())
-    return; // already downgraded
-
-  ceph_assert(lock->get_parent()->is_auth());
-  ceph_assert(it != mut->locks.end());
-  ceph_assert(it->is_xlock());
-
-  lock->set_xlock_done();
-  lock->get_rdlock();
-  xlock_finish(it, mut, nullptr);
-  mut->emplace_lock(lock, MutationImpl::LockOp::RDLOCK);
-}
-
-
 // file i/o -----------------------------------------
 
 version_t Locker::issue_file_data_version(CInode *in)
