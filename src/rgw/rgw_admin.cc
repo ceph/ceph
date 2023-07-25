@@ -4294,7 +4294,10 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_GET
                           && opt_cmd != OPT::PUBSUB_TOPIC_RM
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
-                          && opt_cmd != OPT::PUBSUB_TOPIC_STATS  ) {
+                          && opt_cmd != OPT::PUBSUB_TOPIC_STATS
+			  && opt_cmd != OPT::SCRIPT_PUT
+			  && opt_cmd != OPT::SCRIPT_GET
+			  && opt_cmd != OPT::SCRIPT_RM) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
