@@ -5,8 +5,6 @@ set(cls_dir ${CMAKE_INSTALL_LIBDIR}/rados-classes)
 # cls_sdk
 add_library(cls_sdk SHARED sdk/cls_sdk.cc)
 set_target_properties(cls_sdk PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_sdk DESTINATION ${cls_dir})
@@ -15,8 +13,6 @@ install(TARGETS cls_sdk DESTINATION ${cls_dir})
 set(cls_hello_srcs hello/cls_hello.cc)
 add_library(cls_hello SHARED ${cls_hello_srcs})
 set_target_properties(cls_hello PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_hello DESTINATION ${cls_dir})
@@ -25,8 +21,6 @@ install(TARGETS cls_hello DESTINATION ${cls_dir})
 set(cls_numops_srcs numops/cls_numops.cc)
 add_library(cls_numops SHARED ${cls_numops_srcs})
 set_target_properties(cls_numops PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_numops DESTINATION ${cls_dir})
@@ -40,8 +34,6 @@ if (WITH_RBD)
   set(cls_rbd_srcs rbd/cls_rbd.cc rbd/cls_rbd_types.cc)
   add_library(cls_rbd SHARED ${cls_rbd_srcs})
   set_target_properties(cls_rbd PROPERTIES
-    VERSION "1.0.0"
-    SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_rbd DESTINATION ${cls_dir})
@@ -56,8 +48,6 @@ endif (WITH_RBD)
 set(cls_lock_srcs lock/cls_lock.cc)
 add_library(cls_lock SHARED ${cls_lock_srcs})
 set_target_properties(cls_lock PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_lock DESTINATION ${cls_dir})
@@ -78,8 +68,6 @@ if (WITH_RADOSGW)
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
   set_target_properties(cls_otp PROPERTIES
-    VERSION "1.0.0"
-    SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_otp DESTINATION ${cls_dir})
@@ -99,8 +87,6 @@ set(cls_refcount_srcs
 add_library(cls_refcount SHARED ${cls_refcount_srcs})
 target_link_libraries(cls_refcount json_spirit)
 set_target_properties(cls_refcount PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_refcount DESTINATION ${cls_dir})
@@ -115,8 +101,6 @@ add_library(cls_refcount_client STATIC ${cls_refcount_client_srcs})
 set(cls_version_srcs version/cls_version.cc)
 add_library(cls_version SHARED ${cls_version_srcs})
 set_target_properties(cls_version PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_version DESTINATION ${cls_dir})
@@ -131,8 +115,6 @@ add_library(cls_version_client STATIC ${cls_version_client_srcs})
 set(cls_log_srcs log/cls_log.cc)
 add_library(cls_log SHARED ${cls_log_srcs})
 set_target_properties(cls_log PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_log DESTINATION ${cls_dir})
@@ -145,8 +127,6 @@ add_library(cls_log_client STATIC ${cls_log_client_srcs})
 set(cls_timeindex_srcs timeindex/cls_timeindex.cc)
 add_library(cls_timeindex SHARED ${cls_timeindex_srcs})
 set_target_properties(cls_timeindex PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_timeindex DESTINATION ${cls_dir})
@@ -161,8 +141,6 @@ add_library(cls_timeindex_client STATIC ${cls_timeindex_client_srcs})
 set(cls_user_srcs user/cls_user.cc)
 add_library(cls_user SHARED ${cls_user_srcs})
 set_target_properties(cls_user PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_user DESTINATION ${cls_dir})
@@ -180,8 +158,6 @@ set(cls_journal_srcs
   journal/cls_journal_types.cc)
 add_library(cls_journal SHARED ${cls_journal_srcs})
 set_target_properties(cls_journal PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_journal DESTINATION ${cls_dir})
@@ -205,8 +181,6 @@ if (WITH_RADOSGW)
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
   set_target_properties(cls_rgw PROPERTIES
-    VERSION "1.0.0"
-    SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_rgw DESTINATION ${cls_dir})
@@ -228,8 +202,6 @@ if (WITH_CEPHFS)
     cephfs/cls_cephfs.cc)
   add_library(cls_cephfs SHARED ${cls_cephfs_srcs})
   set_target_properties(cls_cephfs PROPERTIES
-    VERSION "1.0.0"
-    SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_cephfs DESTINATION ${cls_dir})
@@ -247,8 +219,6 @@ if (NOT WIN32)
       lua/lua_bufferlist.cc)
   add_library(cls_lua SHARED ${cls_lua_srcs})
   set_target_properties(cls_lua PROPERTIES
-    VERSION "1.0.0"
-    SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_lua DESTINATION ${cls_dir})
@@ -276,8 +246,6 @@ set(cls_cas_srcs
 add_library(cls_cas SHARED ${cls_cas_srcs})
 target_link_libraries(cls_cas cls_cas_internal)
 set_target_properties(cls_cas PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_cas DESTINATION ${cls_dir})
@@ -291,8 +259,6 @@ set(cls_queue_srcs
   ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
 add_library(cls_queue SHARED ${cls_queue_srcs})
 set_target_properties(cls_queue PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_queue DESTINATION ${cls_dir})
@@ -312,8 +278,6 @@ if (WITH_RADOSGW)
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
 	  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw")
   set_target_properties(cls_rgw_gc PROPERTIES
-    VERSION "1.0.0"
-    SOVERSION "1"
     INSTALL_RPATH ""
     CXX_VISIBILITY_PRESET hidden)
   install(TARGETS cls_rgw_gc DESTINATION ${cls_dir})
@@ -335,8 +299,6 @@ set(cls_2pc_queue_srcs
   ${CMAKE_SOURCE_DIR}/src/common/ceph_json.cc)
 add_library(cls_2pc_queue SHARED ${cls_2pc_queue_srcs})
 set_target_properties(cls_2pc_queue PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_2pc_queue DESTINATION ${cls_dir})
@@ -351,8 +313,6 @@ add_subdirectory(cmpomap)
 set(cls_fifo_srcs fifo/cls_fifo.cc)
 add_library(cls_fifo SHARED ${cls_fifo_srcs})
 set_target_properties(cls_fifo PROPERTIES
-  VERSION "1.0.0"
-  SOVERSION "1"
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 target_link_libraries(cls_fifo ${FMT_LIB})
