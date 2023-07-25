@@ -30,6 +30,8 @@ export class UsageBarComponent implements OnChanges {
   customLegendValue?: string;
   @Input()
   showFreeToolTip = true;
+  @Input()
+  showMultisiteTooltip = false;
 
   usedPercentage: number;
   freePercentage: number;
