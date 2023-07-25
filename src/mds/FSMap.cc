@@ -115,6 +115,14 @@ void MirrorInfo::dump(ceph::Formatter *f) const {
   f->close_section(); // peers
 }
 
+void MirrorInfo::generate_test_instances(std::list<MirrorInfo*>& ls) {
+  ls.push_back(new MirrorInfo());
+  ls.push_back(new MirrorInfo());
+  ls.back()->mirrored = true;
+  ls.back()->peers.insert(Peer());
+  ls.back()->peers.insert(Peer());
+}
+
 void MirrorInfo::print(std::ostream& out) const {
   out << "[peers=" << peers << "]" << std::endl;
 }

@@ -226,7 +226,6 @@ struct vinodeno_t {
     ls.push_back(new vinodeno_t);
     ls.push_back(new vinodeno_t(1, 2));
   }
-
   inodeno_t ino;
   snapid_t snapid;
 };
@@ -371,7 +370,6 @@ public:
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<inline_data_t*>& ls);
-
   version_t version = 1;
 
 private:

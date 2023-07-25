@@ -688,6 +688,10 @@ public:
     apply_visitor(DumpPayloadVisitor(f), payload);
   }
 
+  static void generate_test_instances(std::list<ClientMetricMessage*>& ls) {
+    ls.push_back(new ClientMetricMessage(CapInfoPayload(1, 2, 3)));
+  }
+
   void print(std::ostream *out) const {
     apply_visitor(PrintPayloadVisitor(out), payload);
   }

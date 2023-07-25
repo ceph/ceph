@@ -32,11 +32,19 @@ struct OSDMetricPayload {
   }
 
   void dump(ceph::Formatter *f) const {
-    encode_json("report", report, f);
+    f->open_array_section("report");
+    for (auto& i : report) {
+      f->open_object_section("query");
+      i.first.dump(f);
+      f->close_section();
+      f->open_object_section("report");
+      i.second.dump(f);
+      f->close_section();
+    }
+    f->close_section();
   }
-
   static void generate_test_instances(std::list<OSDMetricPayload*>& ls) {
-    ls.push_back(new OSDMetricPayload);
+    ls.push_back(new OSDMetricPayload());
   }
 };
 
@@ -55,6 +63,12 @@ struct MDSMetricPayload {
     denc(v.metric_report, p);
     DENC_FINISH(p);
   }
+  void dump(ceph::Formatter *f) const {
+    metric_report.dump(f);
+  }
+  static void generate_test_instances(std::list<MDSMetricPayload*>& ls) {
+    ls.push_back(new MDSMetricPayload());
+  }
 };
 
 struct UnknownMetricPayload {
@@ -63,6 +77,10 @@ struct UnknownMetricPayload {
   UnknownMetricPayload() { }
 
   DENC(UnknownMetricPayload, v, p) {
+    ceph_abort();
+  }
+
+  void dump(ceph::Formatter *f) const {
     ceph_abort();
   }
 };
@@ -145,6 +163,23 @@ struct MetricReportMessage {
 
   boost::apply_visitor(DecodeMetricPayloadVisitor(iter), payload);
   }
+  void dump(ceph::Formatter *f) const {
+    f->open_object_section("payload");
+    if (const OSDMetricPayload* osdPayload = boost::get<OSDMetricPayload>(&payload)) {
+      osdPayload->dump(f);
+    } else if (const MDSMetricPayload* mdsPayload = boost::get<MDSMetricPayload>(&payload)) {
+      mdsPayload->dump(f);
+    } else if (const UnknownMetricPayload* unknownPayload = boost::get<UnknownMetricPayload>(&payload)) {
+      unknownPayload->dump(f);
+    } else {
+      ceph_abort();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(std::list<MetricReportMessage*>& ls) {
+    ls.push_back(new MetricReportMessage(OSDMetricPayload()));
+    ls.push_back(new MetricReportMessage(MDSMetricPayload()));
+  }
 };
 
 WRITE_CLASS_ENCODER(MetricReportMessage);
@@ -187,6 +222,22 @@ struct MDSConfigPayload {
     DENC_START(1, 1, p);
     denc(v.config, p);
     DENC_FINISH(p);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->open_object_section("config");
+    for (auto& i : config) {
+      f->dump_object("query", i.first);
+      f->open_object_section("limits");
+      for (auto& j : i.second) {
+        f->dump_object("limit", j);
+      }
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(std::list<MDSConfigPayload*>& ls) {
+    ls.push_back(new MDSConfigPayload);
   }
 };
 
