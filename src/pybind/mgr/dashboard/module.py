@@ -261,7 +261,7 @@ class CherryPyConfig(object):
                 resp_head['Access-Control-Allow-Origin'] = req_header_origin_url
             ac_method = req_head.get('Access-Control-Request-Method', None)
 
-            allowed_methods = ['GET', 'POST']
+            allowed_methods = ['GET', 'POST', 'PUT']
             allowed_headers = [
                 'Content-Type',
                 'Authorization',
