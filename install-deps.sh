@@ -418,7 +418,7 @@ else
                 $with_zbd && install_libzbd_on_ubuntu bionic
                 ;;
             *Focal*)
-                ensure_decent_gcc_on_ubuntu 11 focal
+                ensure_decent_gcc_on_ubuntu 12 focal
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
                 ;;
