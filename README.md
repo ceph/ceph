@@ -23,33 +23,43 @@ contributed under the terms of the applicable license.
 
 ## Checking out the source
 
-You can clone from github with
+Clone the ceph/ceph repository from github by running the following command on
+a system that has git installed:
 
 	git clone git@github.com:ceph/ceph
 
-or, if you are not a github user,
+Alternatively, if you are not a github user, you should run the following
+command on a system that has git installed:
 
 	git clone https://github.com/ceph/ceph.git
 
-Ceph contains many git submodules that need to be checked out with
+When the ceph/ceph repository has been cloned to your system, run the following
+command to check out the git submodules associated with the ceph/ceph
+repository: 
 
 	git submodule update --init --recursive
 
 
 ## Build Prerequisites
 
-The list of Debian or RPM packages dependencies can be installed with:
+Make sure that ``curl`` is installed. The Debian and Ubuntu ``apt`` command is
+provided here, but if you use a system with a different package manager, then
+you must use whatever command is the proper counterpart of this one:
+
+    apt install curl
+
+Install Debian or RPM package dependencies by running the following command:
 
 	./install-deps.sh
 
 
 ## Building Ceph
 
-Note that these instructions are meant for developers who are
-compiling the code for development and testing.  To build binaries
-suitable for installation we recommend you build deb or rpm packages
-or refer to the `ceph.spec.in` or `debian/rules` to see which
-configuration options are specified for production builds.
+These instructions are meant for developers who are compiling the code for
+development and testing. To build binaries that are suitable for installation
+we recommend that you build .deb or .rpm packages, or refer to ``ceph.spec.in``
+or ``debian/rules`` to see which configuration options are specified for
+production builds.
 
 Build instructions:
 
@@ -57,21 +67,20 @@ Build instructions:
 	cd build
 	ninja
 
-(do_cmake.sh now defaults to creating a debug build of ceph that can
-be up to 5x slower with some workloads. Please pass 
-"-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug
-release.
+``do_cmake.sh`` defaults to creating a debug build of Ceph that can be up to 5x
+slower with some workloads. Pass ``-DCMAKE_BUILD_TYPE=RelWithDebInfo`` to
+``do_cmake.sh`` to create a non-debug release.
 
 The number of jobs used by `ninja` is derived from the number of CPU cores of
 the building host if unspecified. Use the `-j` option to limit the job number
 if the build jobs are running out of memory. On average, each job takes around
-2.5GiB memory.)
+2.5GiB memory.
 
-This assumes you make your build dir a subdirectory of the ceph.git
+This assumes that you make your build directory a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just point `CEPH_GIT_DIR` to the correct
-path to the checkout. Any additional CMake args can be specified by setting ARGS
-before invoking do_cmake. See [cmake options](#cmake-options)
-for more details. Eg.
+path to the checkout. Additional CMake args can be specified by setting ARGS
+before invoking ``do_cmake.sh``. See [cmake options](#cmake-options)
+for more details. For example:
 
     ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
 
