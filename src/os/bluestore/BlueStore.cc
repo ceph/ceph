@@ -3642,6 +3642,54 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 }
 
 // Onode
+//
+// Mapping blobs over Onode's logical offsets.
+//
+// Blob is always continous. Blobs may overlap.
+// Non-mapped regions are "0" when read.
+//                 1               2               3
+// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+// <blob.a.blob.a><blob.b.blo>        <blob.c.blob.c.blob.c.blob>
+//       <blob.d.blob.d.b>                      <blob.e.blob.e>
+// blob.a starts at 0x0 length 0xe
+// blob.b starts at 0xf length 0xb
+// blob.c starts at 0x23 length 0x1b
+// blob.d starts at 0x06 length 0x12
+// blob.e starts at 0x2d length 0xf
+//
+// Blobs can have non-encoded parts:
+//                 1               2               3
+// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+// aaaaaa......aaabbbbb...bbbb        ccccccccccccccc..........cc
+//       dddddd........ddd                      .....eeeeeeeeee
+// "." - non-encoded parts of blob (holes)
+//
+// Mapping logical to blob:
+// extent_map maps {Onode's logical offset, length}=>{Blob, in-blob offset}
+// {0x0, 0x6}=>{blob.a, 0x0}
+// {0x6, 0x6}=>{blob.d, 0x0}
+// {0xc, 0x3}=>{blob.a, 0xc}
+// {0xf, 0x5}=>{blob.b, 0x0}
+// {0x14, 0x3}=>{blob.d, 0xe}
+// {0x17, 0x4}=>{blob.b, 0x8}
+// a hole here
+// {0x23, 0xe}=>{blob.c, 0x0}
+// and so on...
+//
+// Compressed blobs do not have non-encoded parts.
+// Same example as above but all blobs are compressed:
+//                 1               2               3
+// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+// aaaaaaAAAAAAaaabbbbbBBBbbbb        cccccccccccccccCCCCCCCCCCcc
+//       ddddddDDDDDDDDddd                      EEEEEeeeeeeeeee
+// A-E: parts of blobs that are never used.
+// This can happen when a compressed blob is overwritten partially.
+// The target ranges are no longer used, but are left there because they are necessary
+// for successful decompression.
+//
+// In compressed blobs PExtentVector and csum refer to actually occupied disk space.
+// Blob's logical length is larger then occupied disk space.
+// Mapping from extent_map always uses offsets of decompressed data.
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
