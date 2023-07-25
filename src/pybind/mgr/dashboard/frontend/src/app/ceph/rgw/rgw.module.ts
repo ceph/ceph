@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
-import { NgbNavModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
@@ -43,6 +43,9 @@ import { RgwMultisiteExportComponent } from './rgw-multisite-export/rgw-multisit
 import { CreateRgwServiceEntitiesComponent } from './create-rgw-service-entities/create-rgw-service-entities.component';
 import { RgwOverviewDashboardComponent } from './rgw-overview-dashboard/rgw-overview-dashboard.component';
 import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
+import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-primary-zone.component';
+import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
+import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
 
 @NgModule({
   imports: [
@@ -54,6 +57,7 @@ import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
     NgbNavModule,
     RouterModule,
     NgbTooltipModule,
+    NgbPopoverModule,
     NgxPipeFunctionModule,
     TreeModule,
     DataTableModule,
@@ -95,7 +99,10 @@ import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
     RgwMultisiteImportComponent,
     RgwMultisiteExportComponent,
     CreateRgwServiceEntitiesComponent,
-    RgwOverviewDashboardComponent
+    RgwOverviewDashboardComponent,
+    RgwSyncPrimaryZoneComponent,
+    RgwSyncMetadataInfoComponent,
+    RgwSyncDataInfoComponent
   ]
 })
 export class RgwModule {}
