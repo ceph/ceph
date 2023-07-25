@@ -5,8 +5,6 @@ import { of } from 'rxjs';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwDaemon } from '../models/rgw-daemon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { CardComponent } from '../../dashboard-v3/card/card.component';
-import { CardRowComponent } from '../../dashboard-v3/card-row/card-row.component';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
@@ -14,6 +12,8 @@ import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { HealthService } from '~/app/shared/api/health.service';
+import { CardComponent } from '~/app/shared/components/card/card.component';
+import { CardRowComponent } from '~/app/shared/components/card-row/card-row.component';
 
 describe('RgwOverviewDashboardComponent', () => {
   let component: RgwOverviewDashboardComponent;
@@ -168,7 +168,7 @@ describe('RgwOverviewDashboardComponent', () => {
   it('should render all cards', () => {
     fixture.detectChanges();
     const dashboardCards = fixture.debugElement.nativeElement.querySelectorAll('cd-card');
-    expect(dashboardCards.length).toBe(4);
+    expect(dashboardCards.length).toBe(5);
   });
 
   it('should get corresponding data into Daemons', () => {

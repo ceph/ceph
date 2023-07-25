@@ -38,12 +38,6 @@ import { PgSummaryPipe } from './pg-summary.pipe';
     DashboardTimeSelectorComponent
   ],
 
-  exports: [
-    DashboardV3Component,
-    CardComponent,
-    CardRowComponent,
-    DashboardAreaChartComponent,
-    DashboardTimeSelectorComponent
-  ]
+  exports: [DashboardV3Component, DashboardAreaChartComponent, DashboardTimeSelectorComponent]
 })
 export class DashboardV3Module {}
