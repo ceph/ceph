@@ -801,6 +801,7 @@ class FSTop(FSTopBase):
                     xp += len(f'{self.speed_items(item)}{self.speed_mtype(typ)}') + ITEMS_PAD_LEN
                 else:
                     # display 0th element from metric tuple
+                    metrics_dict[fs_name][client_id][self.items(item)] = m[0]
                     self.fsstats.addstr(y_coord, xp, f'{m[0]}', curses.A_DIM)
                     xp += len(f'{self.items(item)}{self.mtype(typ)}') + ITEMS_PAD_LEN
             else:
