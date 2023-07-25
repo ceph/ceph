@@ -71,6 +71,31 @@ elif [ "$(uname)" == FreeBSD ] ; then
   PYBUILD="3"
   ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
   ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
+elif [ "$(uname)" == Darwin ] ; then
+# macOs build limitations
+  ARGS+=" -DWITH_RDMA=OFF"
+  ARGS+=" -DHAVE_POSIXAIO=OFF"
+  ARGS+=" -DWITH_BLUESTORE=OFF"
+  ARGS+=" -DWITH_LTTNG=OFF"
+  ARGS+=" -DWITH_BABELTRACE=OFF"
+  ARGS+=" -DWITH_RBD=OFF"
+  ARGS+=" -DWITH_KRBD=OFF"
+  ARGS+=" -DWITH_RADOSGW_AMQP_ENDPOINT=OFF"
+  ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
+  # currently, rgw posix driver requires inotify
+  ARGS+=" -DWITH_RADOSGW_POSIX=OFF"
+
+# you should have configured and bootstrapped brew
+  ARGS+=" -DICU_ROOT=$(brew --prefix icu4c)"
+  ARGS+=" -DSQLite3_ROOT=$(brew --prefix sqlite)"
+  ARGS+=" -DOpenLDAP_ROOT=$(brew --prefix openldap)"
+  ARGS+=" -Dthrift_ROOT=$(brew --prefix thrift)"
+
+  # distutils may want to link to some other libraries, like libintl for example
+  ARGS+=" -DPY_CPPFLAGS=-L$(brew --prefix)/lib"
+
+  cxx_compiler="clang++"
+  c_compiler="clang"
 else
   echo Unknown release
   exit 1
@@ -86,16 +111,18 @@ elif type ccache > /dev/null 2>&1 ; then
     ARGS+=" -DWITH_CCACHE=ON"
 fi
 
-cxx_compiler="g++"
-c_compiler="gcc"
-# 20 is used for more future-proof
-for i in $(seq 20 -1 11); do
-  if type -t gcc-$i > /dev/null; then
-    cxx_compiler="g++-$i"
-    c_compiler="gcc-$i"
-    break
-  fi
-done
+if [ -z "$cxx_compiler" ]; then
+  cxx_compiler="g++"
+  c_compiler="gcc"
+  # 20 is used for more future-proof
+  for i in $(seq 20 -1 11); do
+    if type -t gcc-$i > /dev/null; then
+      cxx_compiler="g++-$i"
+      c_compiler="gcc-$i"
+      break
+    fi
+  done
+fi
 ARGS+=" -DCMAKE_CXX_COMPILER=$cxx_compiler"
 ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
 

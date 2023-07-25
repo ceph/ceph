@@ -167,7 +167,7 @@ overwrite_conf=0
 cephx=1 #turn cephx on by default
 gssapi_authx=0
 cache=""
-if [ `uname` = FreeBSD ]; then
+if [ `uname` = FreeBSD -o `uname` = Darwin ]; then
     objectstore="memstore"
 else
     objectstore="bluestore"
