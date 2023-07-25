@@ -617,16 +617,16 @@ class ServiceSpec(object):
     Details of service creation.
 
     Request to the orchestrator for a cluster of daemons
-    such as MDS, RGW, iscsi gateway, MONs, MGRs, Prometheus
+    such as MDS, RGW, iscsi gateway, nvmeof gateway, MONs, MGRs, Prometheus
 
     This structure is supposed to be enough information to
     start the services.
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi loki promtail mds mgr mon nfs ' \
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi nvmeof loki promtail mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ceph-exporter ' \
                           'container ingress cephfs-mirror snmp-gateway jaeger-tracing ' \
                           'elasticsearch jaeger-agent jaeger-collector jaeger-query'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
+    REQUIRES_SERVICE_ID = 'iscsi nvmeof mds nfs rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -642,6 +642,7 @@ class ServiceSpec(object):
             'osd': DriveGroupSpec,
             'mds': MDSSpec,
             'iscsi': IscsiServiceSpec,
+            'nvmeof': NvmeofServiceSpec,
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'container': CustomContainerSpec,
@@ -702,8 +703,8 @@ class ServiceSpec(object):
         #: ``prometheus``) or (``container``) for custom containers.
         self.service_type = service_type
 
-        #: The name of the service. Required for ``iscsi``, ``mds``, ``nfs``, ``osd``, ``rgw``,
-        #: ``container``, ``ingress``
+        #: The name of the service. Required for ``iscsi``, ``nvmeof``, ``mds``, ``nfs``, ``osd``,
+        #: ``rgw``, ``container``, ``ingress``
         self.service_id = None
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
@@ -1106,6 +1107,100 @@ class RGWSpec(ServiceSpec):
 
 
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
+
+
+class NvmeofServiceSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'nvmeof',
+                 service_id: Optional[str] = None,
+                 name: Optional[str] = None,
+                 group: Optional[str] = None,
+                 port: Optional[int] = None,
+                 pool: Optional[str] = None,
+                 enable_auth: bool = False,
+                 server_key: Optional[str] = None,
+                 server_cert: Optional[str] = None,
+                 client_key: Optional[str] = None,
+                 client_cert: Optional[str] = None,
+                 spdk_path: Optional[str] = None,
+                 tgt_path: Optional[str] = None,
+                 timeout: Optional[int] = 60,
+                 conn_retries: Optional[int] = 10,
+                 transports: Optional[str] = 'tcp',
+                 transport_tcp_options: Optional[Dict[str, int]] =
+                 {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
+                 tgt_cmd_extra_args: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'nvmeof'
+        super(NvmeofServiceSpec, self).__init__('nvmeof', service_id=service_id,
+                                                placement=placement, unmanaged=unmanaged,
+                                                preview_only=preview_only,
+                                                config=config, networks=networks,
+                                                extra_container_args=extra_container_args,
+                                                extra_entrypoint_args=extra_entrypoint_args,
+                                                custom_configs=custom_configs)
+
+        #: RADOS pool where ceph-nvmeof config data is stored.
+        self.pool = pool
+        #: ``port`` port of the nvmeof gateway
+        self.port = port or 5500
+        #: ``name`` name of the nvmeof gateway
+        self.name = name
+        #: ``group`` name of the nvmeof gateway
+        self.group = group
+        #: ``enable_auth`` enables user authentication on nvmeof gateway
+        self.enable_auth = enable_auth
+        #: ``server_key`` gateway server key
+        self.server_key = server_key or './server.key'
+        #: ``server_cert`` gateway server certificate
+        self.server_cert = server_cert or './server.crt'
+        #: ``client_key`` client key
+        self.client_key = client_key or './client.key'
+        #: ``client_cert`` client certificate
+        self.client_cert = client_cert or './client.crt'
+        #: ``spdk_path`` path to SPDK
+        self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
+        #: ``tgt_path`` nvmeof target path
+        self.tgt_path = tgt_path or '/usr/local/bin/nvmf_tgt'
+        #: ``timeout`` ceph connectivity timeout
+        self.timeout = timeout
+        #: ``conn_retries`` ceph connection retries number
+        self.conn_retries = conn_retries
+        #: ``transports`` tcp
+        self.transports = transports
+        #: List of extra arguments for transports in the form opt=value
+        self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
+        #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
+        self.tgt_cmd_extra_args = tgt_cmd_extra_args
+
+    def get_port_start(self) -> List[int]:
+        return [5500, 4420, 8009]
+
+    def validate(self) -> None:
+        #  TODO: what other parameters should be validated as part of this function?
+        super(NvmeofServiceSpec, self).validate()
+
+        if not self.pool:
+            raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
+
+        if self.enable_auth:
+            if not any([self.server_key, self.server_cert, self.client_key, self.client_cert]):
+                raise SpecValidationError(
+                    'enable_auth is true but client/server certificates are missing')
+
+        if self.transports not in ['tcp']:
+            raise SpecValidationError('Invalid transport. Valid values are tcp')
+
+
+yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
 
 
 class IscsiServiceSpec(ServiceSpec):
