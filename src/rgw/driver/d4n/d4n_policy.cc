@@ -392,7 +392,8 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 
 int PolicyDriver::init() {
   rgw::cache::Partition partition_info;
-  cacheDriver = new rgw::cache::RedisDriver(partition_info); // hardcoded for now -Sam
+  boost::asio::io_context io;
+  cacheDriver = new rgw::cache::RedisDriver(io, partition_info); // hardcoded for now -Sam
 
   if (policyName == "lfuda") {
     cachePolicy = new LFUDAPolicy();

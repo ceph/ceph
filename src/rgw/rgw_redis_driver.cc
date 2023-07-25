@@ -835,20 +835,19 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
     //(net::use_future).get();
 
   dout(0) << "Sam: " << std::get<1>(resp) << dendl;
-  /*
 
   if (0 == ret) {
     ret = ::aio_read(op.aio_cb.get());
   }
-  */
-//  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
+  
+  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
   if(ret < 0) {
       auto ec = boost::system::error_code{-ret, boost::system::system_category()};
       ceph::async::post(std::move(p), ec, bufferlist{});
   } else {
       (void)p.release();
-  }*/
-  //return init.result.get();
+  }
+  return init.result.get();*/
 }
 
 void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
