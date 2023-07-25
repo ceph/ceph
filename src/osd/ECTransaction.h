@@ -55,6 +55,7 @@ namespace ECTransaction {
 
 	hobject_t source;
 	if (i.second.has_source(&source)) {
+	  // typically clone or mv
 	  plan.invalidates_cache = true;
 
 	  ECUtil::HashInfoRef shinfo = get_hinfo(source);
