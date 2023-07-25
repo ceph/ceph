@@ -2784,7 +2784,7 @@ void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
       request->unsafe_item.remove_myself();
       request->unsafe_dir_item.remove_myself();
       request->unsafe_target_item.remove_myself();
-      signal_cond_list(request->waitfor_safe);
+      signal_context_list(request->waitfor_safe);
     }
     request->item.remove_myself();
     unregister_request(request);
@@ -3277,7 +3277,7 @@ void Client::wait_unsafe_requests()
        ++p) {
     MetaRequest *req = *p;
     if (req->unsafe_item.is_on_list())
-      wait_on_list(req->waitfor_safe);
+      wait_on_context_list(req->waitfor_safe);
     put_request(req);
   }
 }
@@ -3313,7 +3313,7 @@ void Client::kick_requests_closed(MetaSession *session)
 		     <<  in->ino  << " " << req->get_tid() << dendl;
 	  req->unsafe_target_item.remove_myself();
 	}
-	signal_cond_list(req->waitfor_safe);
+	signal_context_list(req->waitfor_safe);
 	unregister_request(req);
       }
     }
@@ -3586,12 +3586,13 @@ void Client::put_cap_ref(Inode *in, int cap)
 	ldout(cct, 10) << __func__ << " finishing pending cap_snap on " << *in << dendl;
 	in->cap_snaps.rbegin()->second.writing = 0;
 	finish_cap_snap(in, in->cap_snaps.rbegin()->second, get_caps_used(in));
-	signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
+	ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+	signal_caps_inode(in);  // wake up blocked sync writers
       }
       if (last & CEPH_CAP_FILE_BUFFER) {
 	for (auto &p : in->cap_snaps)
 	  p.second.dirty_data = 0;
-	signal_cond_list(in->waitfor_commit);
+	signal_context_list(in->waitfor_commit);
 	ldout(cct, 5) << __func__ << " dropped last FILE_BUFFER ref on " << *in << dendl;
 	++put_nref;
 
@@ -3716,9 +3717,9 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
     }
 
     if (waitfor_caps)
-      wait_on_list(in->waitfor_caps);
+      wait_on_context_list(in->waitfor_caps);
     else if (waitfor_commit)
-      wait_on_list(in->waitfor_commit);
+      wait_on_context_list(in->waitfor_commit);
   }
 }
 
@@ -4236,6 +4237,24 @@ void Client::signal_context_list(list<Context*>& ls)
   }
 }
 
+void Client::signal_caps_inode(Inode *in)
+{
+  // Process the waitfor_caps list
+  while (!in->waitfor_caps.empty()) {
+    in->waitfor_caps.front()->complete(0);
+    in->waitfor_caps.pop_front();
+  }
+
+  // New items may have been added to the pending list, move them onto the
+  // waitfor_caps list
+  while (!in->waitfor_caps_pending.empty()) {
+    Context *ctx = in->waitfor_caps_pending.front();
+
+    in->waitfor_caps_pending.pop_front();
+    in->waitfor_caps.push_back(ctx);
+  }
+}
+
 void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
 {
   for (const auto &cap : s->caps) {
@@ -4252,7 +4271,8 @@ void Client::wake_up_session_caps(MetaSession *s, bool reconnect)
 	  in.flags |= I_CAP_DROPPED;
       }
     }
-    signal_cond_list(in.waitfor_caps);
+    ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+    signal_caps_inode(&in);
   }
 }
 
@@ -4506,8 +4526,10 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     }
   }
 
-  if (issued & ~old_caps)
-    signal_cond_list(in->waitfor_caps);
+  if (issued & ~old_caps) {
+    ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+    signal_caps_inode(in);
+  }
 }
 
 void Client::remove_cap(Cap *cap, bool queue_release)
@@ -4599,7 +4621,8 @@ void Client::remove_session_caps(MetaSession *s, int err)
       _schedule_invalidate_callback(in.get(), 0, 0);
     }
 
-    signal_cond_list(in->waitfor_caps);
+    ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+    signal_caps_inode(in.get());
   }
   s->flushing_caps_tids.clear();
   sync_cond.notify_all();
@@ -4810,8 +4833,10 @@ void Client::force_session_readonly(MetaSession *s)
   s->readonly = true;
   for (xlist<Cap*>::iterator p = s->caps.begin(); !p.end(); ++p) {
     auto &in = (*p)->inode;
-    if (in.caps_wanted() & CEPH_CAP_FILE_WR)
-      signal_cond_list(in.waitfor_caps);
+    if (in.caps_wanted() & CEPH_CAP_FILE_WR) {
+      ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+      signal_caps_inode(&in);
+    }
   }
 }
 
@@ -4894,7 +4919,7 @@ void Client::wait_sync_caps(Inode *in, ceph_tid_t want)
     ldout(cct, 10) << __func__ << " on " << *in << " flushing "
 		   << ccap_string(it->second) << " want " << want
 		   << " last " << it->first << dendl;
-    wait_on_list(in->waitfor_caps);
+    wait_on_context_list(in->waitfor_caps);
   }
 }
 
@@ -5532,13 +5557,6 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in
 	  << " with " << ccap_string(dirty) << dendl;
 
-  if (flushed) {
-    signal_cond_list(in->waitfor_caps);
-    if (session->flushing_caps_tids.empty() ||
-	*session->flushing_caps_tids.begin() > flush_ack_tid)
-      sync_cond.notify_all();
-  }
-
   if (!dirty) {
     in->cap_dirtier_uid = -1;
     in->cap_dirtier_gid = -1;
@@ -5557,9 +5575,19 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
        if (in->flushing_cap_tids.empty())
 	  in->flushing_cap_item.remove_myself();
       }
-      if (!in->caps_dirty())
-	put_inode(in);
     }
+  }
+
+  if (flushed) {
+    ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+    signal_caps_inode(in);
+    if (session->flushing_caps_tids.empty() ||
+	*session->flushing_caps_tids.begin() > flush_ack_tid)
+      sync_cond.notify_all();
+  }
+
+  if (cleaned && !in->caps_dirty()) {
+    put_inode(in);
   }
 }
 
@@ -5585,7 +5613,8 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MCo
 	in->flushing_cap_item.remove_myself();
       in->cap_snaps.erase(it);
 
-      signal_cond_list(in->waitfor_caps);
+      ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+      signal_caps_inode(in);
       if (session->flushing_caps_tids.empty() ||
 	  *session->flushing_caps_tids.begin() > flush_ack_tid)
 	sync_cond.notify_all();
@@ -5847,8 +5876,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
     check_caps(in, flags);
 
   // wake up waiters
-  if (new_caps)
-    signal_cond_list(in->waitfor_caps);
+  if (new_caps) {
+    ldout(cct, 10) << __func__ << " calling signal_caps_inode" << dendl;
+    signal_caps_inode(in);
+  }
 
   // may drop inode's last ref
   if (deleted_inode)
@@ -10499,17 +10530,145 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
-int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
+void Client::C_Read_Finisher::finish_io(int r)
+{
+  utime_t lat;
+
+  // Caller holds client_lock so we don't need to take it.
+
+  if (r >= 0) {
+    if (is_read_async) {
+    } else {
+      // may need to retry on short read
+    }
+
+    clnt->update_read_io_size(size);
+    if (movepos) {
+      // adjust fd pos
+      f->pos = offset + r;
+    }
+    
+    lat = ceph_clock_now();
+    lat -= start;
+    ++clnt->nr_read_request;
+    clnt->update_io_stat_read(lat);
+  }
+
+  iofinished = true;
+
+  if (have_caps) {
+    clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
+  }
+
+  if (movepos) {
+    clnt->unlock_fh_pos(f);
+  }
+
+  onfinish->complete(r);
+  delete this;
+}
+
+void Client::C_Read_Sync_NonBlocking::retry()
+{
+  filer->read_trunc(in->ino, &in->layout, in->snapid, pos, left, &tbl, 0,
+                    in->truncate_size, in->truncate_seq, this);
+}
+
+/**
+ * The following method implements most of what _read_sync does, but in a
+ * way that works with the non-blocking read path.
+ */
+void Client::C_Read_Sync_NonBlocking::finish(int r)
+{
+  clnt->client_lock.lock();
+
+  if (r == -CEPHFS_ENOENT) {
+    // if we get ENOENT from OSD, assume 0 bytes returned
+    goto success;
+  } else if (r < 0) {
+    // pass error to caller
+    goto error;
+  }
+
+  if (tbl.length()) {
+    r = tbl.length();
+
+    read += r;
+    pos += r;
+    left -= r;
+    bl->claim_append(tbl);
+  }
+
+  // short read?
+  if (r >= 0 && r < wanted) {
+    if (pos < in->size) {
+      // zero up to known EOF
+      int64_t some = in->size - pos;
+      if (some > left)
+        some = left;
+      auto z = buffer::ptr_node::create(some);
+      z->zero();
+      bl->push_back(std::move(z));
+      read += some;
+      pos += some;
+      left -= some;
+      if (left == 0)
+        goto success;
+    }
+
+    clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
+    // reverify size
+    {
+      r = clnt->_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+      if (r < 0)
+        goto error;
+    }
+
+    // eof?  short read.
+    if ((uint64_t)pos >= in->size)
+      goto success;
+
+    {
+      int have_caps2 = 0;
+      r = clnt->get_caps(f, CEPH_CAP_FILE_RD, have_caps, &have_caps2, -1);
+      if (r < 0) {
+        goto error;
+      }
+    }
+
+    wanted = left;
+    retry();
+    clnt->client_lock.unlock();
+    return;
+  }
+
+success:
+
+  r = read;
+
+error:
+
+  onfinish->complete(r);
+  fini = true;
+
+  clnt->client_lock.unlock();
+}
+
+int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
+                      Context *onfinish)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   int want, have = 0;
   bool movepos = false;
+  std::unique_ptr<Context> iofinish = nullptr;
+  std::unique_ptr<C_Read_Finisher> crf = nullptr;
   int64_t rc = 0;
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
   utime_t lat;
   utime_t start = ceph_clock_now(); 
+  CRF_iofinish *crf_iofinish = nullptr;
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -CEPHFS_EBADF;
@@ -10569,17 +10728,81 @@ retry:
     goto success;
   }
 
+  if (onfinish) {
+     crf_iofinish = new CRF_iofinish();
+     iofinish.reset(crf_iofinish);
+
+     crf.reset(new
+       C_Read_Finisher(this, onfinish, iofinish.get(),
+                       !conf->client_debug_force_sync_read &&
+                         conf->client_oc &&
+                         (have & (CEPH_CAP_FILE_CACHE |
+                                  CEPH_CAP_FILE_LAZYIO)),
+                       have, movepos, start, f, in, f->pos, offset, size));
+
+    crf_iofinish->CRF = crf.get();
+  }
+
+  // There are three cases to be handled at this point:
+  //
+  // CAES 1 - blocking or non-blocking caller with the client holding Fc caps
+  //          and client_debug_force_sync_read being default (`false)
+  //
+  // CASE 2 - non-blocking caller with sync read from the OSD (since client
+  //          does not have the required caps or the above config is set)
+  //
+  // CASE 3 - blocking call by the caller
+
   if (!conf->client_debug_force_sync_read &&
       conf->client_oc &&
       (have & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO))) {
+    // CAES 1 - blocking or non-blocking caller with the client holding Fc caps
+    //          and client_debug_force_sync_read being default (`false)
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
     }
-    rc = _read_async(f, offset, size, bl);
+    rc = _read_async(f, offset, size, bl, iofinish.get());
+
+    if (onfinish) {
+      // handle non-blocking caller (onfinish != nullptr), we can now safely
+      // release all the managed pointers, but we might need to do something
+      // with iofinisher.
+      Context *iof = iofinish.release();
+      crf.release();
+
+      if (rc < 0)
+        iof->complete(rc);
+
+      // allow caller to wait on onfinish...
+      return 0;
+    }
+
     if (rc < 0)
       goto done;
+  } else if (onfinish) {
+    // CASE 2 - non-blocking caller with sync read from the OSD (since client
+    //          does not have the required caps or the above config is set)
+
+    // handle _sync_read without blocking...
+    // This sounds odd, but we want to accomplish what is done in the else
+    // branch below but in a non-blocking fashion. The code in _read_sync
+    // is duplicated and modified and exists in
+    // C_Read_Sync_NonBlocking::finish().
+    C_Read_Sync_NonBlocking *crsa =
+      new C_Read_Sync_NonBlocking(this, iofinish.release(), f, in, f->pos,
+                                  offset, size, bl, filer.get(), have);
+      crf.release();
+
+      // Now make first attempt at performing _read_sync
+      crsa->retry();
+
+      // Now the C_Read_Sync_NonBlocking is going to handle EVERYTHING else
+      // Allow caller to wait on onfinish...
+      return 0;
   } else {
+    // CASE 3 - blocking call by the caller
+
     if (f->flags & O_DIRECT)
       _flush_range(in, offset, size);
 
@@ -10652,7 +10875,41 @@ void Client::C_Readahead::finish(int r) {
   }
 }
 
-int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
+void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
+{
+  if(f->readahead.get_min_readahead_size() > 0) {
+    pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
+    if (readahead_extent.second > 0) {
+      ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
+		     << " (caller wants " << off << "~" << len << ")" << dendl;
+      Context *onfinish2 = new C_Readahead(this, f);
+      int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
+				       readahead_extent.first, readahead_extent.second,
+				       NULL, 0, onfinish2);
+      if (r2 == 0) {
+	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
+	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
+      } else {
+	ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
+	delete onfinish2;
+      }
+    }
+  }
+}
+
+void Client::C_Read_Async_Finisher::finish(int r)
+{
+  clnt->client_lock.lock();
+
+  clnt->do_readahead(f, in, off, len);
+
+  onfinish->complete(r);
+
+  clnt->client_lock.unlock();
+}
+
+int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
+			Context *onfinish)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -10676,36 +10933,46 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
 
   // read (and possibly block)
   int r = 0;
-  C_SaferCond onfinish("Client::_read_async flock");
+  std::unique_ptr<Context> io_finish = nullptr;
+  C_SaferCond *io_finish_cond = nullptr;
+  if (onfinish == nullptr) {
+    io_finish_cond = new C_SaferCond("Client::_read_async flock");
+    io_finish.reset(io_finish_cond);
+  } else {
+    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in,
+                                              f->pos, off, len));
+  }
+
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-			      off, len, bl, 0, &onfinish);
+			      off, len, bl, 0, io_finish.get());
+
+  if (onfinish != nullptr) {
+    // Release C_Read_Async_Finisher from managed pointer, either
+    // file_read will result in non-blocking complete, or we need to complete
+    // immediately. In either case, the C_Read_Async_Finisher is safely
+    // handled and won't be abandoned.
+    Context *crf = io_finish.release();
+    if (r != 0) {
+      // need to do readahead, so complete the crf
+      client_lock.unlock();
+      crf->complete(r);
+      client_lock.lock();
+    } else {
+      get_cap_ref(in, CEPH_CAP_FILE_CACHE);
+    }
+    return 0;
+  }
+
   if (r == 0) {
     get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.unlock();
-    r = onfinish.wait();
+    r = io_finish_cond->wait();
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
     update_read_io_size(bl->length());
   }
 
-  if(f->readahead.get_min_readahead_size() > 0) {
-    pair<uint64_t, uint64_t> readahead_extent = f->readahead.update(off, len, in->size);
-    if (readahead_extent.second > 0) {
-      ldout(cct, 20) << "readahead " << readahead_extent.first << "~" << readahead_extent.second
-		     << " (caller wants " << off << "~" << len << ")" << dendl;
-      Context *onfinish2 = new C_Readahead(this, f);
-      int r2 = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-				       readahead_extent.first, readahead_extent.second,
-				       NULL, 0, onfinish2);
-      if (r2 == 0) {
-	ldout(cct, 20) << "readahead initiated, c " << onfinish2 << dendl;
-	get_cap_ref(in, CEPH_CAP_FILE_RD | CEPH_CAP_FILE_CACHE);
-      } else {
-	ldout(cct, 20) << "readahead was no-op, already cached" << dendl;
-	delete onfinish2;
-      }
-    }
-  }
+  do_readahead(f, in, off, len);
 
   return r;
 }
@@ -10818,7 +11085,9 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
 
 int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                                        unsigned iovcnt, int64_t offset,
-                                       bool write, bool clamp_to_int)
+                                       bool write, bool clamp_to_int,
+                                       Context *onfinish, bufferlist *blp,
+                                       bool do_fsync, bool syncdataonly)
 {
     ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -10839,35 +11108,35 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     if (clamp_to_int) {
       totallen = std::min(totallen, (loff_t)INT_MAX);
     }
+
     if (write) {
-        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt);
+        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt, onfinish, do_fsync, syncdataonly);
         ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
         bufferlist bl;
-        int64_t r = _read(fh, offset, totallen, &bl);
+        int64_t r = _read(fh, offset, totallen, blp ? blp : &bl,
+                          onfinish);
         ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
-        if (r <= 0)
+        if (r <= 0) {
+          if (r < 0 && onfinish != nullptr) {
+            client_lock.unlock();
+            onfinish->complete(r);
+            client_lock.lock();
+          }
           return r;
+        }
 
         client_lock.unlock();
-        auto iter = bl.cbegin();
-        for (unsigned j = 0, resid = r; j < iovcnt && resid > 0; j++) {
-               /*
-                * This piece of code aims to handle the case that bufferlist
-                * does not have enough data to fill in the iov
-                */
-               const auto round_size = std::min<unsigned>(resid, iov[j].iov_len);
-               iter.copy(round_size, reinterpret_cast<char*>(iov[j].iov_base));
-               resid -= round_size;
-               /* iter is self-updating */
-        }
+        copy_bufferlist_to_iovec(iov, iovcnt, &bl, r);
         client_lock.lock();
         return r;
     }
 }
 
-int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
+int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt,
+                            int64_t offset, bool write, Context *onfinish,
+                            bufferlist *blp)
 {
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied())
@@ -10880,16 +11149,157 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     Fh *fh = get_filehandle(fd);
     if (!fh)
       return -CEPHFS_EBADF;
-    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true);
+    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
+                                  onfinish, blp);
+}
+
+int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
+                               int64_t offset, uint64_t size, Inode *in)
+{
+  utime_t lat;
+  uint64_t totalwritten;
+  int64_t r;
+
+  update_write_io_size(size);
+  // time
+  lat = ceph_clock_now();
+  lat -= start;
+
+  ++nr_write_request;
+  update_io_stat_write(lat);
+
+  if (fpos) {
+    lock_fh_pos(f);
+    f->pos = fpos;
+    unlock_fh_pos(f);
+  }
+  totalwritten = size;
+  r = (int64_t)totalwritten;
+
+  // extend file?
+  if (totalwritten + offset > in->size) {
+    in->size = totalwritten + offset;
+    in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+
+    if (is_quota_bytes_approaching(in, f->actor_perms)) {
+      check_caps(in, CHECK_CAPS_NODELAY);
+    } else if (is_max_size_approaching(in)) {
+      check_caps(in, 0);
+    }
+
+    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
+  } else {
+    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->size << dendl;
+  }
+
+  // mtime
+  in->mtime = in->ctime = ceph_clock_now();
+  in->change_attr++;
+  in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+
+  return r;
+}
+
+void Client::C_Write_Finisher::finish_io(int r)
+{
+  bool fini;
+
+  clnt->put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+  if (r >= 0) {
+    if (is_file_write) {
+      if ((f->flags & O_SYNC) || (f->flags & O_DSYNC)) {
+        clnt->_flush_range(in, offset, size);
+      }
+    }
+
+    r = clnt->_write_success(f, start, fpos, offset, size, in);
+  }
+
+  iofinished = true;
+  iofinished_r = r;
+  fini = try_complete();
+
+  if (fini)
+    delete this;
+}
+
+void Client::C_Write_Finisher::finish_onuninline(int r)
+{
+  // Called by _write with client_lock held.
+  onuninlinefinished = true;
+  onuninlinefinished_r = r;
+
+  if (try_complete())
+    delete this;
+}
+
+void Client::C_Write_Finisher::finish_fsync(int r)
+{
+  bool fini;
+  client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ldout(clnt->cct, 3) << "finish_fsync r = " << r << dendl;
+
+  fsync_finished = true;
+  fsync_r = r;
+  fini = try_complete();
+
+  if (fini)
+    delete this;
+}
+
+bool Client::C_Write_Finisher::try_complete()
+{
+  client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ldout(clnt->cct, 19) << "C_Write_Finisher::try_complete this " << this 
+                       << " onuninlinefinished " << onuninlinefinished
+                       << " iofinished " << iofinished
+                       << " iofinished_r " << iofinished_r
+                       << " fsync_finished " << fsync_finished
+                       << dendl;
+
+  if (onuninlinefinished && iofinished && !fsync_finished && iofinished_r >= 0) {
+    // Done with I/O AND uninline, but we want to do fsync
+    CWF_fsync_finish *fsync_f = new CWF_fsync_finish(this);
+    C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(clnt, in, syncdataonly, fsync_f);
+
+    // Kick fsync off... and all will magically complete eventually...
+    ldout(clnt->cct, 19) << "kickoff fsync onfinish " << onfinish << dendl;
+    state->advance();
+  } else if (onuninlinefinished && iofinished) {
+    // Now we are REALLY done...
+    clnt->put_cap_ref(in, CEPH_CAP_FILE_WR);
+
+    if (fsync_r < 0) {
+      ldout(clnt->cct, 19) << " complete with fsync_r " << fsync_r << dendl;
+      onfinish->complete(fsync_r);
+    } else if (onuninlinefinished_r < 0 && onuninlinefinished_r != -CEPHFS_ECANCELED) {
+      ldout(clnt->cct, 19) << " complete with onuninlinefinished_r " << onuninlinefinished_r << dendl;
+      onfinish->complete(onuninlinefinished_r);
+    } else {
+      ldout(clnt->cct, 19) << " complete with iofinished_r " << iofinished_r << dendl;
+      onfinish->complete(iofinished_r);
+    }
+    onfinish = nullptr;
+    return true;
+  }
+
+  return false;
 }
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
-	                const struct iovec *iov, int iovcnt)
+	                const struct iovec *iov, int iovcnt, Context *onfinish,
+	                bool do_fsync, bool syncdataonly)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
   uint64_t fpos = 0;
   Inode *in = f->inode.get();
+  std::unique_ptr<C_SaferCond> onuninline = nullptr;
+  CWF_iofinish *cwf_iofinish = NULL;
+  C_SaferCond *cond_iofinish = NULL;
 
   if ( (uint64_t)(offset+size) > mdsmap->get_max_filesize() && //exceeds config
        (uint64_t)(offset+size) > in->size ) { //exceeds filesize 
@@ -10960,8 +11370,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     }
   }
 
-  utime_t lat;
-  uint64_t totalwritten;
   int want, have;
   if (f->mode & CEPH_FILE_MODE_LAZY)
     want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO;
@@ -10985,7 +11393,8 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
-  std::unique_ptr<C_SaferCond> onuninline = nullptr;
+  std::unique_ptr<Context> iofinish = nullptr;
+  std::unique_ptr<C_Write_Finisher> cwf = nullptr;
   
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (endoff > cct->_conf->client_max_inline_size ||
@@ -11015,6 +11424,21 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     }
   }
 
+  if (onfinish) {
+     cwf_iofinish = new CWF_iofinish();
+     iofinish.reset(cwf_iofinish);
+
+     cwf.reset(new
+       C_Write_Finisher(this, onfinish, nullptr == onuninline,
+                        cct->_conf->client_oc &&
+                          (have & (CEPH_CAP_FILE_BUFFER |
+                                 CEPH_CAP_FILE_LAZYIO)),
+                        start, f, in, fpos, offset, size,
+                        do_fsync, syncdataonly));
+
+    cwf_iofinish->CWF = cwf.get();
+  }
+
   if (cct->_conf->client_oc &&
       (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO))) {
     // do buffered write
@@ -11027,7 +11451,42 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     r = objectcacher->file_write(&in->oset, &in->layout,
 				 in->snaprealm->get_snap_context(),
 				 offset, size, bl, ceph::real_clock::now(),
-				 0);
+				 0, iofinish.get(),
+				 onfinish == nullptr
+				   ? objectcacher->CFG_block_writes_upfront()
+				   : false);
+
+    if (onfinish) {
+      // handle non-blocking caller (onfinish != nullptr), we can now safely
+      // release all the managed pointers, but we might need to do something
+      // with iofinisher.
+      Context *iof = iofinish.release();
+      C_Write_Finisher *cwfp = cwf.release();
+
+      if (r < 0) {
+        // should not get here, but...
+        iof->complete(r);
+      }
+
+      if (nullptr != onuninline) {
+        client_lock.unlock();
+        int uninline_ret = onuninline->wait();
+        client_lock.lock();
+
+        if (uninline_ret >= 0 || uninline_ret == -CEPHFS_ECANCELED) {
+          in->inline_data.clear();
+          in->inline_version = CEPH_INLINE_NONE;
+          in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+          check_caps(in, 0);
+        }
+
+        cwfp->finish_onuninline(uninline_ret);
+      }
+
+      // allow caller to wait on onfinish...
+      return 0;
+    }
+
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     if (r < 0)
@@ -11044,15 +11503,32 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       _flush_range(in, offset, size);
 
     // simple, non-atomic sync write
-    C_SaferCond onfinish("Client::_write flock");
+    if (onfinish == nullptr) {
+      // We need a safer condition to wait on.
+      cond_iofinish = new C_SaferCond();
+      iofinish.reset(cond_iofinish);
+    }
+
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
 		       in->truncate_size, in->truncate_seq,
-		       &onfinish);
+		       iofinish.get());
+
+    if (onfinish) {
+      // handle non-blocking caller (onfinish != nullptr), we can now safely
+      // release all the managed pointers
+      iofinish.release();
+      onuninline.release();
+      cwf.release();
+
+      // allow caller to wait on onfinish...
+      return 0;
+    }
+
     client_lock.unlock();
-    r = onfinish.wait();
+    r = cond_iofinish->wait();
     client_lock.lock();
     put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
     if (r < 0)
@@ -11061,44 +11537,22 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   // if we get here, write was successful, update client metadata
 success:
-  update_write_io_size(size);
-  // time
-  lat = ceph_clock_now();
-  lat -= start;
 
-  ++nr_write_request;
-  update_io_stat_write(lat);
+  // do not get here if non-blocking caller (onfinish != nullptr)
+  r = _write_success(f, start, fpos, offset, size, in);
 
-  if (fpos) {
-    lock_fh_pos(f);
-    f->pos = fpos;
-    unlock_fh_pos(f);
+  if (r >= 0 && do_fsync) {
+    int64_t r1;
+    client_lock.unlock();
+    r1 = _fsync(f, false);
+    if (r1 < 0)
+      r = r1;
+    client_lock.lock();
   }
-  totalwritten = size;
-  r = (int64_t)totalwritten;
-
-  // extend file?
-  if (totalwritten + offset > in->size) {
-    in->size = totalwritten + offset;
-    in->mark_caps_dirty(CEPH_CAP_FILE_WR);
-
-    if (is_quota_bytes_approaching(in, f->actor_perms)) {
-      check_caps(in, CHECK_CAPS_NODELAY);
-    } else if (is_max_size_approaching(in)) {
-      check_caps(in, 0);
-    }
-
-    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", extending file size" << dendl;
-  } else {
-    ldout(cct, 7) << "wrote to " << totalwritten+offset << ", leaving file size at " << in->size << dendl;
-  }
-
-  // mtime
-  in->mtime = in->ctime = ceph_clock_now();
-  in->change_attr++;
-  in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
 done:
+
+  // can not get here if non-blocking caller (onfinish != nullptr)
 
   if (nullptr != onuninline) {
     client_lock.unlock();
@@ -11201,6 +11655,204 @@ int Client::fsync(int fd, bool syncdataonly)
   return r;
 }
 
+void Client::C_nonblocking_fsync_state::advance()
+{
+  Context *advancer;
+  client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance"
+                       << " progress " << progress
+                       << " flush_wait " << flush_wait
+                       << " flush_completed " << flush_completed
+                       << " result " << result
+                       << " waitfor_safe " << waitfor_safe
+                       << " onfinish " << onfinish
+                       << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+
+  switch (progress) {
+  case 0:
+    ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - case 0" << dendl;
+    progress = 1;
+
+    if (clnt->cct->_conf->client_oc) {
+      Context *finisher = new C_nonblocking_fsync_flush_finisher(clnt, this);
+      flush_wait = true;
+      tmp_ref = in; // take a reference; C_SaferCond doesn't and _flush won't either
+      clnt->_flush(in, finisher);
+      ldout(clnt->cct, 15) << "using return-valued form of _fsync" << dendl;
+    }
+
+    if (!syncdataonly && in->dirty_caps) {
+      clnt->check_caps(in, CHECK_CAPS_NODELAY|CHECK_CAPS_SYNCHRONOUS);
+      if (in->flushing_caps)
+        flush_tid = clnt->last_flush_tid;
+    } else {
+      ldout(clnt->cct, 10) << "no metadata needs to commit" << dendl;
+    }
+
+    if (!syncdataonly && !in->unsafe_ops.empty()) {
+      waitfor_safe = true;
+      clnt->flush_mdlog_sync(in);
+
+      advancer = new C_nonblocking_fsync_state_advancer(clnt, this);
+      req = in->unsafe_ops.back();
+      ldout(clnt->cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
+
+      req->get();
+      clnt->add_nonblocking_onfinish_to_context_list(req->waitfor_safe, advancer);
+      // ------------  here is a state machine break point
+      return;
+    }
+
+    // skip and fall through
+
+  case 1:
+    ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - case 1" << dendl;
+    progress = 2;
+
+    if (waitfor_safe) {
+      clnt->put_request(req);
+    }
+
+    if (flush_wait && !flush_completed) {
+      // wait on a real reply instead of guessing
+      ldout(clnt->cct, 15) << "waiting on data to flush" << dendl;
+      // ------------  here is a state machine break point
+      return;
+    } else {
+      // FIXME: this can starve
+      if (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
+        ldout(clnt->cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
+                             << " uncommitted, waiting" << dendl;
+        advancer = new C_nonblocking_fsync_state_advancer(clnt, this);
+        clnt->add_nonblocking_onfinish_to_context_list(in->waitfor_commit, advancer);
+        // ------------  here is a state machine break point but we have to
+        //               return to this case because this might loop.
+        progress = 1;
+        return;
+      }
+    }
+
+    // skip and fall through
+
+  case 2:
+    ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - case 2" << dendl;
+
+    if (flush_completed) {
+      // we waited for real reply above, now we have it... retrieve result
+      ldout(clnt->cct, 15) << "got " << result << " from flush writeback" << dendl;
+    }
+
+    if (result != 0) {
+      // ERROR!
+      ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - ERROR!" << dendl;
+      break;
+    }
+
+    if (flush_tid <= 0) {
+      // DONE!
+      ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - DONE!" << dendl;
+      break;
+    }
+
+    // fall through
+    progress = 3;
+
+  case 3:
+  case 4:
+    ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - case " << progress << dendl;
+    ldout(clnt->cct, 15) << "in->flushing_cap_tids.empty() " << in->flushing_cap_tids.empty()
+                         << " in->flushing_caps " << in->flushing_caps
+                         << dendl; 
+    // do equivalent of wait_sync_caps(in, flush_tid)
+    if (in->flushing_caps) {
+      ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - flushing_caps" << dendl;
+      map<ceph_tid_t, int>::iterator it = in->flushing_cap_tids.begin();
+      ceph_assert(it != in->flushing_cap_tids.end());
+
+      ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance" 
+                           << " it->first " << it->first
+                           << " flush_tid " << flush_tid
+                           << dendl;
+      if (it->first <= flush_tid) {
+        ldout(clnt->cct, 10) << __func__ << " on " << *in << " flushing "
+                             << ccap_string(it->second) << " flush_tid " << flush_tid
+                             << " last " << it->first << dendl;
+        advancer = new C_nonblocking_fsync_state_advancer(clnt, this);
+        ldout(clnt->cct, 10) << "Adding onfinish " << onfinish
+                             << " for C_nonblocking_fsync_state " << this
+                             << dendl;
+        if (progress == 3)
+          clnt->add_nonblocking_onfinish_to_context_list(in->waitfor_caps, advancer);
+        else
+          clnt->add_nonblocking_onfinish_to_context_list(in->waitfor_caps_pending, advancer);
+        // ------------  here is a state machine break point
+        //               the advancer completion will resume with case 3
+        progress = 4;
+        return;
+      }
+
+      // DONE!
+      ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - DONE!" << dendl;
+    }
+  }
+
+  if (result == 0) {
+    ldout(clnt->cct, 10) << "ino " << in->ino << " has no uncommitted writes" << dendl;
+  } else {
+    ldout(clnt->cct, 8) << "ino " << in->ino << " failed to commit to disk! "
+                        << cpp_strerror(-result) << dendl;
+  }
+
+  utime_t lat;
+
+  lat = ceph_clock_now();
+  lat -= start;
+  clnt->logger->tinc(l_c_fsync, lat);
+
+  onfinish->complete(result);
+
+  // we're done
+  delete this;
+}
+
+void Client::C_nonblocking_fsync_state::complete_flush(int r)
+{
+  client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ldout(clnt->cct, 15) << "complete_flush"
+                       << " r " << r
+                       << " progress " << progress
+                       << dendl;
+
+  flush_completed = true;
+  result = r;
+  if (progress == 2)
+    advance();
+}
+
+void Client::C_nonblocking_fsync_state_advancer::finish(int r)
+{
+  client_t const whoami = clnt->whoami;  // For the benefit of ldout prefix
+
+  ldout(clnt->cct, 15) << "C_nonblocking_fsync_state_advancer::finish"
+                       << " r " << r
+                       << dendl;
+
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+  state->advance();
+}
+
+void Client::nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinish)
+{
+  C_nonblocking_fsync_state *state = new C_nonblocking_fsync_state(this, in, syncdataonly, onfinish);
+
+  // Kick fsync off...
+  state->advance();
+}
+
 int Client::_fsync(Inode *in, bool syncdataonly)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
@@ -11234,7 +11886,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 15) << "waiting on unsafe requests, last tid " << req->get_tid() <<  dendl;
 
     req->get();
-    wait_on_list(req->waitfor_safe);
+    wait_on_context_list(req->waitfor_safe);
     put_request(req);
   }
 
@@ -11249,7 +11901,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     while (in->cap_refs[CEPH_CAP_FILE_BUFFER] > 0) {
       ldout(cct, 10) << "ino " << in->ino << " has " << in->cap_refs[CEPH_CAP_FILE_BUFFER]
 		     << " uncommitted, waiting" << dendl;
-      wait_on_list(in->waitfor_commit);
+      wait_on_context_list(in->waitfor_commit);
     }
   }
 
@@ -15140,6 +15792,20 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
 
   std::scoped_lock cl(client_lock);
   return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
+}
+
+int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
+                                  int iovcnt, int64_t offset, bool write,
+                                  Context *onfinish, bufferlist *bl,
+                                  bool do_fsync, bool syncdataonly)
+{
+    RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
+    if (!mref_reader.is_state_satisfied())
+      return -CEPHFS_ENOTCONN;
+
+    std::scoped_lock cl(client_lock);
+    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
+    				  onfinish, bl, do_fsync, syncdataonly);
 }
 
 int Client::ll_flush(Fh *fh)
