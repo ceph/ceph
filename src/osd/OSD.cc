@@ -5317,7 +5317,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
   }
 
   pg->handle_initialize(rctx);
-  pg->handle_activate_map(rctx);
+  pg->handle_activate_map(rctx, startmap->get_epoch());
 
   dispatch_context(rctx, pg.get(), osdmap, nullptr);
 
@@ -8725,10 +8725,11 @@ bool OSD::advance_pg(
   OSDMapRef lastmap = pg->get_osdmap();
   set<PGRef> new_pgs;  // any split children
   bool ret = true;
+  auto first_new_epoch = pg->get_osdmap_epoch() + 1;
 
   unsigned old_pg_num = lastmap->have_pg_pool(pg->pg_id.pool()) ?
     lastmap->get_pg_num(pg->pg_id.pool()) : 0;
-  for (epoch_t next_epoch = pg->get_osdmap_epoch() + 1;
+  for (epoch_t next_epoch = first_new_epoch;
        next_epoch <= osd_epoch;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
@@ -8901,7 +8902,7 @@ bool OSD::advance_pg(
     old_pg_num = new_pg_num;
     handle.reset_tp_timeout();
   }
-  pg->handle_activate_map(rctx);
+  pg->handle_activate_map(rctx, first_new_epoch);
 
   ret = true;
  out:
