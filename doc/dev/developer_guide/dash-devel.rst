@@ -214,7 +214,7 @@ The build process is based on `Node.js <https://nodejs.org/>`_ and requires the
 Prerequisites
 ~~~~~~~~~~~~~
 
- * Node 14.15.0 or higher
+ * Node 16.20.0 or higher
  * NPM 6.14.9 or higher
 
 nodeenv:
