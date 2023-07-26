@@ -15,6 +15,7 @@
 #define TRACKEDREQUEST_H_
 
 #include <atomic>
+#include "common/StackStringStream.h"
 #include "common/ceph_mutex.h"
 #include "common/histogram.h"
 #include "common/Thread.h"
@@ -278,10 +279,6 @@ protected:
   };
   std::atomic<int> state = {STATE_UNTRACKED};
 
-  mutable std::string desc_str;   ///< protected by lock
-  mutable const char *desc = nullptr;  ///< readable without lock
-  mutable std::atomic<bool> want_new_desc = {false};
-
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
     initiated_at(initiated)
@@ -294,7 +291,7 @@ protected:
   /// if you want something else to happen when events are marked, implement
   virtual void _event_marked() {}
   /// return a unique descriptor of the Op; eg the message it's attached to
-  virtual void _dump_op_descriptor_unlocked(std::ostream& stream) const = 0;
+  virtual void _dump_op_descriptor(std::ostream& stream) const = 0;
   /// called when the last non-OpTracker reference is dropped
   virtual void _unregistered() {}
 
@@ -346,21 +343,32 @@ public:
     }
   }
 
-  const char *get_desc() const {
-    if (!desc || want_new_desc.load()) {
-      std::lock_guard l(lock);
-      _gen_desc();
+  std::string get_desc() const {
+    std::string ret;
+    {
+      std::lock_guard l(desc_lock);
+      ret = desc;
     }
-    return desc;
+    if (ret.size() == 0 || want_new_desc.load()) {
+      CachedStackStringStream css;
+      std::scoped_lock l(lock, desc_lock);
+      if (desc.size() && !want_new_desc.load()) {
+        return desc;
+      }
+      _dump_op_descriptor(*css);
+      desc = css->strv();
+      want_new_desc = false;
+      return desc;
+    } else {
+      return ret;
+    }
   }
+
 private:
-  void _gen_desc() const {
-    std::ostringstream ss;
-    _dump_op_descriptor_unlocked(ss);
-    desc_str = ss.str();
-    desc = desc_str.c_str();
-    want_new_desc = false;
-  }
+  mutable ceph::mutex desc_lock = ceph::make_mutex("OpTracker::desc_lock");
+  mutable std::string desc;   ///< protected by desc_lock
+  mutable std::atomic<bool> want_new_desc = {false};
+
 public:
   void reset_desc() {
     want_new_desc = true;
