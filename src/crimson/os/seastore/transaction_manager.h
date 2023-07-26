@@ -775,6 +775,7 @@ private:
       remap_length,
       original_laddr,
       std::move(original_bptr));
+    ext->set_laddr(remap_laddr);
     return lba_manager->alloc_extent(
       t,
       remap_laddr,
