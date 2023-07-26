@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import json
 import logging
 import os
 from collections import defaultdict
@@ -580,3 +581,26 @@ class CephFsUi(CephFS):
         except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths
+
+
+@APIRouter('/cephfs/subvolume', Scope.CEPHFS)
+@APIDoc('CephFS Subvolume Management API', 'CephFSSubvolume')
+class CephFSSubvolume(RESTController):
+
+    def get(self, vol_name: str):
+        error_code, out, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolume_ls', None, {'vol_name': vol_name})
+        if error_code != 0:
+            raise RuntimeError(
+                f'Failed to list subvolumes for volume {vol_name}: {err}'
+            )
+        subvolumes = json.loads(out)
+        for subvolume in subvolumes:
+            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
+                                              'vol_name': vol_name, 'sub_name': subvolume['name']})
+            if error_code != 0:
+                raise RuntimeError(
+                    f'Failed to get info for subvolume {subvolume["name"]}: {err}'
+                )
+            subvolume['info'] = json.loads(out)
+        return subvolumes
