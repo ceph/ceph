@@ -1368,6 +1368,8 @@ class MDCache {
 
   void upkeep_main(void);
 
+  bool is_ready_to_trim_cache(void);
+
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;
