@@ -6,6 +6,7 @@ import logging
 import math
 from datetime import datetime
 from functools import partial
+from typing import Any, Dict
 
 import cherrypy
 import rbd
@@ -203,7 +204,7 @@ class RbdStatus(BaseController):
     @Endpoint()
     @ReadPermission
     def status(self):
-        status = {'available': True, 'message': None}
+        status: Dict[str, Any] = {'available': True, 'message': None}
         if not CephService.get_pool_list('rbd'):
             status['available'] = False
             status['message'] = 'No Block Pool is available in the cluster. Please click ' \
