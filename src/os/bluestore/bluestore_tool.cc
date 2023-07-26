@@ -91,6 +91,11 @@ BlueStorePair open_bluestore(CephContext *cct, const string& path)
     exit(EXIT_FAILURE);
   }
   string bluestore_type = label.meta["type"];
+  // when upgraded from non-rdr aware build there is no "type" in label.meta
+  if (bluestore_type == "") {
+    // so it had to be bluestore
+    bluestore_type = "bluestore";
+  }
   if (bluestore_type != "bluestore" && bluestore_type != "bluestore-rdr") {
     cerr << "expected bluestore, but type is " << bluestore_type << std::endl;
     exit(EXIT_FAILURE);
@@ -683,6 +688,11 @@ int main(int argc, char **argv)
     label.meta["path_block"] = devs.front();
     //now type is stored in label, this allows bluestore-rdr
     //label.meta["type"] = "bluestore";
+    //but it can happen that we upgraded bluestore from previous version
+    //and now we need to patch it
+    if (label.meta["type"] == "") {
+      label.meta["type"] = "bluestore";
+    }
     label.meta["fsid"] = stringify(label.osd_uuid);
     
     for (auto kk : {
