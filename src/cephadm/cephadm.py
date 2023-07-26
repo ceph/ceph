@@ -2247,15 +2247,22 @@ def create_daemon_dirs(
         sg = SNMPGateway.init(ctx, fsid, ident.daemon_id)
         sg.create_daemon_conf()
 
-    _write_custom_conf_files(ctx, daemon_type, ident.daemon_id, fsid, uid, gid)
+    _write_custom_conf_files(ctx, ident, uid, gid)
 
 
-def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: str, fsid: str, uid: int, gid: int) -> None:
+def _write_custom_conf_files(
+    ctx: CephadmContext, ident: 'DaemonIdentity', uid: int, gid: int
+) -> None:
     # mostly making this its own function to make unit testing easier
     ccfiles = fetch_custom_config_files(ctx)
     if not ccfiles:
         return
-    custom_config_dir = os.path.join(ctx.data_dir, fsid, 'custom_config_files', f'{daemon_type}.{daemon_id}')
+    custom_config_dir = os.path.join(
+        ctx.data_dir,
+        ident.fsid,
+        'custom_config_files',
+        f'{ident.daemon_type}.{ident.daemon_id}',
+    )
     if not os.path.exists(custom_config_dir):
         makedirs(custom_config_dir, uid, gid, 0o755)
     mandatory_keys = ['mount_path', 'content']
@@ -2266,7 +2273,7 @@ def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: s
                 f.write(ccf['content'])
             # temporary workaround to make custom config files work for tcmu-runner
             # container we deploy with iscsi until iscsi is refactored
-            if daemon_type == 'iscsi':
+            if ident.daemon_type == 'iscsi':
                 tcmu_config_dir = custom_config_dir + '.tcmu'
                 if not os.path.exists(tcmu_config_dir):
                     makedirs(tcmu_config_dir, uid, gid, 0o755)
