@@ -152,7 +152,7 @@ class TestLvmBlueStore:
     @patch('ceph_volume.objectstore.baseobjectstore.BaseObjectStore.get_ptuuid', Mock(return_value='c6798f59-01'))
     @patch('ceph_volume.api.lvm.Volume.set_tags', MagicMock())
     @patch('ceph_volume.api.lvm.get_single_lv')
-    def test_prepare(self, m_get_single_lv, factory):
+    def test_prepare(self, m_get_single_lv, is_root, factory):
         m_get_single_lv.return_value = Volume(lv_name='lv_foo',
                                               lv_path='/fake-path',
                                               vg_name='vg_foo',
@@ -445,7 +445,9 @@ class TestLvmBlueStore:
 
     @patch('ceph_volume.systemd.systemctl.osd_is_active', return_value=False)
     def test_activate_all(self,
+                          m_create_key,
                           mock_lvm_direct_report,
+                          is_root,
                           factory,
                           fake_run):
         args = factory(no_systemd=True)
@@ -461,6 +463,8 @@ class TestLvmBlueStore:
 
     @patch('ceph_volume.systemd.systemctl.osd_is_active', return_value=False)
     def test_activate_all_no_osd_found(self,
+                                       m_create_key,
+                                       is_root,
                                        factory,
                                        fake_run,
                                        monkeypatch,
@@ -476,6 +480,7 @@ class TestLvmBlueStore:
     @patch('ceph_volume.systemd.systemctl.osd_is_active', return_value=True)
     def test_activate_all_osd_is_active(self,
                                         mock_lvm_direct_report,
+                                        is_root,
                                         factory,
                                         fake_run):
         args = factory(no_systemd=False)
@@ -487,6 +492,7 @@ class TestLvmBlueStore:
     @patch('ceph_volume.api.lvm.get_lvs')
     def test_activate_osd_id_and_fsid(self,
                                       m_get_lvs,
+                                      is_root,
                                       factory):
         args = factory(osd_id='1',
                        osd_fsid='824f7edf',
@@ -507,6 +513,7 @@ class TestLvmBlueStore:
     @patch('ceph_volume.api.lvm.get_lvs')
     def test_activate_not_osd_id_and_fsid(self,
                                           m_get_lvs,
+                                          is_root,
                                           factory):
         args = factory(no_systemd=True,
                        osd_id=None,
@@ -524,6 +531,7 @@ class TestLvmBlueStore:
         assert m_get_lvs.mock_calls == [call(tags={'ceph.osd_fsid': '824f7edf'})]
 
     def test_activate_osd_id_and_not_fsid(self,
+                                          is_root,
                                           factory):
         args = factory(no_systemd=True,
                        osd_id='1',
@@ -535,6 +543,7 @@ class TestLvmBlueStore:
         assert str(error.value) == 'could not activate osd.1, please provide the osd_fsid too'
 
     def test_activate_not_osd_id_and_not_fsid(self,
+                                              is_root,
                                               factory):
         args = factory(no_systemd=True,
                        osd_id=None,
@@ -548,6 +557,7 @@ class TestLvmBlueStore:
     @patch('ceph_volume.api.lvm.get_lvs')
     def test_activate_couldnt_find_osd(self,
                                        m_get_lvs,
+                                       is_root,
                                        factory):
         args = factory(osd_id='1',
                        osd_fsid='824f7edf',
