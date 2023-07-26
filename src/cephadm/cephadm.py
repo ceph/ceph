@@ -2838,9 +2838,7 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
 
 def deploy_daemon(
     ctx: CephadmContext,
-    fsid: str,
-    daemon_type: str,
-    daemon_id: Union[int, str],
+    ident: 'DaemonIdentity',
     c: Optional['CephContainer'],
     uid: int,
     gid: int,
@@ -2852,9 +2850,9 @@ def deploy_daemon(
     init_containers: Optional[List['InitContainer']] = None,
 ) -> None:
     endpoints = endpoints or []
+    daemon_type = ident.daemon_type
     # only check port in use if fresh deployment since service
     # we are redeploying/reconfiguring will already be using the port
-    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     if deployment_type == DeploymentType.DEFAULT:
         if any([port_in_use(ctx, e) for e in endpoints]):
             if daemon_type == 'mgr':
@@ -2882,21 +2880,21 @@ def deploy_daemon(
         create_daemon_dirs(ctx, ident, uid, gid)
         assert ident.daemon_type == 'mon'
         mon_dir = get_data_dir(ident, ctx.data_dir)
-        log_dir = get_log_dir(fsid, ctx.log_dir)
+        log_dir = get_log_dir(ident.fsid, ctx.log_dir)
         CephContainer(
             ctx,
             image=ctx.image,
             entrypoint='/usr/bin/ceph-mon',
             args=[
                 '--mkfs',
-                '-i', str(daemon_id),
-                '--fsid', fsid,
+                '-i', ident.daemon_id,
+                '--fsid', ident.fsid,
                 '-c', '/tmp/config',
                 '--keyring', '/tmp/keyring',
             ] + get_daemon_args(ctx, ident),
             volume_mounts={
                 log_dir: '/var/log/ceph:z',
-                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (daemon_id),
+                mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (ident.daemon_id),
                 tmp_keyring.name: '/tmp/keyring:z',
                 tmp_config.name: '/tmp/config:z',
             },
@@ -2916,7 +2914,7 @@ def deploy_daemon(
             config_js = fetch_configs(ctx)
             assert isinstance(config_js, dict)
 
-            cephadm_agent = CephadmAgent(ctx, fsid, daemon_id)
+            cephadm_agent = CephadmAgent(ctx, ident.fsid, ident.daemon_id)
             cephadm_agent.deploy_daemon_unit(config_js)
         else:
             if c:
@@ -2953,10 +2951,8 @@ def deploy_daemon(
     if deployment_type == DeploymentType.RECONFIG and daemon_type not in Ceph.daemons:
         # ceph daemons do not need a restart; others (presumably) do to pick
         # up the new config
-        call_throws(ctx, ['systemctl', 'reset-failed',
-                          get_unit_name(fsid, daemon_type, daemon_id)])
-        call_throws(ctx, ['systemctl', 'restart',
-                          get_unit_name(fsid, daemon_type, daemon_id)])
+        call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
+        call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
 
 
 def _bash_cmd(
@@ -4993,8 +4989,8 @@ def create_mon(
 ) -> None:
     mon_c = get_container(ctx, fsid, 'mon', mon_id)
     ctx.meta_properties = {'service_name': 'mon'}
-    deploy_daemon(ctx, fsid, 'mon', mon_id, mon_c, uid, gid,
-                  config=None, keyring=None)
+    ident = DaemonIdentity(fsid, 'mon', mon_id)
+    deploy_daemon(ctx, ident, mon_c, uid, gid)
 
 
 def wait_for_mon(
@@ -5043,8 +5039,16 @@ def create_mgr(
     endpoints = [EndPoint('0.0.0.0', 9283), EndPoint('0.0.0.0', 8765)]
     if not ctx.skip_monitoring_stack:
         endpoints.append(EndPoint('0.0.0.0', 8443))
-    deploy_daemon(ctx, fsid, 'mgr', mgr_id, mgr_c, uid, gid,
-                  config=config, keyring=mgr_keyring, endpoints=endpoints)
+    deploy_daemon(
+        ctx,
+        DaemonIdentity(fsid, 'mgr', mgr_id),
+        mgr_c,
+        uid,
+        gid,
+        config=config,
+        keyring=mgr_keyring,
+        endpoints=endpoints,
+    )
 
     # wait for the service to become available
     logger.info('Waiting for mgr to start...')
@@ -5966,6 +5970,7 @@ def _dispatch_deploy(
     daemon_endpoints: List[EndPoint],
     deployment_type: DeploymentType,
 ) -> None:
+    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
@@ -5984,11 +5989,18 @@ def _dispatch_deploy(
                 # in further function calls
                 c.args = c.args + ['--set-crush-location', c_loc]
 
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      config=config, keyring=keyring,
-                      osd_fsid=ctx.osd_fsid,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            config=config,
+            keyring=keyring,
+            osd_fsid=ctx.osd_fsid,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+        )
 
     elif daemon_type in Monitoring.components:
         # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
@@ -6008,9 +6020,15 @@ def _dispatch_deploy(
 
         uid, gid = extract_uid_gid_monitoring(ctx, daemon_type)
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints
+        )
 
     elif daemon_type == NFSGanesha.daemon_type:
         # only check ports if this is a fresh deployment
@@ -6022,48 +6040,87 @@ def _dispatch_deploy(
         # TODO: extract ganesha uid/gid (997, 994) ?
         uid, gid = extract_uid_gid(ctx)
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      config=config, keyring=keyring,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            config=config,
+            keyring=keyring,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints
+        )
 
     elif daemon_type == CephIscsi.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      config=config, keyring=keyring,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            config=config,
+            keyring=keyring,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints
+        )
     elif daemon_type == CephNvmeof.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = 167, 167  # TODO: need to get properly the uid/gid
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      config=config, keyring=keyring,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            config=config,
+            keyring=keyring,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+        )
     elif daemon_type in Tracing.components:
         uid, gid = 65534, 65534
         c = get_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+        )
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, ctx.fsid, daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+        )
 
     elif daemon_type == Keepalived.daemon_type:
         keepalived = Keepalived.init(ctx, ctx.fsid, daemon_id)
         uid, gid = keepalived.extract_uid_gid_keepalived()
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid,
+            gid,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+        )
 
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ctx.fsid, daemon_id)
@@ -6077,29 +6134,45 @@ def _dispatch_deploy(
             ctx,
             c,
         )
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
-                      uid=cc.uid, gid=cc.gid, config=None,
-                      keyring=None,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints,
-                      init_containers=ics)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            uid=cc.uid,
+            gid=cc.gid,
+            config=None,
+            keyring=None,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+            init_containers=ics,
+        )
 
     elif daemon_type == CephadmAgent.daemon_type:
         # get current user gid and uid
         uid = os.getuid()
         gid = os.getgid()
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, None,
-                      uid, gid,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            None,
+            uid,
+            gid,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+        )
 
     elif daemon_type == SNMPGateway.daemon_type:
         sc = SNMPGateway.init(ctx, ctx.fsid, daemon_id)
         c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
-        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
-                      sc.uid, sc.gid,
-                      deployment_type=deployment_type,
-                      endpoints=daemon_endpoints)
+        deploy_daemon(
+            ctx,
+            ident,
+            c,
+            sc.uid,
+            sc.gid,
+            deployment_type=deployment_type,
+            endpoints=daemon_endpoints,
+        )
 
     else:
         raise Error('daemon type {} not implemented in command_deploy function'
@@ -7053,8 +7126,15 @@ def command_adopt_prometheus(ctx, daemon_id, fsid):
 
     make_var_run(ctx, fsid, uid, gid)
     c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
-                  deployment_type=DeploymentType.REDEPLOY, endpoints=endpoints)
+    deploy_daemon(
+        ctx,
+        DaemonIdentity(fsid, daemon_type, daemon_id),
+        c,
+        uid,
+        gid,
+        deployment_type=DeploymentType.REDEPLOY,
+        endpoints=endpoints,
+    )
     update_firewalld(ctx, daemon_type)
 
 
@@ -7070,9 +7150,10 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
 
     _stop_and_disable(ctx, 'grafana-server')
 
+    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     data_dir_dst = make_data_dir(
         ctx,
-        DaemonIdentity(fsid, daemon_type, daemon_id),
+        ident,
         uid=uid,
         gid=gid,
     )
@@ -7116,8 +7197,15 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
 
     make_var_run(ctx, fsid, uid, gid)
     c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
-                  deployment_type=DeploymentType.REDEPLOY, endpoints=endpoints)
+    deploy_daemon(
+        ctx,
+        ident,
+        c,
+        uid,
+        gid,
+        deployment_type=DeploymentType.REDEPLOY,
+        endpoints=endpoints,
+    )
     update_firewalld(ctx, daemon_type)
 
 
@@ -7133,9 +7221,10 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
 
     _stop_and_disable(ctx, 'prometheus-alertmanager')
 
+    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     data_dir_dst = make_data_dir(
         ctx,
-        DaemonIdentity(fsid, daemon_type, daemon_id),
+        ident,
         uid=uid,
         gid=gid,
     )
@@ -7155,8 +7244,15 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
 
     make_var_run(ctx, fsid, uid, gid)
     c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon(ctx, fsid, daemon_type, daemon_id, c, uid, gid,
-                  deployment_type=DeploymentType.REDEPLOY, endpoints=endpoints)
+    deploy_daemon(
+        ctx,
+        ident,
+        c,
+        uid,
+        gid,
+        deployment_type=DeploymentType.REDEPLOY,
+        endpoints=endpoints,
+    )
     update_firewalld(ctx, daemon_type)
 
 
