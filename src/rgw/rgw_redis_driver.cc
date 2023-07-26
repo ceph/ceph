@@ -726,7 +726,7 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
 
   connection conn{ctx};
   request req;
-  response<std::string> resp;
+  response< std::map<std::string, std::string> > resp;
 
   req.push("HGETALL", key);
 
