@@ -250,6 +250,8 @@ public:
 
   int get_encrypted_fname(const std::string& plain, std::string *encrypted);
   int get_decrypted_fname(const std::string& b64enc, std::string *decrypted);
+
+  int get_decrypted_symlink(const std::string& b64enc, std::string *decrypted);
 };
 
 using FSCryptFNameDencRef = std::shared_ptr<FSCryptFNameDenc>;

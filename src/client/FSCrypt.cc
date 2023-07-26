@@ -586,8 +586,38 @@ int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, std::string
   int len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
                                   enc, sizeof(enc));
 
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " len=" << len << dendl;
   char dec_fname[NAME_MAX + 64]; /* some extra just in case */
   int r = decrypt(enc, len, dec_fname, sizeof(dec_fname));
+
+  if (r >= 0) {
+    dec_fname[r] = '\0';
+    *decrypted = dec_fname;
+  } else {
+    return r;
+  }
+
+  return r;
+}
+
+int FSCryptFNameDenc::get_decrypted_symlink(const std::string& b64enc, std::string *decrypted)
+{
+  struct {
+    ceph_le16 len;
+    char enc[NAME_MAX - 2];
+  } slink_data;
+
+  int len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
+                                  (char *)&slink_data, sizeof(slink_data));
+
+  char dec_fname[NAME_MAX + 64]; /* some extra just in case */
+
+  if (slink_data.len > len) { /* should never happen */
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: slink_data.len greater than decrypted buffer (slink_data.len=" << slink_data.len << ", len=" << len << ")" << dendl;
+    return -EIO;
+  }
+
+  int r = decrypt(slink_data.enc, slink_data.len, dec_fname, sizeof(dec_fname));
 
   if (r >= 0) {
     dec_fname[r] = '\0';
