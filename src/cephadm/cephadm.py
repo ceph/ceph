@@ -2451,9 +2451,24 @@ def get_container_binds(
     return binds
 
 
-def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
-                         no_config=False):
-    # type: (CephadmContext, str, str, Union[int, str, None], Optional[bool]) -> Dict[str, str]
+def get_container_mounts_for_type(
+    ctx: CephadmContext, fsid: str, daemon_type: str
+) -> Dict[str, str]:
+    """Return a dictionary mapping container-external paths to container-internal
+    paths given an fsid and daemon_type.
+    """
+    mounts = _get_container_mounts_for_type(ctx, fsid, daemon_type)
+    _update_podman_mounts(ctx, mounts)
+    return mounts
+
+
+def _get_container_mounts_for_type(
+    ctx: CephadmContext, fsid: str, daemon_type: str
+) -> Dict[str, str]:
+    """The main implementation of get_container_mounts_for_type minus the call
+    to _update_podman_mounts so that this can be called from
+    get_container_mounts.
+    """
     mounts = dict()
 
     if daemon_type in Ceph.daemons:
@@ -2469,21 +2484,6 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             if daemon_type != 'crash' and should_log_to_journald(ctx):
                 journald_sock_dir = '/run/systemd/journal'
                 mounts[journald_sock_dir] = journald_sock_dir
-
-    if daemon_type in Ceph.daemons and daemon_id:
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
-        data_dir = get_data_dir(ident, ctx.data_dir)
-        if daemon_type == 'rgw':
-            cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (daemon_id)
-        else:
-            cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, daemon_id)
-        if daemon_type != 'crash':
-            mounts[data_dir] = cdata_dir + ':z'
-        if not no_config:
-            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
-        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash', 'ceph-exporter']:
-            # these do not search for their keyrings in a data directory
-            mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, daemon_id)
 
     if daemon_type in ['mon', 'osd', 'clusterless-ceph-volume']:
         mounts['/dev'] = '/dev'  # FIXME: narrow this down?
@@ -2521,9 +2521,37 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
                                              termcolor.end))
     except AttributeError:
         pass
+    return mounts
 
-    if daemon_type in Monitoring.components and daemon_id:
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
+
+def get_container_mounts(
+    ctx: CephadmContext, ident: 'DaemonIdentity', no_config: bool = False
+) -> Dict[str, str]:
+    """Return a dictionary mapping container-external paths to container-internal
+    paths given a daemon identity.
+    Setting `no_config` will skip mapping a daemon specific ceph.conf file.
+    """
+    # unpack fsid and daemon_type from ident because they're used very frequently
+    fsid, daemon_type = ident.fsid, ident.daemon_type
+    mounts = get_container_mounts_for_type(ctx, fsid, daemon_type)
+
+    assert ident.fsid
+    assert ident.daemon_id
+    if daemon_type in Ceph.daemons:
+        data_dir = get_data_dir(ident, ctx.data_dir)
+        if daemon_type == 'rgw':
+            cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (ident.daemon_id)
+        else:
+            cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, ident.daemon_id)
+        if daemon_type != 'crash':
+            mounts[data_dir] = cdata_dir + ':z'
+        if not no_config:
+            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
+        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash', 'ceph-exporter']:
+            # these do not search for their keyrings in a data directory
+            mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, ident.daemon_id)
+
+    if daemon_type in Monitoring.components:
         data_dir = get_data_dir(ident, ctx.data_dir)
         log_dir = get_log_dir(fsid, ctx.log_dir)
         if daemon_type == 'prometheus':
@@ -2550,27 +2578,19 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
             mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/etc/alertmanager:Z'
 
     if daemon_type == NFSGanesha.daemon_type:
-        assert daemon_id
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         data_dir = get_data_dir(ident, ctx.data_dir)
-        nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
+        nfs_ganesha = NFSGanesha.init(ctx, fsid, ident.daemon_id)
         mounts.update(nfs_ganesha.get_container_mounts(data_dir))
 
     if daemon_type == HAproxy.daemon_type:
-        assert daemon_id
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         data_dir = get_data_dir(ident, ctx.data_dir)
         mounts.update(HAproxy.get_container_mounts(data_dir))
 
     if daemon_type == CephNvmeof.daemon_type:
-        assert daemon_id
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         data_dir = get_data_dir(ident, ctx.data_dir)
         mounts.update(CephNvmeof.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
-        assert daemon_id
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         data_dir = get_data_dir(ident, ctx.data_dir)
         # Removes ending ".tcmu" from data_dir a tcmu-runner uses the same data_dir
         # as rbd-runner-api
@@ -2580,18 +2600,20 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
 
     if daemon_type == Keepalived.daemon_type:
-        assert daemon_id
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         data_dir = get_data_dir(ident, ctx.data_dir)
         mounts.update(Keepalived.get_container_mounts(data_dir))
 
     if daemon_type == CustomContainer.daemon_type:
-        assert daemon_id
-        cc = CustomContainer.init(ctx, fsid, daemon_id)
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
+        cc = CustomContainer.init(ctx, fsid, ident.daemon_id)
         data_dir = get_data_dir(ident, ctx.data_dir)
         mounts.update(cc.get_container_mounts(data_dir))
 
+    _update_podman_mounts(ctx, mounts)
+    return mounts
+
+
+def _update_podman_mounts(ctx: CephadmContext, mounts: Dict[str, str]) -> None:
+    """Update the given mounts dict with mounts specific to podman."""
     # Modifications podman makes to /etc/hosts causes issues with
     # certain daemons (specifically referencing "host.containers.internal" entry
     # being added to /etc/hosts in this case). To avoid that, but still
@@ -2603,8 +2625,6 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         if os.path.exists('/etc/hosts'):
             if '/etc/hosts' not in mounts:
                 mounts['/etc/hosts'] = '/etc/hosts:ro'
-
-    return mounts
 
 
 def get_ceph_volume_container(ctx: CephadmContext,
@@ -2776,7 +2796,7 @@ def get_container(ctx: CephadmContext,
         entrypoint=entrypoint,
         args=ceph_args + get_daemon_args(ctx, fsid, daemon_type, daemon_id),
         container_args=container_args,
-        volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+        volume_mounts=get_container_mounts(ctx, ident),
         bind_mounts=get_container_binds(ctx, ident),
         envs=envs,
         privileged=privileged,
@@ -3183,7 +3203,7 @@ def _write_osd_unit_run_commands(
         test_cv = get_ceph_volume_container(
             ctx,
             args=['activate', '--bad-option'],
-            volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+            volume_mounts=get_container_mounts(ctx, ident),
             bind_mounts=get_container_binds(ctx, ident),
             cname='ceph-%s-%s.%s-activate-test' % (fsid, daemon_type, daemon_id),
         )
@@ -3210,7 +3230,7 @@ def _write_osd_unit_run_commands(
         prestart = get_ceph_volume_container(
             ctx,
             args=cmd,
-            volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+            volume_mounts=get_container_mounts(ctx, ident),
             bind_mounts=get_container_binds(ctx, ident),
             cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
         )
@@ -3236,7 +3256,7 @@ def _write_osd_unit_poststop_commands(
             'lvm', 'deactivate',
             str(daemon_id), osd_fsid,
         ],
-        volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
+        volume_mounts=get_container_mounts(ctx, ident),
         bind_mounts=get_container_binds(ctx, ident),
         cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                             daemon_id),
@@ -6129,10 +6149,15 @@ def command_shell(ctx):
             ctx.keyring = CEPH_DEFAULT_KEYRING
 
     container_args: List[str] = ['-i']
-    mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
-                                  no_config=True if ctx.config else False)
-    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
-    binds = get_container_binds(ctx, ident)
+    if ctx.fsid and daemon_id:
+        ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
+        mounts = get_container_mounts(
+            ctx, ident, no_config=bool(ctx.config),
+        )
+        binds = get_container_binds(ctx, ident)
+    else:
+        mounts = get_container_mounts_for_type(ctx, ctx.fsid, daemon_type)
+        binds = []
     if ctx.config:
         mounts[pathify(ctx.config)] = '/etc/ceph/ceph.conf:z'
     if ctx.keyring:
@@ -6237,7 +6262,7 @@ def command_ceph_volume(ctx):
         lock.acquire()
 
     (uid, gid) = (0, 0)  # ceph-volume runs as root
-    mounts = get_container_mounts(ctx, ctx.fsid, 'osd', None)
+    mounts = get_container_mounts_for_type(ctx, ctx.fsid, 'osd')
 
     tmp_config = None
     tmp_keyring = None
@@ -7215,7 +7240,9 @@ def command_rm_daemon(ctx):
 
 
 def _zap(ctx: CephadmContext, what: str) -> None:
-    mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
+    mounts = get_container_mounts_for_type(
+        ctx, ctx.fsid, 'clusterless-ceph-volume'
+    )
     c = get_ceph_volume_container(ctx,
                                   args=['lvm', 'zap', '--destroy', what],
                                   volume_mounts=mounts,
@@ -7229,7 +7256,9 @@ def _zap_osds(ctx: CephadmContext) -> None:
     # assume fsid lock already held
 
     # list
-    mounts = get_container_mounts(ctx, ctx.fsid, 'clusterless-ceph-volume', None)
+    mounts = get_container_mounts_for_type(
+        ctx, ctx.fsid, 'clusterless-ceph-volume'
+    )
     c = get_ceph_volume_container(ctx,
                                   args=['inventory', '--format', 'json'],
                                   volume_mounts=mounts,
