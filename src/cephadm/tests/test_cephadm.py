@@ -339,13 +339,14 @@ class TestCephAdm(object):
                 'content': 'this\nis\na\nstring',
             }
         ]
+        ident = _cephadm.DaemonIdentity(
+            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+            daemon_type='grafana',
+            daemon_id='host1',
+        )
         _get_container.return_value = _cephadm.CephContainer.for_daemon(
             ctx,
-            ident=_cephadm.DaemonIdentity(
-                fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
-                daemon_type='grafana',
-                daemon_id='host1',
-            ),
+            ident=ident,
             entrypoint='',
             args=[],
             container_args=[],
@@ -356,10 +357,7 @@ class TestCephAdm(object):
             ptrace=False,
             host_network=True,
         )
-        c = _cephadm.get_deployment_container(ctx,
-                                    '9b9d7609-f4d5-4aba-94c8-effa764d96c9',
-                                    'grafana',
-                                    'host1',)
+        c = _cephadm.get_deployment_container(ctx, ident)
 
         assert '--pids-limit=12345' in c.container_args
         assert '--something' in c.container_args
