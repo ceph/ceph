@@ -2026,10 +2026,10 @@ def should_log_to_journald(ctx: CephadmContext) -> bool:
         ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION
 
 
-def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
-    # type: (CephadmContext, str, str, Union[int, str]) -> List[str]
+def get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     r = list()  # type: List[str]
 
+    daemon_type = ident.daemon_type
     if daemon_type in Ceph.daemons and daemon_type not in ['crash', 'ceph-exporter']:
         r += [
             '--setuser', 'ceph',
@@ -2119,19 +2119,19 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     elif daemon_type == 'jaeger-agent':
         r.extend(Tracing.components[daemon_type]['daemon_args'])
     elif daemon_type == NFSGanesha.daemon_type:
-        nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
+        nfs_ganesha = NFSGanesha.init(ctx, ident.fsid, ident.daemon_id)
         r += nfs_ganesha.get_daemon_args()
     elif daemon_type == CephExporter.daemon_type:
-        ceph_exporter = CephExporter.init(ctx, fsid, daemon_id)
+        ceph_exporter = CephExporter.init(ctx, ident.fsid, ident.daemon_id)
         r.extend(ceph_exporter.get_daemon_args())
     elif daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.init(ctx, fsid, daemon_id)
+        haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
         r += haproxy.get_daemon_args()
     elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, fsid, daemon_id)
+        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
         r.extend(cc.get_daemon_args())
     elif daemon_type == SNMPGateway.daemon_type:
-        sc = SNMPGateway.init(ctx, fsid, daemon_id)
+        sc = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
         r.extend(sc.get_daemon_args())
 
     return r
@@ -2794,7 +2794,7 @@ def get_container(ctx: CephadmContext,
         ctx,
         ident=ident,
         entrypoint=entrypoint,
-        args=ceph_args + get_daemon_args(ctx, fsid, daemon_type, daemon_id),
+        args=ceph_args + get_daemon_args(ctx, ident),
         container_args=container_args,
         volume_mounts=get_container_mounts(ctx, ident),
         bind_mounts=get_container_binds(ctx, ident),
@@ -2893,7 +2893,7 @@ def deploy_daemon(
                 '--fsid', fsid,
                 '-c', '/tmp/config',
                 '--keyring', '/tmp/keyring',
-            ] + get_daemon_args(ctx, fsid, 'mon', daemon_id),
+            ] + get_daemon_args(ctx, ident),
             volume_mounts={
                 log_dir: '/var/log/ceph:z',
                 mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (daemon_id),
@@ -4965,7 +4965,7 @@ def prepare_create_mon(
             '-c', '/dev/null',
             '--monmap', '/tmp/monmap',
             '--keyring', '/tmp/keyring',
-        ] + get_daemon_args(ctx, fsid, 'mon', mon_id),
+        ] + get_daemon_args(ctx, ident),
         volume_mounts={
             log_dir: '/var/log/ceph:z',
             mon_dir: '/var/lib/ceph/mon/ceph-%s:z' % (mon_id),
