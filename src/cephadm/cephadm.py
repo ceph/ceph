@@ -5970,17 +5970,16 @@ def _common_deploy(ctx: CephadmContext) -> None:
 
     # Get and check ports explicitly required to be opened
     endpoints = fetch_tcp_ports(ctx)
-    _dispatch_deploy(ctx, ident.daemon_type, ident.daemon_id, endpoints, deployment_type)
+    _dispatch_deploy(ctx, ident, endpoints, deployment_type)
 
 
 def _dispatch_deploy(
     ctx: CephadmContext,
-    daemon_type: str,
-    daemon_id: str,
+    ident: 'DaemonIdentity',
     daemon_endpoints: List[EndPoint],
     deployment_type: DeploymentType,
 ) -> None:
-    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
+    daemon_type = ident.daemon_type
     if daemon_type in Ceph.daemons:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
@@ -6104,7 +6103,7 @@ def _dispatch_deploy(
             endpoints=daemon_endpoints,
         )
     elif daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.init(ctx, ctx.fsid, daemon_id)
+        haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()
         c = get_deployment_container(ctx, ident)
         deploy_daemon(
@@ -6118,7 +6117,7 @@ def _dispatch_deploy(
         )
 
     elif daemon_type == Keepalived.daemon_type:
-        keepalived = Keepalived.init(ctx, ctx.fsid, daemon_id)
+        keepalived = Keepalived.init(ctx, ident.fsid, ident.daemon_id)
         uid, gid = keepalived.extract_uid_gid_keepalived()
         c = get_deployment_container(ctx, ident)
         deploy_daemon(
@@ -6132,7 +6131,7 @@ def _dispatch_deploy(
         )
 
     elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, ctx.fsid, daemon_id)
+        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
         # only check ports if this is a fresh deployment
         if deployment_type == DeploymentType.DEFAULT:
             daemon_endpoints.extend([EndPoint('0.0.0.0', p) for p in cc.ports])
@@ -6171,7 +6170,7 @@ def _dispatch_deploy(
         )
 
     elif daemon_type == SNMPGateway.daemon_type:
-        sc = SNMPGateway.init(ctx, ctx.fsid, daemon_id)
+        sc = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
         c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
