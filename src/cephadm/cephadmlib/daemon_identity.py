@@ -17,6 +17,9 @@ class DaemonIdentity:
         self._fsid = fsid
         self._daemon_type = daemon_type
         self._daemon_id = str(daemon_id)
+        assert self._fsid
+        assert self._daemon_type
+        assert self._daemon_id
 
     @property
     def fsid(self) -> str:
