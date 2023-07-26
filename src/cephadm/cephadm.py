@@ -5873,11 +5873,12 @@ def get_deployment_init_containers(
     ]
 
 
-def get_deployment_type(ctx: CephadmContext, daemon_type: str, daemon_id: str) -> DeploymentType:
+def get_deployment_type(
+    ctx: CephadmContext, ident: 'DaemonIdentity',
+) -> DeploymentType:
     deployment_type: DeploymentType = DeploymentType.DEFAULT
     if ctx.reconfig:
         deployment_type = DeploymentType.RECONFIG
-    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
     (_, state, _) = check_unit(ctx, ident.unit_name)
     if state == 'running' or is_container_running(ctx, CephContainer.for_daemon(ctx, ident, 'bash')):
         # if reconfig was set, that takes priority over redeploy. If
@@ -5955,21 +5956,21 @@ def command_deploy_from(ctx: CephadmContext) -> None:
 
 
 def _common_deploy(ctx: CephadmContext) -> None:
-    daemon_type, daemon_id = ctx.name.split('.', 1)
-    if daemon_type not in get_supported_daemons():
-        raise Error('daemon type %s not recognized' % daemon_type)
+    ident = DaemonIdentity.from_context(ctx)
+    if ident.daemon_type not in get_supported_daemons():
+        raise Error('daemon type %s not recognized' % ident.daemon_type)
 
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
 
-    deployment_type = get_deployment_type(ctx, daemon_type, daemon_id)
+    deployment_type = get_deployment_type(ctx, ident)
 
     # Migrate sysctl conf files from /usr/lib to /etc
     migrate_sysctl_dir(ctx, ctx.fsid)
 
     # Get and check ports explicitly required to be opened
     endpoints = fetch_tcp_ports(ctx)
-    _dispatch_deploy(ctx, daemon_type, daemon_id, endpoints, deployment_type)
+    _dispatch_deploy(ctx, ident.daemon_type, ident.daemon_id, endpoints, deployment_type)
 
 
 def _dispatch_deploy(
