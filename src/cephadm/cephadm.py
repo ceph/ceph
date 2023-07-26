@@ -2137,10 +2137,16 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     return r
 
 
-def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
-                       config=None, keyring=None):
-    # type: (CephadmContext, str, str, Union[int, str], int, int, Optional[str], Optional[str]) ->  None
-    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
+def create_daemon_dirs(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    uid: int,
+    gid: int,
+    config: Optional[str] = None,
+    keyring: Optional[str] = None,
+) -> None:
+    # unpack fsid and daemon_type from ident because they're used very frequently
+    fsid, daemon_type = ident.fsid, ident.daemon_type
     data_dir = make_data_dir(ctx, ident, uid=uid, gid=gid)
 
     if daemon_type in Ceph.daemons:
@@ -2214,34 +2220,34 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
                     f.write(content)
 
     elif daemon_type == NFSGanesha.daemon_type:
-        nfs_ganesha = NFSGanesha.init(ctx, fsid, daemon_id)
+        nfs_ganesha = NFSGanesha.init(ctx, fsid, ident.daemon_id)
         nfs_ganesha.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == CephIscsi.daemon_type:
-        ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
+        ceph_iscsi = CephIscsi.init(ctx, fsid, ident.daemon_id)
         ceph_iscsi.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == CephNvmeof.daemon_type:
-        ceph_nvmeof = CephNvmeof.init(ctx, fsid, daemon_id)
+        ceph_nvmeof = CephNvmeof.init(ctx, fsid, ident.daemon_id)
         ceph_nvmeof.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.init(ctx, fsid, daemon_id)
+        haproxy = HAproxy.init(ctx, fsid, ident.daemon_id)
         haproxy.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == Keepalived.daemon_type:
-        keepalived = Keepalived.init(ctx, fsid, daemon_id)
+        keepalived = Keepalived.init(ctx, fsid, ident.daemon_id)
         keepalived.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, fsid, daemon_id)
+        cc = CustomContainer.init(ctx, fsid, ident.daemon_id)
         cc.create_daemon_dirs(data_dir, uid, gid)
 
     elif daemon_type == SNMPGateway.daemon_type:
-        sg = SNMPGateway.init(ctx, fsid, daemon_id)
+        sg = SNMPGateway.init(ctx, fsid, ident.daemon_id)
         sg.create_daemon_conf()
 
-    _write_custom_conf_files(ctx, daemon_type, str(daemon_id), fsid, uid, gid)
+    _write_custom_conf_files(ctx, daemon_type, ident.daemon_id, fsid, uid, gid)
 
 
 def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: str, fsid: str, uid: int, gid: int) -> None:
@@ -2848,7 +2854,7 @@ def deploy_daemon(
         tmp_config = write_tmp(config, uid, gid)
 
         # --mkfs
-        create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid)
+        create_daemon_dirs(ctx, ident, uid, gid)
         assert ident.daemon_type == 'mon'
         mon_dir = get_data_dir(ident, ctx.data_dir)
         log_dir = get_log_dir(fsid, ctx.log_dir)
@@ -2876,11 +2882,7 @@ def deploy_daemon(
             f.write(config)
     else:
         # dirs, conf, keyring
-        create_daemon_dirs(
-            ctx,
-            fsid, daemon_type, daemon_id,
-            uid, gid,
-            config, keyring)
+        create_daemon_dirs(ctx, ident, uid, gid, config, keyring)
 
     # only write out unit files and start daemon
     # with systemd if this is not a reconfig
@@ -4921,7 +4923,7 @@ def prepare_create_mon(
 ) -> Tuple[str, str]:
     logger.info('Creating mon...')
     ident = DaemonIdentity(fsid, 'mon', mon_id)
-    create_daemon_dirs(ctx, fsid, 'mon', mon_id, uid, gid)
+    create_daemon_dirs(ctx, ident, uid, gid)
     mon_dir = get_data_dir(ident, ctx.data_dir)
     log_dir = get_log_dir(fsid, ctx.log_dir)
     out = CephContainer(

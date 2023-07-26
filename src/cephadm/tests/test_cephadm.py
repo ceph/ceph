@@ -1250,14 +1250,14 @@ class TestMonitoring(object):
             }
         })
 
-        _cephadm.create_daemon_dirs(ctx,
-                              fsid,
-                              daemon_type,
-                              daemon_id,
-                              uid,
-                              gid,
-                              config=None,
-                              keyring=None)
+        _cephadm.create_daemon_dirs(
+            ctx,
+            _cephadm.DaemonIdentity(fsid, daemon_type, daemon_id),
+            uid,
+            gid,
+            config=None,
+            keyring=None,
+        )
 
         prefix = '{data_dir}/{fsid}/{daemon_type}.{daemon_id}'.format(
             data_dir=ctx.data_dir,
@@ -1280,14 +1280,14 @@ class TestMonitoring(object):
         # assert uid/gid after redeploy
         new_uid = uid+1
         new_gid = gid+1
-        _cephadm.create_daemon_dirs(ctx,
-                              fsid,
-                              daemon_type,
-                              daemon_id,
-                              new_uid,
-                              new_gid,
-                              config=None,
-                              keyring=None)
+        _cephadm.create_daemon_dirs(
+            ctx,
+            _cephadm.DaemonIdentity(fsid, daemon_type, daemon_id),
+            new_uid,
+            new_gid,
+            config=None,
+            keyring=None,
+        )
         for file,content in expected.items():
             file = os.path.join(prefix, file)
             assert os.stat(file).st_uid == new_uid
@@ -2279,11 +2279,10 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.V2c_config
             c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(
-                ctx, _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
-            )
+            ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            _cephadm.make_data_dir(ctx, ident)
 
-            _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
                 conf = f.read().rstrip()
                 assert conf == 'SNMP_NOTIFIER_COMMUNITY=public'
@@ -2311,11 +2310,10 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.V3_no_priv_config
             c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(
-                ctx, _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
-            )
+            ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            _cephadm.make_data_dir(ctx, ident)
 
-            _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
                 conf = f.read()
                 assert conf == 'SNMP_NOTIFIER_AUTH_USERNAME=myuser\nSNMP_NOTIFIER_AUTH_PASSWORD=mypassword\n'
@@ -2343,11 +2341,10 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.V3_priv_config
             c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(
-                ctx, _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
-            )
+            ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            _cephadm.make_data_dir(ctx, ident)
 
-            _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
                 conf = f.read()
                 assert conf == 'SNMP_NOTIFIER_AUTH_USERNAME=myuser\nSNMP_NOTIFIER_AUTH_PASSWORD=mypassword\nSNMP_NOTIFIER_PRIV_PASSWORD=mysecret\n'
@@ -2557,7 +2554,8 @@ class TestJaeger:
             ctx.config_json = json.dumps(self.single_es_node_conf)
             ctx.fsid = fsid
             c = _cephadm.get_container(ctx, fsid, 'jaeger-collector', 'daemon_id')
-            _cephadm.create_daemon_dirs(ctx, fsid, 'jaeger-collector', 'daemon_id', 0, 0)
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
                 fsid,
@@ -2578,7 +2576,8 @@ class TestJaeger:
             ctx.config_json = json.dumps(self.multiple_es_nodes_conf)
             ctx.fsid = fsid
             c = _cephadm.get_container(ctx, fsid, 'jaeger-collector', 'daemon_id')
-            _cephadm.create_daemon_dirs(ctx, fsid, 'jaeger-collector', 'daemon_id', 0, 0)
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
                 fsid,
@@ -2599,7 +2598,8 @@ class TestJaeger:
             ctx.config_json = json.dumps(self.agent_conf)
             ctx.fsid = fsid
             c = _cephadm.get_container(ctx, fsid, 'jaeger-agent', 'daemon_id')
-            _cephadm.create_daemon_dirs(ctx, fsid, 'jaeger-agent', 'daemon_id', 0, 0)
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-agent', 'daemon_id')
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
                 fsid,
