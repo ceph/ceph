@@ -414,7 +414,7 @@ class TestCephAdm(object):
             host_network=True,
         )
 
-        def _crush_location_checker(ctx, fsid, daemon_type, daemon_id, container, uid, gid, **kwargs):
+        def _crush_location_checker(ctx, ident, container, uid, gid, **kwargs):
             print(container.args)
             raise Exception(' '.join(container.args))
 
