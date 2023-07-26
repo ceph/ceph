@@ -268,7 +268,7 @@ void MutationImpl::cleanup()
   drop_pins();
 }
 
-void MutationImpl::_dump_op_descriptor_unlocked(ostream& stream) const
+void MutationImpl::_dump_op_descriptor(ostream& stream) const
 {
   stream << "Mutation";
 }
@@ -537,7 +537,7 @@ void MDRequestImpl::_dump(Formatter *f) const
   }
 }
 
-void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
+void MDRequestImpl::_dump_op_descriptor(ostream& stream) const
 {
   msg_lock.lock();
   auto _client_request = client_request;

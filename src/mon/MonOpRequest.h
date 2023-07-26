@@ -131,7 +131,7 @@ private:
   }
 
 protected:
-  void _dump_op_descriptor_unlocked(std::ostream& stream) const override {
+  void _dump_op_descriptor(std::ostream& stream) const override {
     get_req()->print(stream);
   }
 
