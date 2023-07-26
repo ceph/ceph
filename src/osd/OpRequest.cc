@@ -88,7 +88,7 @@ void OpRequest::_dump(Formatter *f) const
   }
 }
 
-void OpRequest::_dump_op_descriptor_unlocked(ostream& stream) const
+void OpRequest::_dump_op_descriptor(ostream& stream) const
 {
   get_req()->print(stream);
 }
