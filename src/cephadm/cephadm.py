@@ -801,7 +801,10 @@ done
         # daemon_id, is used to generated the cid and pid files used by podman but as both tcmu-runner
         # and rbd-target-api have the same daemon_id, it conflits and prevent the second container from
         # starting. .tcmu runner is appended to the daemon_id to fix that.
-        tcmu_container = get_deployment_container(self.ctx, self.fsid, self.daemon_type, str(self.daemon_id) + '.tcmu')
+        subident = DaemonSubIdentity(
+            self.fsid, self.daemon_type, self.daemon_id, 'tcmu'
+        )
+        tcmu_container = get_deployment_container(self.ctx, subident)
         # TODO: Eventually we don't want to run tcmu-runner through this script.
         # This is intended to be a workaround backported to older releases
         # and should eventually be removed in at least squid onward
@@ -5828,14 +5831,15 @@ def extract_uid_gid_monitoring(ctx, daemon_type):
     return uid, gid
 
 
-def get_deployment_container(ctx: CephadmContext,
-                             fsid: str, daemon_type: str, daemon_id: Union[int, str],
-                             privileged: bool = False,
-                             ptrace: bool = False,
-                             container_args: Optional[List[str]] = None) -> 'CephContainer':
+def get_deployment_container(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    privileged: bool = False,
+    ptrace: bool = False,
+    container_args: Optional[List[str]] = None,
+) -> 'CephContainer':
     # wrapper for get_container specifically for containers made during the `cephadm deploy`
     # command. Adds some extra things such as extra container args and custom config files
-    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     c = get_container(ctx, ident, privileged, ptrace, container_args)
     if 'extra_container_args' in ctx and ctx.extra_container_args:
         c.container_args.extend(ctx.extra_container_args)
@@ -5849,9 +5853,9 @@ def get_deployment_container(ctx: CephadmContext,
                 mount_path = conf['mount_path']
                 file_path = os.path.join(
                     ctx.data_dir,
-                    fsid,
+                    ident.fsid,
                     'custom_config_files',
-                    f'{daemon_type}.{daemon_id}',
+                    ident.daemon_name,
                     os.path.basename(mount_path)
                 )
                 c.volume_mounts[file_path] = mount_path
@@ -5983,8 +5987,7 @@ def _dispatch_deploy(
 
         config_json = fetch_configs(ctx)
 
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
-                                     ptrace=ctx.allow_ptrace)
+        c = get_deployment_container(ctx, ident, ptrace=ctx.allow_ptrace)
 
         if daemon_type == 'mon' and config_json is not None:
             if 'crush_location' in config_json:
@@ -6024,7 +6027,7 @@ def _dispatch_deploy(
                             'contain arg for {}'.format(daemon_type.capitalize(), ', '.join(required_args)))
 
         uid, gid = extract_uid_gid_monitoring(ctx, daemon_type)
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,
@@ -6044,7 +6047,7 @@ def _dispatch_deploy(
         config, keyring = get_config_and_keyring(ctx)
         # TODO: extract ganesha uid/gid (997, 994) ?
         uid, gid = extract_uid_gid(ctx)
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,
@@ -6060,7 +6063,7 @@ def _dispatch_deploy(
     elif daemon_type == CephIscsi.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,
@@ -6075,7 +6078,7 @@ def _dispatch_deploy(
     elif daemon_type == CephNvmeof.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = 167, 167  # TODO: need to get properly the uid/gid
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,
@@ -6102,7 +6105,7 @@ def _dispatch_deploy(
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, ctx.fsid, daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,
@@ -6116,7 +6119,7 @@ def _dispatch_deploy(
     elif daemon_type == Keepalived.daemon_type:
         keepalived = Keepalived.init(ctx, ctx.fsid, daemon_id)
         uid, gid = keepalived.extract_uid_gid_keepalived()
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,
@@ -6132,9 +6135,9 @@ def _dispatch_deploy(
         # only check ports if this is a fresh deployment
         if deployment_type == DeploymentType.DEFAULT:
             daemon_endpoints.extend([EndPoint('0.0.0.0', p) for p in cc.ports])
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id,
-                                     privileged=cc.privileged,
-                                     ptrace=ctx.allow_ptrace)
+        c = get_deployment_container(
+            ctx, ident, privileged=cc.privileged, ptrace=ctx.allow_ptrace
+        )
         ics = get_deployment_init_containers(
             ctx,
             c,
@@ -6168,7 +6171,7 @@ def _dispatch_deploy(
 
     elif daemon_type == SNMPGateway.daemon_type:
         sc = SNMPGateway.init(ctx, ctx.fsid, daemon_id)
-        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,
