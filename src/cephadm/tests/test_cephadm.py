@@ -446,7 +446,9 @@ class TestCephAdm(object):
                 'mount_path': '/etc/no-content.conf',
             },
         ]
-        _cephadm._write_custom_conf_files(ctx, 'mon', 'host1', 'fsid', 0, 0)
+        _cephadm._write_custom_conf_files(
+            ctx, _cephadm.DaemonIdentity('fsid', 'mon', 'host1'), 0, 0
+        )
         with open(os.path.join(_cephadm.DATA_DIR, 'fsid', 'custom_config_files', 'mon.host1', 'testing.str'), 'r') as f:
             assert 'this\nis\na\nstring' == f.read()
         with open(os.path.join(_cephadm.DATA_DIR, 'fsid', 'custom_config_files', 'mon.host1', 'testing.conf'), 'r') as f:
