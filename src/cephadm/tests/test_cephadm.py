@@ -1739,9 +1739,9 @@ class TestIscsi:
             ctx.config_json = json.dumps(config_json)
             ctx.fsid = fsid
             _cephadm.get_parm.return_value = config_json
-            c = _cephadm.get_container(ctx, fsid, 'iscsi', 'daemon_id')
 
             ident = _cephadm.DaemonIdentity(fsid, 'iscsi', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
             _cephadm.make_data_dir(ctx, ident)
             _cephadm.deploy_daemon_units(
                 ctx,
@@ -1774,7 +1774,9 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
         fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
         with with_cephadm_ctx(['--image=ceph/ceph'], list_networks={}) as ctx:
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'iscsi', 'something')
+            c = _cephadm.get_container(
+                ctx, _cephadm.DaemonIdentity(fsid, 'iscsi', 'something')
+            )
             assert c.cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-something'
             assert c.old_cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.something'
 
@@ -2278,9 +2280,9 @@ class TestSNMPGateway:
             ctx.fsid = fsid
             ctx.tcp_ports = '9464'
             _cephadm.get_parm.return_value = self.V2c_config
-            c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
             ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
             _cephadm.make_data_dir(ctx, ident)
 
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
@@ -2307,9 +2309,9 @@ class TestSNMPGateway:
             ctx.fsid = fsid
             ctx.tcp_ports = '9465'
             _cephadm.get_parm.return_value = self.V3_no_priv_config
-            c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
             ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
             _cephadm.make_data_dir(ctx, ident)
 
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
@@ -2336,9 +2338,9 @@ class TestSNMPGateway:
             ctx.fsid = fsid
             ctx.tcp_ports = '9464'
             _cephadm.get_parm.return_value = self.V3_priv_config
-            c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
             ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
             _cephadm.make_data_dir(ctx, ident)
 
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
@@ -2367,7 +2369,10 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.no_destination_config
 
             with pytest.raises(Exception) as e:
-                c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
+                c = _cephadm.get_container(
+                    ctx,
+                    _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id'),
+                )
             assert str(e.value) == "config is missing destination attribute(<ip>:<port>) of the target SNMP listener"
 
     def test_unit_run_bad_version(self, cephadm_fs):
@@ -2380,7 +2385,10 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.bad_version_config
 
             with pytest.raises(Exception) as e:
-                c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
+                c = _cephadm.get_container(
+                    ctx,
+                    _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id'),
+                )
             assert str(e.value) == 'not a valid snmp version: V1'
 
 class TestNetworkValidation:
@@ -2548,8 +2556,8 @@ class TestJaeger:
             import json
             ctx.config_json = json.dumps(self.single_es_node_conf)
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'jaeger-collector', 'daemon_id')
             ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
@@ -2568,8 +2576,8 @@ class TestJaeger:
             import json
             ctx.config_json = json.dumps(self.multiple_es_nodes_conf)
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'jaeger-collector', 'daemon_id')
             ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
@@ -2588,8 +2596,8 @@ class TestJaeger:
             import json
             ctx.config_json = json.dumps(self.agent_conf)
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'jaeger-agent', 'daemon_id')
             ident = _cephadm.DaemonIdentity(fsid, 'jaeger-agent', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
