@@ -63,7 +63,7 @@ class TestActivate(object):
             a.objectstore.activate()
         assert result.value.args[0] == 'Please provide both osd_id and osd_fsid'
 
-    def test_bluestore_no_systemd(self, is_root, monkeypatch, capture):
+    def test_bluestore_no_systemd(self, m_create_key, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
         fake_start_osd = Capture()
@@ -88,7 +88,7 @@ class TestActivate(object):
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
 
-    def test_bluestore_systemd(self, is_root, monkeypatch, capture):
+    def test_bluestore_systemd(self, m_create_key, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
         fake_start_osd = Capture()
@@ -114,7 +114,7 @@ class TestActivate(object):
         assert fake_enable.calls != []
         assert fake_start_osd.calls != []
 
-    def test_bluestore_no_systemd_autodetect(self, is_root, monkeypatch, capture):
+    def test_bluestore_no_systemd_autodetect(self, m_create_key, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
         fake_start_osd = Capture()
@@ -140,7 +140,7 @@ class TestActivate(object):
         assert fake_enable.calls == []
         assert fake_start_osd.calls == []
 
-    def test_bluestore_systemd_autodetect(self, is_root, monkeypatch, capture):
+    def test_bluestore_systemd_autodetect(self, m_create_key, is_root, monkeypatch, capture):
         monkeypatch.setattr('ceph_volume.configuration.load', lambda: None)
         fake_enable = Capture()
         fake_start_osd = Capture()
@@ -242,7 +242,7 @@ class TestActivateAll(object):
         m_activate.assert_has_calls(calls)
 
     @patch('ceph_volume.objectstore.lvmbluestore.LvmBlueStore.activate')
-    def test_detects_osds_to_activate_no_systemd(self, m_activate, is_root, monkeypatch):
+    def test_detects_osds_to_activate_no_systemd(self, m_activate, m_create_key, is_root, monkeypatch):
         monkeypatch.setattr('ceph_volume.objectstore.lvmbluestore.direct_report', lambda: direct_report)
         args = ['--all', '--no-systemd', '--bluestore']
         a = activate.Activate(args)

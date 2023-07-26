@@ -39,7 +39,7 @@ class TestPrepareDevice(object):
 
 @patch('ceph_volume.util.prepare.create_key', return_value='fake-secret')
 class TestGetClusterFsid(object):
-    def setup(self):
+    def setup_method(self):
         self.p = lvm.prepare.Prepare([])
 
     def test_fsid_is_passed_in(self, m_create_key, factory):
@@ -57,7 +57,7 @@ class TestGetClusterFsid(object):
 @patch('ceph_volume.util.prepare.create_key', return_value='fake-secret')
 class TestPrepare(object):
 
-    def setup(self):
+    def setup_method(self):
         self.p = lvm.prepare.Prepare([])
 
     def test_main_spits_help_with_no_arguments(self, m_create_key, capsys):
