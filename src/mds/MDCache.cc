@@ -13470,6 +13470,13 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   }
 }
 
+bool MDCache::is_ready_to_trim_cache(void)
+{
+  // null rejoin_done means rejoin has finished and all the rejoin acks
+  // have been well received.
+  return is_open() && !rejoin_done;
+}
+
 void MDCache::upkeep_main(void)
 {
   std::unique_lock lock(upkeep_mutex);
@@ -13490,7 +13497,7 @@ void MDCache::upkeep_main(void)
         if (active_with_clients) {
           trim_client_leases();
         }
-        if (is_open() || mds->is_standby_replay()) {
+        if (is_ready_to_trim_cache() || mds->is_standby_replay()) {
           trim();
         }
         if (active_with_clients) {
