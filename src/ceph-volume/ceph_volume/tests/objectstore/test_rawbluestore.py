@@ -58,7 +58,7 @@ class TestRawBlueStore:
     @patch.dict('os.environ', {'CEPH_VOLUME_DMCRYPT_SECRET': 'dmcrypt-key'})
     @patch('ceph_volume.objectstore.rawbluestore.prepare_utils.create_id')
     @patch('ceph_volume.objectstore.rawbluestore.system.generate_uuid')
-    def test_prepare(self, m_generate_uuid, m_create_id, factory):
+    def test_prepare(self, m_generate_uuid, m_create_id, is_root, factory):
         m_generate_uuid.return_value = 'fake-uuid'
         m_create_id.return_value = MagicMock()
         self.raw_bs.prepare_dmcrypt = MagicMock()
@@ -117,6 +117,7 @@ class TestRawBlueStore:
         assert m_create_osd_path.mock_calls == [call('1', tmpfs=True)]
 
     def test_activate_raises_exception(self,
+                                       is_root,
                                        mock_raw_direct_report):
         with pytest.raises(RuntimeError) as error:
             self.raw_bs.activate([],
@@ -126,6 +127,7 @@ class TestRawBlueStore:
         assert str(error.value) == 'did not find any matching OSD to activate'
 
     def test_activate_osd_id(self,
+                             is_root,
                              mock_raw_direct_report):
         self.raw_bs._activate = MagicMock()
         self.raw_bs.activate([],
@@ -141,6 +143,7 @@ class TestRawBlueStore:
                                                   tmpfs=True)]
 
     def test_activate_osd_fsid(self,
+                               is_root,
                                mock_raw_direct_report):
         self.raw_bs._activate = MagicMock()
         with pytest.raises(RuntimeError):

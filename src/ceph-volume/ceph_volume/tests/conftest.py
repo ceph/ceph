@@ -256,6 +256,13 @@ def is_root(monkeypatch):
     """
     monkeypatch.setattr('os.getuid', lambda: 0)
 
+@pytest.fixture
+def is_non_root(monkeypatch):
+    """
+    Patch ``os.getuid()`` so that ceph-volume's decorators that ensure a user
+    is not root.
+    """
+    monkeypatch.setattr('os.getuid', lambda: 100)
 
 @pytest.fixture
 def tmpfile(tmpdir):
@@ -380,6 +387,8 @@ def fake_filesystem(fs):
     fs.create_dir('/sys/block/sda/slaves')
     fs.create_dir('/sys/block/sda/queue')
     fs.create_dir('/sys/block/rbd0')
+    fs.create_dir('/var/log/ceph')
+    fs.create_dir('/tmp/osdpath')
     yield fs
 
 @pytest.fixture

@@ -119,7 +119,7 @@ class TestFormatDevice(object):
 
 
 class TestOsdMkfsBluestore(object):
-    def setup(self):
+    def setup_method(self):
         conf.cluster = 'ceph'
 
     def test_keyring_is_added(self, fake_call, monkeypatch):
