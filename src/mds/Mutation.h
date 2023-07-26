@@ -221,7 +221,7 @@ public:
   }
 
   virtual void dump(ceph::Formatter *f) const {}
-  void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
+  void _dump_op_descriptor(std::ostream& stream) const override;
 
   metareqid_t reqid;
   __u32 attempt = 0;      // which attempt for this request
@@ -453,7 +453,7 @@ struct MDRequestImpl : public MutationImpl {
 
 protected:
   void _dump(ceph::Formatter *f) const override;
-  void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
+  void _dump_op_descriptor(std::ostream& stream) const override;
 private:
   mutable ceph::spinlock msg_lock;
 };
