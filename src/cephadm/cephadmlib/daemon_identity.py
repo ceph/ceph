@@ -34,6 +34,10 @@ class DaemonIdentity:
         return self._daemon_id
 
     @property
+    def daemon_name(self) -> str:
+        return f'{self.daemon_type}.{self.daemon_id}'
+
+    @property
     def legacy_container_name(self) -> str:
         return 'ceph-%s-%s.%s' % (self.fsid, self.daemon_type, self.daemon_id)
 
@@ -74,6 +78,10 @@ class DaemonSubIdentity(DaemonIdentity):
     @property
     def subcomponent(self) -> str:
         return self._subcomponent
+
+    @property
+    def daemon_name(self) -> str:
+        return f'{self.daemon_type}.{self.daemon_id}.{self.subcomponent}'
 
     @property
     def container_name(self) -> str:
