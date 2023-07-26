@@ -130,6 +130,8 @@ class OpTracker {
   ceph::shared_mutex lock = ceph::make_shared_mutex("OpTracker::lock");
 
 public:
+  using dumper = std::function<void(const TrackedOp&, Formatter*)>;
+
   CephContext *cct;
   OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
       
@@ -149,7 +151,8 @@ public:
   void set_tracking(bool enable) {
     tracking_enabled = enable;
   }
-  bool dump_ops_in_flight(ceph::Formatter *f, bool print_only_blocked = false, std::set<std::string> filters = {""}, bool count_only = false);
+  static void default_dumper(const TrackedOp& op, Formatter* f);
+  bool dump_ops_in_flight(ceph::Formatter *f, bool print_only_blocked = false, std::set<std::string> filters = {""}, bool count_only = false, dumper lambda = default_dumper);
   bool dump_historic_ops(ceph::Formatter *f, bool by_duration = false, std::set<std::string> filters = {""});
   bool dump_historic_slow_ops(ceph::Formatter *f, std::set<std::string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
@@ -374,6 +377,10 @@ public:
     want_new_desc = true;
   }
 
+  void dump_type(Formatter* f) const {
+    return _dump(f);
+  }
+
   const utime_t& get_initiated() const {
     return initiated_at;
   }
@@ -397,7 +404,7 @@ public:
     return _get_state_string();
   }
 
-  void dump(utime_t now, ceph::Formatter *f) const;
+  void dump(utime_t now, ceph::Formatter *f, OpTracker::dumper lambda) const;
 
   void tracking_start() {
     if (tracker->register_inflight_op(this)) {
@@ -421,5 +428,8 @@ protected:
   }
 };
 
+inline void OpTracker::default_dumper(const TrackedOp& op, Formatter* f) {
+  op._dump(f);
+}
 
 #endif
