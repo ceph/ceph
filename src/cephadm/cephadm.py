@@ -2920,9 +2920,16 @@ def deploy_daemon(
             cephadm_agent.deploy_daemon_unit(config_js)
         else:
             if c:
-                deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id,
-                                    c, osd_fsid=osd_fsid, endpoints=endpoints,
-                                    init_containers=init_containers)
+                deploy_daemon_units(
+                    ctx,
+                    ident,
+                    uid,
+                    gid,
+                    c,
+                    osd_fsid=osd_fsid,
+                    endpoints=endpoints,
+                    init_containers=init_containers,
+                )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
 
@@ -3070,11 +3077,9 @@ def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
 
 def deploy_daemon_units(
     ctx: CephadmContext,
-    fsid: str,
+    ident: 'DaemonIdentity',
     uid: int,
     gid: int,
-    daemon_type: str,
-    daemon_id: Union[int, str],
     container: 'CephContainer',
     enable: bool = True,
     start: bool = True,
@@ -3084,7 +3089,11 @@ def deploy_daemon_units(
 ) -> None:
     # cmd
 
-    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
+    # unpack values from ident because they're used very frequently
+    fsid = ident.fsid
+    daemon_type = ident.daemon_type
+    daemon_id = ident.daemon_id
+
     data_dir = get_data_dir(ident, ctx.data_dir)
     run_file_path = data_dir + '/unit.run'
     meta_file_path = data_dir + '/unit.meta'
@@ -6997,10 +7006,17 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
     logger.info('Creating new units...')
     make_var_run(ctx, fsid, uid, gid)
     c = get_container(ctx, fsid, daemon_type, daemon_id)
-    deploy_daemon_units(ctx, fsid, uid, gid, daemon_type, daemon_id, c,
-                        enable=True,  # unconditionally enable the new unit
-                        start=(state == 'running' or ctx.force_start),
-                        osd_fsid=osd_fsid)
+    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
+    deploy_daemon_units(
+        ctx,
+        ident,
+        uid,
+        gid,
+        c,
+        enable=True,  # unconditionally enable the new unit
+        start=(state == 'running' or ctx.force_start),
+        osd_fsid=osd_fsid,
+    )
     update_firewalld(ctx, daemon_type)
 
 

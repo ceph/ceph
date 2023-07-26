@@ -1741,15 +1741,12 @@ class TestIscsi:
             _cephadm.get_parm.return_value = config_json
             c = _cephadm.get_container(ctx, fsid, 'iscsi', 'daemon_id')
 
-            _cephadm.make_data_dir(
-                ctx, _cephadm.DaemonIdentity(fsid, 'iscsi', 'daemon_id')
-            )
+            ident = _cephadm.DaemonIdentity(fsid, 'iscsi', 'daemon_id')
+            _cephadm.make_data_dir(ctx, ident)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'iscsi',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2293,10 +2290,8 @@ class TestSNMPGateway:
 
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'snmp-gateway',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2324,10 +2319,8 @@ class TestSNMPGateway:
 
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'snmp-gateway',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2355,10 +2348,8 @@ class TestSNMPGateway:
 
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'snmp-gateway',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2562,10 +2553,8 @@ class TestJaeger:
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'jaeger-collector',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2584,10 +2573,8 @@ class TestJaeger:
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'jaeger-collector',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2606,10 +2593,8 @@ class TestJaeger:
             _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'jaeger-agent',
-                'daemon_id',
                 c,
                 True, True
             )
