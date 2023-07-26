@@ -1,7 +1,15 @@
-<button (click)="onClick()"
-        type="button"
-        class="btn btn-light"
-        i18n-title
-        title="Copy to Clipboard">
-  <i [ngClass]="[icons.clipboard]"></i>
-</button>
+<i [ngClass]="[icons.clipboard, icons.large]"
+   (click)="onClick()"
+   class="text-primary ms-2"
+   title="Copy to Clipboard"
+   *ngIf="showIconOnly; else withButtonTpl"></i>
+
+<ng-template #withButtonTpl>
+  <button (click)="onClick()"
+          type="button"
+          class="btn btn-light"
+          i18n-title
+          title="Copy to Clipboard">
+    <i [ngClass]="[icons.clipboard]"></i>
+  </button>
+</ng-template>

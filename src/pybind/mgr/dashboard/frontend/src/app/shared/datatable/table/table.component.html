@@ -339,3 +339,15 @@
   <span data-toggle="tooltip"
         [title]="value | cdDate">{{ value | relativeDate }}</span>
 </ng-template>
+
+<ng-template #pathTpl
+             let-value="value">
+  <span data-toggle="tooltip"
+        [title]="value"
+        class="font-monospace">{{ value | path }}
+    <cd-copy-2-clipboard-button [source]="value"
+                                [byId]="false"
+                                [showIconOnly]="true">
+    </cd-copy-2-clipboard-button>
+  </span>
+</ng-template>

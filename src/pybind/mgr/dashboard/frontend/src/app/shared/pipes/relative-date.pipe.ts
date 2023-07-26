@@ -40,10 +40,11 @@ export class RelativeDatePipe implements PipeTransform {
    */
   transform(value: Date | string | number, upperFirst = true): string {
     let date: moment.Moment;
+    const offset = moment().utcOffset();
     if (_.isNumber(value)) {
-      date = moment.unix(value);
+      date = moment.parseZone(moment.unix(value)).utc().utcOffset(offset).local();
     } else {
-      date = moment(value);
+      date = moment.parseZone(value).utc().utcOffset(offset).local();
     }
     if (!date.isValid()) {
       return '';

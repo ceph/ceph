@@ -72,6 +72,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   rowDetailsTpl: TemplateRef<any>;
   @ViewChild('rowSelectionTpl', { static: true })
   rowSelectionTpl: TemplateRef<any>;
+  @ViewChild('pathTpl', { static: true })
+  pathTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
   @Input()
@@ -608,6 +610,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.cellTemplates.map = this.mapTpl;
     this.cellTemplates.truncate = this.truncateTpl;
     this.cellTemplates.timeAgo = this.timeAgoTpl;
+    this.cellTemplates.path = this.pathTpl;
   }
 
   useCustomClass(value: any): string {
