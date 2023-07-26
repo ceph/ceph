@@ -2434,21 +2434,18 @@ def get_config_and_keyring(ctx):
     return config, keyring
 
 
-def get_container_binds(ctx, fsid, daemon_type, daemon_id):
-    # type: (CephadmContext, str, str, Union[int, str, None]) -> List[List[str]]
+def get_container_binds(
+    ctx: CephadmContext, ident: 'DaemonIdentity'
+) -> List[List[str]]:
     binds = list()
 
-    if daemon_type == CephIscsi.daemon_type:
+    if ident.daemon_type == CephIscsi.daemon_type:
         binds.extend(CephIscsi.get_container_binds())
-    if daemon_type == CephNvmeof.daemon_type:
+    if ident.daemon_type == CephNvmeof.daemon_type:
         binds.extend(CephNvmeof.get_container_binds())
-    elif daemon_type == CustomContainer.daemon_type:
-        assert daemon_id
-        cc = CustomContainer.init(ctx, fsid, daemon_id)
-        data_dir = get_data_dir(
-            DaemonIdentity(fsid, daemon_type, daemon_id),
-            ctx.data_dir,
-        )
+    elif ident.daemon_type == CustomContainer.daemon_type:
+        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
+        data_dir = get_data_dir(ident, ctx.data_dir)
         binds.extend(cc.get_container_binds(data_dir))
 
     return binds
@@ -2772,14 +2769,15 @@ def get_container(ctx: CephadmContext,
         if not os.path.exists('/etc/hosts'):
             container_args.extend(['--no-hosts'])
 
+    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     return CephContainer.for_daemon(
         ctx,
-        ident=DaemonIdentity(fsid, daemon_type, daemon_id),
+        ident=ident,
         entrypoint=entrypoint,
         args=ceph_args + get_daemon_args(ctx, fsid, daemon_type, daemon_id),
         container_args=container_args,
         volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
-        bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+        bind_mounts=get_container_binds(ctx, ident),
         envs=envs,
         privileged=privileged,
         ptrace=ptrace,
@@ -3181,11 +3179,12 @@ def _write_osd_unit_run_commands(
     else:
         # if ceph-volume does not support 'ceph-volume activate', we must
         # do 'ceph-volume lvm activate'.
+        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         test_cv = get_ceph_volume_container(
             ctx,
             args=['activate', '--bad-option'],
             volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
-            bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+            bind_mounts=get_container_binds(ctx, ident),
             cname='ceph-%s-%s.%s-activate-test' % (fsid, daemon_type, daemon_id),
         )
         out, err, ret = call(ctx, test_cv.run_cmd(), verbosity=CallVerbosity.SILENT)
@@ -3207,11 +3206,12 @@ def _write_osd_unit_run_commands(
                 '--no-tmpfs',
             ]
 
+        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         prestart = get_ceph_volume_container(
             ctx,
             args=cmd,
             volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
-            bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+            bind_mounts=get_container_binds(ctx, ident),
             cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
         )
         _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
@@ -3229,6 +3229,7 @@ def _write_iscsi_unit_run_commands(
 def _write_osd_unit_poststop_commands(
     ctx: CephadmContext, f: IO, daemon_type: str, daemon_id: str, fsid: str, osd_fsid: str
 ) -> None:
+    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     poststop = get_ceph_volume_container(
         ctx,
         args=[
@@ -3236,7 +3237,7 @@ def _write_osd_unit_poststop_commands(
             str(daemon_id), osd_fsid,
         ],
         volume_mounts=get_container_mounts(ctx, fsid, daemon_type, daemon_id),
-        bind_mounts=get_container_binds(ctx, fsid, daemon_type, daemon_id),
+        bind_mounts=get_container_binds(ctx, ident),
         cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
                                             daemon_id),
     )
@@ -6130,7 +6131,8 @@ def command_shell(ctx):
     container_args: List[str] = ['-i']
     mounts = get_container_mounts(ctx, ctx.fsid, daemon_type, daemon_id,
                                   no_config=True if ctx.config else False)
-    binds = get_container_binds(ctx, ctx.fsid, daemon_type, daemon_id)
+    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
+    binds = get_container_binds(ctx, ident)
     if ctx.config:
         mounts[pathify(ctx.config)] = '/etc/ceph/ceph.conf:z'
     if ctx.keyring:
