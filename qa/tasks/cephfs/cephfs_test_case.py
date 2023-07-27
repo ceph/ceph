@@ -13,6 +13,12 @@ from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+def classhook(m):
+    def dec(cls):
+        getattr(cls, m)()
+        return cls
+    return dec
+
 def for_teuthology(f):
     """
     Decorator that adds an "is_for_teuthology" attribute to the wrapped function
