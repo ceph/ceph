@@ -32,7 +32,6 @@ export LC_ALL=C.UTF-8
 
 ARCH=$(uname -m)
 
-
 function munge_ceph_spec_in {
     local with_seastar=$1
     shift
@@ -139,7 +138,7 @@ function install_pkg_on_ubuntu {
     fi
     if test -n "$missing_pkgs"; then
         local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
-        in_jenkins && echo -n "CI_DEBUG: Downloading $shaman_url ... "
+        in_ci && echo -n "CI_DEBUG: Downloading $shaman_url ... "
         $SUDO curl --silent --fail --write-out "%{http_code}" --location $shaman_url --output /etc/apt/sources.list.d/$project.list
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
         $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
@@ -479,42 +478,47 @@ else
         fi
         ;;
     rocky|centos|fedora|rhel|ol|virtuozzo)
-        builddepcmd="dnf -y builddep --allowerasing"
+        builddepcmd="dnf builddep -y $DNF_INSTALL_OPTIONS --allowerasing"
         echo "Using dnf to install dependencies"
         case "$ID" in
             fedora)
-                $SUDO dnf install -y dnf-utils
+                $SUDO dnf install -y $DNF_INSTALL_OPTIONS dnf-utils
                 ;;
             rocky|centos|rhel|ol|virtuozzo)
                 MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
-                $SUDO dnf install -y dnf-utils selinux-policy-targeted
+                $SUDO dnf install -y $DNF_INSTALL_OPTIONS dnf-utils selinux-policy-targeted
                 rpm --quiet --query epel-release || \
-                    $SUDO dnf -y install --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
+                    $SUDO dnf install -y $DNF_INSTALL_OPTIONS --nogpgcheck https://dl.fedoraproject.org/pub/epel/epel-release-latest-$MAJOR_VERSION.noarch.rpm
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $ID = centos -a $MAJOR_VERSION = 8 ; then
-                    # Enable 'powertools' or 'PowerTools' repo
-                    $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
-                    dts_ver=11
-                    # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
-                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-                    $SUDO dnf -y module enable javapackages-tools
-                elif test $ID = rhel -a $MAJOR_VERSION = 8 ; then
-                    dts_ver=11
-                    $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-8-${ARCH}-rpms"
-                    $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/8/
-                    $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_8_.gpgcheck=0 --save
-                    $SUDO dnf -y module enable javapackages-tools
-                fi
+                case "$ID-$MAJOR_VERSION" in
+                    centos-8)
+                        # Enable 'powertools' or 'PowerTools' repo
+                        $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
+                        ;;&
+                    centos-9)
+                        # Enable 'crb' repo
+                        $SUDO dnf config-manager --set-enabled crb
+                        ;;&
+                    rhel-[89])
+                        $SUDO dnf config-manager --set-enabled "codeready-builder-for-rhel-${MAJOR_VERSION}-${ARCH}-rpms"
+                        ;;&
+                    centos-8|rhel-8)
+                        # before EPEL8 and PowerTools provide all dependencies, we use sepia for the dependencies
+                        $SUDO dnf config-manager --add-repo http://apt-mirror.front.sepia.ceph.com/lab-extras/${MAJOR_VERSION}/
+                        $SUDO dnf config-manager --setopt=apt-mirror.front.sepia.ceph.com_lab-extras_${MAJOR_VERSION}_.gpgcheck=0 --save
+                        $SUDO dnf -y module enable javapackages-tools
+                        dts_ver=11
+                        ;;
+                esac
                 ;;
         esac
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
-            $SUDO dnf install -y $INSTALL_EXTRA_PACKAGES
+            $SUDO dnf install -y $DNF_INSTALL_OPTIONS $INSTALL_EXTRA_PACKAGES
         fi
         munge_ceph_spec_in $with_seastar $with_zbd $for_make_check $DIR/ceph.spec
         # for python3_pkgversion macro defined by python-srpm-macros, which is required by python3-devel
-        $SUDO dnf install -y python3-devel
+        $SUDO dnf install -y $DNF_INSTALL_OPTIONS python3-devel
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
         if [ -n "$dts_ver" ]; then
@@ -525,7 +529,7 @@ else
         # for rgw motr backend build checks
         if ! rpm --quiet -q cortx-motr-devel &&
               { [[ $FOR_MAKE_CHECK ]] || $with_rgw_motr; }; then
-            $SUDO dnf install -y \
+            $SUDO dnf install -y $DNF_INSTALL_OPTIONS --nobest \
                   "$motr_pkgs_url/isa-l-2.30.0-1.el7.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm" \
                   "$motr_pkgs_url/cortx-motr-devel-2.0.0-1_git3252d623_any.el8.${ARCH}.rpm"
@@ -554,7 +558,6 @@ fi
 if $for_make_check; then
     mkdir -p install-deps-cache
     top_srcdir=$(pwd)
-    export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
     wip_wheelhouse=wheelhouse-wip
     #
     # preload python modules so that tox can run without network access
@@ -563,7 +566,6 @@ if $for_make_check; then
         preload_wheels_for_tox $ini
     done
     rm -rf $top_srcdir/install-deps-python3
-    rm -rf $XDG_CACHE_HOME
     type git > /dev/null || (echo "Dashboard uses git to pull dependencies." ; false)
 fi
 

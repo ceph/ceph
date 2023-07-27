@@ -1,0 +1,81 @@
+name: Build and Test
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+jobs:
+  install-dependencies:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distro-name: centos
+            distro-release: stream8
+            distro-image: quay.io/centos/centos:stream8
+            cache_package_path: |
+              /var/lib/dnf
+              /var/cache/dnf
+            cache_package_hashfiles: |
+              ceph.spec.in
+          #- distro-name: centos
+          #  distro-release: stream9
+          #- ubuntu:20.04
+          #- ubuntu:22.04
+    container:
+      image: ${{ matrix.distro-image }}
+      options: --user root
+      env:
+        BASH_ENV: ./run-make-check.sh
+        SHELLOPTS: xtrace
+        FOR_MAKE_CHECK: 1
+        DNF_INSTALL_OPTIONS: >-
+          --setopt=install_weak_deps=False
+          --setopt=keepcache=True
+          --setopt=fastestmirror=True
+          --nodocs
+    defaults:
+      run:
+        shell: bash
+    env:
+      CACHE_PACKAGE_HASHFILES: |
+        install-deps.sh
+        run-make-check.sh
+        do_cmake.sh
+        src/script/run-make.sh
+        src/script/lib-build.sh
+    name: "${{ matrix.distro-name }}:${{ matrix.distro-release }}"
+    timeout-minutes: 120
+    steps:
+      - run: |
+          dnf install -y $DNF_INSTALL_OPTIONS git-core
+      - run: export
+      - run: set
+      - name: Restore package cache
+        uses: actions/checkout@v3
+        with:
+          submodules: true
+      - run: git config --global --add safe.directory $GITHUB_WORKSPACE
+      - name: Restore ccache
+        uses: actions/cache@v3
+        with:
+          path: ~/.ccache
+          key: ccache-${{ matrix.distro-name }}-${{ matrix.distro-release }}-${{ github.ref_name }}
+          restore-keys: |
+            packages-${{ matrix.distro-name }}-${{ matrix.distro-release }}-
+      - uses: actions/cache@v3
+        with:
+          path: ${{ matrix.cache_package_path }}
+          key: packages-${{ matrix.distro-name }}-${{ matrix.distro-release }}-${{ hashFiles(env.CACHE_PACKAGE_HASHFILES, matrix.cache_package_hashfiles) }}
+          restore-keys: |
+            packages-${{ matrix.distro-name }}-${{ matrix.distro-release }}-
+      - run: prepare
+      - run: ccache -s
+      - run: configure
+      - run: build vstart
+      - name: Test
+        run: |
+          build tests
+          cd build
+          run

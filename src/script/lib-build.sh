@@ -22,12 +22,12 @@
 # shellcheck disable=SC2034
 _SOURCED_LIB_BUILD=1
 
-function in_jenkins() {
-    [ -n "$JENKINS_HOME" ]
+function in_ci() {
+    [ -n "$JENKINS_HOME" -o -n "$CI" ]
 }
 
 function ci_debug() {
-    if in_jenkins || [ "${FORCE_CI_DEBUG}" ]; then
+    if in_ci || [ "${FORCE_CI_DEBUG}" ]; then
         echo "CI_DEBUG: $*"
     fi
 }

@@ -43,7 +43,7 @@ function run() {
     fi
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
-    if in_jenkins; then
+    if in_ci; then
         if ! ctest $CHECK_MAKEOPTS --no-compress-output --output-on-failure --test-output-size-failed 1024000 -T Test; then
             # do not return failure, as the jenkins publisher will take care of this
             rm -fr ${TMPDIR:-/tmp}/ceph-asok.*
@@ -72,7 +72,7 @@ function main() {
     # uses run-make.sh to install-deps
     FOR_MAKE_CHECK=1 prepare
     configure "$@"
-    in_jenkins && echo "CI_DEBUG: Running 'build tests'"
+    in_ci && echo "CI_DEBUG: Running 'build tests'"
     build tests
     echo "make check: successful build on $(git rev-parse HEAD)"
     FOR_MAKE_CHECK=1 run

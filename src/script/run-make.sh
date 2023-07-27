@@ -48,6 +48,36 @@ function detect_ceph_dev_pkgs() {
     echo "$cmake_opts"
 }
 
+function get_os_id() {
+    local OS=$(uname -s)
+    local ID
+    if [[ -e /etc/os-release ]]; then
+        source /etc/os-release
+    elif [[ "$OS" == FreeBSD ]]; then
+        ID=freebsd
+    else
+        ID=unknown
+    fi
+
+    echo "$ID"
+}
+
+function install_packages() {
+    local packages="$1"
+
+    case "$(get_os_id)" in
+        fedora|rocky|centos|rhel|ol|virtuozzo)
+            $SUDO dnf install -y $DNF_INSTALL_OPTIONS $packages
+            ;;
+        debian|ubuntu|devuan|elementary|softiron)
+            $SUDO apt-get install -y $APT_INSTALL_OPTIONS $packages
+            ;;
+        opensuse*|suse|sles)
+            $SUDO zypper install -y $ZYPPER_INSTALL_OPTIONS $packages
+            ;;
+    esac
+}
+
 function prepare() {
     local which_pkg="which"
     if command -v apt-get > /dev/null 2>&1 ; then
@@ -56,7 +86,7 @@ function prepare() {
 
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
-        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang"
+        export INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang curl"
         $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
@@ -78,7 +108,7 @@ EOM
     $DRY_RUN export SOURCE_DATE_EPOCH="946684800"
     $DRY_RUN ccache -o sloppiness=time_macros
     $DRY_RUN ccache -o run_second_cpp=true
-    if in_jenkins; then
+    if in_ci; then
         # Build host has plenty of space available, let's use it to keep
         # various versions of the built objects. This could increase the cache hit
         # if the same or similar PRs are running several times
