@@ -481,7 +481,7 @@ void MDRequestImpl::dump(Formatter *f) const
 
 void MDRequestImpl::_dump(Formatter *f) const
 {
-  f->dump_string("flag_point", state_string());
+  f->dump_string("flag_point", _get_state_string());
   f->dump_stream("reqid") << reqid;
   {
     msg_lock.lock();
