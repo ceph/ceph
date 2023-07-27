@@ -392,9 +392,9 @@ public:
     warn_interval_multiplier = 0;
   }
 
-  virtual std::string_view state_string() const {
+  std::string state_string() const {
     std::lock_guard l(lock);
-    return events.empty() ? std::string_view() : std::string_view(events.rbegin()->str);
+    return _get_state_string();
   }
 
   void dump(utime_t now, ceph::Formatter *f) const;
@@ -413,6 +413,11 @@ public:
   }
   friend void intrusive_ptr_release(TrackedOp *o) {
     o->put();
+  }
+
+protected:
+  virtual std::string _get_state_string() const {
+    return events.empty() ? std::string() : std::string(events.rbegin()->str);
   }
 };
 
