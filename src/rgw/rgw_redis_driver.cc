@@ -213,7 +213,7 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
   config cfg;
   cfg.addr.host = addr.host;
   cfg.addr.port = std::to_string(addr.port);
-  
+
   conn.async_run(cfg, {}, net::detached);
 
   // remove
@@ -304,6 +304,10 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) 
 {
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
+
   std::string value;
   std::string entry = partition_info.location + key;
 
@@ -325,8 +329,23 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   }
 
   try { // do we want key check here? -Sam
-    /* Append to existing value or set as new value */
+    std::string location = partition_info.location + key;
     std::string newVal = value + bl_data.to_str();
+
+    request req;
+    response<std::string> resp;
+
+    req.push("HMSET", location, "data", newVal);
+
+    conn.async_exec(req, resp, [&](auto ec, auto) {
+       if (!ec)
+	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+       conn.cancel();
+    });
+
+    /* Append to existing value or set as new value */
+   /* std::string newVal = value + bl_data.to_str();
     std::vector< std::pair<std::string, std::string> > field;
     field.push_back({"data", newVal});
     std::string result;
@@ -341,7 +360,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
     if (result != "OK") {
       return -1;
-    }
+    }*/
   } catch(std::exception &e) {
     return -1;
   }
@@ -722,7 +741,6 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
                 off_t read_ofs, off_t read_len, CompletionToken&& token)
 {
   namespace net = boost::asio;
-  using boost::redis::connection;
   using boost::redis::request;
   using boost::redis::response;
 
@@ -733,7 +751,7 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
   request req;
   response< std::map<std::string, std::string> > resp;
 
-  req.push("HGETALL", key);
+  req.push("HGETALL", location);
 
   return conn.async_exec(req, resp, std::forward<CompletionToken>(token));
 
