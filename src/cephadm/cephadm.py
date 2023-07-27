@@ -3146,7 +3146,7 @@ def deploy_daemon_units(
             assert osd_fsid
             _write_osd_unit_poststop_commands(ctx, f, ident, osd_fsid)
         elif daemon_type == CephIscsi.daemon_type:
-            _write_iscsi_unit_poststop_commands(ctx, f, daemon_type, str(daemon_id), fsid, data_dir)
+            _write_iscsi_unit_poststop_commands(ctx, f, ident, data_dir)
 
     # post-stop command(s)
     with write_new(data_dir + '/unit.stop') as f:
@@ -3275,15 +3275,15 @@ def _write_osd_unit_poststop_commands(
 
 
 def _write_iscsi_unit_poststop_commands(
-    ctx: CephadmContext, f: IO, daemon_type: str, daemon_id: str, fsid: str, data_dir: str
+    ctx: CephadmContext, f: IO, ident: 'DaemonIdentity', data_dir: str
 ) -> None:
     # make sure we also stop the tcmu container
     runtime_dir = '/run'
-    ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
+    ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
     tcmu_container = ceph_iscsi.get_tcmu_runner_container()
     f.write('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
-    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
-    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (fsid, daemon_type, str(daemon_id) + '.tcmu') + '\n')
+    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
+    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
     f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
 
 
