@@ -3114,7 +3114,7 @@ def deploy_daemon_units(
                 ctx, f, ident, osd_fsid, data_dir, uid, gid
             )
         elif daemon_type == CephIscsi.daemon_type:
-            _write_iscsi_unit_run_commands(ctx, f, daemon_type, str(daemon_id), fsid, data_dir)
+            _write_iscsi_unit_run_commands(ctx, f, ident, data_dir)
         init_containers = init_containers or []
         if init_containers:
             _write_init_container_cmds_clean(ctx, f, init_containers[0])
@@ -3250,10 +3250,10 @@ def _write_osd_unit_run_commands(
 
 
 def _write_iscsi_unit_run_commands(
-    ctx: CephadmContext, f: IO, daemon_type: str, daemon_id: str, fsid: str, data_dir: str
+    ctx: CephadmContext, f: IO, ident: 'DaemonIdentity', data_dir: str
 ) -> None:
     f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
-    ceph_iscsi = CephIscsi.init(ctx, fsid, daemon_id)
+    ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
     tcmu_container = ceph_iscsi.get_tcmu_runner_container()
     _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runner container', background=True)
 
