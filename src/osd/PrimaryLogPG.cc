@@ -2797,9 +2797,13 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
 
   case pg_pool_t::CACHEMODE_READONLY:
     // TODO: clean this case up
-    if (!obc.get() && r == -ENOENT) {
+    if ((!obc.get() && r == -ENOENT) || (op->may_read() && !obc->obs.exists)) {
       // we don't have the object and op's a read
-      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      if (!obc.get() || !obc->is_blocked()) {
+        promote_object(obc, missing_oid, oloc, op, promote_obc);
+      } else if (promote_obc) {
+         *promote_obc = obc;
+      }
       return cache_result_t::BLOCKED_PROMOTE;
     }
     if (!r) { // it must be a write
