@@ -1136,9 +1136,8 @@ class CephExporter(object):
         self.image = image
 
         self.sock_dir = config_json.get('sock-dir', '/var/run/ceph/')
-        ipv4_addrs, ipv6_addrs = get_ip_addresses(get_hostname())
-        # use the first ipv4 (if any) otherwise use the first ipv6
-        addrs = next(iter(ipv4_addrs or ipv6_addrs), None)
+        ipv4_addrs, _ = get_ip_addresses(get_hostname())
+        addrs = '0.0.0.0' if ipv4_addrs else '::'
         self.addrs = config_json.get('addrs', addrs)
         self.port = config_json.get('port', self.DEFAULT_PORT)
         self.prio_limit = config_json.get('prio-limit', 5)
