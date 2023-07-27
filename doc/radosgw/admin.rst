@@ -652,10 +652,12 @@ user usage within date ranges too.
 Options include: 
 
 - **Start Date:** The ``--start-date`` option allows you to filter usage
-  stats from a particular start date (**format:** ``yyyy-mm-dd[HH:MM:SS]``).
+  stats from a particular start date and an optional start time
+  (**format:** ``yyyy-mm-dd [HH:MM:SS]``).
 
 - **End Date:** The ``--end-date`` option allows you to filter usage up
-  to a particular date (**format:** ``yyyy-mm-dd[HH:MM:SS]``). 
+  to a particular date and an optional end time
+  (**format:** ``yyyy-mm-dd [HH:MM:SS]``). 
   
 - **Log Entries:** The ``--show-log-entries`` option allows you to specify
   whether or not to include log entries with the usage stats 
