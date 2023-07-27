@@ -31,9 +31,9 @@ class RedisCacheAioRequest: public CacheAioRequest {
 class RedisDriver : public CacheDriver {
   public:
     RedisDriver(boost::redis::connection& _conn, Partition& _partition_info) : conn(_conn),
-	    								     partition_info(_partition_info),
-                                              				     free_space(_partition_info.size), 
-				              				     outstanding_write_size(0)
+									       partition_info(_partition_info),
+									       free_space(_partition_info.size), 
+									       outstanding_write_size(0)
     {
       add_partition_info(_partition_info);
     }
