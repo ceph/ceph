@@ -42,6 +42,8 @@ repository:
 
 ## Build Prerequisites
 
+*section last updated 27 Jul 2023*
+
 Make sure that ``curl`` is installed. The Debian and Ubuntu ``apt`` command is
 provided here, but if you use a system with a different package manager, then
 you must use whatever command is the proper counterpart of this one:
@@ -51,6 +53,10 @@ you must use whatever command is the proper counterpart of this one:
 Install Debian or RPM package dependencies by running the following command:
 
 	./install-deps.sh
+
+Install the ``python3-routes`` package:
+
+    apt install python3-routes
 
 
 ## Building Ceph
