@@ -11441,6 +11441,7 @@ void Server::handle_client_readdir_snapdiff(MDRequestRef& mdr)
     if (logger)
       logger->inc(l_mdss_cap_acquisition_throttle);
 
+    mdr->mark_event("cap_acquisition_throttle");
     mds->timer.add_event_after(caps_throttle_retry_request_timeout, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
