@@ -1621,6 +1621,16 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 
     in = add_update_inode(&ist, request->sent_stamp, session,
 			  request->perms);
+
+    auto fscrypt_denc = fscrypt->get_fname_denc(in->fscrypt_ctx, &in->fscrypt_key_validator, true);
+    if (fscrypt_denc && in->is_symlink()) {
+      string slname;
+      int ret = fscrypt_denc->get_decrypted_symlink(in->symlink, &slname);
+      if (ret < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+      }
+      in->symlink_plain = slname;
+    }
   }
 
   if (reply->head.is_dentry) {
@@ -7249,6 +7259,19 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
 
   r = make_request(req, perms, target);
   ldout(cct, 10) << __func__ << " res is " << r << dendl;
+
+  if (r == 0 && (*target)->is_symlink()) {
+    auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
+    if (fscrypt_denc) {
+      string slname;
+      int ret = fscrypt_denc->get_decrypted_symlink((*target)->symlink, &slname);
+      if (ret < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt symlink (r=" << ret << ")" << dendl;
+      }
+      (*target)->symlink_plain = slname;
+    }
+  }
+
   return r;
 }
 
@@ -7496,25 +7519,26 @@ int Client::path_walk(const filepath& origpath, walk_dentry_result* result, cons
 	return -CEPHFS_ELOOP;
       }
 
+      const char *slink = (next->symlink_plain.empty() ? next->symlink.c_str() : next->symlink_plain.c_str());
       if (i < path.depth() - 1) {
 	// dir symlink
 	// replace consumed components of path with symlink dir target
-	filepath resolved(next->symlink.c_str());
+	filepath resolved(slink);
 	resolved.append(path.postfixpath(i + 1));
 	path = resolved;
 	i = 0;
-	if (next->symlink[0] == '/') {
+	if (slink[0] == '/') {
 	  cur = root;
 	}
 	continue;
       } else if (followsym) {
-	if (next->symlink[0] == '/') {
-	  path = next->symlink.c_str();
+	if (slink[0] == '/') {
+	  path = slink;
 	  i = 0;
 	  // reset position
 	  cur = root;
 	} else {
-	  filepath more(next->symlink.c_str());
+	  filepath more(slink);
 	  // we need to remove the symlink component from off of the path
 	  // before adding the target that the symlink points to.  remain
 	  // at the same position in the path.
@@ -15163,9 +15187,24 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
     return r;
   }
 
+  req->fscrypt_file = dir->fscrypt_file;
+
+  dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+  auto fscrypt_ctx = FSCrypt::init_ctx(req->fscrypt_auth);
+
+  if (fscrypt_ctx) {
+    auto fscrypt_denc = fscrypt->get_fname_denc(fscrypt_ctx, nullptr, true);
+
+    string enc_target;
+    int r = fscrypt_denc->get_encrypted_symlink(target,&enc_target);
+
+    req->set_string2(enc_target.c_str());
+  } else {
+    req->set_string2(target); 
+  }
+
   req->set_alternate_name(std::move(alternate_name));
   req->set_inode(dir);
-  req->set_string2(target); 
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
 

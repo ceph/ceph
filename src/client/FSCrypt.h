@@ -251,6 +251,7 @@ public:
   int get_encrypted_fname(const std::string& plain, std::string *encrypted);
   int get_decrypted_fname(const std::string& b64enc, std::string *decrypted);
 
+  int get_encrypted_symlink(const std::string& plain, std::string *encrypted);
   int get_decrypted_symlink(const std::string& b64enc, std::string *decrypted);
 };
 
@@ -318,6 +319,8 @@ class FSCrypt {
                          std::function<FSCryptDenc *()> gen_denc);
 public:
   FSCrypt() {}
+
+  static FSCryptContextRef init_ctx(const std::vector<unsigned char>& fscrypt_auth);
 
   FSCryptKeyStore& get_key_store() {
     return key_store;

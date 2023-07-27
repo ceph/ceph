@@ -254,6 +254,7 @@ struct Inode : RefCountedObject {
   uint64_t  ll_ref = 0;   // separate ref count for ll client
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
   std::string    symlink;  // symlink content, if it's a symlink
+  std::string    symlink_plain;  // decoded symlink (in-memory only)
   std::map<std::string,bufferptr> xattrs;
   std::map<frag_t,int> fragmap;  // known frag -> mds mappings
   std::map<frag_t, std::vector<mds_rank_t>> frag_repmap; // non-auth mds mappings

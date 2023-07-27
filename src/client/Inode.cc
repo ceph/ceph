@@ -813,24 +813,7 @@ void Inode::mark_caps_clean()
 
 FSCryptContextRef Inode::init_fscrypt_ctx()
 {
-  if (fscrypt_auth.size() == 0) {
-    return nullptr;
-  }
-
-  FSCryptContextRef ctx = std::make_shared<FSCryptContext>();
-
-  bufferlist bl;
-  bl.append((const char *)fscrypt_auth.data(), fscrypt_auth.size());
-        
-  auto bliter = bl.cbegin();
-  try {
-    ctx->decode(bliter);
-  } catch (buffer::error& err) {
-lsubdout(client->cct, client, 0) << __func__ << " " << *this << " failed to decode" << dendl;
-    return nullptr;
-  }
-
-  return ctx;
+  return FSCrypt::init_ctx(fscrypt_auth);
 }
 
 void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
