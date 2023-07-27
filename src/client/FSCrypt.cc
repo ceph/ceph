@@ -600,12 +600,43 @@ generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " len=" << 
   return r;
 }
 
+struct fscrypt_slink_data {
+  ceph_le16 len;
+  char enc[NAME_MAX - 2];
+};
+
+int FSCryptFNameDenc::get_encrypted_symlink(const std::string& plain, std::string *encrypted)
+{
+  auto plain_size = plain.size();
+  int dec_size = (plain.size() + 31) & ~31; // FIXME, need to be based on policy
+
+  char orig[dec_size];
+  memcpy(orig, plain.c_str(), plain_size);
+  memset(orig + plain_size, 0, dec_size - plain_size);
+
+  fscrypt_slink_data slink_data;
+  int r = encrypt(orig, dec_size,
+                  slink_data.enc, sizeof(slink_data.enc));
+
+  if (r < 0) {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+    return r;
+  }
+
+  slink_data.len = r;
+
+  int b64_len = NAME_MAX * 2; // name.size() * 2;
+  char b64_name[b64_len]; // large enough
+  int len = fscrypt_fname_armor((const char *)&slink_data, slink_data.len + sizeof(slink_data.len), b64_name, b64_len);
+
+  *encrypted = std::string(b64_name, len);
+
+  return len;
+}
+
 int FSCryptFNameDenc::get_decrypted_symlink(const std::string& b64enc, std::string *decrypted)
 {
-  struct {
-    ceph_le16 len;
-    char enc[NAME_MAX - 2];
-  } slink_data;
+  fscrypt_slink_data slink_data;
 
   int len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
                                   (char *)&slink_data, sizeof(slink_data));
@@ -767,6 +798,28 @@ int FSCryptFDataDenc::encrypt_bl(uint64_t off, uint64_t len, bufferlist& bl, buf
   encbl->swap(newbl);
 
   return 0;
+}
+
+FSCryptContextRef FSCrypt::init_ctx(const std::vector<unsigned char>& fscrypt_auth)
+{
+  if (fscrypt_auth.size() == 0) {
+    return nullptr;
+  }
+
+  FSCryptContextRef ctx = std::make_shared<FSCryptContext>();
+
+  bufferlist bl;
+  bl.append((const char *)fscrypt_auth.data(), fscrypt_auth.size());
+
+  auto bliter = bl.cbegin();
+  try {
+    ctx->decode(bliter);
+  } catch (buffer::error& err) {
+    generic_dout(0) << __func__ << " " << " failed to decode fscrypt_auth:" << fscrypt_hex_str(fscrypt_auth.data(), fscrypt_auth.size()) << dendl;
+    return nullptr;
+  }
+
+  return ctx;
 }
 
 FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
