@@ -3144,7 +3144,7 @@ def deploy_daemon_units(
         _write_stop_actions(ctx, cast(TextIO, f), container, timeout)
         if daemon_type == 'osd':
             assert osd_fsid
-            _write_osd_unit_poststop_commands(ctx, f, daemon_type, str(daemon_id), fsid, osd_fsid)
+            _write_osd_unit_poststop_commands(ctx, f, ident, osd_fsid)
         elif daemon_type == CephIscsi.daemon_type:
             _write_iscsi_unit_poststop_commands(ctx, f, daemon_type, str(daemon_id), fsid, data_dir)
 
@@ -3259,19 +3259,17 @@ def _write_iscsi_unit_run_commands(
 
 
 def _write_osd_unit_poststop_commands(
-    ctx: CephadmContext, f: IO, daemon_type: str, daemon_id: str, fsid: str, osd_fsid: str
+    ctx: CephadmContext, f: IO, ident: 'DaemonIdentity', osd_fsid: str
 ) -> None:
-    ident = DaemonIdentity(fsid, daemon_type, daemon_id)
     poststop = get_ceph_volume_container(
         ctx,
         args=[
             'lvm', 'deactivate',
-            str(daemon_id), osd_fsid,
+            ident.daemon_id, osd_fsid,
         ],
         volume_mounts=get_container_mounts(ctx, ident),
         bind_mounts=get_container_binds(ctx, ident),
-        cname='ceph-%s-%s.%s-deactivate' % (fsid, daemon_type,
-                                            daemon_id),
+        cname='ceph-%s-%s.%s-deactivate' % (ident.fsid, ident.daemon_type, ident.daemon_id),
     )
     _write_container_cmd_to_bash(ctx, f, poststop, 'deactivate osd')
 
