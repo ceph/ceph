@@ -1,5 +1,4 @@
-#ifndef CEPH_REDISDRIVER_H
-#define CEPH_REDISDRIVER_H
+#pragma once
 
 #include <aio.h>
 #include "common/async/completion.h"
@@ -129,5 +128,3 @@ class RedisDriver : public CacheDriver {
 };
 
 } } // namespace rgw::cache
-
-#endif

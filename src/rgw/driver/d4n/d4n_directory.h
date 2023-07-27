@@ -1,5 +1,4 @@
-#ifndef CEPH_D4NDIRECTORY_H
-#define CEPH_D4NDIRECTORY_H
+#pragma once
 
 #include "rgw_common.h"
 #include <cpp_redis/cpp_redis>
@@ -97,5 +96,3 @@ class BlockDirectory: public Directory {
 };
 
 } } // namespace rgw::d4n
-
-#endif
