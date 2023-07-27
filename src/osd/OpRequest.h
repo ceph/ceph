@@ -113,7 +113,7 @@ public:
     return latest_flag_point;
   }
 
-  std::string_view state_string() const override {
+  std::string _get_state_string() const override {
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";
