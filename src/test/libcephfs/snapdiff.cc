@@ -17,6 +17,10 @@
 #include "include/ceph_assert.h"
 #include "include/object.h"
 #include "include/stringify.h"
+#include "common/ceph_context.h"
+#include "common/config_proxy.h"
+#include "json_spirit/json_spirit.h"
+#include "boost/format/alt_sstream.hpp"
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -27,6 +31,7 @@
 #include <algorithm>
 #include <limits.h>
 #include <dirent.h>
+#include <optional>
 
 using namespace std;
 class TestMount {
@@ -56,7 +61,56 @@ public:
     return ceph_conf_get(cmount, option, buf, len);
   }
 
-  string make_file_path(const char* relpath) {
+  json_spirit::mValue tell_rank0(const std::string& prefix, cmdmap_t&& cmdmap = {}) {
+    cmdmap["prefix"] = prefix;
+    cmdmap["format"] = std::string("json");
+
+    JSONFormatter jf;
+    jf.open_object_section("");
+    ceph::common::cmdmap_dump(cmdmap, &jf);
+    jf.close_section();
+
+    boost::io::basic_oaltstringstream<char> oss;
+    jf.flush(oss);
+
+    const char *cmdv[] = {oss.begin()};
+
+    char *outb, *outs;
+    size_t outb_len, outs_len;
+    int status = ceph_mds_command(cmount, "0", cmdv, sizeof(cmdv)/sizeof(cmdv[0]), nullptr, 0, &outb, &outb_len, &outs, &outs_len);
+    if (status < 0)
+    {
+      outs[outs_len] = 0;
+      std::cout << "couldn't tell rank 0 '" << oss.begin() << "'\n" << strerror(-status) << ": " << outs << std::endl;
+      return json_spirit::mValue::null;
+    }
+
+    json_spirit::mValue dump;
+    if (!json_spirit::read(outb, dump))
+    {
+      std::cout << "couldn't parse '" << prefix << "'response json" << std::endl;
+      return json_spirit::mValue::null;
+    }
+    return dump;
+  }
+
+  bool tell_rank0_config(const std::string &var, const std::optional<const std::string> val = {}) {
+    cmdmap_t cmdmap;
+    std::string prefix;
+    cmdmap["var"] = var;
+
+    if (val.has_value()) {
+      cmdmap["val"] = std::vector{val.value()};
+      prefix = "config set";
+    }
+    else {
+      prefix = "config unset";
+    }
+
+    return !tell_rank0(prefix, std::move(cmdmap)).is_null();
+  }
+
+  string make_file_path(const char *relpath) {
     char path[PATH_MAX];
     sprintf(path, "%s/%s", dir_path, relpath);
     return path;
@@ -369,7 +423,6 @@ void TestMount::print_snap_diff(const char* relpath,
     }));
 };
 
-
 /* The following method creates some files/folders/snapshots layout,
    described in the sheet below.
    We're to test SnapDiff readdir API against that structure.
@@ -497,71 +550,123 @@ TEST(LibCephFS, SnapDiffLib)
     test_mount.verify_snap_diff(expected, "", "snap1", "snap2");
   }
 
-  //
-  // Make sure snap1 vs. snap2 delta for /dirA is as expected
-  //
+  json_spirit::mValue dump;
   {
-    vector<pair<string, uint64_t>> expected;
-    expected.emplace_back("fileA", snapid2);
-    test_mount.verify_snap_diff(expected, "dirA", "snap1", "snap2");
+    struct Cleanup
+    {
+      TestMount &test_mount;
+      ~Cleanup()
+      {
+        // make sure to restore the default settings before leaving this block
+        test_mount.tell_rank0_config("mds_max_caps_per_client");
+        test_mount.tell_rank0_config("mds_session_cap_acquisition_throttle");
+        test_mount.tell_rank0_config("mds_session_cap_acquisition_decay_rate");
+        test_mount.tell_rank0_config("mds_op_history_size");
+        test_mount.tell_rank0_config("mds_op_history_duration");
+      }
+    } cleanup {test_mount};
+    // the following commands will be run with cap_acquisition_throttle triggered
+    // to verify that such event is logged on the operations
+    ASSERT_TRUE(test_mount.tell_rank0_config("mds_max_caps_per_client", "1"));
+    ASSERT_TRUE(test_mount.tell_rank0_config("mds_session_cap_acquisition_throttle", "1"));
+    ASSERT_TRUE(test_mount.tell_rank0_config("mds_session_cap_acquisition_decay_rate", "1"));
+    ASSERT_TRUE(test_mount.tell_rank0_config("mds_op_history_size", "100"));
+    ASSERT_TRUE(test_mount.tell_rank0_config("mds_op_history_duration", "600"));
+
+    //
+    // Make sure snap1 vs. snap2 delta for /dirA is as expected
+    //
+    {
+      vector<pair<string, uint64_t>> expected;
+      expected.emplace_back("fileA", snapid2);
+      test_mount.verify_snap_diff(expected, "dirA", "snap1", "snap2");
+    }
+
+    //
+    // Make sure snap1 vs. snap2 delta for /dirB is as expected
+    //
+    {
+      vector<pair<string, uint64_t>> expected;
+      expected.emplace_back("fileb", snapid2);
+      test_mount.verify_snap_diff(expected, "dirB", "snap1", "snap2");
+    }
+
+    //
+    // Make sure snap1 vs. snap2 delta for /dirC is as expected
+    //
+    {
+      vector<pair<string, uint64_t>> expected;
+      expected.emplace_back("filec", snapid1);
+      test_mount.verify_snap_diff(expected, "dirC", "snap2", "snap1");
+    }
+
+    //
+    // Make sure snap1 vs. snap2 delta for /dirD is as expected
+    //
+    {
+      vector<pair<string, uint64_t>> expected;
+      test_mount.verify_snap_diff(expected, "dirD", "snap1", "snap2");
+    }
+
+    // Make sure SnapDiff returns an error when provided with the same
+    // snapshot name for both parties A and B.
+    {
+      string snap_path = test_mount.make_snap_path("snap2");
+      string snap_other_path = snap_path;
+      std::cout << "---------invalid snapdiff params, the same snaps---------" << std::endl;
+      ASSERT_EQ(-EINVAL, test_mount.for_each_readdir_snapdiff(
+        "",
+        "snap2",
+        "snap2",
+        [&](const dirent* dire, uint64_t snapid) {
+          return true;
+        }));
+    }
+    // Make sure SnapDiff returns an error when provided with an empty
+    // snapshot name for one of the parties
+    {
+      std::cout << "---------invalid snapdiff params, no snap_other ---------" << std::endl;
+      string snap_path = test_mount.make_snap_path("snap2");
+      string snap_other_path;
+      ASSERT_EQ(-EINVAL, test_mount.for_each_readdir_snapdiff(
+        "",
+        "snap2",
+        "",
+        [&](const dirent* dire, uint64_t snapid) {
+          return true;
+        }));
+    }
+
+    // do this before the scope ends and cleanup is run
+    dump = test_mount.tell_rank0("dump_historic_ops");
   }
 
-  //
-  // Make sure snap1 vs. snap2 delta for /dirB is as expected
-  //
-  {
-    vector<pair<string, uint64_t>> expected;
-    expected.emplace_back("fileb", snapid2);
-    test_mount.verify_snap_diff(expected, "dirB", "snap1", "snap2");
+  ASSERT_FALSE(dump.is_null());
+  bool seen_cap_throttle_in_recent_op_events = false;
+  try {
+    for (const auto& op: dump.get_obj().at("ops").get_array()) {
+      for (const auto& ev: op.get_obj().at("type_data").get_obj().at("events").get_array()) {
+        if (ev.get_obj().at("event") == "cap_acquisition_throttle") {
+	  seen_cap_throttle_in_recent_op_events = true;
+	  goto done;
+	}
+      }
+    }
+    done:;
+  }
+  catch (const std::runtime_error &e) {
+    std::cout << "error while parsing dump_historic_ops: " << e.what() << std::endl;
   }
 
-  //
-  // Make sure snap1 vs. snap2 delta for /dirC is as expected
-  //
-  {
-    vector<pair<string, uint64_t>> expected;
-    expected.emplace_back("filec", snapid1);
-    test_mount.verify_snap_diff(expected, "dirC", "snap2", "snap1");
+  if (!seen_cap_throttle_in_recent_op_events) {
+    std::cout << "couldn't find 'cap_acquisition_throttle' event in:" << std::endl;
+    json_spirit::write(dump, std::cout, json_spirit::pretty_print);
   }
 
-  //
-  // Make sure snap1 vs. snap2 delta for /dirD is as expected
-  //
-  {
-    vector<pair<string, uint64_t>> expected;
-    test_mount.verify_snap_diff(expected, "dirD", "snap1", "snap2");
-  }
-
-  // Make sure SnapDiff returns an error when provided with the same
-  // snapshot name for both parties A and B.
-  {
-    string snap_path = test_mount.make_snap_path("snap2");
-    string snap_other_path = snap_path;
-    std::cout << "---------invalid snapdiff params, the same snaps---------" << std::endl;
-    ASSERT_EQ(-EINVAL, test_mount.for_each_readdir_snapdiff(
-      "",
-      "snap2",
-      "snap2",
-      [&](const dirent* dire, uint64_t snapid) {
-        return true;
-      }));
-  }
-  // Make sure SnapDiff returns an error when provided with an empty
-  // snapshot name for one of the parties
-  {
-    std::cout << "---------invalid snapdiff params, no snap_other ---------" << std::endl;
-    string snap_path = test_mount.make_snap_path("snap2");
-    string snap_other_path;
-    ASSERT_EQ(-EINVAL, test_mount.for_each_readdir_snapdiff(
-      "",
-      "snap2",
-      "",
-      [&](const dirent* dire, uint64_t snapid) {
-        return true;
-      }));
-  }
+  ASSERT_TRUE(seen_cap_throttle_in_recent_op_events);
 
   std::cout << "------------- closing -------------" << std::endl;
+
   ASSERT_EQ(0, test_mount.purge_dir(""));
   ASSERT_EQ(0, test_mount.rmsnap("snap1"));
   ASSERT_EQ(0, test_mount.rmsnap("snap2"));
