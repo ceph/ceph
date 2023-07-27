@@ -379,6 +379,7 @@ state_update_interval_sec = 5
 [ceph]
 pool = {pool}
 config_file = /etc/ceph/ceph.conf
+id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
 server_key = ./server.key
