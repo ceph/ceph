@@ -3110,7 +3110,9 @@ def deploy_daemon_units(
         # pre-start cmd(s)
         if daemon_type == 'osd':
             assert osd_fsid
-            _write_osd_unit_run_commands(ctx, f, daemon_type, str(daemon_id), fsid, osd_fsid, data_dir, uid, gid)
+            _write_osd_unit_run_commands(
+                ctx, f, ident, osd_fsid, data_dir, uid, gid
+            )
         elif daemon_type == CephIscsi.daemon_type:
             _write_iscsi_unit_run_commands(ctx, f, daemon_type, str(daemon_id), fsid, data_dir)
         init_containers = init_containers or []
@@ -3191,9 +3193,7 @@ def _write_stop_actions(
 def _write_osd_unit_run_commands(
     ctx: CephadmContext,
     f: IO,
-    daemon_type: str,
-    daemon_id: str,
-    fsid: str,
+    ident: 'DaemonIdentity',
     osd_fsid: str,
     data_dir: str,
     uid: int,
@@ -3201,7 +3201,7 @@ def _write_osd_unit_run_commands(
 ) -> None:
     # osds have a pre-start step
     simple_fn = os.path.join('/etc/ceph/osd',
-                             '%s-%s.json.adopted-by-cephadm' % (daemon_id, osd_fsid))
+                             '%s-%s.json.adopted-by-cephadm' % (ident.daemon_id, osd_fsid))
     if os.path.exists(simple_fn):
         f.write('# Simple OSDs need chown on startup:\n')
         for n in ['block', 'block.db', 'block.wal']:
@@ -3210,7 +3210,9 @@ def _write_osd_unit_run_commands(
     else:
         # if ceph-volume does not support 'ceph-volume activate', we must
         # do 'ceph-volume lvm activate'.
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
+        fsid = ident.fsid
+        daemon_type = ident.daemon_type
+        daemon_id = ident.daemon_id
         test_cv = get_ceph_volume_container(
             ctx,
             args=['activate', '--bad-option'],
@@ -3237,7 +3239,6 @@ def _write_osd_unit_run_commands(
                 '--no-tmpfs',
             ]
 
-        ident = DaemonIdentity(fsid, daemon_type, daemon_id)
         prestart = get_ceph_volume_container(
             ctx,
             args=cmd,
