@@ -1,5 +1,4 @@
-#ifndef CEPH_REDISDRIVER_H
-#define CEPH_REDISDRIVER_H
+#pragma once
 
 #include <aedis.hpp>
 #include <aio.h>
@@ -104,5 +103,3 @@ class RedisDriver : public CacheDriver {
 };
 
 } } // namespace rgw::cache
-
-#endif
