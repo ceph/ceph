@@ -43,36 +43,18 @@ class CrushWrapper;
 //
 // * class:device-class where device-class is the name of a CRUSH device class
 //   - This mask has no effect on non-OSD daemons or clients.
-struct OptionMask {
-  std::string location_type, location_value; ///< matches crush_location
-  std::string device_class;                  ///< matches device class
-
-  bool empty() const {
-    return location_type.size() == 0
-      && location_value.size() == 0
-      && device_class.size() == 0;
-  }
-
-  std::string to_str() const {
-    std::string r;
-    if (location_type.size()) {
-      r += location_type + ":" + location_value;
-    }
-    if (device_class.size()) {
-      if (r.size()) {
-	r += "/";
-      }
-      r += "class:" + device_class;
-    }
-    return r;
-  }
-  void dump(ceph::Formatter *f) const;
-};
-
 struct MaskedOption {
+
   std::string raw_value;               ///< raw, unparsed, unvalidated value
   const Option *opt;              ///< the option
-  OptionMask mask;
+  struct OptionMask {
+    std::string location_type, location_value; ///< matches crush_location
+    std::string device_class;                  ///< matches device class
+
+    bool empty() const;
+    std::string to_str() const;
+    void dump(ceph::Formatter *f) const;
+  } mask;
   std::unique_ptr<const Option> unknown_opt; ///< if fabricated for an unknown option
   std::string localized_name;     ///< localized name for the option
 
@@ -189,7 +171,7 @@ struct ConfigMap {
   static bool parse_mask(
     const std::string& in,
     std::string *section,
-    OptionMask *mask);
+    MaskedOption::OptionMask *mask);
 
   int add_option(
     CephContext *cct,

@@ -568,7 +568,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     }
 
     string section;
-    OptionMask mask;
+    MaskedOption::OptionMask mask;
     if (!ConfigMap::parse_mask(who, &section, &mask)) {
       ss << "unrecognized config target '" << who << "'";
       err = -EINVAL;

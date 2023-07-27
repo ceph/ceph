@@ -58,7 +58,27 @@ int MaskedOption::get_precision(const CrushWrapper *crush)
   return num_types + 1;
 }
 
-void OptionMask::dump(Formatter *f) const
+bool MaskedOption::OptionMask::empty() const {
+  return (location_type.size() == 0
+          && location_value.size() == 0
+          && device_class.size() == 0);
+}
+
+std::string MaskedOption::OptionMask::to_str() const {
+  std::string r;
+  if (location_type.size()) {
+    r += location_type + ":" + location_value;
+  }
+  if (device_class.size()) {
+    if (r.size()) {
+      r += "/";
+    }
+    r += "class:" + device_class;
+  }
+  return r;
+}
+
+void MaskedOption::OptionMask::dump(Formatter *f) const
 {
   if (location_type.size()) {
     f->dump_string("location_type", location_type);
@@ -347,7 +367,7 @@ ConfigMap::generate_entity_map(
 bool ConfigMap::parse_mask(
   const std::string& who,
   std::string *section,
-  OptionMask *mask)
+  MaskedOption::OptionMask *mask)
 {
   vector<std::string> split;
   boost::split(split, who, [](char c){ return c == '/'; });
