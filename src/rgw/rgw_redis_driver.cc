@@ -98,25 +98,37 @@ int RedisDriver::remove_partition_info(Partition& info)
 
 bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
 {
-  int result;
-  std::string entry = partition_info.location + key;
-  std::vector<std::string> keys;
-  keys.push_back(entry);
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
+  std::string entry = partition_info.location + key;
+  response<int> resp;
 
   try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer();
-      }
+    boost::redis::config cfg;
+    cfg.addr.host = "127.0.0.1";
+    cfg.addr.port = "6379";
+
+    boost::asio::io_context io;
+    boost::redis::connection connect{io};
+    connect.async_run(cfg, {}, net::detached);
+
+    request req;
+
+    req.push("EXISTS", entry);
+
+    connect.async_exec(req, resp, [&](auto ec, auto) {
+       if (!ec)
+	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+       connect.cancel();
     });
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    io.run();
   } catch(std::exception &e) {}
 
-  return result;
+  return std::get<0>(resp).value();
 }
 
 std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) 
@@ -422,7 +434,6 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
       });
 
       io.run();
-
     } catch(std::exception &e) {
       return -1;
     }
