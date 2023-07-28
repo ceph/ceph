@@ -46,6 +46,7 @@ class RGWBlockDirectory: RGWDirectory {
   private:
     cpp_redis::client client;
     std::string buildIndex(cache_block *ptr);
+    unsigned int hash_slot(const char *key, int keylen){};
     std::string host = "";
     int port = 0;
 };
