@@ -580,15 +580,20 @@ int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string 
   return len;
 }
 
-int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, std::string *decrypted)
+int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, const std::string& alt_name, std::string *decrypted)
 {
   char enc[NAME_MAX];
-  int len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
-                                  enc, sizeof(enc));
+  int len = alt_name.size();
 
-generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << " len=" << len << dendl;
+  const char *penc = (len == 0 ? enc : alt_name.c_str());
+
+  if (len == 0) {
+    len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
+                                enc, sizeof(enc));
+  }
+
   char dec_fname[NAME_MAX + 64]; /* some extra just in case */
-  int r = decrypt(enc, len, dec_fname, sizeof(dec_fname));
+  int r = decrypt(penc, len, dec_fname, sizeof(dec_fname));
 
   if (r >= 0) {
     dec_fname[r] = '\0';
