@@ -26,6 +26,7 @@ class NvmeofService(CephService):
 
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id
+        host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
 
         keyring = self.get_keyring_with_caps(self.get_auth_entity(igw_id),
                                              ['mon', 'profile rbd',
@@ -38,7 +39,7 @@ class NvmeofService(CephService):
         context = {
             'spec': spec,
             'name': name,
-            'addr': self.mgr.get_mgr_ip(),
+            'addr': host_ip,
             'port': spec.port,
             'log_level': 'WARN',
             'rpc_socket': '/var/tmp/spdk.sock',
