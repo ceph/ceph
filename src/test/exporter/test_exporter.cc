@@ -1,9 +1,12 @@
 #include "gtest/gtest.h"
 #include "exporter/util.h"
+#include "exporter/DaemonMetricCollector.h"
 
 #include <string>
 #include <vector>
 #include <utility>
+
+typedef std::map<std::string, std::string> labels_t;
 
 // 17.2.6's memento mori:
 // This data was gathered from the python implementation of the promethize method
@@ -662,3 +665,23 @@ TEST(Exporter, promethize) {
   }
 }
 
+TEST(Exporter, check_labels_and_metric_name) {
+  static std::vector<std::pair<std::string, std::string>> counters_data;
+  counters_data.emplace_back("ceph-osd.0", "ceph_osd_numpg");
+  counters_data.emplace_back("ceph-client.rgw.foo.ceph-node-00.okbvtv", "ceph_rgw_get");
+
+  static std::vector<std::pair<labels_t, std::string>> labels_and_name;
+  labels_and_name.emplace_back(labels_t{{"ceph_daemon", "\"osd.0\""}}, "ceph_osd_numpg");
+  labels_and_name.emplace_back(labels_t{{"instance_id", "\"okbvtv\""}}, "ceph_rgw_get");
+  auto counter_data_itr = counters_data.begin();
+  auto labels_and_name_itr = labels_and_name.begin();
+  for (; counter_data_itr != counters_data.end() && labels_and_name_itr != labels_and_name.end();
+         ++counter_data_itr, ++labels_and_name_itr) {
+        std::string daemon_name = counter_data_itr->first;
+        std::string counter_name = counter_data_itr->second;
+        DaemonMetricCollector &collector = collector_instance();
+        std::pair<labels_t, std::string> result = collector.get_labels_and_metric_name(daemon_name, counter_name);
+        ASSERT_EQ(result.first, labels_and_name_itr->first);
+        ASSERT_EQ(result.second, labels_and_name_itr->second);
+  }
+}

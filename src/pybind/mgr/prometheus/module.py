@@ -13,6 +13,7 @@ from collections import namedtuple
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
+from orchestrator import OrchestratorClientMixin, raise_if_exception, NoOrchestrator
 from rbd import RBD
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
@@ -548,7 +549,7 @@ class MetricCollectionThread(threading.Thread):
         self.event.set()
 
 
-class Module(MgrModule):
+class Module(MgrModule, OrchestratorClientMixin):
     MODULE_OPTIONS = [
         Option(
             'server_addr',
@@ -645,6 +646,8 @@ class Module(MgrModule):
         _global_instance = self
         self.metrics_thread = MetricCollectionThread(_global_instance)
         self.health_history = HealthHistory(self)
+        self.modify_instance_id = self.get_orch_status() and self.get_module_option(
+            'exclude_perf_counters')
 
     def _setup_static_metrics(self) -> Dict[str, Metric]:
         metrics = {}
@@ -860,6 +863,12 @@ class Module(MgrModule):
             )
 
         return metrics
+
+    def get_orch_status(self) -> bool:
+        try:
+            return self.available()[0]
+        except NoOrchestrator:
+            return False
 
     def get_server_addr(self) -> str:
         """
@@ -1281,9 +1290,20 @@ class Module(MgrModule):
             )
 
         # Populate other servers metadata
+        # If orchestrator is available and ceph-exporter is running modify rgw instance id
+        # to match the one from exporter
+        if self.modify_instance_id:
+            daemons = raise_if_exception(self.list_daemons(daemon_type='rgw'))
+            for daemon in daemons:
+                self.metrics['rgw_metadata'].set(1,
+                                                 ('{}.{}'.format(str(daemon.daemon_type),
+                                                                 str(daemon.daemon_id)),
+                                                  str(daemon.hostname),
+                                                  str(daemon.version),
+                                                  str(daemon.daemon_id).split(".")[2]))
         for key, value in servers.items():
             service_id, service_type = key
-            if service_type == 'rgw':
+            if service_type == 'rgw' and not self.modify_instance_id:
                 hostname, version, name = value
                 self.metrics['rgw_metadata'].set(
                     1,
