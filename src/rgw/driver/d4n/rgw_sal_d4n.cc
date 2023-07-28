@@ -939,7 +939,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
   }
-  */
+*/  
   return ret;
 }
 
