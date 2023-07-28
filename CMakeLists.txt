@@ -46,6 +46,7 @@ if(WIN32)
   # https://github.com/msys2/MINGW-packages/issues/3319
   add_definitions(
     -D_WIN32_WINNT=${WIN32_WINNT}
+    -DFMT_USE_TZSET=0
     -DBOOST_THREAD_PROVIDES_GENERIC_SHARED_MUTEX_ON_WIN
     -DBOOST_THREAD_V2_SHARED_MUTEX
   )
