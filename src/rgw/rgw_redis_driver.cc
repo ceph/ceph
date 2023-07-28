@@ -26,6 +26,22 @@ std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* 
   return values;
 }
 
+std::list<std::string> build_attrs_new(rgw::sal::Attrs* binary) 
+{
+  std::list<std::string> values;
+  rgw::sal::Attrs::iterator attrs;
+
+  /* Convert to vector */
+  if (binary != NULL) {
+    for (attrs = binary->begin(); attrs != binary->end(); ++attrs) {
+      values.push_back(attrs->first);
+      values.push_back(attrs->second.to_str());
+    }
+  }
+
+  return values;
+}
+
 int RedisDriver::find_client(const DoutPrefixProvider* dpp) 
 {
   if (client.is_connected())
@@ -206,15 +222,11 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
   }
 
   if (addr.host == "" || addr.port == 0) {
+    addr.host = "127.0.0.1"; // fix later -Sam
+    addr.port = 6379;
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+   // return EDESTADDRREQ;
   }
-
-  config cfg;
-  cfg.addr.host = addr.host;
-  cfg.addr.port = std::to_string(addr.port);
-
-  conn.async_run(cfg, {}, net::detached);
 
   // remove
   addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
@@ -311,24 +323,46 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   std::string value;
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   if (key_exists(dpp, key)) {
     try {
-      client.hget(entry, "data", [&value](cpp_redis::reply &reply) {
-        if (!reply.is_null()) {
-          value = reply.as_string();
-        }
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+      response<std::string> resp;
+
+      req.push("HGET", entry, "data");
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec) {
+	   dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	   value = std::get<0>(resp).value();
+	 }
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
     } catch(std::exception &e) {
       return -1;
     }
   }
 
   try { // do we want key check here? -Sam
+    /* Append to existing value or set as new value */
+    boost::redis::config cfg;
+    cfg.addr.host = "127.0.0.1";
+    cfg.addr.port = "6379";
+
+    boost::asio::io_context io;
+    boost::redis::connection connect{io};
+    connect.async_run(cfg, {}, net::detached);
+
     std::string location = partition_info.location + key;
     std::string newVal = value + bl_data.to_str();
 
@@ -337,30 +371,18 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
     req.push("HMSET", location, "data", newVal);
 
-    conn.async_exec(req, resp, [&](auto ec, auto) {
+    connect.async_exec(req, resp, [&](auto ec, auto) {
        if (!ec)
 	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
 
-       conn.cancel();
+       connect.cancel();
     });
 
-    /* Append to existing value or set as new value */
-   /* std::string newVal = value + bl_data.to_str();
-    std::vector< std::pair<std::string, std::string> > field;
-    field.push_back({"data", newVal});
-    std::string result;
+    io.run();
 
-    client.hmset(entry, field, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_string();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-
-    if (result != "OK") {
+    if (std::get<0>(resp).value() != "OK") {
       return -1;
-    }*/
+    }
   } catch(std::exception &e) {
     return -1;
   }
@@ -370,41 +392,65 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
 int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key) 
 {
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
+
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   if (key_exists(dpp, key)) {
-    int exists = -2;
+    response<int> resp;
 
     try {
-      client.hexists(entry, "data", [&exists](cpp_redis::reply &reply) {
-	if (!reply.is_null()) {
-	  exists = reply.as_integer();
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+
+      req.push("HEXISTS", entry, "data");
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
+
     } catch(std::exception &e) {
       return -1;
     }
 
-    if (exists) {
+    if (std::get<0>(resp).value()) {
       try {
-	int result;
-	std::vector<std::string> deleteField;
-	deleteField.push_back("data");
+	boost::redis::config cfg;
+	cfg.addr.host = "127.0.0.1";
+	cfg.addr.port = "6379";
 
-	client.hdel(entry, deleteField, [&result](cpp_redis::reply &reply) {
-	  if (reply.is_integer()) {
-	    result = reply.as_integer(); 
-	  }
+	boost::asio::io_context io;
+	boost::redis::connection connect{io};
+	connect.async_run(cfg, {}, net::detached);
+
+	request req;
+
+	req.push("HDEL", entry, "data");
+
+	connect.async_exec(req, resp, [&](auto ec, auto) {
+	   if (!ec)
+	      dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+	   connect.cancel();
 	});
 
-	client.sync_commit(std::chrono::milliseconds(1000));
+	io.run();
 
-	if (!result) {
+	if (!std::get<0>(resp).value()) {
 	  return -1;
 	} else {
 	  return remove_entry(dpp, key);
@@ -460,29 +506,44 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 
 int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
 {
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
+
   if (attrs.empty())
     return -1;
       
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   if (key_exists(dpp, key)) {
     /* Every attr set will be treated as new */
     try {
       std::string result;
-      auto redisAttrs = build_attrs(&attrs);
+      std::list<std::string> redisAttrs = build_attrs_new(&attrs);
 	
-      client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-	if (!reply.is_null()) {
-	  result = reply.as_string();
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+      response<std::string> resp;
+
+      req.push_range("HMSET", entry, redisAttrs);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
 
-      if (result != "OK") {
+      if (std::get<0>(resp).value() != "OK") {
 	return -1;
       }
     } catch(std::exception &e) {
@@ -753,7 +814,7 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
 
   req.push("HGETALL", location);
 
-  return conn.async_exec(req, resp, std::forward<CompletionToken>(token));
+//  return conn.async_exec(req, resp, std::forward<CompletionToken>(token));
 
   /*
   using Op = AsyncReadOp;

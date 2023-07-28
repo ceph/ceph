@@ -819,6 +819,7 @@ int D4NFilterWriter::prepare(optional_yield y)
 
 int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
 {
+/*
   int append_dataReturn = driver->get_cache_driver()->append_data(save_dpp, obj->get_key().get_oid(), data);
 
   if (append_dataReturn < 0) {
@@ -826,7 +827,7 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation succeeded." << dendl;
   }
-
+*/
   return next->process(std::move(data), offset);
 }
 
@@ -928,14 +929,15 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   baseAttrs.insert(attrs.begin(), attrs.end());
 
-/*  int set_attrsReturn = driver->get_cache_driver()->set_attrs(save_dpp, obj->get_key().get_oid(), baseAttrs);
+/*
+  int set_attrsReturn = driver->get_cache_driver()->set_attrs(save_dpp, obj->get_key().get_oid(), baseAttrs);
 
   if (set_attrsReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation failed." << dendl;
   } else {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
   }
-  */
+*/  
   return ret;
 }
 
