@@ -27,12 +27,9 @@ class NvmeofService(CephService):
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         igw_id = daemon_spec.daemon_id
 
-        # TODO: fixme, we should restrict the permissions here to only the necessary ones
         keyring = self.get_keyring_with_caps(self.get_auth_entity(igw_id),
-                                             ['mon', 'allow *',
-                                              'mds', 'allow *',
-                                              'mgr', 'allow *',
-                                              'osd', 'allow *'])
+                                             ['mon', 'profile rbd',
+                                              'osd', 'allow all tag rbd *=*'])
 
         # TODO: check if we can force jinja2 to generate dicts with double quotes instead of using json.dumps
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
