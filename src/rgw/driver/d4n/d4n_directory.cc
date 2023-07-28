@@ -3,6 +3,8 @@
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
+unsigned int RGWBlockDirectory::hash_slot(const char *key, int keylen) {}
+
 int RGWBlockDirectory::findClient(cpp_redis::client *client) {
   if (client->is_connected())
     return 0;
