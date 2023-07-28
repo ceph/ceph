@@ -1420,7 +1420,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 
       if (fscrypt_denc) {
         enc_name = orig_dname;
-        int r = fscrypt_denc->get_decrypted_fname(orig_dname, &dname);
+        int r = fscrypt_denc->get_decrypted_fname(orig_dname, dlease.alternate_name, &dname);
         if (r < 0) {
           ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
           dname = orig_dname;
@@ -1596,7 +1596,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
     if (fscrypt_denc) {
       enc_name = dname;
-      int r = fscrypt_denc->get_decrypted_fname(enc_name, &dname);
+      int r = fscrypt_denc->get_decrypted_fname(enc_name, dlease.alternate_name, &dname);
       if (r < 0) {
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
         dname = enc_name;
@@ -1673,7 +1673,7 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
     auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
     if (fscrypt_denc) {
       enc_name = dname;
-      int r = fscrypt_denc->get_decrypted_fname(enc_name, &dname);
+      int r = fscrypt_denc->get_decrypted_fname(enc_name, dlease.alternate_name, &dname);
       if (r < 0) {
         ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
         dname = enc_name;
