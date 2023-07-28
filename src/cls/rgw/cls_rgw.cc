@@ -1776,6 +1776,9 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       return ret;
     }
     olh.set_tag(op.olh_tag);
+    if (op.key.instance.empty()){
+      obj.set_epoch(1);
+    }
   }
 
   /* update the olh log */
