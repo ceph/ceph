@@ -912,7 +912,18 @@ class CephadmServe:
 
             while daemons_to_remove and not _ok_to_stop(daemons_to_remove):
                 # let's find a subset that is ok-to-stop
-                daemons_to_remove.pop()
+                non_error_daemon_index = -1
+                # prioritize removing daemons in error state
+                for i, dmon in enumerate(daemons_to_remove):
+                    if dmon.status != DaemonDescriptionStatus.error:
+                        non_error_daemon_index = i
+                        break
+                if non_error_daemon_index != -1:
+                    daemons_to_remove.pop(non_error_daemon_index)
+                else:
+                    # all daemons in list are in error state
+                    # we should be able to remove all of them
+                    break
             for d in daemons_to_remove:
                 r = True
                 assert d.hostname is not None
