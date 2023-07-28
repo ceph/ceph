@@ -2917,9 +2917,9 @@ public:
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t(),
-    ZTracer::Trace *parent_trace = nullptr) {
+    ZTracer::Trace *parent_trace = nullptr, int flage_w_r = CEPH_OSD_FLAG_WRITE) {
     Op *o = new Op(oid, oloc, std::move(op.ops), flags | global_op_flags |
-		   CEPH_OSD_FLAG_WRITE, oncommit, objver,
+		   flage_w_r, oncommit, objver,
 		   nullptr, parent_trace);
     o->priority = op.priority;
     o->mtime = mtime;
@@ -2937,9 +2937,9 @@ public:
     ObjectOperation& op, const SnapContext& snapc,
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
-    osd_reqid_t reqid = osd_reqid_t()) {
+    osd_reqid_t reqid = osd_reqid_t(), int flage_w_r = CEPH_OSD_FLAG_WRITE) {
     Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
-			      oncommit, objver, reqid);
+			      oncommit, objver, reqid, nullptr, flage_w_r);
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
