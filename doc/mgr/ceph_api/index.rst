@@ -41,14 +41,16 @@ So, prior to start consuming the Ceph API, a valid JSON Web Token (JWT) has to
 be obtained, and it may then be reused for subsequent requests. The
 ``/api/auth`` endpoint will provide the valid token:
 
-.. code-block:: sh
+.. prompt:: bash $
 
-  $ curl -X POST "https://example.com:8443/api/auth" \
-    -H  "Accept: application/vnd.ceph.api.v1.0+json" \
-    -H  "Content-Type: application/json" \
-    -d '{"username": <username>, "password": <password>}'
+   curl -X POST "https://example.com:8443/api/auth" \
+   -H  "Accept: application/vnd.ceph.api.v1.0+json" \
+   -H  "Content-Type: application/json" \
+   -d '{"username": <username>, "password": <password>}'
 
-  { "token": "<redacted_token>", ...}
+::
+
+    { "token": "<redacted_token>", ...}
 
 The token obtained must be passed together with every API request in the
 ``Authorization`` HTTP header::
@@ -74,11 +76,11 @@ purpose, Ceph API is built upon the following principles:
 
 An example:
 
-.. code-block:: bash
+.. prompt:: bash $
 
-  $ curl -X GET "https://example.com:8443/api/osd" \
-    -H  "Accept: application/vnd.ceph.api.v1.0+json" \
-    -H  "Authorization: Bearer <token>"
+   curl -X GET "https://example.com:8443/api/osd" \
+   -H  "Accept: application/vnd.ceph.api.v1.0+json" \
+   -H  "Authorization: Bearer <token>"
 
 
 Specification
