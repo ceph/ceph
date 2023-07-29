@@ -2581,16 +2581,19 @@ void PG::handle_advance_map(
     rctx);
 }
 
-void PG::handle_activate_map(PeeringCtx &rctx)
-{
-  dout(10) << __func__ << ": " << get_osdmap()->get_epoch()
-	   << dendl;
+void PG::handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at) {
+  dout(10) << fmt::format("{}: epoch range: {}..{}", __func__, range_starts_at,
+                          get_osdmap()->get_epoch())
+           << dendl;
   recovery_state.activate_map(rctx);
-
   requeue_map_waiters();
 
-  // pool options affecting scrub may have changed
-  on_scrub_schedule_input_change();
+  // pool options affecting scrub may have changed.
+  // Note: as on_scrub_schedule_input_change() is performing quite a lot of
+  // work, we must not call it unconditionally.
+  if (pool.info.last_change >= range_starts_at) {
+    on_scrub_schedule_input_change();
+  }
 }
 
 void PG::handle_initialize(PeeringCtx &rctx)
