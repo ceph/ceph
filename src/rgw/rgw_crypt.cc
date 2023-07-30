@@ -1147,6 +1147,9 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
     /* AMAZON server side encryption with KMS (key management service) */
     std::string_view req_sse =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION);
+    if (req_sse.empty() && s->cct->_conf->rgw_crypt_sse_s3_enforce) {
+      req_sse = "AES256";
+    }
     if (! req_sse.empty()) {
 
       if (req_sse == "aws:kms") {
@@ -1170,10 +1173,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           return -EINVAL;
         }
         /* try to retrieve actual key */
-        std::string key_selector = create_random_key_selector(s->cct);
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS");
         set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
-        set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
         set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
         std::string actual_key;
         res = make_actual_key_from_kms(s, attrs, y, actual_key);
@@ -1226,9 +1227,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
       if (res != 0) {
         return res;
       }
-      std::string key_selector = create_random_key_selector(s->cct);
 
-      set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
       set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
       set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
       set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);

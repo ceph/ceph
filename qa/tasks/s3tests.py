@@ -466,6 +466,8 @@ def run_tests(ctx, config):
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
+        if not client_config.get('with-forced-sse-s3'):
+            attrs += ['not forced_sse_s3']
 
         attrs += client_config.get('extra_attrs', [])
         if 'bucket_logging' not in attrs:
