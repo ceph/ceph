@@ -167,10 +167,11 @@ void RGWFormatter_Plain::dump_format_va(std::string_view name, const char *ns, b
     eol = "";
   wrote_something = true;
 
-  if (use_kv && !entry.is_array)
-    write_data("%s%.*s: %s", eol, name.size(), name.data(), buf);
-  else
+  if (use_kv && !entry.is_array) {
+    write_data("%s%.*s: %s", eol, static_cast<int>(name.size()), name.data(), buf);
+  } else {
     write_data("%s%s", eol, buf);
+  }
 }
 
 int RGWFormatter_Plain::get_len() const
@@ -277,10 +278,11 @@ void RGWFormatter_Plain::dump_value_int(std::string_view name, const char *fmt, 
     eol = "";
   wrote_something = true;
 
-  if (use_kv && !entry.is_array)
-    write_data("%s%.*s: %s", eol, name.size(), name.data(), buf);
-  else
+  if (use_kv && !entry.is_array) {
+    write_data("%s%.*s: %s", eol, static_cast<int>(name.size()), name.data(), buf);
+  } else {
     write_data("%s%s", eol, buf);
+  }
 
 }
 
