@@ -92,6 +92,9 @@ class CephFSMountBase(object):
     # last failed test cases.
     @staticmethod
     def cleanup_stale_netnses_and_bridge(remote):
+        if os.uname().sysname == 'Darwin':
+            return
+
         p = remote.run(args=['ip', 'netns', 'list'],
                        stdout=StringIO(), timeout=(5*60))
         p = p.stdout.getvalue().strip()
@@ -216,7 +219,10 @@ class CephFSMountBase(object):
         return False
 
     def is_mounted(self):
-        file = self.client_remote.read_file('/proc/self/mounts',stdout=StringIO())
+        if os.uname().sysname == 'Darwin':
+            file = self.client_remote.run(args='mount', stdout=StringIO()).stdout.getvalue()
+        else:
+            file = self.client_remote.read_file('/proc/self/mounts',stdout=StringIO())
         if self.hostfs_mntpt in file:
             return True
         else:
@@ -1569,7 +1575,11 @@ class CephFSMountBase(object):
         :param val: xattr value
         :return: None
         """
-        kwargs['args'] = ["setfattr", "-n", str(key), "-v", str(val), path]
+        if os.uname().sysname == 'Darwin':
+            kwargs['args'] = ["xattr", "-w", str(key), str(val), path]
+        else:
+            kwargs['args'] = ["setfattr", "-n", str(key), "-v", str(val), path]
+
         if kwargs.pop('sudo', False):
             kwargs['args'].insert(0, 'sudo')
             kwargs['omit_sudo'] = False
@@ -1582,7 +1592,11 @@ class CephFSMountBase(object):
 
         :return: a string
         """
-        kwargs['args'] = ["getfattr", "--only-values", "-n", attr, path]
+        if os.uname().sysname == 'Darwin':
+            kwargs['args'] = ["xattr", "-p", attr, path]
+        else:
+            kwargs['args'] = ["getfattr", "--only-values", "-n", attr, path]
+
         if kwargs.pop('sudo', False):
             kwargs['args'].insert(0, 'sudo')
             kwargs['omit_sudo'] = False

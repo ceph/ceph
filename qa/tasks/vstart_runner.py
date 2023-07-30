@@ -524,7 +524,8 @@ class LocalDaemon(object):
         """
         Return PID as an integer or None if not found
         """
-        ps_txt = self.controller.run(args=["ps", "ww", "-u"+str(os.getuid())],
+        macos = os.uname().sysname == 'Darwin'
+        ps_txt = self.controller.run(args=["ps", "-ww" if macos else "ww", "-u"+str(os.getuid())],
                                      stdout=StringIO()).\
             stdout.getvalue().strip()
         lines = ps_txt.split("\n")[1:]
@@ -532,7 +533,7 @@ class LocalDaemon(object):
         for line in lines:
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.debug("Found ps line for daemon: {0}".format(line))
-                return int(line.split()[0])
+                return int(line.split()[1 if macos else 0])
         if not opt_log_ps_output:
             ps_txt = '(omitted)'
         log.debug("No match for {0} {1}: {2}".format(
@@ -1415,7 +1416,8 @@ def exec_test():
         lines = ps_txt.split("\n")[1:]
         for line in lines:
             if 'ceph-fuse' in line or 'ceph-mds' in line:
-                pid = int(line.split()[0])
+                col = 1 if os.uname().sysname == 'Darwin' else 0
+                pid = int(line.split()[col])
                 log.warning("Killing stray process {0}".format(line))
                 remote.run(args=f'sudo kill -{signal.SIGKILL.value} {pid}',
                         omit_sudo=False)

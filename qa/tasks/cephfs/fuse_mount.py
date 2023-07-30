@@ -12,6 +12,10 @@ from teuthology.exceptions import CommandFailedError
 from tasks.ceph_manager import get_valgrind_args
 from tasks.cephfs.mount import CephFSMountBase, UMOUNT_TIMEOUT
 
+import os
+import glob
+import re
+
 log = logging.getLogger(__name__)
 
 # Refer mount.py for docstrings.
@@ -139,7 +143,15 @@ class FuseMountBase(CephFSMountBase):
 
         return mount_cmd
 
-    def _list_fuse_conns(self):
+    def _list_fuse_conns_cmd(self):
+        if os.uname().sysname == 'Darwin':
+            # `mount`` will list macfuse mounts like
+            # > ceph-fuse@macfuse0 on /... (macfuse, nodev, nosuid, synchronous, ...)
+            # where the `@macfuseXX` is one of 60~ish predefined devices.
+            # XX is a running counter which can be used later to kill this fs via sysctl
+            return "mount | sed -En 's/^.*@macfuse([[:digit:]]+).*$/\\1/p'"
+        #else: assuming Linux
+
         conn_dir = "/sys/fs/fuse/connections"
 
         self.client_remote.run(args=['sudo', 'modprobe', 'fuse'],
@@ -150,8 +162,13 @@ class FuseMountBase(CephFSMountBase):
                 args=["sudo", "mount", "-t", "fusectl", conn_dir, conn_dir],
                 timeout=30, omit_sudo=False)
 
+        return "ls " + conn_dir
+
+    def _list_fuse_conns(self):
+        cmd = self._list_fuse_conns_cmd()
+
         try:
-            ls_str = self.client_remote.sh("ls " + conn_dir,
+            ls_str = self.client_remote.sh(cmd,
                                            stdout=StringIO(),
                                            timeout=300).strip()
         except CommandFailedError:
@@ -234,8 +251,24 @@ class FuseMountBase(CephFSMountBase):
             if self.inst is None:
                 raise RuntimeError("cannot find client session")
 
-    def check_mounted_state(self):
-        proc = self.client_remote.run(
+    def _check_mounted_state_proc_macos(self):
+        # macos doesn't provide fs info in the stat output
+        # maybe there are better ways to do this, but the only one I've found so far is to query the mount list
+        shellcmd = "mount | sed -nE 's>^.*{0}.*(macfuse).*$>\\1>p'".format(self.hostfs_mntpt.replace(".", "\\."))
+        return self.client_remote.run(
+            args=shellcmd,
+            stdout=StringIO(),
+            stderr=StringIO(),
+            wait=False,
+            timeout=300
+        )
+
+    def _check_mounted_state_proc(self):
+        if os.uname().sysname == 'Darwin':
+            return self._check_mounted_state_proc_macos()
+        #else: assuming Linux
+
+        return self.client_remote.run(
             args=[
                 'stat',
                 '--file-system',
@@ -248,6 +281,10 @@ class FuseMountBase(CephFSMountBase):
             wait=False,
             timeout=300
         )
+
+    def check_mounted_state(self):
+        proc = self._check_mounted_state_proc()
+
         try:
             proc.wait()
         except CommandFailedError:
@@ -263,7 +300,7 @@ class FuseMountBase(CephFSMountBase):
                 return False
 
         fstype = proc.stdout.getvalue().rstrip('\n')
-        if fstype == 'fuseblk':
+        if fstype in ('fuseblk','macfuse'):
             log.info('ceph-fuse is mounted on %s', self.hostfs_mntpt)
             return True
         else:
@@ -324,10 +361,12 @@ class FuseMountBase(CephFSMountBase):
             return
 
         try:
-            log.info('Running fusermount -u on {name}...'.format(name=self.client_remote.name))
+            args = ['umount'] if os.uname().sysname == 'Darwin' else ['sudo', 'fusermount', '-u']
+            log.info('Running {args} on {name}...'.format(args=args, name=self.client_remote.name))
+            args.append(self.hostfs_mntpt)
             stderr = StringIO()
             self.client_remote.run(
-                args=['sudo', 'fusermount', '-u', self.hostfs_mntpt],
+                args=args,
                 stderr=stderr, timeout=UMOUNT_TIMEOUT, omit_sudo=False)
         except run.CommandFailedError:
             if "mountpoint not found" in stderr.getvalue():
@@ -339,20 +378,17 @@ class FuseMountBase(CephFSMountBase):
             else:
                 log.info('Failed to unmount ceph-fuse on {name}, aborting...'.format(name=self.client_remote.name))
 
-                self.client_remote.run(
-                    args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
-                    run.Raw(';'), 'ps', 'auxf'],
-                    timeout=UMOUNT_TIMEOUT, omit_sudo=False)
+                # On Mac the commands are slightly different
+                # but more importantly, this is just printed FYI
+                # Presuming that mac is a local dev env, the below is not necessary.
+                if os.uname().sysname != 'Darwin':
+                  self.client_remote.run(
+                      args=['sudo', run.Raw('PATH=/usr/sbin:$PATH'), 'lsof',
+                      run.Raw(';'), 'ps', 'auxf'],
+                      timeout=UMOUNT_TIMEOUT, omit_sudo=False)
 
                 # abort the fuse mount, killing all hung processes
-                if self._fuse_conn:
-                    self.run_python(dedent("""
-                    import os
-                    path = "/sys/fs/fuse/connections/{0}/abort"
-                    if os.path.exists(path):
-                        open(path, "w").write("1")
-                    """).format(self._fuse_conn))
-                    self._fuse_conn = None
+                self._fuse_conn_abort()
 
                 # make sure its unmounted
                 self._run_umount_lf()
@@ -363,6 +399,24 @@ class FuseMountBase(CephFSMountBase):
         self.addr = None
         if cleanup:
             self.cleanup()
+
+    def _fuse_conn_abort(self):
+        if not self._fuse_conn:
+            return
+
+        if os.uname().sysname == 'Darwin':
+            self.client_remote.run(
+                args=['sudo', 'sysctl', '-w', 'vfs.generic.macfuse.control.kill={0}'.format(self._fuse_conn)],
+                stdout=StringIO())
+        else:
+            self.run_python(dedent("""
+                import os
+                path = "/sys/fs/fuse/connections/{0}/abort"
+                if os.path.exists(path):
+                    open(path, "w").write("1")
+            """).format(self._fuse_conn))
+
+        self._fuse_conn = None
 
     def umount_wait(self, force=False, require_clean=False,
                     timeout=UMOUNT_TIMEOUT):
@@ -432,7 +486,32 @@ class FuseMountBase(CephFSMountBase):
     def _prefix(self):
         return ""
 
+    def _find_admin_socket_macos(self):
+        asok_path = self._asok_path()
+        files = glob.glob(asok_path)
+
+        # Given a non-glob path, it better be there
+        if "*" not in asok_path:
+            assert(len(files) == 1)
+            return files[0]
+
+        for f in files:
+            pid = re.match(".*\.(\d+)\.asok$", f).group(1)
+            cmd = 'ps -awwo pid,command | grep -E "^\\s*{0}"'.format(pid)
+            ps_proc = self.client_remote.run(args=cmd, stdout=StringIO(), check_status=False)
+            ps_proc.wait()
+            line = ps_proc.stdout.getvalue()
+            log.debug("macos: found socket process line: '%s'", line)
+            if self.mountpoint in line:
+                return f
+
+        raise RuntimeError("Client socket client.{0} not found".format(self.client_id))
+
     def find_admin_socket(self):
+        if os.uname().sysname == 'Darwin':
+            return self._find_admin_socket_macos()
+        #else: assuming Linux
+
         pyscript = """
 import glob
 import re
