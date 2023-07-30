@@ -668,11 +668,11 @@ TEST(Exporter, promethize) {
 TEST(Exporter, check_labels_and_metric_name) {
   static std::vector<std::pair<std::string, std::string>> counters_data;
   counters_data.emplace_back("ceph-osd.0", "ceph_osd_numpg");
-  counters_data.emplace_back("ceph-client.rgw.foo.ceph-node-00.okbvtv", "ceph_rgw_get");
+  counters_data.emplace_back("ceph-client.rgw.foo.ceph-node-00.hrgsea.2.94739968030880", "ceph_rgw_get");
 
   static std::vector<std::pair<labels_t, std::string>> labels_and_name;
   labels_and_name.emplace_back(labels_t{{"ceph_daemon", "\"osd.0\""}}, "ceph_osd_numpg");
-  labels_and_name.emplace_back(labels_t{{"instance_id", "\"okbvtv\""}}, "ceph_rgw_get");
+  labels_and_name.emplace_back(labels_t{{"instance_id", "\"hrgsea\""}}, "ceph_rgw_get");
   auto counter_data_itr = counters_data.begin();
   auto labels_and_name_itr = labels_and_name.begin();
   for (; counter_data_itr != counters_data.end() && labels_and_name_itr != labels_and_name.end();
@@ -684,4 +684,13 @@ TEST(Exporter, check_labels_and_metric_name) {
         ASSERT_EQ(result.first, labels_and_name_itr->first);
         ASSERT_EQ(result.second, labels_and_name_itr->second);
   }
+  // test for fail case with daemon_name.size() < 4
+  std::string short_daemon_name = "ceph-client.rgw.foo";
+  std::string counter_name = "ceph_rgw_get";
+  DaemonMetricCollector &collector = collector_instance();
+  std::pair<labels_t, std::string> fail_result = collector.get_labels_and_metric_name(short_daemon_name, counter_name);
+  // This is a special case, the daemon name is not of the required size for fetching instance_id.
+  // So no labels should be added.
+  ASSERT_TRUE(fail_result.first.empty());
+  ASSERT_TRUE(fail_result.second.empty());
 }
