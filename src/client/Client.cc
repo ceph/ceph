@@ -6434,7 +6434,6 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
   if (op.outbl) {
     if (multi_id != 0 && m->r == 0) {
       string prefix;
-      string suffix = "}";
       string mds_name = fmt::format("mds.{}", fsmap->get_info_gid(op.mds_gid).name);
 
       if (op.outbl->length() == 0) { // very first command result
@@ -6443,18 +6442,19 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
       else {
         prefix = fmt::format(",{{\"{}\":", mds_name);
       }
-
       op.outbl->append(prefix);
       op.outbl->append(m->get_data());
-      op.outbl->append(suffix);
+      op.outbl->append("}");
+    }
 
+    if (multi_id == 0) {
+      *op.outbl = m->get_data();
+    }
+    else {
       // when this command is the last one
-      if (command_table.count_multi_commands(multi_id) == 1) {
+      if (command_table.count_multi_commands(multi_id) <= 1) {
         op.outbl->append("]");
       }
-    }
-    else if (multi_id == 0) {
-      *op.outbl = m->get_data();
     }
   }
   if (op.outs) {
