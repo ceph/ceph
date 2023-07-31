@@ -604,64 +604,45 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 
 int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) 
 {
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
+
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   if (key_exists(dpp, key)) {
-    std::vector<std::string> getFields;
-
     try {
-      client.hgetall(entry, [&getFields](cpp_redis::reply &reply) {
-	if (reply.is_array()) {
-	  auto arr = reply.as_array();
-    
-	  if (!arr[0].is_null()) {
-	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
-	      getFields.push_back(arr[i].as_string());
-	    }
-	  }
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+      response<int> resp;
+
+      auto redisAttrs = build_attrs_new(&del_attrs);
+
+      req.push_range("HDEL", entry, redisAttrs);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
+
+      return std::get<0>(resp).value();  /* Returns number of fields deleted */
     } catch(std::exception &e) {
       return -1;
     }
-
-    auto redisAttrs = build_attrs(&del_attrs);
-    std::vector<std::string> redisFields;
-
-    std::transform(begin(redisAttrs), end(redisAttrs), std::back_inserter(redisFields),
-      [](auto const& pair) { return pair.first; });
-
-    /* Only delete attributes that have been stored */
-    for (const auto& it : redisFields) {
-      if (std::find(getFields.begin(), getFields.end(), it) == getFields.end()) {
-        redisFields.erase(std::find(redisFields.begin(), redisFields.end(), it));
-      }
-    }
-
-    try {
-      int result = 0;
-
-      client.hdel(entry, redisFields, [&result](cpp_redis::reply &reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer();
-        }
-      });
-
-      client.sync_commit(std::chrono::milliseconds(1000));
-
-      return result - 1;
-    } catch(std::exception &e) {
-      return -1;
-    }
+  } else {
+    return 0; /* No delete was necessary */
   }
-
-  ldpp_dout(dpp, 20) << "RGW Redis Cache: Object is not in cache." << dendl;
-  return -2;
 }
 
 std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) 
