@@ -1,0 +1,84 @@
+<div class="container-fluid">
+  <div class="row">
+    <div class="col-lg-3">
+      <cd-card cardTitle="Inventory"
+               i18n-title
+               class="col-sm-3 px-3"
+               aria-label="Inventory card">
+        <hr>
+        <li class="list-group-item">
+          <cd-card-row [data]="rgwDaemonCount"
+                       link="/rgw/daemon"
+                       title="Gateway"
+                       summaryType="simplified"
+                       *ngIf="rgwDaemonCount != null"></cd-card-row>
+        </li>
+        <hr>
+        <li class="list-group-item">
+          <cd-card-row [data]="rgwRealmCount"
+                       link="/rgw/multisite"
+                       title="Realm"
+                       summaryType="simplified"
+                       *ngIf="rgwRealmCount != null"></cd-card-row>
+        </li>
+        <hr>
+        <li class="list-group-item">
+          <cd-card-row [data]="rgwZonegroupCount"
+                       link="/rgw/multisite"
+                       title="Zonegroup"
+                       summaryType="simplified"
+                       *ngIf="rgwZonegroupCount != null"></cd-card-row>
+        </li>
+        <hr>
+        <li class="list-group-item">
+          <cd-card-row [data]="rgwZoneCount"
+                       link="/rgw/multisite"
+                       title="Zone"
+                       summaryType="simplified"
+                       *ngIf="rgwZoneCount != null"></cd-card-row>
+        </li>
+        <hr>
+        <li class="list-group-item">
+          <cd-card-row [data]="rgwBucketCount"
+                       link="/rgw/bucket"
+                       title="Bucket"
+                       summaryType="simplified"
+                       *ngIf="rgwBucketCount != null"></cd-card-row>
+        </li>
+        <hr>
+        <li class="list-group-item">
+          <cd-card-row [data]="UserCount"
+                       link="/rgw/user"
+                       title="User"
+                       summaryType="simplified"
+                       *ngIf="UserCount != null"></cd-card-row>
+        </li>
+        <hr>
+        <li class="list-group-item">
+          <cd-card-row [data]="objectCount"
+                       title="Object"
+                       summaryType="simplified"
+                       *ngIf="objectCount != null"></cd-card-row>
+        </li>
+      </cd-card>
+    </div>
+    <div class="col-lg-3">
+      <cd-card cardTitle="Used Capacity"
+               i18n-title
+               class="col-sm-2 px-3 d-flex w-100 h-50 mt-4 pb-5"
+               aria-label="Details card">
+        <span  class="ms-4 me-4 text-center">
+          <h1>{{ totalPoolUsedBytes | dimlessBinary}}</h1>
+        </span>
+      </cd-card>
+      <cd-card cardTitle="Avg Object Size"
+               i18n-title
+               class="col-sm-2 px-3 d-flex w-100 h-50 mt-2 pb-5"
+               aria-label="Details card">
+        <span class="ms-4 me-4 text-center">
+          <h1>{{ averageObjectSize | dimlessBinary}}</h1>
+        </span>
+      </cd-card>
+    </div>
+  </div>
+</div>
