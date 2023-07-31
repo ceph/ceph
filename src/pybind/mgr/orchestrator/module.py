@@ -1,7 +1,7 @@
 import enum
 import errno
 import json
-from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping
+from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping, Tuple
 import re
 import datetime
 import math
@@ -45,6 +45,10 @@ def nice_bytes(v: Optional[int]) -> str:
     if not v:
         return '-'
     return format_bytes(v, 5)
+
+
+class ArgumentError(Exception):
+    pass
 
 
 class HostDetails:
@@ -883,13 +887,57 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             return HandleCommandResult(stdout=table.get_string())
 
-    @_cli_write_command('orch prometheus access info')
+    def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
+
+        _username = username
+        _password = password
+        if inbuf:
+            try:
+                credentials = json.loads(inbuf)
+                _username = credentials['username'].strip()
+                _password = credentials['password'].strip()
+            except (KeyError, json.JSONDecodeError):
+                raise ArgumentError("""
+                json provided for credentials did not include all necessary fields. Please setup json file as:
+
+                {
+                   "username": "USERNAME",
+                   "password": "PASSWORD"
+                }
+                """)
+
+        if not _username or not _password:
+            raise ArgumentError("Invalid arguments. Please provide arguments <username> <password> or -i <credentials_json_file>")
+
+        return _username, _password
+
+    @_cli_write_command('orch prometheus set-credentials')
+    def _set_prometheus_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
+        try:
+            username, password = self._get_credentials(username, password, inbuf)
+            completion = self.set_prometheus_access_info(username, password)
+            result = raise_if_exception(completion)
+            return HandleCommandResult(stdout=json.dumps(result))
+        except ArgumentError as e:
+            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
+
+    @_cli_write_command('orch alertmanager set-credentials')
+    def _set_alertmanager_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
+        try:
+            username, password = self._get_credentials(username, password, inbuf)
+            completion = self.set_alertmanager_access_info(username, password)
+            result = raise_if_exception(completion)
+            return HandleCommandResult(stdout=json.dumps(result))
+        except ArgumentError as e:
+            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
+
+    @_cli_write_command('orch prometheus get-credentials')
     def _get_prometheus_access_info(self) -> HandleCommandResult:
         completion = self.get_prometheus_access_info()
         access_info = raise_if_exception(completion)
         return HandleCommandResult(stdout=json.dumps(access_info))
 
-    @_cli_write_command('orch alertmanager access info')
+    @_cli_write_command('orch alertmanager get-credentials')
     def _get_alertmanager_access_info(self) -> HandleCommandResult:
         completion = self.get_alertmanager_access_info()
         access_info = raise_if_exception(completion)

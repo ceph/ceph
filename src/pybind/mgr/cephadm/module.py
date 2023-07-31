@@ -453,30 +453,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Log all refresh metadata. Includes daemon, device, and host info collected regularly. Only has effect if logging at debug level'
         ),
         Option(
-            'prometheus_web_user',
-            type='str',
-            default='admin',
-            desc='Prometheus web user'
-        ),
-        Option(
-            'prometheus_web_password',
-            type='str',
-            default='admin',
-            desc='Prometheus web password'
-        ),
-        Option(
-            'alertmanager_web_user',
-            type='str',
-            default='admin',
-            desc='Alertmanager web user'
-        ),
-        Option(
-            'alertmanager_web_password',
-            type='str',
-            default='admin',
-            desc='Alertmanager web password'
-        ),
-        Option(
             'secure_monitoring_stack',
             type='bool',
             default=False,
@@ -563,10 +539,6 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_starting_port = 0
             self.service_discovery_port = 0
             self.secure_monitoring_stack = False
-            self.prometheus_web_password: Optional[str] = None
-            self.prometheus_web_user: Optional[str] = None
-            self.alertmanager_web_password: Optional[str] = None
-            self.alertmanager_web_user: Optional[str] = None
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.device_enhanced_scan = False
@@ -2629,6 +2601,9 @@ Then run the following:
                     daemon_names.append(dd.name())
             return daemon_names
 
+        alertmanager_user, alertmanager_password = self._get_alertmanager_credentials()
+        prometheus_user, prometheus_password = self._get_prometheus_credentials()
+
         deps = []
         if daemon_type == 'haproxy':
             # because cephadm creates new daemon instances whenever
@@ -2683,19 +2658,18 @@ Then run the following:
             # add dependency on ceph-exporter daemons
             deps += [d.name() for d in self.cache.get_daemons_by_service('ceph-exporter')]
             if self.secure_monitoring_stack:
-                if self.prometheus_web_user and self.prometheus_web_password:
-                    deps.append(f'{hash(self.prometheus_web_user + self.prometheus_web_password)}')
-                if self.alertmanager_web_user and self.alertmanager_web_password:
-                    deps.append(
-                        f'{hash(self.alertmanager_web_user + self.alertmanager_web_password)}')
+                if prometheus_user and prometheus_password:
+                    deps.append(f'{hash(prometheus_user + prometheus_password)}')
+                if alertmanager_user and alertmanager_password:
+                    deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'grafana':
             deps += get_daemon_names(['prometheus', 'loki'])
-            if self.secure_monitoring_stack and self.prometheus_web_user and self.prometheus_web_password:
-                deps.append(f'{hash(self.prometheus_web_user + self.prometheus_web_password)}')
+            if self.secure_monitoring_stack and prometheus_user and prometheus_password:
+                deps.append(f'{hash(prometheus_user + prometheus_password)}')
         elif daemon_type == 'alertmanager':
             deps += get_daemon_names(['mgr', 'alertmanager', 'snmp-gateway'])
-            if self.secure_monitoring_stack and self.alertmanager_web_user and self.alertmanager_web_password:
-                deps.append(f'{hash(self.alertmanager_web_user + self.alertmanager_web_password)}')
+            if self.secure_monitoring_stack and alertmanager_user and alertmanager_password:
+                deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
             deps += get_daemon_names(['loki'])
         else:
@@ -2796,16 +2770,50 @@ Then run the following:
             self.events.from_orch_error(e)
             raise
 
+    def _get_alertmanager_credentials(self) -> Tuple[str, str]:
+        user = self.get_store(AlertmanagerService.USER_CFG_KEY)
+        password = self.get_store(AlertmanagerService.PASS_CFG_KEY)
+        if user is None or password is None:
+            user = 'admin'
+            password = 'admin'
+            self.set_store(AlertmanagerService.USER_CFG_KEY, user)
+            self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
+        return (user, password)
+
+    def _get_prometheus_credentials(self) -> Tuple[str, str]:
+        user = self.get_store(PrometheusService.USER_CFG_KEY)
+        password = self.get_store(PrometheusService.PASS_CFG_KEY)
+        if user is None or password is None:
+            user = 'admin'
+            password = 'admin'
+            self.set_store(PrometheusService.USER_CFG_KEY, user)
+            self.set_store(PrometheusService.PASS_CFG_KEY, password)
+        return (user, password)
+
+    @handle_orch_error
+    def set_prometheus_access_info(self, user: str, password: str) -> str:
+        self.set_store(PrometheusService.USER_CFG_KEY, user)
+        self.set_store(PrometheusService.PASS_CFG_KEY, password)
+        return 'prometheus credentials updated correctly'
+
+    @handle_orch_error
+    def set_alertmanager_access_info(self, user: str, password: str) -> str:
+        self.set_store(AlertmanagerService.USER_CFG_KEY, user)
+        self.set_store(AlertmanagerService.PASS_CFG_KEY, password)
+        return 'alertmanager credentials updated correctly'
+
     @handle_orch_error
     def get_prometheus_access_info(self) -> Dict[str, str]:
-        return {'user': self.prometheus_web_user or '',
-                'password': self.prometheus_web_password or '',
+        user, password = self._get_prometheus_credentials()
+        return {'user': user,
+                'password': password,
                 'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
 
     @handle_orch_error
     def get_alertmanager_access_info(self) -> Dict[str, str]:
-        return {'user': self.alertmanager_web_user or '',
-                'password': self.alertmanager_web_password or '',
+        user, password = self._get_alertmanager_credentials()
+        return {'user': user,
+                'password': password,
                 'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
 
     @handle_orch_error
