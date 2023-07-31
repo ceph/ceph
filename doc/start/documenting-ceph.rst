@@ -981,7 +981,8 @@ External Links
 
 .. _external_link_with_inline_text:
 
-This is the formula for links to addresses external to the Ceph documentation:
+Use the formula immediately below to render links that direct the reader to
+addresses external to the Ceph documentation:
 
 ::
 
@@ -994,10 +995,13 @@ This is the formula for links to addresses external to the Ceph documentation:
 
    To link to addresses that are external to the Ceph documentation, include a
    space between the inline text and the angle bracket that precedes the
-   external address. This is precisely the opposite of :ref:`the convention for
-   inline text that links to a location inside the Ceph
-   documentation<internal_link_with_inline_text>`. If this seems inconsistent
-   and confusing to you, then you're right. It is inconsistent and confusing.
+   external address. This is precisely the opposite of the convention for
+   inline text that links to a location inside the Ceph documentation. See
+   :ref:`here <internal_link_with_inline_text>` for an exemplar of this
+   convention.
+
+   If this seems inconsistent and confusing to you, then you're right. It is
+   inconsistent and confusing.
 
 See also ":ref:`External Hyperlink Example<start_external_hyperlink_example>`".
 
