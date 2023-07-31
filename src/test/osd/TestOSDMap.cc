@@ -2349,7 +2349,7 @@ TEST_F(OSDMapTest, ReadBalanceScore1) {
         float fratio = 1. / (float)replica_count;
         for (int iter = 0 ; iter < 100 ; iter++) {  // run the test 100 times
           // Create random shuffle of OSDs
-          std::random_shuffle (osds.begin(), osds.end());
+          std::shuffle (osds.begin(), osds.end(), std::default_random_engine{});
           for (uint i = 0 ; i < num_osds ; i++) {
             if ((float(i + 1) / float(num_osds)) < fratio) {
               ASSERT_TRUE(osds[i] < num_osds);
