@@ -5,6 +5,7 @@
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"
 #include "rgw_auth_registry.h"
+#include "rgw_aio_throttle.h"
 #include "rgw_redis_driver.h"
 
 namespace net = boost::asio;
@@ -183,8 +184,6 @@ TEST_F(RedisDriverFixture, DelYield)
 
   io.run();
 }
-
-// How can I test get_async? -Sam
 
 TEST_F(RedisDriverFixture, AppendDataYield)
 {
@@ -485,7 +484,6 @@ TEST_F(RedisDriverFixture, GetAttrYield)
 
   io.run();
 }
-
 
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);

@@ -32,8 +32,6 @@ class RedisDriver : public CacheDriver {
       remove_partition_info(partition_info);
     }
 
-    //int update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight); // may need to exist for base class -Sam
-
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; } // how to get this from redis server? -Sam
@@ -42,6 +40,7 @@ class RedisDriver : public CacheDriver {
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) override;
+    virtual int put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
     virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) override;
     virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
     virtual int del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
@@ -53,12 +52,11 @@ class RedisDriver : public CacheDriver {
     virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) override;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) override;
     virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) override;
+    void shutdown();
 
-    virtual int put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
     struct redis_response {
       boost::redis::response<std::string> resp;
     };
-    void shutdown();
 
     struct redis_aio_handler { 
       rgw::Aio* throttle = nullptr;
@@ -66,7 +64,7 @@ class RedisDriver : public CacheDriver {
       std::shared_ptr<redis_response> s;
 
       /* Read Callback */
-      void operator()(boost::system::error_code ec, long unsigned int size) const {
+      void operator()(boost::system::error_code ec, auto) const {
 	r.result = -ec.value();
 	r.data.append(std::get<0>(s->resp).value().c_str());
 	throttle->put(r);
