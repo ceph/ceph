@@ -269,16 +269,47 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 
 int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) 
 {
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
+
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
+ // if (!client.is_connected()) 
+ //   find_client(dpp);
 
   /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
   try {
-    std::string result; 
-    auto redisAttrs = build_attrs(&attrs);
-    redisAttrs.push_back({"data", bl.to_str()});
+    boost::redis::config cfg;
+    cfg.addr.host = "127.0.0.1";
+    cfg.addr.port = "6379";
+
+    boost::asio::io_context io;
+    boost::redis::connection connect{io};
+    connect.async_run(cfg, {}, net::detached);
+
+    request req;
+    response<std::string> resp;
+
+    auto redisAttrs = build_attrs_new(&attrs);
+
+    if (bl.length()) {
+      redisAttrs.push_back("data");
+      redisAttrs.push_back(bl.to_str());
+    }
+
+    req.push_range("HMSET", entry, redisAttrs);
+
+    connect.async_exec(req, resp, [&](auto ec, auto) {
+       if (!ec)
+	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+       connect.cancel();
+    });
+
+    io.run();
+
+    /*std::string result; 
 
     client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
       if (!reply.is_null()) {
@@ -286,9 +317,9 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
       }
     });
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    client.sync_commit(std::chrono::milliseconds(1000));*/
 
-    if (result != "OK") {
+    if (std::get<0>(resp).value() != "OK") {
       return -1;
     }
   } catch(std::exception &e) {
