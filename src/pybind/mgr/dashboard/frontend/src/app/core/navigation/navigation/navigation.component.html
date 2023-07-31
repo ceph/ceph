@@ -270,6 +270,11 @@
             id="gateway-nav"
             [ngbCollapse]="displayedSubMenu !== 'rgw'">
           <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_overview">
+            <a i18n
+               routerLink="/rgw/overview">Overview</a>
+          </li>
+          <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_daemons">
             <a i18n
                routerLink="/rgw/daemon">Gateways</a>

@@ -41,6 +41,8 @@ import { RgwMultisiteMigrateComponent } from './rgw-multisite-migrate/rgw-multis
 import { RgwMultisiteImportComponent } from './rgw-multisite-import/rgw-multisite-import.component';
 import { RgwMultisiteExportComponent } from './rgw-multisite-export/rgw-multisite-export.component';
 import { CreateRgwServiceEntitiesComponent } from './create-rgw-service-entities/create-rgw-service-entities.component';
+import { RgwOverviewDashboardComponent } from './rgw-overview-dashboard/rgw-overview-dashboard.component';
+import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 
 @NgModule({
   imports: [
@@ -54,7 +56,8 @@ import { CreateRgwServiceEntitiesComponent } from './create-rgw-service-entities
     NgbTooltipModule,
     NgxPipeFunctionModule,
     TreeModule,
-    DataTableModule
+    DataTableModule,
+    DashboardV3Module
   ],
   exports: [
     RgwDaemonListComponent,
@@ -91,7 +94,8 @@ import { CreateRgwServiceEntitiesComponent } from './create-rgw-service-entities
     RgwMultisiteMigrateComponent,
     RgwMultisiteImportComponent,
     RgwMultisiteExportComponent,
-    CreateRgwServiceEntitiesComponent
+    CreateRgwServiceEntitiesComponent,
+    RgwOverviewDashboardComponent
   ]
 })
 export class RgwModule {}
@@ -164,6 +168,11 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
+  },
+  {
+    path: 'overview',
+    data: { breadcrumbs: 'Overview' },
+    children: [{ path: '', component: RgwOverviewDashboardComponent }]
   },
   {
     path: 'multisite',
