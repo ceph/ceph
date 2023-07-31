@@ -973,6 +973,15 @@ convention was preferred because it made the documents more readable in a
 command line interface. As of 2023, though, we have no preference for one over
 the other. Use whichever convention makes the text easier to read.
 
+Using a part of a sentence as a hyperlink, `like this <docs.ceph.com>`_, is
+discouraged. The convention of writing "See X" is preferred. Here are some
+preferred formulations:
+
+#. For more information, see `docs.ceph.com <docs.ceph.com>`_.
+
+#. See `docs.ceph.com <docs.ceph.com>`_.
+
+
 Quirks of ReStructured Text
 ---------------------------
 
