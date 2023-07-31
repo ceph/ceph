@@ -918,12 +918,15 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   baseAttrs.insert(attrs.begin(), attrs.end());
 
-  int set_attrsReturn = driver->get_cache_driver()->set_attrs(save_dpp, obj->get_key().get_oid(), baseAttrs);
+  // is the accounted_size equivalent to the length? -Sam
+  bufferlist bl_empty;
+  int putReturn = driver->get_cache_driver()->
+	  put(save_dpp, obj->get_key().get_oid(), bl_empty, accounted_size, baseAttrs); /* Data already written during process call */
 
-  if (set_attrsReturn < 0) {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation failed." << dendl;
+  if (putReturn < 0) {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache put operation failed." << dendl;
   } else {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache put operation succeeded." << dendl;
   }
   
   return ret;
