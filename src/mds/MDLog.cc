@@ -645,11 +645,8 @@ void MDLog::trim(int m)
 
   unsigned new_expiring_segments = 0;
 
-  unsigned max_expiring_segments = 0;
-  if (pre_segments_size > 0){
-    max_expiring_segments = max_segments/2;
+  if (pre_segments_size > 0) {
     ceph_assert(segments.size() >= pre_segments_size);
-    max_expiring_segments = std::max<unsigned>(max_expiring_segments,segments.size() - pre_segments_size);
   }
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
@@ -685,15 +682,6 @@ void MDLog::trim(int m)
       break;
     }
 
-    // Do not trim too many segments at once for peak workload. If mds keeps creating N segments each tick,
-    // the upper bound of 'num_remaining_segments - max_segments' is '2 * N'
-    if (new_expiring_segments * 2 > num_remaining_segments)
-      break;
-
-    if (max_expiring_segments > 0 &&
-	expiring_segments.size() >= max_expiring_segments)
-      break;
-    
     // look at first segment
     LogSegment *ls = p->second;
     ceph_assert(ls);
