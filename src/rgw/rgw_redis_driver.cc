@@ -326,6 +326,47 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
+int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key)
+{
+  namespace net = boost::asio;
+  using boost::redis::request;
+  using boost::redis::response;
+
+  std::string entry = partition_info.location + key;
+
+  if (key_exists(dpp, key)) {
+    try {
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+      response<int> resp;
+
+      req.push("DEL", entry);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
+      });
+
+      io.run();
+
+      return std::get<0>(resp).value() - 1; 
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    return 0; /* No delete was necessary */
+  }
+}
+
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) 
 {
   namespace net = boost::asio;
@@ -636,7 +677,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 
       io.run();
 
-      return std::get<0>(resp).value();  /* Returns number of fields deleted */
+      return std::get<0>(resp).value() - del_attrs.size();  /* Returns number of fields deleted */
     } catch(std::exception &e) {
       return -1;
     }
