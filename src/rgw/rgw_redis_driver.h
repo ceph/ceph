@@ -15,6 +15,12 @@
 
 namespace rgw { namespace cache { 
 
+namespace net = boost::asio;
+using boost::redis::config;
+using boost::redis::connection;
+using boost::redis::request;
+using boost::redis::response;
+ 
 class RedisDriver;
 
 class RedisCacheAioRequest: public CacheAioRequest {
@@ -30,10 +36,10 @@ class RedisCacheAioRequest: public CacheAioRequest {
 
 class RedisDriver : public CacheDriver {
   public:
-    RedisDriver(boost::redis::connection& _conn, Partition& _partition_info) : conn(_conn),
-									       partition_info(_partition_info),
-									       free_space(_partition_info.size), 
-									       outstanding_write_size(0)
+    RedisDriver(connection& _conn, Partition& _partition_info) : conn(_conn),
+								 partition_info(_partition_info),
+								 free_space(_partition_info.size), 
+								 outstanding_write_size(0)
     {
       add_partition_info(_partition_info);
     }
@@ -88,7 +94,7 @@ class RedisDriver : public CacheDriver {
     };
 
   protected:
-    boost::redis::connection& conn;
+    connection& conn;
 
     rgw::d4n::Address addr; // remove -Sam
     cpp_redis::client client;

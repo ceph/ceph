@@ -1,6 +1,5 @@
 #include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
-//#include "rgw_ssd_driver.h" // fix -Sam
 #include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/redis/src.hpp>
 
@@ -105,10 +104,6 @@ auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request
 
 bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
 {
-  namespace net = boost::asio;
-  using boost::redis::request;
-  using boost::redis::response;
-
   std::string entry = partition_info.location + key;
   response<int> resp;
 
@@ -231,9 +226,6 @@ int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string 
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
 {
-  namespace net = boost::asio;
-  using boost::redis::config;
-
   this->cct = cct;
 
   if (partition_info.location.back() != '/') {
@@ -269,10 +261,6 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 
 int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) 
 {
-  namespace net = boost::asio;
-  using boost::redis::request;
-  using boost::redis::response;
-
   std::string entry = partition_info.location + key;
 
   /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
@@ -368,10 +356,6 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 
 int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key)
 {
-  namespace net = boost::asio;
-  using boost::redis::request;
-  using boost::redis::response;
-
   std::string entry = partition_info.location + key;
 
   if (key_exists(dpp, key)) {
@@ -409,10 +393,6 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key)
 
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
 {
-  namespace net = boost::asio;
-  using boost::redis::request;
-  using boost::redis::response;
-
   std::string value;
   std::string entry = partition_info.location + key;
 
@@ -485,10 +465,6 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
 int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) 
 {
-  namespace net = boost::asio;
-  using boost::redis::request;
-  using boost::redis::response;
-
   std::string entry = partition_info.location + key;
 
   if (key_exists(dpp, key)) {
@@ -598,10 +574,6 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 
 int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
-  namespace net = boost::asio;
-  using boost::redis::request;
-  using boost::redis::response;
-
   if (attrs.empty())
     return -1;
       
@@ -685,10 +657,6 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 
 int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) 
 {
-  namespace net = boost::asio;
-  using boost::redis::request;
-  using boost::redis::response;
-
   std::string entry = partition_info.location + key;
 
   if (key_exists(dpp, key)) {
