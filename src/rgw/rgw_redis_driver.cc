@@ -262,9 +262,6 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
 
   std::string entry = partition_info.location + key;
 
- // if (!client.is_connected()) 
- //   find_client(dpp);
-
   /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
   try {
     boost::redis::config cfg;
@@ -296,16 +293,6 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
 
     io.run();
 
-    /*std::string result; 
-
-    client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-	result = reply.as_string();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));*/
-
     if (std::get<0>(resp).value() != "OK") {
       return -1;
     }
@@ -320,32 +307,41 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 {
   std::string entry = partition_info.location + key;
   
-  if (!client.is_connected()) 
-    find_client(dpp);
-    
   if (key_exists(dpp, key)) {
     /* Retrieve existing values from cache */
     try {
-      client.hgetall(entry, [&bl, &attrs](cpp_redis::reply &reply) {
-	if (reply.is_array()) {
-	  auto arr = reply.as_array();
-    
-	  if (!arr[0].is_null()) {
-    	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
-	      if (arr[i].as_string() == "data") {
-                bl.append(arr[i + 1].as_string());
-	      } else {
-	        buffer::list bl_value;
-		bl_value.append(arr[i + 1].as_string());
-                attrs.insert({arr[i].as_string(), bl_value});
-		bl_value.clear();
-	      }
-            }
-	  }
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+      response< std::map<std::string, std::string> > resp;
+
+      req.push("HGETALL", entry);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "Sam get: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
+
+      for (auto const& it : std::get<0>(resp).value()) {
+	if (it.first == "data") {
+	  bl.append(it.second);
+	} else {
+	  buffer::list bl_value;
+	  bl_value.append(it.second);
+	  attrs.insert({it.first, bl_value});
+	  bl_value.clear();
+	}
+      }
     } catch(std::exception &e) {
       return -1;
     }
