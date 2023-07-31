@@ -518,12 +518,19 @@ std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string
 
 int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y)
 {
+    int e;
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): set_attr: key: " << attr_name << " val: " << attr_val << dendl;
 
-    return setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), 0);
+    int ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), 0);
+    if (ret < 0) {
+      e = errno; 
+      ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): ERROR: " << cpp_strerror(e) << dendl;
+    }
+
+    return ret;
 }
 
 int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name)
