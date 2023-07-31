@@ -45,8 +45,8 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
   partition_info.type = "read-cache";
   partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
 
-  //cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
-  cacheDriver = new rgw::cache::SSDDriver(partition_info);
+  cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
+  //cacheDriver = new rgw::cache::SSDDriver(partition_info);
   objDir = new rgw::d4n::ObjectDirectory(io_context);
   blockDir = new rgw::d4n::BlockDirectory(io_context);
   cacheBlock = new rgw::d4n::CacheBlock();
