@@ -90,9 +90,9 @@ def with_cephadm_module(module_options=None, store=None):
     :param module_options: Set opts as if they were set before module.__init__ is called
     :param store: Set the store before module.__init__ is called
     """
-    with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option),\
+    with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option), \
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
-            mock.patch('cephadm.module.CephadmOrchestrator.get_module_option_ex', get_module_option_ex),\
+            mock.patch('cephadm.module.CephadmOrchestrator.get_module_option_ex', get_module_option_ex), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
             mock.patch("cephadm.module.CephadmOrchestrator.remote"), \
             mock.patch("cephadm.agent.CephadmAgentHelpers._request_agent_acks"), \

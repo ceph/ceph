@@ -92,11 +92,11 @@ def test_upgrade_run(use_repo_digest, cephadm_module: CephadmOrchestrator):
             cephadm_module.set_container_image('global', 'from_image')
             cephadm_module.use_repo_digest = use_repo_digest
             with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(host_pattern='*', count=2)),
-                              CephadmOrchestrator.apply_mgr, '', status_running=True),\
+                              CephadmOrchestrator.apply_mgr, '', status_running=True), \
                 mock.patch("cephadm.module.CephadmOrchestrator.lookup_release_name",
-                           return_value='foo'),\
+                           return_value='foo'), \
                 mock.patch("cephadm.module.CephadmOrchestrator.version",
-                           new_callable=mock.PropertyMock) as version_mock,\
+                           new_callable=mock.PropertyMock) as version_mock, \
                 mock.patch("cephadm.module.CephadmOrchestrator.get",
                            return_value={
                                # capture fields in both mon and osd maps
