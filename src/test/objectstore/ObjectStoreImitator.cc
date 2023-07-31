@@ -12,6 +12,7 @@
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
 #include <algorithm>
+#include <cerrno>
 #include <cmath>
 
 #define dout_context g_ceph_context
@@ -267,6 +268,72 @@ void ObjectStoreImitator::print_allocator_profile() {
   dout(0) << "Total alloc ops latency: " << alloc_time
           << ", total ops: " << alloc_ops
           << ", average alloc op latency: " << avg << dendl;
+}
+
+void ObjectStoreImitator::output_fragmentation_img(const std::string &path,
+                                                   unsigned n) {
+  if (path.empty() || n == 0)
+    return;
+
+  ImageGenerator img_gen;
+  if (!img_gen.init_out(path)) {
+    derr << "Error initializing output file" << dendl;
+    if (errno)
+      derr << cpp_strerror(errno) << dendl;
+    return;
+  }
+
+  img_gen.write_header(n, n);
+
+  uint64_t region_size = alloc->get_capacity() / (n * n); // is a power of 2
+  std::vector<uint64_t> region_free_space(n * n, region_size);
+
+  for (const auto &[_, coll_ref] : coll_map) {
+    for (const auto &[_, obj] : coll_ref->objects) {
+      for (auto [_, ext] : obj->extent_map) {
+        uint64_t start = ext.offset, end = ext.offset + ext.length;
+        uint64_t start_round_up = p2roundup(start, region_size);
+
+        if (start_round_up >= end) {
+          // extent completely fits into the region
+          ceph_assert(region_free_space[start / region_size] >= ext.length);
+          region_free_space[start / region_size] -= ext.length;
+          continue;
+        }
+
+        // overlaps at least 2 regions
+
+        ceph_assert(region_free_space[start / region_size] >=
+                    (start_round_up - start));
+        region_free_space[start / region_size] -= start_round_up - start;
+
+        ext.length -= start_round_up - start;
+        start += start_round_up - start;
+
+        while (ext.length > 0) {
+          if (ext.length < region_size) {
+            ceph_assert(region_free_space[start / region_size] >= ext.length);
+            region_free_space[start / region_size] -= ext.length;
+
+            start += ext.length;
+            ext.length = 0;
+            continue;
+          }
+
+          ceph_assert(region_free_space[start / region_size] >= region_size);
+          region_free_space[start / region_size] -= region_size;
+
+          ext.length -= region_size;
+          start += region_size;
+        }
+      }
+    }
+  }
+
+  for (const auto &free_space : region_free_space) {
+    uint64_t v = (region_size - free_space) * 255 / region_size;
+    img_gen.write_pixel(v, v, v);
+  }
 }
 
 // ------- Transactions -------

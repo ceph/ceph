@@ -79,8 +79,8 @@ private:
         "ObjectStoreImitator::Collection::lock", true, false);
 
     // Lock for 'objects'
-    ceph::recursive_mutex obj_lock = ceph::make_recursive_mutex(
-        "ObjectStoreImitator::Collection::obj_lock");
+    ceph::recursive_mutex obj_lock =
+        ceph::make_recursive_mutex("ObjectStoreImitator::Collection::obj_lock");
 
     bool exists;
 
@@ -194,6 +194,35 @@ private:
                          uint64_t max_alloc_size, int64_t hint,
                          PExtentVector *extents);
 
+  /*
+   * ImageGenerator generates an image according to the netpbm(ppm) format.
+   * To generate an image, first call init_out() to create a handle to the
+   * output file then call writeHeader() with width and height to write the file
+   * header.
+   */
+  class ImageGenerator {
+  public:
+    ImageGenerator() = default;
+    bool init_out(const std::string &output_file_path_) {
+      output_file_path = output_file_path_;
+      o.open(output_file_path, std::ios_base::out);
+      return o.is_open();
+    }
+    void write_header(int width_, int height_) {
+      width = width_, height = height_;
+      o << "P3\n" << fmt::format("{} {}\n", width, height) << "255\n";
+    }
+    void write_pixel(uint8_t red, uint8_t green, uint8_t blue) {
+      o << fmt::format("{} {} {}\n", red, green, blue);
+    }
+    ~ImageGenerator() = default;
+
+  private:
+    std::string output_file_path;
+    int width, height;
+    std::ofstream o;
+  };
+
   // Members
 
   double alloc_time = 0.0;
@@ -202,12 +231,12 @@ private:
   boost::scoped_ptr<Allocator> alloc;
   std::atomic<uint64_t> nid_last = {0};
 
-  uint64_t min_alloc_size; ///< minimum allocation unit (power of 2)
+  uint64_t min_alloc_size; //< minimum allocation unit (power of 2)
   static_assert(std::numeric_limits<uint8_t>::max() >
                     std::numeric_limits<decltype(min_alloc_size)>::digits,
                 "not enough bits for min_alloc_size");
 
-  ///< rwlock to protect coll_map/new_coll_map
+  //< rwlock to protect coll_map/new_coll_map
   ceph::shared_mutex coll_lock =
       ceph::make_shared_mutex("ObjectStoreImitator::coll_lock");
   std::unordered_map<coll_t, CollectionRef> coll_map;
@@ -239,6 +268,9 @@ public:
 
   // Print allocator average latency
   void print_allocator_profile();
+
+  void output_fragmentation_img(const std::string &path, unsigned n);
+
   // Overrides
 
   // This is often not called directly but through queue_transaction

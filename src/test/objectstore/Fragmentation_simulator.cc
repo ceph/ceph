@@ -87,7 +87,8 @@ public:
   using WorkloadGeneratorRef = std::shared_ptr<WorkloadGenerator>;
 
   void add_generator(WorkloadGeneratorRef gen);
-  int begin_simulation_with_generators(unsigned iterations);
+  int begin_simulation(unsigned iterations, const std::string &img_path,
+                       unsigned img_size);
   void init(const std::string &alloc_type, uint64_t size,
             uint64_t min_alloc_size = 4096);
 
@@ -122,8 +123,9 @@ void FragmentationSimulator::add_generator(WorkloadGeneratorRef gen) {
   generators.push_back(gen);
 }
 
-int FragmentationSimulator::begin_simulation_with_generators(
-    unsigned iterations) {
+int FragmentationSimulator::begin_simulation(unsigned iterations,
+                                             const std::string &img_path,
+                                             unsigned img_size) {
   ObjectStore::CollectionHandle ch = os->create_new_collection(coll_t::meta());
 
   ObjectStore::Transaction t;
@@ -144,6 +146,7 @@ int FragmentationSimulator::begin_simulation_with_generators(
   os->print_per_object_fragmentation();
   os->print_per_access_fragmentation();
   os->print_allocator_profile();
+  os->output_fragmentation_img(img_path, img_size);
 
   return 0;
 }
@@ -414,21 +417,24 @@ private:
 // ----------- Tests -----------
 
 TEST_P(FragmentationSimulator, SimpleCWGenerator) {
-  init(GetParam(), _1Gb);
+  std::string alloc = GetParam();
+  init(alloc, _1Gb);
   add_generator(std::make_shared<SimpleCWGenerator>());
-  begin_simulation_with_generators(1);
+  begin_simulation(1, fmt::format("{}_simple.ppm", alloc), 128);
 }
 
 TEST_P(FragmentationSimulator, RandomCWGenerator) {
-  init(GetParam(), _1Mb * 16);
+  std::string alloc = GetParam();
+  init(alloc, _1Mb * 16);
   add_generator(std::make_shared<RandomCWGenerator>());
-  begin_simulation_with_generators(1);
+  begin_simulation(1, fmt::format("{}_random.ppm", alloc), 16);
 }
 
 TEST_P(FragmentationSimulator, MultiThreadedCWGenerator) {
-  init(GetParam(), _1Mb * 4);
+  std::string alloc = GetParam();
+  init(alloc, _1Mb * 4);
   add_generator(std::make_shared<MultiThreadedCWGenerator>());
-  begin_simulation_with_generators(1);
+  begin_simulation(1, fmt::format("{}_multi.ppm", alloc), 4);
 }
 
 // ----------- main -----------
