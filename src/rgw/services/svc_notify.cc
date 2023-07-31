@@ -427,7 +427,7 @@ int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp,
       ldpp_dout(dpp, 1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			<< " Invalidating obj=" << info.obj << " tries="
 			<< tries << dendl;
-      r = notify_obj.notify(dpp, bl, 0, nullptr, y);
+      r = notify_obj.notify(dpp, retrybl, 0, nullptr, y);
       if (r < 0) {
 	ldpp_dout(dpp, 1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			  << " invalidation attempt " << tries << " failed: "
