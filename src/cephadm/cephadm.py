@@ -8367,7 +8367,7 @@ class Apt(Packager):
 
     def install(self, ls: List[str]) -> None:
         logger.info('Installing packages %s...' % ls)
-        call_throws(self.ctx, ['apt-get', 'install', '-y'] + ls)
+        call_throws(self.ctx, ['apt-get', 'install', '-y', '--no-install-recommends'] + ls)
 
     def update(self) -> None:
         logger.info('Updating package list...')
