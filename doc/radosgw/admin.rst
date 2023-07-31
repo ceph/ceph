@@ -484,8 +484,8 @@ Every Object Gateway tracks per user and bucket metrics separately, these metric
 That means that the desired limits configured should be divide by the number of active Object Gateways.
 For example, if userA should be limited by 10 ops per minute and there are 2 Object Gateways in the cluster,
 the limit over userA should be 5 (10 ops per minute / 2 RGWs).
-if the requests are ``not`` balanced between RGWs, the rate limit may be underutilized.
-For example, if the ops limit is 5 and there are 2 RGWs, ``but`` the Load Balancer send load only to one of those RGWs,
+If the requests are **not** balanced between RGWs, the rate limit may be underutilized.
+For example, if the ops limit is 5 and there are 2 RGWs, **but** the Load Balancer send load only to one of those RGWs,
 The effective limit would be 5 ops, because this limit is enforced per RGW.
 If there is a limit reached for bucket not for user or vice versa the request would be cancelled as well.
 The bandwidth counting happens after the request is being accepted, as a result, even if in the middle of the request the bucket/user has reached its bandwidth limit this request will proceed.
