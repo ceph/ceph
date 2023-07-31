@@ -1782,7 +1782,7 @@ do_rgw()
             --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
             --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
             --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
-            --rgw_luarocks_location=${CEPH_OUT_DIR}/luarocks \
+            --rgw_luarocks_location=${CEPH_OUT_DIR}/radosgw.${current_port}.luarocks \
             ${RGWDEBUG} \
             -n ${rgw_name} \
             "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}${flight_conf:+,arrow_flight}"

@@ -3709,7 +3709,7 @@ options:
   type: str
   level: advanced
   desc: Directory where luarocks install packages from allowlist
-  default: @rgw_luarocks_location@
+  default: /tmp/rgw_luarocks/$name
   services:
   - rgw
   flags:

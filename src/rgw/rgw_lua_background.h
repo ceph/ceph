@@ -151,7 +151,6 @@ private:
   const DoutPrefix dp;
   std::unique_ptr<rgw::sal::LuaManager> lua_manager; 
   CephContext* const cct;
-  const std::string luarocks_path;
   std::thread runner;
   mutable std::mutex table_mutex;
   std::mutex cond_mutex;
@@ -167,7 +166,6 @@ protected:
 public:
   Background(rgw::sal::Driver* driver,
       CephContext* cct,
-      const std::string& luarocks_path,
       int execute_interval = INIT_EXECUTE_INTERVAL);
 
     virtual ~Background() = default;

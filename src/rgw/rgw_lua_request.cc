@@ -821,7 +821,8 @@ int execute(
   lua_state_guard lguard(L);
 
   open_standard_libs(L);
-  set_package_path(L, s->penv.lua.luarocks_path);
+  const std::string path = s->cct->_conf.get_val<std::string>("rgw_luarocks_location");
+  set_package_path(L, path);
 
   create_debug_action(L, s->cct);  
   

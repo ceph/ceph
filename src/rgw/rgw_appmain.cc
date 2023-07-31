@@ -550,11 +550,7 @@ void rgw::AppMain::init_lua()
 {
   rgw::sal::Driver* driver = env.driver;
   int r{0};
-  std::string path = g_conf().get_val<std::string>("rgw_luarocks_location");
-  if (!path.empty()) {
-    path += "/" + g_conf()->name.to_str();
-  }
-  env.lua.luarocks_path = path;
+  const std::string path = g_conf().get_val<std::string>("rgw_luarocks_location");
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
@@ -577,8 +573,7 @@ void rgw::AppMain::init_lua()
   env.lua.manager = env.driver->get_lua_manager();
 
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
-    lua_background = std::make_unique<
-      rgw::lua::Background>(driver, dpp->get_cct(), path);
+    lua_background = std::make_unique<rgw::lua::Background>(driver, dpp->get_cct());
     lua_background->start();
     env.lua.background = lua_background.get();
   }

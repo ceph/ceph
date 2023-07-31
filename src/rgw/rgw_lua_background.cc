@@ -58,13 +58,11 @@ int RGWTable::increment_by(lua_State* L) {
 
 Background::Background(rgw::sal::Driver* driver,
     CephContext* cct,
-      const std::string& luarocks_path,
       int execute_interval) :
     execute_interval(execute_interval),
     dp(cct, dout_subsys, "lua background: "),
     lua_manager(driver->get_lua_manager()),
-    cct(cct),
-    luarocks_path(luarocks_path) {}
+    cct(cct) {}
 
 void Background::shutdown(){
   stopped = true;
@@ -129,7 +127,8 @@ void Background::run() {
   lua_State* const L = luaL_newstate();
   rgw::lua::lua_state_guard lguard(L);
   open_standard_libs(L);
-  set_package_path(L, luarocks_path);
+  const std::string path = cct->_conf.get_val<std::string>("rgw_luarocks_location");
+  set_package_path(L, path);
   create_debug_action(L, cct);
   create_background_metatable(L);
   const DoutPrefixProvider* const dpp = &dp;
