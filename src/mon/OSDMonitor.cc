@@ -9783,6 +9783,7 @@ static int parse_reweights(CephContext *cct,
 }
 
 int OSDMonitor::prepare_command_osd_destroy(
+    MonOpRequestRef op,
     int32_t id,
     stringstream& ss)
 {
@@ -9814,10 +9815,11 @@ int OSDMonitor::prepare_command_osd_destroy(
   EntityName cephx_entity, lockbox_entity;
   bool idempotent_auth = false, idempotent_cks = false;
 
-  int err = mon.authmon()->validate_osd_destroy(id, uuid,
-                                                 cephx_entity,
-                                                 lockbox_entity,
-                                                 ss);
+  auto&& authmon = mon.authmon();
+  int err = authmon->validate_osd_destroy(id, uuid,
+                                          cephx_entity,
+                                          lockbox_entity,
+                                          ss);
   if (err < 0) {
     if (err == -ENOENT) {
       idempotent_auth = true;
@@ -9826,21 +9828,28 @@ int OSDMonitor::prepare_command_osd_destroy(
     }
   }
 
-  auto svc = mon.kvmon();
-  err = svc->validate_osd_destroy(id, uuid);
+  auto&& kvmon = mon.kvmon();
+  err = kvmon->validate_osd_destroy(id, uuid);
   if (err < 0) {
     ceph_assert(err == -ENOENT);
     err = 0;
     idempotent_cks = true;
   }
 
-  if (!idempotent_auth) {
-    err = mon.authmon()->do_osd_destroy(cephx_entity, lockbox_entity);
-    ceph_assert(0 == err);
+  if (!idempotent_auth && !authmon->is_writeable()) {
+    authmon->wait_for_writeable(op, new C_RetryMessage(this, op));
+    return -EAGAIN;
+  }
+  if (!idempotent_cks && !kvmon->is_writeable()) {
+    kvmon->wait_for_writeable(op, new C_RetryMessage(this, op));
+    return -EAGAIN;
   }
 
+  if (!idempotent_auth) {
+    authmon->do_osd_destroy(cephx_entity, lockbox_entity);
+  }
   if (!idempotent_cks) {
-    svc->do_osd_destroy(id, uuid);
+    kvmon->do_osd_destroy(id, uuid);
   }
 
   pending_inc.new_state[id] = CEPH_OSD_DESTROYED;
@@ -9855,6 +9864,7 @@ int OSDMonitor::prepare_command_osd_destroy(
 }
 
 int OSDMonitor::prepare_command_osd_purge(
+    MonOpRequestRef op,
     int32_t id,
     stringstream& ss)
 {
@@ -9895,7 +9905,11 @@ int OSDMonitor::prepare_command_osd_purge(
 
   // no point destroying the osd again if it has already been marked destroyed
   if (!osdmap.is_destroyed(id)) {
-    err = prepare_command_osd_destroy(id, ss);
+    /* N.B.: up to this point, we've not changed pending at all.
+     * ::prepare_command_osd_destroy may return -EAGAIN if the kvmon/authmon is
+     * not writeable without changing pending. It will queue `op` if we should wait.
+     */
+    err = prepare_command_osd_destroy(op, id, ss);
     if (err < 0) {
       if (err == -ENOENT) {
         err = 0;
@@ -12669,11 +12683,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     paxos.plug();
     if (is_destroy) {
-      err = prepare_command_osd_destroy(id, ss);
+      err = prepare_command_osd_destroy(op, id, ss);
+      if (err == EAGAIN) {
+        return false;
+      }
       // we checked above that it should exist.
       ceph_assert(err != -ENOENT);
     } else {
-      err = prepare_command_osd_purge(id, ss);
+      err = prepare_command_osd_purge(op, id, ss);
+      if (err == EAGAIN) {
+        return false;
+      }
       if (err == -ENOENT) {
         err = 0;
         ss << "osd." << id << " does not exist.";
