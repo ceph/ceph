@@ -9,7 +9,7 @@ from collections import defaultdict
 from prettytable import PrettyTable
 import re
 from threading import Event, Lock
-from typing import cast, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Tuple, TypeVar,\
+from typing import cast, Any, Callable, DefaultDict, Dict, Iterable, List, Optional, Tuple, TypeVar, \
     Union, TYPE_CHECKING
 
 
