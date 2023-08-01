@@ -5,11 +5,13 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
+#include "erasure-code/ErasureCodeInterface.h"
 #include "include/buffer_fwd.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "osd/ECUtil.h"
 #include "osd/osd_types.h"
 #include "pg_backend.h"
 
@@ -46,4 +48,16 @@ private:
 				       const eversion_t& version) final {
     return seastar::now();
   }
+
+  bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
+
+  ll_read_errorator::future<ceph::bufferlist> maybe_chunked_read(
+    const hobject_t& obj,
+    const ECSubRead& op,
+    std::uint64_t off,
+    std::uint64_t size,
+    std::uint32_t flags);
+
+  ceph::ErasureCodeInterfaceRef ec_impl;
+  const ECUtil::stripe_info_t sinfo;
 };
