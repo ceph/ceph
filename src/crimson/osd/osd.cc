@@ -848,13 +848,13 @@ OSD::do_ms_dispatch(
     return handle_update_log_missing_reply(conn, boost::static_pointer_cast<
       MOSDPGUpdateLogMissingReply>(m));
   case MSG_OSD_EC_WRITE:
-    [[fallthrough]];
+    return handle_some_ec_messages(conn, boost::static_pointer_cast<MOSDECSubOpWrite>(m));
   case MSG_OSD_EC_WRITE_REPLY:
-    [[fallthrough]];
+    return handle_some_ec_messages(conn, boost::static_pointer_cast<MOSDECSubOpWriteReply>(m));
   case MSG_OSD_EC_READ:
-    [[fallthrough]];
+    return handle_some_ec_messages(conn, boost::static_pointer_cast<MOSDECSubOpRead>(m));
   case MSG_OSD_EC_READ_REPLY:
-    return handle_some_ec_messages(conn, m);
+    return handle_some_ec_messages(conn, boost::static_pointer_cast<MOSDECSubOpReadReply>(m));
 #if 0
   case MSG_OSD_PG_PUSH:
     [[fallthrough]];

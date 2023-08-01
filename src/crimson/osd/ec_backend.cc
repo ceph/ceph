@@ -35,3 +35,27 @@ ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
   return {seastar::now(),
 	  seastar::make_ready_future<crimson::osd::acked_peers_t>()};
 }
+
+ECBackend::write_iertr::future<>
+ECBackend::handle_rep_write_op(Ref<MOSDECSubOpWrite>)
+{
+  return write_iertr::now();
+}
+
+ECBackend::write_iertr::future<>
+ECBackend::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>)
+{
+  return write_iertr::now();
+}
+
+ECBackend::ll_read_ierrorator::future<>
+ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
+{
+  return ll_read_ierrorator::now();
+}
+
+ECBackend::ll_read_ierrorator::future<>
+ECBackend::handle_rep_read_reply(Ref<MOSDECSubOpReadReply>)
+{
+  return ll_read_ierrorator::now();
+}

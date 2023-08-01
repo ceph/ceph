@@ -5,6 +5,7 @@
 
 #include "common/Formatter.h"
 
+#include "crimson/osd/ec_backend.h"
 #include "crimson/osd/osd.h"
 #include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
@@ -67,8 +68,30 @@ seastar::future<> ECRepRequest::with_pg(
   logger().debug("{}: ECRepRequest::with_pg", *this);
 
   IRef ref = this;
-  return interruptor::with_interruption([this, pg] {
-    return interruptor::now();
+  return interruptor::with_interruption(
+    [this, ec_backend=dynamic_cast<ECBackend*>(&pg->get_backend())] {
+    assert(ec_backend);
+    return std::visit(overloaded{
+      [ec_backend, this] (Ref<MOSDECSubOpWrite> concrete_req) {
+        return ec_backend->handle_rep_write_op(
+	  std::move(concrete_req)
+	).handle_error_interruptible(crimson::ct_error::assert_all{});
+      },
+      [ec_backend, this] (Ref<MOSDECSubOpWriteReply> concrete_req) {
+        return ec_backend->handle_rep_write_reply(
+	  std::move(concrete_req)
+	).handle_error_interruptible(crimson::ct_error::assert_all{});
+      },
+      [ec_backend, this] (Ref<MOSDECSubOpRead> concrete_req) {
+        return ec_backend->handle_rep_read_op(
+	  std::move(concrete_req)
+	).handle_error_interruptible(crimson::ct_error::assert_all{});
+      },
+      [ec_backend, this] (Ref<MOSDECSubOpReadReply> concrete_req) {
+        return ec_backend->handle_rep_read_reply(
+	  std::move(concrete_req)
+	).handle_error_interruptible(crimson::ct_error::assert_all{});
+      }}, req);
   }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
 }
 
