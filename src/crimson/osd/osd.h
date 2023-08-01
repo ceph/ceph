@@ -199,9 +199,10 @@ private:
   seastar::future<> handle_update_log_missing_reply(
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGUpdateLogMissingReply> m);
+  template <class MessageRefT>
   seastar::future<> handle_some_ec_messages(
     crimson::net::ConnectionRef conn,
-    MessageRef m);
+    MessageRefT m);
 public:
   auto &get_pg_shard_manager() {
     return pg_shard_manager;
