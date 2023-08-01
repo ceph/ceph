@@ -11,6 +11,10 @@
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
+#include "messages/MOSDECSubOpWrite.h"
+#include "messages/MOSDECSubOpWriteReply.h"
+#include "messages/MOSDECSubOpRead.h"
+#include "messages/MOSDECSubOpReadReply.h"
 
 
 namespace ceph {
