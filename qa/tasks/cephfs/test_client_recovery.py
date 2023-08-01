@@ -9,7 +9,6 @@ import signal
 from textwrap import dedent
 import time
 import distutils.version as version
-import random
 import re
 import string
 import os
