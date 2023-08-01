@@ -55,7 +55,8 @@ if(WITH_LIBCEPHFS)
     add_executable(ceph_test_libcephfs_reclaim
       reclaim.cc
     )
-    target_link_libraries(ceph_test_libcephfs_reclaim
+  target_link_libraries(ceph_test_libcephfs_reclaim
+      ceph-common
       cephfs
       ${UNITTEST_LIBS}
       ${EXTRALIBS}
@@ -68,7 +69,8 @@ if(WITH_LIBCEPHFS)
   add_executable(ceph_test_libcephfs_lazyio
     lazyio.cc
   )
-  target_link_libraries(ceph_test_libcephfs_lazyio
+target_link_libraries(ceph_test_libcephfs_lazyio
+    ceph-common
     cephfs
     librados
     ${UNITTEST_LIBS}
