@@ -20,35 +20,41 @@ struct cache_block {
 class RGWDirectory {
   public:
     RGWDirectory() {}
+    virtual ~RGWDirectory() = default;
+    RGWDirectory(std::string blockHosts): hosts(blockHosts) {}
     CephContext *cct;
+    virtual std::string get_hosts() { return hosts; }
+    virtual void set_hosts(std::string blockHosts) { hosts = blockHosts; }
+    virtual int process_hosts(std::string hosts, std::vector<std::pair<std::string, int>> *hosts_vector);
+    virtual int findClient(std::string key, cpp_redis::client *client);
+    virtual int findHost(std::string key, std::vector<std::pair<std::string, int>> *hosts_vector);
+
+  private:
+    virtual unsigned int hash_slot(const char *key, int keylen);
+    virtual uint16_t crc16(const char *buf, int len);
+    std::string hosts = ""; //a config option in this format: "host1:port1;host2:port2;..."
+
 };
 
 class RGWBlockDirectory: RGWDirectory {
   public:
     RGWBlockDirectory() {}
-    RGWBlockDirectory(std::string blockHost, int blockPort):host(blockHost), port(blockPort) {}
+    RGWBlockDirectory(std::string blockHosts): RGWDirectory(blockHosts) {}
     
     void init(CephContext *_cct) {
       cct = _cct;
-      host = cct->_conf->rgw_d4n_host;
-      port = cct->_conf->rgw_d4n_port;
+      set_hosts(cct->_conf->rgw_d4n_directory_hosts);
     }
 	
-    int findClient(cpp_redis::client *client);
-    int existKey(std::string key);
+    int existKey(std::string key, cpp_redis::client *client);
     int setValue(cache_block *ptr);
     int getValue(cache_block *ptr);
     int delValue(cache_block *ptr);
 
-    std::string get_host() { return host; }
-    int get_port() { return port; }
 
   private:
-    cpp_redis::client client;
     std::string buildIndex(cache_block *ptr);
-    unsigned int hash_slot(const char *key, int keylen);
-    std::string host = "";
-    int port = 0;
+
 };
 
 #endif

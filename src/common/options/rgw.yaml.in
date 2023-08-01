@@ -3788,7 +3788,7 @@ options:
 - name: rgw_d4n_host
   type: str
   level: advanced
-  desc: The rgw directory host
+  desc: The rgw d4n host
   default: 127.0.0.1
   services: 
   - rgw
@@ -3798,8 +3798,18 @@ options:
 - name: rgw_d4n_port
   type: int
   level: advanced
-  desc: The rgw directory port
-  default: 6379
+  desc: The rgw d4n port
+  default: 8000
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_directory_hosts
+  type: str
+  level: advanced
+  desc: The rgw directory hosts and ports
+  default: 127.0.0.1:6379
   services: 
   - rgw
   flags:

@@ -17,7 +17,7 @@ int blkSize = 123;
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      blk_dir = new RGWBlockDirectory(hostStr, stoi(portStr));
+      blk_dir = new RGWBlockDirectory(hostStr+":"+portStr);
       c_blk = new cache_block();
 
       c_blk->hosts_list.push_back(redisHost);
