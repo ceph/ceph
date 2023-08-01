@@ -56,7 +56,7 @@ describe('UpgradeComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(UpgradeComponent);
     component = fixture.componentInstance;
-    upgradeInfoSpy = spyOn(TestBed.inject(UpgradeService), 'list');
+    upgradeInfoSpy = spyOn(TestBed.inject(UpgradeService), 'list').and.callFake(() => of(null));
     getHealthSpy = spyOn(TestBed.inject(HealthService), 'getMinimalHealth');
     getHealthSpy.and.returnValue(of(healthPayload));
     fixture.detectChanges();
