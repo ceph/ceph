@@ -6,6 +6,10 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 #include "include/buffer_fwd.h"
+#include "messages/MOSDECSubOpWrite.h"
+#include "messages/MOSDECSubOpWriteReply.h"
+#include "messages/MOSDECSubOpRead.h"
+#include "messages/MOSDECSubOpReadReply.h"
 #include "osd/osd_types.h"
 #include "pg_backend.h"
 
@@ -22,6 +26,11 @@ public:
     return seastar::now();
   }
   void on_actingset_changed(bool same_primary) final {}
+
+  write_iertr::future<> handle_rep_write_op(Ref<MOSDECSubOpWrite>);
+  write_iertr::future<> handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>);
+  ll_read_ierrorator::future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
+  ll_read_ierrorator::future<> handle_rep_read_reply(Ref<MOSDECSubOpReadReply>);
 private:
   ll_read_ierrorator::future<ceph::bufferlist>
   _read(const hobject_t& hoid, uint64_t off, uint64_t len, uint32_t flags) override;
