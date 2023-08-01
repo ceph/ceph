@@ -18,8 +18,9 @@ class RedisCacheAioRequest: public CacheAioRequest {
   public:
     RedisCacheAioRequest(RedisDriver* cache_driver) : cache_driver(cache_driver) {}
     virtual ~RedisCacheAioRequest() = default;
-    virtual void cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override;
-    virtual void cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override;
+    virtual void cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override {}
+    virtual void cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override {}
+
   private:
     RedisDriver* cache_driver;
 };
@@ -62,23 +63,30 @@ class RedisDriver : public CacheDriver {
     virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) override;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) override;
 
-    virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override;
+    virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override { return nullptr; }
     virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
 
-    struct libaio_handler { // should this be the same as SSDDriver? -Sam
+    struct redis_aio_handler { 
       rgw::Aio* throttle = nullptr;
       rgw::AioResult& r;
+      boost::redis::response<std::string>* resp;
+      bufferlist* bl;
 
-      // read callback
-      void operator()(boost::system::error_code ec, bufferlist bl) const {
+      /* Read Callback */
+      void operator()(boost::system::error_code ec, auto) const {
 	r.result = -ec.value();
-	r.data = std::move(bl);
+
+	const std::string s = std::get<0>(*resp).value();
+	bl->append(s.c_str(), s.size()); 
+
+	r.data = *bl;
 	throttle->put(r);
+
+	delete resp;
       }
+
+      ~redis_aio_handler() { delete bl; }
     };
-    template <typename ExecutionContext, typename CompletionToken>
-    auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
-                  off_t read_ofs, off_t read_len, CompletionToken&& token);
 
   protected:
     boost::redis::connection& conn;
@@ -98,33 +106,6 @@ class RedisDriver : public CacheDriver {
     int remove_entry(const DoutPrefixProvider* dpp, std::string key);
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
-
-  private:
-    // unique_ptr with custom deleter for struct aiocb
-    struct libaio_aiocb_deleter {
-      void operator()(struct aiocb* c) {
-        if(c->aio_fildes > 0) {
-          if( ::close(c->aio_fildes) != 0) {
-          }
-        }
-        delete c;
-      }
-    };
-
-    using unique_aio_cb_ptr = std::unique_ptr<struct aiocb, libaio_aiocb_deleter>;
-
-    struct AsyncReadOp {
-      bufferlist result;
-      unique_aio_cb_ptr aio_cb;
-      using Signature = void(boost::system::error_code, bufferlist);
-      using Completion = ceph::async::Completion<Signature, AsyncReadOp>;
-
-      int init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg);
-      static void libaio_cb_aio_dispatch(sigval sigval);
-
-      template <typename Executor1, typename CompletionHandler>
-      static auto create(const Executor1& ex1, CompletionHandler&& handler);
-    };
 };
 
 } } // namespace rgw::cache

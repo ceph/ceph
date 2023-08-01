@@ -652,9 +652,22 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   return result - 1;
 }
 
-std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) 
+static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& conn,
+                                 off_t read_ofs, off_t read_len, const std::string& key)
 {
-  return std::make_unique<RedisCacheAioRequest>(this);  
+  return [y, &conn, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
+    using namespace boost::asio;
+    async_completion<yield_context, void()> init(y.get_yield_context());
+    auto ex = get_associated_executor(init.completion_handler);
+
+    boost::redis::request req;
+    req.push("GETRANGE", key, read_ofs, read_ofs + read_len);
+
+    auto resp = new boost::redis::response<std::string>();
+    auto bl = new bufferlist();
+
+    conn.async_exec(req, *resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, resp, bl}));
+  };
 }
 
 rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) 
@@ -662,114 +675,7 @@ rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optiona
   rgw_raw_obj r_obj;
   r_obj.oid = key;
 
-  return aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, this, ofs, len, key), cost, id);
-}
-
-int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)
-{
-  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): file_path=" << file_path << dendl;
-  aio_cb.reset(new struct aiocb);
-  
-  memset(aio_cb.get(), 0, sizeof(struct aiocb));
-  aio_cb->aio_fildes = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_RDONLY|O_CLOEXEC|O_BINARY));
-
-  if (aio_cb->aio_fildes < 0) {
-      int err = errno;
-      ldpp_dout(dpp, 1) << "ERROR: RedisCache: " << __func__ << "(): can't open " << file_path << " : " << " error: " << err << dendl;
-      return -err;
-  }
-
-  if (cct->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL) {
-      posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
-  }
-
-  bufferptr bp(read_len);
-  aio_cb->aio_buf = bp.c_str();
-  result.append(std::move(bp));
-
-  aio_cb->aio_nbytes = read_len;
-  aio_cb->aio_offset = read_ofs;
-  aio_cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
-  aio_cb->aio_sigevent.sigev_notify_function = libaio_cb_aio_dispatch;
-  aio_cb->aio_sigevent.sigev_notify_attributes = nullptr;
-  aio_cb->aio_sigevent.sigev_value.sival_ptr = arg;
-
-  return 0;
-}
-
-void RedisDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
-{
-  auto p = std::unique_ptr<Completion>{static_cast<Completion*>(sigval.sival_ptr)};
-  auto op = std::move(p->user_data);
-  const int ret = -aio_error(op.aio_cb.get());
-  boost::system::error_code ec;
-  if (ret < 0) {
-      ec.assign(-ret, boost::system::system_category());
-  }
-
-  ceph::async::dispatch(std::move(p), ec, std::move(op.result));
-}
-
-template <typename Executor1, typename CompletionHandler>
-auto RedisDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& handler)
-{
-  auto p = Completion::create(ex1, std::move(handler));
-  return p;
-}
-
-template <typename ExecutionContext, typename CompletionToken>
-auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
-                off_t read_ofs, off_t read_len, CompletionToken&& token)
-{
-  namespace net = boost::asio;
-  using boost::redis::connection;
-  using boost::redis::request;
-  using boost::redis::response;
-
-  std::string location = partition_info.location + key;
-
-  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
-
-  request req;
-  response< std::map<std::string, std::string> > resp;
-
-  req.push("HGETALL", key);
-
-  return conn.async_exec(req, resp, std::forward<CompletionToken>(token));
-
-  /*
-  using Op = AsyncReadOp;
-  using Signature = typename Op::Signature;
-  boost::asio::async_completion<CompletionToken, Signature> init(token);
-  auto p = Op::create(ctx.get_executor(), init.completion_handler);
-  auto& op = p->user_data;
-
-  int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
-  if (0 == ret) {
-    ret = ::aio_read(op.aio_cb.get());
-  }
-  
-  if(ret < 0) {
-      auto ec = boost::system::error_code{-ret, boost::system::system_category()};
-      ceph::async::post(std::move(p), ec, bufferlist{});
-  } else {
-      (void)p.release();
-  }
-  return init.result.get();*/
-}
-
-void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
-{
-  using namespace boost::asio;
-  async_completion<yield_context, void()> init(y.get_yield_context());
-  auto ex = get_associated_executor(init.completion_handler);
-
-  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): key=" << key << dendl;
-  cache_driver->get_async(dpp, y.get_io_context(), key, ofs, len, bind_executor(ex, RedisDriver::libaio_handler{aio, r}));
-}
-
-void RedisCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
-{
+  return aio->get(r_obj, redis_read_op(y, conn, ofs, len, key), cost, id);
 }
 
 } } // namespace rgw::cache
