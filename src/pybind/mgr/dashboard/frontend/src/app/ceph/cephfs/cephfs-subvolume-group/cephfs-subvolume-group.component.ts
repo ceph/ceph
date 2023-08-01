@@ -1,4 +1,4 @@
-import { Component, Input, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 import { Observable, ReplaySubject, of } from 'rxjs';
 import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 
@@ -21,7 +21,7 @@ import { Permissions } from '~/app/shared/models/permissions';
   templateUrl: './cephfs-subvolume-group.component.html',
   styleUrls: ['./cephfs-subvolume-group.component.scss']
 })
-export class CephfsSubvolumeGroupComponent implements OnInit {
+export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   @ViewChild('quotaUsageTpl', { static: true })
   quotaUsageTpl: any;
 
