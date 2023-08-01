@@ -20,6 +20,10 @@ overrides:
         debug monc: 20
       mon:
         mon warn on pool no app: false
+      osd:
+        osd class load list: "*"
+        osd class default list: "*"
+        osd client watch timeout: 120
 tasks:
 - workunit:
     timeout: 6h
