@@ -167,8 +167,15 @@ struct log_ms_remainder {
 };
 std::ostream& operator<<(std::ostream& out, const log_ms_remainder& m) {
   using namespace std::chrono;
-  return out << std::setfill('0') << std::setw(3)
+
+  std::ios oldState(nullptr);
+  oldState.copyfmt(out);
+
+  out << std::setfill('0') << std::setw(3)
       << duration_cast<milliseconds>(m.t.time_since_epoch()).count() % 1000;
+
+  out.copyfmt(oldState);
+  return out;
 }
 
 // log time in apache format: day/month/year:hour:minute:second zone

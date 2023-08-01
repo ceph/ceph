@@ -286,10 +286,16 @@ req_state::~req_state() {
 
 std::ostream& req_state::gen_prefix(std::ostream& out) const
 {
-  auto p = out.precision();
-  return out << "req " << id << ' '
+  std::ios oldState(nullptr);
+  oldState.copyfmt(out);
+
+  out << "req " << id << ' '
       << std::setprecision(3) << std::fixed << time_elapsed() // '0.123s'
-      << std::setprecision(p) << std::defaultfloat << ' ';
+      << ' ';
+
+  out.copyfmt(oldState);
+  return out;
+
 }
 
 bool search_err(rgw_http_errors& errs, int err_no, int& http_ret, string& code)
