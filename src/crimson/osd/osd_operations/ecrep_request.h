@@ -3,13 +3,15 @@
 
 #pragma once
 
+#include <variant>
+
 #include "crimson/net/Connection.h"
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/common/type_helpers.h"
-#include "messages/MOSDPGUpdateLogMissing.h"
+
 
 namespace ceph {
   class Formatter;
@@ -25,17 +27,29 @@ class PG;
 class ECRepRequest final : public PhasedOperationT<ECRepRequest> {
 public:
   static constexpr OperationTypeCode type = OperationTypeCode::logmissing_request;
-  ECRepRequest(crimson::net::ConnectionRef&&, MessageRef&&);
+
+  template <class MessageRefT>
+  ECRepRequest(crimson::net::ConnectionRef&& conn,
+               MessageRefT &&req)
+    : conn{std::move(conn)},
+      req{std::move(req)}
+  {}
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
 
   static constexpr bool can_create() { return false; }
   spg_t get_pgid() const {
-    return req->get_spg();
+    return std::visit([] (const auto& concrete_req) {
+      return concrete_req->get_spg();
+    }, req);
+  }
+  epoch_t get_epoch() const {
+    return std::visit([] (const auto& concrete_req) {
+      return concrete_req->get_min_epoch();
+    }, req);
   }
   PipelineHandle &get_handle() { return handle; }
-  epoch_t get_epoch() const { return req->get_min_epoch(); }
 
   ConnectionPipeline &get_connection_pipeline();
   seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
@@ -69,7 +83,12 @@ private:
   crimson::net::ConnectionRef conn;
   // must be after `conn` to ensure the ConnectionPipeline's is alive
   PipelineHandle handle;
-  Ref<MOSDFastDispatchOp> req;
+  std::variant<
+    Ref<MOSDECSubOpWrite>,
+    Ref<MOSDECSubOpWriteReply>,
+    Ref<MOSDECSubOpRead>,
+    Ref<MOSDECSubOpReadReply>
+  > req;
 };
 
 }

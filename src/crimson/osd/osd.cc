@@ -1259,8 +1259,9 @@ bool OSD::should_restart() const
   }
 }
 
+template <class MessageRefT>
 seastar::future<>
-OSD::handle_some_ec_messages(crimson::net::ConnectionRef conn, MessageRef m)
+OSD::handle_some_ec_messages(crimson::net::ConnectionRef conn, MessageRefT m)
 {
   m->decode_payload();
   (void) pg_shard_manager.start_pg_operation<ECRepRequest>(

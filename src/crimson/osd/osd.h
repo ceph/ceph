@@ -216,9 +216,10 @@ private:
   seastar::future<> handle_update_log_missing_reply(
     crimson::net::ConnectionRef conn,
     Ref<MOSDPGUpdateLogMissingReply> m);
+  template <class MessageRefT>
   seastar::future<> handle_some_ec_messages(
     crimson::net::ConnectionRef conn,
-    MessageRef m);
+    MessageRefT m);
 
 private:
   crimson::common::Gated gate;
