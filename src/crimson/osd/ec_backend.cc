@@ -38,4 +38,28 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
   return make_ready_future<rep_op_ret_t>(seastar::now(), seastar::now());
 }
 
+ECBackend::write_iertr::future<>
+ECBackend::handle_rep_write_op(Ref<MOSDECSubOpWrite>)
+{
+  return write_iertr::now();
 }
+
+ECBackend::write_iertr::future<>
+ECBackend::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>)
+{
+  return write_iertr::now();
+}
+
+ECBackend::ll_read_ierrorator::future<>
+ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
+{
+  return ll_read_ierrorator::now();
+}
+
+ECBackend::ll_read_ierrorator::future<>
+ECBackend::handle_rep_read_reply(Ref<MOSDECSubOpReadReply>)
+{
+  return ll_read_ierrorator::now();
+}
+
+} // namespace crimson::osd
