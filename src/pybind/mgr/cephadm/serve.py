@@ -6,7 +6,7 @@ import uuid
 import os
 from collections import defaultdict
 from typing import TYPE_CHECKING, Optional, List, cast, Dict, Any, Union, Tuple, Set, \
-    DefaultDict
+    DefaultDict, Callable
 
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec
@@ -17,6 +17,7 @@ from ceph.deployment.service_spec import (
     PlacementSpec,
     RGWSpec,
     ServiceSpec,
+    IngressSpec,
 )
 from ceph.utils import datetime_now
 
@@ -695,8 +696,7 @@ class CephadmServe:
                 public_networks = [x.strip() for x in out.split(',')]
                 self.log.debug('mon public_network(s) is %s' % public_networks)
 
-        def matches_network(host):
-            # type: (str) -> bool
+        def matches_public_network(host: str, sspec: ServiceSpec) -> bool:
             # make sure the host has at least one network that belongs to some configured public network(s)
             for pn in public_networks:
                 public_network = ipaddress.ip_network(pn)
@@ -713,6 +713,40 @@ class CephadmServe:
             )
             return False
 
+        def has_interface_for_vip(host: str, sspec: ServiceSpec) -> bool:
+            # make sure the host has an interface that can
+            # actually accomodate the VIP
+            if not sspec or sspec.service_type != 'ingress':
+                return True
+            ingress_spec = cast(IngressSpec, sspec)
+            virtual_ips = []
+            if ingress_spec.virtual_ip:
+                virtual_ips.append(ingress_spec.virtual_ip)
+            elif ingress_spec.virtual_ips_list:
+                virtual_ips = ingress_spec.virtual_ips_list
+            for vip in virtual_ips:
+                found = False
+                bare_ip = str(vip).split('/')[0]
+                for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
+                    if ifaces and ipaddress.ip_address(bare_ip) in ipaddress.ip_network(subnet):
+                        # found matching interface for this IP, move on
+                        self.log.debug(
+                            f'{bare_ip} is in {subnet} on {host} interface {list(ifaces.keys())[0]}'
+                        )
+                        found = True
+                        break
+                if not found:
+                    self.log.info(
+                        f"Filtered out host {host}: Host has no interface available for VIP: {vip}"
+                    )
+                    return False
+            return True
+
+        host_filters: Dict[str, Callable[[str, ServiceSpec], bool]] = {
+            'mon': matches_public_network,
+            'ingress': has_interface_for_vip
+        }
+
         rank_map = None
         if svc.ranked():
             rank_map = self.mgr.spec_store[spec.service_name()].rank_map or {}
@@ -725,10 +759,7 @@ class CephadmServe:
             daemons=daemons,
             related_service_daemons=related_service_daemons,
             networks=self.mgr.cache.networks,
-            filter_new_host=(
-                matches_network if service_type == 'mon'
-                else None
-            ),
+            filter_new_host=host_filters.get(service_type, None),
             allow_colo=svc.allow_colo(),
             primary_daemon_type=svc.primary_daemon_type(spec),
             per_host_daemon_type=svc.per_host_daemon_type(spec),
