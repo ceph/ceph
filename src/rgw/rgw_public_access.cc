@@ -22,12 +22,16 @@ void PublicAccessBlockConfiguration::dump_xml(Formatter *f) const {
 
 std::ostream& operator<< (std::ostream& os, const PublicAccessBlockConfiguration& access_conf)
 {
+    std::ios oldState(nullptr);
+    oldState.copyfmt(os);
+
     os << std::boolalpha
        << "BlockPublicAcls: " << access_conf.block_public_acls() << std::endl
        << "IgnorePublicAcls: " << access_conf.ignore_public_acls() << std::endl
        << "BlockPublicPolicy" << access_conf.block_public_policy() << std::endl
        << "RestrictPublicBuckets" << access_conf.restrict_public_buckets() << std::endl;
 
+    os.copyfmt(oldState);
     return os;
 }
 
