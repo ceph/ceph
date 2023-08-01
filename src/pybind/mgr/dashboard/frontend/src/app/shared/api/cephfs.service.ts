@@ -73,4 +73,14 @@ export class CephfsService {
       params
     });
   }
+
+  create(name: string, serviceSpec: object) {
+    return this.http.post(
+      this.baseURL,
+      { name: name, service_spec: serviceSpec },
+      {
+        observe: 'response'
+      }
+    );
+  }
 }

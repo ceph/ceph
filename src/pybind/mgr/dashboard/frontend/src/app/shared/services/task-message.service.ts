@@ -352,6 +352,9 @@ export class TaskMessageService {
     ),
     'crud-component/id': this.newTaskMessage(this.commonOperations.delete, (id) =>
       this.crudMessageId(id)
+    ),
+    'cephfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.volume(metadata)
     )
   };
 
@@ -406,6 +409,10 @@ export class TaskMessageService {
       }
     });
     return $localize`${message}`;
+  }
+
+  volume(metadata: any) {
+    return $localize`'${metadata.volumeName}'`;
   }
 
   crudMessageId(id: string) {
