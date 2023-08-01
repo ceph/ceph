@@ -328,6 +328,15 @@ TEST(LibCephFS, DelegTimeout) {
   std::thread breaker1(open_breaker_func, nullptr, filename, O_RDWR, &opened);
   breaker1.join();
   ASSERT_EQ(recalled.load(), true);
+  /*
+   * Wait for the delegation to be timedout.
+   *
+   * MDSs will allow multiple clients to do r/w at the same time and the filelock
+   * will be in LOCK_MIX state. So the open() in a second mounter in the
+   * open_breaker_func() thread won't guarantee that after it exiting the delegation
+   * in the mounter in main thread has already timedout.
+   */
+  sleep(3);
   ASSERT_EQ(ceph_ll_getattr(cmount, root, &stx, 0, 0, perms), -CEPHFS_ENOTCONN);
   ceph_release(cmount);
 }
