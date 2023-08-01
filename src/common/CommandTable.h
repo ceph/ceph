@@ -80,7 +80,9 @@ public:
   ~CommandTable()
   {
     ceph_assert(commands.empty());
-    ceph_assert(multi_targets.empty());
+    for (const auto& pair : multi_targets) {
+      ceph_assert(pair.second.empty());
+    }
   }
 
   ceph_tid_t get_new_multi_target_id()
