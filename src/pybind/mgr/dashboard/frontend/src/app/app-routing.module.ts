@@ -46,6 +46,7 @@ import { FeatureTogglesGuardService } from './shared/services/feature-toggles-gu
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 import { UpgradeComponent } from './ceph/cluster/upgrade/upgrade.component';
+import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -328,9 +329,16 @@ const routes: Routes = [
       // File Systems
       {
         path: 'cephfs',
-        component: CephfsListComponent,
         canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'File Systems' }
+        data: { breadcrumbs: 'File Systems' },
+        children: [
+          { path: '', component: CephfsListComponent },
+          {
+            path: URLVerbs.CREATE,
+            component: CephfsVolumeFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          }
+        ]
       },
       // Object Gateway
       {

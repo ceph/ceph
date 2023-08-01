@@ -208,6 +208,11 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           name: $localize`Created`,
           flexGrow: 1,
           pipe: this.cdDatePipe
+        },
+        {
+          prop: 'created',
+          name: $localize`Capacity`,
+          flexGrow: 1
         }
       ],
       selection: new CdTableSelection(),
