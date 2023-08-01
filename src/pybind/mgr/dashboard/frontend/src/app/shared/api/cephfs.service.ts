@@ -87,4 +87,20 @@ export class CephfsService {
   isCephFsPool(pool: any) {
     return _.indexOf(pool.application_metadata, 'cephfs') !== -1 && !pool.pool_name.includes('/');
   }
+
+  remove(name: string) {
+    return this.http.delete(`${this.baseURL}/remove/${name}`, {
+      observe: 'response'
+    });
+  }
+
+  rename(vol_name: string, new_vol_name: string) {
+    let requestBody = {
+      name: vol_name,
+      new_name: new_vol_name
+    };
+    return this.http.put(`${this.baseURL}/rename`, requestBody, {
+      observe: 'response'
+    });
+  }
 }
