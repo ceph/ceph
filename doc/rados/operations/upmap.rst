@@ -1,7 +1,7 @@
 .. _upmap:
 
 =======================================
-Operating the Capacity (Upmap) Balancer
+Using pg-upmap
 =======================================
 
 In Luminous v12.2.z and later releases, there is a *pg-upmap* exception table
