@@ -525,29 +525,38 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   if (key_exists(dpp, key)) {
     try {
-      client.hgetall(entry, [&attrs](cpp_redis::reply &reply) {
-	if (reply.is_array()) { 
-	  auto arr = reply.as_array();
-    
-	  if (!arr[0].is_null()) {
-    	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
-	      if (arr[i].as_string() != "data") {
-	        buffer::list bl_value;
-		bl_value.append(arr[i + 1].as_string());
-                attrs.insert({arr[i].as_string(), bl_value});
-		bl_value.clear();
-	      }
-            }
-	  }
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+      response< std::map<std::string, std::string> > resp;
+
+      req.push("HGETALL", entry);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "RedisDriver get_attrs: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
+
+      for (auto const& it : std::get<0>(resp).value()) {
+	if (it.first != "data") {
+	  buffer::list bl_value;
+	  bl_value.append(it.second);
+	  attrs.insert({it.first, bl_value});
+	  bl_value.clear();
+	}
+      }
     } catch(std::exception &e) {
       return -1;
     }
