@@ -17,8 +17,6 @@
 .. confval:: mds_early_reply
 .. confval:: mds_default_dir_hash
 .. confval:: mds_log_skip_corrupt_events
-.. confval:: mds_log_max_events
-.. confval:: mds_log_max_segments
 .. confval:: mds_bal_sample_interval
 .. confval:: mds_bal_replicate_threshold
 .. confval:: mds_bal_unreplicate_threshold

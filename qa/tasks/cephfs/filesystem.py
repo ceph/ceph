@@ -68,6 +68,14 @@ class FSMissing(Exception):
     def __str__(self):
         return f"File system {self.ident} does not exist in the map"
 
+class NoSuchRank(Exception):
+    def __init__(self, fscid, rank):
+        self.fscid = fscid
+        self.rank = rank
+
+    def __str__(self):
+        return f"No such rank {self.fscid}:{self.rank}"
+
 class FSStatus(RunCephCmd):
     """
     Operations on a snapshot of the FSMap.
@@ -163,7 +171,7 @@ class FSStatus(RunCephCmd):
         for info in self.get_ranks(fscid):
             if info['rank'] == rank:
                 return info
-        raise RuntimeError("FSCID {0} has no rank {1}".format(fscid, rank))
+        raise NoSuchRank(fscid, rank)
 
     def get_mds(self, name):
         """
@@ -586,6 +594,10 @@ class Filesystem(MDSCluster):
     def set_flag(self, var, *args):
         a = map(lambda x: str(x).lower(), args)
         self.run_ceph_cmd("fs", "flag", "set", var, *a)
+
+    def set_config(self, opt, val, rank=0, status=None):
+        command = ["config", "set", opt, val]
+        self.rank_asok(command, rank, status=status)
 
     def set_allow_multifs(self, yes=True):
         self.set_flag("enable_multiple", yes)
@@ -1145,6 +1157,38 @@ class Filesystem(MDSCluster):
                 result.append(mds_status['name'])
 
         return result
+
+    def wait_for_death(self, rank=0, timeout=None, status=None):
+        """
+        Wait until rank fails and cluster is healthy.
+        :return: status
+        """
+
+        if timeout is None:
+            timeout = DAEMON_WAIT_TIMEOUT
+
+        if status is None:
+            status = self.status()
+
+        rinfo = self.get_rank(rank=rank, status=status)
+        elapsed = 0
+        while True:
+            try:
+                info = self.get_rank(rank=rank, status=status)
+                if rinfo['gid'] != info['gid']:
+                    log.info(f"mds.{rinfo['name']}:{rinfo['gid']} failed")
+                    break
+            except NoSuchRank:
+                log.info(f"mds.{rinfo['name']}:{rinfo['gid']} failed")
+                break
+            time.sleep(1)
+            elapsed += 1
+
+            if elapsed > timeout:
+                log.debug("status = {0}".format(status))
+                raise RuntimeError("Timed out waiting for rank to fail")
+
+            status = self.status()
 
     def wait_for_daemons(self, timeout=None, skip_max_mds_check=False, status=None):
         """

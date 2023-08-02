@@ -64,7 +64,6 @@ void MDSTableServer::handle_prepare(const cref_t<MMDSTableRequest> &req)
 
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from,
 				      projected_version, projected_version);
-  mds->mdlog->start_entry(le);
   le->mutation = req->bl;
   mds->mdlog->submit_entry(le, new C_Prepare(this, req, projected_version));
   mds->mdlog->flush();
@@ -148,7 +147,7 @@ void MDSTableServer::handle_commit(const cref_t<MMDSTableRequest> &req)
     projected_version++;
     committing_tids.insert(tid);
 
-    mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, MDS_RANK_NONE, 
+    mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, MDS_RANK_NONE, 
 						    tid, projected_version),
 				   new C_Commit(this, req));
   }
@@ -206,7 +205,7 @@ void MDSTableServer::handle_rollback(const cref_t<MMDSTableRequest> &req)
   projected_version++;
   committing_tids.insert(tid);
 
-  mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, MDS_RANK_NONE,
+  mds->mdlog->submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, MDS_RANK_NONE,
 						  tid, projected_version),
 				 new C_Rollback(this, req));
 }
@@ -245,7 +244,6 @@ void MDSTableServer::do_server_update(bufferlist& bl)
   projected_version++;
 
   ETableServer *le = new ETableServer(table, TABLESERVER_OP_SERVER_UPDATE, 0, MDS_RANK_NONE, 0, projected_version);
-  mds->mdlog->start_entry(le);
   le->mutation = bl;
   mds->mdlog->submit_entry(le, new C_ServerUpdate(this, bl));
 }

@@ -816,3 +816,57 @@ class TestMultiFilesystems(CephFSTestCase):
         fs_a.set_max_mds(3)
         self.wait_until_equal(lambda: len(fs_a.get_active_names()), 3, 60,
                               reject_fn=lambda v: v > 3 or v < 2)
+
+SHUTDOWN_KILLPOINTS = [
+    "SHUTDOWN_NULL",
+    "SHUTDOWN_START",
+    "SHUTDOWN_POSTTRIM",
+    "SHUTDOWN_POSTONEEXPORT",
+    "SHUTDOWN_POSTALLEXPORTS",
+    "SHUTDOWN_SESSIONTERMINATE",
+    "SHUTDOWN_SUBTREEMAP",
+    "SHUTDOWN_TRIMALL",
+    "SHUTDOWN_STRAYPUT",
+    "SHUTDOWN_LOGCAP",
+    "SHUTDOWN_EMPTYSUBTREES",
+    "SHUTDOWN_MYINREMOVAL",
+    "SHUTDOWN_GLOBALSNAPREALMREMOVAL",
+]
+
+class TestShutdownKillpoints(CephFSTestCase):
+    CLIENTS_REQUIRED = 1
+    MDSS_REQUIRED = 3
+
+    def _run_workload(self, killpoint):
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        rinfo = self.fs.get_rank(rank=1, status=status)
+
+        self.fs.set_config("mds_kill_shutdown_at", str(killpoint), rank=1, status=status)
+
+        self.mount_a.run_shell_payload("mkdir top && touch top/file")
+        self.mount_a.setfattr("top", "ceph.dir.pin", "1")
+        self._wait_subtrees([('/top', 1)], status=status, rank=0)
+
+        p = self.mount_a.open_n_background("top", 1000)
+        self.fs.set_max_mds(1)
+        self.fs.wait_for_death(timeout=120, status=status, rank=1)
+        self.delete_mds_coredump(rinfo['name'])
+        self.fs.mds_restart(rinfo['name'])
+        status = self.fs.wait_for_daemons()
+        p.stdin.close()
+        p.wait()
+
+    @staticmethod
+    def make_test_killpoint(killpoint, name):
+        def test(self):
+            log.info(f"Starting workload with killpoint {name}={killpoint}")
+            self._run_workload(killpoint)
+            log.info(f"Test passed for killpoint {name}={killpoint}")
+        return test
+
+for killpoint, name in enumerate(SHUTDOWN_KILLPOINTS):
+    if killpoint == 0:
+        continue
+    test_export_killpoints = TestShutdownKillpoints.make_test_killpoint(killpoint, name)
+    setattr(TestShutdownKillpoints, f"test_shutdown_killpoint_{name}", test_export_killpoints)
