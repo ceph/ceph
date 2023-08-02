@@ -59,6 +59,8 @@ PGBackend::create(pg_t pgid,
     return std::make_unique<ECBackend>(pg_shard.shard, coll, shard_services,
                                        std::move(ec_profile),
                                        pool.stripe_width,
+				       pool.fast_read,
+				       pool.allows_ecoverwrites(),
 				       dpp);
   default:
     throw runtime_error(seastar::format("unsupported pool type '{}'",

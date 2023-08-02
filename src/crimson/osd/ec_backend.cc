@@ -1,16 +1,27 @@
 #include <boost/iterator/counting_iterator.hpp>
 
+#include "crimson/common/log.h"
 #include "crimson/osd/shard_services.h"
 #include "ec_backend.h"
+
+namespace {
+  seastar::logger& logger() {
+    return crimson::get_logger(ceph_subsys_osd);
+  }
+}
 
 ECBackend::ECBackend(shard_id_t shard,
                      ECBackend::CollectionRef coll,
                      crimson::osd::ShardServices& shard_services,
                      const ec_profile_t&,
                      uint64_t stripe_width,
+                     bool fast_read,
+                     bool allows_ecoverwrites,
 		     DoutPrefixProvider &dpp)
   : PGBackend{shard, coll, shard_services, dpp},
-    sinfo{ec_impl->get_data_chunk_count(), stripe_width}
+    sinfo{ec_impl->get_data_chunk_count(), stripe_width},
+    fast_read{fast_read},
+    allows_ecoverwrites{allows_ecoverwrites}
 {
   // FIXME: ec_impl
   // todo
@@ -115,17 +126,32 @@ ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
     return interruptor::do_for_each(op.to_read, [&op, &reply, this] (auto read_item) {
       const auto& [obj, op_list] = read_item;
       return interruptor::do_for_each(op_list, [&op, &reply, obj, this] (auto op_spec) {
-        using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
+        using read_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
         const auto& [off, size, flags] = op_spec;
         return maybe_chunked_read(
           obj, op, off, size, flags
-        ).safe_then([&reply] (auto bl) {
-          return ll_read_ierrorator::now();
-        }, read_errorator::all_same_way([] (const auto& e) {
-	assert(e.value() > 0);
-          return ll_read_ierrorator::now();
+        ).safe_then([&reply, obj, off, size] (auto&& result_bl) {
+          logger().debug("{}: read requested={} len={}",
+			 "handle_rep_read_op", size, result_bl.length());
+	  reply.buffers_read[obj].emplace_back(off, std::move(result_bl));
+          return read_ertr::now();
+	}).handle_error(read_ertr::all_same_way([&reply, obj, this] (const auto& e) {
+          assert(e.value() > 0);
+	  if (e.value() == ENOENT && fast_read) {
+	    logger().info("{}: ENOENT reading {}, fast, read, probably ok",
+			  "handle_rep_read_op", obj);
+	  } else {
+	    logger().error("{}: Error {} reading {}",
+			   "handle_rep_read_op", e.value(), obj);
+	    // TODO: clog error logging
+            reply.buffers_read.erase(obj);
+            reply.errors[obj] = -e.value();
+	  }
+          return read_ertr::now();
         }));
       });
+    }).si_then([this] {
+      return ll_read_ierrorator::now();
     });
   });
 }
