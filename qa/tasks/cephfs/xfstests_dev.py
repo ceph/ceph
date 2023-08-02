@@ -97,7 +97,7 @@ class XFSTestsDev(CephFSTestCase):
             gawk gcc indent libtool lvm2 make psmisc quota sed \
             xfsdump xfsprogs \
             libacl-devel libattr-devel libaio-devel libuuid-devel \
-            xfsprogs-devel btrfs-progs-devel python2 sqlite""".split()
+            xfsprogs-devel btrfs-progs-devel python3 sqlite""".split()
             deps_old_distros = ['xfsprogs-qa-devel']
 
             if distro != 'fedora' and major_ver_num > 7:
