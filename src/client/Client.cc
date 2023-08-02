@@ -6403,7 +6403,7 @@ int Client::mds_command(
       op.con = conn;
 
       ldout(cct, 4) << __func__ << ": new command op to " << target_gid
-        << " tid=" << op.tid << cmd << dendl;
+        << " tid=" << op.tid << " multi_id=" << op.multi_target_id << " "<< cmd << dendl;
 
       // Construct and send MCommand
       MessageRef m = op.get_message(monclient->get_fsid());
@@ -6429,7 +6429,7 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
   }
 
   auto &op = command_table.get_command(tid);
-  ceph_tid_t multi_id = command_table.get_multi_target_id(tid);
+  ceph_tid_t multi_id = op.multi_target_id;
 
   if (op.outbl) {
     if (multi_id != 0 && m->r == 0) {
@@ -6452,7 +6452,7 @@ void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
     }
     else {
       // when this command is the last one
-      if (command_table.count_multi_commands(multi_id) <= 1) {
+      if (command_table.count_multi_commands(multi_id) == 1) {
         op.outbl->append("]");
       }
     }

@@ -122,11 +122,6 @@ public:
     return commands.at(tid);
   }
 
-  bool get_multi_target_id(ceph_tid_t tid) const
-  {
-    return commands.at(tid).multi_target_id;
-  }
-
   void erase(ceph_tid_t tid)
   {
     ceph_tid_t multi_id = commands.at(tid).multi_target_id;
