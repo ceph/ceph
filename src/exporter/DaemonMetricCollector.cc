@@ -149,6 +149,10 @@ void DaemonMetricCollector::dump_asok_metrics() {
 
           if (counters_labels.empty()) {
             auto labels_and_name = get_labels_and_metric_name(daemon_name, counter_name);
+            if (labels_and_name.first.empty()) {
+              dout(1) << "Unable to parse instance_id from daemon_name: " << daemon_name << dendl;
+              continue;
+            }
             labels = labels_and_name.first;
             counter_name = labels_and_name.second;
           }
@@ -306,13 +310,19 @@ DaemonMetricCollector::get_labels_and_metric_name(std::string daemon_name,
     labels["instance_id"] = quote(tmp);
   }
   else if (daemon_name.find("rgw") != std::string::npos) {
-    // fetch intance_id for e.g. "okbvtv" from daemon_name=rgw.foo.ceph-node-00.okbvtv 
-    size_t pos = daemon_name.find_last_of(".");
-    std::string instance_id = "";
-    if (pos != std::string::npos) {
-       instance_id = daemon_name.substr(pos+1);
+    // fetch intance_id for e.g. "hrgsea" from daemon_name=rgw.foo.ceph-node-00.hrgsea.2.94739968030880
+    std::vector<std::string> elems;
+    std::stringstream ss;
+    ss.str(daemon_name);
+    std::string item;
+    while (std::getline(ss, item, '.')) {
+        elems.push_back(item);
     }
-    labels["instance_id"] = quote(instance_id);
+    if (elems.size() >= 4) {
+      labels["instance_id"] = quote(elems[3]);
+    } else {
+      return std::make_pair(labels_t(), "");
+    }
   } else {
     labels.insert({"ceph_daemon", quote(daemon_name)});
   }
