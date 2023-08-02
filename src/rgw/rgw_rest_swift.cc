@@ -1982,7 +1982,7 @@ void RGWFormPost::init(rgw::sal::Driver* const driver,
                        RGWHandler* const dialect_handler)
 {
   if (!rgw::sal::Object::empty(s->object)) {
-    prefix = std::move(s->object->get_name());
+    prefix = s->object->get_name();
     s->object->set_key(rgw_obj_key());
   }
 
@@ -2555,7 +2555,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
     }
   };
 
-  std::string prefix = std::move(s->object->get_name());
+  std::string prefix = s->object->get_name();
   s->object->set_key(rgw_obj_key());
 
   return new RGWWebsiteListing(std::move(prefix));
