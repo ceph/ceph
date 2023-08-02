@@ -6082,6 +6082,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       inodeno_t subvol_ino = realm->get_subvolume_ino();
       // can't create subvolume inside another subvolume
       if (subvol_ino && subvol_ino != cur->ino()) {
+	dout(20) << "subvol ino changed between rdlock release and xlock "
+		 << "policylock; subvol_ino: " << subvol_ino << ", "
+		 << "cur->ino: " << cur->ino()
+		 << dendl;
 	respond_to_request(mdr, -CEPHFS_EINVAL);
 	return;
       }
@@ -6096,10 +6100,13 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     auto pi = cur->project_inode(mdr, false, true);
     if (!srnode)
       pi.snapnode->created = pi.snapnode->seq = realm->get_newest_seq();
-    if (val)
+    if (val) {
+      dout(20) << "marking subvolume for ino: " << cur->ino() << dendl;
       pi.snapnode->mark_subvolume();
-    else
+    } else {
+      dout(20) << "clearing subvolume for ino: " << cur->ino() << dendl;
       pi.snapnode->clear_subvolume();
+    }
 
     mdr->no_early_reply = true;
     pip = pi.inode.get();
