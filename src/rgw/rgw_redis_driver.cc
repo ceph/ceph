@@ -663,10 +663,11 @@ static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& con
     boost::redis::request req;
     req.push("GETRANGE", key, read_ofs, read_ofs + read_len);
 
-    auto resp = new boost::redis::response<std::string>();
-    auto bl = new bufferlist();
+    // TODO: Make unique pointer once support is added
+    auto s = std::make_shared<RedisDriver::redis_response>();
+    auto& resp = s->resp;
 
-    conn.async_exec(req, *resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, resp, bl}));
+    conn.async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
   };
 }
 

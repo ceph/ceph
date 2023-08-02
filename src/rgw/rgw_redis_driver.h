@@ -66,26 +66,21 @@ class RedisDriver : public CacheDriver {
     virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override { return nullptr; }
     virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
 
+    struct redis_response {
+      boost::redis::response<std::string> resp;
+    };
+
     struct redis_aio_handler { 
       rgw::Aio* throttle = nullptr;
       rgw::AioResult& r;
-      boost::redis::response<std::string>* resp;
-      bufferlist* bl;
+      std::shared_ptr<redis_response> s;
 
       /* Read Callback */
       void operator()(boost::system::error_code ec, auto) const {
 	r.result = -ec.value();
-
-	const std::string s = std::get<0>(*resp).value();
-	bl->append(s.c_str(), s.size()); 
-
-	r.data = *bl;
+	r.data.append(std::get<0>(s->resp).value().c_str());
 	throttle->put(r);
-
-	delete resp;
       }
-
-      ~redis_aio_handler() { delete bl; }
     };
 
   protected:
