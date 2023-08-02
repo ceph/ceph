@@ -3799,7 +3799,7 @@ options:
   type: int
   level: advanced
   desc: The rgw d4n port
-  default: 8000
+  default: 6379
   services: 
   - rgw
   flags:
@@ -3810,6 +3810,16 @@ options:
   level: advanced
   desc: The rgw directory hosts and ports
   default: 127.0.0.1:6379
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_local_cache_addr
+  type: str
+  level: advanced
+  desc: The rgw local cache ip and port
+  default: 127.0.0.1:8000
   services: 
   - rgw
   flags:

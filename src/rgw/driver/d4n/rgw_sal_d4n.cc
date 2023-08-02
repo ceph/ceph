@@ -454,9 +454,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   cache_block* temp_cache_block = filter->get_cache_block();
   RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
 
-  //FIXME: AMIN: we need to differentiate between remote cache and remote redis. 
-  //Basically we d o not need to bother about redis. All we care is remote cache.
-  //temp_cache_block->hosts_list.push_back(temp_block_dir->get_host() + ":" + std::to_string(temp_block_dir->get_port())); 
+  temp_cache_block->hosts_list.push_back(temp_block_dir->get_hosts()); 
   temp_cache_block->size_in_bytes = accounted_size;
   temp_cache_block->c_obj.bucket_name = obj->get_bucket()->get_name();
   temp_cache_block->c_obj.obj_name = obj->get_key().get_oid();
