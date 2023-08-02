@@ -122,7 +122,7 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
 
     connect.async_exec(req, resp, [&](auto ec, auto) {
        if (!ec)
-	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	  dout(0) << "RedisDriver key_exists: " << std::get<0>(resp).value() << dendl;
 
        connect.cancel();
     });
@@ -287,7 +287,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
 
     connect.async_exec(req, resp, [&](auto ec, auto) {
        if (!ec)
-	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	  dout(0) << "RedisDriver put: " << std::get<0>(resp).value() << dendl;
 
        connect.cancel();
     });
@@ -326,7 +326,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 
       connect.async_exec(req, resp, [&](auto ec, auto) {
 	 if (!ec)
-	    dout(0) << "Sam get: " << std::get<0>(resp).value() << dendl;
+	    dout(0) << "RedisDriver get: " << std::get<0>(resp).value() << dendl;
 
 	 connect.cancel();
       });
@@ -375,7 +375,7 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key)
 
       connect.async_exec(req, resp, [&](auto ec, auto) {
 	 if (!ec)
-	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	    dout(0) << "RedisDriver del: " << std::get<0>(resp).value() << dendl;
 
 	 connect.cancel();
       });
@@ -413,7 +413,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
       connect.async_exec(req, resp, [&](auto ec, auto) {
 	 if (!ec) {
-	   dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	   dout(0) << "RedisDriver append_data: " << std::get<0>(resp).value() << dendl;
 	   value = std::get<0>(resp).value();
 	 }
 
@@ -446,7 +446,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
     connect.async_exec(req, resp, [&](auto ec, auto) {
        if (!ec)
-	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	  dout(0) << "RedisDriver append_data: " << std::get<0>(resp).value() << dendl;
 
        connect.cancel();
     });
@@ -485,7 +485,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
 
       connect.async_exec(req, resp, [&](auto ec, auto) {
 	 if (!ec)
-	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	    dout(0) << "RedisDriver delete_data: " << std::get<0>(resp).value() << dendl;
 
 	 connect.cancel();
       });
@@ -511,7 +511,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
 
 	connect.async_exec(req, resp, [&](auto ec, auto) {
 	   if (!ec)
-	      dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	      dout(0) << "RedisDriver delete_data: " << std::get<0>(resp).value() << dendl;
 
 	   connect.cancel();
 	});
@@ -600,7 +600,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
 
       connect.async_exec(req, resp, [&](auto ec, auto) {
 	 if (!ec)
-	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	    dout(0) << "RedisDriver set_attrs: " << std::get<0>(resp).value() << dendl;
 
 	 connect.cancel();
       });
@@ -678,7 +678,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 
       connect.async_exec(req, resp, [&](auto ec, auto) {
 	 if (!ec)
-	    dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+	    dout(0) << "RedisDriver delete_attrs: " << std::get<0>(resp).value() << dendl;
 
 	 connect.cancel();
       });
