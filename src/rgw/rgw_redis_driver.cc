@@ -773,24 +773,34 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   return std::get<0>(value).value();
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) 
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) 
 {
   std::string entry = partition_info.location + key;
-  int result = 0;
-    
-  if (!client.is_connected()) 
-    find_client(dpp);
+  response<int> resp;
     
   if (key_exists(dpp, key)) {
     /* Every attr set will be treated as new */
     try {
-      client.hset(entry, attr_name, attrVal, [&result](cpp_redis::reply& reply) {
-	if (!reply.is_null()) {
-	  result = reply.as_integer();
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+
+      req.push("HSET", entry, attr_name, attr_val);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "RedisDriver set_attr: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
     } catch(std::exception &e) {
       return -1;
     }
@@ -799,7 +809,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
     return -2; 
   }
 
-  return result - 1;
+  return std::get<0>(resp).value() - 1; /* Returns number of fields set */
 }
 
 std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) 
