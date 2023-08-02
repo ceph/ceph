@@ -152,7 +152,7 @@ class VolumeClient(CephfsClient["Module"]):
                                          cephfs.AT_SYMLINK_NOFOLLOW)
 
                     usedbytes = st['size']
-                    vol_info_dict = get_pending_subvol_deletions_count(path)
+                    vol_info_dict = get_pending_subvol_deletions_count(fs_handle, path)
                     if human_readable:
                         vol_info_dict['used_size'] = mgr_util.format_bytes(int(usedbytes), 5)
                     else:
