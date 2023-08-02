@@ -234,7 +234,7 @@ mode. As a result, however, pools with lost OSDs but without complete data loss 
 unable to recover and go active without manual intervention to temporarily change
 the ``min_size`` setting.
 
-We recommend that ``min_size`` be ``K+2`` or greater to prevent loss of writes and
+We recommend that ``min_size`` be ``K+1`` or greater to prevent loss of writes and
 loss of data.
 
 
