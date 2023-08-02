@@ -246,6 +246,7 @@ It is a yaml format file with the following properties:
       virtual_interface_networks: [ ... ]       # optional: list of CIDR networks
       use_keepalived_multicast: <bool>          # optional: Default is False.
       vrrp_interface_network: <string>/<string> # optional: ex: 192.168.20.0/24
+      health_check_interval: <string>           # optional: Default is 2s.
       ssl_cert: |                               # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
@@ -273,6 +274,7 @@ It is a yaml format file with the following properties:
       monitor_port: <integer>             # ex: 1967, used by haproxy for load balancer status
       virtual_interface_networks: [ ... ] # optional: list of CIDR networks
       first_virtual_router_id: <integer>  # optional: default 50
+      health_check_interval: <string>     # optional: Default is 2s.
       ssl_cert: |                         # optional: SSL certificate and key
         -----BEGIN CERTIFICATE-----
         ...
@@ -321,6 +323,9 @@ where the properties of this service specification are:
     keepalived will have different virtual_router_id. In the case of using ``virtual_ips_list``,
     each IP will create its own virtual router. So the first one will have ``first_virtual_router_id``,
     second one will have ``first_virtual_router_id`` + 1, etc. Valid values go from 1 to 255.
+* ``health_check_interval``
+    Default is 2 seconds. This parameter can be used to set the interval between health checks
+    for the haproxy with the backend servers.
 
 .. _ingress-virtual-ip:
 
