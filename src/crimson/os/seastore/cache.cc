@@ -85,12 +85,6 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
   ext = query_cache(addr, nullptr);
   if (ext) {
     DEBUGT("retire {}~{} in cache -- {}", t, addr, length, *ext);
-    if (ext->get_type() != extent_types_t::RETIRED_PLACEHOLDER) {
-      t.add_to_read_set(ext);
-      t.add_to_retired_set(ext);
-      return retire_extent_iertr::now();
-    }
-    // the retired-placeholder exists
   } else {
     // add a new placeholder to Cache
     ext = CachedExtent::make_cached_extent_ref<
@@ -105,8 +99,6 @@ Cache::retire_extent_ret Cache::retire_extent_addr(
     const auto t_src = t.get_src();
     add_extent(ext, &t_src);
   }
-
-  // add the retired-placeholder to transaction
   t.add_to_read_set(ext);
   t.add_to_retired_set(ext);
   return retire_extent_iertr::now();
