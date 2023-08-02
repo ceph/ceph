@@ -1,14 +1,10 @@
 #pragma once
 
 #include <aio.h>
+#include <boost/redis/connection.hpp>
 #include "common/async/completion.h"
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
-
-#include <cpp_redis/cpp_redis>
-#include "driver/d4n/d4n_directory.h"
-
-#include <boost/redis/connection.hpp>
 
 #define dout_subsys ceph_subsys_rgw // remove -Sam
 #define dout_context g_ceph_context
@@ -96,8 +92,6 @@ class RedisDriver : public CacheDriver {
   protected:
     connection& conn;
 
-    rgw::d4n::Address addr; // remove -Sam
-    cpp_redis::client client;
     static std::unordered_map<std::string, Partition> partitions;
     std::unordered_map<std::string, Entry> entries;
     Partition partition_info;
@@ -105,7 +99,6 @@ class RedisDriver : public CacheDriver {
     uint64_t outstanding_write_size;
     CephContext* cct;
 
-    int find_client(const DoutPrefixProvider* dpp);
     int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
     std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
     int remove_entry(const DoutPrefixProvider* dpp, std::string key);

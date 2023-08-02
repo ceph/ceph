@@ -1,6 +1,6 @@
 #include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
-#include <boost/asio/experimental/awaitable_operators.hpp>
+//#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/redis/src.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -10,22 +10,7 @@ namespace rgw { namespace cache {
 
 std::unordered_map<std::string, Partition> RedisDriver::partitions;
 
-std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* binary) 
-{
-  std::vector< std::pair<std::string, std::string> > values;
-  rgw::sal::Attrs::iterator attrs;
-
-  /* Convert to vector */
-  if (binary != NULL) {
-    for (attrs = binary->begin(); attrs != binary->end(); ++attrs) {
-      values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
-    }
-  }
-
-  return values;
-}
-
-std::list<std::string> build_attrs_new(rgw::sal::Attrs* binary) 
+std::list<std::string> build_attrs(rgw::sal::Attrs* binary) 
 {
   std::list<std::string> values;
   rgw::sal::Attrs::iterator attrs;
@@ -39,24 +24,6 @@ std::list<std::string> build_attrs_new(rgw::sal::Attrs* binary)
   }
 
   return values;
-}
-
-int RedisDriver::find_client(const DoutPrefixProvider* dpp) 
-{
-  if (client.is_connected())
-    return 0;
-
-  if (addr.host == "" || addr.port == 0) { 
-    ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
-    return -EDESTADDRREQ;
-  }
-
-  client.connect(addr.host, addr.port, nullptr);
-
-  if (!client.is_connected())
-    return -ECONNREFUSED;
-
-  return 0;
 }
 
 int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) 
@@ -232,29 +199,16 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     partition_info.location += "/";
   }
 
-  // remove
-  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
-  addr.port = cct->_conf->rgw_d4n_port;
+  config cfg;
+  cfg.addr.host = cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
+  cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
 
-  if (addr.host == "" || addr.port == 0) {
-    addr.host = "127.0.0.1"; // fix later -Sam
-    addr.port = 6379;
+  if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return -EDESTADDRREQ;
   }
 
-  config cfg;
-  cfg.addr.host = addr.host;
-  cfg.addr.port = std::to_string(addr.port);
-
   conn.async_run(cfg, {}, net::detached);
-
-/*  client.connect("127.0.0.1", 6379, nullptr);
-
-  if (!client.is_connected()) {
-    ldpp_dout(dpp, 10) << "RGW Redis Cache: Could not connect to redis cache endpoint." << dendl;
-    return ECONNREFUSED;
-  }*/
 
   return 0;
 }
@@ -276,7 +230,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
     request req;
     response<std::string> resp;
 
-    auto redisAttrs = build_attrs_new(&attrs);
+    auto redisAttrs = build_attrs(&attrs);
 
     if (bl.length()) {
       redisAttrs.push_back("data");
@@ -592,7 +546,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
     /* Every attr set will be treated as new */
     try {
       std::string result;
-      std::list<std::string> redisAttrs = build_attrs_new(&attrs);
+      std::list<std::string> redisAttrs = build_attrs(&attrs);
 	
       boost::redis::config cfg;
       cfg.addr.host = "127.0.0.1";
@@ -647,7 +601,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
       request req;
       response<std::string> resp;
 
-      auto redisAttrs = build_attrs_new(&attrs);
+      auto redisAttrs = build_attrs(&attrs);
 
       req.push_range("HMSET", entry, redisAttrs);
 
@@ -691,7 +645,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
       request req;
       response<int> resp;
 
-      auto redisAttrs = build_attrs_new(&del_attrs);
+      auto redisAttrs = build_attrs(&del_attrs);
 
       req.push_range("HDEL", entry, redisAttrs);
 
