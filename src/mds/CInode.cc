@@ -5169,6 +5169,11 @@ void CInode::dump(Formatter *f, int flags) const
     }
     f->close_section();
   }
+
+  auto realm = find_snaprealm();
+  inodeno_t subvol_ino = realm->get_subvolume_ino();
+  bool is_subvol = (subvol_ino && subvol_ino == ino());
+  f->dump_bool("is_subvolume", is_subvol);
 }
 
 /****** Scrub Stuff *****/
