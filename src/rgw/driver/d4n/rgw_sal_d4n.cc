@@ -259,6 +259,54 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 
     return next->get_obj_attrs(y, dpp, target_obj);
   } else {
+    /* Set metadata locally */
+    RGWQuotaInfo quota_info;
+    RGWObjState* astate;
+    this->get_obj_state(dpp, &astate, y);
+
+    for (auto it = attrs.begin(); it != attrs.end(); ++it) {
+      if (it->second.length() > 0) { // or return? -Sam
+	if (it->first == "mtime") {
+	  parse_time(it->second.c_str(), &astate->mtime);
+	  attrs.erase(it->first);
+	} else if (it->first == "object_size") {
+	  this->set_obj_size(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "accounted_size") {
+	  astate->accounted_size = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "epoch") {
+	  astate->epoch = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "version_id") {
+	  this->set_instance(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "this_zone_short_id") {
+	  astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "bucket_count") {
+	  this->get_bucket()->set_count(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "bucket_size") {
+	  this->get_bucket()->set_size(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else if (it->first == "user_quota.max_size") {
+	  quota_info.max_size = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "user_quota.max_objects") {
+	  quota_info.max_objects = std::stoull(it->second.c_str());
+	  attrs.erase(it->first);
+	} else if (it->first == "max_buckets") {
+	  this->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	}
+      }
+    }
+
+    this->get_bucket()->get_owner()->set_info(quota_info);
+    this->set_obj_state(*astate);
+   
+    /* Set attributes locally */
     int set_attrsReturn = this->set_attrs(attrs);
     
     if (set_attrsReturn < 0) {
