@@ -3,6 +3,7 @@ if(${WITH_CEPHFS})
     main.cc
     alternate_name.cc
     ops.cc
+    commands.cc
     )
   target_link_libraries(ceph_test_client
     client
