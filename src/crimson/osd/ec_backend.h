@@ -26,6 +26,8 @@ public:
 	    store_index_t store_index,
 	    const ec_profile_t& ec_profile,
 	    uint64_t stripe_width,
+	    bool fast_read,
+	    bool allows_ecoverwrites,
 	    DoutPrefixProvider &dpp);
   seastar::future<> stop() final {
     return seastar::now();
@@ -64,6 +66,9 @@ private:
 
   ceph::ErasureCodeInterfaceRef ec_impl;
   const ECUtil::stripe_info_t sinfo;
+
+  const bool fast_read;
+  const bool allows_ecoverwrites;
 };
 
 }
