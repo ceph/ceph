@@ -703,42 +703,65 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) 
 {
   std::string entry = partition_info.location + key;
-  std::string attrValue;
-
-  if (!client.is_connected()) 
-    find_client(dpp);
+  response<std::string> value;
 
   if (key_exists(dpp, key)) {
-    int exists = -2;
-    std::string getValue;
+    response<int> resp;
 
     /* Ensure field was set */
     try {
-      client.hexists(entry, attr_name, [&exists](cpp_redis::reply& reply) {
-	if (!reply.is_null()) {
-	  exists = reply.as_integer();
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+
+      req.push("HEXISTS", entry, attr_name);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "RedisDriver get_attr: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
     } catch(std::exception &e) {
       return {};
     }
     
-    if (!exists) {
+    if (!std::get<0>(resp).value()) {
       ldpp_dout(dpp, 20) << "RGW Redis Cache: Attribute was not set." << dendl;
       return {};
     }
 
     /* Retrieve existing value from cache */
     try {
-      client.hget(entry, attr_name, [&exists, &attrValue](cpp_redis::reply &reply) {
-	if (!reply.is_null()) {
-	  attrValue = reply.as_string();
-	}
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+
+      req.push("HGET", entry, attr_name);
+
+      connect.async_exec(req, value, [&](auto ec, auto) {
+	 if (!ec) {
+	   dout(0) << "RedisDriver get_attr: " << std::get<0>(value).value() << dendl;
+	 }
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
     } catch(std::exception &e) {
       return {};
     }
@@ -747,7 +770,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
     return {};
   }
 
-  return attrValue;
+  return std::get<0>(value).value();
 }
 
 int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) 
