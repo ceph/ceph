@@ -525,7 +525,7 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
   auto free_ifa = make_scope_guard([ifa] { freeifaddrs(ifa); });
   const unsigned int prefix_len = std::max(sizeof(in_addr::s_addr), sizeof(in6_addr::s6_addr)) * CHAR_BIT;
   for (auto addr = ifa; addr != nullptr; addr = addr->ifa_next) {
-    if (matches_with_net(*ifa, (const struct sockaddr *) &network, prefix_len,
+    if (matches_with_net(*addr, (const struct sockaddr *) &network, prefix_len,
 			 CEPH_PICK_ADDRESS_IPV4 | CEPH_PICK_ADDRESS_IPV6)) {
       return addr->ifa_name;
     }
