@@ -38,8 +38,6 @@ cypress_run () {
 
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/dashboard/frontend
 
-kcli ssh -u root ceph-node-00 'cephadm shell "ceph config set mgr mgr/prometheus/exclude_perf_counters false"'
-
 # check if the prometheus daemon is running
 # before starting the e2e tests
 
