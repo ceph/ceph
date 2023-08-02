@@ -179,6 +179,7 @@ struct Mirror::C_RestartMirroring : Context {
 
   void handle_enable_mirroring(int r) {
     mirror->handle_enable_mirroring(filesystem, peers, r);
+    mirror->_unset_restarting(filesystem);
     delete this;
   }
 
@@ -509,16 +510,20 @@ void Mirror::update_fs_mirrors() {
       auto failed = mirror_action.fs_mirror && mirror_action.fs_mirror->is_failed();
       auto blocklisted = mirror_action.fs_mirror && mirror_action.fs_mirror->is_blocklisted();
 
-      if (check_failure && !mirror_action.action_in_progress && failed) {
+      if (check_failure && !mirror_action.action_in_progress &&
+	  !_is_restarting(filesystem) && failed) {
         // about to restart failed mirror instance -- nothing
         // should interfere
         dout(5) << ": filesystem=" << filesystem << " failed mirroring -- restarting" << dendl;
+	_set_restarting(filesystem);
         auto peers = mirror_action.fs_mirror->get_peers();
         auto ctx =  new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
         ctx->complete(0);
-      } else if (check_blocklist && !mirror_action.action_in_progress && blocklisted) {
+      } else if (check_blocklist && !mirror_action.action_in_progress &&
+		 !_is_restarting(filesystem) && blocklisted) {
         // about to restart blocklisted mirror instance -- nothing
         // should interfere
+	_set_restarting(filesystem);
         dout(5) << ": filesystem=" << filesystem << " is blocklisted -- restarting" << dendl;
         auto peers = mirror_action.fs_mirror->get_peers();
         auto ctx = new C_RestartMirroring(this, filesystem, mirror_action.pool_id, peers);
