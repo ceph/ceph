@@ -621,23 +621,33 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   if (key_exists(dpp, key)) {
     try {
-      std::string result;
-      auto redisAttrs = build_attrs(&attrs);
+      boost::redis::config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
 
-      client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-        if (!reply.is_null()) {
-          result = reply.as_string();
-        }
+      boost::asio::io_context io;
+      boost::redis::connection connect{io};
+      connect.async_run(cfg, {}, net::detached);
+
+      request req;
+      response<std::string> resp;
+
+      auto redisAttrs = build_attrs_new(&attrs);
+
+      req.push_range("HMSET", entry, redisAttrs);
+
+      connect.async_exec(req, resp, [&](auto ec, auto) {
+	 if (!ec)
+	    dout(0) << "RedisDriver update_attrs: " << std::get<0>(resp).value() << dendl;
+
+	 connect.cancel();
       });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      io.run();
 
-      if (result != "OK") {
+      if (std::get<0>(resp).value() != "OK") {
         return -1;
       }
     } catch(std::exception &e) {
