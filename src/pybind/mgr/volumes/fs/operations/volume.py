@@ -9,11 +9,12 @@ from contextlib import contextmanager
 import orchestrator
 
 from .lock import GlobalLock
-from ..exception import VolumeException
+from ..exception import VolumeException, IndexException
 from ..fs_util import create_pool, remove_pool, rename_pool, create_filesystem, \
     remove_filesystem, rename_filesystem, create_mds, volume_exists, listdir
 from .trash import Trash
 from mgr_util import open_filesystem, CephfsConnectionException
+from .clone_index import open_clone_index
 
 log = logging.getLogger(__name__)
 
@@ -258,6 +259,30 @@ def get_pending_subvol_deletions_count(fs, path):
             num_pending_subvol_del = 0
 
     return {'pending_subvolume_deletions': num_pending_subvol_del}
+
+
+def get_all_pending_clones_count(self, mgr, vol_spec):
+    pending_clones_cnt = 0
+    index_path = ""
+    fs_map = mgr.get('fs_map')
+    for fs in fs_map['filesystems']:
+        volname = fs['mdsmap']['fs_name']
+        try:
+            with open_volume(self, volname) as fs_handle:
+                with open_clone_index(fs_handle, vol_spec) as index:
+                    index_path = index.path.decode('utf-8')
+                    pending_clones_cnt = pending_clones_cnt \
+                                            + len(listdir(fs_handle, index_path,
+                                                          filter_entries=None, filter_files=False))
+        except IndexException as e:
+            if e.errno == -errno.ENOENT:
+                continue
+            raise VolumeException(-e.args[0], e.args[1])
+        except VolumeException as ve:
+            log.error("error fetching clone entry for volume '{0}' ({1})".format(volname, ve))
+            raise ve
+
+    return pending_clones_cnt
 
 
 @contextmanager
