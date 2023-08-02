@@ -1290,6 +1290,23 @@ class MDCache {
     int num_remote_waiters = 0;	// number of remote authpin waiters
   };
 
+  enum KILL_SHUTDOWN_AT {
+    SHUTDOWN_NULL,
+    SHUTDOWN_START,
+    SHUTDOWN_POSTTRIM,
+    SHUTDOWN_POSTONEEXPORT,
+    SHUTDOWN_POSTALLEXPORTS,
+    SHUTDOWN_SESSIONTERMINATE,
+    SHUTDOWN_SUBTREEMAP,
+    SHUTDOWN_TRIMALL,
+    SHUTDOWN_STRAYPUT,
+    SHUTDOWN_LOGCAP,
+    SHUTDOWN_EMPTYSUBTREES,
+    SHUTDOWN_MYINREMOVAL,
+    SHUTDOWN_GLOBALSNAPREALMREMOVAL,
+    SHUTDOWN_UNUSED
+  };
+
   typedef std::map<dirfrag_t,fragment_info_t>::iterator fragment_info_iterator;
 
   friend class EFragment;
@@ -1389,6 +1406,8 @@ class MDCache {
   time upkeep_last_trim = time::min();
   time upkeep_last_release = time::min();
   std::atomic<bool> upkeep_trim_shutdown{false};
+
+  uint64_t kill_shutdown_at = 0;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

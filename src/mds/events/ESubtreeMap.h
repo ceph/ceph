@@ -16,17 +16,17 @@
 #define CEPH_MDS_ESUBTREEMAP_H
 
 #include "../LogEvent.h"
+#include "../SegmentBoundary.h"
 #include "EMetaBlob.h"
 
-class ESubtreeMap : public LogEvent {
+class ESubtreeMap : public LogEvent, public SegmentBoundary {
 public:
   EMetaBlob metablob;
   std::map<dirfrag_t, std::vector<dirfrag_t> > subtrees;
   std::set<dirfrag_t> ambiguous_subtrees;
-  uint64_t expire_pos;
-  uint64_t event_seq;
+  uint64_t expire_pos = 0;
 
-  ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP), expire_pos(0), event_seq(0) { }
+  ESubtreeMap() : LogEvent(EVENT_SUBTREEMAP) {}
   
   void print(std::ostream& out) const override {
     out << "ESubtreeMap " << subtrees.size() << " subtrees " 
@@ -42,6 +42,9 @@ public:
   static void generate_test_instances(std::list<ESubtreeMap*>& ls);
 
   void replay(MDSRank *mds) override;
+  bool is_major_segment_boundary() const override {
+    return true;
+  }
 };
 WRITE_CLASS_ENCODER_FEATURES(ESubtreeMap)
 
