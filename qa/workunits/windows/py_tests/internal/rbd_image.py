@@ -185,7 +185,7 @@ class RbdImage(object):
     @Tracer.trace
     @utils.retry_decorator()
     def _init_disk(self):
-        cmd = f"Get-Disk -Number {self.disk_number} | Initialize-Disk"
+        cmd = f"Get-Disk -Number {self.disk_number} | Initialize-Disk -PartitionStyle MBR"
         utils.ps_execute(cmd)
 
     @Tracer.trace
