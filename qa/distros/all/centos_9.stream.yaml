@@ -1,2 +1,6 @@
 os_type: centos
 os_version: "9.stream"
+overrides:
+  install:
+      enable_coprs: [aflyhorse/iozone]
+      extra_system_packages: [iozone]
