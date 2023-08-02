@@ -217,43 +217,46 @@ quorum.
 
       ceph-mon -i `hostname` --extract-monmap /tmp/monmap
 
-#. Remove the non-surviving or problematic monitors.  For example, if
-   you have three monitors, ``mon.a``, ``mon.b``, and ``mon.c``, where
-   only ``mon.a`` will survive, follow the example below:
+#. Remove the non-surviving or otherwise problematic monitors:
 
    .. prompt:: bash $
 
       monmaptool {map-path} --rm {mon-id}
 
-   For example,
+   For example, suppose that there are three monitors |---| ``mon.a``, ``mon.b``,
+   and ``mon.c`` |---| and that only ``mon.a`` will survive:
 
    .. prompt:: bash $
 
       monmaptool /tmp/monmap --rm b
       monmaptool /tmp/monmap --rm c
-	
-#. Inject the surviving map with the removed monitors into the
-   surviving monitor(s).  For example, to inject a map into monitor
-   ``mon.a``, follow the example below:
+
+#. Inject the surviving map that includes the removed monitors into the
+   monmap of the surviving monitor(s):
 
    .. prompt:: bash $
 
       ceph-mon -i {mon-id} --inject-monmap {map-path}
 
-   For example:
+   Continuing with the above example, inject a map into monitor ``mon.a`` by
+   running the following command:
 
    .. prompt:: bash $
 
       ceph-mon -i a --inject-monmap /tmp/monmap
 
+
 #. Start only the surviving monitors.
 
-#. Verify the monitors form a quorum (``ceph -s``).
+#. Verify that the monitors form a quorum by running the command ``ceph -s``.
 
-#. You may wish to archive the removed monitors' data directory in
-   ``/var/lib/ceph/mon`` in a safe location, or delete it if you are
-   confident the remaining monitors are healthy and are sufficiently
-   redundant.
+#. The data directory of the removed monitors is in ``/var/lib/ceph/mon``:
+   either archive this data directory in a safe location or delete this data
+   directory. However, do not delete it unless you are confident that the
+   remaining monitors are healthy and sufficiently redundant. Make sure that
+   there is enough room for the live DB to expand and compact, and make sure
+   that there is also room for an archived copy of the DB. The archived copy
+   can be compressed.
 
 .. _Changing a Monitor's IP address:
 
@@ -262,185 +265,195 @@ Changing a Monitor's IP Address
 
 .. important:: Existing monitors are not supposed to change their IP addresses.
 
-Monitors are critical components of a Ceph cluster, and they need to maintain a
-quorum for the whole system to work properly. To establish a quorum, the
-monitors need to discover each other. Ceph has strict requirements for
-discovering monitors.
+Monitors are critical components of a Ceph cluster. The entire system can work
+properly only if the monitors maintain quorum, and quorum can be established
+only if the monitors have discovered each other by means of their IP addresses.
+Ceph has strict requirements on the discovery of monitors.
 
-Ceph clients and other Ceph daemons use ``ceph.conf`` to discover monitors.
-However, monitors discover each other using the monitor map, not ``ceph.conf``.
-For example,  if you refer to `Adding a Monitor (Manual)`_ you will see that you
-need to obtain the current monmap for the cluster when creating a new monitor,
-as it is one of the required arguments of ``ceph-mon -i {mon-id} --mkfs``. The
-following sections explain the consistency requirements for Ceph monitors, and a
-few safe ways to change a monitor's IP address.
+Although the ``ceph.conf`` file is used by Ceph clients and other Ceph daemons
+to discover monitors, the monitor map is used by monitors to discover each
+other. This is why it is necessary to obtain the current ``monmap`` at the time
+a new monitor is created: as can be seen above in `Adding a Monitor (Manual)`_,
+the ``monmap`` is one of the arguments required by the ``ceph-mon -i {mon-id}
+--mkfs`` command. The following sections explain the consistency requirements
+for Ceph monitors, and also explain a number of safe ways to change a monitor's
+IP address.
 
 
 Consistency Requirements
 ------------------------
 
-A monitor always refers to the local copy of the monmap  when discovering other
-monitors in the cluster.  Using the monmap instead of ``ceph.conf`` avoids
-errors that could  break the cluster (e.g., typos in ``ceph.conf`` when
-specifying a monitor address or port). Since monitors use monmaps for discovery
-and they share monmaps with clients and other Ceph daemons, the monmap provides
-monitors with a strict guarantee that their consensus is valid.
+When a monitor discovers other monitors in the cluster, it always refers to the
+local copy of the monitor map. Using the monitor map instead of using the
+``ceph.conf`` file avoids errors that could break the cluster (for example,
+typos or other slight errors in ``ceph.conf`` when a monitor address or port is
+specified). Because monitors use monitor maps for discovery and because they
+share monitor maps with Ceph clients and other Ceph daemons, the monitor map
+provides monitors with a strict guarantee that their consensus is valid.
 
 Strict consistency also applies to updates to the monmap. As with any other
 updates on the monitor, changes to the monmap always run through a distributed
 consensus algorithm called `Paxos`_. The monitors must agree on each update to
-the monmap, such as adding or removing a monitor, to ensure that each monitor in
-the quorum has the same version of the monmap. Updates to the monmap are
+the monmap, such as adding or removing a monitor, to ensure that each monitor
+in the quorum has the same version of the monmap. Updates to the monmap are
 incremental so that monitors have the latest agreed upon version, and a set of
-previous versions, allowing a monitor that has an older version of the monmap to
-catch up with the current state of the cluster.
+previous versions, allowing a monitor that has an older version of the monmap
+to catch up with the current state of the cluster.
 
-If monitors discovered each other through the Ceph configuration file instead of
-through the monmap, it would introduce additional risks because the Ceph
-configuration files are not updated and distributed automatically. Monitors
-might inadvertently use an older ``ceph.conf`` file, fail to recognize a
-monitor, fall out of a quorum, or develop a situation where `Paxos`_ is not able
-to determine the current state of the system accurately. Consequently,  making
-changes to an existing monitor's IP address must be done with  great care.
+There are additional advantages to using the monitor map rather than
+``ceph.conf`` when monitors discover each other. Because ``ceph.conf`` is not
+automatically updated and distributed, its use would bring certain risks:
+monitors might use an outdated ``ceph.conf`` file, might fail to recognize a
+specific monitor, might fall out of quorum, and might develop a situation in
+which `Paxos`_ is unable to accurately ascertain the current state of the
+system. Because of these risks, any changes to an existing monitor's IP address
+must be made with great care.
 
+.. _operations_add_or_rm_mons_changing_mon_ip:
 
-Changing a Monitor's IP address (The Right Way)
------------------------------------------------
+Changing a Monitor's IP address (Preferred Method)
+--------------------------------------------------
 
-Changing a monitor's IP address in ``ceph.conf`` only is not sufficient to
-ensure that other monitors in the cluster will receive the update.  To change a
-monitor's IP address, you must add a new monitor with the IP  address you want
-to use (as described in `Adding a Monitor (Manual)`_),  ensure that the new
-monitor successfully joins the  quorum; then, remove the monitor that uses the
-old IP address. Then, update the ``ceph.conf`` file to ensure that clients and
-other daemons know the IP address of the new monitor.
+If a monitor's IP address is changed only in the ``ceph.conf`` file, there is
+no guarantee that the other monitors in the cluster will receive the update.
+For this reason, the preferred method to change a monitor's IP address is as
+follows: add a new monitor with the desired IP address (as described in `Adding
+a Monitor (Manual)`_), make sure that the new monitor successfully joins the
+quorum, remove the monitor that is using the old IP address, and update the
+``ceph.conf`` file to ensure that clients and other daemons are made aware of
+the new monitor's IP address.
 
-For example, lets assume there are three monitors in place, such as :: 
+For example, suppose that there are three monitors in place:: 
 
-	[mon.a]
-		host = host01
-		addr = 10.0.0.1:6789
-	[mon.b]
-		host = host02
-		addr = 10.0.0.2:6789
-	[mon.c]
-		host = host03
-		addr = 10.0.0.3:6789
+    [mon.a]
+        host = host01
+        addr = 10.0.0.1:6789
+    [mon.b]
+        host = host02
+        addr = 10.0.0.2:6789
+    [mon.c]
+        host = host03
+        addr = 10.0.0.3:6789
 
-To change ``mon.c`` to ``host04`` with the IP address  ``10.0.0.4``, follow the
-steps in `Adding a Monitor (Manual)`_ by adding a  new monitor ``mon.d``. Ensure
-that ``mon.d`` is  running before removing ``mon.c``, or it will break the
-quorum. Remove ``mon.c`` as described on  `Removing a Monitor (Manual)`_. Moving
-all three  monitors would thus require repeating this process as many times as
-needed.
+To change ``mon.c`` so that its name is ``host04`` and its IP address is
+``10.0.0.4``: (1) follow the steps in `Adding a Monitor (Manual)`_ to add a new
+monitor ``mon.d``, (2) make sure that ``mon.d`` is  running before removing
+``mon.c`` or else quorum will be broken, and (3) follow the steps in `Removing
+a Monitor (Manual)`_ to remove ``mon.c``. To move all three monitors to new IP
+addresses, repeat this process.
 
+Changing a Monitor's IP address (Advanced Method)
+-------------------------------------------------
 
-Changing a Monitor's IP address (The Messy Way)
------------------------------------------------
+There are cases in which the method outlined in :ref"`<Changing a Monitor's IP
+Address (Preferred Method)> operations_add_or_rm_mons_changing_mon_ip` cannot
+be used. For example, it might be necessary to move the cluster's monitors to a
+different network, to a different part of the datacenter, or to a different
+datacenter altogether. It is still possible to change the monitors' IP
+addresses, but a different method must be used.
 
-There may come a time when the monitors must be moved to a different network,  a
-different part of the datacenter or a different datacenter altogether. While  it
-is possible to do it, the process becomes a bit more hazardous.
+For such cases, a new monitor map with updated IP addresses for every monitor
+in the cluster must be generated and injected on each monitor. Although this
+method is not particularly easy, such a major migration is unlikely to be a
+routine task. As stated at the beginning of this section, existing monitors are
+not supposed to change their IP addresses.
 
-In such a case, the solution is to generate a new monmap with updated IP
-addresses for all the monitors in the cluster, and inject the new map on each
-individual monitor.  This is not the most user-friendly approach, but we do not
-expect this to be something that needs to be done every other week.  As it is
-clearly stated on the top of this section, monitors are not supposed to change
-IP addresses.
+Continue with the monitor configuration in the example from :ref"`<Changing a
+Monitor's IP Address (Preferred Method)>
+operations_add_or_rm_mons_changing_mon_ip` . Suppose that all of the monitors
+are to be moved from the ``10.0.0.x`` range to the ``10.1.0.x`` range, and that
+these networks are unable to communicate. Carry out the following procedure:
 
-Using the previous monitor configuration as an example, assume you want to move
-all the  monitors from the ``10.0.0.x`` range to ``10.1.0.x``, and these
-networks  are unable to communicate.  Use the following procedure:
-
-#. Retrieve the monitor map, where ``{tmp}`` is the path to 
-   the retrieved monitor map, and ``{filename}`` is the name of the file 
-   containing the retrieved monitor map:
+#. Retrieve the monitor map (``{tmp}`` is the path to the retrieved monitor
+   map, and ``{filename}`` is the name of the file that contains the retrieved
+   monitor map):
 
    .. prompt:: bash $
 
       ceph mon getmap -o {tmp}/{filename}
 
-#. The following example demonstrates the contents of the monmap:
+#. Check the contents of the monitor map:
 
    .. prompt:: bash $
 
       monmaptool --print {tmp}/{filename}
 
-   ::	
+   ::    
 
-	monmaptool: monmap file {tmp}/{filename}
-	epoch 1
-	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
-	last_changed 2012-12-17 02:46:41.591248
-	created 2012-12-17 02:46:41.591248
-	0: 10.0.0.1:6789/0 mon.a
-	1: 10.0.0.2:6789/0 mon.b
-	2: 10.0.0.3:6789/0 mon.c
+    monmaptool: monmap file {tmp}/{filename}
+    epoch 1
+    fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
+    last_changed 2012-12-17 02:46:41.591248
+    created 2012-12-17 02:46:41.591248
+    0: 10.0.0.1:6789/0 mon.a
+    1: 10.0.0.2:6789/0 mon.b
+    2: 10.0.0.3:6789/0 mon.c
 
-#. Remove the existing monitors:
+#. Remove the existing monitors from the monitor map:
 
    .. prompt:: bash $
 
       monmaptool --rm a --rm b --rm c {tmp}/{filename}
-	
 
    ::
 
-	monmaptool: monmap file {tmp}/{filename}
-	monmaptool: removing a
-	monmaptool: removing b
-	monmaptool: removing c
-	monmaptool: writing epoch 1 to {tmp}/{filename} (0 monitors)
+    monmaptool: monmap file {tmp}/{filename}
+    monmaptool: removing a
+    monmaptool: removing b
+    monmaptool: removing c
+    monmaptool: writing epoch 1 to {tmp}/{filename} (0 monitors)
 
-#. Add the new monitor locations:
+#. Add the new monitor locations to the monitor map:
 
    .. prompt:: bash $
 
       monmaptool --add a 10.1.0.1:6789 --add b 10.1.0.2:6789 --add c 10.1.0.3:6789 {tmp}/{filename}
 
-
    ::
-	
+
       monmaptool: monmap file {tmp}/{filename}
       monmaptool: writing epoch 1 to {tmp}/{filename} (3 monitors)
 
-#. Check new contents:
+#. Check the new contents of the monitor map:
 
    .. prompt:: bash $
 
        monmaptool --print {tmp}/{filename}
-	
+
    ::
 
-	monmaptool: monmap file {tmp}/{filename}
-	epoch 1
-	fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
-	last_changed 2012-12-17 02:46:41.591248
-	created 2012-12-17 02:46:41.591248
-	0: 10.1.0.1:6789/0 mon.a
-	1: 10.1.0.2:6789/0 mon.b
-	2: 10.1.0.3:6789/0 mon.c
+    monmaptool: monmap file {tmp}/{filename}
+    epoch 1
+    fsid 224e376d-c5fe-4504-96bb-ea6332a19e61
+    last_changed 2012-12-17 02:46:41.591248
+    created 2012-12-17 02:46:41.591248
+    0: 10.1.0.1:6789/0 mon.a
+    1: 10.1.0.2:6789/0 mon.b
+    2: 10.1.0.3:6789/0 mon.c
 
-At this point, we assume the monitors (and stores) are installed at the new
-location. The next step is to propagate the modified monmap to the new 
-monitors, and inject the modified monmap into each new monitor.
+At this point, we assume that the monitors (and stores) have been installed at
+the new location. Next, propagate the modified monitor map to the new monitors,
+and inject the modified monitor map into each new monitor.
 
-#. First, make sure to stop all your monitors.  Injection must be done while 
-   the daemon is not running.
+#. Make sure all of your monitors have been stopped. Never inject into a
+   monitor while the monitor daemon is running.
 
-#. Inject the monmap: 
+#. Inject the monitor map:
 
    .. prompt:: bash $
 
       ceph-mon -i {mon-id} --inject-monmap {tmp}/{filename}
 
-#. Restart the monitors.
+#. Restart all of the monitors.
 
-After this step, migration to the new location is complete and 
-the monitors should operate successfully.
+Migration to the new location is now complete. The monitors should operate
+successfully.
+
 
 
 .. _Manual Deployment: ../../../install/manual-deployment
 .. _Monitor Bootstrap: ../../../dev/mon-bootstrap
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
+
+.. |---|   unicode:: U+2014 .. EM DASH
+   :trim:
