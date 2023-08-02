@@ -25,16 +25,16 @@ class NvmeofService(CephService):
         assert self.TYPE == daemon_spec.daemon_type
 
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        igw_id = daemon_spec.daemon_id
+        nvmeof_gw_id = daemon_spec.daemon_id
         host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
 
-        keyring = self.get_keyring_with_caps(self.get_auth_entity(igw_id),
+        keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
                                               'osd', 'allow all tag rbd *=*'])
 
         # TODO: check if we can force jinja2 to generate dicts with double quotes instead of using json.dumps
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
-        name = '{}.{}'.format(utils.name_to_config_section('nvmeof'), igw_id)
+        name = '{}.{}'.format(utils.name_to_config_section('nvmeof'), nvmeof_gw_id)
         rados_id = name[len('client.'):] if name.startswith('client.') else name
         context = {
             'spec': spec,
