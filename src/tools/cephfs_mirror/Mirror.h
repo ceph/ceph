@@ -101,9 +101,6 @@ private:
   std::unique_ptr<ClusterWatcher> m_cluster_watcher;
   std::map<Filesystem, MirrorAction> m_mirror_actions;
 
-  utime_t m_last_blocklist_check;
-  utime_t m_last_failure_check;
-
   RadosRef m_local;
   std::unique_ptr<ServiceDaemon> m_service_daemon;
 
