@@ -4,74 +4,70 @@
  Adding/Removing Monitors
 ==========================
 
-When you have a cluster up and running, you may add or remove monitors
-from the cluster at runtime. To bootstrap a monitor, see `Manual Deployment`_
-or `Monitor Bootstrap`_.
+It is possible to add monitors to a running cluster as long as redundancy is
+maintained. To bootstrap a monitor, see `Manual Deployment`_ or `Monitor
+Bootstrap`_.
 
 .. _adding-monitors:
 
 Adding Monitors
 ===============
 
-Ceph monitors are lightweight processes that are the single source of truth
-for the cluster map. You can run a cluster with 1 monitor but we recommend at least 3 
-for a production cluster. Ceph monitors use a variation of the
-`Paxos`_ algorithm to establish consensus about maps and other critical
-information across the cluster. Due to the nature of Paxos, Ceph requires
-a majority of monitors to be active to establish a quorum (thus establishing
-consensus).
+Ceph monitors serve as the single source of truth for the cluster map. It is
+possible to run a cluster with only one monitor, but for a production cluster
+it is recommended to have at least three monitors provisioned and in quorum.
+Ceph monitors use a variation of the `Paxos`_ algorithm to maintain consensus
+about maps and about other critical information across the cluster. Due to the
+nature of Paxos, Ceph is able to maintain quorum (and thus establish
+consensus) only if a majority of the monitors are ``active``.
 
-It is advisable to run an odd number of monitors. An
-odd number of monitors is more resilient than an
-even number. For instance, with a two monitor deployment, no
-failures can be tolerated and still maintain a quorum; with three monitors,
-one failure can be tolerated; in a four monitor deployment, one failure can
-be tolerated; with five monitors, two failures can be tolerated.  This avoids
-the dreaded *split brain* phenomenon, and is why an odd number is best.
-In short, Ceph needs a majority of
-monitors to be active (and able to communicate with each other), but that
-majority can be achieved using a single monitor, or 2 out of 2 monitors,
-2 out of 3, 3 out of 4, etc.
+It is best to run an odd number of monitors. This is because a cluster that is
+running an odd number of monitors is more resilient than a cluster running an
+even number. For example, in a two-monitor deployment, no failures can be
+tolerated if quorum is to be maintained; in a three-monitor deployment, one
+failure can be tolerated; in a four-monitor deployment, one failure can be
+tolerated; and in a five-monitor deployment, two failures can be tolerated. In
+general, a cluster running an odd number of monitors is best because it avoids
+what is called the *split brain* phenomenon. In short, Ceph is able to operate
+only if a majority of monitors are ``active`` and able to communicate with each
+other, (for example: there must be a single monitor, two out of two monitors,
+two out of three monitors, three out of five monitors, or the like).
 
 For small or non-critical deployments of multi-node Ceph clusters, it is
-advisable to deploy three monitors, and to increase the number of monitors
-to five for larger clusters or to survive a double failure.  There is rarely
-justification for seven or more.
+recommended to deploy three monitors. For larger clusters or for clusters that
+are intended to survive a double failure, it is recommended to deploy five
+monitors. Only in rare circumstances is there any justification for deploying
+seven or more monitors.
 
-Since monitors are lightweight, it is possible to run them on the same 
-host as OSDs; however, we recommend running them on separate hosts,
-because `fsync` issues with the kernel may impair performance.
-Dedicated monitor nodes also minimize disruption since monitor and OSD
-daemons are not inactive at the same time when a node crashes or is
-taken down for maintenance.
-
-Dedicated
-monitor nodes also make for cleaner maintenance by avoiding both OSDs and
-a mon going down if a node is rebooted, taken down, or crashes.
+It is possible to run a monitor on the same host that is running an OSD.
+However, this approach has disadvantages: for example: `fsync` issues with the
+kernel might weaken performance, monitor and OSD daemons might be inactive at
+the same time and cause disruption if the node crashes, is rebooted, or is
+taken down for maintenance. Because of these risks, it is instead
+recommended to run monitors and managers on dedicated hosts.
 
 .. note:: A *majority* of monitors in your cluster must be able to 
-   reach each other in order to establish a quorum.
+   reach each other in order for quorum to be established.
 
-Deploy your Hardware
---------------------
+Deploying your Hardware
+-----------------------
 
-If you are adding a new host when adding a new monitor,  see `Hardware
-Recommendations`_ for details on minimum recommendations for monitor hardware.
-To add a monitor host to your cluster, first make sure you have an up-to-date
-version of Linux installed (typically Ubuntu 16.04 or RHEL 7). 
+Some operators choose to add a new monitor host at the same time that they add
+a new monitor. For details on the minimum recommendations for monitor hardware,
+see `Hardware Recommendations`_. Before adding a monitor host to the cluster,
+make sure that there is an up-to-date version of Linux installed.
 
-Add your monitor host to a rack in your cluster, connect it to the network
-and ensure that it has network connectivity.
+Add the newly installed monitor host to a rack in your cluster, connect the
+host to the network, and make sure that the host has network connectivity.
 
 .. _Hardware Recommendations: ../../../start/hardware-recommendations
 
-Install the Required Software
------------------------------
+Installing the Required Software
+--------------------------------
 
-For manually deployed clusters, you must install Ceph packages
-manually. See `Installing Packages`_ for details.
-You should configure SSH to a user with password-less authentication
-and root permissions.
+In manually deployed clusters, it is necessary to install Ceph packages
+manually. For details, see `Installing Packages`_. Configure SSH so that it can
+be used by a user that has passwordless authentication and root permissions.
 
 .. _Installing Packages: ../../../install/install-storage-cluster
 
@@ -81,67 +77,65 @@ and root permissions.
 Adding a Monitor (Manual)
 -------------------------
 
-This procedure creates a ``ceph-mon`` data directory, retrieves the monitor map
-and monitor keyring, and adds a ``ceph-mon`` daemon to your cluster.  If
-this results in only two monitor daemons, you may add more monitors by
-repeating this procedure until you have a sufficient number of ``ceph-mon`` 
-daemons to achieve a quorum.
+The procedure in this section creates a ``ceph-mon`` data directory, retrieves
+both the monitor map and the monitor keyring, and adds a ``ceph-mon`` daemon to
+the cluster. The procedure might result in a Ceph cluster that contains only
+two monitor daemons. To add more monitors until there are enough ``ceph-mon``
+daemons to establish quorum, repeat the procedure.
 
-At this point you should define your monitor's id.  Traditionally, monitors 
-have been named with single letters (``a``, ``b``, ``c``, ...), but you are 
-free to define the id as you see fit.  For the purpose of this document, 
-please take into account that ``{mon-id}`` should be the id you chose, 
-without the ``mon.`` prefix (i.e., ``{mon-id}`` should be the ``a`` 
-on ``mon.a``).
+This is a good point at which to define the new monitor's ``id``. Monitors have
+often been named with single letters (``a``, ``b``, ``c``, etc.), but you are
+free to define the ``id`` however you see fit. In this document, ``{mon-id}``
+refers to the ``id`` exclusive of the ``mon.`` prefix: for example, if
+``mon.a`` has been chosen as the ``id`` of a monitor, then ``{mon-id}`` is
+``a``.                                               ???
 
-#. Create the default directory on the machine that will host your 
-   new monitor:
-
-   .. prompt:: bash $
-
-	ssh {new-mon-host}
-	sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
-
-#. Create a temporary directory ``{tmp}`` to keep the files needed during 
-   this process. This directory should be different from the monitor's default 
-   directory created in the previous step, and can be removed after all the 
-   steps are executed:
+#. Create a data directory on the machine that will host the new monitor:
 
    .. prompt:: bash $
 
-	mkdir {tmp}
+    ssh {new-mon-host}
+    sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
 
-#. Retrieve the keyring for your monitors, where ``{tmp}`` is the path to 
-   the retrieved keyring, and ``{key-filename}`` is the name of the file 
-   containing the retrieved monitor key:
+#. Create a temporary directory ``{tmp}`` that will contain the files needed
+   during this procedure. This directory should be different from the data
+   directory created in the previous step. Because this is a temporary
+   directory, it can be removed after the procedure is complete:
+
+   .. prompt:: bash $
+
+    mkdir {tmp}
+
+#. Retrieve the keyring for your monitors (``{tmp}`` is the path to the
+   retrieved keyring and ``{key-filename}`` is the name of the file that
+   contains the retrieved monitor key):
 
    .. prompt:: bash $
 
       ceph auth get mon. -o {tmp}/{key-filename}
 
-#. Retrieve the monitor map, where ``{tmp}`` is the path to 
-   the retrieved monitor map, and ``{map-filename}`` is the name of the file 
-   containing the retrieved monitor map:
+#. Retrieve the monitor map (``{tmp}`` is the path to the retrieved monitor map
+   and ``{map-filename}`` is the name of the file that contains the retrieved
+   monitor map):
 
    .. prompt:: bash $
 
       ceph mon getmap -o {tmp}/{map-filename}
 
-#. Prepare the monitor's data directory created in the first step. You must 
-   specify the path to the monitor map so that you can retrieve the 
-   information about a quorum of monitors and their ``fsid``. You must also 
-   specify a path to the monitor keyring:
-   
+#. Prepare the monitor's data directory, which was created in the first step.
+   The following command must specify the path to the monitor map (so that
+   information about a quorum of monitors and their ``fsid``\s can be
+   retrieved) and specify the path to the monitor keyring:
+
    .. prompt:: bash $
 
       sudo ceph-mon -i {mon-id} --mkfs --monmap {tmp}/{map-filename} --keyring {tmp}/{key-filename}
-	
 
-#. Start the new monitor and it will automatically join the cluster.
-   The daemon needs to know which address to bind to, via either the
-   ``--public-addr {ip}`` or ``--public-network {network}`` argument.
+#. Start the new monitor. It will automatically join the cluster. To provide
+   information to the daemon about which address to bind to, use either the
+   ``--public-addr {ip}`` option or the ``--public-network {network}`` option.
    For example:
-   
+
    .. prompt:: bash $
 
       ceph-mon -i {mon-id} --public-addr {ip:port}
@@ -151,44 +145,47 @@ on ``mon.a``).
 Removing Monitors
 =================
 
-When you remove monitors from a cluster, consider that Ceph monitors use 
-Paxos to establish consensus about the master cluster map. You must have 
-a sufficient number of monitors to establish a quorum for consensus about 
-the cluster map.
+When monitors are removed from a cluster, it is important to remember
+that Ceph monitors use Paxos to maintain consensus about the cluster
+map. Such consensus is possible only if the number of monitors is sufficient
+to establish quorum.
+
 
 .. _Removing a Monitor (Manual):
 
 Removing a Monitor (Manual)
 ---------------------------
 
-This procedure removes a ``ceph-mon`` daemon from your cluster.   If this
-procedure results in only two monitor daemons, you may add or remove another
-monitor until you have a number of ``ceph-mon`` daemons that can achieve a 
-quorum.
+The procedure in this section removes a ``ceph-mon`` daemon from the cluster.
+The procedure might result in a Ceph cluster that contains a number of monitors
+insufficient to maintain quorum, so plan carefully. When replacing an old
+monitor with a new monitor, add the new monitor first, wait for quorum to be
+established, and then remove the old monitor. This ensures that quorum is not
+lost.
+
 
 #. Stop the monitor:
 
    .. prompt:: bash $
 
       service ceph -a stop mon.{mon-id}
-	
+
 #. Remove the monitor from the cluster:
 
    .. prompt:: bash $
 
       ceph mon remove {mon-id}
-	
-#. Remove the monitor entry from ``ceph.conf``. 
+
+#. Remove the monitor entry from the ``ceph.conf`` file:
 
 .. _rados-mon-remove-from-unhealthy: 
+
 
 Removing Monitors from an Unhealthy Cluster
 -------------------------------------------
 
-This procedure removes a ``ceph-mon`` daemon from an unhealthy
-cluster, for example a cluster where the monitors cannot form a
-quorum.
-
+The procedure in this section removes a ``ceph-mon`` daemon from an unhealthy
+cluster (for example, a cluster whose monitors are unable to form a quorum).
 
 #. Stop all ``ceph-mon`` daemons on all monitor hosts:
 
@@ -197,21 +194,23 @@ quorum.
       ssh {mon-host}
       systemctl stop ceph-mon.target
 
-   Repeat for all monitor hosts.
+   Repeat this step on every monitor host.
 
-#. Identify a surviving monitor and log in to that host:
+#. Identify a surviving monitor and log in to the monitor's host:
 
    .. prompt:: bash $
 
       ssh {mon-host}
 
-#. Extract a copy of the monmap file:
+#. Extract a copy of the ``monmap`` file by running a command of the following
+   form:
 
    .. prompt:: bash $
 
       ceph-mon -i {mon-id} --extract-monmap {map-path}
 
-   In most cases, this command will be:
+   Here is a more concrete example. In this example, ``hostname`` is the
+   ``{mon-id}`` and ``/tmp/monpap`` is the ``{map-path}``:
 
    .. prompt:: bash $
 
