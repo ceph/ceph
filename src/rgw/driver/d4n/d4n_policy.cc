@@ -1,3 +1,4 @@
+#include "../../../common/async/yield_context.h"
 #include "d4n_policy.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -220,7 +221,8 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
   int minWeight = INT_MAX;
 
   for (auto it = entries.begin(); it != entries.end(); ++it) {
-    std::string localWeightStr = cacheNode->get_attr(dpp, it->key, "localWeight"); // should represent block -Sam
+    optional_yield y = null_yield;
+    std::string localWeightStr = cacheNode->get_attr(dpp, it->key, "localWeight", y); // should represent block -Sam
 
     if (!std::stoi(localWeightStr)) { // maybe do this in some sort of initialization procedure instead of here? -Sam
       /* Local weight hasn't been set */
@@ -251,14 +253,16 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode) {
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
-  std::string localWeightStr = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight"); // change to block name eventually -Sam
+  optional_yield y = null_yield;
+  std::string localWeightStr = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight", y); // change to block name eventually -Sam
   int localWeight = -1;
 
   if (!client.is_connected())
     find_client(dpp, &client);
 
   if (localWeightStr.empty()) { // figure out where to set local weight -Sam
-    int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(get_age())); 
+    optional_yield y = null_yield;
+    int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(get_age()), y); 
     localWeight = get_age();
 
     if (ret < 0)
@@ -306,7 +310,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
       // do I need to add the block to the local cache here? -Sam
       // update hosts list for block as well? check read workflow -Sam
       localWeight += age;
-      return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight));
+      return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight), y);
     }
   } 
 
@@ -324,7 +328,8 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   std::string key = "rgw-object:" + victim.cacheObj.objName + ":directory";
   std::string hosts;
   int globalWeight = get_global_weight(key);
-  int localWeight = std::stoi(cacheNode->get_attr(dpp, victim.cacheObj.objName, "localWeight")); // change to block name eventually -Sam
+  optional_yield y = null_yield;
+  int localWeight = std::stoi(cacheNode->get_attr(dpp, victim.cacheObj.objName, "localWeight", y)); // change to block name eventually -Sam
   int avgWeight = get_min_avg_weight();
 
   if (exist_key(key)) {
@@ -346,7 +351,8 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   if (hosts.empty()) { /* Last copy */
     if (globalWeight > 0) {
       localWeight += globalWeight;
-      int ret = cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight));
+      optional_yield y = null_yield;
+      int ret = cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight), y);
 
       if (!ret)
         ret = set_global_weight(key, 0);
@@ -371,7 +377,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
     return -2;
 
   ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
-  int ret = cacheNode->delete_data(dpp, victim.cacheObj.objName);
+  int ret = cacheNode->delete_data(dpp, victim.cacheObj.objName, y);
 
   if (!ret) {
     uint64_t num_entries = 100; //cacheNode->get_num_entries(dpp) TODO - correct this

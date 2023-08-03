@@ -159,7 +159,7 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) 
+int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -190,7 +190,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
   return 0; // why is offset necessarily 0? -Sam
 }
 
-int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) 
+int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   
@@ -227,7 +227,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
-int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) 
+int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
 {
   std::string value;
   std::string entry = partition_info.location + key;
@@ -272,7 +272,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   return 0;
 }
 
-int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key) 
+int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -319,7 +319,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   return 0;
 }
 
-int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -352,7 +352,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
-int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   if (attrs.empty())
     return -1;
@@ -385,7 +385,7 @@ return -1;
   return 0;
 }
 
-int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -414,7 +414,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return 0;
 }
 
-int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) 
+int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -474,7 +474,7 @@ if (reply.is_array()) {
   return -2;
 }
 
-std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) 
+std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   std::string attrValue;
@@ -519,7 +519,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   return attrValue;
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) 
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   int result = 0;
