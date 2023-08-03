@@ -42,7 +42,7 @@ private:
   bool enabled{false};
 
   double inject_notify_timeout_probability{0};
-  static constexpr unsigned max_notify_retries = 10;
+  uint64_t max_notify_retries = 10;
 
   std::string get_control_oid(int i);
   RGWSI_RADOS::Obj pick_control_obj(const std::string& key);
