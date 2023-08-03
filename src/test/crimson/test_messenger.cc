@@ -1298,13 +1298,16 @@ class FailoverSuite : public Dispatcher {
     assert(seastar::this_shard_id() == primary_sid);
     ceph_assert(tracked_conn);
     // sleep to propagate potential remaining acks
-    return seastar::sleep(100ms
+    return seastar::sleep(50ms
     ).then([this] {
       return seastar::smp::submit_to(
           tracked_conn->get_shard_id(), [tracked_conn=tracked_conn] {
         assert(tracked_conn->get_shard_id() == seastar::this_shard_id());
         tracked_conn->mark_down();
       });
+    }).then([] {
+      // sleep to wait for markdown propagate to the primary sid
+      return seastar::sleep(100ms);
     });
   }
 
