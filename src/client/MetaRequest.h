@@ -91,6 +91,8 @@ public:
     caller_cond(0), dispatch_cond(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
+    head.owner_uid = -1;
+    head.owner_gid = -1;
   }
   ~MetaRequest();
 
@@ -162,6 +164,13 @@ public:
   bool _put() {
     int v = --ref;
     return v == 0;
+  }
+
+  void set_inode_owner_uid_gid(unsigned u, unsigned g) {
+    /* it makes sense to set owner_{u,g}id only for OPs which create inodes */
+    ceph_assert(IS_CEPH_MDS_OP_NEWINODE(head.op));
+    head.owner_uid = u;
+    head.owner_gid = g;
   }
 
   // normal fields
