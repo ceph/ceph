@@ -41,7 +41,7 @@ export class FormatterService {
   formatNumberFromTo(
     n: any,
     units: any,
-    targetedUnits: string,
+    targetedUnits: string = '',
     conversionFactor: number,
     unitsArray: string[],
     decimals: number = 1

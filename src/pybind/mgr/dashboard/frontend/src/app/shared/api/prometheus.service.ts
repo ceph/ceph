@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable } from 'rxjs';
+import { Observable, Subscription, timer } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
@@ -10,11 +10,19 @@ import {
   AlertmanagerNotification,
   PrometheusRuleGroup
 } from '../models/prometheus-alerts';
+import moment from 'moment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class PrometheusService {
+  timerGetPrometheusDataSub: Subscription;
+  timerTime = 30000;
+  readonly lastHourDateObject = {
+    start: moment().unix() - 3600,
+    end: moment().unix(),
+    step: 14
+  };
   private baseURL = 'api/prometheus';
   private settingsKey = {
     alertmanager: 'ui-api/prometheus/alertmanager-api-host',
@@ -114,5 +122,65 @@ export class PrometheusService {
 
   private getSettingsValue(data: any): string {
     return data.value || data.instance || '';
+  }
+
+  getPrometheusQueriesData(
+    selectedTime: any,
+    queries: any,
+    queriesResults: any,
+    checkNan?: boolean
+  ) {
+    this.ifPrometheusConfigured(() => {
+      if (this.timerGetPrometheusDataSub) {
+        this.timerGetPrometheusDataSub.unsubscribe();
+      }
+      this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
+        selectedTime = this.updateTimeStamp(selectedTime);
+
+        for (const queryName in queries) {
+          if (queries.hasOwnProperty(queryName)) {
+            const query = queries[queryName];
+            this.getPrometheusData({
+              params: encodeURIComponent(query),
+              start: selectedTime['start'],
+              end: selectedTime['end'],
+              step: selectedTime['step']
+            }).subscribe((data: any) => {
+              if (data.result.length) {
+                queriesResults[queryName] = data.result[0].values;
+              }
+              if (
+                queriesResults[queryName] !== undefined &&
+                queriesResults[queryName] !== '' &&
+                checkNan
+              ) {
+                queriesResults[queryName].forEach((valueArray: string[]) => {
+                  if (valueArray.includes('NaN')) {
+                    const index = valueArray.indexOf('NaN');
+                    if (index !== -1) {
+                      valueArray[index] = '0';
+                    }
+                  }
+                });
+              }
+            });
+          }
+        }
+      });
+    });
+    return queriesResults;
+  }
+
+  private updateTimeStamp(selectedTime: any): any {
+    let formattedDate = {};
+    let secondsAgo = selectedTime['end'] - selectedTime['start'];
+    const date: number = moment().unix() - secondsAgo;
+    const dateNow: number = moment().unix();
+    formattedDate = {
+      start: date,
+      end: dateNow,
+      step: selectedTime['step']
+    };
+    return formattedDate;
   }
 }

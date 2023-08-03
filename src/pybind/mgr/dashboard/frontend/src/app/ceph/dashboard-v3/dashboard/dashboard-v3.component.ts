@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, Subscription, timer } from 'rxjs';
+import { Observable, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
 import moment from 'moment';
 
@@ -165,54 +165,11 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     });
   }
 
-  getPrometheusData(selectedTime: any) {
-    this.prometheusService.ifPrometheusConfigured(() => {
-      if (this.timerGetPrometheusDataSub) {
-        this.timerGetPrometheusDataSub.unsubscribe();
-      }
-      this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
-        selectedTime = this.updateTimeStamp(selectedTime);
-
-        for (const queryName in queries) {
-          if (queries.hasOwnProperty(queryName)) {
-            const query = queries[queryName];
-            let interval = selectedTime.step;
-
-            if (query.includes('rate') && selectedTime.step < 20) {
-              interval = 20;
-            } else if (query.includes('rate')) {
-              interval = selectedTime.step * 2;
-            }
-
-            const intervalAdjustedQuery = query.replace(/\[(.*?)\]/g, `[${interval}s]`);
-
-            this.prometheusService
-              .getPrometheusData({
-                params: intervalAdjustedQuery,
-                start: selectedTime['start'],
-                end: selectedTime['end'],
-                step: selectedTime['step']
-              })
-              .subscribe((data: any) => {
-                if (data.result.length) {
-                  this.queriesResults[queryName] = data.result[0].values;
-                }
-              });
-          }
-        }
-      });
-    });
-  }
-
-  private updateTimeStamp(selectedTime: any): any {
-    let formattedDate = {};
-    const date: number = selectedTime['start'] + this.timerTime / 1000;
-    const dateNow: number = selectedTime['end'] + this.timerTime / 1000;
-    formattedDate = {
-      start: date,
-      end: dateNow,
-      step: selectedTime['step']
-    };
-    return formattedDate;
+  public getPrometheusData(selectedTime: any) {
+    this.queriesResults = this.prometheusService.getPrometheusQueriesData(
+      selectedTime,
+      queries,
+      this.queriesResults
+    );
   }
 }
