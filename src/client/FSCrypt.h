@@ -248,7 +248,7 @@ class FSCryptFNameDenc : public FSCryptDenc {
 public:
   FSCryptFNameDenc();
 
-  int get_encrypted_fname(const std::string& plain, std::string *encrypted);
+  int get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name);
   int get_decrypted_fname(const std::string& b64enc, const std::string& alt_name, std::string *decrypted);
 
   int get_encrypted_symlink(const std::string& plain, std::string *encrypted);
