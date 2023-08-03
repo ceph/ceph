@@ -98,7 +98,7 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     return 0;
 }
 
-int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
+int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
 
@@ -139,7 +139,7 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
     return 0;
 }
 
-int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs)
+int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
 {
     char buffer[len];
     std::string location = partition_info.location + key;
@@ -266,7 +266,7 @@ int SSDDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, 
     return 0;
 }
 
-int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key)
+int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y)
 {
     std::string location = partition_info.location + key;
 
