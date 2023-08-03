@@ -6659,19 +6659,15 @@ void ObjectRecoveryInfo::dump(Formatter *f) const
 
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf)
 {
-  return inf.print(out);
+  return out << inf.fmt_print();
 }
 
-ostream &ObjectRecoveryInfo::print(ostream &out) const
+std::string ObjectRecoveryInfo::fmt_print() const
 {
-  return out << "ObjectRecoveryInfo("
-	     << soid << "@" << version
-	     << ", size: " << size
-	     << ", copy_subset: " << copy_subset
-	     << ", clone_subset: " << clone_subset
-	     << ", snapset: " << ss
-	     << ", object_exist: " << object_exist
-	     << ")";
+  return fmt::format(
+      "ObjectRecoveryInfo({}@{}, size: {}, copy_subset: {}, "
+      "clone_subset: {}, snapset: {}, object_exist: {})",
+      soid, version, size, copy_subset, clone_subset, ss, object_exist);
 }
 
 // -- PushReplyOp --
