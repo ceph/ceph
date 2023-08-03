@@ -148,8 +148,22 @@ ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
           return read_ertr::now();
         }));
       });
-    }).si_then([this] {
-      return ll_read_ierrorator::now();
+    }).si_then([&op, &reply, this] {
+      // return handle_rep_read_attrs();
+      return interruptor::do_for_each(op.attrs_to_read,
+		                      [&op, &reply, this] (auto obj_attr) {
+	logger().debug("{}: fulfilling attr request on obj {}",
+		       "handle_rep_read_op", obj_attr);
+	if (reply.errors.count(obj_attr)) {
+	  return ll_read_ierrorator::now();
+	}
+        return store->get_attrs(
+          coll, ghobject_t{obj_attr, ghobject_t::NO_GEN, shard}
+	).safe_then([&reply, obj_attr] (auto&& attrs) {
+	  reply.attrs_read[obj_attr] = std::move(attrs);
+	  return ll_read_ierrorator::now();
+        });
+      });
     });
   });
 }
