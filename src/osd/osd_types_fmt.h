@@ -329,7 +329,6 @@ struct fmt::formatter<ScrubMap> {
 };
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<ObjectRecoveryInfo> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ObjectRecoveryProgress> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<PastIntervals> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<pg_log_op_return_item_t> : fmt::ostream_formatter {};
