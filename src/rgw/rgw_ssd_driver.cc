@@ -266,7 +266,7 @@ int SSDDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, 
     return 0;
 }
 
-int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key)
+int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y)
 {
     std::string location = partition_info.location + key;
 
