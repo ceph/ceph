@@ -309,3 +309,19 @@ below.
 
 .. confval:: rgw_d4n_host
 .. confval:: rgw_d4n_port
+
+Topic persistency settings
+==========================
+
+Topic persistency will persistently push the notification until it succeeds
+
+The default behavior is to push indefinitely as frequently as possible.
+With these settings you can control how long to persistently push and their frequency (or it succeeds before that),
+you can either control by providing maximum time of retention or maximum amount of pushing,
+and you can control the frequency with the sleep duration parameter
+
+All of these values have default value 0 (persistency retention is indefinite, and as frequently as possible)
+
+.. confval:: rgw_topic_persistency_time_to_live
+.. confval:: rgw_topic_persistency_max_retries
+.. confval:: rgw_topic_persistency_sleep_duration
