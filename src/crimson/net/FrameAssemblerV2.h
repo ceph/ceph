@@ -10,6 +10,10 @@
 #include "crimson/common/gated.h"
 #include "crimson/net/Socket.h"
 
+#ifdef UNIT_TESTS_BUILT
+#include "Interceptor.h"
+#endif
+
 namespace crimson::net {
 
 class SocketConnection;
@@ -131,9 +135,6 @@ public:
   template <class F>
   ceph::bufferlist get_buffer(F &tx_frame) {
     assert(seastar::this_shard_id() == sid);
-#ifdef UNIT_TESTS_BUILT
-    intercept_frame(F::tag, true);
-#endif
     auto bl = tx_frame.get_buffer(tx_frame_asm);
     log_main_preamble(bl);
     return bl;
@@ -143,12 +144,56 @@ public:
   seastar::future<> write_flush_frame(F &tx_frame) {
     assert(seastar::this_shard_id() == sid);
     auto bl = get_buffer(tx_frame);
+#ifdef UNIT_TESTS_BUILT
+    return intercept_frame(F::tag, true
+    ).then([this, bl=std::move(bl)]() mutable {
+      return write_flush<may_cross_core>(std::move(bl));
+    });
+#else
     return write_flush<may_cross_core>(std::move(bl));
+#endif
   }
 
   static FrameAssemblerV2Ref create(SocketConnection &conn);
 
+#ifdef UNIT_TESTS_BUILT
+  seastar::future<> intercept_frames(
+      std::vector<ceph::msgr::v2::Tag> tags,
+      bool is_write) {
+    auto type = is_write ? bp_type_t::WRITE : bp_type_t::READ;
+    std::vector<Breakpoint> bps;
+    for (auto &tag : tags) {
+      bps.emplace_back(Breakpoint{tag, type});
+    }
+    return intercept_frames(bps, type);
+  }
+
+  seastar::future<> intercept_frame(
+      ceph::msgr::v2::Tag tag,
+      bool is_write) {
+    auto type = is_write ? bp_type_t::WRITE : bp_type_t::READ;
+    std::vector<Breakpoint> bps;
+    bps.emplace_back(Breakpoint{tag, type});
+    return intercept_frames(bps, type);
+  }
+
+  seastar::future<> intercept_frame(
+      custom_bp_t bp,
+      bool is_write) {
+    auto type = is_write ? bp_type_t::WRITE : bp_type_t::READ;
+    std::vector<Breakpoint> bps;
+    bps.emplace_back(Breakpoint{bp});
+    return intercept_frames(bps, type);
+  }
+#endif
+
 private:
+#ifdef UNIT_TESTS_BUILT
+  seastar::future<> intercept_frames(
+      std::vector<Breakpoint> bps,
+      bp_type_t type);
+#endif
+
   bool has_socket() const;
 
   SocketFRef move_socket();
@@ -156,10 +201,6 @@ private:
   void clear();
 
   void log_main_preamble(const ceph::bufferlist &bl);
-
-#ifdef UNIT_TESTS_BUILT
-  void intercept_frame(ceph::msgr::v2::Tag, bool is_write);
-#endif
 
   SocketConnection &conn;
 

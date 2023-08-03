@@ -120,7 +120,9 @@ struct Interceptor {
   virtual void register_conn_ready(ConnectionRef) = 0;
   virtual void register_conn_closed(ConnectionRef) = 0;
   virtual void register_conn_replaced(ConnectionRef) = 0;
-  virtual bp_action_t intercept(ConnectionRef, Breakpoint bp) = 0;
+
+  virtual seastar::future<bp_action_t>
+  intercept(Connection&, std::vector<Breakpoint> bp) = 0;
 };
 
 } // namespace crimson::net
