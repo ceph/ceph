@@ -41,6 +41,18 @@
 
 >=17.2.5
 --------
+>=19.0.0
+
+* RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
+  multi-site. Previously, the replicas of such objects were corrupted on decryption.
+  A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
+  identify these original multipart uploads. The ``LastModified`` timestamp of any
+  identified object is incremented by 1ns to cause peer zones to replicate it again.
+  For multi-site deployments that make any use of Server-Side Encryption, we
+  recommended running this command against every bucket in every zone after all
+  zones have upgraded.
+
+>=18.0.0
 
 * RBD: The semantics of compare-and-write C++ API (`Image::compare_and_write`
   and `Image::aio_compare_and_write` methods) now match those of C API.  Both
