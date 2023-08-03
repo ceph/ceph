@@ -1225,7 +1225,7 @@ class FailoverSuite : public Dispatcher {
           entity_name_t::OSD(TEST_OSD),
           "Test",
           TEST_NONCE,
-          true),
+          false),
         test_peer_addr,
         interceptor,
         gates);
