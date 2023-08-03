@@ -165,44 +165,75 @@ function install_pkg_on_ubuntu {
     fi
 }
 
+boost_ver=1.75
+
+function clean_boost_on_ubuntu {
+    # Find currently installed version. If there are multiple
+    # versions, they end up newline separated
+    local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
+                              cut -d' ' -f2 |
+                              cut -d'.' -f1,2 |
+			      sort -u)
+    # If installed_ver contains whitespace, we can't really count on it,
+    # but otherwise, bail out if the version installed is the version
+    # we want.
+    if test -n "$installed_ver" &&
+	    echo -n "$installed_ver" | tr '[:space:]' ' ' | grep -v -q ' '; then
+	if echo "$installed_ver" | grep -q "^$boost_ver"; then
+	    return
+        fi
+    fi
+
+    # Historical packages
+    $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost*.list
+    # Currently used
+    $SUDO rm -f /etc/apt/sources.list.d/libboost.list
+    # Refresh package list so things aren't in the available list.
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+    # Remove all ceph-libboost packages. We have an early return if
+    # the desired version is already (and the only) version installed,
+    # so no need to spare it.
+    if test -n "$installed_ver"; then
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove "ceph-libboost*"
+    fi
+}
+
 function install_boost_on_ubuntu {
-    local ver=1.75
+    # Once we get to this point, clean_boost_on_ubuntu() should ensure
+    # that there is no more than one installed version.
     local installed_ver=$(apt -qq list --installed ceph-libboost*-dev 2>/dev/null |
                               grep -e 'libboost[0-9].[0-9]\+-dev' |
                               cut -d' ' -f2 |
                               cut -d'.' -f1,2)
     if test -n "$installed_ver"; then
-        if echo "$installed_ver" | grep -q "^$ver"; then
+        if echo "$installed_ver" | grep -q "^$boost_ver"; then
             return
-        else
-            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove "ceph-libboost.*${installed_ver}.*"
-            $SUDO rm -f /etc/apt/sources.list.d/ceph-libboost${installed_ver}.list
         fi
     fi
     local codename=$1
     local project=libboost
     local sha1=7aba8a1882670522ee1d1ee1bba0ea170b292dec
     install_pkg_on_ubuntu \
-	$project \
-	$sha1 \
-	$codename \
-	check \
-	ceph-libboost-atomic$ver-dev \
-	ceph-libboost-chrono$ver-dev \
-	ceph-libboost-container$ver-dev \
-	ceph-libboost-context$ver-dev \
-	ceph-libboost-coroutine$ver-dev \
-	ceph-libboost-date-time$ver-dev \
-	ceph-libboost-filesystem$ver-dev \
-	ceph-libboost-iostreams$ver-dev \
-	ceph-libboost-program-options$ver-dev \
-	ceph-libboost-python$ver-dev \
-	ceph-libboost-random$ver-dev \
-	ceph-libboost-regex$ver-dev \
-	ceph-libboost-system$ver-dev \
-	ceph-libboost-test$ver-dev \
-	ceph-libboost-thread$ver-dev \
-	ceph-libboost-timer$ver-dev
+        $project \
+        $sha1 \
+        $codename \
+        check \
+        ceph-libboost-atomic${boost_ver}-dev \
+        ceph-libboost-chrono${boost_ver}-dev \
+        ceph-libboost-container${boost_ver}-dev \
+        ceph-libboost-context${boost_ver}-dev \
+        ceph-libboost-coroutine${boost_ver}-dev \
+        ceph-libboost-date-time${boost_ver}-dev \
+        ceph-libboost-filesystem${boost_ver}-dev \
+        ceph-libboost-iostreams${boost_ver}-dev \
+        ceph-libboost-program-options${boost_ver}-dev \
+        ceph-libboost-python${boost_ver}-dev \
+        ceph-libboost-random${boost_ver}-dev \
+        ceph-libboost-regex${boost_ver}-dev \
+        ceph-libboost-system${boost_ver}-dev \
+        ceph-libboost-test${boost_ver}-dev \
+        ceph-libboost-thread${boost_ver}-dev \
+        ceph-libboost-timer${boost_ver}-dev
 }
 
 function install_libzbd_on_ubuntu {
@@ -296,6 +327,9 @@ else
     case "$ID" in
     debian|ubuntu|devuan|elementary|softiron)
         echo "Using apt-get to install dependencies"
+	# Put this before any other invocation of apt so it can clean
+	# up in a broken case.
+        clean_boost_on_ubuntu
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
         ensure_python3_sphinx_on_ubuntu
@@ -308,6 +342,27 @@ else
             *Focal*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu focal
                 $with_zbd && install_libzbd_on_ubuntu focal
+                ;;
+            *Jammy*)
+                [ ! $NO_BOOST_PKGS ] && \
+		    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
+			  libboost-atomic-dev \
+			  libboost-chrono-dev \
+			  libboost-container-dev \
+			  libboost-context-dev \
+			  libboost-coroutine-dev \
+			  libboost-date-time-dev \
+			  libboost-filesystem-dev \
+			  libboost-iostreams-dev \
+			  libboost-program-options-dev \
+			  libboost-python-dev \
+			  libboost-random-dev \
+			  libboost-regex-dev \
+			  libboost-system-dev \
+			  libboost-test-dev \
+			  libboost-thread-dev \
+			  libboost-timer-dev \
+			  gcc
                 ;;
             *)
                 $SUDO apt-get install -y gcc
