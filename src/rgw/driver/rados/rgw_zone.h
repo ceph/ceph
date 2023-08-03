@@ -439,7 +439,6 @@ struct RGWPeriodMap
 {
   std::string id;
   std::map<std::string, RGWZoneGroup> zonegroups;
-  std::map<std::string, RGWZoneGroup> zonegroups_by_api;
   std::map<std::string, uint32_t> short_zone_ids;
 
   std::string master_zonegroup;
@@ -454,7 +453,6 @@ struct RGWPeriodMap
 
   void reset() {
     zonegroups.clear();
-    zonegroups_by_api.clear();
     master_zonegroup.clear();
   }
 

@@ -386,18 +386,8 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
     ldout(cct,0) << "master zonegroup: " << master_zonegroup << " and  " << zonegroup.get_id() <<dendl;
     return -EINVAL;
   }
-  map<string, RGWZoneGroup>::iterator iter = zonegroups.find(zonegroup.get_id());
-  if (iter != zonegroups.end()) {
-    RGWZoneGroup& old_zonegroup = iter->second;
-    if (!old_zonegroup.api_name.empty()) {
-      zonegroups_by_api.erase(old_zonegroup.api_name);
-    }
-  }
-  zonegroups[zonegroup.get_id()] = zonegroup;
 
-  if (!zonegroup.api_name.empty()) {
-    zonegroups_by_api[zonegroup.api_name] = zonegroup;
-  }
+  zonegroups[zonegroup.get_id()] = zonegroup;
 
   if (zonegroup.is_master_zonegroup()) {
     master_zonegroup = zonegroup.get_id();

@@ -3301,23 +3301,13 @@ void RGWCreateBucket::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  if (!relaxed_region_enforcement &&
-      !location_constraint.empty() &&
-      !driver->get_zone()->has_zonegroup_api(location_constraint)) {
-      ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
-                       << " can't be found." << dendl;
-      op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
-      s->err.message = "The specified location-constraint is not valid";
-      return;
-  }
-
-  if (!relaxed_region_enforcement && !driver->get_zone()->get_zonegroup().is_master_zonegroup() && !location_constraint.empty() &&
+  if (!relaxed_region_enforcement && !location_constraint.empty() &&
       driver->get_zone()->get_zonegroup().get_api_name() != location_constraint) {
     ldpp_dout(this, 0) << "location constraint (" << location_constraint << ")"
                      << " doesn't match zonegroup" << " (" << driver->get_zone()->get_zonegroup().get_api_name() << ")"
                      << dendl;
     op_ret = -ERR_INVALID_LOCATION_CONSTRAINT;
-    s->err.message = "The specified location-constraint is not valid";
+    s->err.message = "The specified location constraint is incompatible for the region specific endpoint this request was sent to.";
     return;
   }
 

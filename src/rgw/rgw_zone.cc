@@ -1033,16 +1033,6 @@ void RGWPeriodMap::decode(bufferlist::const_iterator& bl) {
     decode(short_zone_ids, bl);
   }
   DECODE_FINISH(bl);
-
-  zonegroups_by_api.clear();
-  for (map<string, RGWZoneGroup>::iterator iter = zonegroups.begin();
-       iter != zonegroups.end(); ++iter) {
-    RGWZoneGroup& zonegroup = iter->second;
-    zonegroups_by_api[zonegroup.api_name] = zonegroup;
-    if (zonegroup.is_master_zonegroup()) {
-      master_zonegroup = zonegroup.get_id();
-    }
-  }
 }
 
 void RGWPeriodMap::encode(bufferlist& bl) const
