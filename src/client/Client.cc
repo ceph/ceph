@@ -7357,27 +7357,39 @@ int Client::_prepare_req_path(Inode *dir, MetaRequest *req, filepath& path, cons
   dir->make_nosnap_relative_path(path);
 
   std::optional<string> enc_name;
+  std::optional<string> alt_name;
   const char *plain_name = name;
   auto fscrypt_denc = fscrypt->get_fname_denc(dir->fscrypt_ctx, &dir->fscrypt_key_validator, true);
   if (fscrypt_denc) {
     string _enc_name;
-    int r = fscrypt_denc->get_encrypted_fname(name, &_enc_name);
+    string _alt_name;
+    int r = fscrypt_denc->get_encrypted_fname(name, &_enc_name, &_alt_name);
     if (r < 0) {
       ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
       return r;
     }
     path.push_dentry(_enc_name);
     enc_name = std::move(_enc_name);
+    alt_name = std::move(_alt_name);
   } else {
     path.push_dentry(plain_name);
   }
 
   if (set_filepath) {
     req->set_filepath(path);
+    if (alt_name) {
+      req->set_alternate_name(*alt_name);
+    }
   }
 
   if (pdn) {
     *pdn = get_or_create(dir, plain_name, enc_name);
+    if (alt_name) {
+      if (alt_name->size() > 0) {
+        ldout(cct, 20) << __func__ << " " << *dir << " alt_name=" << fscrypt_hex_str(alt_name->c_str(), alt_name->size()) << dendl;
+      }
+      (*pdn)->alternate_name = *alt_name;
+    }
   }
 
   return 0;
@@ -15224,7 +15236,11 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
     return r;
   }
 
-  req->set_alternate_name(std::move(alternate_name));
+  if (de->alternate_name.empty()) {
+    req->set_alternate_name(std::move(alternate_name));
+  } else {
+    req->set_alternate_name(de->alternate_name);
+  }
   dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
   req->set_inode(dir);
   req->head.args.open.flags = cflags | CEPH_O_CREAT;
@@ -15311,7 +15327,11 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   req->set_inode(dir);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->set_alternate_name(std::move(alternate_name));
+  if (de->alternate_name.empty()) {
+    req->set_alternate_name(std::move(alternate_name));
+  } else {
+    req->set_alternate_name(de->alternate_name);
+  }
   dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 
   mode |= S_IFDIR;
@@ -15468,7 +15488,12 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
     req->set_string2(target); 
   }
 
-  req->set_alternate_name(std::move(alternate_name));
+  if (de->alternate_name.empty()) {
+    req->set_alternate_name(std::move(alternate_name));
+  } else {
+    req->set_alternate_name(de->alternate_name);
+  }
+
   req->set_inode(dir);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
@@ -15751,7 +15776,11 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   }
   req->set_filepath2(from);
 
-  req->set_alternate_name(std::move(alternate_name));
+  if (de->alternate_name.empty()) {
+    req->set_alternate_name(std::move(alternate_name));
+  } else {
+    req->set_alternate_name(de->alternate_name);
+  }
 
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
@@ -15878,7 +15907,11 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
     return r;
   }
 
-  req->set_alternate_name(std::move(alternate_name));
+  if (de->alternate_name.empty()) {
+    req->set_alternate_name(std::move(alternate_name));
+  } else {
+    req->set_alternate_name(de->alternate_name);
+  }
   filepath existing(in->ino);
   req->set_filepath2(existing);
 

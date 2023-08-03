@@ -36,6 +36,8 @@ using ceph::crypto::HMACSHA512;
  * base64 encode/decode.
  */
 
+#define CEPH_NOHASH_NAME_MAX (180 - CEPH_CRYPTO_SHA256_DIGESTSIZE)
+
 
 
 /* FIXME: this was copy pasted from common/armor.c with slight modification
@@ -551,10 +553,20 @@ FSCryptDenc::~FSCryptDenc()
   EVP_CIPHER_CTX_free(cipher_ctx);
 }
 
-int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted)
+static void sha256(const char *buf, int len, char *hash)
+{   
+  ceph::crypto::ssl::SHA256 hasher;
+  hasher.Update((const unsigned char *)buf, len);
+  hasher.Final((unsigned char *)hash);
+}   
+
+int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name)
 {
   auto plain_size = plain.size();
   int dec_size = (plain.size() + 31) & ~31; // FIXME, need to be based on policy
+  if (dec_size > NAME_MAX) {
+    dec_size = NAME_MAX;
+  }
 
   char orig[dec_size];
   memcpy(orig, plain.c_str(), plain_size);
@@ -571,6 +583,20 @@ int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string 
 
   int enc_len = r;
 
+  if (enc_len > CEPH_NOHASH_NAME_MAX) {
+    *alt_name = std::string(enc_name, enc_len);
+    char hash[CEPH_CRYPTO_SHA256_DIGESTSIZE];
+    char *extra = enc_name + CEPH_NOHASH_NAME_MAX;
+
+    /* hash the extra bytes and overwrite crypttext beyond that point with it */
+    int extra_len = enc_len - CEPH_NOHASH_NAME_MAX;
+    sha256(extra, extra_len, hash);
+    memcpy(extra, hash, sizeof(hash));
+    enc_len = CEPH_NOHASH_NAME_MAX + sizeof(hash);
+  } else {
+    alt_name->clear();
+  }
+
   int b64_len = NAME_MAX * 2; // name.size() * 2;
   char b64_name[b64_len]; // large enough
   int len = fscrypt_fname_armor(enc_name, enc_len, b64_name, b64_len);
@@ -586,6 +612,7 @@ int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, const std::
   int len = alt_name.size();
 
   const char *penc = (len == 0 ? enc : alt_name.c_str());
+generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): alt_name.size()=" << alt_name.size() << " alt_name=" << alt_name << dendl;
 
   if (len == 0) {
     len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
