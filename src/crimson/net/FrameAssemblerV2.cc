@@ -6,10 +6,6 @@
 #include "Errors.h"
 #include "SocketConnection.h"
 
-#ifdef UNIT_TESTS_BUILT
-#include "Interceptor.h"
-#endif
-
 using ceph::msgr::v2::FrameAssembler;
 using ceph::msgr::v2::FrameError;
 using ceph::msgr::v2::preamble_block_t;
@@ -43,23 +39,23 @@ FrameAssemblerV2::~FrameAssemblerV2()
 
 #ifdef UNIT_TESTS_BUILT
 // should be consistent to intercept() in ProtocolV2.cc
-void FrameAssemblerV2::intercept_frame(Tag tag, bool is_write)
+seastar::future<> FrameAssemblerV2::intercept_frames(
+    std::vector<Breakpoint> bps,
+    bp_type_t type)
 {
   assert(seastar::this_shard_id() == sid);
   assert(has_socket());
-  if (conn.interceptor) {
-    auto type = is_write ? bp_type_t::WRITE : bp_type_t::READ;
-    // FIXME: doesn't support cross-core
-    auto action = conn.interceptor->intercept(
-        conn.get_local_shared_foreign_from_this(),
-        Breakpoint{tag, type});
-    // tolerate leaking future in tests
-    std::ignore = seastar::smp::submit_to(
+  if (!conn.interceptor) {
+    return seastar::now();
+  }
+  return conn.interceptor->intercept(conn, bps
+  ).then([this, type](bp_action_t action) {
+    return seastar::smp::submit_to(
         socket->get_shard_id(),
         [this, type, action] {
       socket->set_trap(type, action, &conn.interceptor->blocker);
     });
-  }
+  });
 }
 #endif
 
@@ -361,17 +357,22 @@ FrameAssemblerV2::read_main_preamble()
   return read_exactly<may_cross_core>(
     rx_frame_asm.get_preamble_onwire_len()
   ).then([this](auto bptr) {
+    rx_preamble.append(std::move(bptr));
+    Tag tag;
     try {
-      rx_preamble.append(std::move(bptr));
-      const Tag tag = rx_frame_asm.disassemble_preamble(rx_preamble);
-#ifdef UNIT_TESTS_BUILT
-      intercept_frame(tag, false);
-#endif
-      return read_main_t{tag, &rx_frame_asm};
+      tag = rx_frame_asm.disassemble_preamble(rx_preamble);
     } catch (FrameError& e) {
       logger().warn("{} read_main_preamble: {}", conn, e.what());
       throw std::system_error(make_error_code(crimson::net::error::negotiation_failure));
     }
+#ifdef UNIT_TESTS_BUILT
+    return intercept_frame(tag, false
+    ).then([this, tag] {
+      return read_main_t{tag, &rx_frame_asm};
+    });
+#else
+    return read_main_t{tag, &rx_frame_asm};
+#endif
   });
 }
 template seastar::future<FrameAssemblerV2::read_main_t> FrameAssemblerV2::read_main_preamble<true>();

@@ -63,7 +63,12 @@ IOHandler::~IOHandler()
   assert(!conn_ref);
 }
 
-ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
+#ifdef UNIT_TESTS_BUILT
+IOHandler::sweep_ret
+#else
+ceph::bufferlist
+#endif
+IOHandler::sweep_out_pending_msgs_to_sent(
   bool require_keepalive,
   std::optional<utime_t> maybe_keepalive_ack,
   bool require_ack)
@@ -71,25 +76,45 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
   std::size_t num_msgs = out_pending_msgs.size();
   ceph::bufferlist bl;
 
+#ifdef UNIT_TESTS_BUILT
+  std::vector<Tag> tags;
+#endif
+
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
     bl.append(frame_assembler->get_buffer(keepalive_frame));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = KeepAliveFrame::tag;
+    tags.push_back(tag);
+#endif
   }
 
   if (unlikely(maybe_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*maybe_keepalive_ack);
     bl.append(frame_assembler->get_buffer(keepalive_ack_frame));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = KeepAliveFrameAck::tag;
+    tags.push_back(tag);
+#endif
   }
 
   if (require_ack && num_msgs == 0u) {
     auto ack_frame = AckFrame::Encode(in_seq);
     bl.append(frame_assembler->get_buffer(ack_frame));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = AckFrame::tag;
+    tags.push_back(tag);
+#endif
   }
 
   std::for_each(
       out_pending_msgs.begin(),
       out_pending_msgs.begin()+num_msgs,
-      [this, &bl](const MessageFRef& msg) {
+      [this, &bl
+#ifdef UNIT_TESTS_BUILT
+        , &tags
+#endif
+      ](const MessageFRef& msg) {
     // set priority
     msg->get_header().src = conn.messenger.get_myname();
 
@@ -114,6 +139,10 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(frame_assembler->get_buffer(message));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = MessageFrame::tag;
+    tags.push_back(tag);
+#endif
   });
 
   if (!conn.policy.lossy) {
@@ -123,7 +152,12 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
         std::make_move_iterator(out_pending_msgs.end()));
   }
   out_pending_msgs.clear();
+
+#ifdef UNIT_TESTS_BUILT
+  return sweep_ret{std::move(bl), tags};
+#else
   return bl;
+#endif
 }
 
 seastar::future<> IOHandler::send(MessageFRef msg)
@@ -791,9 +825,18 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
       ack_left = 0;
-      return frame_assembler->write<false>(
-        sweep_out_pending_msgs_to_sent(
-          require_keepalive, maybe_keepalive_ack, to_ack > 0)
+#ifdef UNIT_TESTS_BUILT
+      auto ret = sweep_out_pending_msgs_to_sent(
+          require_keepalive, maybe_keepalive_ack, to_ack > 0);
+      return frame_assembler->intercept_frames(ret.tags, true
+      ).then([this, bl=std::move(ret.bl)]() mutable {
+        return frame_assembler->write<false>(std::move(bl));
+      }
+#else
+      auto bl = sweep_out_pending_msgs_to_sent(
+          require_keepalive, maybe_keepalive_ack, to_ack > 0);
+      return frame_assembler->write<false>(std::move(bl)
+#endif
       ).then([this, &ctx] {
         if (ctx.get_io_state() != io_state_t::open) {
           return frame_assembler->flush<false>(
