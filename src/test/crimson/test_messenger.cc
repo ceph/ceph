@@ -775,49 +775,68 @@ struct TestInterceptor : public Interceptor {
     logger().info("[{}] {} {}", result->index, *conn, result->state);
   }
 
-  bp_action_t intercept(ConnectionRef conn, Breakpoint bp) override {
-    ++breakpoints_counter[bp].counter;
+  seastar::future<bp_action_t>
+  intercept(Connection &_conn, std::vector<Breakpoint> bps) override {
+    assert(bps.size() >= 1);
 
-    auto result = find_result(&*conn);
-    if (result == nullptr) {
-      logger().error("Untracked intercepted connection: {}, at breakpoint {}({})",
-                     *conn, bp, breakpoints_counter[bp].counter);
-      ceph_abort();
+    std::vector<bp_action_t> actions;
+    for (const Breakpoint &bp : bps) {
+      ++breakpoints_counter[bp].counter;
+
+      auto result = find_result(&*conn);
+      if (result == nullptr) {
+        logger().error("Untracked intercepted connection: {}, at breakpoint {}({})",
+                       *conn, bp, breakpoints_counter[bp].counter);
+        ceph_abort();
+      }
+
+      if (bp == custom_bp_t::SOCKET_CONNECTING) {
+        ++result->connect_attempts;
+        logger().info("[Test] connect_attempts={}", result->connect_attempts);
+      } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::WRITE}) {
+        ++result->client_connect_attempts;
+        logger().info("[Test] client_connect_attempts={}", result->client_connect_attempts);
+      } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::WRITE}) {
+        ++result->client_reconnect_attempts;
+        logger().info("[Test] client_reconnect_attempts={}", result->client_reconnect_attempts);
+      } else if (bp == custom_bp_t::SOCKET_ACCEPTED) {
+        ++result->accept_attempts;
+        logger().info("[Test] accept_attempts={}", result->accept_attempts);
+      } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::READ}) {
+        ++result->server_connect_attempts;
+        logger().info("[Test] server_connect_attemps={}", result->server_connect_attempts);
+      } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
+        ++result->server_reconnect_attempts;
+        logger().info("[Test] server_reconnect_attempts={}", result->server_reconnect_attempts);
+      }
+
+      auto it_bp = breakpoints.find(bp);
+      if (it_bp != breakpoints.end()) {
+        auto it_cnt = it_bp->second.find(breakpoints_counter[bp].counter);
+        if (it_cnt != it_bp->second.end()) {
+          logger().info("[{}] {} intercepted {}({}) => {}",
+                        result->index, *conn, bp,
+                        breakpoints_counter[bp].counter, it_cnt->second);
+          actions.emplace_back(it_cnt->second);
+          continue;
+        }
+      }
+      logger().info("[{}] {} intercepted {}({})",
+                    result->index, *conn, bp, breakpoints_counter[bp].counter);
+      actions.emplace_back(bp_action_t::CONTINUE);
     }
 
-    if (bp == custom_bp_t::SOCKET_CONNECTING) {
-      ++result->connect_attempts;
-      logger().info("[Test] connect_attempts={}", result->connect_attempts);
-    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::WRITE}) {
-      ++result->client_connect_attempts;
-      logger().info("[Test] client_connect_attempts={}", result->client_connect_attempts);
-    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::WRITE}) {
-      ++result->client_reconnect_attempts;
-      logger().info("[Test] client_reconnect_attempts={}", result->client_reconnect_attempts);
-    } else if (bp == custom_bp_t::SOCKET_ACCEPTED) {
-      ++result->accept_attempts;
-      logger().info("[Test] accept_attempts={}", result->accept_attempts);
-    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::READ}) {
-      ++result->server_connect_attempts;
-      logger().info("[Test] server_connect_attemps={}", result->server_connect_attempts);
-    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
-      ++result->server_reconnect_attempts;
-      logger().info("[Test] server_reconnect_attempts={}", result->server_reconnect_attempts);
-    }
-
-    auto it_bp = breakpoints.find(bp);
-    if (it_bp != breakpoints.end()) {
-      auto it_cnt = it_bp->second.find(breakpoints_counter[bp].counter);
-      if (it_cnt != it_bp->second.end()) {
-        logger().info("[{}] {} intercepted {}({}) => {}",
-                      result->index, *conn, bp,
-                      breakpoints_counter[bp].counter, it_cnt->second);
-        return it_cnt->second;
+    bp_action_t action = bp_action_t::CONTINUE;
+    for (bp_action_t &a : actions) {
+      if (a != bp_action_t::CONTINUE) {
+        if (action == bp_action_t::CONTINUE) {
+          action = a;
+        } else {
+          ceph_abort("got multiple incompatible actions");
+        }
       }
     }
-    logger().info("[{}] {} intercepted {}({})",
-                  result->index, *conn, bp, breakpoints_counter[bp].counter);
-    return bp_action_t::CONTINUE;
+    return seastar::make_ready_future<bp_action_t>(action);
   }
 };
 

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <seastar/core/shared_future.hh>
 #include <seastar/util/later.hh>
 
@@ -475,7 +477,16 @@ public:
 
   seastar::future<> do_out_dispatch(shard_states_t &ctx);
 
-  ceph::bufferlist sweep_out_pending_msgs_to_sent(
+#ifdef UNIT_TESTS_BUILT
+  struct sweep_ret {
+    ceph::bufferlist bl;
+    std::vector<ceph::msgr::v2::Tag> tags;
+  };
+  sweep_ret
+#else
+  ceph::bufferlist
+#endif
+  sweep_out_pending_msgs_to_sent(
       bool require_keepalive,
       std::optional<utime_t> maybe_keepalive_ack,
       bool require_ack);
