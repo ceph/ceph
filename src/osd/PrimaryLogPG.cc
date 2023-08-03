@@ -3502,7 +3502,8 @@ bool PrimaryLogPG::recover_adjacent_clones(ObjectContextRef obc, OpRequestRef op
     begin(m->ops),
     end(m->ops),
     [](const auto& osd_op) {
-       return osd_op.op.op == CEPH_OSD_OP_SET_CHUNK;
+       return osd_op.op.op == CEPH_OSD_OP_SET_CHUNK ||
+              osd_op.op.op == CEPH_OSD_OP_ROLLBACK;
     });
   if (!obc->obs.oi.manifest.is_chunked() && !has_manifest_op) {
     return false;
