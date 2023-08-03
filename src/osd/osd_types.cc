@@ -6542,7 +6542,7 @@ void ObjectRecoveryProgress::decode(ceph::buffer::list::const_iterator &bl)
 
 ostream &operator<<(ostream &out, const ObjectRecoveryProgress &prog)
 {
-  return prog.print(out);
+  return out << prog.fmt_print();
 }
 
 void ObjectRecoveryProgress::generate_test_instances(
@@ -6563,14 +6563,16 @@ void ObjectRecoveryProgress::generate_test_instances(
 
 ostream &ObjectRecoveryProgress::print(ostream &out) const
 {
-  return out << "ObjectRecoveryProgress("
-	     << ( first ? "" : "!" ) << "first, "
-	     << "data_recovered_to:" << data_recovered_to
-	     << ", data_complete:" << ( data_complete ? "true" : "false" )
-	     << ", omap_recovered_to:" << omap_recovered_to
-	     << ", omap_complete:" << ( omap_complete ? "true" : "false" )
-	     << ", error:" << ( error ? "true" : "false" )
-	     << ")";
+  return out << fmt_print();
+}
+
+std::string ObjectRecoveryProgress::fmt_print() const {
+  return fmt::format(
+      "ObjectRecoveryProgress({}first, data_recovered_to: {}, "
+      "data_complete: {}, omap_recovered_to: {}, omap_complete: "
+      "{}, error: {})",
+      (first ? "" : "!"), data_recovered_to, data_complete, omap_recovered_to,
+      omap_complete, error);
 }
 
 void ObjectRecoveryProgress::dump(Formatter *f) const
