@@ -591,7 +591,7 @@ class CephFSSubvolume(RESTController):
         error_code, out, err = mgr.remote(
             'volumes', '_cmd_fs_subvolume_ls', None, {'vol_name': vol_name})
         if error_code != 0:
-            raise RuntimeError(
+            raise DashboardException(
                 f'Failed to list subvolumes for volume {vol_name}: {err}'
             )
         subvolumes = json.loads(out)
@@ -599,8 +599,28 @@ class CephFSSubvolume(RESTController):
             error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
                                               'vol_name': vol_name, 'sub_name': subvolume['name']})
             if error_code != 0:
-                raise RuntimeError(
+                raise DashboardException(
                     f'Failed to get info for subvolume {subvolume["name"]}: {err}'
                 )
             subvolume['info'] = json.loads(out)
         return subvolumes
+
+    @RESTController.Resource('GET')
+    def info(self, vol_name: str, subvol_name: str):
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
+            'vol_name': vol_name, 'sub_name': subvol_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get info for subvolume {subvol_name}: {err}'
+            )
+        return json.loads(out)
+
+    def create(self, vol_name: str, subvol_name: str, **kwargs):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_create', None, {
+            'vol_name': vol_name, 'sub_name': subvol_name, **kwargs})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create subvolume {subvol_name}: {err}'
+            )
+
+        return f'Subvolume {subvol_name} created successfully'
