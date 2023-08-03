@@ -3,7 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import { TreeModule } from '@circlon/angular-tree-component';
-import { NgbNavModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 import { ChartsModule } from 'ng2-charts';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -15,6 +15,7 @@ import { CephfsDirectoriesComponent } from './cephfs-directories/cephfs-director
 import { CephfsVolumeFormComponent } from './cephfs-form/cephfs-form.component';
 import { CephfsListComponent } from './cephfs-list/cephfs-list.component';
 import { CephfsTabsComponent } from './cephfs-tabs/cephfs-tabs.component';
+import { CephfsSubvolumeListComponent } from './cephfs-subvolume-list/cephfs-subvolume-list.component';
 
 @NgModule({
   imports: [
@@ -26,7 +27,8 @@ import { CephfsTabsComponent } from './cephfs-tabs/cephfs-tabs.component';
     NgbNavModule,
     FormsModule,
     ReactiveFormsModule,
-    NgbTypeaheadModule
+    NgbTypeaheadModule,
+    NgbTooltipModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -35,7 +37,8 @@ import { CephfsTabsComponent } from './cephfs-tabs/cephfs-tabs.component';
     CephfsListComponent,
     CephfsTabsComponent,
     CephfsVolumeFormComponent,
-    CephfsDirectoriesComponent
+    CephfsDirectoriesComponent,
+    CephfsSubvolumeListComponent
   ]
 })
 export class CephfsModule {}

@@ -12,6 +12,13 @@
         </cd-cephfs-detail>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="subvolumes">
+      <a ngbNavLink
+         i18n>Subvolumes</a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-subvolume-list [fsName]="selection.mdsmap.fs_name"></cd-cephfs-subvolume-list>
+      </ng-template>
+    </ng-container>
     <ng-container ngbNavItem="clients">
       <a ngbNavLink>
         <ng-container i18n>Clients</ng-container>
