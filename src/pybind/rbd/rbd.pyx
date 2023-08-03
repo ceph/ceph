@@ -371,11 +371,19 @@ ELSE:
     cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
         return <rados_ioctx_t>ioctx.io
 
-cdef int progress_callback(uint64_t offset, uint64_t total, void* ptr) with gil:
-    return (<object>ptr)(offset, total)
+IF cython.__version__ >= 3.0.0:
+    cdef int progress_callback(uint64_t offset, uint64_t total, void* ptr) noexcept with gil:
+        return (<object>ptr)(offset, total)
+ELSE:
+    cdef int progress_callback(uint64_t offset, uint64_t total, void* ptr) with gil:
+        return (<object>ptr)(offset, total)
 
-cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr):
-    return 0
+IF cython.__version__ >= 3.0.0:
+    cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr) noexcept:
+        return 0
+ELSE:
+    cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr):
+        return 0
 
 def cstr(val, name, encoding="utf-8", opt=False):
     """
@@ -426,12 +434,20 @@ RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY = decode_cstr(_RBD_MIRROR_PEER_ATTRIBUTE_NAME
 
 cdef class Completion
 
-cdef void __aio_complete_cb(rbd_completion_t completion, void *args) with gil:
-    """
-    Callback to oncomplete() for asynchronous operations
-    """
-    cdef Completion cb = <Completion>args
-    cb._complete()
+IF cython.__version__ >= 3.0.0:
+    cdef void __aio_complete_cb(rbd_completion_t completion, void *args) noexcept with gil:
+        """
+        Callback to oncomplete() for asynchronous operations
+        """
+        cdef Completion cb = <Completion>args
+        cb._complete()
+ELSE:
+    cdef void __aio_complete_cb(rbd_completion_t completion, void *args) with gil:
+        """
+        Callback to oncomplete() for asynchronous operations
+        """
+        cdef Completion cb = <Completion>args
+        cb._complete()
 
 
 cdef class Completion(object):
