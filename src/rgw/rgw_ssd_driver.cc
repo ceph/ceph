@@ -98,7 +98,7 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     return 0;
 }
 
-int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
+int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
 
@@ -129,7 +129,7 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
     this->free_space = space.available;
 
     if (attrs.size() > 0) {
-        r = set_attrs(dpp, key, attrs);
+        r = set_attrs(dpp, key, attrs, y);
         if (r < 0) {
             ldpp_dout(dpp, 0) << "ERROR: put::set_attrs: failed to set attrs, r = " << r << dendl;
             return r;
@@ -139,7 +139,7 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
     return 0;
 }
 
-int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs)
+int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
 {
     char buffer[len];
     std::string location = partition_info.location + key;
@@ -170,7 +170,7 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
     ceph::encode(buffer, bl);
 
     if (attrs.size() > 0) {
-        r = get_attrs(dpp, key, attrs);
+        r = get_attrs(dpp, key, attrs, y);
         if (r < 0) {
             ldpp_dout(dpp, 0) << "ERROR: put::get_attrs: failed to get attrs, r = " << r << dendl;
             return r;
@@ -266,7 +266,7 @@ int SSDDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, 
     return 0;
 }
 
-int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key)
+int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y)
 {
     std::string location = partition_info.location + key;
 
@@ -281,7 +281,7 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     return 0;
 }
 
-int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data)
+int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y)
 {
     std::string location = partition_info.location + key;
 
@@ -368,7 +368,7 @@ void SSDDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
     ceph::async::dispatch(std::move(p), ec, std::move(op.result));
 }
 
-int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs)
+int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
@@ -386,7 +386,7 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
     return 0;
 }
 
-int SSDDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs)
+int SSDDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
@@ -401,7 +401,7 @@ int SSDDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& ke
     return 0;
 }
 
-int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs)
+int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
@@ -426,7 +426,7 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
             keyptr += keylen;
             continue;
         }
-        std::string attr_value = get_attr(dpp, key, attr_name);
+        std::string attr_value = get_attr(dpp, key, attr_name, y);
         bufferlist bl_value;
         ceph::encode(attr_value, bl_value);
         attrs.emplace(std::move(attr_name), std::move(bl_value));
@@ -435,7 +435,7 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     return 0;
 }
 
-int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs)
+int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
@@ -443,7 +443,7 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     for (auto& [attr_name, attr_val_bl] : attrs) {
         ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): attr_name = " << attr_name << " attr_val_bl length: " << attr_val_bl.length() << dendl;
         if (attr_val_bl.length() != 0) {
-            auto ret = set_attr(dpp, key, attr_name, attr_val_bl.c_str());
+            auto ret = set_attr(dpp, key, attr_name, attr_val_bl.c_str(), y);
             if (ret < 0) {
                 ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << attr_name << " key: " << key << dendl;
                 return ret;
@@ -453,7 +453,7 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     return 0;
 }
 
-std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name)
+std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
@@ -474,7 +474,7 @@ std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string
     return attr_val;
 }
 
-int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val)
+int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
