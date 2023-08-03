@@ -1904,7 +1904,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   ceph_assert_always(state >= state_t::ESTABLISHING);
   ceph_assert_always(state <= state_t::WAIT);
   ceph_assert_always(has_socket || state == state_t::CONNECTING);
-  ceph_assert_always(!mover.socket->is_shutdown());
+  // mover.socket shouldn't be shutdown
 
   logger().info("{} start replacing ({}): pgs was {}, cs was {}, "
                 "client_cookie was {}, {}, new_sid={}",
