@@ -23,7 +23,6 @@ import { RoleFormModel } from './role-form.model';
   styleUrls: ['./role-form.component.scss']
 })
 export class RoleFormComponent extends CdForm implements OnInit {
-
   roleForm: CdFormGroup;
   response: RoleFormModel;
 

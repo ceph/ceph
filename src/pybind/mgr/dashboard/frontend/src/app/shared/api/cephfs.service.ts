@@ -83,4 +83,8 @@ export class CephfsService {
       }
     );
   }
+
+  isCephFsPool(pool: any) {
+    return _.indexOf(pool.application_metadata, 'cephfs') !== -1 && !pool.pool_name.includes('/');
+  }
 }
