@@ -24,6 +24,7 @@ import { FormlyTextareaTypeComponent } from '../forms/crud-form/formly-textarea-
 import { FormlyInputWrapperComponent } from '../forms/crud-form/formly-input-wrapper/formly-input-wrapper.component';
 import { FormlyFileTypeComponent } from '../forms/crud-form/formly-file-type/formly-file-type.component';
 import { FormlyFileValueAccessorDirective } from '../forms/crud-form/formly-file-type/formly-file-type-accessor';
+import { CheckedTableFormComponent } from './checked-table-form/checked-table-form.component';
 
 @NgModule({
   imports: [
@@ -78,7 +79,8 @@ import { FormlyFileValueAccessorDirective } from '../forms/crud-form/formly-file
     FormlyObjectTypeComponent,
     FormlyInputWrapperComponent,
     FormlyFileTypeComponent,
-    FormlyFileValueAccessorDirective
+    FormlyFileValueAccessorDirective,
+    CheckedTableFormComponent
   ],
   exports: [
     TableComponent,
@@ -86,7 +88,8 @@ import { FormlyFileValueAccessorDirective } from '../forms/crud-form/formly-file
     TableKeyValueComponent,
     TableActionsComponent,
     CRUDTableComponent,
-    TablePaginationComponent
+    TablePaginationComponent,
+    CheckedTableFormComponent
   ]
 })
 export class DataTableModule {}
