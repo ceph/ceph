@@ -4805,11 +4805,15 @@ void ObjectCleanRegions::generate_test_instances(list<ObjectCleanRegions*>& o)
   o.back()->mark_object_new();
 }
 
+std::string ObjectCleanRegions::fmt_print() const
+{
+  return fmt::format("clean_offsets: {}, clean_omap: {}, new_object: {}",
+                     clean_offsets, clean_omap, new_object);
+}
+
 ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
 {
-  return out << "clean_offsets: " << ocr.clean_offsets
-             << ", clean_omap: " << ocr.clean_omap
-             << ", new_object: " << ocr.new_object;
+  return out << ocr.fmt_print();
 }
 
 // -- pg_log_entry_t --
@@ -5023,26 +5027,33 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
-  out << e.version << " (" << e.prior_version << ") "
-      << std::left << std::setw(8) << e.get_op_name() << ' '
-      << e.soid << " by " << e.reqid << " " << e.mtime
-      << " " << e.return_code;
-  if (!e.op_returns.empty()) {
-    out << " " << e.op_returns;
+  return out << e.fmt_print();
+}
+
+std::string pg_log_entry_t::fmt_print() const
+{
+  std::string pos_op_returns{};
+  if (!op_returns.empty()) {
+    pos_op_returns = fmt::format(" {}", op_returns);
   }
-  if (e.snaps.length()) {
-    vector<snapid_t> snaps;
-    ceph::buffer::list c = e.snaps;
+
+  std::string pos_snaps{};
+  if (snaps.length()) {
+    std::vector<snapid_t> decoded_snaps;
+    ceph::buffer::list c = snaps;
     auto p = c.cbegin();
     try {
-      decode(snaps, p);
+      ::decode(decoded_snaps, p);
     } catch (...) {
-      snaps.clear();
+      decoded_snaps.clear();
     }
-    out << " snaps " << snaps;
+    pos_snaps = fmt::format(" snaps {}", decoded_snaps);
   }
-  out << " ObjectCleanRegions " << e.clean_regions;
-  return out;
+
+  return fmt::format(
+      "{} ({}) {:<8} {} by {} {} {}{}{} ObjectCleanRegions {}", version,
+      prior_version, get_op_name(), soid, reqid, mtime, return_code,
+      pos_op_returns, pos_snaps, clean_regions);
 }
 
 // -- pg_log_dup_t --

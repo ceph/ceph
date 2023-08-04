@@ -4075,6 +4075,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
+  std::string fmt_print() const;
   static void generate_test_instances(std::list<ObjectCleanRegions*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectCleanRegions)
@@ -4298,7 +4299,7 @@ struct pg_log_entry_t {
      invalid_hash(false), invalid_pool(false) {
     snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
   }
-      
+
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
   bool is_promote() const { return op == PROMOTE; }
@@ -4357,6 +4358,7 @@ struct pg_log_entry_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
+  std::string fmt_print() const;
   static void generate_test_instances(std::list<pg_log_entry_t*>& o);
 
 };
