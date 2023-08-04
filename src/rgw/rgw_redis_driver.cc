@@ -33,13 +33,13 @@ int RedisDriver::find_client(const DoutPrefixProvider* dpp)
 
   if (addr.host == "" || addr.port == 0) { 
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+    return -EDESTADDRREQ;
   }
 
   client.connect(addr.host, addr.port, nullptr);
 
   if (!client.is_connected())
-    return ECONNREFUSED;
+    return -ECONNREFUSED;
 
   return 0;
 }
@@ -218,7 +218,7 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 
   if (addr.host == "" || addr.port == 0) {
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+    return -EDESTADDRREQ;
   }
 
   config cfg;

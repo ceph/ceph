@@ -11,13 +11,13 @@ int CachePolicy::find_client(const DoutPrefixProvider* dpp, cpp_redis::client* c
 
   if (get_addr().host == "" || get_addr().port == 0) {
     ldpp_dout(dpp, 10) << "RGW D4N Policy: D4N policy endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+    return -EDESTADDRREQ;
   }
 
   client->connect(get_addr().host, get_addr().port, nullptr);
 
   if (!client->is_connected())
-    return ECONNREFUSED;
+    return -ECONNREFUSED;
 
   return 0;
 }

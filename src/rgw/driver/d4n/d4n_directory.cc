@@ -12,13 +12,13 @@ int ObjectDirectory::find_client(cpp_redis::client* client) {
 
    if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW D4N Directory: D4N directory endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+    return -EDESTADDRREQ;
   }
 
   client->connect(addr.host, addr.port, nullptr);
 
   if (!client->is_connected())
-    return ECONNREFUSED;
+    return -ECONNREFUSED;
 
   return 0;
 }
@@ -192,13 +192,13 @@ int BlockDirectory::find_client(cpp_redis::client* client) {
 
    if (addr.host == "" || addr.port == 0) {
     dout(10) << "RGW D4N Directory: D4N directory endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+    return -EDESTADDRREQ;
   }
 
   client->connect(addr.host, addr.port, nullptr);
 
   if (!client->is_connected())
-    return ECONNREFUSED;
+    return -ECONNREFUSED;
 
   return 0;
 }
