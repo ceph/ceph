@@ -55,8 +55,9 @@ void RGWOp_Metadata_Get::execute(optional_yield y) {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
+  rgw::sal::Driver* store = driver->get_store();
 
-  auto meta_mgr = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr;
+  auto meta_mgr = static_cast<rgw::sal::RadosStore*>(store)->ctl()->meta.mgr;
 
   /* Get keys */
   op_ret = meta_mgr->get(metadata_key, s->formatter, s->yield, s);

@@ -471,6 +471,8 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
+
+    virtual Driver* get_store() = 0;
 };
 
 

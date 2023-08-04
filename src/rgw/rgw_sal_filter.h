@@ -338,6 +338,10 @@ public:
   virtual void register_admin_apis(RGWRESTMgr* mgr) override {
       return next->register_admin_apis(mgr);
   }
+
+  virtual Driver *get_store() override {
+    return next->get_store();
+  }
 };
 
 class FilterUser : public User {

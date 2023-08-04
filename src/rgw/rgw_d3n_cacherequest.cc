@@ -128,12 +128,12 @@ struct d3n_libaio_handler {
 };
 
 static void cache_read(const DoutPrefixProvider *dpp,
-                       boost::asio::io_context& context, yield_context yield,
+                       boost::asio::io_context& context, spawn::yield_context yield,
                        const std::string& path, off_t ofs, off_t len,
                        void* buffer, AioResult& r)
 {
   using namespace boost::asio;
-  async_completion<yield_context, void()> init(yield);
+  async_completion<spawn::yield_context, void()> init(yield);
   auto ex = get_associated_executor(init.completion_handler);
 
   async_read(dpp, context, path, ofs, len, r, buffer,
