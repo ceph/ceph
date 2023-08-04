@@ -39,7 +39,6 @@ private:
     epoch_t min_epoch, epoch_t max_epoch,
     std::vector<pg_log_entry_t>&& log_entries) final;
   const pg_t pgid;
-  const pg_shard_t whoami;
   class pending_on_t : public seastar::weakly_referencable<pending_on_t> {
   public:
     pending_on_t(size_t pending, const eversion_t& at_version)

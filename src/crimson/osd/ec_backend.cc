@@ -10,7 +10,7 @@ namespace {
   }
 }
 
-ECBackend::ECBackend(shard_id_t shard,
+ECBackend::ECBackend(pg_shard_t p_shard,
                      ECBackend::CollectionRef coll,
                      crimson::osd::ShardServices& shard_services,
                      const ec_profile_t&,
@@ -18,7 +18,7 @@ ECBackend::ECBackend(shard_id_t shard,
                      bool fast_read,
                      bool allows_ecoverwrites,
 		     DoutPrefixProvider &dpp)
-  : PGBackend{shard, coll, shard_services, dpp},
+  : PGBackend{whoami, coll, shard_services, dpp},
     sinfo{ec_impl->get_data_chunk_count(), stripe_width},
     fast_read{fast_read},
     allows_ecoverwrites{allows_ecoverwrites}

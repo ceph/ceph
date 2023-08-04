@@ -18,7 +18,7 @@
 class ECBackend : public PGBackend
 {
 public:
-  ECBackend(shard_id_t shard,
+  ECBackend(pg_shard_t whoami,
 	    CollectionRef coll,
 	    crimson::osd::ShardServices& shard_services,
 	    const ec_profile_t& ec_profile,

@@ -20,9 +20,8 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      ReplicatedBackend::CollectionRef coll,
                                      crimson::osd::ShardServices& shard_services,
 				     DoutPrefixProvider &dpp)
-  : PGBackend{whoami.shard, coll, shard_services, dpp},
+  : PGBackend{whoami, coll, shard_services, dpp},
     pgid{pgid},
-    whoami{whoami},
     pg(pg)
 {}
 
