@@ -18,9 +18,8 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
                                      ReplicatedBackend::CollectionRef coll,
                                      crimson::osd::ShardServices& shard_services,
 				     DoutPrefixProvider &dpp)
-  : PGBackend{whoami.shard, coll, shard_services, dpp},
-    pgid{pgid},
-    whoami{whoami}
+  : PGBackend{whoami, coll, shard_services, dpp},
+    pgid{pgid}
 {}
 
 ReplicatedBackend::ll_read_ierrorator::future<ceph::bufferlist>
