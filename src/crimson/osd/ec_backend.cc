@@ -123,10 +123,10 @@ ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
     const ECSubRead &op = m->op;
     reply.from = whoami;
     reply.tid = op.tid;
+    using read_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
     return interruptor::do_for_each(op.to_read, [&op, &reply, this] (auto read_item) {
       const auto& [obj, op_list] = read_item;
       return interruptor::do_for_each(op_list, [&op, &reply, obj, this] (auto op_spec) {
-        using read_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
         const auto& [off, size, flags] = op_spec;
         return maybe_chunked_read(
           obj, op, off, size, flags
@@ -157,14 +157,20 @@ ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
 	logger().debug("{}: fulfilling attr request on obj {}",
 		       "handle_rep_read_op", obj_attr);
 	if (reply.errors.count(obj_attr)) {
-	  return ll_read_ierrorator::now();
+          return read_ertr::now();
 	}
         return store->get_attrs(
-          coll, ghobject_t{obj_attr, ghobject_t::NO_GEN, shard}
+          coll, ghobject_t{obj_attr, ghobject_t::NO_GEN, get_shard()}
 	).safe_then([&reply, obj_attr] (auto&& attrs) {
 	  reply.attrs_read[obj_attr] = std::move(attrs);
-	  return ll_read_ierrorator::now();
-        });
+          return read_ertr::now();
+        }, read_ertr::all_same_way([&reply, obj_attr, this] (const auto& e) {
+          assert(e.value() > 0);
+          reply.attrs_read.erase(obj_attr);
+          reply.buffers_read.erase(obj_attr);
+          reply.errors[obj_attr] = -e.value();
+          return read_ertr::now();
+	}));
       });
     });
   });
