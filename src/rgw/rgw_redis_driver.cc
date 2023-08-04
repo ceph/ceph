@@ -140,7 +140,7 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 
   if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+    return -EDESTADDRREQ;
   }
 
   conn->async_run(cfg, {}, net::detached);
