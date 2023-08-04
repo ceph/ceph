@@ -175,12 +175,18 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   priority_t immediate_class_priority = std::numeric_limits<priority_t>::max();
 
   static scheduler_id_t get_scheduler_id(const OpSchedulerItem &item) {
+    op_scheduler_class class_id = item.get_scheduler_class();
+    /*
+     * use class_id as client_id,
+     * the same class of requests enter the same mclock queue
+     * */
+    client_id_t client_id = (client_id_t) class_id;
     return scheduler_id_t{
-      item.get_scheduler_class(),
+        class_id,
 	client_profile_id_t{
-	item.get_owner(),
+	  client_id,
 	  0
-	  }
+	}
     };
   }
 
