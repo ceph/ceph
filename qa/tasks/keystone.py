@@ -3,6 +3,8 @@ Deploy and configure Keystone for Teuthology
 """
 import argparse
 import contextlib
+from io import StringIO
+import json
 import logging
 
 # still need this for python3.6
@@ -35,12 +37,12 @@ def toxvenv_sh(ctx, remote, args, **kwargs):
     activate = get_toxvenv_dir(ctx) + '/bin/activate'
     return remote.sh(['source', activate, run.Raw('&&')] + args, **kwargs)
 
-def run_in_keystone_venv(ctx, client, args):
-    run_in_keystone_dir(ctx, client,
+def run_in_keystone_venv(ctx, client, args, **kwargs):
+    return run_in_keystone_dir(ctx, client,
                         [   'source',
                             '.tox/venv/bin/activate',
                             run.Raw('&&')
-                        ] + args)
+                        ] + args, **kwargs)
 
 def get_keystone_venved_cmd(ctx, cmd, args, env=[]):
     kbindir = get_keystone_dir(ctx) + '/.tox/venv/bin/'
@@ -420,6 +422,29 @@ def assign_ports(ctx, config, initial_port):
 
     return role_endpoints
 
+def read_ec2_credentials(ctx, client, user):
+    """
+    Look up EC2 credentials for the given user.
+
+    Returns a dictionary of the form:
+    {
+        "Access": "b2c9a792ff934b50b7e5c6d8f0fbbc96",
+        "Secret": "53b34a24a8e244ca89f1d754f089b63a",
+        "Project ID": "49208b6cc1864a0ea1cd7de3b456db11",
+        "User ID": "3276c0e0116a4a3ab1dd462ae4846416"
+    }
+    """
+    public_host, public_port = ctx.keystone.public_endpoints[client]
+    procs = run_in_keystone_venv(ctx, client,
+        ['openstack', 'ec2', 'credentials', 'list',
+         '--user', user, '--format', 'json', '--debug'] +
+        os_auth_args(public_host, public_port),
+        stdout=StringIO())
+    assert len(procs) == 1
+    response = json.loads(procs[0].stdout.getvalue())
+    assert len(response)
+    return response[0]
+
 @contextlib.contextmanager
 def task(ctx, config):
     """
@@ -476,6 +501,7 @@ def task(ctx, config):
 
     ctx.keystone = argparse.Namespace()
     ctx.keystone.public_endpoints = assign_ports(ctx, config, 5000)
+    ctx.keystone.read_ec2_credentials = read_ec2_credentials
 
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
