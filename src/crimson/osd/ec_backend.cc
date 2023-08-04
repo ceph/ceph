@@ -79,7 +79,7 @@ ECBackend::maybe_chunked_read(
 {
   if (is_single_chunk(obj, op)) {
     return store->read(
-      coll, ghobject_t{obj, ghobject_t::NO_GEN, shard}, off, size, flags);
+      coll, ghobject_t{obj, ghobject_t::NO_GEN, get_shard()}, off, size, flags);
   } else {
     return seastar::do_with(ceph::bufferlist{}, [=, this] (auto&& result_bl) {
       const int subchunk_size =
@@ -96,7 +96,7 @@ ECBackend::maybe_chunked_read(
               const auto [sub_off_count, sub_size_count] = subchunk;
               return store->read(
                 coll,
-                ghobject_t{obj, ghobject_t::NO_GEN, shard},
+                ghobject_t{obj, ghobject_t::NO_GEN, get_shard()},
                 off + m*sinfo.get_chunk_size() + sub_off_count*subchunk_size,
                 sub_size_count * subchunk_size,
                 flags
@@ -121,6 +121,8 @@ ECBackend::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
   return seastar::do_with(ECSubReadReply{},
 		          [m=std::move(m), this] (auto&& reply) {
     const ECSubRead &op = m->op;
+    reply.from = whoami;
+    reply.tid = op.tid;
     return interruptor::do_for_each(op.to_read, [&op, &reply, this] (auto read_item) {
       const auto& [obj, op_list] = read_item;
       return interruptor::do_for_each(op_list, [&op, &reply, obj, this] (auto op_spec) {
