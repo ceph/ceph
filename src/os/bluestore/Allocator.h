@@ -49,6 +49,13 @@ public:
 
   /* Bulk release. Implementations may override this method to handle the whole
    * set at once. This could save e.g. unnecessary mutex dance. */
+  /*
+    Releases disk regions.
+    It is required that prior to invoking it the regions were marked as taken.
+    The caller is relinquishing ownership back to the allocator.
+
+    Note: the allocator must assert if any part of any region was already free.
+  */
   virtual void release(const interval_set<uint64_t>& release_set) = 0;
   void release(const PExtentVector& release_set);
 
@@ -56,7 +63,21 @@ public:
   virtual void foreach(
     std::function<void(uint64_t offset, uint64_t length)> notify) = 0;
 
+  /*
+    Used during allocator initialization.
+    init_add_free tells that specific region is free.
+
+    Note: the allocator must assert if any part of the region was already free.
+   */
   virtual void init_add_free(uint64_t offset, uint64_t length) = 0;
+  /*
+    Used during allocator initialization.
+    init_rm_free tells that specific region is allocated.
+
+    Note: the allocator must assert if any part of the region was already allocated.
+    init_rm_free() is similiar to release(), but will never be called from
+    concurrent threads; it does not have to maintain internal execution exclusion.
+   */
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;

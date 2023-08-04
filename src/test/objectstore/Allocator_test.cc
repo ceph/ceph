@@ -10,6 +10,8 @@
 
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "global/global_init.h"
+#include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
@@ -636,3 +638,161 @@ INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap", "avl", "hybrid"));
+
+
+using Range = std::pair<uint64_t, uint64_t>;
+class IntrusionDeathTest : public testing::TestWithParam<
+  std::tuple<const char*, std::pair<uint64_t, uint64_t> > > {
+
+public:
+  boost::scoped_ptr<Allocator> alloc;
+  IntrusionDeathTest(): alloc(0) { }
+  void init_alloc(int64_t size, uint64_t min_alloc_size) {
+    std::cout << "Creating alloc type " << string(GetParam_alloc()) << " \n";
+    alloc.reset(Allocator::create(g_ceph_context, GetParam_alloc(),
+				  size, min_alloc_size,
+				  256*1048576, 100*256*1048576ull));
+  }
+
+  void init_close() {
+    alloc.reset(0);
+  }
+  const char* GetParam_alloc() {
+    return std::get<0>(GetParam());
+  }
+  uint64_t GetParam_offset() {
+    return std::get<1>(GetParam()).first;
+  }
+  uint64_t GetParam_size() {
+    return std::get<1>(GetParam()).second;
+  }
+  static std::string pretty_name(const testing::TestParamInfo<IntrusionDeathTest::ParamType>& info) {
+    std::stringstream ss;
+    ss << std::get<0>(info.param) << "0x"
+       << std::hex << std::setfill('0') << std::setw(5)
+       << std::get<1>(info.param).first
+       << std::setw(0) <<"to0x"
+       << std::setw(5) << std::get<1>(info.param).first + std::get<1>(info.param).second;
+    return ss.str();
+  }
+};
+
+using AllocDeathTest = IntrusionDeathTest;
+using FreeDeathTest = IntrusionDeathTest;
+
+TEST_P(FreeDeathTest, reject_release_on_unallocated)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 0x1234567000;
+  init_alloc(size, block);
+  alloc->init_add_free(0x10000,0x10000);
+  alloc->init_add_free(0x30000,0x10000);
+  alloc->init_add_free(0x50000,0x10000);
+  PExtentVector release_set;
+  release_set.emplace_back(GetParam_offset(), GetParam_size());
+  EXPECT_DEATH(alloc->release(release_set),".*");
+}
+
+TEST_P(FreeDeathTest, reject_init_add_free_on_unallocated)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 0x1234567000;
+  init_alloc(size, block);
+  alloc->init_add_free(0x10000,0x10000);
+  alloc->init_add_free(0x30000,0x10000);
+  alloc->init_add_free(0x50000,0x10000);
+  EXPECT_DEATH(alloc->init_add_free(GetParam_offset(), GetParam_size()),".*");
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  Allocator,
+  FreeDeathTest,
+  ::testing::Combine(
+    ::testing::Values("stupid", "bitmap", "avl", "hybrid", "btree"),
+    //base free pattern is ____0000____0000____0000_______..... (each char=0x4000)
+    // _=allocated 0=free f=free-ok, !=free-collision
+    ::testing::Values(Range(0x0c000, 0x8000), //___f!000____0000____0000______
+		      Range(0x0c000, 0x18000),//___f!!!!f___0000____0000______
+		      Range(0x0c000, 0x58000),//___f!!!!ffff!!!!ffff!!!!f_____
+
+		      Range(0x10000, 0x4000), //____!000____0000____0000______
+		      Range(0x10000, 0x10000),//____!!!!____0000____0000______
+		      Range(0x10000, 0x18000),//____!!!!ff__0000____0000______
+		      Range(0x10000, 0x50000),//____!!!!ffff!!!!ffff!!!!______
+
+		      Range(0x18000, 0x4000), //____00!0____0000____0000______
+		      Range(0x18000, 0x10000),//____00!!ff__0000____0000______
+		      Range(0x18000, 0x20000),//____00!!ffff!!00____0000______
+		      Range(0x18000, 0x40000),//____00!!ffff!!!!ffff!!00______
+		      Range(0x18000, 0x50000),//____00!!ffff!!!!ffff!!!!ff____
+
+		      Range(0x28000, 0x10000),//____0000__ff!!00____0000______
+
+		      Range(0x30000, 0x4000), //____0000____!000____0000______
+		      Range(0x30000, 0x10000),//____0000____!!!!____0000______
+		      Range(0x30000, 0x18000),//____0000____!!!!ff__0000______
+		      Range(0x30000, 0x20000),//____0000____!!!!ffff0000______
+
+		      Range(0x38000, 0x08000),//____0000____00!!____0000______
+		      Range(0x38000, 0x20000) //____0000____00!!ffff!!00______
+    ))
+  ,FreeDeathTest::pretty_name
+);
+
+TEST_P(AllocDeathTest, reject_init_rm_free_on_allocated)
+{
+  uint64_t block = 0x1000;
+  uint64_t size = 0x1234567000;
+  init_alloc(size, block);
+  alloc->init_add_free(0x10000,0x10000);
+  alloc->init_add_free(0x30000,0x10000);
+  alloc->init_add_free(0x50000,0x10000);
+  EXPECT_DEATH(alloc->init_rm_free(GetParam_offset(), GetParam_size()),".*");
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  Allocator,
+  AllocDeathTest,
+  ::testing::Combine(
+    ::testing::Values("stupid", "bitmap", "avl", "hybrid", "btree"),
+    //base free pattern is ____0000____0000____0000_______..... (each char=0x4000)
+    // _=allocated 0=free a=mark-alloc-ok, !=mark-alloc-collision
+    ::testing::Values(Range(0x0c000, 0x4000), //___!0000____0000____0000______
+		      Range(0x0c000, 0x8000), //___!a000____0000____0000______
+		      Range(0x0c000, 0x18000),//___!aaaa!___0000____0000______
+		      Range(0x0c000, 0x58000),//___!aaaa!!!!aaaa!!!!aaaa!_____
+		      Range(0x10000, 0x30000),//____aaaa!!!!aaaa______________
+		      Range(0x10000, 0x50000),//____aaaa!!!!aaaa!!!!aaaa______
+		      Range(0x10000, 0x54000),//____aaaa!!!!aaaa!!!!aaaa!_____
+
+		      Range(0x1c000, 0x8000), //____000a!___0000____0000______
+		      Range(0x1c000, 0x14000),//____000a!!!!0000____0000______
+		      Range(0x1c000, 0x18000),//____000a!!!!a000____0000______
+		      Range(0x1c000, 0x24000),//____000a!!!!aaaa____0000______
+		      Range(0x1c000, 0x44000),//____000a!!!!aaaa!!!!aaaa______
+
+		      Range(0x20000, 0x10000),//____0000!!!!0000____0000______
+		      Range(0x20000, 0x20000),//____0000!!!!aaaa____0000______
+		      Range(0x20000, 0x30000),//____0000!!!!aaaa!!!!0000______
+
+		      Range(0x30000, 0x30000),//____0000____aaaa!!!!aaaa______
+		      Range(0x34000, 0x28000) //____0000____0aaa!!!!aaa0______
+    ))
+  ,AllocDeathTest::pretty_name
+);
+
+
+int main(int argc, char **argv) {
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
+  g_ceph_context->_conf.set_val(
+    "enable_experimental_unrecoverable_data_corrupting_features",
+    "");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}

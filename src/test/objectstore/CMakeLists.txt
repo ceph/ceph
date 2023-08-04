@@ -53,7 +53,6 @@ if(WITH_BLUESTORE)
 
   add_executable(unittest_alloc
     Allocator_test.cc
-    $<TARGET_OBJECTS:unit-main>
     )
   add_ceph_unittest(unittest_alloc)
   target_link_libraries(unittest_alloc os global)
