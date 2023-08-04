@@ -3788,6 +3788,18 @@ void PastIntervals::pg_interval_t::dump(Formatter *f) const
   f->dump_int("up_primary", up_primary);
 }
 
+ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
+{
+  return out << i.fmt_print();
+}
+
+std::string PastIntervals::pg_interval_t::fmt_print() const
+{
+  return fmt::format(
+      "interval({}-{} up {}({}) acting {}({}){})", first, last, up, up_primary,
+      acting, primary, maybe_went_rw ? " maybe_went_rw" : "");
+}
+
 void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
 {
   o.push_back(new pg_interval_t);
@@ -3852,14 +3864,16 @@ struct compact_interval_t {
     decode(acting, bl);
     DECODE_FINISH(bl);
   }
+  std::string fmt_print() const {
+    return fmt::format("([{},{}] acting={})", first, last, acting);
+  }
   static void generate_test_instances(list<compact_interval_t*> & o) {
     /* Not going to be used, we'll generate pi_compact_rep directly */
   }
 };
 ostream &operator<<(ostream &o, const compact_interval_t &rhs)
 {
-  return o << "([" << rhs.first << "," << rhs.last
-	   << "] acting " << rhs.acting << ")";
+  return o << rhs.fmt_print();
 }
 WRITE_CLASS_ENCODER(compact_interval_t)
 
@@ -3936,6 +3950,10 @@ public:
     return out << "([" << first << "," << last
 	       << "] all_participants=" << all_participants
 	       << " intervals=" << intervals << ")";
+  }
+  std::string print() const override {
+    return fmt::format("([{},{}] all_participants={} intervals={})",
+                       first, last, all_participants, intervals);
   }
   void encode(ceph::buffer::list &bl) const override {
     ENCODE_START(1, 1, bl);
@@ -4029,22 +4047,29 @@ PastIntervals &PastIntervals::operator=(const PastIntervals &rhs)
 
 ostream& operator<<(ostream& out, const PastIntervals &i)
 {
-  if (i.past_intervals) {
-    return i.past_intervals->print(out);
-  } else {
-    return out << "(empty)";
-  }
+  return out << i.fmt_print();
 }
 
-ostream& operator<<(ostream& out, const PastIntervals::PriorSet &i)
+std::string PastIntervals::fmt_print() const {
+  return past_intervals ? past_intervals->print() : "(empty)";
+}
+
+
+std::string PastIntervals::PriorSet::fmt_print() const
 {
-  return out << "PriorSet("
-	     << "ec_pool: " << i.ec_pool
-	     << ", probe: " << i.probe
-	     << ", down: " << i.down
-	     << ", blocked_by: " << i.blocked_by
-	     << ", pg_down: " << i.pg_down
-	     << ")";
+  return fmt::format(
+      "PriorSet("
+      "ec_pool: {}, "
+      "probe: {}, "
+      "down: {}, "
+      "blocked_by: {}, "
+      "pg_down: {})",
+      ec_pool, probe, down, blocked_by, pg_down);
+}
+
+ostream& operator<<(ostream& out, const PastIntervals::PriorSet &pset)
+{
+  return out << pset.fmt_print();
 }
 
 void PastIntervals::decode(ceph::buffer::list::const_iterator &bl)
@@ -4389,19 +4414,6 @@ bool PastIntervals::PriorSet::affected_by_map(
 
   return false;
 }
-
-ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
-{
-  out << "interval(" << i.first << "-" << i.last
-      << " up " << i.up << "(" << i.up_primary << ")"
-      << " acting " << i.acting << "(" << i.primary << ")";
-  if (i.maybe_went_rw)
-    out << " maybe_went_rw";
-  out << ")";
-  return out;
-}
-
-
 
 // -- pg_query_t --
 

@@ -3231,6 +3231,7 @@ public:
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
+    std::string fmt_print() const;
     static void generate_test_instances(std::list<pg_interval_t*>& o);
   };
 
@@ -3255,6 +3256,7 @@ public:
     virtual void encode(ceph::buffer::list &bl) const = 0;
     virtual void decode(ceph::buffer::list::const_iterator &bl) = 0;
     virtual void dump(ceph::Formatter *f) const = 0;
+    virtual std::string print() const = 0;
     virtual void iterate_mayberw_back_to(
       epoch_t les,
       std::function<void(epoch_t, const std::set<pg_shard_t> &)> &&f) const = 0;
@@ -3300,6 +3302,9 @@ public:
     ceph_assert(past_intervals);
     past_intervals->dump(f);
   }
+
+  std::string fmt_print() const;
+
   static void generate_test_instances(std::list<PastIntervals *> & o);
 
   /**
@@ -3508,6 +3513,8 @@ public:
     bool affected_by_map(
       const OSDMap &osdmap,
       const DoutPrefixProvider *dpp) const;
+
+    std::string fmt_print() const;
 
     // For verifying tests
     PriorSet(
