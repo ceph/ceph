@@ -387,6 +387,8 @@ def fill_keystone(ctx, config):
                          cconfig.get('projects', []))
         run_section_cmds(ctx, cclient, 'user create --or-show', 'name',
                          cconfig.get('users', []))
+        run_section_cmds(ctx, cclient, 'ec2 credentials create', '',
+                         cconfig.get('ec2 credentials', []))
         run_section_cmds(ctx, cclient, 'role create --or-show', 'name',
                          cconfig.get('roles', []))
         run_section_cmds(ctx, cclient, 'role add', 'name',
@@ -441,6 +443,9 @@ def task(ctx, config):
               - name: custom
                 password: SECRET
                 project: custom
+            ec2 credentials:
+              - project: custom
+                user: custom
             roles: [ name: custom ]
             role-mappings:
               - name: custom
