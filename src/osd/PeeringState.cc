@@ -2164,9 +2164,11 @@ void PeeringState::choose_async_recovery_ec(
   const OSDMapRef osdmap) const
 {
   set<pair<int, pg_shard_t> > candidates_by_cost;
+  unsigned want_acting_size = 0;
   for (uint8_t i = 0; i < want->size(); ++i) {
     if ((*want)[i] == CRUSH_ITEM_NONE)
       continue;
+    ++want_acting_size;
 
     // Considering log entries to recover is accurate enough for
     // now. We could use minimum_to_decode_with_cost() later if
@@ -2199,6 +2201,7 @@ void PeeringState::choose_async_recovery_ec(
       candidates_by_cost.emplace(approx_missing_objects, shard_i);
     }
   }
+  ceph_assert(candidates_by_cost.size() <= want_acting_size);
 
   psdout(20) << "candidates by cost are: " << candidates_by_cost
 	     << dendl;
@@ -2209,7 +2212,10 @@ void PeeringState::choose_async_recovery_ec(
     pg_shard_t cur_shard = rit->second;
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
-    if (recoverable(candidate_want)) {
+    ceph_assert(want_acting_size > 0);
+    --want_acting_size;
+    if ((want_acting_size >= pool.info.min_size) &&
+	recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
     }
