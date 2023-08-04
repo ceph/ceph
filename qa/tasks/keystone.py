@@ -463,6 +463,8 @@ def task(ctx, config):
         config = all_clients
     if isinstance(config, list):
         config = dict.fromkeys(config)
+    overrides = ctx.config.get('overrides', {})
+    teuthology.deep_merge(config, overrides.get('keystone', {}))
 
     log.debug('Keystone config is %s', config)
 
