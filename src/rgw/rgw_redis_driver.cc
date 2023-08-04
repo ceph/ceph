@@ -52,8 +52,53 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) {
   return 0;
 }
 
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, std::string& key) {
-  int result = -1;
+int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) 
+{
+  auto ret = entries.emplace(key, Entry(key, offset, len));
+  return ret.second;
+}
+
+std::optional<Entry> RedisDriver::get_entry(const DoutPrefixProvider* dpp, std::string key) 
+{
+  auto iter = entries.find(key);
+
+  if (iter != entries.end()) {
+    return iter->second;
+  }
+
+  return std::nullopt;
+}
+
+int RedisDriver::remove_entry(const DoutPrefixProvider* dpp, std::string key) 
+{
+  return entries.erase(key);
+}
+
+int RedisDriver::add_partition_info(Partition& info)
+{
+  std::string key = info.name + info.type;
+  auto ret = partitions.emplace(key, info);
+
+  return ret.second;
+}
+
+int RedisDriver::remove_partition_info(Partition& info)
+{
+  std::string key = info.name + info.type;
+  return partitions.erase(key);
+}
+
+auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<std::string>& resp, optional_yield y) {
+  assert(y); 
+  auto yield = y.get_yield_context();
+
+  return conn.async_exec(req, resp, yield[ec]);
+}
+
+bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
+{
+  int result;
+  std::string entry = partition_info.location + key;
   std::vector<std::string> keys;
   keys.push_back(key);
 
@@ -99,6 +144,89 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
     return -1;
   }
 
+  return result;
+}
+*/
+
+std::optional<Partition> RedisDriver::get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type)
+{
+  std::string key = name + type;
+
+  auto iter = partitions.find(key);
+  if (iter != partitions.end())
+    return iter->second;
+
+  return std::nullopt;
+}
+
+std::vector<Partition> RedisDriver::list_partitions(const DoutPrefixProvider* dpp)
+{
+  std::vector<Partition> partitions_v;
+
+  for (auto& it : partitions)
+    partitions_v.emplace_back(it.second);
+
+  return partitions_v;
+}
+
+/* Currently an attribute but will also be part of the Entry metadata once consistency is guaranteed -Sam
+int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight) 
+{
+  auto iter = entries.find(key);
+
+  if (iter != entries.end()) {
+    iter->second.localWeight = localWeight;
+    return 0;
+  }
+
+  return -1;
+}
+*/
+
+int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
+{
+  namespace net = boost::asio;
+  using boost::redis::config;
+
+  this->cct = cct;
+
+  if (partition_info.location.back() != '/') {
+    partition_info.location += "/";
+  }
+
+  // remove
+  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
+  addr.port = cct->_conf->rgw_d4n_port;
+
+  if (addr.host == "" || addr.port == 0) {
+    ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
+    return EDESTADDRREQ;
+  }
+
+  config cfg;
+  cfg.addr.host = addr.host;
+  cfg.addr.port = std::to_string(addr.port);
+  
+  conn.async_run(cfg, {}, net::detached);
+
+/*  client.connect("127.0.0.1", 6379, nullptr);
+
+  if (!client.is_connected()) {
+    ldpp_dout(dpp, 10) << "RGW Redis Cache: Could not connect to redis cache endpoint." << dendl;
+    return ECONNREFUSED;
+  }*/
+
+  return 0;
+}
+
+int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
   try {
     /* Set attribute fields */
     std::string result; 
@@ -122,9 +250,9 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
   return 0;
 }
 
-int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) {
-  std::string result;
-  std::string entryName = "rgw-object:" + key + ":cache";
+int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
   
   if (!client.is_connected()) 
     return ECONNREFUSED;
@@ -167,10 +295,10 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
-int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) {
-  std::string result;
-  std::string value = "";
-  std::string entryName = "rgw-object:" + key + ":cache";
+int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
+{
+  std::string value;
+  std::string entry = partition_info.location + key;
 
   if (!client.is_connected()) 
     return ECONNREFUSED;
@@ -213,11 +341,9 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   return 0;
 }
 
-int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key) {
-  int result = 0;
-  std::string entryName = "rgw-object:" + key + ":cache";
-  std::vector<std::string> deleteField;
-  deleteField.push_back("data");
+int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
 
   if (!client.is_connected()) 
     return ECONNREFUSED;
@@ -241,17 +367,124 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   return result - 1;
 }
 
-int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) {
-  int exists = -2;
-  std::string result;
-  std::string entryName = "rgw-object:" + key + ":cache";
+int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
 
   if (!client.is_connected()) 
     return ECONNREFUSED;
 
-  if (key_exists(dpp, entryName)) {
-    rgw::sal::Attrs::iterator it;
-    std::vector< std::pair<std::string, std::string> > redisAttrs;
+  if (key_exists(dpp, key)) {
+    try {
+      client.hgetall(entry, [&attrs](cpp_redis::reply &reply) {
+	if (reply.is_array()) { 
+	  auto arr = reply.as_array();
+    
+	  if (!arr[0].is_null()) {
+    	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
+	      if (arr[i].as_string() != "data") {
+	        buffer::list bl_value;
+		bl_value.append(arr[i + 1].as_string());
+                attrs.insert({arr[i].as_string(), bl_value});
+		bl_value.clear();
+	      }
+            }
+	  }
+	}
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
+    return -2;
+  }
+
+  return 0;
+}
+
+int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
+{
+  if (attrs.empty())
+    return -1;
+      
+  std::string entry = partition_info.location + key;
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  if (key_exists(dpp, key)) {
+    /* Every attr set will be treated as new */
+    try {
+      std::string result;
+      auto redisAttrs = build_attrs(&attrs);
+	
+      client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
+	if (!reply.is_null()) {
+	  result = reply.as_string();
+	}
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+
+      if (result != "OK") {
+	return -1;
+      }
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
+    return -2;
+  }
+
+  return 0;
+}
+
+int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  if (key_exists(dpp, key)) {
+    try {
+      std::string result;
+      auto redisAttrs = build_attrs(&attrs);
+
+      client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
+        if (!reply.is_null()) {
+          result = reply.as_string();
+        }
+      });
+
+      client.sync_commit(std::chrono::milliseconds(1000));
+
+      if (result != "OK") {
+        return -1;
+      }
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
+    return -2;
+  }
+
+  return 0;
+}
+
+int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
+
+  if (!client.is_connected()) 
+    find_client(dpp);
+
+  if (key_exists(dpp, key)) {
     std::vector<std::string> getFields;
 
     /* Retrieve existing values from cache */
@@ -414,10 +647,9 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return -2;
 }
 
-std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) {
-  int exists = -2;
-  std::string result;
-  std::string entryName = "rgw-object:" + key + ":cache";
+std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
   std::string attrValue;
 
   if (!client.is_connected()) 
@@ -467,10 +699,10 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   return attrValue;
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) {
-  /* Creating the index based on key */
-  std::string entryName = "rgw-object:" + key + ":cache";
-  int result = -1;
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
+  int result = 0;
     
   if (!client.is_connected()) 
     return ECONNREFUSED;
