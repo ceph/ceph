@@ -142,16 +142,18 @@ class D4NFilterObject : public FilterObject {
 	    bool write_to_cache{true};
 
 	  public:
-	    D4NFilterGetCB(D4NFilterDriver* _filter, std::string& _oid, D4NFilterObject* _source) : filter(_filter), 
-									  oid(_oid), 
-								          source(_source) {}
+	    D4NFilterGetCB(D4NFilterDriver* _filter, std::string& _oid, 
+		D4NFilterObject* _source) : filter(_filter), 
+					    oid(_oid), 
+					    source(_source) {}
 
 	    const DoutPrefixProvider* save_dpp;
+	    optional_yield* save_y;
 
 	    int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
 	    void set_client_cb(RGWGetDataCB* client_cb) { this->client_cb = client_cb;}
 	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
-	    int flush_last_part(const DoutPrefixProvider* dpp);
+	    int flush_last_part(const DoutPrefixProvider* dpp, optional_yield y);
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
 
@@ -234,16 +236,17 @@ class D4NFilterWriter : public FilterWriter {
     D4NFilterDriver* driver; 
     const DoutPrefixProvider* save_dpp;
     bool atomic;
+    optional_yield y;
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
-	const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), _obj),
-					  driver(_driver),
-					  save_dpp(_dpp), atomic(false) {}
+	const DoutPrefixProvider* _dpp, optional_yield _y) : FilterWriter(std::move(_next), _obj),
+							     driver(_driver),
+							     save_dpp(_dpp), atomic(false), y(_y) {}
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
-	const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), _obj),
-							driver(_driver),
-							save_dpp(_dpp), atomic(_atomic) {}
+	const DoutPrefixProvider* _dpp, bool _atomic, optional_yield _y) : FilterWriter(std::move(_next), _obj),
+									   driver(_driver),
+									   save_dpp(_dpp), atomic(_atomic), y(_y) {}
     virtual ~D4NFilterWriter() = default;
 
     virtual int prepare(optional_yield y);
