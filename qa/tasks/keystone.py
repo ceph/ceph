@@ -326,25 +326,26 @@ def dict_to_args(specials, items):
     args.extend(arg for arg in special_vals.values() if arg)
     return args
 
+def os_auth_args(host, port):
+    return [
+        '--os-username', 'admin',
+        '--os-password', 'ADMIN',
+        '--os-user-domain-id', 'default',
+        '--os-project-name', 'admin',
+        '--os-project-domain-id', 'default',
+        '--os-identity-api-version', '3',
+        '--os-auth-url', 'http://{host}:{port}/v3'.format(host=host, port=port),
+    ]
+
 def run_section_cmds(ctx, cclient, section_cmd, specials,
                      section_config_list):
     public_host, public_port = ctx.keystone.public_endpoints[cclient]
-
-    auth_section = [
-        ( 'os-username', 'admin' ),
-        ( 'os-password', 'ADMIN' ),
-        ( 'os-user-domain-id', 'default' ),
-        ( 'os-project-name', 'admin' ),
-        ( 'os-project-domain-id', 'default' ),
-        ( 'os-identity-api-version', '3' ),
-        ( 'os-auth-url', 'http://{host}:{port}/v3'.format(host=public_host,
-                                                          port=public_port) ),
-    ]
+    auth_args = os_auth_args(public_host, public_port)
 
     for section_item in section_config_list:
         run_in_keystone_venv(ctx, cclient,
-            [ 'openstack' ] + section_cmd.split() +
-            dict_to_args(specials, auth_section + list(section_item.items())) +
+            [ 'openstack' ] + section_cmd.split() + auth_args +
+            dict_to_args(specials, list(section_item.items())) +
             [ '--debug' ])
 
 def create_endpoint(ctx, cclient, service, url, adminurl=None):
