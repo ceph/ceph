@@ -13,6 +13,7 @@ from collections import namedtuple
 
 from mgr_module import CLIReadCommand, MgrModule, MgrStandbyModule, PG_STATES, Option, ServiceInfoT, HandleCommandResult, CLIWriteCommand
 from mgr_util import get_default_addr, profile_method, build_url
+from orchestrator import OrchestratorClientMixin, raise_if_exception, NoOrchestrator
 from rbd import RBD
 
 from typing import DefaultDict, Optional, Dict, Any, Set, cast, Tuple, Union, List, Callable
@@ -548,7 +549,7 @@ class MetricCollectionThread(threading.Thread):
         self.event.set()
 
 
-class Module(MgrModule):
+class Module(MgrModule, OrchestratorClientMixin):
     MODULE_OPTIONS = [
         Option(
             'server_addr',
@@ -599,6 +600,14 @@ class Module(MgrModule):
             min=400,
             max=599,
             runtime=True
+        ),
+        Option(
+            name='exclude_perf_counters',
+            type='bool',
+            default=True,
+            desc='Do not include perf-counters in the metrics output',
+            long_desc='Gathering perf-counters from a single Prometheus exporter can degrade ceph-mgr performance, especially in large clusters. Instead, Ceph-exporter daemons are now used by default for perf-counter gathering. This should only be disabled when no ceph-exporters are deployed.',
+            runtime=True
         )
     ]
 
@@ -637,6 +646,8 @@ class Module(MgrModule):
         _global_instance = self
         self.metrics_thread = MetricCollectionThread(_global_instance)
         self.health_history = HealthHistory(self)
+        self.modify_instance_id = self.get_orch_status() and self.get_module_option(
+            'exclude_perf_counters')
 
     def _setup_static_metrics(self) -> Dict[str, Metric]:
         metrics = {}
@@ -852,6 +863,12 @@ class Module(MgrModule):
             )
 
         return metrics
+
+    def get_orch_status(self) -> bool:
+        try:
+            return self.available()[0]
+        except NoOrchestrator:
+            return False
 
     def get_server_addr(self) -> str:
         """
@@ -1273,9 +1290,20 @@ class Module(MgrModule):
             )
 
         # Populate other servers metadata
+        # If orchestrator is available and ceph-exporter is running modify rgw instance id
+        # to match the one from exporter
+        if self.modify_instance_id:
+            daemons = raise_if_exception(self.list_daemons(daemon_type='rgw'))
+            for daemon in daemons:
+                self.metrics['rgw_metadata'].set(1,
+                                                 ('{}.{}'.format(str(daemon.daemon_type),
+                                                                 str(daemon.daemon_id)),
+                                                  str(daemon.hostname),
+                                                  str(daemon.version),
+                                                  str(daemon.daemon_id).split(".")[2]))
         for key, value in servers.items():
             service_id, service_type = key
-            if service_type == 'rgw':
+            if service_type == 'rgw' and not self.modify_instance_id:
                 hostname, version, name = value
                 self.metrics['rgw_metadata'].set(
                     1,
@@ -1620,26 +1648,10 @@ class Module(MgrModule):
                 self.metrics[path].set(health_metric['value'], labelvalues=(
                     health_metric['type'], daemon_name,))
 
-    @profile_method(True)
-    def collect(self) -> str:
-        # Clear the metrics before scraping
-        for k in self.metrics.keys():
-            self.metrics[k].clear()
-
-        self.get_health()
-        self.get_df()
-        self.get_osd_blocklisted_entries()
-        self.get_pool_stats()
-        self.get_fs()
-        self.get_osd_stats()
-        self.get_quorum_status()
-        self.get_mgr_status()
-        self.get_metadata_and_osd_status()
-        self.get_pg_status()
-        self.get_pool_repaired_objects()
-        self.get_num_objects()
-        self.get_all_daemon_health_metrics()
-
+    def get_perf_counters(self) -> None:
+        """
+        Get the perf counters for all daemons
+        """
         for daemon, counters in self.get_all_perf_counters().items():
             for path, counter_info in counters.items():
                 # Skip histograms, they are represented by long running avgs
@@ -1666,7 +1678,6 @@ class Module(MgrModule):
                             label_names,
                         )
                     self.metrics[_path].set(value, labels)
-
                     _path = path + '_count'
                     if _path not in self.metrics:
                         self.metrics[_path] = Metric(
@@ -1685,8 +1696,30 @@ class Module(MgrModule):
                             label_names,
                         )
                     self.metrics[path].set(value, labels)
-
         self.add_fixed_name_metrics()
+
+    @profile_method(True)
+    def collect(self) -> str:
+        # Clear the metrics before scraping
+        for k in self.metrics.keys():
+            self.metrics[k].clear()
+
+        self.get_health()
+        self.get_df()
+        self.get_osd_blocklisted_entries()
+        self.get_pool_stats()
+        self.get_fs()
+        self.get_osd_stats()
+        self.get_quorum_status()
+        self.get_mgr_status()
+        self.get_metadata_and_osd_status()
+        self.get_pg_status()
+        self.get_pool_repaired_objects()
+        self.get_num_objects()
+        self.get_all_daemon_health_metrics()
+
+        if not self.get_module_option('exclude_perf_counters'):
+            self.get_perf_counters()
         self.get_rbd_stats()
 
         self.get_collect_time_metrics()
