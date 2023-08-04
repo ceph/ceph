@@ -80,6 +80,13 @@ int RedisDriver::remove_partition_info(Partition& info)
   return partitions.erase(key);
 }
 
+auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<std::string>& resp, optional_yield y) {
+  assert(y); 
+  auto yield = y.get_yield_context();
+
+  return conn.async_exec(req, resp, yield[ec]);
+}
+
 bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
 {
   int result;
@@ -205,6 +212,10 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     partition_info.location += "/";
   }
 
+  // remove
+  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
+  addr.port = cct->_conf->rgw_d4n_port;
+
   if (addr.host == "" || addr.port == 0) {
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return EDESTADDRREQ;
@@ -216,21 +227,17 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
   
   conn.async_run(cfg, {}, net::detached);
 
-  // remove
-  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
-  addr.port = cct->_conf->rgw_d4n_port;
-
-  client.connect("127.0.0.1", 6379, nullptr);
+/*  client.connect("127.0.0.1", 6379, nullptr);
 
   if (!client.is_connected()) {
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Could not connect to redis cache endpoint." << dendl;
     return ECONNREFUSED;
-  }
+  }*/
 
   return 0;
 }
 
-int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) 
+int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -261,7 +268,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
   return insert_entry(dpp, key, 0, len); // why is offset necessarily 0? -Sam
 }
 
-int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) 
+int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   
@@ -302,7 +309,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
-int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data) 
+int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
 {
   std::string value;
   std::string entry = partition_info.location + key;
@@ -349,7 +356,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   return 0;
 }
 
-int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key) 
+int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -401,7 +408,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   }
 }
 
-int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -439,7 +446,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
-int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   if (attrs.empty())
     return -1;
@@ -477,7 +484,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
-int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
+int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -511,7 +518,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return 0;
 }
 
-int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) 
+int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -573,7 +580,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   return -2;
 }
 
-std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) 
+std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   std::string attrValue;
@@ -623,7 +630,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   return attrValue;
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal) 
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   int result = 0;
