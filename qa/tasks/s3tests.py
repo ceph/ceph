@@ -102,8 +102,31 @@ def create_users(ctx, config, s3tests_conf):
         conf = s3tests_conf[client]
         conf.setdefault('fixtures', {})
         conf['fixtures'].setdefault('bucket prefix', 'test-' + client + '-{random}-')
+
+        keystone_users = cconfig.get('keystone users', {})
         for section, user in users.items():
             _config_user(conf, section, '{user}.{client}'.format(user=user, client=client))
+
+            # for keystone users, read ec2 credentials into s3tests.conf instead
+            # of creating a local user
+            keystone_user = keystone_users.get(section)
+            if keystone_user:
+                project_name = keystone_user.pop('project')
+                creds = ctx.keystone.read_ec2_credentials(ctx, **keystone_user)
+                access = creds['Access']
+                secret = creds['Secret']
+                project_id = creds['Project ID']
+
+                conf[section]['access_key'] = access
+                conf[section]['secret_key'] = secret
+                conf[section]['user_id'] = project_id
+                conf[section]['display_name'] = project_name
+
+                log.debug('Using keystone user {kuser} credentials ({access} : {secret}) for {pname}:{pid} on {host}'.format(
+                    kuser=keystone_user['user'], access=access, secret=secret,
+                    pname=project_name, pid=project_id, host=client))
+                continue
+
             log.debug('Creating user {user} on {host}'.format(user=conf[section]['user_id'], host=client))
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
             client_with_id = daemon_type + '.' + client_id
@@ -189,6 +212,9 @@ def create_users(ctx, config, s3tests_conf):
     finally:
         for client in config.keys():
             for user in users.values():
+                # don't need to delete keystone users
+                if not user in keystone_users:
+                    continue
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
                 client_with_id = daemon_type + '.' + client_id
@@ -500,6 +526,31 @@ def task(ctx, config):
             client.0:
               cloudtier_tests: True
               rgw_server: client.0
+
+    To test against Keystone users with EC2 credentials::
+
+        tasks:
+        - ceph:
+        - rgw: [client.0 client.1]
+        - keystone:
+          client.0:
+            projects:
+              - name: myproject
+                description: my project
+            users:
+              - name: myuser
+                password: SECRET
+                project: myproject
+            ec2 credentials:
+              - project: myproject
+                user: myuser
+        - s3tests:
+            client.0:
+              keystone users:
+                s3 main:
+                  client: client.0
+                  project: myproject
+                  user: myuser
 
     """
     assert hasattr(ctx, 'rgw'), 's3tests must run after the rgw task'
