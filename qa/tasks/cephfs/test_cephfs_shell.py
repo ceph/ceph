@@ -839,6 +839,7 @@ class TestDF(TestCephFSShell):
         s = 'df test' * 14145016
         o = self.get_cephfs_shell_cmd_output("put - dumpfile", stdin=s)
         log.info("cephfs-shell output:\n{}".format(o))
+        sleep(20)
         self.validate_df("dumpfile")
 
 
