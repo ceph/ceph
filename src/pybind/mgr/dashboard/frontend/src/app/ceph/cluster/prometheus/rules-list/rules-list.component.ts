@@ -18,7 +18,7 @@ import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.s
 })
 export class RulesListComponent extends PrometheusListHelper implements OnInit {
   columns: CdTableColumn[];
-  expandedRow: PrometheusRule;
+  declare expandedRow: PrometheusRule;
   selection = new CdTableSelection();
 
   /**
