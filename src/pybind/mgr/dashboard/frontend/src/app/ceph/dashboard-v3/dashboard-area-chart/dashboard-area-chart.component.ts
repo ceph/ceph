@@ -40,90 +40,9 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
 
   chartDataUnits: string;
 
-  chartData: any = {
-    dataset: [
-      {
-        label: '',
-        data: [{ x: 0, y: 0 }],
-        tension: 0,
-        pointBackgroundColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
-        backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-blue'),
-        borderColor: this.cssHelper.propertyValue('chart-color-strong-blue')
-      },
-      {
-        label: '',
-        data: [],
-        tension: 0,
-        pointBackgroundColor: this.cssHelper.propertyValue('chart-color-orange'),
-        backgroundColor: this.cssHelper.propertyValue('chart-color-yellow'),
-        borderColor: this.cssHelper.propertyValue('chart-color-orange')
-      }
-    ]
-  };
+  chartData: any = {};
 
-  options: any = {
-    responsive: true,
-    maintainAspectRatio: false,
-    elements: {
-      point: {
-        radius: 0
-      }
-    },
-    legend: {
-      display: false
-    },
-    tooltips: {
-      intersect: false,
-      displayColors: true,
-      backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
-      callbacks: {
-        title: function (tooltipItem: any): any {
-          return tooltipItem[0].xLabel;
-        }
-      }
-    },
-    hover: {
-      intersect: false
-    },
-    scales: {
-      xAxes: [
-        {
-          display: false,
-          type: 'time',
-          gridLines: {
-            display: false
-          },
-          time: {
-            tooltipFormat: 'YYYY/MM/DD hh:mm:ss'
-          }
-        }
-      ],
-      yAxes: [
-        {
-          gridLines: {
-            display: false
-          },
-          ticks: {
-            beginAtZero: true,
-            maxTicksLimit: 3,
-            callback: (value: any) => {
-              if (value === 0) {
-                return null;
-              }
-              return this.fillString(this.convertUnits(value));
-            }
-          }
-        }
-      ]
-    },
-    plugins: {
-      borderArea: true,
-      chartAreaBorder: {
-        borderColor: this.cssHelper.propertyValue('chart-color-slight-dark-gray'),
-        borderWidth: 2
-      }
-    }
-  };
+  options: any = {};
 
   public chartAreaBorderPlugin: PluginServiceGlobalRegistrationAndOptions[] = [
     {
@@ -153,7 +72,92 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
     private dimlessPipe: DimlessPipe,
     private formatter: FormatterService,
     private numberFormatter: NumberFormatterService
-  ) {}
+  ) {
+    this.chartData = {
+      dataset: [
+        {
+          label: '',
+          data: [{ x: 0, y: 0 }],
+          tension: 0,
+          pointBackgroundColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
+          backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-blue'),
+          borderColor: this.cssHelper.propertyValue('chart-color-strong-blue')
+        },
+        {
+          label: '',
+          data: [],
+          tension: 0,
+          pointBackgroundColor: this.cssHelper.propertyValue('chart-color-orange'),
+          backgroundColor: this.cssHelper.propertyValue('chart-color-yellow'),
+          borderColor: this.cssHelper.propertyValue('chart-color-orange')
+        }
+      ]
+    };
+
+    this.options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      elements: {
+        point: {
+          radius: 0
+        }
+      },
+      legend: {
+        display: false
+      },
+      tooltips: {
+        intersect: false,
+        displayColors: true,
+        backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
+        callbacks: {
+          title: function (tooltipItem: any): any {
+            return tooltipItem[0].xLabel;
+          }
+        }
+      },
+      hover: {
+        intersect: false
+      },
+      scales: {
+        xAxes: [
+          {
+            display: false,
+            type: 'time',
+            gridLines: {
+              display: false
+            },
+            time: {
+              tooltipFormat: 'YYYY/MM/DD hh:mm:ss'
+            }
+          }
+        ],
+        yAxes: [
+          {
+            gridLines: {
+              display: false
+            },
+            ticks: {
+              beginAtZero: true,
+              maxTicksLimit: 3,
+              callback: (value: any) => {
+                if (value === 0) {
+                  return null;
+                }
+                return this.fillString(this.convertUnits(value));
+              }
+            }
+          }
+        ]
+      },
+      plugins: {
+        borderArea: true,
+        chartAreaBorder: {
+          borderColor: this.cssHelper.propertyValue('chart-color-slight-dark-gray'),
+          borderWidth: 2
+        }
+      }
+    };
+  }
 
   ngOnChanges(): void {
     this.updateChartData();
