@@ -75,6 +75,12 @@ void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size)
     rs_before = std::prev(rs_after);
   }
 
+  // It is illegal if region before is in collision with new region
+  ceph_assert(rs_before == range_tree.end() || rs_before->second <= start);
+  // It is illegal if region after is in collision with new region
+  // the below assertion seems to be necessary, but in fact it only check upper_bound()
+  ceph_assert(rs_after == range_tree.end() || end <= rs_after->first);
+
   bool merge_before = (rs_before != range_tree.end() && rs_before->second == start);
   bool merge_after = (rs_after != range_tree.end() && rs_after->first == end);
 
