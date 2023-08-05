@@ -163,7 +163,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
       fields: [
         {
           type: 'text',
-          name: 'volumeName',
+          name: 'name',
           value: selectedVolume,
           label: $localize`Name`,
           required: true
@@ -171,7 +171,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
       ],
       submitButtonText: $localize`Edit Volume`,
       onSubmit: (values: any) => {
-        this.cephfsService.rename(selectedVolume, values.volumeName).subscribe(() => {
+        this.cephfsService.rename(selectedVolume, values.name).subscribe(() => {
           this.notificationService.show(
             NotificationType.success,
             $localize`Updated Volume '${selectedVolume}'`
