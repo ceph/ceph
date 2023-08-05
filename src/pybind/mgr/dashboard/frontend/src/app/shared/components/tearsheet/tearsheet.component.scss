@@ -56,8 +56,6 @@
   background-color: var(--cds-background);
   border-block-end: 1px solid var(--cds-border-subtle-01);
   fill: var(--cds-icon-primary);
-  fill: var(--cds-icon-primary);
-  padding: var(--cds-spacing-06) var(--cds-spacing-07);
   padding: var(--cds-spacing-06) var(--cds-spacing-07);
 
   &-title {
@@ -66,7 +64,6 @@
 
   &-description {
     color: var(--cds-text-secondary);
-    margin-top: var(--cds-spacing-04);
     margin-top: var(--cds-spacing-04);
   }
 
@@ -79,10 +76,7 @@
 // BODY
 .tearsheet-body {
   height: 100%;
-  height: 100%;
   margin: 0;
-  margin: 0;
-  padding: 0;
   padding: 0;
   padding-block: 0;
   padding-inline: 0;
