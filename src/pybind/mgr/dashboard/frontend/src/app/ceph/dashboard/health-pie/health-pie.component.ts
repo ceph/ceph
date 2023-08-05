@@ -42,64 +42,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
   @Output()
   prepareFn = new EventEmitter();
 
-  chartConfig: any = {
-    chartType: 'doughnut',
-    dataset: [
-      {
-        label: null,
-        borderWidth: 0
-      }
-    ],
-    colors: [
-      {
-        backgroundColor: [
-          this.cssHelper.propertyValue('chart-color-green'),
-          this.cssHelper.propertyValue('chart-color-yellow'),
-          this.cssHelper.propertyValue('chart-color-orange'),
-          this.cssHelper.propertyValue('chart-color-red'),
-          this.cssHelper.propertyValue('chart-color-blue')
-        ]
-      }
-    ],
-    options: {
-      cutoutPercentage: 90,
-      events: ['click', 'mouseout', 'touchstart'],
-      legend: {
-        display: true,
-        position: 'right',
-        labels: {
-          boxWidth: 10,
-          usePointStyle: false
-        }
-      },
-      plugins: {
-        center_text: true
-      },
-      tooltips: {
-        enabled: true,
-        displayColors: false,
-        backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
-        cornerRadius: 0,
-        bodyFontSize: 14,
-        bodyFontStyle: '600',
-        position: 'nearest',
-        xPadding: 12,
-        yPadding: 12,
-        callbacks: {
-          label: (item: Record<string, any>, data: Record<string, any>) => {
-            let text = data.labels[item.index];
-            if (!text.includes('%')) {
-              text = `${text} (${data.datasets[item.datasetIndex].data[item.index]}%)`;
-            }
-            return text;
-          }
-        }
-      },
-      title: {
-        display: false
-      }
-    }
-  };
+  chartConfig: any = {};
 
   public doughnutChartPlugins: PluginServiceGlobalRegistrationAndOptions[] = [
     {
@@ -139,7 +82,66 @@ export class HealthPieComponent implements OnChanges, OnInit {
     private dimlessBinary: DimlessBinaryPipe,
     private dimless: DimlessPipe,
     private cssHelper: CssHelper
-  ) {}
+  ) {
+    this.chartConfig = {
+      chartType: 'doughnut',
+      dataset: [
+        {
+          label: null,
+          borderWidth: 0
+        }
+      ],
+      colors: [
+        {
+          backgroundColor: [
+            this.cssHelper.propertyValue('chart-color-green'),
+            this.cssHelper.propertyValue('chart-color-yellow'),
+            this.cssHelper.propertyValue('chart-color-orange'),
+            this.cssHelper.propertyValue('chart-color-red'),
+            this.cssHelper.propertyValue('chart-color-blue')
+          ]
+        }
+      ],
+      options: {
+        cutoutPercentage: 90,
+        events: ['click', 'mouseout', 'touchstart'],
+        legend: {
+          display: true,
+          position: 'right',
+          labels: {
+            boxWidth: 10,
+            usePointStyle: false
+          }
+        },
+        plugins: {
+          center_text: true
+        },
+        tooltips: {
+          enabled: true,
+          displayColors: false,
+          backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
+          cornerRadius: 0,
+          bodyFontSize: 14,
+          bodyFontStyle: '600',
+          position: 'nearest',
+          xPadding: 12,
+          yPadding: 12,
+          callbacks: {
+            label: (item: Record<string, any>, data: Record<string, any>) => {
+              let text = data.labels[item.index];
+              if (!text.includes('%')) {
+                text = `${text} (${data.datasets[item.datasetIndex].data[item.index]}%)`;
+              }
+              return text;
+            }
+          }
+        },
+        title: {
+          display: false
+        }
+      }
+    };
+  }
 
   ngOnInit() {
     const getStyleTop = (tooltip: any, positionY: number) => {
