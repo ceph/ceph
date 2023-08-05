@@ -1,11 +1,10 @@
 {
-  "extends": "stylelint-config-sass-guidelines",
-  "plugins": [
-    "stylelint-declaration-use-variable"
+  "extends": [
+    "stylelint-config-standard"
   ],
+  "plugins": ["stylelint-scss"],
+  "customSyntax": "postcss-scss",
   "rules": {
-    "function-parentheses-space-inside": null,
-    "indentation": null,
     "selector-no-qualifying-type": null,
     "selector-class-pattern": null,
     "selector-pseudo-element-no-unknown": null,
@@ -13,31 +12,37 @@
     "selector-max-compound-selectors": null,
     "scss/at-extend-no-missing-placeholder": null,
     "max-nesting-depth": null,
-    "scss/at-import-partial-extension-blacklist": null,
+    "scss/at-import-partial-extension": null,
     "value-no-vendor-prefix": null,
     "scss/dollar-variable-pattern": [
       "^([a-z][a-z0-9]*)(-[a-z0-9]+)*$",
       "message": "Variable name should be written in lower kebab-case (scss/dollar-variable-pattern)"
-    ],
-    "sh-waqar/declaration-use-variable": [
-      [
-        "/color/",
-        {
-          "ignoreValues": [
-            "inherit",
-            "initial",
-            "transparent",
-            "/darken/",
-            "/\\w+\\.\\$.+/"
-          ]
-        }
-      ]
     ],
     "property-no-unknown": [
       true,
       {
         "ignoreSelectors": [":export"]
       }
-    ]
+    ],
+    "no-empty-source": null,
+    "at-rule-no-unknown": [
+      true,
+      {
+        "ignoreAtRules": ["use", "forward", "mixin", "include", "if", "else", "function", "return", "each", "extend"]
+      }
+    ],
+    "color-function-alias-notation": "with-alpha",
+    "color-function-notation": "legacy",
+    "keyframe-selector-notation": null,
+    "font-family-name-quotes": "always-unless-keyword",
+    "declaration-block-no-redundant-longhand-properties": null,
+    "font-family-no-missing-generic-family-keyword": null,
+    "no-descending-specificity": null,
+    "media-query-no-invalid": null,
+    "no-invalid-double-slash-comments": null,
+    "declaration-property-value-no-unknown": null,
+    "no-invalid-position-at-import-rule": null,
+    "annotation-no-unknown": null,
+    "import-notation": null
   }
 }

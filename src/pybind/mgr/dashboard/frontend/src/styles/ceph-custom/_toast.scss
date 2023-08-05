@@ -3,7 +3,7 @@
 #toast-container {
   margin-top: 2vw;
 
-  @media (max-width: 1600px) {
+  @media (width <= 1600px) {
     margin-top: 2.5vw;
   }
 
@@ -11,15 +11,15 @@
     margin-top: 9vw;
   }
 
-  @media (max-width: 900px) {
+  @media (width <= 900px) {
     margin-top: 10vw;
   }
 
-  @media (max-width: 319px) {
+  @media (width <= 319px) {
     margin-top: 11vw;
   }
 
-  @media (max-width: 260px) {
+  @media (width <= 260px) {
     margin-top: 14vw;
   }
 }
