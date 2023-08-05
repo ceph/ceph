@@ -14,6 +14,7 @@
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "global/global_init.h"
+#include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
@@ -292,7 +293,7 @@ void AllocTest::doAgingTest(
     cnt++;
     sum+=len;
   };
-  alloc->dump(list_free);
+  alloc->foreach(list_free);
   ASSERT_EQ(sum, capacity);
   if (verbose)
     std::cout << "free chunks sum=" << sum << " free chunks count=" << cnt << std::endl;
@@ -308,12 +309,7 @@ void AllocTest::doAgingTest(
 
 void AllocTest::SetUpTestSuite()
 {
-  vector<const char*> args;
-  cct = global_init(NULL, args,
-		    CEPH_ENTITY_TYPE_CLIENT,
-		    CODE_ENVIRONMENT_UTILITY,
-		    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(cct.get());
+  cct = g_ceph_context;
 }
 
 void AllocTest::TearDown()
@@ -460,4 +456,20 @@ TEST_P(AllocTest, test_bonus_empty_fragmented)
 INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
-  ::testing::Values("stupid", "bitmap", "avl", "btree"));
+  ::testing::Values("stupid", "bitmap", "avl", "btree", "hybrid"));
+
+
+int main(int argc, char **argv) {
+  auto args = argv_to_vec(argc, argv);
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  common_init_finish(g_ceph_context);
+  g_ceph_context->_conf.set_val(
+    "enable_experimental_unrecoverable_data_corrupting_features",
+    "");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
