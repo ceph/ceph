@@ -210,10 +210,11 @@ private:
     }
     void write_header(int width_, int height_) {
       width = width_, height = height_;
-      o << "P3\n" << fmt::format("{} {}\n", width, height) << "255\n";
+      o << fmt::format("P6\n{} {}\n255\n", width, height);
     }
     void write_pixel(uint8_t red, uint8_t green, uint8_t blue) {
-      o << fmt::format("{} {} {}\n", red, green, blue);
+      unsigned char buf[] = {red, green, blue};
+      o.write((char *)buf, sizeof(buf));
     }
     ~ImageGenerator() = default;
 
