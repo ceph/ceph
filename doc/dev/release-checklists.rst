@@ -138,5 +138,5 @@ First stable release
 ====================
 
 - [x] src/ceph_release: change type `stable`
-- [ ] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
+- [x] generate new object corpus for encoding/decoding tests - see :doc:`corpus`
 - [ ] src/cephadm/cephadm: update `LATEST_STABLE_RELEASE`
