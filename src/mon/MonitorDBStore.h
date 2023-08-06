@@ -604,6 +604,14 @@ class MonitorDBStore
     return combine_strings(prefix, os.str());
   }
 
+  int clear_key(const std::string& prefix, const std::string& key) {
+    ceph_assert(!prefix.empty());
+    ceph_assert(!key.empty());
+    KeyValueDB::Transaction dbt = db->get_transaction();
+    dbt->rmkey(prefix, key);
+    return db->submit_transaction_sync(dbt);
+  }
+
   void clear(std::set<std::string>& prefixes) {
     KeyValueDB::Transaction dbt = db->get_transaction();
 

@@ -211,6 +211,7 @@ void usage(const char *n, po::options_description &d)
   << "  get crushmap [-- options]       get crushmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
   << "  get-key PREFIX KEY [-- options] get key\n"
+  << "  remove-key PREFIX KEY           remove key\n"
   << "  show-versions [-- options]      show the first&last committed version of map\n"
   << "                                  (show-versions -- --help for more info)\n"
   << "  dump-keys                       dumps store keys to FILE\n"
@@ -1410,6 +1411,32 @@ int main(int argc, char **argv) {
     err = rewrite_crush(argv[0], subcmds, st);
   } else if (cmd == "rebuild") {
     err = rebuild_monstore(argv[0], subcmds, st);
+  } else if (cmd == "remove-key") {
+    string prefix, key;
+    // No visible options for this command
+    po::options_description op_desc("Allowed 'get' options");
+    po::options_description hidden_op_desc("Hidden 'get' options");
+    hidden_op_desc.add_options()
+      ("prefix", po::value<string>(&prefix),"prefix")
+      ("key", po::value<string>(&key),"key")
+      ;
+    po::positional_options_description op_positional;
+    op_positional.add("prefix", 1);
+    op_positional.add("key", 1);
+
+    po::variables_map op_vm;
+    int r = parse_cmd_args(&op_desc, &hidden_op_desc, &op_positional,
+                           subcmds, &op_vm);
+    if (r < 0) {
+      return -r;
+    }
+    r = st.clear_key(prefix, key);
+    if (r < 0) {
+      std::cerr << "error removing ("
+                << prefix << "," << key << ")"
+                << std::endl;
+      return r;
+    }
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     usage(argv[0], desc);
