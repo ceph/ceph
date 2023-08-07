@@ -11,6 +11,19 @@ import { UpgradeInfoInterface } from '../models/upgrade.interface';
 export class UpgradeService extends ApiClient {
   baseURL = 'api/cluster/upgrade';
 
+  upgradableServiceTypes = [
+    'mgr',
+    'mon',
+    'crash',
+    'osd',
+    'mds',
+    'rgw',
+    'rbd-mirror',
+    'cephfs-mirror',
+    'iscsi',
+    'nfs'
+  ];
+
   constructor(private http: HttpClient, private summaryService: SummaryService) {
     super();
   }
@@ -38,7 +51,7 @@ export class UpgradeService extends ApiClient {
         cVersion[0] === tVersion[0] && (cVersion[1] < tVersion[1] || cVersion[2] < tVersion[2])
       );
     });
-    upgradeInfo.versions = upgradableVersions;
+    upgradeInfo.versions = upgradableVersions.sort();
     return upgradeInfo;
   }
 

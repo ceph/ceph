@@ -6,13 +6,14 @@ import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { SharedModule } from '~/app/shared/shared.module';
+import { ToastrModule } from 'ngx-toastr';
 
 describe('UpgradeComponent', () => {
   let component: UpgradeComponent;
   let fixture: ComponentFixture<UpgradeComponent>;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, SharedModule],
+    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot()],
     schemas: [NO_ERRORS_SCHEMA],
     declarations: [UpgradeComponent],
     providers: [UpgradeService]

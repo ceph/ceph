@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-from typing import Optional
+from typing import List, Optional
 
 from ..exceptions import DashboardException
 from ..security import Scope
@@ -31,3 +31,19 @@ class Daemon(RESTController):
         orch = OrchClient.instance()
         res = orch.daemons.action(action=action, daemon_name=daemon_name, image=container_image)
         return res
+
+    @raise_if_no_orchestrator([OrchFeature.DAEMON_LIST])
+    @handle_orchestrator_error('daemon')
+    @RESTController.MethodMap(version=APIVersion.DEFAULT)
+    def list(self, daemon_types: Optional[List[str]] = None):
+        """List all daemons in the cluster. Also filter by the daemon types specified
+
+        :param daemon_types: List of daemon types to filter by.
+        :return: Returns list of daemons.
+        :rtype: list
+        """
+        orch = OrchClient.instance()
+        daemons = [d.to_dict() for d in orch.services.list_daemons()]
+        if daemon_types:
+            daemons = [d for d in daemons if d['daemon_type'] in daemon_types]
+        return daemons

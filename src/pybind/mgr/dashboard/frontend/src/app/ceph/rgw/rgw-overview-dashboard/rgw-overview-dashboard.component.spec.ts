@@ -5,8 +5,6 @@ import { of } from 'rxjs';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwDaemon } from '../models/rgw-daemon';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { CardComponent } from '../../dashboard-v3/card/card.component';
-import { CardRowComponent } from '../../dashboard-v3/card-row/card-row.component';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
@@ -14,6 +12,9 @@ import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { HealthService } from '~/app/shared/api/health.service';
+import { CardRowComponent } from '~/app/shared/components/card-row/card-row.component';
+import { CardComponent } from '~/app/shared/components/card/card.component';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 describe('RgwOverviewDashboardComponent', () => {
   let component: RgwOverviewDashboardComponent;
@@ -134,6 +135,7 @@ describe('RgwOverviewDashboardComponent', () => {
         CardRowComponent,
         DimlessBinaryPipe
       ],
+      schemas: [NO_ERRORS_SCHEMA],
       imports: [HttpClientTestingModule]
     }).compileComponents();
   });
