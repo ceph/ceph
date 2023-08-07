@@ -15,11 +15,8 @@ export class CheckedTableFormComponent implements OnInit {
   @Input() inputField: string;
   @Input() scopes: Array<string> = [];
   @Input() isTableForOctalMode = false;
-  @Input() initialValue: any = {
-    owner: ['read', 'write', 'execute'],
-    group: ['read', 'execute'],
-    others: ['read', 'execute']
-  };
+  @Input() initialValue = {};
+  @Input() isDisabled = false;
 
   @ViewChild('headerPermissionCheckboxTpl', { static: true })
   headerPermissionCheckboxTpl: TemplateRef<any>;

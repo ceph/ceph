@@ -17,6 +17,7 @@
            id="scope_{{ row.scope }}"
            type="checkbox"
            [checked]="isRowChecked(row.scope)"
+           [disabled]="isDisabled"
            (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
     <label class="datatable-permissions-scope-cell-label custom-control-label"
            for="scope_{{ row.scope }}">{{ value }}</label>
@@ -31,6 +32,7 @@
     <input class="custom-control-input"
            type="checkbox"
            [checked]="value"
+           [disabled]="isDisabled"
            [id]="row.scope + '-' + column.prop"
            (change)="onClickCellCheckbox(row.scope, column.prop, $event)">
     <label class="custom-control-label"
@@ -44,6 +46,7 @@
     <input class="custom-control-input"
            id="header_{{ column.prop }}"
            type="checkbox"
+           [disabled]="isDisabled"
            [checked]="isHeaderChecked(column.prop)"
            (change)="onClickHeaderCheckbox(column.prop, $event)">
     <label class="datatable-permissions-header-cell-label custom-control-label"
