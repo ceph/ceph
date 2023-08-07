@@ -72,6 +72,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     end: moment().unix(),
     step: 12
   };
+  origin = window.location.origin;
 
   constructor(
     private summaryService: SummaryService,
