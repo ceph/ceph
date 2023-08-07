@@ -127,7 +127,7 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 
 int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y)
 {
-    if (key_exists(dpp, key)) {
+    if (key_exists(dpp, key, y)) {
         return 0;
     }
 
@@ -164,7 +164,7 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
 
 int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y)
 {
-    if (!key_exists(dpp, key)) {
+    if (!key_exists(dpp, key, y)) {
         return -ENOENT;
     }
 
