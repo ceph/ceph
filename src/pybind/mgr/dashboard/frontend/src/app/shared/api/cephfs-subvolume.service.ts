@@ -21,7 +21,7 @@ export class CephfsSubvolumeService {
     fsName: string,
     subVolumeName: string,
     poolName: string,
-    size: number,
+    size: string,
     uid: number,
     gid: number,
     mode: string,
@@ -61,5 +61,12 @@ export class CephfsSubvolumeService {
         return of(false);
       })
     );
+  }
+
+  update(fsName: string, subVolumeName: string, size: string) {
+    return this.http.put(`${this.baseURL}/${fsName}`, {
+      subvol_name: subVolumeName,
+      size: size
+    });
   }
 }
