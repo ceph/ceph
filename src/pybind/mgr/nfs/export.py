@@ -686,6 +686,8 @@ class ExportMgr:
             if not check_fs(self.mgr, fs_name):
                 raise FSNotFound(fs_name)
 
+            validate_cephfs_path(self.mgr, fs_name, path)
+
             user_id = f"nfs.{cluster_id}.{ex_id}"
             if "user_id" in fsal and fsal["user_id"] != user_id:
                 raise NFSInvalidOperation(f"export FSAL user_id must be '{user_id}'")
