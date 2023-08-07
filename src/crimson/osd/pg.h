@@ -697,6 +697,9 @@ public:
     ceph_tid_t rep_tid);
   seastar::future<> clear_temp_objects();
 
+  interruptible_future<> handle_rep_write_op(Ref<MOSDECSubOpWrite>);
+  interruptible_future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
+
 private:
 
   struct BackgroundProcessLock {
