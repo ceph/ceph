@@ -5995,6 +5995,13 @@ void watch_info_t::dump(Formatter *f) const
   f->close_section();
 }
 
+std::string watch_info_t::fmt_print() const
+{
+  return fmt::format(
+      "watch(cookie {} {}s {})", cookie, timeout_seconds, addr);
+}
+
+
 void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
 {
   o.push_back(new watch_info_t);
