@@ -5519,11 +5519,11 @@ struct SnapSet {
 
   /// get space accounted to clone
   uint64_t get_clone_bytes(snapid_t clone) const;
-    
+
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapSet*>& o);  
+  static void generate_test_instances(std::list<SnapSet*>& o);
 
   SnapContext get_ssc_as_of(snapid_t as_of) const {
     SnapContext out;
@@ -5564,6 +5564,7 @@ struct watch_info_t {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
+  std::string fmt_print() const;
   static void generate_test_instances(std::list<watch_info_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(watch_info_t)
@@ -5574,8 +5575,7 @@ static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
 }
 
 static inline std::ostream& operator<<(std::ostream& out, const watch_info_t& w) {
-  return out << "watch(cookie " << w.cookie << " " << w.timeout_seconds << "s"
-    << " " << w.addr << ")";
+  return out << w.fmt_print();
 }
 
 struct notify_info_t {
