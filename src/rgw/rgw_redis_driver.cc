@@ -69,7 +69,7 @@ auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request
   return conn.async_exec(req, resp, yield[ec]);
 }
 
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
+bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   response<int> resp;
@@ -235,7 +235,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 {
   std::string entry = partition_info.location + key;
   
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     /* Retrieve existing values from cache */
     try {
       boost::system::error_code ec;
@@ -273,7 +273,7 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, opti
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     try {
       boost::system::error_code ec;
       response<int> resp;
@@ -299,7 +299,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   std::string value;
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     try {
       boost::system::error_code ec;
       response<std::string> resp;
@@ -342,7 +342,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     response<int> resp;
 
     try {
@@ -386,7 +386,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     try {
       boost::system::error_code ec;
       response< std::map<std::string, std::string> > resp;
@@ -424,7 +424,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
       
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     /* Every attr set will be treated as new */
     try {
       boost::system::error_code ec;
@@ -455,7 +455,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     try {
       boost::system::error_code ec;
       response<std::string> resp;
@@ -484,7 +484,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     try {
       boost::system::error_code ec;
       response<int> resp;
@@ -512,7 +512,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   std::string entry = partition_info.location + key;
   response<std::string> value;
 
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     response<int> resp;
 
     /* Ensure field was set */
@@ -560,7 +560,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   std::string entry = partition_info.location + key;
   response<int> resp;
     
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     /* Every attr set will be treated as new */
     try {
       boost::system::error_code ec;
