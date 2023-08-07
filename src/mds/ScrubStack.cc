@@ -67,6 +67,11 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
       dout(10) << __func__ << " with {" << *in << "}" << ", already in scrubbing" << dendl;
       return -CEPHFS_EBUSY;
     }
+    if(in->state_test(CInode::STATE_PURGING)) {
+      dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
+      // treating this as success since purge will make sure this inode goes away
+      return 0;
+    }
 
     dout(10) << __func__ << " with {" << *in << "}" << ", top=" << top << dendl;
     in->scrub_initialize(header);
@@ -74,6 +79,11 @@ int ScrubStack::_enqueue(MDSCacheObject *obj, ScrubHeaderRef& header, bool top)
     if (dir->scrub_is_in_progress()) {
       dout(10) << __func__ << " with {" << *dir << "}" << ", already in scrubbing" << dendl;
       return -CEPHFS_EBUSY;
+    }
+    if(dir->get_inode()->state_test(CInode::STATE_PURGING)) {
+      dout(10) << *obj << " is purging, skip pushing into scrub stack" << dendl;
+      // treating this as success since purge will make sure this dir inode goes away
+      return 0;
     }
 
     dout(10) << __func__ << " with {" << *dir << "}" << ", top=" << top << dendl;
@@ -109,7 +119,20 @@ int ScrubStack::enqueue(CInode *in, ScrubHeaderRef& header, bool top)
 	     << ", conflicting tag " << header->get_tag() << dendl;
     return -CEPHFS_EEXIST;
   }
-
+  if (header->get_scrub_mdsdir()) {
+    filepath fp;
+    mds_rank_t rank;
+    rank = mdcache->mds->get_nodeid();
+    if(rank >= 0 && rank < MAX_MDS) {
+      fp.set_path("", MDS_INO_MDSDIR(rank));
+    }
+    int r = _enqueue(mdcache->get_inode(fp.get_ino()), header, true);
+    if (r < 0) {
+      return r;
+    }
+    //to make sure mdsdir is always on the top
+    top = false;
+  }
   int r = _enqueue(in, header, top);
   if (r < 0)
     return r;
@@ -673,6 +696,12 @@ void ScrubStack::scrub_status(Formatter *f) {
       }
       *optcss << "force";
     }
+    if (header->get_scrub_mdsdir()) {
+      if (have_more) {
+        *optcss << ",";
+      }
+      *optcss << "scrub_mdsdir";
+    }
 
     f->dump_string("options", optcss->strv());
     f->close_section(); // scrub id
@@ -835,6 +864,18 @@ void ScrubStack::dispatch(const cref_t<Message> &m)
     derr << " scrub stack unknown message " << m->get_type() << dendl_impl;
     ceph_abort_msg("scrub stack unknown message");
   }
+}
+
+bool ScrubStack::remove_inode_if_stacked(CInode *in) {
+  MDSCacheObject *obj = dynamic_cast<MDSCacheObject*>(in);
+  if(obj->item_scrub.is_on_list()) {
+    dout(20) << "removing inode " << *in << " from scrub_stack" << dendl;
+    obj->put(MDSCacheObject::PIN_SCRUBQUEUE);
+    obj->item_scrub.remove_myself();
+    stack_size--;
+    return true;
+  }
+  return false;
 }
 
 void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)

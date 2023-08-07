@@ -13010,7 +13010,7 @@ void MDCache::enqueue_scrub(
     std::string_view path,
     std::string_view tag,
     bool force, bool recursive, bool repair,
-    Formatter *f, Context *fin)
+    bool scrub_mdsdir, Formatter *f, Context *fin)
 {
   dout(10) << __func__ << " " << path << dendl;
 
@@ -13044,7 +13044,8 @@ void MDCache::enqueue_scrub(
   }
 
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
-  cs->header = std::make_shared<ScrubHeader>(tag_str, is_internal, force, recursive, repair);
+  cs->header = std::make_shared<ScrubHeader>(tag_str, is_internal, force,
+                                             recursive, repair, scrub_mdsdir);
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
