@@ -21,6 +21,7 @@ security fixes.
    :maxdepth: 1
    :hidden:
 
+   Reef (v18.2.*) <reef>
    Quincy (v17.2.*) <quincy>
    Pacific (v16.2.*) <pacific>
 
@@ -58,8 +59,11 @@ receive bug fixes or backports).
 Release timeline
 ----------------
 
-.. ceph_timeline_gantt:: releases.yml quincy pacific
-.. ceph_timeline:: releases.yml quincy pacific
+.. ceph_timeline_gantt:: releases.yml reef quincy 
+.. ceph_timeline:: releases.yml reef quincy 
+
+.. _Reef: reef
+.. _18.2.0: reef#v18-2-0-reef
 
 .. _Quincy: quincy
 .. _17.2.0: quincy#v17-2-0-quincy
