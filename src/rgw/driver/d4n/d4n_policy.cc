@@ -267,7 +267,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 
   int age = get_age();
 
-  if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */ 
+  if (cacheNode->key_exists(dpp, block->cacheObj.objName, y)) { /* Local copy */ 
     localWeight += age;
   } else {
     std::string hosts;
