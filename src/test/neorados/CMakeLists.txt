@@ -41,3 +41,51 @@ target_link_libraries(ceph_test_neorados_handler_error
 install(TARGETS
   ceph_test_neorados_handler_error
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_cls
+  cls.cc
+  )
+target_link_libraries(ceph_test_neorados_cls
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_cls
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_cmd
+  cmd.cc
+  )
+target_link_libraries(ceph_test_neorados_cmd
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_cmd
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_read_operations
+  read_operations.cc
+  )
+target_link_libraries(ceph_test_neorados_read_operations
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_read_operations
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
