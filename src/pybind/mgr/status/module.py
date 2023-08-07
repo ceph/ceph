@@ -336,8 +336,8 @@ class Module(MgrModule):
                 stats = osd_stats[osd_id]
                 assert metadata
                 hostname = metadata['hostname']
-                kb_used = stats['kb_used'] * 1024
-                kb_avail = stats['kb_avail'] * 1024
+                kb_used = stats['kb_used']
+                kb_avail = stats['kb_avail']
 
             wr_ops_rate = (self.get_rate("osd", osd_id.__str__(), "osd.op_w") +
                            self.get_rate("osd", osd_id.__str__(), "osd.op_rw"))
@@ -345,8 +345,8 @@ class Module(MgrModule):
             rd_ops_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_r")
             rd_byte_rate = self.get_rate("osd", osd_id.__str__(), "osd.op_out_bytes")
             osd_table.add_row([osd_id, hostname,
-                               mgr_util.format_bytes(kb_used, 5),
-                               mgr_util.format_bytes(kb_avail, 5),
+                               mgr_util.format_bytes(kb_used * 1024, 5),
+                               mgr_util.format_bytes(kb_avail * 1024, 5),
                                mgr_util.format_dimless(wr_ops_rate, 5),
                                mgr_util.format_bytes(wr_byte_rate, 5),
                                mgr_util.format_dimless(rd_ops_rate, 5),
