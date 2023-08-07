@@ -10,6 +10,9 @@
 
 #include <boost/redis/connection.hpp>
 
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
+
 namespace rgw { namespace cache { 
 
 class RedisDriver;
@@ -64,7 +67,7 @@ class RedisDriver : public CacheDriver {
     virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) override;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) override;
 
-    virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override { return nullptr; }
+    virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override { return std::make_unique<RedisCacheAioRequest>(this); }
 
     struct redis_response {
       boost::redis::response<std::string> resp;
@@ -76,7 +79,7 @@ class RedisDriver : public CacheDriver {
       std::shared_ptr<redis_response> s;
 
       /* Read Callback */
-      void operator()(boost::system::error_code ec, auto) const {
+      void operator()(auto ec, auto) const {
 	r.result = -ec.value();
 	r.data.append(std::get<0>(s->resp).value().c_str());
 	throttle->put(r);

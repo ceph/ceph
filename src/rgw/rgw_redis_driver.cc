@@ -668,7 +668,7 @@ static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& con
     auto ex = get_associated_executor(init.completion_handler);
 
     boost::redis::request req;
-    req.push("GETRANGE", key, read_ofs, read_ofs + read_len);
+    req.push("HGET", key, "data");
 
     // TODO: Make unique pointer once support is added
     auto s = std::make_shared<RedisDriver::redis_response>();
@@ -680,10 +680,11 @@ static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& con
 
 rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) 
 {
+  std::string entry = partition_info.location + key;
   rgw_raw_obj r_obj;
   r_obj.oid = key;
 
-  return aio->get(r_obj, redis_read_op(y, conn, ofs, len, key), cost, id);
+  return aio->get(r_obj, redis_read_op(y, conn, ofs, len, entry), cost, id);
 }
 
 } } // namespace rgw::cache

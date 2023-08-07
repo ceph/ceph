@@ -525,8 +525,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 
       if (source->driver->get_cache_driver()->get(dpp, oid, ofs, part_len, bl, source->get_attrs(), y) == 0) { 
         // Read From Cache
-        auto completed = aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, source->driver->get_cache_driver(), 
-			   read_ofs, len_to_read, oid), cost, id); 
+        auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid, read_ofs, len_to_read, cost, id); 
 
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid << dendl;
 
