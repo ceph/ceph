@@ -4,7 +4,7 @@ import { Pipe, PipeTransform } from '@angular/core';
   name: 'octalToHumanReadable'
 })
 export class OctalToHumanReadablePipe implements PipeTransform {
-  transform(value: number): any {
+  transform(value: number, toTableArray = false): any {
     if (!value) {
       return [];
     }
@@ -17,6 +17,14 @@ export class OctalToHumanReadablePipe implements PipeTransform {
     const owner = permissions[parseInt(digits[4])];
     const group = permissions[parseInt(digits[5])];
     const others = permissions[parseInt(digits[6])];
+
+    if (toTableArray) {
+      return {
+        owner: this.getItem(owner),
+        group: this.getItem(group),
+        others: this.getItem(others)
+      };
+    }
 
     if (fileType !== 'directory') {
       permissionSummary.push({
@@ -76,5 +84,13 @@ export class OctalToHumanReadablePipe implements PipeTransform {
       default:
         return '-';
     }
+  }
+
+  private getItem(item: string) {
+    const returnlist = [];
+    if (item.includes('r')) returnlist.push('read');
+    if (item.includes('w')) returnlist.push('write');
+    if (item.includes('x')) returnlist.push('execute');
+    return returnlist;
   }
 }
