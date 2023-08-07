@@ -107,7 +107,8 @@ class RedisDriver : public CacheDriver {
     int remove_entry(const DoutPrefixProvider* dpp, std::string key);
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
-    auto redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<std::string>& resp, optional_yield y);
+    template <typename T>
+    auto redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<T>& resp, optional_yield y);
 };
 
 } } // namespace rgw::cache

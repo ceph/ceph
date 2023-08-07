@@ -1,6 +1,5 @@
 #include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
-//#include <boost/asio/experimental/awaitable_operators.hpp>
 #include <boost/redis/src.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -62,7 +61,8 @@ int RedisDriver::remove_partition_info(Partition& info)
   return partitions.erase(key);
 }
 
-auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<std::string>& resp, optional_yield y) {
+template <typename T>
+auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<T>& resp, optional_yield y) {
   assert(y); 
   auto yield = y.get_yield_context();
 
@@ -75,26 +75,14 @@ bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& k
   response<int> resp;
 
   try {
-    boost::redis::config cfg;
-    cfg.addr.host = "127.0.0.1";
-    cfg.addr.port = "6379";
-
-    boost::asio::io_context io;
-    boost::redis::connection connect{io};
-    connect.async_run(cfg, {}, net::detached);
-
+    boost::system::error_code ec;
     request req;
-
     req.push("EXISTS", entry);
 
-    connect.async_exec(req, resp, [&](auto ec, auto) {
-       if (!ec)
-	  dout(0) << "RedisDriver key_exists: " << std::get<0>(resp).value() << dendl;
+    redis_exec(ec, req, resp, y);
 
-       connect.cancel();
-    });
-
-    io.run();
+    if (ec)
+      return false;
   } catch(std::exception &e) {}
 
   return std::get<0>(resp).value();
@@ -219,17 +207,8 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
 
   /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
   try {
-    boost::redis::config cfg;
-    cfg.addr.host = "127.0.0.1";
-    cfg.addr.port = "6379";
-
-    boost::asio::io_context io;
-    boost::redis::connection connect{io};
-    connect.async_run(cfg, {}, net::detached);
-
-    request req;
+    boost::system::error_code ec;
     response<std::string> resp;
-
     auto redisAttrs = build_attrs(&attrs);
 
     if (bl.length()) {
@@ -237,18 +216,12 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
       redisAttrs.push_back(bl.to_str());
     }
 
+    request req;
     req.push_range("HMSET", entry, redisAttrs);
 
-    connect.async_exec(req, resp, [&](auto ec, auto) {
-       if (!ec)
-	  dout(0) << "RedisDriver put: " << std::get<0>(resp).value() << dendl;
+    redis_exec(ec, req, resp, y);
 
-       connect.cancel();
-    });
-
-    io.run();
-
-    if (std::get<0>(resp).value() != "OK") {
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -265,27 +238,15 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   if (key_exists(dpp, key)) {
     /* Retrieve existing values from cache */
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
-      request req;
+      boost::system::error_code ec;
       response< std::map<std::string, std::string> > resp;
-
+      request req;
       req.push("HGETALL", entry);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver get: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return -1;
 
       for (auto const& it : std::get<0>(resp).value()) {
 	if (it.first == "data") {
@@ -308,33 +269,21 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
-int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key)
+int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
 {
   std::string entry = partition_info.location + key;
 
   if (key_exists(dpp, key)) {
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
-      request req;
+      boost::system::error_code ec;
       response<int> resp;
-
+      request req;
       req.push("DEL", entry);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver del: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return -1;
 
       return std::get<0>(resp).value() - 1; 
     } catch(std::exception &e) {
@@ -352,29 +301,17 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
   if (key_exists(dpp, key)) {
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
-      request req;
+      boost::system::error_code ec;
       response<std::string> resp;
-
+      request req;
       req.push("HGET", entry, "data");
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec) {
-	   dout(0) << "RedisDriver append_data: " << std::get<0>(resp).value() << dendl;
-	   value = std::get<0>(resp).value();
-	 }
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
+      if (ec)
+	return -1;
 
-      io.run();
+      value = std::get<0>(resp).value();
     } catch(std::exception &e) {
       return -1;
     }
@@ -382,32 +319,16 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 
   try { // do we want key check here? -Sam
     /* Append to existing value or set as new value */
-    boost::redis::config cfg;
-    cfg.addr.host = "127.0.0.1";
-    cfg.addr.port = "6379";
-
-    boost::asio::io_context io;
-    boost::redis::connection connect{io};
-    connect.async_run(cfg, {}, net::detached);
-
-    std::string location = partition_info.location + key;
+    boost::system::error_code ec;
+    response<std::string> resp;
     std::string newVal = value + bl_data.to_str();
 
     request req;
-    response<std::string> resp;
+    req.push("HMSET", entry, "data", newVal);
 
-    req.push("HMSET", location, "data", newVal);
+    redis_exec(ec, req, resp, y);
 
-    connect.async_exec(req, resp, [&](auto ec, auto) {
-       if (!ec)
-	  dout(0) << "RedisDriver append_data: " << std::get<0>(resp).value() << dendl;
-
-       connect.cancel();
-    });
-
-    io.run();
-
-    if (std::get<0>(resp).value() != "OK") {
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -425,54 +346,27 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
     response<int> resp;
 
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
+      boost::system::error_code ec;
       request req;
-
       req.push("HEXISTS", entry, "data");
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver delete_data: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return -1;
     } catch(std::exception &e) {
       return -1;
     }
 
     if (std::get<0>(resp).value()) {
       try {
-	boost::redis::config cfg;
-	cfg.addr.host = "127.0.0.1";
-	cfg.addr.port = "6379";
-
-	boost::asio::io_context io;
-	boost::redis::connection connect{io};
-	connect.async_run(cfg, {}, net::detached);
-
+	boost::system::error_code ec;
 	request req;
-
 	req.push("HDEL", entry, "data");
 
-	connect.async_exec(req, resp, [&](auto ec, auto) {
-	   if (!ec)
-	      dout(0) << "RedisDriver delete_data: " << std::get<0>(resp).value() << dendl;
+	redis_exec(ec, req, resp, y);
 
-	   connect.cancel();
-	});
-
-	io.run();
-
-	if (!std::get<0>(resp).value()) {
+	if (!std::get<0>(resp).value() || ec) {
 	  return -1;
 	} else {
 	  return remove_entry(dpp, key);
@@ -494,27 +388,15 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 
   if (key_exists(dpp, key)) {
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
-      request req;
+      boost::system::error_code ec;
       response< std::map<std::string, std::string> > resp;
-
+      request req;
       req.push("HGETALL", entry);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver get_attrs: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return -1;
 
       for (auto const& it : std::get<0>(resp).value()) {
 	if (it.first != "data") {
@@ -545,32 +427,17 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
   if (key_exists(dpp, key)) {
     /* Every attr set will be treated as new */
     try {
+      boost::system::error_code ec;
+      response<std::string> resp;
       std::string result;
       std::list<std::string> redisAttrs = build_attrs(&attrs);
-	
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
 
       request req;
-      response<std::string> resp;
-
       req.push_range("HMSET", entry, redisAttrs);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver set_attrs: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
-
-      if (std::get<0>(resp).value() != "OK") {
+      if (std::get<0>(resp).value() != "OK" || ec) {
 	return -1;
       }
     } catch(std::exception &e) {
@@ -590,31 +457,16 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 
   if (key_exists(dpp, key)) {
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
-      request req;
+      boost::system::error_code ec;
       response<std::string> resp;
-
       auto redisAttrs = build_attrs(&attrs);
 
+      request req;
       req.push_range("HMSET", entry, redisAttrs);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver update_attrs: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
-
-      if (std::get<0>(resp).value() != "OK") {
+      if (std::get<0>(resp).value() != "OK" || ec) {
         return -1;
       }
     } catch(std::exception &e) {
@@ -634,29 +486,17 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 
   if (key_exists(dpp, key)) {
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
-      request req;
+      boost::system::error_code ec;
       response<int> resp;
-
       auto redisAttrs = build_attrs(&del_attrs);
 
+      request req;
       req.push_range("HDEL", entry, redisAttrs);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver delete_attrs: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return -1;
 
       return std::get<0>(resp).value() - del_attrs.size();  /* Returns number of fields deleted */
     } catch(std::exception &e) {
@@ -677,26 +517,14 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
 
     /* Ensure field was set */
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
+      boost::system::error_code ec;
       request req;
-
       req.push("HEXISTS", entry, attr_name);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver get_attr: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return {};
     } catch(std::exception &e) {
       return {};
     }
@@ -708,27 +536,14 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
 
     /* Retrieve existing value from cache */
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
+      boost::system::error_code ec;
       request req;
-
       req.push("HGET", entry, attr_name);
 
-      connect.async_exec(req, value, [&](auto ec, auto) {
-	 if (!ec) {
-	   dout(0) << "RedisDriver get_attr: " << std::get<0>(value).value() << dendl;
-	 }
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return {};
     } catch(std::exception &e) {
       return {};
     }
@@ -740,7 +555,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   return std::get<0>(value).value();
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal, optional_yield y) 
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   response<int> resp;
@@ -748,26 +563,14 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   if (key_exists(dpp, key)) {
     /* Every attr set will be treated as new */
     try {
-      boost::redis::config cfg;
-      cfg.addr.host = "127.0.0.1";
-      cfg.addr.port = "6379";
-
-      boost::asio::io_context io;
-      boost::redis::connection connect{io};
-      connect.async_run(cfg, {}, net::detached);
-
+      boost::system::error_code ec;
       request req;
-
       req.push("HSET", entry, attr_name, attr_val);
 
-      connect.async_exec(req, resp, [&](auto ec, auto) {
-	 if (!ec)
-	    dout(0) << "RedisDriver set_attr: " << std::get<0>(resp).value() << dendl;
+      redis_exec(ec, req, resp, y);
 
-	 connect.cancel();
-      });
-
-      io.run();
+      if (ec)
+	return {};
     } catch(std::exception &e) {
       return -1;
     }
