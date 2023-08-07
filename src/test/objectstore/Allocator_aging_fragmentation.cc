@@ -18,6 +18,7 @@
 #include "include/stringify.h"
 #include "include/Context.h"
 #include "os/bluestore/Allocator.h"
+#include <map>
 
 #include <boost/random/uniform_int.hpp>
 
@@ -101,6 +102,8 @@ public:
   void do_free(uint64_t low_mark);
   uint32_t free_random();
 
+  void check_allocs();
+
   void TearDown() final;
   static void SetUpTestSuite();
   static void TearDownTestSuite();
@@ -123,13 +126,14 @@ const uint64_t _2m = 2 * 1024 * 1024;
 
 class AllocTracker
 {
+public:
   std::vector<bluestore_pextent_t> allocations;
   uint64_t size = 0;
 
 public:
   bool push(uint64_t offs, uint32_t len)
   {
-    assert(len != 0);
+    ceph_assert(len > 0);
     if (size + 1 > allocations.size())
       allocations.resize(size + 100);
     allocations[size++] = bluestore_pextent_t(offs, len);
@@ -185,6 +189,102 @@ uint32_t AllocTest::free_random() {
   alloc->release(release_set);
   level -= l;
   return l;
+}
+
+void AllocTest::check_allocs() {
+  std::multimap<size_t, size_t> mext;
+  auto extract_extents = [&](size_t off, size_t len) {
+    mext.emplace(off, len);
+  };
+  alloc->foreach(extract_extents);
+
+  //1. Check if some returned free regions span over same areas
+  {
+  auto it = mext.begin();
+  if (it != mext.end()) {
+    size_t start = it->first;
+    size_t end   = it->first + it->second;
+    // start - end form the exclusion zone - no other extent can cross this range
+    ++it;
+    while (it != mext.end()) {
+      //std::cout << std::hex << "[0x" << it->first << "-" << it->first + it->second
+      //<< "]" << std::dec << std::endl;
+      if (end > it->first) {
+	// collision!
+	std::cout << "collison: [0x" << std::hex << start << "-" << end
+		  << "] vs [0x" << it->first << "-" << it->first + it->second
+		  << "]" << std::dec << std::endl;
+	if (end > it->first + it->second) {
+	  // this new extent spans further then previous one, take it
+	  start = it->first;
+	  end   = it->first + it->second;
+	} else {
+	  // use old extent for collision-checking
+	}
+      } else {
+	// new extent does not cross exclusion zone, everyting fine
+	start = it->first;
+	end =   it->first + it->second;
+      }
+      ++it;
+    }
+  }
+  }
+
+  //2. Check if there is no collision between allocated and free
+  for (size_t i = 0; i < at->size; i++) {
+    ceph_assert(at->allocations[i].length > 0);
+    mext.emplace(at->allocations[i].offset, at->allocations[i].length);
+  }
+  {
+  auto it = mext.begin();
+  if (it != mext.end()) {
+    size_t start = it->first;
+    size_t end   = it->first + it->second;
+    // start - end form the exclusion zone - no other extent can cross this range
+    ++it;
+    while (it != mext.end()) {
+      //std::cout << std::hex << "[0x" << it->first << "-" << it->first + it->second
+      //<< "]" << std::dec << std::endl;
+      EXPECT_LE(end, it->first);
+      if (end > it->first) {
+	// collision!
+	std::cout << "allocated collison: [0x" << std::hex << start << "-" << end
+		  << "] vs [0x" << it->first << "-" << it->first + it->second
+		  << "]" << std::dec << std::endl;
+	if (end > it->first + it->second) {
+	  // this new extent spans further then previous one, take it
+	  start = it->first;
+	  end   = it->first + it->second;
+	} else {
+	  // use old extent for collision-checking
+	}
+      } else {
+	// new extent does not cross exclusion zone, everyting fine
+	start = it->first;
+	end =   it->first + it->second;
+      }
+      ++it;
+    }
+  }
+  }
+  //3. Check total capacity
+  {
+    auto it = mext.begin();
+    ceph_assert(it!=mext.end());
+    ceph_assert(it->first == 0);
+    size_t end   = it->first + it->second;
+    ++it;
+    while (it != mext.end()) {
+      EXPECT_EQ(end, it->first);
+      if (end != it->first) {
+	std::cout << "hole [0x" << std::hex << end << "-0x" << it->first << std::dec << "]" << std::endl;
+      }
+      end = it->first + it->second;
+      ++it;
+    }
+    EXPECT_EQ(end, this->capacity);
+  }
 }
 
 
@@ -277,10 +377,12 @@ void AllocTest::doAgingTest(
         " #frags=" << ( fragmented != 0 ? double(fragments) / fragmented : 0 ) <<
         " time=" << (ceph_clock_now() - start) * 1000 << "ms" << std::endl;
   }
+  check_allocs();
   double frag_score = alloc->get_fragmentation_score();
   do_free(0);
+  check_allocs();
   double free_frag_score = alloc->get_fragmentation_score();
-  ASSERT_EQ(alloc->get_free(), capacity);
+  EXPECT_EQ(alloc->get_free(), capacity);
 
   std::cout << "    fragmented allocs=" << 100.0 * fragmented / allocs << "%" <<
         " #frags=" << ( fragmented != 0 ? double(fragments) / fragmented : 0 ) <<
@@ -294,7 +396,7 @@ void AllocTest::doAgingTest(
     sum+=len;
   };
   alloc->foreach(list_free);
-  ASSERT_EQ(sum, capacity);
+  EXPECT_EQ(sum, capacity);
   if (verbose)
     std::cout << "free chunks sum=" << sum << " free chunks count=" << cnt << std::endl;
 
