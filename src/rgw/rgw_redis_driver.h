@@ -9,6 +9,9 @@
 #define dout_subsys ceph_subsys_rgw // remove -Sam
 #define dout_context g_ceph_context
 
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
+
 namespace rgw { namespace cache { 
 
 namespace net = boost::asio;
