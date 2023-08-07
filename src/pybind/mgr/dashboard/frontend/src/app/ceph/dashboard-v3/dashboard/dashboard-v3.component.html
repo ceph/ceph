@@ -13,6 +13,14 @@
         <dd i18n>{{ detailsCardData.orchestrator || 'Orchestrator is not available' }}</dd>
         <dt>Ceph version</dt>
         <dd>{{ detailsCardData.cephVersion }}</dd>
+        <dt>Cluster API</dt>
+        <dd>
+          <a routerLink="/api-docs"
+             target="_blank">
+            {{ origin }}/api-docs
+            <i class="fa fa-external-link"></i>
+          </a>
+        </dd>
       </dl>
     </cd-card>
 
