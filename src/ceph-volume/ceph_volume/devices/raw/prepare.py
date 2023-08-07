@@ -22,18 +22,7 @@ def prepare_dmcrypt(key, device, device_type, fsid):
         return ''
     kname = disk.lsblk(device)['KNAME']
     mapping = 'ceph-{}-{}-{}-dmcrypt'.format(fsid, kname, device_type)
-    # format data device
-    encryption_utils.luks_format(
-        key,
-        device
-    )
-    encryption_utils.luks_open(
-        key,
-        device,
-        mapping
-    )
-
-    return '/dev/mapper/{}'.format(mapping)
+    return encryption_utils.prepare_dmcrypt(key, device, mapping)
 
 def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
     """
