@@ -539,6 +539,9 @@ public:
     ceph_tid_t rep_tid,
     eversion_t &version);
 
+  interruptible_future<> handle_rep_write_op(Ref<MOSDECSubOpWrite>);
+  interruptible_future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
+
 private:
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
