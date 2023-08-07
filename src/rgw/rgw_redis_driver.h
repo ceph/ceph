@@ -20,6 +20,25 @@ class RedisDriver : public CacheDriver {
       addr.host = host;
       addr.port = port;
     }
+<<<<<<< HEAD
+=======
+    virtual ~RedisDriver()
+    {
+      remove_partition_info(partition_info);
+    }
+
+    /* Entry */
+    virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
+    virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) override;
+    virtual size_t get_num_entries(const DoutPrefixProvider* dpp) override;
+    //int update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight); // may need to exist for base class -Sam
+
+    /* Partition */
+    virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; } // how to get this from redis server? -Sam
+    static std::optional<Partition> get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type);
+    static std::vector<Partition> list_partitions(const DoutPrefixProvider* dpp);
+>>>>>>> 5987321cf25 (RGW: Add `optional_yield` to `RedisDriver::key_exists`)
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
 <<<<<<< HEAD

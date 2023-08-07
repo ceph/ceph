@@ -95,7 +95,7 @@ auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request
   return conn.async_exec(req, resp, yield[ec]);
 }
 
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
+bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) 
 {
   int result;
   std::string entry = partition_info.location + key;
@@ -254,14 +254,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 {
   std::string entry = partition_info.location + key;
   
-  if (!client.is_connected()) 
-    return ECONNREFUSED;
-    
-  if (key_exists(dpp, entryName)) {
-    rgw::sal::Attrs::iterator it;
-    std::vector< std::pair<std::string, std::string> > redisAttrs;
-    std::vector<std::string> getFields;
-
+  if (key_exists(dpp, key, y)) {
     /* Retrieve existing values from cache */
     try {
       client.hgetall(entryName, [&bl, &attrs](cpp_redis::reply &reply) {
@@ -295,15 +288,37 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   return 0;
 }
 
+int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
+{
+  std::string entry = partition_info.location + key;
+
+  if (key_exists(dpp, key, y)) {
+    try {
+      boost::system::error_code ec;
+      response<int> resp;
+      request req;
+      req.push("DEL", entry);
+
+      redis_exec(ec, req, resp, y);
+
+      if (ec)
+	return -1;
+
+      return std::get<0>(resp).value() - 1; 
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    return 0; /* No delete was necessary */
+  }
+}
+
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
 {
   std::string value;
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    return ECONNREFUSED;
-
-  if (key_exists(dpp, entryName)) {
+  if (key_exists(dpp, key, y)) {
     try {
       client.hget(entryName, "data", [&value](cpp_redis::reply &reply) {
         if (!reply.is_null()) {
@@ -345,8 +360,8 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    return ECONNREFUSED;
+  if (key_exists(dpp, key, y)) {
+    response<int> resp;
 
   if (key_exists(dpp, entryName)) {
     try {
@@ -371,10 +386,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    return ECONNREFUSED;
-
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     try {
       client.hgetall(entry, [&attrs](cpp_redis::reply &reply) {
 	if (reply.is_array()) { 
@@ -412,10 +424,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
       
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     /* Every attr set will be treated as new */
     try {
       std::string result;
@@ -447,10 +456,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  if (key_exists(dpp, key)) {
+  if (key_exists(dpp, key, y)) {
     try {
       std::string result;
       auto redisAttrs = build_attrs(&attrs);
@@ -481,13 +487,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  if (key_exists(dpp, key)) {
-    std::vector<std::string> getFields;
-
-    /* Retrieve existing values from cache */
+  if (key_exists(dpp, key, y)) {
     try {
       client.hgetall(entryName, [&getFields](cpp_redis::reply &reply) {
 	if (reply.is_array()) {
@@ -652,11 +652,8 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   std::string entry = partition_info.location + key;
   std::string attrValue;
 
-  if (!client.is_connected()) 
-    return {};
-
-  if (key_exists(dpp, entryName)) {
-    std::string getValue;
+  if (key_exists(dpp, key, y)) {
+    response<int> resp;
 
     /* Ensure field was set */
     try {
@@ -690,9 +687,27 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
       return {};
     }
 
-    if (exists < 0) {
-      dout(20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-      return {};
+  return std::get<0>(value).value();
+}
+
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) 
+{
+  std::string entry = partition_info.location + key;
+  response<int> resp;
+    
+  if (key_exists(dpp, key, y)) {
+    /* Every attr set will be treated as new */
+    try {
+      boost::system::error_code ec;
+      request req;
+      req.push("HSET", entry, attr_name, attr_val);
+
+      redis_exec(ec, req, resp, y);
+
+      if (ec)
+	return {};
+    } catch(std::exception &e) {
+      return -1;
     }
   }
 
