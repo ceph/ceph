@@ -71,6 +71,17 @@ def normalize_path(path: str) -> str:
     return path
 
 
+def validate_cephfs_path(mgr: 'Module', fs_name: str, path: str) -> None:
+    try:
+        cephfs_path_is_dir(mgr, fs_name, path)
+    except NotADirectoryError:
+        raise NFSException(f"path {path} is not a dir", -errno.ENOTDIR)
+    except cephfs.ObjectNotFound:
+        raise NFSObjectNotFound(f"path {path} does not exist")
+    except cephfs.Error as e:
+        raise NFSException(e.args[1], -e.args[0])
+
+
 class NFSRados:
     def __init__(self, rados: 'Rados', namespace: str) -> None:
         self.rados = rados
