@@ -46,7 +46,6 @@ class D4NFilterDriver : public FilterDriver {
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
-
     virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
