@@ -33,20 +33,28 @@ class Devices(object):
     A container for Device instances with reporting
     """
 
-    def __init__(self, filter_for_batch=False, with_lsm=False):
+    def __init__(self,
+                 filter_for_batch=False,
+                 with_lsm=False,
+                 list_all=False):
         lvs = lvm.get_lvs()
         lsblk_all = disk.lsblk_all()
         all_devices_vgs = lvm.get_all_devices_vgs()
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
-        self.devices = [Device(k,
-                               with_lsm,
-                               lvs=lvs,
-                               lsblk_all=lsblk_all,
-                               all_devices_vgs=all_devices_vgs) for k in
-                        sys_info.devices.keys()]
-        if filter_for_batch:
-            self.devices = [d for d in self.devices if d.available_lvm_batch]
+        self._devices = [Device(k,
+                                with_lsm,
+                                lvs=lvs,
+                                lsblk_all=lsblk_all,
+                                all_devices_vgs=all_devices_vgs) for k in
+                         sys_info.devices.keys()]
+        self.devices = []
+        for device in self._devices:
+            if filter_for_batch and not device.available_lvm_batch:
+                continue
+            if device.is_lv and not list_all:
+                continue
+            self.devices.append(device)
 
     def pretty_report(self):
         output = [
