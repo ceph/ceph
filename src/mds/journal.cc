@@ -1156,7 +1156,7 @@ void EMetaBlob::generate_test_instances(std::list<EMetaBlob*>& ls)
   ls.push_back(new EMetaBlob());
 }
 
-void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
+void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate *peerup)
 {
   dout(10) << "EMetaBlob.replay " << lump_map.size() << " dirlumps by " << client_name << dendl;
 
@@ -1560,11 +1560,16 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     logseg->open_files.push_back(&in->item_open_file);
   }
 
+  bool skip_replaying_inotable = g_conf()->mds_inject_skip_replaying_inotable;
+
   // allocated_inos
   if (inotablev) {
-    if (mds->inotable->get_version() >= inotablev) {
+    if (mds->inotable->get_version() >= inotablev ||
+	unlikely(type == EVENT_UPDATE && skip_replaying_inotable)) {
       dout(10) << "EMetaBlob.replay inotable tablev " << inotablev
 	       << " <= table " << mds->inotable->get_version() << dendl;
+      if (allocated_ino)
+        mds->mdcache->insert_taken_inos(allocated_ino);
     } else {
       dout(10) << "EMetaBlob.replay inotable v " << inotablev
 	       << " - 1 == table " << mds->inotable->get_version()
@@ -1588,9 +1593,12 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDPeerUpdate *peerup)
     }
   }
   if (sessionmapv) {
-    if (mds->sessionmap.get_version() >= sessionmapv) {
+    if (mds->sessionmap.get_version() >= sessionmapv ||
+	unlikely(type == EVENT_UPDATE && skip_replaying_inotable)) {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << " <= table " << mds->sessionmap.get_version() << dendl;
+      if (used_preallocated_ino)
+        mds->mdcache->insert_taken_inos(used_preallocated_ino);
     } else {
       dout(10) << "EMetaBlob.replay sessionmap v " << sessionmapv
 	       << ", table " << mds->sessionmap.get_version()
@@ -2230,7 +2238,8 @@ void EUpdate::update_segment()
 void EUpdate::replay(MDSRank *mds)
 {
   auto&& segment = get_segment();
-  metablob.replay(mds, segment);
+  dout(10) << "EUpdate::replay" << dendl;
+  metablob.replay(mds, segment, EVENT_UPDATE);
   
   if (had_peers) {
     dout(10) << "EUpdate.replay " << reqid << " had peers, expecting a matching ECommitted" << dendl;
@@ -2313,7 +2322,7 @@ void EOpen::replay(MDSRank *mds)
 {
   dout(10) << "EOpen.replay " << dendl;
   auto&& segment = get_segment();
-  metablob.replay(mds, segment);
+  metablob.replay(mds, segment, EVENT_OPEN);
 
   // note which segments inodes belong to, so we don't have to start rejournaling them
   for (const auto &ino : inos) {
@@ -2629,7 +2638,7 @@ void EPeerUpdate::replay(MDSRank *mds)
     dout(10) << "EPeerUpdate.replay prepare " << reqid << " for mds." << leader
 	     << ": applying commit, saving rollback info" << dendl;
     su = new MDPeerUpdate(origop, rollback);
-    commit.replay(mds, segment, su);
+    commit.replay(mds, segment, EVENT_PEERUPDATE, su);
     mds->mdcache->add_uncommitted_peer(reqid, segment, leader, su);
     break;
 
@@ -2641,7 +2650,7 @@ void EPeerUpdate::replay(MDSRank *mds)
   case EPeerUpdate::OP_ROLLBACK:
     dout(10) << "EPeerUpdate.replay abort " << reqid << " for mds." << leader
 	     << ": applying rollback commit blob" << dendl;
-    commit.replay(mds, segment);
+    commit.replay(mds, segment, EVENT_PEERUPDATE);
     mds->mdcache->finish_uncommitted_peer(reqid, false);
     break;
 
@@ -2820,7 +2829,7 @@ void ESubtreeMap::replay(MDSRank *mds)
   
   // first, stick the spanning tree in my cache
   //metablob.print(*_dout);
-  metablob.replay(mds, get_segment());
+  metablob.replay(mds, get_segment(), EVENT_SUBTREEMAP);
   
   // restore import/export maps
   for (map<dirfrag_t, vector<dirfrag_t> >::iterator p = subtrees.begin();
@@ -2895,7 +2904,7 @@ void EFragment::replay(MDSRank *mds)
     ceph_abort();
   }
 
-  metablob.replay(mds, segment);
+  metablob.replay(mds, segment, EVENT_FRAGMENT);
   if (in && g_conf()->mds_debug_frag)
     in->verify_dirfrags();
 }
@@ -2979,7 +2988,7 @@ void EExport::replay(MDSRank *mds)
 {
   dout(10) << "EExport.replay " << base << dendl;
   auto&& segment = get_segment();
-  metablob.replay(mds, segment);
+  metablob.replay(mds, segment, EVENT_EXPORT);
   
   CDir *dir = mds->mdcache->get_dirfrag(base);
   ceph_assert(dir);
@@ -3058,7 +3067,7 @@ void EImportStart::replay(MDSRank *mds)
   dout(10) << "EImportStart.replay " << base << " bounds " << bounds << dendl;
   //metablob.print(*_dout);
   auto&& segment = get_segment();
-  metablob.replay(mds, segment);
+  metablob.replay(mds, segment, EVENT_IMPORTSTART);
 
   // put in ambiguous import list
   mds->mdcache->add_ambiguous_import(base, bounds);

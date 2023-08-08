@@ -501,6 +501,25 @@
 :Type:  32-bit Integer
 :Default: ``0``
 
+``mds_inject_skip_replaying_inotable``
+
+:Description: Ceph will skip replaying the inotable when replaying the journal,
+              and the premary MDS will crash, while the replacing MDS won't.
+              (for developers only).
+
+:Type:  Boolean
+:Default: ``false``
+
+
+``mds_kill_skip_replaying_inotable``
+
+:Description: Ceph will skip replaying the inotable when replaying the journal,
+              and the premary MDS will crash, while the replacing MDS won't.
+              (for developers only).
+
+:Type:  Boolean
+:Default: ``false``
+
 
 ``mds_wipe_sessions``
 
