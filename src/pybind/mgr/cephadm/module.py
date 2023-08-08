@@ -157,6 +157,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Use libstoragemgmt during device scans',
         ),
         Option(
+            'inventory_list_all',
+            type='bool',
+            default=False,
+            desc='Whether ceph-volume inventory should report '
+            'more devices (mostly mappers (LVs / mpaths), partitions...)',
+        ),
+        Option(
             'daemon_cache_timeout',
             type='secs',
             default=10 * 60,
@@ -487,6 +494,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.apply_spec_fails: List[Tuple[str, str]] = []
             self.max_osd_draining_count = 10
             self.device_enhanced_scan = False
+            self.inventory_list_all = False
             self.cgroups_split = True
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
