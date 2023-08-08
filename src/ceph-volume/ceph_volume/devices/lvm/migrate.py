@@ -6,6 +6,7 @@ from textwrap import dedent
 from ceph_volume.util import system, disk, merge_dict
 from ceph_volume.util.device import Device
 from ceph_volume.util.arg_validators import valid_osd_id
+from ceph_volume.util import encryption as encryption_utils
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
 from ceph_volume.systemd import systemctl
@@ -300,6 +301,15 @@ class Migrate(object):
                 osd_path, self.get_filename_by_type(type))]
         return ret
 
+    def close_encrypted(self, source_devices):
+        # close source device(-s) if they're encrypted and have been removed
+        for device,type in source_devices:
+            if (type == 'db' or type == 'wal'):
+                logger.info("closing dmcrypt volume {}"
+                   .format(device.lv_api.lv_uuid))
+                encryption_utils.dmcrypt_close(
+                   mapping = device.lv_api.lv_uuid, skip_path_check=True)
+
     @decorators.needs_root
     def migrate_to_new(self, osd_id, osd_fsid, devices, target_lv):
         source_devices = self.get_source_devices(devices)
@@ -312,9 +322,14 @@ class Migrate(object):
                 "Unable to migrate to : {}".format(self.args.target))
 
         target_path = target_lv.lv_path
-
+        tag_tracker = VolumeTagTracker(devices, target_lv)
+        # prepare and encrypt target if data volume is encrypted
+        if tag_tracker.data_device.lv_api.encrypted:
+            secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+            mlogger.info(' preparing dmcrypt for {}, uuid {}'.format(target_lv.lv_path, target_lv.lv_uuid))
+            target_path = encryption_utils.prepare_dmcrypt(
+                key=secret, device=target_path, mapping=target_lv.lv_uuid)
         try:
-            tag_tracker = VolumeTagTracker(devices, target_lv)
             # we need to update lvm tags for all the remaining volumes
             # and clear for ones which to be removed
 
@@ -340,10 +355,13 @@ class Migrate(object):
                     'Failed to migrate device, error code:{}'.format(exit_code))
                 raise SystemExit(
                     'Failed to migrate to : {}'.format(self.args.target))
-            else:
-                system.chown(os.path.join(osd_path, "block.{}".format(
-                    target_type)))
-                terminal.success('Migration successful.')
+
+            system.chown(os.path.join(osd_path, "block.{}".format(
+                target_type)))
+            if tag_tracker.data_device.lv_api.encrypted:
+                self.close_encrypted(source_devices)
+            terminal.success('Migration successful.')
+
         except:
             tag_tracker.undo()
             raise
@@ -391,8 +409,9 @@ class Migrate(object):
                     'Failed to migrate device, error code:{}'.format(exit_code))
                 raise SystemExit(
                     'Failed to migrate to : {}'.format(self.args.target))
-            else:
-                terminal.success('Migration successful.')
+            if tag_tracker.data_device.lv_api.encrypted:
+                self.close_encrypted(source_devices)
+            terminal.success('Migration successful.')
         except:
             tag_tracker.undo()
             raise
@@ -574,7 +593,14 @@ class NewVolume(object):
         mlogger.info(
             'Making new volume at {} for OSD: {} ({})'.format(
                 target_lv.lv_path, osd_id, osd_path))
+        target_path = target_lv.lv_path
         tag_tracker = VolumeTagTracker(devices, target_lv)
+        # prepare and encrypt target if data volume is encrypted
+        if tag_tracker.data_device.lv_api.encrypted:
+            secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+            mlogger.info(' preparing dmcrypt for {}, uuid {}'.format(target_lv.lv_path, target_lv.lv_uuid))
+            target_path = encryption_utils.prepare_dmcrypt(
+                key=secret, device=target_path, mapping=target_lv.lv_uuid)
 
         try:
             tag_tracker.update_tags_when_lv_create(self.create_type)
@@ -584,7 +610,7 @@ class NewVolume(object):
                 '--path',
                 osd_path,
                 '--dev-target',
-                target_lv.lv_path,
+                target_path,
                 '--command',
                 'bluefs-bdev-new-{}'.format(self.create_type)
             ])
