@@ -80,7 +80,9 @@ def create_volume(mgr, volname, placement):
     r, outb, outs = create_pool(mgr, metadata_pool)
     if r != 0:
         return r, outb, outs
-    r, outb, outs = create_pool(mgr, data_pool)
+    # default to a bulk pool for data. In case autoscaling has been disabled
+    # for the cluster with `ceph osd pool set noautoscale`, this will have no effect.
+    r, outb, outs = create_pool(mgr, data_pool, bulk=True)
     if r != 0:
         #cleanup
         remove_pool(mgr, metadata_pool)

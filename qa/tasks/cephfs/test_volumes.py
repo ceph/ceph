@@ -442,9 +442,21 @@ class TestVolumes(TestVolumesHelper):
 
         if not (volname in ([volume['name'] for volume in volumels])):
             raise RuntimeError("Error creating volume '{0}'".format(volname))
-        else:
-            # clean up
-            self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
+
+        # check that the pools were created with the correct config
+        pool_details = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json"))
+        pool_flags = {}
+        for pool in pool_details:
+            pool_flags[pool["pool_id"]] = pool["flags_names"].split(",")
+
+        volume_details = json.loads(self._fs_cmd("get", volname, "--format=json"))
+        for data_pool_id in volume_details['mdsmap']['data_pools']:
+            self.assertIn("bulk", pool_flags[data_pool_id])
+        meta_pool_id = volume_details['mdsmap']['metadata_pool']
+        self.assertNotIn("bulk", pool_flags[meta_pool_id])
+
+        # clean up
+        self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
 
     def test_volume_ls(self):
         """
