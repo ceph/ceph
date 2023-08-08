@@ -45,18 +45,27 @@ class Inventory(object):
                   'libstoragemgmt'),
             default=False,
         )
+        parser.add_argument(
+            '--list-all',
+            action='store_true',
+            help=('Whether ceph-volume should list lvm devices'),
+            default=False
+        )
         self.args = parser.parse_args(self.argv)
         if self.args.path:
             self.format_report(Device(self.args.path, with_lsm=self.args.with_lsm))
         else:
             self.format_report(Devices(filter_for_batch=self.args.filter_for_batch,
-                                       with_lsm=self.args.with_lsm))
+                                       with_lsm=self.args.with_lsm,
+                                       list_all=self.args.list_all))
 
     def get_report(self):
         if self.args.path:
             return Device(self.args.path, with_lsm=self.args.with_lsm).json_report()
         else:
-            return Devices(filter_for_batch=self.args.filter_for_batch, with_lsm=self.args.with_lsm).json_report()
+            return Devices(filter_for_batch=self.args.filter_for_batch,
+                           with_lsm=self.args.with_lsm,
+                           list_all=self.args.list_all).json_report()
 
     def format_report(self, inventory):
         if self.args.format == 'json':
