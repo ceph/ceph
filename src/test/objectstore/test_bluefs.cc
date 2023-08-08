@@ -801,7 +801,7 @@ TEST(BlueFS, test_replay_growth) {
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mkdir("dir"));
 
-  char data[2000];
+  char data[2000] = {'x'};
   BlueFS::FileWriter *h;
   ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
   for (size_t i = 0; i < 10000; i++) {
@@ -989,7 +989,7 @@ TEST(BlueFS, test_update_ino1_delta_after_replay) {
   ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mkdir("dir"));
 
-  char data[2000];
+  char data[2000] = {'a'};
   BlueFS::FileWriter *h;
   ASSERT_EQ(0, fs.open_for_write("dir", "file", &h, false));
   for (size_t i = 0; i < 100; i++) {
