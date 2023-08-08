@@ -120,4 +120,22 @@ export class FormatterService {
 
     return 0;
   }
+
+  toOctalPermission(modes: any) {
+    const scopes = ['owner', 'group', 'others'];
+    let octalMode = '';
+    for (const scope of scopes) {
+      let scopeValue = 0;
+      const mode = modes[scope];
+
+      if (mode) {
+        if (mode.includes('read')) scopeValue += 4;
+        if (mode.includes('write')) scopeValue += 2;
+        if (mode.includes('execute')) scopeValue += 1;
+      }
+
+      octalMode += scopeValue.toString();
+    }
+    return octalMode;
+  }
 }

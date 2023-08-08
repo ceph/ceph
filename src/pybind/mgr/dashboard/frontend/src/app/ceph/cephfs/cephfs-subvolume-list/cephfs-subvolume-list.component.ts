@@ -1,13 +1,19 @@
 import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
-import { Observable, of } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { Observable, ReplaySubject, of } from 'rxjs';
+import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CephfsSubvolume } from '~/app/shared/models/cephfs-subvolume.model';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { CephfsSubvolumeFormComponent } from '../cephfs-subvolume-form/cephfs-subvolume-form.component';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { Permissions } from '~/app/shared/models/permissions';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -31,15 +37,26 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
   quotaSizeTpl: any;
 
   @Input() fsName: string;
+  @Input() pools: any[];
 
   columns: CdTableColumn[] = [];
+  tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
   selection = new CdTableSelection();
   icons = Icons;
+  permissions: Permissions;
 
   subVolumes$: Observable<CephfsSubvolume[]>;
+  subject = new ReplaySubject<CephfsSubvolume[]>();
 
-  constructor(private cephfsSubVolume: CephfsSubvolumeService) {}
+  constructor(
+    private cephfsSubVolume: CephfsSubvolumeService,
+    private actionLabels: ActionLabelsI18n,
+    private modalService: ModalService,
+    private authStorageService: AuthStorageService
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit(): void {
     this.columns = [
@@ -84,15 +101,43 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
         cellTransformation: CellTemplate.timeAgo
       }
     ];
+
+    this.tableActions = [
+      {
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () =>
+          this.modalService.show(
+            CephfsSubvolumeFormComponent,
+            {
+              fsName: this.fsName,
+              pools: this.pools
+            },
+            { size: 'lg' }
+          )
+      }
+    ];
+
+    this.subVolumes$ = this.subject.pipe(
+      switchMap(() =>
+        this.cephfsSubVolume.get(this.fsName).pipe(
+          catchError(() => {
+            this.context.error();
+            return of(null);
+          })
+        )
+      ),
+      shareReplay(1)
+    );
+  }
+
+  fetchData() {
+    this.subject.next();
   }
 
   ngOnChanges() {
-    this.subVolumes$ = this.cephfsSubVolume.get(this.fsName).pipe(
-      catchError(() => {
-        this.context.error();
-        return of(null);
-      })
-    );
+    this.subject.next();
   }
 
   updateSelection(selection: CdTableSelection) {

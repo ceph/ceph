@@ -3,7 +3,17 @@
             columnMode="flex"
             [columns]="columns"
             selectionType="single"
-            [hasDetails]="false">
+            [hasDetails]="false"
+            (fetchData)="fetchData()">
+
+    <div class="table-actions btn-toolbar">
+      <cd-table-actions [permission]="permissions.cephfs"
+                        [selection]="selection"
+                        class="btn-group"
+                        id="cephfs-subvolume-actions"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+    </div>
   </cd-table>
 </ng-container>
 

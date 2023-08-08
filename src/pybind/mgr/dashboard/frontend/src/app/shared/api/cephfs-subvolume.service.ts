@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { CephfsSubvolume } from '../models/cephfs-subvolume.model';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { catchError, mapTo } from 'rxjs/operators';
+import _ from 'lodash';
 
 @Injectable({
   providedIn: 'root'
@@ -13,5 +15,51 @@ export class CephfsSubvolumeService {
 
   get(fsName: string): Observable<CephfsSubvolume[]> {
     return this.http.get<CephfsSubvolume[]>(`${this.baseURL}/${fsName}`);
+  }
+
+  create(
+    fsName: string,
+    subVolumeName: string,
+    poolName: string,
+    size: number,
+    uid: number,
+    gid: number,
+    mode: string,
+    namespace: boolean
+  ) {
+    return this.http.post(
+      this.baseURL,
+      {
+        vol_name: fsName,
+        subvol_name: subVolumeName,
+        pool_layout: poolName,
+        size: size,
+        uid: uid,
+        gid: gid,
+        mode: mode,
+        namespace_isolated: namespace
+      },
+      { observe: 'response' }
+    );
+  }
+
+  info(fsName: string, subVolumeName: string) {
+    return this.http.get(`${this.baseURL}/${fsName}/info`, {
+      params: {
+        subvol_name: subVolumeName
+      }
+    });
+  }
+
+  exists(subVolumeName: string, fsName: string) {
+    return this.info(fsName, subVolumeName).pipe(
+      mapTo(true),
+      catchError((error: Event) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return of(false);
+      })
+    );
   }
 }
