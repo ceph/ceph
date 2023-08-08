@@ -1575,6 +1575,11 @@ class CephManager:
         timeout = kwargs.pop('timeout', 120)
         return ['sudo'] + self.pre + ['timeout', f'{timeout}', 'ceph',
                                       '--cluster', self.cluster]
+    def save_conf_epoch(self):
+        p = self.ceph("config log 1 --format=json")
+        J = json.loads(p.stdout.getvalue())
+        self.ctx.conf_epoch = J[0]["version"]
+        log.info("config epoch is %d", self.ctx.conf_epoch)
 
     def ceph(self, cmd, **kwargs):
         """
