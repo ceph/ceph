@@ -1176,7 +1176,7 @@ struct req_info {
 
   req_info(CephContext *cct, const RGWEnv *env);
   void rebuild_from(req_info& src);
-  void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta);
+  void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta, const int prot_flags);
 };
 
 typedef cls_rgw_obj_key rgw_obj_index_key;
@@ -2263,10 +2263,8 @@ static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 extern bool match_policy(std::string_view pattern, std::string_view input,
                          uint32_t flag);
 
-extern std::string camelcase_dash_http_attr(const std::string& orig);
-extern std::string camelcase_http_attr(const std::string& orig);
-extern std::string lowercase_dash_http_attr(const std::string& orig);
-extern std::string lowercase_dash_underscore_http_attr(const std::string& orig);
+extern std::string camelcase_dash_http_attr(const std::string& orig, bool convert2dash = true);
+extern std::string lowercase_dash_http_attr(const std::string& orig, bool bidirection = false);
 
 void rgw_setup_saved_curl_handles();
 void rgw_release_all_curl_handles();
