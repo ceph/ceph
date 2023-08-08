@@ -1,0 +1,21 @@
+<cd-user-tabs></cd-user-tabs>
+
+<cd-table [data]="roles"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="name"
+          selectionType="single"
+          [hasDetails]="true"
+          (setExpandedRow)="setExpandedRow($event)"
+          (fetchData)="getRoles()"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <cd-role-details cdTableDetail
+                   [selection]="expandedRow"
+                   [scopes]="scopes">
+  </cd-role-details>
+</cd-table>

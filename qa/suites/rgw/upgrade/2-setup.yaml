@@ -1,0 +1,8 @@
+tasks:
+- ceph:
+- rgw: [client.0, client.1]
+- tox: [client.0, client.1]
+- print: "installing upgraded packages"
+- install.upgrade:
+    mon.a:
+    mon.b:
