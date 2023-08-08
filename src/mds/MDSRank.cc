@@ -14,6 +14,9 @@
 
 #include <string_view>
 #include <typeinfo>
+#include <atomic>
+#include <signal.h>
+#include <inttypes.h>
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/likely.h"
@@ -558,11 +561,15 @@ MDSRank::MDSRank(
                                                     cct->_conf->mds_op_history_slow_op_threshold);
 
   schedule_update_timer_task();
+  install_abort_handler();
 }
 
 MDSRank::~MDSRank()
 {
-  if (hb) {
+  remove_abort_handler_and_flush_monc_log(true);
+
+  if (hb)
+  {
     g_ceph_context->get_heartbeat_map()->remove_worker(hb);
     hb = nullptr;
   }
@@ -4023,4 +4030,123 @@ void MDSRank::reset_event_flags() {
   client_eviction_dump = false;
   beacon.missed_beacon_ack_dump = false;
   beacon.missed_internal_heartbeat_dump = false;
+}
+
+static struct sigaction old_abort_action;
+
+static MDSRank * const ACTIVE_RANK_NULL = nullptr;
+static MDSRank * const ACTIVE_RANK_ABORT = reinterpret_cast<MDSRank*>((intptr_t)-1);
+
+static std::atomic<MDSRank *> active_rank = nullptr;
+
+void MDSRank::handle_abort_signal(int signal) {
+  assert(signal == SIGABRT);
+
+  // unconditional exchange because the abort signal handler is the leader
+  MDSRank *rank = active_rank.exchange(ACTIVE_RANK_ABORT);
+
+  // we don't expect reentrancy for this method because
+  // we clear the SA_NODEFER flag when installing the handler
+  if (ACTIVE_RANK_ABORT == rank) {
+    lgeneric_derr(g_ceph_context) << __func__ << ": unexpected reentrant call" << dendl;
+    rank = nullptr;
+  }
+
+  if (rank) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "flushing MDSRank (0x%" PRIxPTR ") monc log on SIGABRT", (intptr_t)rank);
+    lgeneric_derr(g_ceph_context) << buf << dendl;
+    dout_emergency(buf);
+    rank->monc->flush_log();
+  }
+
+  // save a copy of the old_abort_action before we resest the active_rank to NULL
+  struct sigaction old_action = old_abort_action;
+
+  rank = active_rank.exchange(ACTIVE_RANK_NULL);
+  // unconditional exchange since the abort signal handler is the leader
+  if (ACTIVE_RANK_ABORT != rank) {
+    lgeneric_derr(g_ceph_context) << __func__ << ": unexpected active_rank: " << std::hex << rank << std::dec << dendl;
+  }
+
+  // restore the original handler unconditionally
+  // a race with `MDSRank::restore_abort_action` is of no concern
+  // due to idempotency of the sigaction() call below.
+  int ret;
+  // re-install the original abort handler
+  ret = sigaction(SIGABRT, &old_action, NULL);
+  if (ret != 0) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "%s: couldn't reinstall the old handler for SIGABRT, errno = %d", __func__, errno);
+    dout_emergency(buf);
+    lgeneric_derr(g_ceph_context) << buf << dendl;
+    exit(1);
+  }
+
+  // re-raise the signal to pass control to the original handler
+  ret = raise(SIGABRT);
+  if (ret != 0) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "%s: couldn't re-raise SIGABRT, errno = %d", __func__, errno);
+    dout_emergency(buf);
+    lgeneric_derr(g_ceph_context) << buf << dendl;
+    exit(1);
+  }
+}
+
+void MDSRank::install_abort_handler()
+{
+  // Install the abort handler only if it wasn't installed before
+  MDSRank * expected = ACTIVE_RANK_NULL;
+  if (active_rank.compare_exchange_strong(expected, this)) {
+    dout(20) << "installing MDSRank abort handler for instance " << std::hex << this << std::dec << dendl;
+
+    struct sigaction act = {};
+    act.sa_handler = MDSRank::handle_abort_signal;
+    sigemptyset(&act.sa_mask);
+    // no flags are set, meaning that by default the singal will be masked
+    // for the duration of the handler execution, i.e. no reentrancy for the hander.
+    int ret = sigaction(SIGABRT, &act, &old_abort_action);
+    if (ret != 0) {
+      ceph_abort_msgf("%s: sigaction returned %d", __func__, ret);
+    }
+  } else {
+    // It's not expected that multiple MDSRank objects will be active at the same time
+    ceph_abort_msgf("%s: unexpected active_rank: 0x%" PRIxPTR, __func__, (intptr_t) expected);
+  }
+}
+
+void MDSRank::remove_abort_handler_and_flush_monc_log(bool flush_monc_log)
+{
+  // The main concern of this function is to remove the pointer to `this`
+  // from the global `active_rank`, so that we don't try to dereference it post destruction.
+  // However, if the ABORT handler is already running on a different thread, then spin-wait
+  // here until that handler is done, so that we can proceed with the delete. 
+  // Not that it would matter much at that point, but still.
+  MDSRank* expected;
+  bool reported_busy = false;
+  do {
+    expected = this;
+    if (!active_rank.compare_exchange_weak(expected, ACTIVE_RANK_NULL)) {
+      if (!reported_busy) {
+        dout(20) << std::hex
+                 << "active_rank = " << expected
+                 << " while removing the abort handler for " << this
+                 << std::dec << dendl;
+        reported_busy = true;
+      }
+    }
+  } while (ACTIVE_RANK_ABORT == expected);
+
+  if (this == expected) {
+    // we should clean up ourselves
+    int ret = sigaction(SIGABRT, &old_abort_action, NULL);
+    if (ret != 0) {
+      ceph_abort_msgf("%s: sigaction returned %d", __func__, ret);
+    }
+  }
+
+  if (flush_monc_log) {
+    monc->flush_log();
+  }
 }

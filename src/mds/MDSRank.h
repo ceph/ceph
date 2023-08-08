@@ -672,6 +672,10 @@ private:
 
     mono_time starttime = mono_clock::zero();
     boost::asio::io_context& ioc;
+
+    static void handle_abort_signal(int sig);
+    void install_abort_handler();
+    void remove_abort_handler_and_flush_monc_log(bool flush_monc_log);
 };
 
 class C_MDS_RetryMessage : public MDSInternalContext {

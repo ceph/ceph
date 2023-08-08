@@ -394,7 +394,12 @@ void MonClient::send_log(bool flush)
 void MonClient::flush_log()
 {
   std::lock_guard l(monc_lock);
-  send_log();
+  // continue sending messages until no more or we see that some are waiting for session
+  while (log_client && log_client->are_pending() && waiting_for_session.empty()) {
+    // NB! the "flush" argument to `send_log` actually means `reset session`
+    //     this will lose all pending messages but the oldest one, hence `false` here
+    send_log(false);
+  }
 }
 
 /* Unlike all the other message-handling functions, we don't put away a reference
