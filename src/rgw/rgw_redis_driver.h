@@ -6,8 +6,7 @@
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
 
-#define dout_subsys ceph_subsys_rgw // remove -Sam
-#define dout_context g_ceph_context
+#include "boost_redis/examples/sync_connection.hpp"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
@@ -17,6 +16,7 @@ namespace rgw { namespace cache {
 namespace net = boost::asio;
 using boost::redis::config;
 using boost::redis::connection;
+using boost::redis::sync_connection;
 using boost::redis::request;
 using boost::redis::response;
  
@@ -85,7 +85,8 @@ class RedisDriver : public CacheDriver {
       std::shared_ptr<redis_response> s;
 
       /* Read Callback */
-      void operator()(auto ec, auto) const {
+      void operator()(boost::system::error_code ec, long unsigned int size) const {
+	dout(0) << "Sam: here in read" << dendl;
 	r.result = -ec.value();
 	r.data.append(std::get<0>(s->resp).value().c_str());
 	throttle->put(r);

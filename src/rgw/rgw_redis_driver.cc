@@ -587,7 +587,8 @@ static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& con
 {
   return [y, &conn, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
     using namespace boost::asio;
-    async_completion<yield_context, void()> init(y.get_yield_context());
+    yield_context yield = y.get_yield_context();
+    async_completion<yield_context, void()> init(yield);
     auto ex = get_associated_executor(init.completion_handler);
 
     boost::redis::request req;
@@ -596,6 +597,20 @@ static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& con
     // TODO: Make unique pointer once support is added
     auto s = std::make_shared<RedisDriver::redis_response>();
     auto& resp = s->resp;
+
+    /*sync_connection sync_conn;
+    config cfg;
+    cfg.addr.host = "127.0.0.1";
+    cfg.addr.port = "6379";
+    sync_conn.run(cfg);
+
+    sync_conn.exec(req, resp);
+    sync_conn.stop();
+
+    dout(0) << "Sam: " << std::get<0>(s->resp).value()<< dendl;
+
+    r.data.append(std::get<0>(s->resp).value().c_str());
+    aio->put(r);*/
 
     conn.async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
   };
