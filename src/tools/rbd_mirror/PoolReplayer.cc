@@ -453,10 +453,9 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
                                 const std::string &key,
 			        const std::string &description,
 			        RadosRef *rados_ref,
-                                bool strip_cluster_overrides) {
+                                bool is_remote) {
   dout(10) << "cluster_name=" << cluster_name << ", client_name=" << client_name
-	   << ", mon_host=" << mon_host << ", strip_cluster_overrides="
-	   << strip_cluster_overrides << dendl;
+	   << ", mon_host=" << mon_host << ", is_remote=" << is_remote << dendl;
 
   // NOTE: manually bootstrap a CephContext here instead of via
   // the librados API to avoid mixing global singletons between
@@ -483,7 +482,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
   // preserve cluster-specific config settings before applying environment/cli
   // overrides
   std::map<std::string, std::string> config_values;
-  if (strip_cluster_overrides) {
+  if (is_remote) {
     // remote peer connections shouldn't apply cluster-specific
     // configuration settings
     for (auto& key : UNIQUE_PEER_CONFIG_KEYS) {
@@ -516,7 +515,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
     }
   }
 
-  if (strip_cluster_overrides) {
+  if (is_remote) {
     // remote peer connections shouldn't apply cluster-specific
     // configuration settings
     for (auto& pair : config_values) {
