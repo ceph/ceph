@@ -1,6 +1,6 @@
 overrides:
   ceph:
-    conf:
+    cluster-conf:
       mds:
         debug mds: 20
         debug mds balancer: 20
