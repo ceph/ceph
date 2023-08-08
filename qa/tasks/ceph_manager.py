@@ -1555,6 +1555,12 @@ class CephManager:
             except CommandFailedError:
                 self.log('Failed to get pg_num from pool %s, ignoring' % pool)
 
+    def save_conf_epoch(self):
+        p = self.ceph("config log 1 --format=json")
+        J = json.loads(p.stdout.getvalue())
+        self.ctx.conf_epoch = J[0]["version"]
+        log.info("config epoch is %d", self.ctx.conf_epoch)
+
     def ceph(self, cmd, **kwargs):
         """
         Simple Ceph admin command wrapper around run_cluster_cmd.

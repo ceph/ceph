@@ -807,6 +807,8 @@ class LocalCephManager(CephManager):
         self.CEPH_CMD = [CEPH_CMD]
         self.RADOS_CMD = [RADOS_CMD]
 
+        self.save_conf_epoch()
+
     def find_remote(self, daemon_type, daemon_id):
         """
         daemon_type like 'mds', 'osd'
