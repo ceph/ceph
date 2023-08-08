@@ -2287,8 +2287,6 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
   }
   s->op = op_from_method(info.method);
 
-  info.init_meta_info(s, &s->has_bad_meta);
-
   return 0;
 }
 
@@ -2330,6 +2328,8 @@ RGWHandler_REST* RGWREST::get_handler(
     m->put_handler(handler);
     return nullptr;
   }
+
+  s->info.init_meta_info(s, &s->has_bad_meta, s->prot_flags);
 
   return handler;
 } /* get stream handler */

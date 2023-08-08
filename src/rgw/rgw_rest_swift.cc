@@ -152,7 +152,7 @@ static void dump_account_metadata(req_state * const s,
       dump_header(s, geniter->second, iter->second);
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
       dump_header_prefixed(s, "X-Account-Meta-",
-                           camelcase_http_attr(name + PREFIX_LEN),
+                           camelcase_dash_http_attr(name + PREFIX_LEN, false),
                            iter->second);
     }
   }
@@ -494,7 +494,7 @@ static void dump_container_metadata(req_state *s,
         dump_header(s, geniter->second, iter->second);
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
         dump_header_prefixed(s, "X-Container-Meta-",
-                             camelcase_http_attr(name + PREFIX_LEN),
+                             camelcase_dash_http_attr(name + PREFIX_LEN, false),
                              iter->second);
       }
     }
@@ -668,7 +668,12 @@ static void get_rmattrs_from_headers(const req_state * const s,
 
     if (prefix_len > 0) {
       string name(RGW_ATTR_META_PREFIX);
-      name.append(lowercase_dash_underscore_http_attr(p + prefix_len));
+      /* For backward compatibility */
+      name.append(lowercase_dash_http_attr(p + prefix_len, true));
+      rmattr_names.insert(name);
+
+      name = RGW_ATTR_META_PREFIX;
+      name.append(lowercase_dash_http_attr(p + prefix_len, false));
       rmattr_names.insert(name);
     }
   }
@@ -1331,7 +1336,7 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, req_state * cons
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
       dump_header_prefixed(s, "X-Object-Meta-",
-                           camelcase_http_attr(name), kv.second);
+                           camelcase_dash_http_attr(name, false), kv.second);
     }
   }
 
