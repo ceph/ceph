@@ -2,7 +2,7 @@ import time
 import signal
 import logging
 import operator
-from random import randint
+from random import randint, choice
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -301,6 +301,27 @@ class TestClusterResize(CephFSTestCase):
 class TestFailover(CephFSTestCase):
     CLIENTS_REQUIRED = 1
     MDSS_REQUIRED = 2
+
+    def test_repeated_boot(self):
+        """
+        That multiple boot messages do not result in the MDS getting evicted.
+        """
+
+        interval = 10
+        self.config_set("mon", "paxos_propose_interval", interval)
+
+        mds = choice(list(self.fs.status().get_all()))
+
+        with self.assert_cluster_log(f"daemon mds.{mds['name']} restarted", present=False):
+            # Avoid a beacon to the monitors with down:dne by restarting:
+            self.fs.mds_fail(mds_id=mds['name'])
+            # `ceph mds fail` won't return until the FSMap is committed, double-check:
+            self.assertIsNone(self.fs.status().get_mds_gid(mds['gid']))
+            time.sleep(2) # for mds to restart and accept asok commands
+            status1 = self.fs.mds_asok(['status'], mds_id=mds['name'])
+            time.sleep(interval*1.5)
+            status2 = self.fs.mds_asok(['status'], mds_id=mds['name'])
+            self.assertEqual(status1['id'], status2['id'])
 
     def test_simple(self):
         """
