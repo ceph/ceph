@@ -6,6 +6,7 @@
 #include <system_error>
 #include <unistd.h>
 
+#include <thread>
 #include <sstream>
 #include <string_view>
 
@@ -4251,8 +4252,11 @@ void RGWPutObj::execute(optional_yield y)
       break;
     }
 
+    thread calc_md5_thread;
     if (need_calc_md5) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
+      calc_md5_thread = thread([](bufferlist data, MD5& hash) {
+        hash.Update((const unsigned char *)data.c_str(), data.length());
+      }, data, std::ref(hash));
     }
 
     op_ret = filter->process(std::move(data), ofs);
@@ -4261,6 +4265,8 @@ void RGWPutObj::execute(optional_yield y)
           << op_ret << dendl;
       return;
     }
+
+    if (calc_md5_thread.joinable()) { calc_md5_thread.join(); }
 
     ofs += len;
   } while (len > 0);
