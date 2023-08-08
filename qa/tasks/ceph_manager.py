@@ -20,7 +20,7 @@ from io import BytesIO, StringIO
 from subprocess import DEVNULL
 from teuthology import misc as teuthology
 from tasks.scrub import Scrubber
-from tasks.util.rados import cmd_erasure_code_profile
+from tasks.util.rados import cmd_erasure_code_profile, cmd_ec_crush_profile
 from tasks.util import get_remote
 
 from teuthology.contextutil import safe_while
@@ -2114,8 +2114,18 @@ class CephManager:
             args = cmd_erasure_code_profile(profile_name, profile)
             self.raw_cluster_cmd(*args)
 
+    def create_erasure_code_crush_rule(self, rule_name, profile):
+        """
+        Create an erasure code crush rule that can be used as a parameter
+        when creating an erasure coded pool.
+        """
+        with self.lock:
+            args = cmd_ec_crush_profile(rule_name, profile)
+            self.raw_cluster_cmd(*args)
+
     def create_pool_with_unique_name(self, pg_num=16,
                                      erasure_code_profile_name=None,
+                                     erasure_code_crush_rule_name=None,
                                      min_size=None,
                                      erasure_code_use_overwrites=False):
         """
@@ -2129,6 +2139,7 @@ class CephManager:
                 name,
                 pg_num,
                 erasure_code_profile_name=erasure_code_profile_name,
+                erasure_code_crush_rule_name=erasure_code_crush_rule_name,
                 min_size=min_size,
                 erasure_code_use_overwrites=erasure_code_use_overwrites)
         return name
@@ -2141,6 +2152,7 @@ class CephManager:
 
     def create_pool(self, pool_name, pg_num=16,
                     erasure_code_profile_name=None,
+                    erasure_code_crush_rule_name=None,
                     min_size=None,
                     erasure_code_use_overwrites=False):
         """
@@ -2149,6 +2161,8 @@ class CephManager:
         :param pg_num: initial number of pgs.
         :param erasure_code_profile_name: if set and !None create an
                                           erasure coded pool using the profile
+        :param erasure_code_crush_rule_name: if set and !None create an
+                                             erasure coded pool using the crush rule
         :param erasure_code_use_overwrites: if true, allow overwrites
         """
         with self.lock:
@@ -2157,9 +2171,14 @@ class CephManager:
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
             if erasure_code_profile_name:
-                self.raw_cluster_cmd('osd', 'pool', 'create',
-                                     pool_name, str(pg_num), str(pg_num),
-                                     'erasure', erasure_code_profile_name)
+                cmd_args = ['osd', 'pool', 'create', 
+                            pool_name, str(pg_num), 
+                            str(pg_num), 'erasure', 
+                            erasure_code_profile_name]
+
+                if erasure_code_crush_rule_name:
+                    cmd_args.extend([erasure_code_crush_rule_name])
+                self.raw_cluster_cmd(*cmd_args)
             else:
                 self.raw_cluster_cmd('osd', 'pool', 'create',
                                      pool_name, str(pg_num))
