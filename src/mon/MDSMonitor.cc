@@ -1814,7 +1814,9 @@ void MDSMonitor::check_sub(Subscription *sub)
 void MDSMonitor::update_metadata(mds_gid_t gid,
 				 const map<string, string>& metadata)
 {
+  dout(20) << __func__ <<  ": mds." << gid << ": " << metadata << dendl;
   if (metadata.empty()) {
+    dout(5) << __func__ << ": mds." << gid << ": no metadata!" << dendl;
     return;
   }
   pending_metadata[gid] = metadata;
@@ -1823,7 +1825,6 @@ void MDSMonitor::update_metadata(mds_gid_t gid,
   bufferlist bl;
   encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
-  paxos.trigger_propose();
 }
 
 void MDSMonitor::remove_from_metadata(const FSMap &fsmap, MonitorDBStore::TransactionRef t)
