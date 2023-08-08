@@ -21,6 +21,8 @@ overrides:
 tasks:
 - thrashosds:
     timeout: 1200
+    min_in: 2
+    thrash_hosts: true
     chance_pgnum_grow: 1
     chance_pgnum_shrink: 1
     chance_pgpnum_fix: 1
