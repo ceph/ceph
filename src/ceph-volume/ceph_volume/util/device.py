@@ -490,7 +490,7 @@ class Device(object):
 
     @property
     def is_acceptable_device(self):
-        return self.is_device or self.is_partition
+        return self.is_device or self.is_partition or self.is_lv
 
     @property
     def is_encrypted(self):

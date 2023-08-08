@@ -845,11 +845,13 @@ def get_devices(_sys_block_path='/sys/block', device=''):
 
     block_devs = get_block_devs_sysfs(_sys_block_path)
 
-    block_types = ['disk', 'mpath']
+    block_types = ['disk', 'mpath', 'lvm']
     if allow_loop_devices():
         block_types.append('loop')
 
     for block in block_devs:
+        if block[2] == 'lvm':
+            block[1] = lvm.get_lv_path_from_mapper(block[1])
         devname = os.path.basename(block[0])
         diskname = block[1]
         if block[2] not in block_types:
