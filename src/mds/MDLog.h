@@ -147,7 +147,6 @@ public:
   }
 
   void trim_expired_segments();
-  void trim(int max=-1);
   int trim_all();
 
   void create(MDSContext *onfinish);  // fresh, empty log! 
@@ -289,6 +288,9 @@ private:
   void _trim_expired_segments();
   void write_head(MDSContext *onfinish);
 
+  void trim();
+  void log_trim_upkeep(void);
+
   bool debug_subtrees;
   std::atomic_uint64_t event_large_threshold; // accessed by submit thread
   uint64_t events_per_segment;
@@ -306,5 +308,11 @@ private:
 
   // log trimming decay counter
   DecayCounter log_trim_counter;
+
+  // log trimming upkeeper thread
+  std::thread upkeep_thread;
+  // guarded by mds_lock
+  std::condition_variable_any cond;
+  std::atomic<bool> upkeep_log_trim_shutdown{false};
 };
 #endif

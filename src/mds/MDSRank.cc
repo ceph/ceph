@@ -743,10 +743,6 @@ void MDSRankDispatcher::tick()
   // update average session uptime
   sessionmap.update_average_session_age();
 
-  if (is_active() || is_stopping()) {
-    mdlog->trim();  // NOT during recovery!
-  }
-
   // ...
   if (is_clientreplay() || is_active() || is_stopping()) {
     server->clear_laggy_clients();
@@ -789,7 +785,6 @@ void MDSRankDispatcher::tick()
 
   // shut down?
   if (is_stopping()) {
-    mdlog->trim();
     if (mdcache->shutdown_pass()) {
       uint64_t pq_progress = 0 ;
       uint64_t pq_total = 0;
