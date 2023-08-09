@@ -683,12 +683,12 @@ class CephFSSubvolumeGroups(RESTController):
     def get(self, vol_name):
         if not vol_name:
             raise DashboardException(
-                'Error listing subvolume groups')
+                f'Error listing subvolume groups for {vol_name}')
         error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_ls',
                                           None, {'vol_name': vol_name})
         if error_code != 0:
             raise DashboardException(
-                'Error listing subvolume groups')
+                f'Error listing subvolume groups for {vol_name}')
         subvolume_groups = json.loads(out)
         for group in subvolume_groups:
             error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info',
@@ -700,3 +700,11 @@ class CephFSSubvolumeGroups(RESTController):
                 )
             group['info'] = json.loads(out)
         return subvolume_groups
+
+    def create(self, vol_name: str, group_name: str, **kwargs):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_create', None, {
+            'vol_name': vol_name, 'group_name': group_name, **kwargs})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create subvolume group {group_name}: {err}'
+            )
