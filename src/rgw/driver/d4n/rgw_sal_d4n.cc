@@ -807,11 +807,11 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
-      filter->get_cache_driver()->put(save_dpp, oid, bl, bl.length(), source->get_attrs(), *save_y); 
+      filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
-      filter->get_cache_driver()->put(save_dpp, oid, bl, bl.length(), source->get_attrs(), *save_y);
+      filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
       uint64_t rem_space = rgw_get_obj_max_req_size - bl_rem.length();
       uint64_t len_to_copy = rem_space > bl.length() ? bl.length() : rem_space;
@@ -824,7 +824,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
         ofs += bl_rem.length();
 
-        filter->get_cache_driver()->put(save_dpp, oid, bl_rem, bl_rem.length(), source->get_attrs(), *save_y);
+        filter->get_cache_driver()->put_async(save_dpp, oid, bl_rem, bl_rem.length(), source->get_attrs());
 
         bl_rem.clear();
         bl_rem = std::move(bl);
