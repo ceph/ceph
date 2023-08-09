@@ -698,7 +698,7 @@ void ObjectWriteSameRequest<I>::add_write_ops(neorados::WriteOp* wr) {
 
 template <typename I>
 void ObjectCompareAndWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
-  wr->cmpext(this->m_object_off, bufferlist{m_cmp_bl}, nullptr);
+  wr->cmpext(this->m_object_off, bufferlist{m_cmp_bl}, &m_mismatch_object_offset);
 
   if (this->m_full_object) {
     wr->write_full(bufferlist{m_write_bl});
@@ -710,13 +710,14 @@ void ObjectCompareAndWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
 
 template <typename I>
 int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
-  if (r <= -MAX_ERRNO) {
+  // Error code value for cmpext mismatch. Works for both neorados and
+  // mock image, which seems to be short-circuiting on nonexistence.
+  if (r == -MAX_ERRNO) {
     I *image_ctx = this->m_ictx;
 
     // object extent compare mismatch
-    uint64_t offset = -MAX_ERRNO - r;
     auto [image_extents, _] = io::util::object_to_area_extents(
-        image_ctx, this->m_object_no, {{offset, this->m_object_len}});
+        image_ctx, this->m_object_no, {{m_mismatch_object_offset, this->m_object_len}});
     ceph_assert(image_extents.size() == 1);
 
     if (m_mismatch_offset) {

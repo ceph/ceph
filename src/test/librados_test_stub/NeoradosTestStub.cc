@@ -113,11 +113,19 @@ librados::AioCompletionImpl* create_aio_completion(
   return impl;
 }
 
-int save_operation_size(int result, size_t* pval) {
-  if (pval != NULL) {
-    *pval = result;
+int save_operation_size(int result, uint64_t* pval) {
+  int our_r = result;
+  if (result <= -MAX_ERRNO) {
+    if (pval != NULL) {
+      *pval = -MAX_ERRNO - result;
+    }
+    our_r = -MAX_ERRNO;
+  } else {
+    if (pval != NULL) {
+      *pval = -1;
+    }
   }
-  return result;
+  return our_r;
 }
 
 int save_operation_ec(int result, boost::system::error_code* ec) {
@@ -323,7 +331,7 @@ void Op::assert_version(uint64_t ver) {
           &librados::TestIoCtxImpl::assert_version, _1, _2, ver));
 }
 
-void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) {
+void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, uint64_t* s) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op = std::bind(
     &librados::TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl, _4);

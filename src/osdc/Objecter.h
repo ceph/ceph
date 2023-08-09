@@ -64,6 +64,7 @@
 #include "msg/Dispatcher.h"
 
 #include "osd/OSDMap.h"
+#include "osd/error_code.h"
 
 class Context;
 class Messenger;
@@ -434,19 +435,41 @@ struct ObjectOperation {
   struct CB_ObjectOperation_cmpext {
     int* prval = nullptr;
     boost::system::error_code* ec = nullptr;
-    std::size_t* s = nullptr;
+    uint64_t* mismatch_offset = nullptr;
     explicit CB_ObjectOperation_cmpext(int *prval)
       : prval(prval) {}
-    CB_ObjectOperation_cmpext(boost::system::error_code* ec, std::size_t* s)
-      : ec(ec), s(s) {}
+    CB_ObjectOperation_cmpext(boost::system::error_code* ec,
+			      uint64_t* mismatch_offset)
+      : ec(ec), mismatch_offset(mismatch_offset) {}
 
-    void operator()(boost::system::error_code ec, int r, const ceph::buffer::list&) {
+    void operator()(boost::system::error_code ec, int r,
+		    const ceph::buffer::list&) {
       if (prval)
         *prval = r;
-      if (this->ec)
-	*this->ec = ec;
-      if (s)
-	*s = static_cast<std::size_t>(-(MAX_ERRNO - r));
+
+      if (r <= -MAX_ERRNO) {
+	if (this->ec) {
+	  *this->ec = make_error_code(osd_errc::cmpext_mismatch);
+	}
+	if (mismatch_offset) {
+	  *mismatch_offset = -MAX_ERRNO - r;
+	}
+	throw boost::system::system_error(osd_errc::cmpext_mismatch);
+      } else if (r < 0) {
+	if (this->ec) {
+	  *this->ec = ec;
+	}
+	if (mismatch_offset) {
+	  *mismatch_offset = -1;
+	}
+      } else {
+	if (this->ec) {
+	  this->ec->clear();
+	}
+	if (mismatch_offset) {
+	  *mismatch_offset = -1;
+	}
+      }
     }
   };
 
@@ -457,9 +480,9 @@ struct ObjectOperation {
   }
 
   void cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, boost::system::error_code* ec,
-	      std::size_t* s) {
+	      uint64_t* mismatch_offset) {
     add_data(CEPH_OSD_OP_CMPEXT, off, cmp_bl.length(), cmp_bl);
-    set_handler(CB_ObjectOperation_cmpext(ec, s));
+    set_handler(CB_ObjectOperation_cmpext(ec, mismatch_offset));
     out_ec.back() = ec;
   }
 
