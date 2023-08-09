@@ -3,7 +3,8 @@ import { Injectable } from '@angular/core';
 import { ApiClient } from './api-client';
 import { map } from 'rxjs/operators';
 import { SummaryService } from '../services/summary.service';
-import { UpgradeInfoInterface } from '../models/upgrade.interface';
+import { UpgradeInfoInterface, UpgradeStatusInterface } from '../models/upgrade.interface';
+import { Observable } from 'rxjs';
 
 @Injectable({
   providedIn: 'root'
@@ -55,7 +56,23 @@ export class UpgradeService extends ApiClient {
     return upgradeInfo;
   }
 
-  start(version: string) {
-    return this.http.post(`${this.baseURL}/start`, { version: version });
+  start(version?: string, image?: string) {
+    return this.http.post(`${this.baseURL}/start`, { image: image, version: version });
+  }
+
+  pause() {
+    return this.http.put(`${this.baseURL}/pause`, null);
+  }
+
+  resume() {
+    return this.http.put(`${this.baseURL}/resume`, null);
+  }
+
+  stop() {
+    return this.http.put(`${this.baseURL}/stop`, null);
+  }
+
+  status(): Observable<UpgradeStatusInterface> {
+    return this.http.get<UpgradeStatusInterface>(`${this.baseURL}/status`);
   }
 }

@@ -18,7 +18,9 @@ export class CriticalConfirmationModalComponent implements OnInit {
   bodyTemplate: TemplateRef<any>;
   bodyContext: object;
   submitActionObservable: () => Observable<any>;
+  callBackAtionObservable: () => Observable<any>;
   submitAction: Function;
+  backAction: Function;
   deletionForm: CdFormGroup;
   itemDescription: 'entry';
   itemNames: string[];
@@ -50,6 +52,17 @@ export class CriticalConfirmationModalComponent implements OnInit {
       });
     } else {
       this.submitAction();
+    }
+  }
+
+  callBackAction() {
+    if (this.callBackAtionObservable) {
+      this.callBackAtionObservable().subscribe({
+        error: this.stopLoadingSpinner.bind(this),
+        complete: this.hideModal.bind(this)
+      });
+    } else {
+      this.backAction();
     }
   }
 

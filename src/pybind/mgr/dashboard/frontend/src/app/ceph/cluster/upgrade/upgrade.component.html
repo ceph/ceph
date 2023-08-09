@@ -6,24 +6,26 @@
              i18n-cardTitle
              aria-label="New Version"
              i18n-aria-label
-             id="newVersionAvailable">
-      <div class="d-flex flex-column justify-content-center align-items-center"
-           *ngIf="info$ | async as info; else checkingForUpgradeStatus">
-        <ng-container *ngIf="info.versions.length > 0; else noUpgradesAvailable">
-          <div i18n-ngbTooltip
-               [ngbTooltip]="(healthData.mgr_map | mgrSummary).total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
-            <button class="btn btn-accent mt-2"
-                    id="upgrade"
-                    aria-label="Upgrade now"
-                    (click)="upgradeNow(info.versions[info.versions.length - 1])"
-                    [disabled]="(healthData.mgr_map | mgrSummary).total <= 1"
-                    i18n>Upgrade to {{ info.versions[info.versions.length - 1] }}</button>
-          </div>
+             id="newVersionAvailable"
+             *ngIf="upgradeStatus$ | async as status">
+      <ng-container *ngIf="status.in_progress; else upgradeStatusTpl">
+        <div class="d-flex flex-column justify-content-center align-items-center mt-2">
+          <h5 i18n
+              *ngIf="status.is_paused; else inProgress">
+            <i [ngClass]="[icons.spinner]"></i>
+            Upgrade is paused {{executingTasks?.progress}}%</h5>
           <a class="mt-2 link-primary mb-2"
-             (click)="startUpgradeModal()"
-             i18n>Select another version...</a>
-        </ng-container>
-      </div>
+             routerLink="/upgrade/progress"
+             i18n>View Details...</a>
+        </div>
+
+        <ng-template #inProgress>
+          <h5 i18n>
+            <i [ngClass]="[icons.spin, icons.spinner]"></i>
+              Upgrade in progress {{executingTasks?.progress}}%
+          </h5>
+        </ng-template>
+      </ng-container>
     </cd-card>
 
     <cd-card class="col-sm-3 px-3 d-flex"
@@ -123,6 +125,27 @@
              [showDownloadCopyButton]="false"
              defaultTab="cluster-logs"
              [scrollable]="true"></cd-logs>
+
+
+    <ng-template #upgradeStatusTpl>
+      <div class="d-flex flex-column justify-content-center align-items-center"
+           *ngIf="info$ | async as info; else checkingForUpgradeStatus">
+        <ng-container *ngIf="info.versions.length > 0; else noUpgradesAvailable">
+          <div i18n-ngbTooltip
+               [ngbTooltip]="(healthData.mgr_map | mgrSummary).total <= 1 ? 'To upgrade, you need minimum 2 mgr daemons.' : ''">
+            <button class="btn btn-accent mt-2"
+                    id="upgrade"
+                    aria-label="Upgrade now"
+                    (click)="upgradeNow(info.versions[info.versions.length - 1])"
+                    [disabled]="(healthData.mgr_map | mgrSummary).total <= 1"
+                    i18n>Upgrade to {{ info.versions[info.versions.length - 1] }}</button>
+          </div>
+          <a class="mt-2 link-primary mb-2"
+             (click)="startUpgradeModal()"
+             i18n>Select another version...</a>
+        </ng-container>
+      </div>
+    </ng-template>
   </ng-container>
 </div>
 
@@ -183,4 +206,15 @@
     <i [ngClass]="[icons.danger]"></i>
     Failed to fetch registry informations
   </span>
+</ng-template>
+
+<ng-template #upgradeProgress>
+  <div class="d-flex flex-column justify-content-center align-items-center mt-2">
+    <h5 i18n>
+      <i [ngClass]="[icons.spin, icons.spinner]"></i>
+      Upgrade in progress {{executingTasks?.progress}}%</h5>
+    <a class="mt-2 link-primary mb-2"
+       routerLink="/upgrade/progress"
+       i18n>View Details...</a>
+  </div>
 </ng-template>
