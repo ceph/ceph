@@ -1,3 +1,9 @@
+overrides:
+  rgw:
+    client.0:
+      # tempest tests expect the swift api at the root
+      frontend_prefix: /swift
+
 tasks:
 - tempest:
     client.0:
