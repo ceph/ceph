@@ -193,7 +193,7 @@ private:
 
 inline constexpr std::string_view all_nspaces("\001");
 
-enum class cmpxattr_op : std::uint8_t {
+enum class cmp_op : std::uint8_t {
   eq  = 1,
   ne  = 2,
   gt  = 3,
@@ -303,14 +303,14 @@ public:
 
   void cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
 	      int* unmatch = nullptr);
-  void cmpxattr(std::string_view name, cmpxattr_op op,
+  void cmpxattr(std::string_view name, cmp_op op,
 		const ceph::buffer::list& val);
-  void cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val);
+  void cmpxattr(std::string_view name, cmp_op op, std::uint64_t val);
   void assert_version(uint64_t ver);
   void assert_exists();
   void cmp_omap(const boost::container::flat_map<std::string,
 		                                 std::pair<ceph::buffer::list,
-		                                           int>>& assertions);
+		                                           cmp_op>>& assertions);
 
   void exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
@@ -547,22 +547,22 @@ public:
     return std::move(*this);
   }
 
-  ReadOp& cmpxattr(std::string_view name, cmpxattr_op op,
+  ReadOp& cmpxattr(std::string_view name, cmp_op op,
 		   const ceph::buffer::list& val) & {
     Op::cmpxattr(name, op, val);
     return *this;
   }
-  ReadOp&& cmpxattr(std::string_view name, cmpxattr_op op,
+  ReadOp&& cmpxattr(std::string_view name, cmp_op op,
 		    const ceph::buffer::list& val) && {
     Op::cmpxattr(name, op, val);
     return std::move(*this);
   }
 
-  ReadOp& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) & {
+  ReadOp& cmpxattr(std::string_view name, cmp_op op, std::uint64_t val) & {
     Op::cmpxattr(name, op, val);
     return *this;
   }
-  ReadOp&& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) && {
+  ReadOp&& cmpxattr(std::string_view name, cmp_op op, std::uint64_t val) && {
     Op::cmpxattr(name, op, val);
     return std::move(*this);
   }
@@ -587,13 +587,13 @@ public:
 
   ReadOp& cmp_omap(
     const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, int>>& assertions) & {
+      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) & {
     Op::cmp_omap(assertions);
     return *this;
   }
   ReadOp&& cmp_omap(
     const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, int>>& assertions) && {
+      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) && {
     Op::cmp_omap(assertions);
     return std::move(*this);
   }
@@ -931,22 +931,22 @@ public:
     return std::move(*this);
   }
 
-  WriteOp& cmpxattr(std::string_view name, cmpxattr_op op,
+  WriteOp& cmpxattr(std::string_view name, cmp_op op,
 		   const ceph::buffer::list& val) & {
     Op::cmpxattr(name, op, val);
     return *this;
   }
-  WriteOp&& cmpxattr(std::string_view name, cmpxattr_op op,
+  WriteOp&& cmpxattr(std::string_view name, cmp_op op,
 		    const ceph::buffer::list& val) && {
     Op::cmpxattr(name, op, val);
     return std::move(*this);
   }
 
-  WriteOp& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) & {
+  WriteOp& cmpxattr(std::string_view name, cmp_op op, std::uint64_t val) & {
     Op::cmpxattr(name, op, val);
     return *this;
   }
-  WriteOp&& cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) && {
+  WriteOp&& cmpxattr(std::string_view name, cmp_op op, std::uint64_t val) && {
     Op::cmpxattr(name, op, val);
     return std::move(*this);
   }
@@ -971,13 +971,13 @@ public:
 
   WriteOp& cmp_omap(
     const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, int>>& assertions) & {
+      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) & {
     Op::cmp_omap(assertions);
     return *this;
   }
   WriteOp&& cmp_omap(
     const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, int>>& assertions) && {
+      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) && {
     Op::cmp_omap(assertions);
     return std::move(*this);
   }

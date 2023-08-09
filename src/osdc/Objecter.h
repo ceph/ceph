@@ -1026,18 +1026,18 @@ struct ObjectOperation {
     }
   }
 
-  void omap_cmp(const boost::container::flat_map<
-		std::string, std::pair<ceph::buffer::list, int>>& assertions,
-		boost::system::error_code *ec) {
+  void omap_cmp(ceph::buffer::list&& assertions,
+		int *prval) {
+    using ceph::encode;
     OSDOp &op = add_op(CEPH_OSD_OP_OMAP_CMP);
-    ceph::buffer::list bl;
-    encode(assertions, bl);
     op.op.extent.offset = 0;
-    op.op.extent.length = bl.length();
-    op.indata.claim_append(bl);
-    out_ec.back() = ec;
+    op.op.extent.length = assertions.length();
+    op.indata.claim_append(assertions);
+    if (prval) {
+      unsigned p = ops.size() - 1;
+      out_rval[p] = prval;
+    }
   }
-
   struct C_ObjectOperation_copyget : public Context {
     ceph::buffer::list bl;
     object_copy_cursor_t *cursor;

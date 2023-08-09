@@ -463,11 +463,11 @@ void Op::cmpext(uint64_t off, bufferlist&& cmp_bl, int* s) {
   reinterpret_cast<OpImpl*>(&impl)->op.cmpext(off, std::move(cmp_bl), nullptr,
 					      s);
 }
-void Op::cmpxattr(std::string_view name, cmpxattr_op op, const bufferlist& val) {
+void Op::cmpxattr(std::string_view name, cmp_op op, const bufferlist& val) {
   reinterpret_cast<OpImpl*>(&impl)->
     op.cmpxattr(name, std::uint8_t(op), CEPH_OSD_CMPXATTR_MODE_STRING, val);
 }
-void Op::cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val) {
+void Op::cmpxattr(std::string_view name, cmp_op op, std::uint64_t val) {
   bufferlist bl;
   encode(val, bl);
   reinterpret_cast<OpImpl*>(&impl)->
@@ -485,8 +485,16 @@ void Op::assert_exists() {
 }
 void Op::cmp_omap(const bc::flat_map<
 		  std::string, std::pair<cb::list,
-		  int>>& assertions) {
-  reinterpret_cast<OpImpl*>(&impl)->op.omap_cmp(assertions, nullptr);
+		  cmp_op>>& assertions) {
+  buffer::list bl;
+  encode(uint32_t(assertions.size()), bl);
+  for (const auto& [key, assertion] : assertions) {
+    const auto& [value, op] = assertion;
+    encode(key, bl);
+    encode(value, bl);
+    encode(int(op), bl);
+  }
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_cmp(std::move(bl), nullptr);
 }
 
 void Op::exec(std::string_view cls, std::string_view method,
