@@ -111,7 +111,7 @@ class CephFSTestCase(CephTestCase):
                                       "dump", "--format=json-pretty"))['blacklist']
                 log.info(f"Removing {len(blacklist)} blacklist entries")
                 for addr, blocklisted_at in blacklist.items():
-                    self.mds_cluster.mon_manager.raw_cluster_cmd("osd", "blacklist", "rm", addr)
+                    self.run_ceph_cmd("osd", "blacklist", "rm", addr)
 
     def setUp(self):
         super(CephFSTestCase, self).setUp()
