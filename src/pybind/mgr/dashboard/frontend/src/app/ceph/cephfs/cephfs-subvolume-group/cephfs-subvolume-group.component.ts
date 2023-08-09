@@ -9,7 +9,7 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
+import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolumegroup.model';
 import { CephfsSubvolumegroupFormComponent } from '../cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -103,15 +103,14 @@ export class CephfsSubvolumeGroupComponent implements OnInit {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () =>
-          this.modalService.show(
-            CephfsSubvolumegroupFormComponent,
-            {
-              fsName: this.fsName,
-              pools: this.pools
-            },
-            { size: 'lg' }
-          )
+        click: () => this.openModal(),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.openModal(true)
       }
     ];
 
@@ -138,5 +137,18 @@ export class CephfsSubvolumeGroupComponent implements OnInit {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  openModal(edit = false) {
+    this.modalService.show(
+      CephfsSubvolumegroupFormComponent,
+      {
+        fsName: this.fsName,
+        subvolumegroupName: this.selection?.first()?.name,
+        pools: this.pools,
+        isEdit: edit
+      },
+      { size: 'lg' }
+    );
   }
 }

@@ -672,6 +672,16 @@ class CephFSSubvolumeGroups(RESTController):
             group['info'] = json.loads(out)
         return subvolume_groups
 
+    @RESTController.Resource('GET')
+    def info(self, vol_name: str, group_name: str):
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info', None, {
+            'vol_name': vol_name, 'group_name': group_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get info for subvolume group {group_name}: {err}'
+            )
+        return json.loads(out)
+
     def create(self, vol_name: str, group_name: str, **kwargs):
         error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_create', None, {
             'vol_name': vol_name, 'group_name': group_name, **kwargs})
@@ -679,3 +689,14 @@ class CephFSSubvolumeGroups(RESTController):
             raise DashboardException(
                 f'Failed to create subvolume group {group_name}: {err}'
             )
+
+    def set(self, vol_name: str, group_name: str, size: str):
+        if not size:
+            return f'Failed to update subvolume group {group_name}, size was not provided'
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_resize', None, {
+            'vol_name': vol_name, 'group_name': group_name, 'new_size': size})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to update subvolume group {group_name}: {err}'
+            )
+        return f'Subvolume group {group_name} updated successfully'
