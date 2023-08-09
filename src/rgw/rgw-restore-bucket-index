@@ -94,10 +94,10 @@ super_exit() {
 usage() {
   >&2 cat << EOF
 
-Usage: $0 -b <bucketname> [-l <rados-ls-file>] [-p <pool>] [-y]
+Usage: $0 -b <bucket-name> [-l <rados-ls-file>] [-p <pool>] [-y]
 
 where:
-  -b <bucketname>      Required - name of the bucket to operate on
+  -b <bucket-name>     Required - name of the bucket to operate on
   -l <rados-ls-file>   Optional - file containing the output of 'rados ls -p <pool>'
   -r <realm-name>      Optional - specify the realm if not applying to the default realm"
   -g <zonegroup-name>  Optional - specify the zonegroup if not applying to the default zonegroup"
@@ -253,8 +253,12 @@ eval "radosgw-admin metadata get bucket:$bucket $debugging_rgwadmin $multisite_s
 export marker=$(jq -r ".data.bucket.marker" $bkt_entry)
 export bucket_id=$(jq -r ".data.bucket.bucket_id" $bkt_entry)
 if [ -z "$marker" -o -z "$bucket_id" ] ;then
-    echo "ERROR: unable to read entry-point metadata for bucket \"$bucket\"."
+    echo "ERROR: Unable to read entry-point metadata for bucket \"$bucket\"."
+    echo "       Please make sure that <bucket-name> is correct and, if not using"
+    echo "       the defaults, that <realm-name>, <zonegroup-name>, and/or"
+    echo "       <zone-name> are correctly specified."
     clean
+    usage
     exit 1
 fi
 
