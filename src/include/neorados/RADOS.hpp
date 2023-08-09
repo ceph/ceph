@@ -301,7 +301,8 @@ public:
   void set_fadvise_dontneed();
   void set_fadvise_nocache();
 
-  void cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s);
+  void cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+	      int* unmatch = nullptr);
   void cmpxattr(std::string_view name, cmpxattr_op op,
 		const ceph::buffer::list& val);
   void cmpxattr(std::string_view name, cmpxattr_op op, std::uint64_t val);
@@ -535,12 +536,14 @@ public:
     return std::move(*this);
   }
 
-  ReadOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) & {
-    Op::cmpext(off, std::move(cmp_bl), s);
+  ReadOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+		 int* unmatch = nullptr) & {
+    Op::cmpext(off, std::move(cmp_bl), unmatch);
     return *this;
   }
-  ReadOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) && {
-    Op::cmpext(off, std::move(cmp_bl), s);
+  ReadOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+		  int* unmatch = nullptr) && {
+    Op::cmpext(off, std::move(cmp_bl), unmatch);
     return std::move(*this);
   }
 
@@ -917,12 +920,14 @@ public:
     return std::move(*this);
   }
 
-  WriteOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) & {
-    Op::cmpext(off, std::move(cmp_bl), s);
+  WriteOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+		  int* unmatch = nullptr) & {
+    Op::cmpext(off, std::move(cmp_bl), unmatch);
     return *this;
   }
-  WriteOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, std::size_t* s) && {
-    Op::cmpext(off, std::move(cmp_bl), s);
+  WriteOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+		   int* unmatch = nullptr) && {
+    Op::cmpext(off, std::move(cmp_bl), unmatch);
     return std::move(*this);
   }
 

@@ -459,7 +459,7 @@ void Op::set_fadvise_nocache() {
     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
 }
 
-void Op::cmpext(uint64_t off, bufferlist&& cmp_bl, std::size_t* s) {
+void Op::cmpext(uint64_t off, bufferlist&& cmp_bl, int* s) {
   reinterpret_cast<OpImpl*>(&impl)->op.cmpext(off, std::move(cmp_bl), nullptr,
 					      s);
 }

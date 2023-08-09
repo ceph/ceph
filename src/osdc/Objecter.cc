@@ -3572,7 +3572,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 	if (*pe) {
 	  **pe = e.code();
 	}
-	if (*pr) {
+	if (*pr && **pr == 0 &&
+	    // Special case for cmpext
+	    !(osd_errc::cmpext_failed == handler_error)) {
 	  **pr = ceph::from_error_code(e.code());
 	}
       } catch (const std::exception& e) {
@@ -3582,7 +3584,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 	if (*pe) {
 	  **pe = osdc_errc::handler_failed;
 	}
-	if (*pr) {
+	if (*pr && **pr == 0) {
 	  **pr = -EIO;
 	}
       }
@@ -3619,6 +3621,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   if (Op::has_completion(onfinish)) {
     if (rc == 0 && handler_error) {
       Op::complete(std::move(onfinish), handler_error, -EIO, service.get_executor());
+    } else if (handler_error) {
+      Op::complete(std::move(onfinish), handler_error, rc, service.get_executor());
     } else {
       Op::complete(std::move(onfinish), osdcode(rc), rc, service.get_executor());
     }

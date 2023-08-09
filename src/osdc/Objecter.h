@@ -57,6 +57,7 @@
 #include "msg/Dispatcher.h"
 
 #include "osd/OSDMap.h"
+#include "osd/error_code.h"
 
 class Context;
 class Messenger;
@@ -427,19 +428,28 @@ struct ObjectOperation {
   struct CB_ObjectOperation_cmpext {
     int* prval = nullptr;
     boost::system::error_code* ec = nullptr;
-    std::size_t* s = nullptr;
+    int* s = nullptr;
     explicit CB_ObjectOperation_cmpext(int *prval)
       : prval(prval) {}
-    CB_ObjectOperation_cmpext(boost::system::error_code* ec, std::size_t* s)
+    CB_ObjectOperation_cmpext(boost::system::error_code* ec, int* s)
       : ec(ec), s(s) {}
 
-    void operator()(boost::system::error_code ec, int r, const ceph::buffer::list&) {
+    void operator()(boost::system::error_code ec, int r,
+		    const ceph::buffer::list&) {
       if (prval)
         *prval = r;
-      if (this->ec)
-	*this->ec = ec;
-      if (s)
-	*s = static_cast<std::size_t>(-(MAX_ERRNO - r));
+      if (this->ec) {
+	if (r < 0) {
+	  *this->ec = make_error_code(osd_errc::cmpext_failed);
+	} else {
+	  this->ec->clear();
+	}
+      }
+      if (s) 
+	*s = r == 0 ? -1 : -MAX_ERRNO - r;
+      if (r < 0 && r < -MAX_ERRNO) {
+	throw boost::system::system_error(osd_errc::cmpext_failed);
+      }
     }
   };
 
@@ -450,7 +460,7 @@ struct ObjectOperation {
   }
 
   void cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, boost::system::error_code* ec,
-	      std::size_t* s) {
+	      int* s) {
     add_data(CEPH_OSD_OP_CMPEXT, off, cmp_bl.length(), cmp_bl);
     set_handler(CB_ObjectOperation_cmpext(ec, s));
     out_ec.back() = ec;
