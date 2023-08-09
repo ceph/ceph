@@ -11,5 +11,4 @@ tasks:
           description: Swift Service
 - rgw:
     client.0:
-      frontend_prefix: /swift
       use-keystone-role: client.0
