@@ -47,7 +47,6 @@ class ClusterModel:
     @classmethod
     def get_capacity(cls) -> ClusterCapacity:
         df = mgr.get('df')
-        total_objects = 0
         total_pool_bytes_used = 0
         average_object_size = 0
         total_data_pool_objects = 0
@@ -59,7 +58,6 @@ class ClusterModel:
             if pool_name in rgw_pools_data:
                 objects = pool['stats']['objects']
                 pool_bytes_used = pool['stats']['bytes_used']
-                total_objects += objects
                 total_pool_bytes_used += pool_bytes_used
                 if pool_name.endswith('.data'):
                     total_data_pool_objects += objects
@@ -72,7 +70,7 @@ class ClusterModel:
             total_avail_bytes=df['stats']['total_avail_bytes'],
             total_bytes=df['stats']['total_bytes'],
             total_used_raw_bytes=df['stats']['total_used_raw_bytes'],
-            total_objects=total_objects,
+            total_objects=total_data_pool_objects,
             total_pool_bytes_used=total_pool_bytes_used,
             average_object_size=average_object_size
         )._asdict()
