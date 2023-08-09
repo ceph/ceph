@@ -484,7 +484,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'snapshot_clone_delay',
             type='int',
             default=0,
-            desc='Delay clone begin operation by snapshot_clone_delay seconds')
+            desc='Delay clone begin operation by snapshot_clone_delay seconds'),
+        Option(
+            'periodic_async_work',
+            type='bool',
+            default=False,
+            desc='Periodically check for async work')
     ]
 
     def __init__(self, *args, **kwargs):
@@ -492,6 +497,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         # for mypy
         self.max_concurrent_clones = None
         self.snapshot_clone_delay = None
+        self.periodic_async_work = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
         # Initialize config option members
@@ -522,6 +528,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         self.vc.cloner.reconfigure_max_concurrent_clones(self.max_concurrent_clones)
                     elif opt['name'] == "snapshot_clone_delay":
                         self.vc.cloner.reconfigure_snapshot_clone_delay(self.snapshot_clone_delay)
+                    elif opt['name'] == "periodic_async_work":
+                        if self.periodic_async_work:
+                            self.vc.cloner.set_wakeup_timeout()
+                            self.vc.purge_queue.set_wakeup_timeout()
+                        else:
+                            self.vc.cloner.unset_wakeup_timeout()
+                            self.vc.purge_queue.unset_wakeup_timeout()
 
     def handle_command(self, inbuf, cmd):
         handler_name = "_cmd_" + cmd['prefix'].replace(" ", "_")
