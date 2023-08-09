@@ -162,6 +162,7 @@ export class HostsPageHelper extends PageHelper {
   drain(hostname: string) {
     this.getTableCell(this.columnIndex.hostname, hostname, true).click();
     this.clickActionButton('start-drain');
+    cy.wait(1000);
     this.checkLabelExists(hostname, ['_no_schedule'], true);
 
     this.clickTab('cd-host-details', hostname, 'Daemons');

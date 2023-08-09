@@ -20,6 +20,7 @@ import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeploymentOptions } from '~/app/shared/models/osd-deployment-options';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -119,7 +120,8 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
 
   onSubmit() {
     if (!this.stepsToSkip['Add Hosts']) {
-      this.hostService.list('false').subscribe((hosts) => {
+      const hostContext = new CdTableFetchDataContext(() => undefined);
+      this.hostService.list(hostContext.toParams(), 'false').subscribe((hosts) => {
         hosts.forEach((host) => {
           const index = host['labels'].indexOf('_no_schedule', 0);
           if (index > -1) {
