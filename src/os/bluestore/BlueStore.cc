@@ -3028,17 +3028,15 @@ void BlueStore::ExtentMap::dump(Formatter* f) const
 }
 
 void BlueStore::ExtentMap::scan_shared_blobs(
-  CollectionRef& c, uint64_t start, uint64_t length,
+  uint64_t start, uint64_t length,
   std::multimap<uint64_t /*blob.logical_offset*/, Blob*>& candidates)
 {
-
+  Collection* c = onode->c;
   uint64_t end = start + length;
   // last_encoded_id will be used to process each blob only once
   // so reset them first
   auto ep_start = seek_lextent(start);
-  for (auto ep = ep_start;
-       ep != extent_map.end();
-       ++ep) {
+  for (auto ep = ep_start; ep != extent_map.end(); ++ep) {
     // ep->logical_offset and ep->blob_start() are different
     // ep->blob_start() allows us to include blobs that do have some empty space in the beginning
     if (ep->blob_start() >= end) {
@@ -3047,9 +3045,8 @@ void BlueStore::ExtentMap::scan_shared_blobs(
     ep->blob->last_encoded_id = -1;
   }
 
-  for (auto ep = ep_start; // reuse, extent_map could not change
-       ep != extent_map.end();
-       ++ep) {
+  // reuse, extent_map could not change
+  for (auto ep = ep_start; ep != extent_map.end(); ++ep) {
     if (ep->blob_start() >= end) {
       break;
     }
@@ -3128,19 +3125,21 @@ void BlueStore::ExtentMap::reblob_extents(uint32_t blob_start, uint32_t blob_end
 
 // Convert blobs in selected range to shared blobs.
 void BlueStore::ExtentMap::make_range_shared_maybe_merge(
-  BlueStore* store, TransContext* txc, CollectionRef& c,
-  OnodeRef& oldo, uint64_t srcoff, uint64_t length)
+  TransContext* txc, OnodeRef& onoderef, uint64_t srcoff, uint64_t length)
 {
+  ceph_assert(onoderef == onode);
   uint64_t end = srcoff + length;
   uint32_t dirty_range_begin = OBJECT_MAX_SIZE;
   uint32_t dirty_range_end = 0;
+  Collection* c = onode->c;
+  BlueStore* store = c->store;
   // load entire object; in most cases we clone entire object anyway
-  oldo->extent_map.fault_range(c->store->db, 0, OBJECT_MAX_SIZE);
+  fault_range(store->db, 0, OBJECT_MAX_SIZE);
   std::multimap<uint64_t /*blob_start*/, Blob*> candidates;
-  scan_shared_blobs(c, srcoff, length, candidates);
+  scan_shared_blobs(srcoff, length, candidates);
 
-  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
-    ep != oldo->extent_map.extent_map.end(); ) {
+  for (auto ep = seek_lextent(srcoff);
+    ep != extent_map.end(); ) {
     auto& e = *ep;
     if (e.logical_offset >= end) {
       break;
@@ -3162,8 +3161,8 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
 	find_mergable_companion(e.blob.get(), e.blob_start(), blob_width, candidates);
       if (b) {
 	dout(20) << __func__ << " merging to: " << *b << " bc=" << b->bc << dendl;
-	e.blob->discard_unused_buffers(store->cct, oldo->c->cache);
-	b->discard_unused_buffers(store->cct, oldo->c->cache);
+	e.blob->discard_unused_buffers(store->cct, c->cache);
+	b->discard_unused_buffers(store->cct, c->cache);
 	uint32_t b_logical_length = b->merge_blob(store->cct, e.blob.get());
 	for (auto p : blob.get_extents()) {
 	  if (p.is_valid()) {
@@ -3175,7 +3174,7 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
 	uint32_t goto_logical_offset = e.logical_offset + e.length;
 	reblob_extents(e.blob_start(), e.blob_start() + blob_width,
 		       e.blob, b);
-	ep = oldo->extent_map.seek_lextent(goto_logical_offset);
+	ep = seek_lextent(goto_logical_offset);
 	dout(20) << __func__ << " merged: " << *b << dendl;
       } else {
 	// no candidate, has to convert to shared
@@ -3191,10 +3190,9 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
   }
   if (dirty_range_begin < dirty_range_end) {
     // source onode got modified in the process
-    oldo->extent_map.dirty_range(dirty_range_begin,
-				 dirty_range_end - dirty_range_begin);
-    oldo->extent_map.maybe_reshard(dirty_range_begin, dirty_range_end);
-    txc->write_onode(oldo);
+    dirty_range(dirty_range_begin, dirty_range_end - dirty_range_begin);
+    maybe_reshard(dirty_range_begin, dirty_range_end);
+    txc->write_onode(onoderef);
   }
 }
 
@@ -3320,6 +3318,8 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
 void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
   CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
   uint64_t& length, uint64_t& dstoff) {
+  ceph_assert(onode == oldo);
+  ceph_assert(onode->c == c);
   BufferCacheShard* bcs = c->cache;
   bcs->lock.lock();
   while(bcs != c->cache) {
@@ -3333,9 +3333,9 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
   dout(25) << __func__ << " start newo=" << dendl;
   _dump_onode<25>(onode->c->store->cct, *newo);
 
-  make_range_shared_maybe_merge(b, txc, c, oldo, srcoff, length);
-  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
-  for (auto& e : oldo->extent_map.extent_map) {
+  make_range_shared_maybe_merge(txc, oldo, srcoff, length);
+  vector<BlobRef> id_to_blob(extent_map.size());
+  for (auto& e : extent_map) {
     e.blob->last_encoded_id = -1;
   }
 
@@ -3344,9 +3344,7 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
   uint32_t dirty_range_begin = 0;
   uint32_t dirty_range_end = 0;
   bool src_dirty = false;
-  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
-    ep != oldo->extent_map.extent_map.end();
-    ++ep) {
+  for (auto ep = seek_lextent(srcoff); ep != extent_map.end(); ++ep) {
     auto& e = *ep;
     if (e.logical_offset >= end) {
       break;
@@ -3436,8 +3434,7 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
     ++n;
   }
   if (src_dirty) {
-    oldo->extent_map.dirty_range(dirty_range_begin,
-      dirty_range_end - dirty_range_begin);
+    dirty_range(dirty_range_begin, dirty_range_end - dirty_range_begin);
     txc->write_onode(oldo);
   }
 
