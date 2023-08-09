@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
-import { CephfsSubvolumeGroup } from '../models/cephfs-subvolume-group.model';
+import { CephfsSubvolumeGroup } from '../models/cephfs-subvolumegroup.model';
 import _ from 'lodash';
 import { mapTo, catchError } from 'rxjs/operators';
 
@@ -21,7 +21,7 @@ export class CephfsSubvolumeGroupService {
     volName: string,
     groupName: string,
     poolName: string,
-    size: number,
+    size: string,
     uid: number,
     gid: number,
     mode: string
@@ -59,5 +59,12 @@ export class CephfsSubvolumeGroupService {
         return of(false);
       })
     );
+  }
+
+  update(volName: string, groupName: string, size: string) {
+    return this.http.put(`${this.baseURL}/${volName}`, {
+      group_name: groupName,
+      size: size
+    });
   }
 }
