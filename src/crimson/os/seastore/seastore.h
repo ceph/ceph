@@ -353,6 +353,12 @@ public:
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
+    tm_ret _set_alloc_hint(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      uint64_t expected_object_size,
+      uint64_t expected_write_size,
+      uint32_t flags);
     tm_ret _zero(
       internal_context_t &ctx,
       OnodeRef &onode,
@@ -432,6 +438,17 @@ public:
       lat.sample_count++;
       lat.sample_sum += std::chrono::duration_cast<std::chrono::milliseconds>(dur).count();
      }
+
+    uint32_t get_max_object_size(const Onode &onode) const {
+      const auto &obj_data = onode.get_layout().object_data.get();
+      if (obj_data.is_null()) {
+	return max_object_size;
+      } else {
+	auto ret = obj_data.get_reserved_data_len();
+	assert(ret <= max_object_size);
+	return ret;
+      }
+    }
 
   private:
     std::string root;

@@ -880,7 +880,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
   LOG_PREFIX(ObjectDataHandler::prepare_data_reservation);
   ceph_assert(size <= max_object_size);
   if (!object_data.is_null()) {
-    ceph_assert(object_data.get_reserved_data_len() == max_object_size);
+    ceph_assert(object_data.get_reserved_data_len() >= size);
     DEBUGT("reservation present: {}~{}",
            ctx.t,
            object_data.get_reserved_data_base(),
@@ -890,13 +890,13 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
     DEBUGT("reserving: {}~{}",
            ctx.t,
            ctx.onode.get_data_hint(),
-           max_object_size);
+           size);
     return ctx.tm.reserve_region(
       ctx.t,
       ctx.onode.get_data_hint(),
-      max_object_size
-    ).si_then([max_object_size=max_object_size, &object_data](auto pin) {
-      ceph_assert(pin->get_length() == max_object_size);
+      size
+    ).si_then([size, &object_data](auto pin) {
+      ceph_assert(pin->get_length() == size);
       object_data.update_reserved(
 	pin->get_key(),
 	pin->get_length());
@@ -1211,10 +1211,11 @@ ObjectDataHandler::zero_ret ObjectDataHandler::zero(
              object_data.get_reserved_data_base(),
              object_data.get_reserved_data_len(),
              object_data.is_null());
+      ceph_assert(p2roundup(offset + len, ctx.tm.get_block_size()) <= max_object_size);
       return prepare_data_reservation(
 	ctx,
 	object_data,
-	p2roundup(offset + len, ctx.tm.get_block_size())
+	max_object_size
       ).si_then([this, ctx, offset, len, &object_data] {
 	auto logical_offset = object_data.get_reserved_data_base() + offset;
 	return ctx.tm.get_pins(
@@ -1239,17 +1240,19 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
     ctx,
     [this, ctx, offset, &bl](auto &object_data) {
       LOG_PREFIX(ObjectDataHandler::write);
-      DEBUGT("writing to {}~{}, object_data: {}~{}, is_null {}",
+      DEBUGT("writing to {}~{}, object_data: {}~{}, is_null {} max_object_size={}",
              ctx.t,
              offset,
 	     bl.length(),
 	     object_data.get_reserved_data_base(),
 	     object_data.get_reserved_data_len(),
-             object_data.is_null());
+             object_data.is_null(),
+	     max_object_size);
+      ceph_assert(p2roundup(offset + bl.length(), ctx.tm.get_block_size()) <= max_object_size);
       return prepare_data_reservation(
 	ctx,
 	object_data,
-	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
+	max_object_size
       ).si_then([this, ctx, offset, &object_data, &bl] {
 	auto logical_offset = object_data.get_reserved_data_base() + offset;
 	return ctx.tm.get_pins(
@@ -1263,6 +1266,29 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	    bufferlist(bl), std::move(pins));
 	});
       });
+    });
+}
+
+ObjectDataHandler::set_alloc_hint_ret
+ObjectDataHandler::set_alloc_hint(
+  context_t ctx,
+  extent_len_t expected_object_size,
+  extent_len_t expected_write_size,
+  uint32_t flags)
+{
+  boost::ignore_unused(expected_write_size);
+  boost::ignore_unused(flags);
+  assert_aligned(expected_object_size);
+  LOG_PREFIX(ObjectDataHandler::set_alloc_hint);
+  DEBUGT("expected_object_size={}, expected_write_size={}, flags={}",
+	 ctx.t, expected_object_size, expected_write_size, flags);
+  return with_object_data(
+    ctx,
+    [this, ctx, expected_object_size](auto &object_data) {
+      return prepare_data_reservation(
+	ctx,
+	object_data,
+	expected_object_size);
     });
 }
 
@@ -1417,10 +1443,11 @@ ObjectDataHandler::truncate_ret ObjectDataHandler::truncate(
       if (offset < object_data.get_reserved_data_len()) {
 	return trim_data_reservation(ctx, object_data, offset);
       } else if (offset > object_data.get_reserved_data_len()) {
+	ceph_assert(p2roundup(offset, ctx.tm.get_block_size()) <= max_object_size);
 	return prepare_data_reservation(
 	  ctx,
 	  object_data,
-	  p2roundup(offset, ctx.tm.get_block_size()));
+	  max_object_size);
       } else {
 	return truncate_iertr::now();
       }

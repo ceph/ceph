@@ -303,6 +303,16 @@ struct seastore_test_t :
         std::move(t)).get0();
     }
 
+    void set_alloc_hint(
+      SeaStoreShard &sharded_seastore,
+      uint64_t expected_object_size,
+      uint64_t expected_write_size,
+      uint32_t flags) {
+      CTransaction t;
+      t.set_alloc_hint(cid, oid, expected_object_size, expected_write_size, flags);
+      sharded_seastore.do_transaction(coll, std::move(t)).get0();
+    }
+
     void read(
       SeaStoreShard &sharded_seastore,
       uint64_t offset,
@@ -1000,15 +1010,17 @@ TEST_P(seastore_test_t, simple_extent_test)
 {
   run_async([this] {
     auto &test_obj = get_object(make_oid(0));
+    test_obj.touch(*sharded_seastore);
+    test_obj.set_alloc_hint(*sharded_seastore, 4096, 4096, 0);
     test_obj.write(
       *sharded_seastore,
-      1024,
-      1024,
+      2048,
+      2048,
       'a');
     test_obj.read(
       *sharded_seastore,
-      1024,
-      1024);
+      2048,
+      2048);
     test_obj.check_size(*sharded_seastore);
   });
 }
