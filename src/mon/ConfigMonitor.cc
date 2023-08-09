@@ -831,6 +831,7 @@ void ConfigMonitor::load_config()
     
     MaskedOption mopt(opt);
     mopt.raw_value = value;
+    mopt.localized_name = name;
     string section_name;
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
