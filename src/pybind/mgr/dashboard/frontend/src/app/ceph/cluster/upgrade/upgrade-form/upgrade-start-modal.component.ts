@@ -26,6 +26,8 @@ export class UpgradeStartModalComponent implements OnInit {
   icons = Icons;
   versions: string[];
 
+  showImageField = false;
+
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
@@ -38,12 +40,16 @@ export class UpgradeStartModalComponent implements OnInit {
 
   ngOnInit() {
     this.upgradeForm = new CdFormGroup({
-      availableVersions: new FormControl(null, [Validators.required])
+      availableVersions: new FormControl(null, [Validators.required]),
+      useImage: new FormControl(false),
+      customImageName: new FormControl(null)
     });
   }
 
   startUpgrade() {
-    this.upgradeService.start(this.upgradeForm.getValue('availableVersions')).subscribe({
+    const version = this.upgradeForm.getValue('availableVersions');
+    const image = this.upgradeForm.getValue('customImageName');
+    this.upgradeService.start(version, image).subscribe({
       next: () => {
         this.notificationService.show(
           NotificationType.success,
@@ -62,5 +68,25 @@ export class UpgradeStartModalComponent implements OnInit {
         this.activeModal.close();
       }
     });
+  }
+
+  useImage() {
+    this.showImageField = !this.showImageField;
+    const availableVersionsControl = this.upgradeForm.get('availableVersions');
+    const customImageNameControl = this.upgradeForm.get('customImageName');
+
+    if (this.showImageField) {
+      availableVersionsControl.disable();
+      availableVersionsControl.clearValidators();
+
+      customImageNameControl.setValidators(Validators.required);
+      customImageNameControl.updateValueAndValidity();
+    } else {
+      availableVersionsControl.enable();
+      availableVersionsControl.setValidators(Validators.required);
+      availableVersionsControl.updateValueAndValidity();
+
+      customImageNameControl.clearValidators();
+    }
   }
 }
