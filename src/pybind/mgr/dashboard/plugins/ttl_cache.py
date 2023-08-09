@@ -4,6 +4,7 @@ This is a minimal implementation of TTL-ed lru_cache function.
 Based on Python 3 functools and backports.functools_lru_cache.
 """
 
+import os
 from collections import OrderedDict
 from functools import wraps
 from threading import RLock
@@ -82,6 +83,10 @@ class CacheManager:
 def ttl_cache(ttl, maxsize=128, typed=False, label: str = ''):
     if typed is not False:
         raise NotImplementedError("typed caching not supported")
+
+    # disable caching while running unit tests
+    if 'UNITTEST' in os.environ:
+        ttl = 0
 
     def decorating_function(function):
         cache_name = label
