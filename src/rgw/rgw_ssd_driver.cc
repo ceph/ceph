@@ -517,7 +517,8 @@ int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key
 void SSDCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
 {
     using namespace boost::asio;
-    async_completion<spawn::yield_context, void()> init(y.get_yield_context());
+    spawn::yield_context yield = y.get_yield_context();
+    async_completion<spawn::yield_context, void()> init(yield);
     auto ex = get_associated_executor(init.completion_handler);
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
