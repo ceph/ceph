@@ -11,15 +11,20 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import _ from 'lodash';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { OctalToHumanReadablePipe } from '~/app/shared/pipes/octal-to-human-readable.pipe';
 
 @Component({
   selector: 'cd-cephfs-subvolumegroup-form',
   templateUrl: './cephfs-subvolumegroup-form.component.html',
   styleUrls: ['./cephfs-subvolumegroup-form.component.scss']
 })
-export class CephfsSubvolumegroupFormComponent implements OnInit {
+export class CephfsSubvolumegroupFormComponent extends CdForm implements OnInit {
   fsName: string;
+  subvolumegroupName: string;
   pools: Pool[];
+  isEdit: boolean = false;
 
   subvolumegroupForm: CdFormGroup;
 
@@ -30,6 +35,11 @@ export class CephfsSubvolumegroupFormComponent implements OnInit {
 
   columns: CdTableColumn[];
   scopePermissions: Array<any> = [];
+  initialMode = {
+    owner: ['read', 'write', 'execute'],
+    group: ['read', 'execute'],
+    others: ['read', 'execute']
+  };
   scopes: string[] = ['owner', 'group', 'others'];
 
   constructor(
@@ -37,13 +47,16 @@ export class CephfsSubvolumegroupFormComponent implements OnInit {
     private actionLabels: ActionLabelsI18n,
     private taskWrapper: TaskWrapperService,
     private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService,
-    private formatter: FormatterService
+    private formatter: FormatterService,
+    private dimlessBinary: DimlessBinaryPipe,
+    private octalToHumanReadable: OctalToHumanReadablePipe
   ) {
-    this.action = this.actionLabels.CREATE;
+    super();
     this.resource = $localize`subvolume group`;
   }
 
   ngOnInit(): void {
+    this.action = this.actionLabels.CREATE;
     this.columns = [
       {
         prop: 'scope',
@@ -72,6 +85,8 @@ export class CephfsSubvolumegroupFormComponent implements OnInit {
 
     this.dataPools = this.pools.filter((pool) => pool.type === 'data');
     this.createForm();
+
+    this.isEdit ? this.populateForm() : this.loadingReady();
   }
 
   createForm() {
@@ -101,35 +116,83 @@ export class CephfsSubvolumegroupFormComponent implements OnInit {
     });
   }
 
+  populateForm() {
+    this.action = this.actionLabels.EDIT;
+    this.cephfsSubvolumeGroupService
+      .info(this.fsName, this.subvolumegroupName)
+      .subscribe((resp: any) => {
+        // Disabled these fields since its not editable
+        this.subvolumegroupForm.get('subvolumegroupName').disable();
+        this.subvolumegroupForm.get('pool').disable();
+        this.subvolumegroupForm.get('uid').disable();
+        this.subvolumegroupForm.get('gid').disable();
+
+        this.subvolumegroupForm.get('subvolumegroupName').setValue(this.subvolumegroupName);
+        if (resp.bytes_quota !== 'infinite') {
+          this.subvolumegroupForm
+            .get('size')
+            .setValue(this.dimlessBinary.transform(resp.bytes_quota));
+        }
+        this.subvolumegroupForm.get('uid').setValue(resp.uid);
+        this.subvolumegroupForm.get('gid').setValue(resp.gid);
+        this.initialMode = this.octalToHumanReadable.transform(resp.mode, true);
+
+        this.loadingReady();
+      });
+  }
+
   submit() {
     const subvolumegroupName = this.subvolumegroupForm.getValue('subvolumegroupName');
     const pool = this.subvolumegroupForm.getValue('pool');
-    const size = this.formatter.toBytes(this.subvolumegroupForm.getValue('size'));
+    const size = this.formatter.toBytes(this.subvolumegroupForm.getValue('size')) || 0;
     const uid = this.subvolumegroupForm.getValue('uid');
     const gid = this.subvolumegroupForm.getValue('gid');
     const mode = this.formatter.toOctalPermission(this.subvolumegroupForm.getValue('mode'));
-    this.taskWrapper
-      .wrapTaskAroundCall({
-        task: new FinishedTask('cephfs/subvolume/group/' + URLVerbs.CREATE, {
-          subvolumegroupName: subvolumegroupName
-        }),
-        call: this.cephfsSubvolumeGroupService.create(
-          this.fsName,
-          subvolumegroupName,
-          pool,
-          size,
-          uid,
-          gid,
-          mode
-        )
-      })
-      .subscribe({
-        error: () => {
-          this.subvolumegroupForm.setErrors({ cdSubmitButton: true });
-        },
-        complete: () => {
-          this.activeModal.close();
-        }
-      });
+    if (this.isEdit) {
+      const editSize = size === 0 ? 'infinite' : size;
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/subvolume/group/' + URLVerbs.EDIT, {
+            subvolumegroupName: subvolumegroupName
+          }),
+          call: this.cephfsSubvolumeGroupService.update(
+            this.fsName,
+            subvolumegroupName,
+            String(editSize)
+          )
+        })
+        .subscribe({
+          error: () => {
+            this.subvolumegroupForm.setErrors({ cdSubmitButton: true });
+          },
+          complete: () => {
+            this.activeModal.close();
+          }
+        });
+    } else {
+      this.taskWrapper
+        .wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/subvolume/group/' + URLVerbs.CREATE, {
+            subvolumegroupName: subvolumegroupName
+          }),
+          call: this.cephfsSubvolumeGroupService.create(
+            this.fsName,
+            subvolumegroupName,
+            pool,
+            String(size),
+            uid,
+            gid,
+            mode
+          )
+        })
+        .subscribe({
+          error: () => {
+            this.subvolumegroupForm.setErrors({ cdSubmitButton: true });
+          },
+          complete: () => {
+            this.activeModal.close();
+          }
+        });
+    }
   }
 }
