@@ -66,7 +66,7 @@ void OptionMask::dump(Formatter *f) const
 
 void MaskedOption::dump(Formatter *f) const
 {
-  f->dump_string("name", opt->name);
+  f->dump_string("name", localized_name);
   f->dump_string("value", raw_value);
   f->dump_string("level", Option::level_to_str(opt->level));
   f->dump_bool("can_update_at_runtime", opt->can_update_at_runtime());
@@ -76,7 +76,7 @@ void MaskedOption::dump(Formatter *f) const
 
 ostream& operator<<(ostream& out, const MaskedOption& o)
 {
-  out << o.opt->name;
+  out << o.localized_name;
   if (o.mask.location_type.size()) {
     out << "@" << o.mask.location_type << '=' << o.mask.location_value;
   }
