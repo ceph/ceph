@@ -6,33 +6,18 @@ export class NavigationPageHelper extends PageHelper {
   };
 
   navigations = [
-    { menu: 'NFS', component: 'cd-error' },
-    {
-      menu: 'Object Gateway',
-      submenus: [
-        { menu: 'Gateways', component: 'cd-rgw-daemon-list' },
-        { menu: 'Users', component: 'cd-rgw-user-list' },
-        { menu: 'Buckets', component: 'cd-rgw-bucket-list' }
-      ]
-    },
     { menu: 'Dashboard', component: 'cd-dashboard' },
     {
       menu: 'Cluster',
       submenus: [
+        { menu: 'Pools', component: 'cd-pool-list' },
         { menu: 'Hosts', component: 'cd-hosts' },
-        { menu: 'Physical Disks', component: 'cd-error' },
-        { menu: 'Monitors', component: 'cd-monitor' },
-        { menu: 'Services', component: 'cd-error' },
         { menu: 'OSDs', component: 'cd-osd-list' },
-        { menu: 'Configuration', component: 'cd-configuration' },
+        { menu: 'Physical Disks', component: 'cd-error' },
         { menu: 'CRUSH map', component: 'cd-crushmap' },
-        { menu: 'Manager Modules', component: 'cd-mgr-module-list' },
-        { menu: 'Ceph Users', component: 'cd-crud-table' },
-        { menu: 'Logs', component: 'cd-logs' },
-        { menu: 'Alerts', component: 'cd-prometheus-tabs' }
+        { menu: 'Monitors', component: 'cd-monitor' }
       ]
     },
-    { menu: 'Pools', component: 'cd-pool-list' },
     {
       menu: 'Block',
       submenus: [
@@ -41,7 +26,41 @@ export class NavigationPageHelper extends PageHelper {
         { menu: 'iSCSI', component: 'cd-iscsi' }
       ]
     },
-    { menu: 'File Systems', component: 'cd-cephfs-list' }
+    {
+      menu: 'Object',
+      submenus: [
+        { menu: 'Overview', component: 'cd-rgw-overview-dashboard' },
+        { menu: 'Buckets', component: 'cd-rgw-bucket-list' },
+        { menu: 'Users', component: 'cd-rgw-user-list' },
+        { menu: 'Multi-site', component: 'cd-rgw-multisite-details' },
+        { menu: 'Gateways', component: 'cd-rgw-daemon-list' },
+        { menu: 'NFS', component: 'cd-error' }
+      ]
+    },
+    {
+      menu: 'File',
+      submenus: [
+        { menu: 'File Systems', component: 'cd-cephfs-list' },
+        { menu: 'NFS', component: 'cd-error' }
+      ]
+    },
+    {
+      menu: 'Observability',
+      submenus: [
+        { menu: 'Logs', component: 'cd-logs' },
+        { menu: 'Alerts', component: 'cd-prometheus-tabs' }
+      ]
+    },
+    {
+      menu: 'Administration',
+      submenus: [
+        { menu: 'Services', component: 'cd-error' },
+        { menu: 'Upgrade', component: 'cd-error' },
+        { menu: 'Ceph Users', component: 'cd-crud-table' },
+        { menu: 'Manager Modules', component: 'cd-mgr-module-list' },
+        { menu: 'Configuration', component: 'cd-configuration' }
+      ]
+    }
   ];
 
   getVerticalMenu() {

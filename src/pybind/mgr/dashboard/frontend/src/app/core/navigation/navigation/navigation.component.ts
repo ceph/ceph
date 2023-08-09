@@ -33,11 +33,11 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
   rightSidebarOpen = false; // rightSidebar only opens when width is less than 768px
   showMenuSidebar = true;
-  displayedSubMenu = '';
 
   simplebar = {
     autoHide: false
   };
+  displayedSubMenu = {};
   private subs = new Subscription();
 
   constructor(
@@ -97,11 +97,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   }
 
   toggleSubMenu(menu: string) {
-    if (this.displayedSubMenu === menu) {
-      this.displayedSubMenu = '';
-    } else {
-      this.displayedSubMenu = menu;
-    }
+    this.displayedSubMenu[menu] = !this.displayedSubMenu[menu];
   }
 
   toggleRightSidebar() {
