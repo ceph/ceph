@@ -63,6 +63,8 @@ added when the notification is committed to persistent storage.
 
 .. note:: If the notification fails with an error, cannot be delivered, or
    times out, it is retried until it is successfully acknowledged.
+   You can control its retry with time_to_live/max_retries to have a time/retry limit and
+   control the retry frequency with retry_sleep_duration
 
 .. tip:: To minimize the latency added by asynchronous notification, we 
    recommended placing the "log" pool on fast media.
@@ -154,6 +156,9 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
    [&Attributes.entry.10.key=cloudevents&Attributes.entry.10.value=true|false]
    [&Attributes.entry.11.key=mechanism&Attributes.entry.11.value=<mechanism>]
+   [&Attributes.entry.12.key=time_to_live&Attributes.entry.12.value=<seconds to live>]
+   [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
+   [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
 
 Request parameters:
 
@@ -162,6 +167,18 @@ Request parameters:
   notifications that are triggered by the topic.
 - persistent: This indicates whether notifications to this endpoint are
   persistent (=asynchronous) or not persistent. (This is "false" by default.)
+- time_to_live: This will limit the time (in seconds) to retain the notifications.
+  default value is taken from `rgw_topic_persistency_time_to_live`.
+  providing a value overrides the global value.
+  zero value means infinite time to live.
+- max_retries: This will limit the max retries before expiring notifications.
+  default value is taken from `rgw_topic_persistency_max_retries`.
+  providing a value overrides the global value.
+  zero value means infinite retries.
+- retry_sleep_duration: This will control the frequency of retrying the notifications.
+  default value is taken from `rgw_topic_persistency_sleep_duration`.
+  providing a value overrides the global value.
+  zero value mean there is no delay between retries.
 
 - HTTP endpoint
 
@@ -317,6 +334,9 @@ The response has the following format:
      information. In this case, the request must be made over HTTPS. The "topic
      get" request will otherwise be rejected.
    - Persistent: This is "true" if the topic is persistent.
+   - TimeToLive: This will limit the time (in seconds) to retain the notifications.
+   - MaxRetries: This will limit the max retries before expiring notifications.
+   - RetrySleepDuration: This will control the frequency of retrying the notifications.
 - TopicArn: topic `ARN
   <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
 - OpaqueData: The opaque data set on the topic.

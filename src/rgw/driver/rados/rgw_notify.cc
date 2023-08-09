@@ -25,14 +25,20 @@ struct event_entry_t {
   std::string push_endpoint_args;
   std::string arn_topic;
   ceph::coarse_real_time creation_time;
+  uint32_t time_to_live = DEFAULT_GLOBAL_VALUE;
+  uint32_t max_retries = DEFAULT_GLOBAL_VALUE;
+  uint32_t retry_sleep_duration = DEFAULT_GLOBAL_VALUE;
   
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(event, bl);
     encode(push_endpoint, bl);
     encode(push_endpoint_args, bl);
     encode(arn_topic, bl);
     encode(creation_time, bl);
+    encode(time_to_live, bl);
+    encode(max_retries, bl);
+    encode(retry_sleep_duration, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -47,6 +53,11 @@ struct event_entry_t {
     } else {
       creation_time = ceph::coarse_real_clock::zero();
     }
+    if (struct_v > 2) {
+      decode(time_to_live, bl);
+      decode(max_retries, bl);
+      decode(retry_sleep_duration, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -55,7 +66,7 @@ WRITE_CLASS_ENCODER(event_entry_t)
 
 struct persistency_tracker {
   ceph::coarse_real_time last_retry_time {ceph::coarse_real_clock::zero()};
-  uint64_t retires_num {0};
+  uint32_t retires_num {0};
 };
 
 using queues_t = std::set<std::string>;
@@ -195,8 +206,12 @@ private:
       return EntryProcessingResult::Failure;
     }
 
-    const auto topic_persistency_ttl = conf->rgw_topic_persistency_time_to_live;
-    const auto topic_persistency_max_retries = conf->rgw_topic_persistency_max_retries;
+    const auto topic_persistency_ttl = event_entry.time_to_live != DEFAULT_GLOBAL_VALUE ?
+        event_entry.time_to_live : conf->rgw_topic_persistency_time_to_live;
+    const auto topic_persistency_max_retries = event_entry.max_retries != DEFAULT_GLOBAL_VALUE ?
+        event_entry.max_retries : conf->rgw_topic_persistency_max_retries;
+    const auto topic_persistency_sleep_duration = event_entry.retry_sleep_duration != DEFAULT_GLOBAL_VALUE ?
+        event_entry.retry_sleep_duration : conf->rgw_topic_persistency_sleep_duration;
     const auto time_now = ceph::coarse_real_clock::now();
     if ( (topic_persistency_ttl != 0 && event_entry.creation_time != ceph::coarse_real_clock::zero() &&
          time_now - event_entry.creation_time > std::chrono::seconds(topic_persistency_ttl))
@@ -205,8 +220,7 @@ private:
                           << event_entry.creation_time << " time_now:" << time_now << dendl;
       return EntryProcessingResult::Expired;
     }
-    if (time_now - entry_persistency_tracker.last_retry_time
-        < std::chrono::seconds(conf->rgw_topic_persistency_sleep_duration) ) {
+    if (time_now - entry_persistency_tracker.last_retry_time < std::chrono::seconds(topic_persistency_sleep_duration) ) {
       return EntryProcessingResult::Sleeping;
     }
     // TODO: write back the entry with creation time as if now
@@ -926,6 +940,9 @@ int publish_commit(rgw::sal::Object* obj,
 	std::move(topic.cfg.dest.push_endpoint_args);
       event_entry.arn_topic = topic.cfg.dest.arn_topic;
       event_entry.creation_time = ceph::coarse_real_clock::now();
+      event_entry.time_to_live = topic.cfg.dest.time_to_live;
+      event_entry.max_retries = topic.cfg.dest.max_retries;
+      event_entry.retry_sleep_duration = topic.cfg.dest.retry_sleep_duration;
       bufferlist bl;
       encode(event_entry, bl);
       const auto& queue_name = topic.cfg.dest.arn_topic;
