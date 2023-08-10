@@ -54,6 +54,8 @@ class Devices(object):
                 continue
             if device.is_lv and not list_all:
                 continue
+            if device.is_partition and not list_all:
+                continue
             self.devices.append(device)
 
     def pretty_report(self):
