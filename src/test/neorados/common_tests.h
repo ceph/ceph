@@ -14,13 +14,16 @@
 
 #pragma once
 
+#include <concepts>
 #include <coroutine>
 #include <cstddef>
 #include <exception>
 #include <initializer_list>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <utility>
 
 #include <boost/asio/async_result.hpp>
@@ -364,3 +367,81 @@ public:
 /// \param test_name Name of the test
 #define CORO_TEST(test_suite_name, test_name)                                  \
   CORO_TEST_F(test_suite_name, test_name, CoroTest)
+
+/// \brief Generate buffer::list filled with repeating byte
+///
+/// \param c Byte with which to fill
+/// \param s Number of bites
+///
+/// \return A buffer::list filled with `s` copies of `c`
+inline auto filled_buffer_list(char c, std::size_t s) {
+  ceph::buffer::ptr bp{buffer::create(s)};
+  std::memset(bp.c_str(), c, bp.length());
+  ceph::buffer::list bl;
+  bl.push_back(std::move(bp));
+  return bl;
+};
+
+/// \brief Create buffer::list with specified bytes
+///
+/// \param cs Bytes the buffer::list should contain
+///
+/// \return A buffer::list containing the bytes in `cs`
+inline auto to_buffer_list(std::initializer_list<unsigned char> cs) {
+  ceph::buffer::ptr bp{buffer::create(cs.size())};
+  auto ci = cs.begin();
+  for (auto i = 0; i < std::ssize(cs); ++i, ++ci) {
+    bp[i] = *ci;
+  }
+  ceph::buffer::list bl;
+  bl.push_back(std::move(bp));
+  return bl;
+};
+
+/// \brief Create buffer::list with the content of a string_view
+///
+/// \param s View with data to copy
+///
+/// \return A buffer::list containing a copy of `s`.
+inline auto to_buffer_list(std::string_view s) {
+  ceph::buffer::list bl;
+  bl.append(s);
+  return bl;
+};
+
+/// \brief Create buffer::list with the content of a span
+///
+/// \param s Span with data to copy
+///
+/// \return A buffer::list containing a copy of `s`.
+inline auto to_buffer_list(std::span<char> s) {
+  ceph::buffer::list bl;
+  bl.append(s.data(), s.size());
+  return bl;
+};
+
+/// \brief Create buffer::list containing integer
+///
+/// \param n Integer with which to fill the list
+///
+/// \return A buffer::list containing the encoded `n`
+inline auto to_buffer_list(std::integral auto n) {
+  ceph::buffer::list bl;
+  encode(n, bl);
+  return bl;
+};
+
+/// \brief Return value contained by buffer::list
+///
+/// \param bl List with encoded value
+///
+/// \return The value encoded in `bl`.
+template<std::default_initializable T>
+inline auto from_buffer_list(const ceph::buffer::list& bl)
+{
+  using ceph::decode;
+  T t;
+  auto bi = bl.begin();
+  decode(t, bi);
+  return t;
+}
