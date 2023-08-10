@@ -990,16 +990,24 @@ int publish_commit(rgw::sal::Object* obj,
         const auto ret = push_endpoint->send_to_completion_async(
 	  dpp->get_cct(), event_entry.event, res.yield);
         if (ret < 0) {
-          ldpp_dout(dpp, 1) << "ERROR: push to endpoint "
-			    << topic.cfg.dest.push_endpoint
-			    << " failed. error: " << ret << dendl;
+          ldpp_dout(dpp, 1)
+              << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint
+              << " bucket: " << event_entry.event.bucket_name
+              << " bucket_owner: " << event_entry.event.bucket_ownerIdentity
+              << " object_name: " << event_entry.event.object_key
+              << " failed. error: " << ret << dendl;
           if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
           return ret;
         }
         if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to create push endpoint: " 
-            << topic.cfg.dest.push_endpoint << ". error: " << e.what() << dendl;
+        ldpp_dout(dpp, 1) << "ERROR: failed to create push endpoint: "
+                          << topic.cfg.dest.push_endpoint
+                          << " bucket: " << event_entry.event.bucket_name
+                          << " bucket_owner: "
+                          << event_entry.event.bucket_ownerIdentity
+                          << " object_name: " << event_entry.event.object_key
+                          << ". error: " << e.what() << dendl;
         if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
         return -EINVAL;
       }
