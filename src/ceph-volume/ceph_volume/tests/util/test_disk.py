@@ -225,7 +225,6 @@ class TestGetDevices(object):
         result = disk.get_devices(_sys_block_path=str(tmpdir))
         assert result == {}
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_sda_block_is_found(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
@@ -235,7 +234,6 @@ class TestGetDevices(object):
         assert result[sda_path]['model'] == ''
         assert result[sda_path]['partitions'] == {}
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_sda_size(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
@@ -244,7 +242,6 @@ class TestGetDevices(object):
         assert list(result.keys()) == [sda_path]
         assert result[sda_path]['human_readable_size'] == '512.00 KB'
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_sda_sectorsize_fallsback(self, patched_get_block_devs_sysfs, fake_filesystem):
         # if no sectorsize, it will use queue/hw_sector_size
         sda_path = '/dev/sda'
@@ -254,7 +251,6 @@ class TestGetDevices(object):
         assert list(result.keys()) == [sda_path]
         assert result[sda_path]['sectorsize'] == '1024'
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_sda_sectorsize_from_logical_block(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
@@ -262,7 +258,6 @@ class TestGetDevices(object):
         result = disk.get_devices()
         assert result[sda_path]['sectorsize'] == '99'
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_sda_sectorsize_does_not_fallback(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
@@ -271,7 +266,6 @@ class TestGetDevices(object):
         result = disk.get_devices()
         assert result[sda_path]['sectorsize'] == '99'
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_is_rotational(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         patched_get_block_devs_sysfs.return_value = [[sda_path, sda_path, 'disk']]
@@ -279,14 +273,12 @@ class TestGetDevices(object):
         result = disk.get_devices()
         assert result[sda_path]['rotational'] == '1'
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_is_ceph_rbd(self, patched_get_block_devs_sysfs, fake_filesystem):
         rbd_path = '/dev/rbd0'
         patched_get_block_devs_sysfs.return_value = [[rbd_path, rbd_path, 'disk']]
         result = disk.get_devices()
         assert rbd_path not in result
 
-    @patch('ceph_volume.util.disk.is_locked_raw_device', lambda x: False)
     def test_actuator_device(self, patched_get_block_devs_sysfs, fake_filesystem):
         sda_path = '/dev/sda'
         fake_actuator_nb = 2
