@@ -1044,10 +1044,13 @@ options:
     a reverse proxy, the remote address header will point at the proxy's address and
     not at the originator's address. Therefore it is sometimes possible to have the
     proxy add the originator's address in a separate HTTP header, which will allow
-    RGW to log it correctly.
+    RGW to log it correctly. Note that when using a HTTP header the value needs to
+    be prepended by ``HTTP_`` and all dashes replaced with underscores. For example if
+    you want to use the X-Forwarder-For this needs to be set to ``HTTP_X_FORWARDER_FOR``.
   fmt_desc: The remote address parameter. For example, the HTTP field
     containing the remote address, or the ``X-Forwarded-For``
-    address if a reverse proxy is operational.
+    address using the config value ``HTTP_X_FORWARDER_FOR`` if a reverse proxy is
+    operational.
   default: REMOTE_ADDR
   services:
   - rgw
