@@ -227,7 +227,7 @@
       </li>
     </cd-card>
 
-    <cd-card cardTitle="Cluster utilization"
+    <cd-card cardTitle="Cluster Utilization"
              i18n-title
              class="col-sm-9 px-3 d-flex"
              aria-label="Cluster utilization card">
@@ -235,7 +235,7 @@
         <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
         </cd-dashboard-time-selector>
         <ng-container *ngIf="capacity">
-          <cd-dashboard-area-chart chartTitle="Used Capacity"
+          <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
                                    [maxValue]="capacity.total_bytes"
                                    dataUnits="B"
                                    label="Used Capacity"
@@ -244,28 +244,31 @@
         </ng-container>
         <cd-dashboard-area-chart chartTitle="IOPS"
                                  dataUnits=""
-                                 label="OPS"
-                                 label2="IPS"
-                                 [data]="queriesResults.OPS"
-                                 [data2]="queriesResults.IPS">
+                                 decimals="0"
+                                 label="Reads"
+                                 label2="Writes"
+                                 [data]="queriesResults.READIOPS"
+                                 [data2]="queriesResults.WRITEIOPS">
         </cd-dashboard-area-chart>
-        <cd-dashboard-area-chart chartTitle="Latency"
+        <cd-dashboard-area-chart chartTitle="OSD Latencies"
                                  dataUnits="ms"
-                                 decimals="3"
-                                 label="Read"
-                                 label2="Write"
+                                 decimals="2"
+                                 label="Apply"
+                                 label2="Commit"
                                  [data]="queriesResults.READLATENCY"
                                  [data2]="queriesResults.WRITELATENCY">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="Client Throughput"
                                  dataUnits="B/s"
-                                 label="Read"
-                                 label2="Write"
+                                 decimals="2"
+                                 label="Reads"
+                                 label2="Writes"
                                  [data]="queriesResults.READCLIENTTHROUGHPUT"
                                  [data2]="queriesResults.WRITECLIENTTHROUGHPUT">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="Recovery Throughput"
                                  dataUnits="B/s"
+                                 decimals="2"
                                  label="Recovery Throughput"
                                  [data]="queriesResults.RECOVERYBYTES">
         </cd-dashboard-area-chart>
