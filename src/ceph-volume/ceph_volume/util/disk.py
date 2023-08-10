@@ -793,6 +793,19 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
         result.append([name, kname, "part"])
     return sorted(result, key=lambda x: x[0])
 
+def get_partitions(_sys_dev_block_path ='/sys/dev/block'):
+    devices = os.listdir(_sys_dev_block_path)
+    result = dict()
+    for device in devices:
+        device_path = os.path.join(_sys_dev_block_path, device)
+        is_partition = get_file_contents(os.path.join(device_path, 'partition')) == "1"
+        if not is_partition:
+            continue
+
+        partition_sys_name = os.path.basename(os.readlink(device_path))
+        parent_device_sys_name = os.readlink(device_path).split('/')[-2:-1][0]
+        result[partition_sys_name] = parent_device_sys_name
+    return result
 
 def get_devices(_sys_block_path='/sys/block', device=''):
     """
@@ -808,8 +821,9 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     device_facts = {}
 
     block_devs = get_block_devs_sysfs(_sys_block_path)
+    partitions = get_partitions()
 
-    block_types = ['disk', 'mpath']
+    block_types = ['disk', 'mpath', 'part']
     if allow_loop_devices():
         block_types.append('loop')
 
@@ -819,6 +833,8 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         if block[2] not in block_types:
             continue
         sysdir = os.path.join(_sys_block_path, devname)
+        if block[2] == 'part':
+            sysdir = os.path.join(_sys_block_path, partitions[devname], devname)
         metadata = {}
 
         # If the device is ceph rbd it gets excluded
@@ -846,11 +862,17 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         for key, file_ in facts:
             metadata[key] = get_file_contents(os.path.join(sysdir, file_))
 
-        device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
+        if block[2] != 'part':
+            device_slaves = os.listdir(os.path.join(sysdir, 'slaves'))
+            metadata['partitions'] = get_partitions_facts(sysdir)
+
         if device_slaves:
             metadata['device_nodes'] = ','.join(device_slaves)
         else:
-            metadata['device_nodes'] = devname
+            if block[2] == 'part':
+                metadata['device_nodes'] = partitions[devname]
+            else:
+                metadata['device_nodes'] = devname
 
         metadata['actuators'] = ""
         if os.path.isdir(sysdir + "/queue/independent_access_ranges/"):
