@@ -594,7 +594,6 @@ class Device(object):
         reasons = [
             ('removable', 1, 'removable'),
             ('ro', 1, 'read-only'),
-            ('locked', 1, 'locked'),
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
@@ -630,6 +629,8 @@ class Device(object):
             rejected.append('Has GPT headers')
         if self.has_partitions:
             rejected.append('Has partitions')
+        if self.has_fs:
+            rejected.append('Has a FileSystem')
         return rejected
 
     def _check_lvm_reject_reasons(self):
