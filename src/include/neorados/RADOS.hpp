@@ -202,6 +202,12 @@ enum class cmp_op : std::uint8_t {
   lte = 6
 };
 
+struct cmp_assertion {
+  std::string attr;
+  cmp_op op;
+  ceph::buffer::list bl;
+};
+
 namespace alloc_hint {
 enum alloc_hint_t {
   sequential_write = 1,
@@ -308,9 +314,7 @@ public:
   void cmpxattr(std::string_view name, cmp_op op, std::uint64_t val);
   void assert_version(uint64_t ver);
   void assert_exists();
-  void cmp_omap(const boost::container::flat_map<std::string,
-		                                 std::pair<ceph::buffer::list,
-		                                           cmp_op>>& assertions);
+  void cmp_omap(const std::vector<cmp_assertion>& assertions);
 
   void exec(std::string_view cls, std::string_view method,
 	    const ceph::buffer::list& inbl,
@@ -585,15 +589,11 @@ public:
     return std::move(*this);
   }
 
-  ReadOp& cmp_omap(
-    const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) & {
+  ReadOp& cmp_omap(const std::vector<cmp_assertion>& assertions) & {
     Op::cmp_omap(assertions);
     return *this;
   }
-  ReadOp&& cmp_omap(
-    const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) && {
+  ReadOp&& cmp_omap(const std::vector<cmp_assertion>& assertions) && {
     Op::cmp_omap(assertions);
     return std::move(*this);
   }
@@ -969,15 +969,11 @@ public:
     return std::move(*this);
   }
 
-  WriteOp& cmp_omap(
-    const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) & {
+  WriteOp& cmp_omap(const std::vector<cmp_assertion>& assertions) & {
     Op::cmp_omap(assertions);
     return *this;
   }
-  WriteOp&& cmp_omap(
-    const boost::container::flat_map<
-      std::string, std::pair<ceph::buffer::list, cmp_op>>& assertions) && {
+  WriteOp&& cmp_omap(const std::vector<cmp_assertion>& assertions) && {
     Op::cmp_omap(assertions);
     return std::move(*this);
   }

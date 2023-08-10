@@ -483,13 +483,10 @@ void Op::assert_exists() {
     static_cast<ceph::real_time*>(nullptr),
     static_cast<bs::error_code*>(nullptr));
 }
-void Op::cmp_omap(const bc::flat_map<
-		  std::string, std::pair<cb::list,
-		  cmp_op>>& assertions) {
+void Op::cmp_omap(const std::vector<cmp_assertion>& assertions) {
   buffer::list bl;
   encode(uint32_t(assertions.size()), bl);
-  for (const auto& [key, assertion] : assertions) {
-    const auto& [value, op] = assertion;
+  for (const auto& [key, op, value] : assertions) {
     encode(key, bl);
     encode(value, bl);
     encode(int(op), bl);
