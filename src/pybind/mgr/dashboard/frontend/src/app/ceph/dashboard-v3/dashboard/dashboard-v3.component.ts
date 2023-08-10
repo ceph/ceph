@@ -73,7 +73,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   readonly lastHourDateObject = {
     start: moment().unix() - 3600,
     end: moment().unix(),
-    step: 12
+    step: 14
   };
   origin = window.location.origin;
 

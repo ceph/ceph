@@ -37,26 +37,29 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   currentData: number;
   currentDataUnits2?: string;
   currentData2?: number;
+  maxConvertedValue?: number;
+  maxConvertedValueUnits?: string;
 
   chartDataUnits: string;
-
   chartData: any = {
     dataset: [
       {
         label: '',
         data: [{ x: 0, y: 0 }],
-        tension: 0,
+        tension: 0.2,
         pointBackgroundColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
         backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-blue'),
-        borderColor: this.cssHelper.propertyValue('chart-color-strong-blue')
+        borderColor: this.cssHelper.propertyValue('chart-color-strong-blue'),
+        borderWidth: 1
       },
       {
         label: '',
         data: [],
-        tension: 0,
+        tension: 0.2,
         pointBackgroundColor: this.cssHelper.propertyValue('chart-color-orange'),
-        backgroundColor: this.cssHelper.propertyValue('chart-color-yellow'),
-        borderColor: this.cssHelper.propertyValue('chart-color-orange')
+        backgroundColor: this.cssHelper.propertyValue('chart-color-translucent-yellow'),
+        borderColor: this.cssHelper.propertyValue('chart-color-orange'),
+        borderWidth: 1
       }
     ]
   };
@@ -64,6 +67,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   options: any = {
     responsive: true,
     maintainAspectRatio: false,
+    animation: false,
     elements: {
       point: {
         radius: 0
@@ -73,6 +77,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
       display: false
     },
     tooltips: {
+      mode: 'index',
       custom: function (tooltipModel: { x: number; y: number }) {
         tooltipModel.x = 10;
         tooltipModel.y = 0;
@@ -83,6 +88,16 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
       callbacks: {
         title: function (tooltipItem: any): any {
           return tooltipItem[0].xLabel;
+        },
+        label: (tooltipItems: any, data: any) => {
+          return (
+            ' ' +
+            data.datasets[tooltipItems.datasetIndex].label +
+            ' - ' +
+            tooltipItems.value +
+            ' ' +
+            this.chartDataUnits
+          );
         }
       }
     },
@@ -98,7 +113,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
             display: false
           },
           time: {
-            tooltipFormat: 'YYYY/MM/DD hh:mm:ss'
+            tooltipFormat: 'DD/MM/YYYY - HH:mm:ss'
           }
         }
       ],
@@ -109,7 +124,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
           },
           ticks: {
             beginAtZero: true,
-            maxTicksLimit: 3,
+            maxTicksLimit: 4,
             callback: (value: any) => {
               if (value === 0) {
                 return null;
@@ -168,17 +183,20 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   }
 
   private updateChartData(): void {
+    this.chartData.dataset[0].label = this.label;
+    this.chartData.dataset[1].label = this.label2;
+    this.setChartTicks();
     if (this.data) {
-      this.setChartTicks();
       this.chartData.dataset[0].data = this.formatData(this.data);
-      this.chartData.dataset[0].label = this.label;
       [this.currentData, this.currentDataUnits] = this.convertUnits(
         this.data[this.data.length - 1][1]
+      ).split(' ');
+      [this.maxConvertedValue, this.maxConvertedValueUnits] = this.convertUnits(
+        this.maxValue
       ).split(' ');
     }
     if (this.data2) {
       this.chartData.dataset[1].data = this.formatData(this.data2);
-      this.chartData.dataset[1].label = this.label2;
       [this.currentData2, this.currentDataUnits2] = this.convertUnits(
         this.data2[this.data2.length - 1][1]
       ).split(' ');
@@ -204,13 +222,15 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
         dataWithUnits = this.numberFormatter.formatBytesFromTo(
           data,
           this.dataUnits,
-          this.chartDataUnits
+          this.chartDataUnits,
+          this.decimals
         );
       } else if (this.dataUnits === 'B/s') {
         dataWithUnits = this.numberFormatter.formatBytesPerSecondFromTo(
           data,
           this.dataUnits,
-          this.chartDataUnits
+          this.chartDataUnits,
+          this.decimals
         );
       } else if (this.dataUnits === 'ms') {
         dataWithUnits = this.numberFormatter.formatSecondsFromTo(
@@ -223,7 +243,8 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
         dataWithUnits = this.numberFormatter.formatUnitlessFromTo(
           data,
           this.dataUnits,
-          this.chartDataUnits
+          this.chartDataUnits,
+          this.decimals
         );
       }
     }
@@ -233,13 +254,13 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   private convertUnits(data: any): any {
     let dataWithUnits: string = '';
     if (this.dataUnits === 'B') {
-      dataWithUnits = this.dimlessBinary.transform(data);
+      dataWithUnits = this.dimlessBinary.transform(data, this.decimals);
     } else if (this.dataUnits === 'B/s') {
-      dataWithUnits = this.dimlessBinaryPerSecond.transform(data);
+      dataWithUnits = this.dimlessBinaryPerSecond.transform(data, this.decimals);
     } else if (this.dataUnits === 'ms') {
       dataWithUnits = this.formatter.format_number(data, 1000, ['ms', 's'], this.decimals);
     } else {
-      dataWithUnits = this.dimlessPipe.transform(data);
+      dataWithUnits = this.dimlessPipe.transform(data, this.decimals);
     }
     return dataWithUnits;
   }
@@ -265,11 +286,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
     let maxValueDataUnits = '';
     let extraRoom = 1.2;
 
-    if (this.maxValue) {
-      extraRoom = 1.0;
-      [maxValue, maxValueDataUnits] = this.convertUnits(this.maxValue).split(' ');
-    } else if (this.data) {
-      extraRoom = 1.2;
+    if (this.data) {
       let maxValueData = Math.max(...this.data.map((values: any) => values[1]));
       if (this.data2) {
         let maxValueData2 = Math.max(...this.data2.map((values: any) => values[1]));
@@ -283,7 +300,6 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
     const yAxesTicks = this.chart.chart.options.scales.yAxes[0].ticks;
     yAxesTicks.suggestedMax = maxValue * extraRoom;
     yAxesTicks.suggestedMin = 0;
-    yAxesTicks.stepSize = Number((yAxesTicks.suggestedMax / 2).toFixed(0));
     yAxesTicks.callback = (value: any) => {
       if (value === 0) {
         return null;
