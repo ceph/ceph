@@ -166,7 +166,8 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
   }
 
   const RGWPubSub ps(driver, s->owner.get_id().tenant);
-  op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data, y);
+  op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
+                           s->owner.get_id(), y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
     return;
@@ -714,7 +715,9 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     // generate the internal topic. destination is stored here for the "push-only" case
     // when no subscription exists
     // ARN is cached to make the "GET" method faster
-    op_ret = ps.create_topic(this, unique_topic_name, topic_info.dest, topic_info.arn, topic_info.opaque_data, y);
+    op_ret = ps.create_topic(this, unique_topic_name, topic_info.dest,
+                             topic_info.arn, topic_info.opaque_data,
+                             s->owner.get_id(), y);
     if (op_ret < 0) {
       ldpp_dout(this, 1) << "failed to auto-generate unique topic '" << unique_topic_name << 
         "', ret=" << op_ret << dendl;
