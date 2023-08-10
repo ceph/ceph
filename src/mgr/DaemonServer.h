@@ -272,7 +272,7 @@ public:
   ~DaemonServer() override;
 
   bool ms_dispatch2(const ceph::ref_t<Message>& m) override;
-  int ms_handle_fast_authentication(Connection *con) override;
+  bool ms_handle_fast_authentication(Connection *con) override;
   void ms_handle_accept(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
