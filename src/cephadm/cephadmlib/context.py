@@ -16,7 +16,6 @@ from .constants import (
 
 
 class BaseConfig:
-
     def __init__(self) -> None:
         self.image: str = ''
         self.docker: bool = False
@@ -45,7 +44,6 @@ class BaseConfig:
 
 
 class CephadmContext:
-
     def __init__(self) -> None:
         self.__dict__['_args'] = None
         self.__dict__['_conf'] = BaseConfig()
