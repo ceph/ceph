@@ -22,6 +22,7 @@ import { DashboardPieComponent } from '../dashboard-pie/dashboard-pie.component'
 import { PgSummaryPipe } from '../pg-summary.pipe';
 import { DashboardV3Component } from './dashboard-v3.component';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 
 export class SummaryServiceMock {
   summaryDataSource = new BehaviorSubject({
@@ -240,7 +241,7 @@ describe('Dashbord Component', () => {
 
   it('should show the critical alerts window and its content', () => {
     const payload = _.cloneDeep(alertsPayload[0]);
-    component.toggleAlertsWindow('danger');
+    component.toggleAlertsWindow(AlertClass.critical);
     fixture.detectChanges();
 
     const cardTitle = fixture.debugElement.query(By.css('.tc_alerts h6.card-title'));
@@ -251,7 +252,7 @@ describe('Dashbord Component', () => {
 
   it('should show the warning alerts window and its content', () => {
     const payload = _.cloneDeep(alertsPayload[2]);
-    component.toggleAlertsWindow('warning');
+    component.toggleAlertsWindow(AlertClass.warning);
     fixture.detectChanges();
 
     const cardTitle = fixture.debugElement.query(By.css('.tc_alerts h6.card-title'));
