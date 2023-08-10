@@ -6,8 +6,21 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
 from ipaddress import ip_network, ip_address
-from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
-    NamedTuple, Mapping, Iterator
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import yaml
 
@@ -1372,6 +1385,103 @@ class IngressSpec(ServiceSpec):
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
+class InitContainerSpec(object):
+    """An init container is not a service that lives on its own, but rather
+    is used to run and exit prior to a service container starting in order
+    to help initialize some aspect of the container environment.
+    For example: a command to pre-populate a DB file with expected values
+    before the server starts.
+    """
+
+    _basic_fields = [
+        'image',
+        'entrypoint',
+        'volume_mounts',
+        'envs',
+        'privileged',
+    ]
+    _fields = _basic_fields + ['entrypoint_args']
+
+    def __init__(
+        self,
+        image: Optional[str] = None,
+        entrypoint: Optional[str] = None,
+        entrypoint_args: Optional[GeneralArgList] = None,
+        volume_mounts: Optional[Dict[str, str]] = None,
+        envs: Optional[List[str]] = None,
+        privileged: Optional[bool] = None,
+    ):
+        self.image = image
+        self.entrypoint = entrypoint
+        self.entrypoint_args: Optional[ArgumentList] = None
+        if entrypoint_args:
+            self.entrypoint_args = ArgumentSpec.from_general_args(
+                entrypoint_args
+            )
+        self.volume_mounts = volume_mounts
+        self.envs = envs
+        self.privileged = privileged
+        self.validate()
+
+    def validate(self) -> None:
+        if all(getattr(self, key) is None for key in self._fields):
+            raise SpecValidationError(
+                'At least one parameter must be set (no values were specified)'
+            )
+
+    def to_json(self, flatten_args: bool = False) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
+        for key in self._basic_fields:
+            value = getattr(self, key, None)
+            if value is not None:
+                data[key] = value
+        if self.entrypoint_args and flatten_args:
+            data['entrypoint_args'] = sum(
+                (ea.to_args() for ea in self.entrypoint_args), []
+            )
+        elif self.entrypoint_args:
+            data['entrypoint_args'] = ArgumentSpec.map_json(
+                self.entrypoint_args
+            )
+        return data
+
+    def __repr__(self) -> str:
+        vals = ((key, getattr(self, key)) for key in self._fields)
+        contents = ", ".join(f'{key}={val!r}' for key, val in vals if val)
+        return f'InitContainerSpec({contents})'
+
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'InitContainerSpec':
+        return cls(
+            image=data.get('image'),
+            entrypoint=data.get('entrypoint'),
+            entrypoint_args=data.get('entrypoint_args'),
+            volume_mounts=data.get('volume_mounts'),
+            envs=data.get('envs'),
+            privileged=data.get('privileged'),
+        )
+
+    @classmethod
+    def import_values(
+        cls, values: List[Union['InitContainerSpec', Dict[str, Any]]]
+    ) -> List['InitContainerSpec']:
+        out: List[InitContainerSpec] = []
+        for value in values:
+            if isinstance(value, dict):
+                out.append(cls.from_json(value))
+            elif isinstance(value, cls):
+                out.append(value)
+            elif hasattr(value, 'to_json'):
+                # This is a workaround for silly ceph mgr object/type identity
+                # mismatches due to multiple python interpreters in use.
+                out.append(cls.from_json(value.to_json()))
+            else:
+                raise SpecValidationError(
+                    f"Unknown type for InitContainerSpec: {type(value)}"
+                )
+        return out
+
+
 class CustomContainerSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'container',
@@ -1397,6 +1507,7 @@ class CustomContainerSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 init_containers: Optional[List[Union['InitContainerSpec', Dict[str, Any]]]] = None,
                  ):
         assert service_type == 'container'
         assert service_id is not None
@@ -1422,6 +1533,11 @@ class CustomContainerSpec(ServiceSpec):
         self.ports = ports
         self.dirs = dirs
         self.files = files
+        self.init_containers: Optional[List['InitContainerSpec']] = None
+        if init_containers:
+            self.init_containers = InitContainerSpec.import_values(
+                init_containers
+            )
 
     def config_json(self) -> Dict[str, Any]:
         """
@@ -1453,6 +1569,15 @@ class CustomContainerSpec(ServiceSpec):
             raise SpecValidationError(
                 '"files" and "custom_configs" are mutually exclusive '
                 '(and both serve the same purpose)')
+
+    # use quotes for OrderedDict, getting this to work across py 3.6, 3.7
+    # and 3.7+ is suprisingly difficult
+    def to_json(self) -> "OrderedDict[str, Any]":
+        data = super().to_json()
+        ics = data.get('spec', {}).get('init_containers')
+        if ics:
+            data['spec']['init_containers'] = [ic.to_json() for ic in ics]
+        return data
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)
