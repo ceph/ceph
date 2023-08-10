@@ -24,7 +24,8 @@
       <a ngbNavLink
          i18n>Subvolume groups</a>
       <ng-template ngbNavContent>
-        <cd-cephfs-subvolume-group [fsName]="selection.mdsmap.fs_name">
+        <cd-cephfs-subvolume-group [fsName]="selection.mdsmap.fs_name"
+                                   [pools]="details.pools">
         </cd-cephfs-subvolume-group>
       </ng-template>
     </ng-container>
