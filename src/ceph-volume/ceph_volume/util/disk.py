@@ -734,28 +734,6 @@ def is_mapper_device(device_name):
     return device_name.startswith(('/dev/mapper', '/dev/dm-'))
 
 
-def is_locked_raw_device(disk_path):
-    """
-    A device can be locked by a third party software like a database.
-    To detect that case, the device is opened in Read/Write and exclusive mode
-    """
-    open_flags = (os.O_RDWR | os.O_EXCL)
-    open_mode = 0
-    fd = None
-
-    try:
-        fd = os.open(disk_path, open_flags, open_mode)
-    except OSError:
-        return 1
-
-    try:
-        os.close(fd)
-    except OSError:
-        return 1
-
-    return 0
-
-
 class AllowLoopDevices(object):
     allow = False
     warned = False
@@ -916,7 +894,6 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['size'] = float(size) * 512
         metadata['human_readable_size'] = human_readable_size(metadata['size'])
         metadata['path'] = diskname
-        metadata['locked'] = is_locked_raw_device(metadata['path'])
         metadata['type'] = block[2]
 
         device_facts[diskname] = metadata
