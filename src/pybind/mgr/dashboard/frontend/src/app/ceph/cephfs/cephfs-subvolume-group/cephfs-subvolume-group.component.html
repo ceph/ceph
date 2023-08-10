@@ -1,0 +1,43 @@
+
+<ng-container *ngIf="subvolumeGroup$ | async as subvolumeGroup">
+  <cd-table *ngIf="subvolumeGroup"
+            [data]="subvolumeGroup"
+            columnMode="flex"
+            [columns]="columns"
+            selectionType="single"
+            [hasDetails]="false">
+  </cd-table>
+</ng-container>
+
+<ng-template #quotaUsageTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row.info.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
+                [total]="row.info.bytes_quota"
+                [used]="row.info.bytes_pcent"
+                [title]="row.name"
+                [calculatePerc]="false"
+                customLegend="Quota"
+                [customLegendValue]="row.info.bytes_quota"
+                decimals="2"></cd-usage-bar>
+
+  <ng-template #noLimitTpl>
+    <span ngbTooltip="Quota limit is not set"
+          *ngIf="row.info.bytes_pcent === 'undefined'"
+          i18n-ngbTooltip>
+      {{row.info.bytes_used | dimlessBinary}}</span>
+  </ng-template>
+</ng-template>
+
+<ng-template #typeTpl
+             let-value="value">
+  <cd-label [value]="value"></cd-label>
+</ng-template>
+
+<ng-template #modeToHumanReadableTpl
+             let-value="value">
+  <span *ngFor="let result of (value | octalToHumanReadable)"
+        [ngClass]="result.class"
+        [ngbTooltip]="result.toolTip">
+    {{ result.content }}
+  </span>
+</ng-template>
