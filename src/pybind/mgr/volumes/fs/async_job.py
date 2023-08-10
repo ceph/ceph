@@ -34,7 +34,7 @@ class JobThread(threading.Thread):
             vol_job = None
             try:
                 # fetch next job to execute
-                with self.async_job.lock:
+                with lock_timeout_log(self.async_job.lock):
                     while True:
                         if self.should_reconfigure_num_threads():
                             log.info("thread [{0}] terminating due to reconfigure".format(thread_name))
@@ -63,12 +63,12 @@ class JobThread(threading.Thread):
             finally:
                 # when done, unregister the job
                 if vol_job:
-                    with self.async_job.lock:
+                    with lock_timeout_log(self.async_job.lock):
                         self.async_job.unregister_async_job(vol_job[0], vol_job[1], thread_id)
                 time.sleep(1)
         log.error("thread [{0}] reached exception limit, bailing out...".format(thread_name))
         self.vc.cluster_log("thread {0} bailing out due to exception".format(thread_name))
-        with self.async_job.lock:
+        with lock_timeout_log(self.async_job.lock):
             self.async_job.threads.remove(self)
 
     def should_reconfigure_num_threads(self):
@@ -148,7 +148,7 @@ class AsyncJobs(threading.Thread):
     def shutdown(self):
         self.stopping.set()
         self.cancel_all_jobs()
-        with self.lock:
+        with lock_timeout_log(self.lock):
             self.cv.notifyAll()
         self.join()
 
