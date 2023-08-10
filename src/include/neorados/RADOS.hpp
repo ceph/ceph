@@ -19,6 +19,7 @@
 #include <concepts>
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <tuple>
 #include <string>
 #include <string_view>
@@ -222,6 +223,33 @@ enum alloc_hint_t {
   incompressible = 512
 };
 }
+
+namespace hash_alg {
+struct xxhash32_t {
+  using init_value = std::uint32_t;
+  using hash_value = std::uint32_t;
+};
+struct xxhash64_t {
+  using init_value = std::uint64_t;
+  using hash_value = std::uint64_t;
+};
+struct crc32c_t {
+  using init_value = std::uint32_t;
+  using hash_value = std::uint32_t;
+};
+
+inline constexpr xxhash32_t xxhash32;
+inline constexpr xxhash64_t xxhash64;
+inline constexpr crc32c_t crc32c;
+};
+
+template<typename T>
+concept HashAlg = requires {
+  // Just enumerate, what's supported is what's on the OSD.
+  (std::is_same_v<hash_alg::xxhash32_t, T> ||
+   std::is_same_v<hash_alg::xxhash64_t, T> ||
+   std::is_same_v<hash_alg::crc32c_t, T>);
+};
 
 class Op;
 class ReadOp;
@@ -474,6 +502,21 @@ public:
   ReadOp&& list_snaps(struct SnapSet* snaps,
 		      boost::system::error_code* ec = nullptr) && {
     return std::move(list_snaps(snaps, ec));
+  }
+
+  template<HashAlg T>
+  ReadOp& checksum(T, const typename T::init_value& iv,
+		   std::uint64_t off, std::uint64_t len,
+		   std::uint64_t chunk_size,
+		   std::vector<typename T::hash_value>* out,
+		   boost::system::error_code* ec = nullptr) &;
+  template<HashAlg T>
+  ReadOp&& checksum(T t, const typename T::init_value& iv,
+		    std::uint64_t off, std::uint64_t len,
+		    std::uint64_t chunk_size,
+		    std::vector<typename T::hash_value>* out,
+		    boost::system::error_code* ec = nullptr) && {
+    return std::move(checksum(t, iv, off, len, chunk_size, out, ec));
   }
 
   // Chaining versions of functions from Op

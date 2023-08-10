@@ -646,6 +646,62 @@ ReadOp& ReadOp::list_snaps(SnapSet* snaps,
   return *this;
 }
 
+inline uint8_t checksum_op_type(hash_alg::xxhash32_t) {
+  return CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH32;
+}
+inline uint8_t checksum_op_type(hash_alg::xxhash64_t) {
+  return CEPH_OSD_CHECKSUM_OP_TYPE_XXHASH64;
+}
+inline uint8_t checksum_op_type(hash_alg::crc32c_t) {
+    return CEPH_OSD_CHECKSUM_OP_TYPE_CRC32C;
+}
+
+template<HashAlg T>
+ReadOp& ReadOp::checksum(T t, const typename T::init_value& iv,
+			 std::uint64_t off, std::uint64_t len,
+			 std::uint64_t chunk_size,
+			 std::vector<typename T::hash_value>* out,
+			 boost::system::error_code* ec) & {
+  using ceph::encode;
+  buffer::list init_bl;
+  encode(iv, init_bl);
+  // If this isn't the case we have a programming error
+  assert(init_bl.length() == sizeof(typename T::init_value));
+  reinterpret_cast<OpImpl*>(&impl)->op.
+    checksum(checksum_op_type(t), std::move(init_bl),
+	     off, len, chunk_size,
+	     [out](bs::error_code ec, int, const buffer::list& bl) {
+	       if (!ec) {
+		 std::vector<typename T::hash_value> v;
+		 auto bi = bl.begin();
+		 decode(v, bi);
+		 if (out) {
+		   *out = std::move(v);
+		 };
+	       }
+	     }, ec);
+  return *this;
+}
+
+template
+ReadOp& ReadOp::checksum<hash_alg::xxhash32_t>(
+  hash_alg::xxhash32_t, const typename hash_alg::xxhash32_t::init_value&,
+  std::uint64_t off, std::uint64_t len, std::uint64_t chunk_size,
+  std::vector<typename hash_alg::xxhash32_t::hash_value>* out,
+  boost::system::error_code* ec) &;
+template
+ReadOp& ReadOp::checksum<hash_alg::xxhash64_t>(
+  hash_alg::xxhash64_t, const typename hash_alg::xxhash64_t::init_value&,
+  std::uint64_t off, std::uint64_t len, std::uint64_t chunk_size,
+  std::vector<typename hash_alg::xxhash64_t::hash_value>* out,
+  boost::system::error_code* ec) &;
+template
+ReadOp& ReadOp::checksum<hash_alg::crc32c_t>(
+  hash_alg::crc32c_t, const typename hash_alg::crc32c_t::init_value&,
+  std::uint64_t off, std::uint64_t len, std::uint64_t chunk_size,
+  std::vector<typename hash_alg::crc32c_t::hash_value>* out,
+  boost::system::error_code* ec) &;
+
 // WriteOp
 
 WriteOp& WriteOp::set_mtime(ceph::real_time t) & {

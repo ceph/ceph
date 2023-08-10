@@ -605,6 +605,23 @@ struct ObjectOperation {
     set_handler(ctx);
   }
 
+  void checksum(uint8_t type, ceph::buffer::list&& init_value,
+		uint64_t off, uint64_t len, size_t chunk_size,
+		fu2::unique_function<void(boost::system::error_code, int,
+					  const ceph::buffer::list&) &&> f,
+		boost::system::error_code* ec) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_CHECKSUM);
+    osd_op.op.checksum.offset = off;
+    osd_op.op.checksum.length = len;
+    osd_op.op.checksum.type = type;
+    osd_op.op.checksum.chunk_size = chunk_size;
+    osd_op.indata.append(std::move(init_value));
+
+    unsigned p = ops.size() - 1;
+    out_ec[p] = ec;
+    set_handler(std::move(f));
+  }
+
   // object attrs
   void getxattr(const char *name, ceph::buffer::list *pbl, int *prval) {
     ceph::buffer::list bl;
