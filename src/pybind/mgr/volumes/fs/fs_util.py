@@ -69,11 +69,12 @@ def volume_exists(mgr, fs_name):
             return True
     return False
 
-def listdir(fs, dirpath, filter_entries=None):
+def listdir(fs, dirpath, filter_entries=None, filter_files=True):
     """
-    Get the directory names (only dirs) for a given path
+    Get the directory entries for a given path. List only dirs if 'filter_files' is True.
+    Don't list the entries passed in 'filter_entries'
     """
-    dirs = []
+    entries = []
     if filter_entries is None:
         filter_entries = [b".", b".."]
     else:
@@ -82,12 +83,15 @@ def listdir(fs, dirpath, filter_entries=None):
         with fs.opendir(dirpath) as dir_handle:
             d = fs.readdir(dir_handle)
             while d:
-                if (d.d_name not in filter_entries) and d.is_dir():
-                    dirs.append(d.d_name)
+                if (d.d_name not in filter_entries):
+                    if not filter_files:
+                        entries.append(d.d_name)
+                    elif d.is_dir():
+                        entries.append(d.d_name)
                 d = fs.readdir(dir_handle)
     except cephfs.Error as e:
         raise VolumeException(-e.args[0], e.args[1])
-    return dirs
+    return entries
 
 
 def has_subdir(fs, dirpath, filter_entries=None):
