@@ -21,6 +21,23 @@
             <i class="fa fa-external-link"></i>
           </a>
         </dd>
+        <ng-container>
+          <dt>Telemetry Dashboard
+            <span
+              class="badge"
+              [ngClass]="telemetryEnabled ? 'badge-success' : 'badge-secondary'"
+              [ngbTooltip]="getTelemetryText()" >
+              {{ telemetryEnabled ? 'Active' : 'Inactive' }}
+            </span>
+          </dt>
+          <dd>
+            <a target="_blank"
+               [href]="telemetryURL">
+               {{ telemetryURL }}
+              <i class="fa fa-external-link"></i>
+            </a>
+          </dd>
+        </ng-container>
       </dl>
     </cd-card>
 
