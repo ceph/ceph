@@ -589,7 +589,7 @@ protected:
 class SessionMap : public SessionMapStore {
 public:
   SessionMap() = delete;
-  explicit SessionMap(MDSRank *m) : mds(m) {}
+  explicit SessionMap(MDSRank *m);
 
   ~SessionMap() override
   {
@@ -838,6 +838,11 @@ private:
   }
 
   time avg_birth_time = clock::zero();
+
+  size_t mds_session_metadata_threshold;
+
+  bool validate_and_encode_session(MDSRank *mds, Session *session, bufferlist& bl);
+  void apply_blocklist(const std::set<entity_name_t>& victims);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);

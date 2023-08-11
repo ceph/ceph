@@ -1524,3 +1524,13 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_session_metadata_threshold
+  type: size
+  level: advanced
+  desc: Evict non-advancing client-tid sessions exceeding the config size.
+  long_desc: Evict clients which are not advancing their request tids which causes a large buildup of session metadata (`completed_requests`) in the MDS causing the MDS to go read-only since the RADOS operation exceeds the size threashold. This config is the maximum size (in bytes) that a session metadata (encoded) can grow.
+  default: 16_M
+  services:
+  - mds
+  flags:
+  - runtime
