@@ -330,14 +330,16 @@ int RGWSI_SysObj_Cache::write(const DoutPrefixProvider *dpp,
   if (pmtime) {
     *pmtime = result_mtime;
   }
-  if (objv_tracker && objv_tracker->read_version.ver) {
-    info.version = objv_tracker->read_version;
-    info.flags |= CACHE_FLAG_OBJV;
-  }
   info.meta.mtime = result_mtime;
   info.meta.size = data.length();
   string name = normal_name(pool, oid);
   if (ret >= 0) {
+    if (objv_tracker && objv_tracker->read_version.ver) {
+      info.version = objv_tracker->read_version;
+      info.flags |= CACHE_FLAG_OBJV;
+      ldpp_dout(dpp, 20) << "RGWSI_SysObj_Cache::write storing objv "
+          << info.version << " for " << obj << dendl;
+    }
     cache.put(dpp, name, info, NULL);
     int r = distribute_cache(dpp, name, obj, info, UPDATE_OBJ, y);
     if (r < 0)
@@ -372,6 +374,8 @@ int RGWSI_SysObj_Cache::write_data(const DoutPrefixProvider *dpp,
     if (objv_tracker && objv_tracker->read_version.ver) {
       info.version = objv_tracker->read_version;
       info.flags |= CACHE_FLAG_OBJV;
+      ldpp_dout(dpp, 20) << "RGWSI_SysObj_Cache::write_data storing objv "
+          << info.version << " for " << obj << dendl;
     }
     cache.put(dpp, name, info, NULL);
     int r = distribute_cache(dpp, name, obj, info, UPDATE_OBJ, y);
@@ -455,6 +459,8 @@ int RGWSI_SysObj_Cache::distribute_cache(const DoutPrefixProvider *dpp,
   info.op = op;
   info.obj_info = obj_info;
   info.obj = obj;
+  ldpp_dout(dpp, 20) << "RGWSI_SysObj_Cache distributing objv "
+      << obj_info.version << " for " << obj << dendl;
   return notify_svc->distribute(dpp, normal_name, info, y);
 }
 
@@ -484,9 +490,13 @@ int RGWSI_SysObj_Cache::watch_cb(const DoutPrefixProvider *dpp,
   
   switch (info.op) {
   case UPDATE_OBJ:
+    ldpp_dout(dpp, 20) << "RGWSI_SysObj_Cache received notify for objv "
+        << info.obj_info.version << " of " << name << dendl;
     cache.put(dpp, name, info.obj_info, NULL);
     break;
   case INVALIDATE_OBJ:
+    ldpp_dout(dpp, 20) << "RGWSI_SysObj_Cache received invalidate for "
+        << name << dendl;
     cache.invalidate_remove(dpp, name);
     break;
   default:
