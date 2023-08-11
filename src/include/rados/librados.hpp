@@ -104,8 +104,13 @@ inline namespace v14_2_0 {
   };
   CEPH_RADOS_API std::ostream& operator<<(std::ostream& os, const librados::ObjectCursor& oc);
 
-  class CEPH_RADOS_API NObjectIterator : public std::iterator <std::forward_iterator_tag, ListObject> {
+  class CEPH_RADOS_API NObjectIterator {
   public:
+    using iterator_category = std::forward_iterator_tag;
+    using value_type = ListObject;
+    using difference_type = std::ptrdiff_t;
+    using pointer = ListObject*;
+    using reference = ListObject&;
     static const NObjectIterator __EndObjectIterator;
     NObjectIterator(): impl(NULL) {}
     ~NObjectIterator();

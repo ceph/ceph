@@ -15,7 +15,10 @@
 #ifndef CEPH_LOGENTRY_H
 #define CEPH_LOGENTRY_H
 
+#include <fmt/format.h>
+
 #include "include/utime.h"
+#include "msg/msg_fmt.h"
 #include "msg/msg_types.h"
 #include "common/entity_name.h"
 #include "ostream_temp.h"
@@ -190,5 +193,20 @@ inline std::ostream& operator<<(std::ostream& out, const LogEntry& e)
 	     << e.seq << " : "
              << e.channel << " " << e.prio << " " << e.msg;
 }
+
+template <> struct fmt::formatter<EntityName> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const EntityName& e, FormatContext& ctx) {
+    return formatter<std::string_view>::format(e.to_str(), ctx);
+  }
+};
+
+template <> struct fmt::formatter<LogEntry> : fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(const LogEntry& e, FormatContext& ctx) {
+    return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} {} {}",
+			  e.stamp, e.name, e.rank, e.seq, e.channel, e.prio, e.msg);
+  }
+};
 
 #endif

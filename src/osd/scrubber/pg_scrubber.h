@@ -16,6 +16,7 @@
 #include "ScrubStore.h"
 #include "scrub_machine_lstnr.h"
 #include "osd/scrubber_common.h"
+#include "osd/SnapMapReaderI.h"
 #include "osd_scrub_sched.h"
 
 class Callback;
@@ -37,10 +38,8 @@ struct BuildMap;
  *  sorting) is better than boost::small_vec. And for std::vector: no need to pre-reserve.
  */
 class ReplicaReservations {
-  using OrigSet = decltype(std::declval<PG>().get_actingset());
-
   PG* m_pg;
-  OrigSet m_acting_set;
+  std::set<pg_shard_t> m_acting_set;
   OSDService* m_osds;
   std::vector<pg_shard_t> m_waited_for_peers;
   std::vector<pg_shard_t> m_reserved_peers;
@@ -488,7 +487,15 @@ class PgScrubber : public ScrubPgIF, public ScrubMachineListener {
 
   void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
 
-  void _scan_snaps(ScrubMap& smap);
+  [[nodiscard]] std::vector<Scrub::snap_mapper_fix_t> _scan_snaps(ScrubMap& smap);
+
+  [[nodiscard]] std::optional<Scrub::snap_mapper_fix_t> scan_object_snaps(
+      const hobject_t& hoid,
+      const SnapSet& snapset,
+      Scrub::SnapMapReaderI& snaps_getter);
+
+  void apply_snap_mapper_fixes(
+      const std::vector<Scrub::snap_mapper_fix_t>& fix_list);
 
   ScrubMap clean_meta_map();
 

@@ -243,7 +243,7 @@ function standard_scrub_cluster() {
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd $ceph_osd_args || return 1
+      run_osd $dir $osd $(echo $ceph_osd_args) || return 1
     done
 
     create_pool $poolname $pg_num $pg_num
@@ -254,6 +254,7 @@ function standard_scrub_cluster() {
     name_n_id=`ceph osd dump | awk '/^pool.*'$poolname'/ { gsub(/'"'"'/," ",$3); print $3," ", $2}'`
     echo "standard_scrub_cluster: $debug_msg: test pool is $name_n_id"
     args['pool_id']="${name_n_id##* }"
+    args['osd_args']=$ceph_osd_args
     if [[ -n "$saved_echo_flag" ]]; then set -x; fi
 }
 

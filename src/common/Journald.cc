@@ -21,6 +21,7 @@
 #include "common/LogEntry.h"
 #include "log/Entry.h"
 #include "log/SubsystemMap.h"
+#include "msg/msg_fmt.h"
 
 
 namespace ceph::logging {
