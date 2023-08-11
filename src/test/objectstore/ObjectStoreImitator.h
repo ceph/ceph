@@ -14,7 +14,10 @@
 #include <algorithm>
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
-#define META_POOL_ID ((uint64_t)-1ull)
+constexpr uint64_t META_POOL_ID = ((uint64_t)-1ull);
+constexpr uint64_t _1Kb = 1024;
+constexpr uint64_t _1Mb = 1024 * _1Kb;
+constexpr uint64_t _1Gb = 1024 * _1Mb;
 
 /**
  * ObjectStoreImitator will simulate how BlueStore does IO (as of the time
@@ -215,6 +218,22 @@ private:
     void write_pixel(uint8_t red, uint8_t green, uint8_t blue) {
       unsigned char buf[] = {red, green, blue};
       o.write((char *)buf, sizeof(buf));
+    }
+
+    // 1: blue, 0: red
+    void write_ratio_red_blue(double value) {
+      uint8_t red{}, green{}, blue{};
+      if (value <= 0.5) {
+        value *= 2.0;
+        red = (uint8_t)(255 * (1 - value) + 0.5);
+        green = (uint8_t)(255 * value + 0.5);
+      } else {
+        value = value * 2 - 1;
+        green = (uint8_t)(255 * (1 - value) + 0.5);
+        blue = (uint8_t)(255 * value + 0.5);
+      }
+
+      write_pixel(red, green, blue);
     }
     ~ImageGenerator() = default;
 

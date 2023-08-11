@@ -25,10 +25,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_test
 
-constexpr uint64_t _1Kb = 1024;
-constexpr uint64_t _1Mb = 1024 * _1Kb;
-constexpr uint64_t _1Gb = 1024 * _1Mb;
-
 typedef boost::mt11213b gen_type;
 
 static bufferlist make_bl(size_t len, char c) {

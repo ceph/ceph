@@ -285,55 +285,35 @@ void ObjectStoreImitator::output_fragmentation_img(const std::string &path,
 
   img_gen.write_header(n, n);
 
-  uint64_t region_size = alloc->get_capacity() / (n * n); // is a power of 2
-  std::vector<uint64_t> region_free_space(n * n, region_size);
-
-  for (const auto &[_, coll_ref] : coll_map) {
-    for (const auto &[_, obj] : coll_ref->objects) {
-      for (auto [_, ext] : obj->extent_map) {
-        uint64_t start = ext.offset, end = ext.offset + ext.length;
-        uint64_t start_round_up = p2roundup(start, region_size);
-
-        if (start_round_up >= end) {
-          // extent completely fits into the region
-          ceph_assert(region_free_space[start / region_size] >= ext.length);
-          region_free_space[start / region_size] -= ext.length;
-          continue;
-        }
-
-        // overlaps at least 2 regions
-
-        ceph_assert(region_free_space[start / region_size] >=
-                    (start_round_up - start));
-        region_free_space[start / region_size] -= start_round_up - start;
-
-        ext.length -= start_round_up - start;
-        start += start_round_up - start;
-
-        while (ext.length > 0) {
-          if (ext.length < region_size) {
-            ceph_assert(region_free_space[start / region_size] >= ext.length);
-            region_free_space[start / region_size] -= ext.length;
-
-            start += ext.length;
-            ext.length = 0;
-            continue;
-          }
-
-          ceph_assert(region_free_space[start / region_size] >= region_size);
-          region_free_space[start / region_size] -= region_size;
-
-          ext.length -= region_size;
-          start += region_size;
-        }
+  uint64_t occupied_space{0};
+  for (const auto &[_, coll_ref] : coll_map)
+    for (const auto &[_, obj] : coll_ref->objects)
+      for (const auto [_, ext] : obj->extent_map) {
+        occupied_space += ext.length;
       }
-    }
-  }
 
-  for (const auto &free_space : region_free_space) {
-    uint64_t v = (region_size - free_space) * 255 / region_size;
-    img_gen.write_pixel(v, v, v);
-  }
+  // Sort blocks into buckets to color them by decreasing size, blue -> red.
+  // Buckets are: 4K, 16K, 64K,... and 16Mb
+  // ie: 6K -> 16K bucket, 16K -> 16K bucket
+  std::map<uint64_t, std::vector<uint64_t>> free_space_hist;
+  uint64_t bucket_size{4 * _1Kb}, max_bucket_size{16 * _1Mb};
+  do {
+    free_space_hist[bucket_size] = {};
+    bucket_size >>= 2;
+  } while (bucket_size < max_bucket_size);
+
+  alloc->foreach ([&](uint64_t offset, uint64_t length) -> void {
+    while (length > 0) {
+      if (length >= max_bucket_size) {
+        free_space_hist[max_bucket_size].push_back(length);
+        length -= max_bucket_size;
+        continue;
+      }
+
+      auto it = std::prev(free_space_hist.upper_bound(length));
+      free_space_hist[it->first].push_back(length);
+    }
+  });
 }
 
 // ------- Transactions -------
