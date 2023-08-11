@@ -102,102 +102,24 @@ void SegmentManagerGroup::initialize_cursor(
     INFO("start to scan segment {}", cursor.get_segment_id());
     cursor.increment_seq(segment_manager.get_block_size());
   }
+  cursor.block_size = segment_manager.get_block_size();
 }
 
-SegmentManagerGroup::read_validate_record_metadata_ret
-SegmentManagerGroup::read_validate_record_metadata(
-  scan_valid_records_cursor &cursor,
-  segment_nonce_t nonce)
+SegmentManagerGroup::read_ret
+SegmentManagerGroup::read(paddr_t start, size_t len) 
 {
-  LOG_PREFIX(SegmentManagerGroup::read_validate_record_metadata);
-  paddr_t start = cursor.seq.offset;
-  auto& seg_addr = start.as_seg_paddr();
-  assert(has_device(seg_addr.get_segment_id().device_id()));
-  auto& segment_manager = *segment_managers[seg_addr.get_segment_id().device_id()];
-  auto block_size = segment_manager.get_block_size();
-  auto segment_size = static_cast<int64_t>(segment_manager.get_segment_size());
-  if (seg_addr.get_segment_off() + block_size > segment_size) {
-    DEBUG("failed -- record group header block {}~4096 > segment_size {}", start, segment_size);
-    return read_validate_record_metadata_ret(
-      read_validate_record_metadata_ertr::ready_future_marker{},
-      std::nullopt);
-  }
-  TRACE("reading record group header block {}~4096", start);
-  return segment_manager.read(start, block_size
-  ).safe_then([=, &segment_manager](bufferptr bptr) mutable
-              -> read_validate_record_metadata_ret {
-    auto block_size = segment_manager.get_block_size();
-    bufferlist bl;
-    bl.append(bptr);
-    auto maybe_header = try_decode_records_header(bl, nonce);
-    if (!maybe_header.has_value()) {
-      return read_validate_record_metadata_ret(
-        read_validate_record_metadata_ertr::ready_future_marker{},
-        std::nullopt);
-    }
-    auto& seg_addr = start.as_seg_paddr();
-    auto& header = *maybe_header;
-    if (header.mdlength < block_size ||
-        header.mdlength % block_size != 0 ||
-        header.dlength % block_size != 0 ||
-        (header.committed_to != JOURNAL_SEQ_NULL &&
-         header.committed_to.offset.as_seg_paddr().get_segment_off() % block_size != 0) ||
-        (seg_addr.get_segment_off() + header.mdlength + header.dlength > segment_size)) {
-      ERROR("failed, invalid record group header {}", start);
-      return crimson::ct_error::input_output_error::make();
-    }
-    if (header.mdlength == block_size) {
-      return read_validate_record_metadata_ret(
-        read_validate_record_metadata_ertr::ready_future_marker{},
-        std::make_pair(std::move(header), std::move(bl))
-      );
-    }
-
-    auto rest_start = paddr_t::make_seg_paddr(
-        seg_addr.get_segment_id(),
-        seg_addr.get_segment_off() + block_size
-    );
-    auto rest_len = header.mdlength - block_size;
-    TRACE("reading record group header rest {}~{}", rest_start, rest_len);
-    return segment_manager.read(rest_start, rest_len
-    ).safe_then([header=std::move(header), bl=std::move(bl)
-                ](auto&& bptail) mutable {
-      bl.push_back(bptail);
-      return read_validate_record_metadata_ret(
-        read_validate_record_metadata_ertr::ready_future_marker{},
-        std::make_pair(std::move(header), std::move(bl)));
-    });
-  }).safe_then([](auto p) {
-    if (p && validate_records_metadata(p->second)) {
-      return read_validate_record_metadata_ret(
-        read_validate_record_metadata_ertr::ready_future_marker{},
-        std::move(*p)
-      );
-    } else {
-      return read_validate_record_metadata_ret(
-        read_validate_record_metadata_ertr::ready_future_marker{},
-        std::nullopt);
-    }
-  });
-}
-
-SegmentManagerGroup::read_validate_data_ret
-SegmentManagerGroup::read_validate_data(
-  paddr_t record_base,
-  const record_group_header_t &header)
-{
-  LOG_PREFIX(SegmentManagerGroup::read_validate_data);
-  assert(has_device(record_base.get_device_id()));
-  auto& segment_manager = *segment_managers[record_base.get_device_id()];
-  auto data_addr = record_base.add_offset(header.mdlength);
-  TRACE("reading record group data blocks {}~{}", data_addr, header.dlength);
+  LOG_PREFIX(SegmentManagerGroup::read);
+  assert(has_device(start.get_device_id()));
+  auto& segment_manager = *segment_managers[start.get_device_id()];
+  TRACE("reading data {}~{}", start, len);
   return segment_manager.read(
-    data_addr,
-    header.dlength
-  ).safe_then([=, &header](auto bptr) {
-    bufferlist bl;
-    bl.append(bptr);
-    return validate_records_data(header, bl);
+    start,
+    len 
+  ).safe_then([](auto bptr) {
+    return read_ret(
+      read_ertr::ready_future_marker{},
+      std::move(bptr)
+    );
   });
 }
 
