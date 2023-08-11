@@ -125,8 +125,8 @@ static void dump_swift_keys_info(Formatter *f, RGWUserInfo &info)
   f->close_section();
 }
 
-static void dump_user_info(Formatter *f, RGWUserInfo &info,
-                           bool dump_keys, RGWStorageStats *stats = NULL)
+static void dump_user_info(const DoutPrefixProvider* dpp, Formatter *f, RGWUserInfo &info,
+                           bool dump_keys, bool system_user_req, RGWStorageStats *stats = NULL)
 {
   f->open_object_section("user_info");
   encode_json("tenant", info.user_id.tenant, f);
@@ -139,10 +139,11 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   dump_subusers_info(f, info);
 
   // keys cannot be viewed unless keys cap is set to read
-  //if (dump_keys || info.system) {
+  // OR user making request is a system user
+  if (dump_keys || system_user_req) {
     dump_access_keys_info(f, info);
     dump_swift_keys_info(f, info);
-  //}
+  }
 
   encode_json("caps", info.caps, f);
 
@@ -2142,7 +2143,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   if (formatter) {
     flusher.start(0);
 
-    dump_user_info(formatter, info, dump_keys, arg_stats);
+    dump_user_info(dpp, formatter, info, dump_keys, op_state.system, arg_stats);
     flusher.flush();
   }
 
@@ -2177,7 +2178,7 @@ int RGWUserAdminOp_User::create(const DoutPrefixProvider *dpp,
   if (formatter) {
     flusher.start(0);
 
-    dump_user_info(formatter, info, dump_keys);
+    dump_user_info(dpp, formatter, info, dump_keys, op_state.system);
     flusher.flush();
   }
 
@@ -2211,7 +2212,7 @@ int RGWUserAdminOp_User::modify(const DoutPrefixProvider *dpp,
   if (formatter) {
     flusher.start(0);
 
-    dump_user_info(formatter, info, dump_keys);
+    dump_user_info(dpp, formatter, info, dump_keys, op_state.system);
     flusher.flush();
   }
 

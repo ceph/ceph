@@ -41,7 +41,7 @@ class RgwTestCase(DashboardTestCase):
             ])
             cls._radosgw_admin_cmd([
                 'caps', 'add', '--uid', 'teuth-test-user', '--caps',
-                'metadata=write'
+                'metadata=write;keys=*'
             ])
             cls._radosgw_admin_cmd([
                 'subuser', 'create', '--uid', 'teuth-test-user', '--subuser',
@@ -656,7 +656,9 @@ class RgwUserCapabilityTest(RgwTestCase):
             '/api/rgw/user/teuth-test-user/capability',
             params={
                 'type': 'metadata',
-                'perm': 'write'
+                'perm': 'write',
+                'type': 'keys',
+                'perm': '*'
             })
         self.assertStatus(204)
 

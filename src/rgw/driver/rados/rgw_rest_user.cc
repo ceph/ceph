@@ -79,6 +79,7 @@ public:
 void RGWOp_User_Info::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state(driver);
+  op_state.set_system(s->system_request);
 
   std::string uid_str, access_key_str;
   bool fetch_stats;
@@ -225,8 +226,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (s->info.args.exists("suspended"))
     op_state.set_suspension(suspended);
 
-  if (s->info.args.exists("system"))
-    op_state.set_system(system);
+  op_state.set_system(s->system_request);
 
   if (s->info.args.exists("exclusive"))
     op_state.set_exclusive(exclusive);
@@ -377,8 +377,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (s->info.args.exists("suspended"))
     op_state.set_suspension(suspended);
 
-  if (s->info.args.exists("system"))
-    op_state.set_system(system);
+  op_state.set_system(s->system_request);
 
   if (!op_mask_str.empty()) {
     uint32_t op_mask;
