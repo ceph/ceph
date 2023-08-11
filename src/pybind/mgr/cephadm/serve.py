@@ -1274,6 +1274,7 @@ class CephadmServe:
                 image = ''
                 start_time = datetime_now()
                 ports: List[int] = daemon_spec.ports if daemon_spec.ports else []
+                port_ips: Dict[str, str] = daemon_spec.port_ips if daemon_spec.port_ips else {}
 
                 if daemon_spec.daemon_type == 'container':
                     spec = cast(CustomContainerSpec,
@@ -1285,6 +1286,9 @@ class CephadmServe:
                 # TCP port to open in the host firewall
                 if len(ports) > 0:
                     daemon_params['tcp_ports'] = list(ports)
+
+                if port_ips:
+                    daemon_params['port_ips'] = port_ips
 
                 # osd deployments needs an --osd-uuid arg
                 if daemon_spec.daemon_type == 'osd':
