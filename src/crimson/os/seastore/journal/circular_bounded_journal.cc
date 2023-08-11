@@ -109,63 +109,6 @@ CircularBoundedJournal::do_submit_record(
   });
 }
 
-RecordScanner::read_validate_record_metadata_ret
-CircularBoundedJournal::read_validate_record_metadata(
-  scan_valid_records_cursor &cursor,
-  segment_nonce_t nonce)
-{
-  LOG_PREFIX(CircularBoundedJournal::read_validate_record_metadata);
-  paddr_t start = cursor.seq.offset;
-  return read_record(start, nonce
-  ).safe_then([FNAME, &cursor, this](auto ret) {
-    if (!ret.has_value()) {
-      return read_validate_record_metadata_ret(
-	read_validate_record_metadata_ertr::ready_future_marker{},
-	std::nullopt);
-    }
-    auto [r_header, bl] = *ret;
-    auto print_invalid = [FNAME](auto &r_header) {
-      DEBUG("invalid header: {}", r_header);
-      return read_validate_record_metadata_ret(
-	read_validate_record_metadata_ertr::ready_future_marker{},
-	std::nullopt);
-    };
-    if (cursor.seq.offset == convert_abs_addr_to_paddr(
-	get_records_start(), get_device_id())) {
-      if ((r_header.committed_to.segment_seq == NULL_SEG_SEQ &&
-	  cursor.seq.segment_seq != 0) ||
-	  r_header.committed_to.segment_seq != cursor.seq.segment_seq - 1) {
-	return print_invalid(r_header);
-      }
-    } else if (r_header.committed_to.segment_seq != cursor.seq.segment_seq) {
-      return print_invalid(r_header);
-    }
-
-    bufferlist mdbuf;
-    mdbuf.substr_of(bl, 0, r_header.mdlength);
-    DEBUG("header: {}", r_header);
-    return read_validate_record_metadata_ret(
-      read_validate_record_metadata_ertr::ready_future_marker{},
-      std::make_pair(std::move(r_header), std::move(mdbuf)));
-  });
-}
-
-RecordScanner::read_validate_data_ret CircularBoundedJournal::read_validate_data(
-  paddr_t record_base,
-  const record_group_header_t &header)
-{
-  return read_record(record_base, header.segment_nonce
-  ).safe_then([](auto ret) {
-    // read_record would return non-empty value if the record is valid
-    if (!ret.has_value()) {
-      return read_validate_data_ret(
-        read_validate_data_ertr::ready_future_marker{},
-        false);
-    }
-    return read_validate_data_ertr::make_ready_future<bool>(true);
-  });
-}
-
 Journal::replay_ret CircularBoundedJournal::replay_segment(
    cbj_delta_handler_t &handler, scan_valid_records_cursor& cursor)
 {
@@ -288,6 +231,42 @@ Journal::replay_ret CircularBoundedJournal::scan_valid_record_delta(
   });
 }
 
+RecordScanner::read_ret CircularBoundedJournal::read(paddr_t start, size_t len) 
+{
+  LOG_PREFIX(CircularBoundedJournal::read);
+  rbm_abs_addr addr = convert_paddr_to_abs_addr(start);
+  DEBUG("reading data from addr {} read length {}", addr, len);
+  auto bptr = bufferptr(ceph::buffer::create_page_aligned(len));
+  return cjs.read(addr, bptr 
+  ).safe_then([bptr=std::move(bptr)]() {
+    return read_ret(
+      RecordScanner::read_ertr::ready_future_marker{},
+      std::move(bptr)
+    );
+  });
+}
+
+bool CircularBoundedJournal::is_record_segment_seq_invalid(
+  scan_valid_records_cursor &cursor,
+  record_group_header_t &r_header) 
+{
+  LOG_PREFIX(CircularBoundedJournal::is_record_segment_seq_invalid);
+  auto print_invalid = [FNAME](auto &r_header) {
+    DEBUG("invalid header: {}", r_header);
+    return true;
+  };
+  if (cursor.seq.offset == convert_abs_addr_to_paddr(
+      get_records_start(), get_device_id())) {
+    if ((r_header.committed_to.segment_seq == NULL_SEG_SEQ &&
+	cursor.seq.segment_seq != 0) ||
+	r_header.committed_to.segment_seq != cursor.seq.segment_seq - 1) {
+      return print_invalid(r_header);
+    }
+  } else if (r_header.committed_to.segment_seq != cursor.seq.segment_seq) {
+    return print_invalid(r_header);
+  }
+  return false;
+}
 
 Journal::replay_ret CircularBoundedJournal::replay(
     delta_handler_t &&delta_handler)
