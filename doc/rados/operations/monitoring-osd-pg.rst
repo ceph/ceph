@@ -22,17 +22,22 @@ placement groups will help you identify the problem.
 Monitoring OSDs
 ===============
 
-An OSD's status is as follows: it is either in the cluster (``in``) or out of the cluster
-(``out``); likewise, it is either up and running (``up``) or down and not
-running (``down``). If an OSD is ``up``, it can be either ``in`` the cluster
-(if so, you can read and write data) or ``out`` of the cluster. If the OSD was previously
-``in`` the cluster but was recently moved ``out`` of the cluster, Ceph will migrate its
-PGs to other OSDs. If an OSD is ``out`` of the cluster, CRUSH will                               
-not assign any PGs to that OSD. If an OSD is ``down``, it should also be
+An OSD's status is either in the cluster (``in``) or out of the cluster
+(``out``); and, it is either up and running (``up``), or it is down and not
+running (``down``). If an OSD is ``up``, it may be either ``in`` the cluster
+(you can read and write data) or it is ``out`` of the cluster. If it was
+``in`` the cluster and recently moved ``out`` of the cluster, Ceph will migrate
+placement groups to other OSDs. If an OSD is ``out`` of the cluster, CRUSH will
+not assign placement groups to the OSD. If an OSD is ``down``, it should also be
 ``out``.
 
-.. note:: If an OSD is ``down`` and ``in``, then there is a problem and the cluster 
-   is not in a healthy state.
+.. note:: If an OSD is ``down`` and ``in``, there is a problem and the cluster 
+   will not be in a healthy state.
+
+The problem here seems to be with the word "should" above, and then with the
+information in the note that there is a problem when an OSD is "down" and "in".
+We need to replace "should" with something less modal and tentative. Does the
+sentence mean to say "When an OSD is 'down', it is therefore a fortiori 'out'."?
 
 .. ditaa::
 
