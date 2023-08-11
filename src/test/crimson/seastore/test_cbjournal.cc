@@ -310,7 +310,10 @@ struct cbjournal_test_t : public seastar_test_suite_t, JournalTrimmer
     ).safe_then([this] {
       return replay(
       ).safe_then([this] {
-	return open();
+	return open(
+	).safe_then([this] {
+	  return replay();
+	});
       });
     }).handle_error(crimson::ct_error::assert_all{});
   }

@@ -36,7 +36,6 @@ CircularBoundedJournal::open_for_mkfs()
 {
   return record_submitter.open(true
   ).safe_then([this](auto ret) {
-    record_submitter.update_committed_to(get_written_to());
     return open_for_mkfs_ret(
       open_for_mkfs_ertr::ready_future_marker{},
       get_written_to());
@@ -48,7 +47,6 @@ CircularBoundedJournal::open_for_mount()
 {
   return record_submitter.open(false
   ).safe_then([this](auto ret) {
-    record_submitter.update_committed_to(get_written_to());
     return open_for_mount_ret(
       open_for_mount_ertr::ready_future_marker{},
       get_written_to());
@@ -111,27 +109,36 @@ CircularBoundedJournal::do_submit_record(
   });
 }
 
-RecordScanner::read_validate_record_metadata_ret CircularBoundedJournal::read_validate_record_metadata(
+RecordScanner::read_validate_record_metadata_ret
+CircularBoundedJournal::read_validate_record_metadata(
   scan_valid_records_cursor &cursor,
   segment_nonce_t nonce)
 {
   LOG_PREFIX(CircularBoundedJournal::read_validate_record_metadata);
   paddr_t start = cursor.seq.offset;
   return read_record(start, nonce
-  ).safe_then([FNAME, &cursor](auto ret) {
+  ).safe_then([FNAME, &cursor, this](auto ret) {
     if (!ret.has_value()) {
       return read_validate_record_metadata_ret(
 	read_validate_record_metadata_ertr::ready_future_marker{},
 	std::nullopt);
     }
     auto [r_header, bl] = *ret;
-    if ((cursor.last_committed != JOURNAL_SEQ_NULL &&
-	cursor.last_committed > r_header.committed_to) ||
-	r_header.committed_to.segment_seq != cursor.seq.segment_seq) {
+    auto print_invalid = [FNAME](auto &r_header) {
       DEBUG("invalid header: {}", r_header);
       return read_validate_record_metadata_ret(
 	read_validate_record_metadata_ertr::ready_future_marker{},
 	std::nullopt);
+    };
+    if (cursor.seq.offset == convert_abs_addr_to_paddr(
+	get_records_start(), get_device_id())) {
+      if ((r_header.committed_to.segment_seq == NULL_SEG_SEQ &&
+	  cursor.seq.segment_seq != 0) ||
+	  r_header.committed_to.segment_seq != cursor.seq.segment_seq - 1) {
+	return print_invalid(r_header);
+      }
+    } else if (r_header.committed_to.segment_seq != cursor.seq.segment_seq) {
+      return print_invalid(r_header);
     }
 
     bufferlist mdbuf;
@@ -179,13 +186,15 @@ Journal::replay_ret CircularBoundedJournal::replay_segment(
               r_header, locator.record_block_base);
         return crimson::ct_error::input_output_error::make();
       }
-      auto cursor_addr = convert_paddr_to_abs_addr(r_header.committed_to.offset);
+      assert(locator.write_result.start_seq != JOURNAL_SEQ_NULL);
+      auto cursor_addr = convert_paddr_to_abs_addr(locator.write_result.start_seq.offset);
       DEBUG("{} at {}", r_header, cursor_addr);
+      journal_seq_t start_seq = locator.write_result.start_seq;
       auto write_result = write_result_t{
-        r_header.committed_to,
+	start_seq,
         r_header.mdlength + r_header.dlength
       };
-      auto expected_seq = r_header.committed_to.segment_seq;
+      auto expected_seq = locator.write_result.start_seq.segment_seq;
       cursor_addr += (r_header.mdlength + r_header.dlength);
       if (cursor_addr >= get_journal_end()) {
         cursor_addr = get_records_start();
@@ -346,7 +355,13 @@ Journal::replay_ret CircularBoundedJournal::replay(
 	return scan_valid_record_delta(std::move(call_d_handler_if_valid), tail);
       });
     }).safe_then([this]() {
-      record_submitter.update_committed_to(get_written_to());
+      // make sure that committed_to is JOURNAL_SEQ_NULL if jounal is the initial state
+      if (get_written_to() != 
+	  journal_seq_t{0,
+	    convert_abs_addr_to_paddr(get_records_start(),
+	    get_device_id())}) {
+	record_submitter.update_committed_to(get_written_to());
+      }
       trimmer.update_journal_tails(
 	get_dirty_tail(),
 	get_alloc_tail());
@@ -403,7 +418,6 @@ CircularBoundedJournal::read_record(paddr_t off, segment_nonce_t magic)
         h.mdlength % get_block_size() != 0 ||
         h.dlength % get_block_size() != 0 ||
         addr + h.mdlength + h.dlength > get_journal_end() ||
-        h.committed_to.segment_seq == NULL_SEG_SEQ ||
 	h.segment_nonce != magic) {
       return read_record_ret(
         read_record_ertr::ready_future_marker{},
