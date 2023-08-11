@@ -27,6 +27,7 @@ describe('RgwBucketDetailsComponent', () => {
     fixture = TestBed.createComponent(RgwBucketDetailsComponent);
     component = fixture.componentInstance;
     component.selection = new CdTableSelection();
+    component.selection = { bid: 'bucket', bucket_quota: { enabled: false, max_size: 0 } };
     fixture.detectChanges();
   });
 
