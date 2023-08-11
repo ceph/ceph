@@ -230,8 +230,10 @@
           </span>
 
           <ng-template #serverSideTpl>
-            {{ data?.length || 0 }} <ng-container i18n="X found">found</ng-container> /
-            {{ rowCount }} <ng-container i18n="X total">total</ng-container>
+            <span>
+              {{ data?.length || 0 }} <ng-container i18n="X found">found</ng-container> /
+              {{ rowCount }} <ng-container i18n="X total">total</ng-container>
+            </span>
           </ng-template>
         </div>
         <cd-table-pagination [page]="curPage"

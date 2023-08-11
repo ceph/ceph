@@ -49,35 +49,9 @@ def RbdTask(name, metadata, wait_for):  # noqa: N802
     return composed_decorator
 
 
-def _sort_features(features, enable=True):
-    """
-    Sorts image features according to feature dependencies:
-
-    object-map depends on exclusive-lock
-    journaling depends on exclusive-lock
-    fast-diff depends on object-map
-    """
-    ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']  # noqa: N806
-
-    def key_func(feat):
-        try:
-            return ORDER.index(feat)
-        except ValueError:
-            return id(feat)
-
-    features.sort(key=key_func, reverse=not enable)
-
-
 @APIRouter('/block/image', Scope.RBD_IMAGE)
 @APIDoc("RBD Management API", "Rbd")
 class Rbd(RESTController):
-
-    # set of image features that can be enable on existing images
-    ALLOW_ENABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "journaling"}
-
-    # set of image features that can be disabled on existing images
-    ALLOW_DISABLE_FEATURES = {"exclusive-lock", "object-map", "fast-diff", "deep-flatten",
-                              "journaling"}
 
     DEFAULT_LIMIT = 5
 
@@ -126,27 +100,10 @@ class Rbd(RESTController):
     def create(self, name, pool_name, size, namespace=None, schedule_interval='',
                obj_size=None, features=None, stripe_unit=None, stripe_count=None,
                data_pool=None, configuration=None, mirror_mode=None):
+        RbdService.create(name, pool_name, size, namespace,
+                          obj_size, features, stripe_unit, stripe_count,
+                          data_pool, configuration)
 
-        size = int(size)
-
-        def _create(ioctx):
-            rbd_inst = rbd.RBD()
-
-            # Set order
-            l_order = None
-            if obj_size and obj_size > 0:
-                l_order = int(round(math.log(float(obj_size), 2)))
-
-            # Set features
-            feature_bitmask = format_features(features)
-
-            rbd_inst.create(ioctx, name, size, order=l_order, old_format=False,
-                            features=feature_bitmask, stripe_unit=stripe_unit,
-                            stripe_count=stripe_count, data_pool=data_pool)
-            RbdConfiguration(pool_ioctx=ioctx, namespace=namespace,
-                             image_name=name).set_configuration(configuration)
-
-        rbd_call(pool_name, namespace, _create)
         if mirror_mode:
             RbdMirroringService.enable_image(name, pool_name, namespace,
                                              MIRROR_IMAGE_MODE[mirror_mode])
@@ -157,84 +114,17 @@ class Rbd(RESTController):
 
     @RbdTask('delete', ['{image_spec}'], 2.0)
     def delete(self, image_spec):
-        pool_name, namespace, image_name = parse_image_spec(image_spec)
-
-        image = RbdService.get_image(image_spec)
-        snapshots = image['snapshots']
-        for snap in snapshots:
-            RbdSnapshotService.remove_snapshot(image_spec, snap['name'], snap['is_protected'])
-
-        rbd_inst = rbd.RBD()
-        return rbd_call(pool_name, namespace, rbd_inst.remove, image_name)
+        return RbdService.delete(image_spec)
 
     @RbdTask('edit', ['{image_spec}', '{name}'], 4.0)
     def set(self, image_spec, name=None, size=None, features=None,
             configuration=None, enable_mirror=None, primary=None,
             force=False, resync=False, mirror_mode=None, schedule_interval='',
             remove_scheduling=False):
-
-        pool_name, namespace, image_name = parse_image_spec(image_spec)
-
-        def _edit(ioctx, image):
-            rbd_inst = rbd.RBD()
-            # check rename image
-            if name and name != image_name:
-                rbd_inst.rename(ioctx, image_name, name)
-
-            # check resize
-            if size and size != image.size():
-                image.resize(size)
-
-            mirror_image_info = image.mirror_image_get_info()
-            if enable_mirror and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_DISABLED:
-                RbdMirroringService.enable_image(
-                    image_name, pool_name, namespace,
-                    MIRROR_IMAGE_MODE[mirror_mode])
-            elif (enable_mirror is False
-                  and mirror_image_info['state'] == rbd.RBD_MIRROR_IMAGE_ENABLED):
-                RbdMirroringService.disable_image(
-                    image_name, pool_name, namespace)
-
-            # check enable/disable features
-            if features is not None:
-                curr_features = format_bitmask(image.features())
-                # check disabled features
-                _sort_features(curr_features, enable=False)
-                for feature in curr_features:
-                    if feature not in features and feature in self.ALLOW_DISABLE_FEATURES:
-                        if feature not in format_bitmask(image.features()):
-                            continue
-                        f_bitmask = format_features([feature])
-                        image.update_features(f_bitmask, False)
-                # check enabled features
-                _sort_features(features)
-                for feature in features:
-                    if feature not in curr_features and feature in self.ALLOW_ENABLE_FEATURES:
-                        if feature in format_bitmask(image.features()):
-                            continue
-                        f_bitmask = format_features([feature])
-                        image.update_features(f_bitmask, True)
-
-            RbdConfiguration(pool_ioctx=ioctx, image_name=image_name).set_configuration(
-                configuration)
-
-            if primary and not mirror_image_info['primary']:
-                RbdMirroringService.promote_image(
-                    image_name, pool_name, namespace, force)
-            elif primary is False and mirror_image_info['primary']:
-                RbdMirroringService.demote_image(
-                    image_name, pool_name, namespace)
-
-            if resync:
-                RbdMirroringService.resync_image(image_name, pool_name, namespace)
-
-            if schedule_interval:
-                RbdMirroringService.snapshot_schedule_add(image_spec, schedule_interval)
-
-            if remove_scheduling:
-                RbdMirroringService.snapshot_schedule_remove(image_spec)
-
-        return rbd_image_call(pool_name, namespace, image_name, _edit)
+        return RbdService.set(image_spec, name, size, features,
+                              configuration, enable_mirror, primary,
+                              force, resync, mirror_mode, schedule_interval,
+                              remove_scheduling)
 
     @RbdTask('copy',
              {'src_image_spec': '{image_spec}',
@@ -246,41 +136,17 @@ class Rbd(RESTController):
     def copy(self, image_spec, dest_pool_name, dest_namespace, dest_image_name,
              snapshot_name=None, obj_size=None, features=None,
              stripe_unit=None, stripe_count=None, data_pool=None, configuration=None):
-        pool_name, namespace, image_name = parse_image_spec(image_spec)
-
-        def _src_copy(s_ioctx, s_img):
-            def _copy(d_ioctx):
-                # Set order
-                l_order = None
-                if obj_size and obj_size > 0:
-                    l_order = int(round(math.log(float(obj_size), 2)))
-
-                # Set features
-                feature_bitmask = format_features(features)
-
-                if snapshot_name:
-                    s_img.set_snap(snapshot_name)
-
-                s_img.copy(d_ioctx, dest_image_name, feature_bitmask, l_order,
-                           stripe_unit, stripe_count, data_pool)
-                RbdConfiguration(pool_ioctx=d_ioctx, image_name=dest_image_name).set_configuration(
-                    configuration)
-
-            return rbd_call(dest_pool_name, dest_namespace, _copy)
-
-        return rbd_image_call(pool_name, namespace, image_name, _src_copy)
+        return RbdService.copy(image_spec, dest_pool_name, dest_namespace, dest_image_name,
+                               snapshot_name, obj_size, features,
+                               stripe_unit, stripe_count, data_pool,
+                               configuration)
 
     @RbdTask('flatten', ['{image_spec}'], 2.0)
     @RESTController.Resource('POST')
     @UpdatePermission
     @allow_empty_body
     def flatten(self, image_spec):
-
-        def _flatten(ioctx, image):
-            image.flatten()
-
-        pool_name, namespace, image_name = parse_image_spec(image_spec)
-        return rbd_image_call(pool_name, namespace, image_name, _flatten)
+        return RbdService.flatten(image_spec)
 
     @RESTController.Collection('GET')
     def default_features(self):
@@ -310,9 +176,7 @@ class Rbd(RESTController):
         Images, even ones actively in-use by clones,
         can be moved to the trash and deleted at a later time.
         """
-        pool_name, namespace, image_name = parse_image_spec(image_spec)
-        rbd_inst = rbd.RBD()
-        return rbd_call(pool_name, namespace, rbd_inst.trash_move, image_name, delay)
+        return RbdService.move_image_to_trash(image_spec, delay)
 
 
 @UIRouter('/block/rbd')
