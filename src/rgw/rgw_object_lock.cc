@@ -58,11 +58,10 @@ ceph::real_time RGWObjectLock::get_lock_until_date(const ceph::real_time& mtime)
   if (!rule_exist) {
     return ceph::real_time();
   }
-  int days = get_days();
-  if (days <= 0) {
-    days = get_years()*365;
+  if (int days = get_days(); days > 0) {
+    return mtime + std::chrono::days(days);
   }
-  return mtime + make_timespan(days*24*60*60);
+  return mtime + std::chrono::years(get_years());
 }
 
 void RGWObjectRetention::decode_xml(XMLObj *obj) {
