@@ -30,6 +30,16 @@ public:
     found_record_handler_t &handler    ///< [in] handler for records
   ); ///< @return used budget
 
+  device_off_t get_segment_off(paddr_t addr) const {
+    if (addr.get_addr_type() == paddr_types_t::SEGMENT) {
+      auto& seg_addr = addr.as_seg_paddr();
+      return seg_addr.get_segment_off();
+    }
+    assert(addr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+    auto& blk_addr = addr.as_blk_paddr();
+    return blk_addr.get_device_off();
+  }
+
 protected:
   /// read record metadata for record starting at start
   using read_validate_record_metadata_ertr = read_ertr;
@@ -37,18 +47,26 @@ protected:
     read_validate_record_metadata_ertr::future<
       std::optional<std::pair<record_group_header_t, bufferlist>>
     >;
-  virtual read_validate_record_metadata_ret read_validate_record_metadata(
+  read_validate_record_metadata_ret read_validate_record_metadata(
     scan_valid_records_cursor &cursor,
-    segment_nonce_t nonce) = 0;
+    segment_nonce_t nonce);
 
   /// read and validate data
   using read_validate_data_ertr = read_ertr;
   using read_validate_data_ret = read_validate_data_ertr::future<bool>;
-  virtual read_validate_data_ret read_validate_data(
+  read_validate_data_ret read_validate_data(
     paddr_t record_base,
     const record_group_header_t &header  ///< caller must ensure lifetime through
                                          ///  future resolution
-  ) = 0;
+  );
+
+  virtual bool is_record_segment_seq_invalid(scan_valid_records_cursor &cursor,
+    record_group_header_t &h) = 0;
+
+  virtual int64_t get_segment_end_offset(paddr_t addr) = 0;
+
+  using read_ret = read_ertr::future<bufferptr>;
+  virtual read_ret read(paddr_t start, size_t len) = 0;
 
   using consume_record_group_ertr = scan_valid_records_ertr;
   consume_record_group_ertr::future<> consume_next_records(

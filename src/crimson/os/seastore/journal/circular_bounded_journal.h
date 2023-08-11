@@ -188,18 +188,21 @@ public:
     cursor.seq.segment_seq += 1;
   }
 
-  void initialize_cursor(scan_valid_records_cursor& cursor) final {};
+  void initialize_cursor(scan_valid_records_cursor& cursor) final {
+    cursor.block_size = get_block_size();
+  };
 
   Journal::replay_ret replay_segment(
     cbj_delta_handler_t &handler, scan_valid_records_cursor& cursor);
 
-  read_validate_record_metadata_ret read_validate_record_metadata(
-    scan_valid_records_cursor &cursor,
-    segment_nonce_t nonce) final;
+  read_ret read(paddr_t start, size_t len) final;
 
-  read_validate_data_ret read_validate_data(
-    paddr_t record_base,
-    const record_group_header_t &header) final;
+  bool is_record_segment_seq_invalid(scan_valid_records_cursor &cursor,
+    record_group_header_t &h) final;
+
+  int64_t get_segment_end_offset(paddr_t addr) final {
+    return get_journal_end();
+  }
 
   // Test interfaces
   

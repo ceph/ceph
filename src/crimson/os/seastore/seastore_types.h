@@ -2056,6 +2056,7 @@ struct scan_valid_records_cursor {
   journal_seq_t seq;
   journal_seq_t last_committed;
   std::size_t num_consumed_records = 0;
+  extent_len_t block_size = 0;
 
   struct found_record_group_t {
     paddr_t offset;
@@ -2080,6 +2081,10 @@ struct scan_valid_records_cursor {
 
   segment_off_t get_segment_offset() const {
     return seq.offset.as_seg_paddr().get_segment_off();
+  }
+
+  extent_len_t get_block_size() const {
+    return block_size;
   }
 
   void increment_seq(segment_off_t off) {

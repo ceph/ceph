@@ -105,6 +105,103 @@ RecordScanner::scan_valid_records(
     });
 }
 
+RecordScanner::read_validate_record_metadata_ret
+RecordScanner::read_validate_record_metadata(
+  scan_valid_records_cursor &cursor,
+  segment_nonce_t nonce)
+{
+  LOG_PREFIX(RecordScanner::read_validate_record_metadata);
+  paddr_t start = cursor.seq.offset;
+  auto block_size = cursor.get_block_size();
+  if (get_segment_off(cursor.seq.offset) + block_size > get_segment_end_offset(cursor.seq.offset)) {
+    DEBUG("failed -- record group header block {}~4096 > segment_size {}",
+      start, get_segment_end_offset(cursor.seq.offset));
+    return read_validate_record_metadata_ret(
+      read_validate_record_metadata_ertr::ready_future_marker{},
+      std::nullopt);
+  }
+  TRACE("reading record group header block {}~4096", start);
+  return read(start, block_size
+  ).safe_then([=](bufferptr bptr) mutable
+              -> read_validate_record_metadata_ret {
+    bufferlist bl;
+    bl.append(bptr);
+    auto maybe_header = try_decode_records_header(bl, nonce);
+    if (!maybe_header.has_value()) {
+      return read_validate_record_metadata_ret(
+        read_validate_record_metadata_ertr::ready_future_marker{},
+        std::nullopt);
+    }
+
+    auto& header = *maybe_header;
+    if (header.mdlength < block_size ||
+        header.mdlength % block_size != 0 ||
+        header.dlength % block_size != 0 ||
+	(header.committed_to != JOURNAL_SEQ_NULL &&
+	get_segment_off(header.committed_to.offset) %
+	cursor.get_block_size() != 0) ||
+	(get_segment_off(cursor.seq.offset) + header.mdlength + header.dlength >
+	get_segment_end_offset(cursor.seq.offset))) {
+      ERROR("failed, invalid record group header {}", header);
+      return crimson::ct_error::input_output_error::make();
+    }
+
+    if (is_record_segment_seq_invalid(cursor, header)) {
+      return read_validate_record_metadata_ret(
+        read_validate_record_metadata_ertr::ready_future_marker{},
+        std::nullopt);
+    }
+
+    if (header.mdlength == block_size) {
+      return read_validate_record_metadata_ret(
+        read_validate_record_metadata_ertr::ready_future_marker{},
+        std::make_pair(std::move(header), std::move(bl))
+      );
+    }
+
+    paddr_t rest_start = cursor.seq.offset.add_offset(block_size);
+    auto rest_len = header.mdlength - block_size;
+    TRACE("reading record group header rest {}~{}", rest_start, rest_len);
+    return read(rest_start, rest_len
+    ).safe_then([header=std::move(header), bl=std::move(bl)
+                ](auto&& bptail) mutable {
+      bl.push_back(bptail);
+      return read_validate_record_metadata_ret(
+        read_validate_record_metadata_ertr::ready_future_marker{},
+        std::make_pair(std::move(header), std::move(bl)));
+    });
+  }).safe_then([](auto p) {
+    if (p && validate_records_metadata(p->second)) {
+      return read_validate_record_metadata_ret(
+        read_validate_record_metadata_ertr::ready_future_marker{},
+        std::move(*p)
+      );
+    } else {
+      return read_validate_record_metadata_ret(
+        read_validate_record_metadata_ertr::ready_future_marker{},
+        std::nullopt);
+    }
+  });
+
+}
+
+RecordScanner::read_validate_data_ret RecordScanner::read_validate_data(
+  paddr_t record_base,
+  const record_group_header_t &header)
+{
+  LOG_PREFIX(RecordScanner::read_validate_data);
+  auto data_addr = record_base.add_offset(header.mdlength);
+  TRACE("reading record group data blocks {}~{}", data_addr, header.dlength);
+  return read(
+    data_addr,
+    header.dlength
+  ).safe_then([=, &header](auto bptr) {
+    bufferlist bl;
+    bl.append(bptr);
+    return validate_records_data(header, bl);
+  });
+}
+
 RecordScanner::consume_record_group_ertr::future<>
 RecordScanner::consume_next_records(
   scan_valid_records_cursor& cursor,
