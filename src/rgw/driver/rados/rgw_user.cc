@@ -139,10 +139,10 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   dump_subusers_info(f, info);
 
   // keys cannot be viewed unless keys cap is set to read
-  if (dump_keys) {
+  //if (dump_keys || info.system) {
     dump_access_keys_info(f, info);
     dump_swift_keys_info(f, info);
-  }
+  //}
 
   encode_json("caps", info.caps, f);
 
