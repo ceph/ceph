@@ -223,6 +223,7 @@ def _get_user_keys(user: str, realm: Optional[str] = None) -> Tuple[str, str]:
                 'user', 'create',
                 '--uid', user,
                 '--display-name', 'Ceph Dashboard',
+                '--caps', 'keys=*'
                 '--system',
             ] + cmd_realm_option
             _, out, err = mgr.send_rgwadmin_command(rgw_create_user_cmd)
