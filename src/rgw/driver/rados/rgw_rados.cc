@@ -132,6 +132,7 @@ void RGWObjVersionTracker::prepare_op_for_read(ObjectReadOperation* op)
   obj_version* check_objv = version_for_check();
 
   if (check_objv) {
+    dout(20) << "RGWObjVersionTracker::prepare_op_for_read check=" << *check_objv << dendl;
     cls_version_check(*op, *check_objv, VER_COND_EQ);
   }
 
@@ -144,6 +145,7 @@ void RGWObjVersionTracker::prepare_op_for_write(ObjectWriteOperation *op)
   obj_version* modify_version = version_for_write();
 
   if (check_objv) {
+    dout(20) << "RGWObjVersionTracker::prepare_op_for_write check=" << *check_objv << dendl;
     cls_version_check(*op, *check_objv, VER_COND_EQ);
   }
 
@@ -162,8 +164,10 @@ void RGWObjVersionTracker::apply_write()
   if (checked && incremented) {
     // apply cls_version_inc() so our next operation can recheck it
     ++read_version.ver;
+    dout(20) << "RGWObjVersionTracker::apply_write incremented " << read_version << dendl;
   } else {
     read_version = write_version;
+    dout(20) << "RGWObjVersionTracker::apply_write set " << read_version << dendl;
   }
   write_version = obj_version();
 }
