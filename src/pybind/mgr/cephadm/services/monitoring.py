@@ -392,10 +392,14 @@ class PrometheusService(CephadmService):
         }
 
         ip_to_bind_to = ''
-        if spec.only_bind_port_on_networks and spec.networks:
+        if prom_spec.only_bind_port_on_networks and prom_spec.networks:
             assert daemon_spec.host is not None
-            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
+            ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, prom_spec) or ''
             if ip_to_bind_to:
+                if prom_spec.port:
+                    port = prom_spec.port
+                else:
+                    port = self.DEFAULT_SERVICE_PORT
                 daemon_spec.port_ips = {str(port): ip_to_bind_to}
 
         r: Dict[str, Any] = {
