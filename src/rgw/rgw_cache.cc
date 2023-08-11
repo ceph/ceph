@@ -179,6 +179,17 @@ void ObjectCache::put(const DoutPrefixProvider *dpp, const string& name, ObjectC
     cache_info->gen = entry.gen;
   }
 
+  // detect out-of-order notifications on the same cls_version tag
+  if (target.flags & CACHE_FLAG_OBJV &&
+      info.flags & CACHE_FLAG_OBJV &&
+      target.version.tag == info.version.tag &&
+      target.version.ver > info.version.ver) {
+    ldpp_dout(dpp, 10) << "cache put: discarding older version ("
+       << info.version.ver << " < " << target.version.ver
+       << ") of existing entry" << dendl;
+    return;
+  }
+
   // put() must include the latest version if we're going to keep caching it
   target.flags &= ~CACHE_FLAG_OBJV;
 
