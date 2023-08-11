@@ -10,10 +10,11 @@ directly to specific OSDs. For this reason, tracking system faults
 requires finding the `placement group`_ (PG) and the underlying OSDs at the
 root of the problem.
 
-.. tip:: A fault in one part of the cluster might prevent you from accessing a 
-   particular object, but that doesn't mean that you are prevented from accessing other objects.
-   When you run into a fault, don't panic. Just follow the steps for monitoring
-   your OSDs and placement groups, and then begin troubleshooting.
+.. tip:: A fault in one part of the cluster might prevent you from accessing a
+   particular object, but that doesn't mean that you are prevented from
+   accessing other objects.  When you run into a fault, don't panic. Just
+   follow the steps for monitoring your OSDs and placement groups, and then
+   begin troubleshooting.
 
 Ceph is self-repairing. However, when problems persist, monitoring OSDs and
 placement groups will help you identify the problem.
@@ -22,22 +23,18 @@ placement groups will help you identify the problem.
 Monitoring OSDs
 ===============
 
-An OSD's status is either in the cluster (``in``) or out of the cluster
-(``out``); and, it is either up and running (``up``), or it is down and not
-running (``down``). If an OSD is ``up``, it may be either ``in`` the cluster
-(you can read and write data) or it is ``out`` of the cluster. If it was
-``in`` the cluster and recently moved ``out`` of the cluster, Ceph will migrate
-placement groups to other OSDs. If an OSD is ``out`` of the cluster, CRUSH will
-not assign placement groups to the OSD. If an OSD is ``down``, it should also be
-``out``.
+An OSD is either *in* service (``in``) or *out* of service (``out``). An OSD is
+either running and reachable (``up``), or it is not running and not
+reachable (``down``). 
 
-.. note:: If an OSD is ``down`` and ``in``, there is a problem and the cluster 
-   will not be in a healthy state.
+If an OSD is ``up``, it may be either ``in`` service (clients can read and
+write data) or it is ``out`` of service. If the OSD was ``in`` but then due to a failure or a manual action was set to the ``out`` state, Ceph will migrate placement groups to the other OSDs to maintin the configured redundancy.  
 
-The problem here seems to be with the word "should" above, and then with the
-information in the note that there is a problem when an OSD is "down" and "in".
-We need to replace "should" with something less modal and tentative. Does the
-sentence mean to say "When an OSD is 'down', it is therefore a fortiori 'out'."?
+If an OSD is ``out`` of service, CRUSH will not assign placement groups to it.
+If an OSD is ``down``, it will also be ``out``.
+
+.. note:: If an OSD is ``down`` and ``in``, there is a problem and this
+   indicates that the cluster is not in a healthy state.
 
 .. ditaa::
 
