@@ -11598,7 +11598,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = 0;
       goto reply;
     }
-    ceph_assert(osdmap.require_osd_release >= ceph_release_t::luminous);
+    if (osdmap.require_osd_release < ceph_release_t::luminous && !sure) {
+      ss << "Not advisable to continue since current 'require_osd_release' "
+         << "refers to a very old Ceph release. Pass "
+	 << "--yes-i-really-mean-it if you really wish to continue.";
+      err = -EPERM;
+      goto reply;
+    }
     if (!osdmap.get_num_up_osds() && !sure) {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
