@@ -77,20 +77,40 @@ class TestCephAdm(object):
     def test_port_in_use(self, _logger, _attempt_bind):
         empty_ctx = None
 
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         _attempt_bind.side_effect = _cephadm.PortOccupiedError('msg')
-        assert _cephadm.port_in_use(empty_ctx, 9100) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+
+    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_with_specific_ips(self, _logger, _attempt_bind):
+        empty_ctx = None
+
+        def _fake_attempt_bind(ctx, s: socket.socket, addr: str, port: int) -> None:
+            occupied_error = _cephadm.PortOccupiedError('msg')
+            if addr.startswith('200'):
+                raise occupied_error
+            if addr.startswith('100'):
+                if port == 4567:
+                    raise occupied_error
+
+        _attempt_bind.side_effect = _fake_attempt_bind
+
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
