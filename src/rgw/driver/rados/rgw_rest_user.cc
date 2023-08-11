@@ -326,7 +326,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
 
   // if keys cap is not set to write a keys cannot be generated
   if (gen_key || !access_key.empty() || !secret_key.empty()) {
-    ldpp_dout(this, 0) << "ALI: in conditional check for user modify for keys" << dendl;
     op_ret = s->user->get_info().caps.check_cap("keys", RGW_CAP_WRITE);
     if (op_ret < 0) {
       return;
