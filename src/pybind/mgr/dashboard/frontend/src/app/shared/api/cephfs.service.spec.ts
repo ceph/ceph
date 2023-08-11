@@ -95,4 +95,20 @@ describe('CephfsService', () => {
     expect(req.request.method).toBe('PUT');
     expect(req.request.body).toEqual({ max_bytes: 1024, max_files: 10 });
   });
+
+  it('should rename the cephfs volume', () => {
+    const volName = 'testvol';
+    const newVolName = 'newtestvol';
+    service.rename(volName, newVolName).subscribe();
+    const req = httpTesting.expectOne('api/cephfs/rename');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ name: 'testvol', new_name: 'newtestvol' });
+  });
+
+  it('should remove the cephfs volume', () => {
+    const volName = 'testvol';
+    service.remove(volName).subscribe();
+    const req = httpTesting.expectOne(`api/cephfs/remove/${volName}`);
+    expect(req.request.method).toBe('DELETE');
+  });
 });
