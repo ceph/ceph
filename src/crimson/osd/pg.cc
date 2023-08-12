@@ -125,6 +125,7 @@ PG::PG(
       osdmap,
       this,
       this),
+    scrubber(*this),
     obc_registry{
       local_conf()},
     obc_loader{
@@ -144,6 +145,7 @@ PG::PG(
       pgid.shard),
     wait_for_active_blocker(this)
 {
+  scrubber.initiate();
   peering_state.set_backend_predicates(
     new ReadablePredicate(pg_whoami),
     new RecoverablePredicate());
@@ -331,6 +333,12 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   projected_last_update = peering_state.get_info().last_update;
 }
 
+void PG::on_replica_activate()
+{
+  logger().debug("{}: {}", *this, __func__);
+  scrubber.on_replica_activate();
+}
+
 void PG::on_activate_complete()
 {
   wait_for_active_blocker.unblock();
@@ -458,7 +466,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 
 Context *PG::on_clean()
 {
-  // Not needed yet (will be needed for IO unblocking)
+  scrubber.on_primary_active_clean();
   return nullptr;
 }
 
@@ -1347,6 +1355,9 @@ void PG::log_operation(
   if (!is_primary()) { // && !is_ec_pg()
     replica_clear_repop_obc(logv);
   }
+  if (!logv.empty()) {
+    scrubber.on_log_update(logv.rbegin()->version);
+  }
   peering_state.append_log(std::move(logv),
                            trim_to,
                            roll_forward_to,
@@ -1527,6 +1538,7 @@ void PG::on_change(ceph::os::Transaction &t) {
     logger().debug("{} {}: dropping requests", *this, __func__);
     client_request_orderer.clear_and_cancel(*this);
   }
+  scrubber.on_interval_change();
 }
 
 void PG::context_registry_on_change() {

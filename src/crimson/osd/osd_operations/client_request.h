@@ -17,6 +17,7 @@
 #include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_map.h"
+#include "crimson/osd/scrub/pg_scrubber.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/common/utility.h"
 #include "messages/MOSDOp.h"
@@ -103,6 +104,7 @@ public:
       PGPipeline::WaitForActive::BlockingEvent,
       PGActivationBlocker::BlockingEvent,
       PGPipeline::RecoverMissing::BlockingEvent,
+      scrub::PGScrubber::BlockingEvent,
       PGPipeline::GetOBC::BlockingEvent,
       PGPipeline::Process::BlockingEvent,
       PGPipeline::WaitRepop::BlockingEvent,
