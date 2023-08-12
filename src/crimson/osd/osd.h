@@ -206,8 +206,10 @@ private:
                                       Ref<MOSDPeeringOp> m);
   seastar::future<> handle_recovery_subreq(crimson::net::ConnectionRef conn,
                                            Ref<MOSDFastDispatchOp> m);
-  seastar::future<> handle_scrub(crimson::net::ConnectionRef conn,
-                                 Ref<MOSDScrub2> m);
+  seastar::future<> handle_scrub_command(crimson::net::ConnectionRef conn,
+					 Ref<MOSDScrub2> m);
+  seastar::future<> handle_scrub_message(crimson::net::ConnectionRef conn,
+					 Ref<MOSDFastDispatchOp> m);
   seastar::future<> handle_mark_me_down(crimson::net::ConnectionRef conn,
                                         Ref<MOSDMarkMeDown> m);
 
