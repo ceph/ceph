@@ -113,6 +113,11 @@ void RGWFormatter_Plain::close_section()
   stack.pop_back();
 }
 
+void RGWFormatter_Plain::dump_null(std::string_view name)
+{
+  dump_value_int(name, "null"); /* I feel a little bad about this. */
+}
+
 void RGWFormatter_Plain::dump_unsigned(std::string_view name, uint64_t u)
 {
   dump_value_int(name, "%" PRIu64, u);
