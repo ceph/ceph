@@ -19,14 +19,6 @@ struct Entry {
   int localWeight;
 };
 
-class CacheAioRequest {
-  public:
-  CacheAioRequest() {}
-  virtual ~CacheAioRequest() = default;
-  virtual void cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) = 0;
-  virtual void cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) = 0;
-};
-
 class CacheDriver {
   public:
     CacheDriver() {}
@@ -45,8 +37,6 @@ class CacheDriver {
     virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs) = 0;
     virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name) = 0;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) = 0;
-
-    virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) = 0;
 
     /* Entry */
     virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) = 0;

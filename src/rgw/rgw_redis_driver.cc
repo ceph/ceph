@@ -640,12 +640,12 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
 
   return result - 1;
 }
-
+#if 0
 std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) 
 {
   return std::make_unique<RedisCacheAioRequest>(this);  
 }
-
+#endif
 rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) 
 {
   rgw_raw_obj r_obj;
@@ -731,7 +731,7 @@ auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx
   }*/
   //return init.result.get();
 }
-
+#if 0
 void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
 {
   using namespace boost::asio;
@@ -745,7 +745,7 @@ void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optiona
 void RedisCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
 {
 }
-
+#endif
 int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
 {
   return 0;
