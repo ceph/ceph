@@ -4,19 +4,7 @@
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
 
-namespace rgw { namespace cache { //cal stands for Cache Abstraction Layer
-
-class SSDDriver;
-
-class SSDCacheAioRequest: public CacheAioRequest {
-public:
-  SSDCacheAioRequest(SSDDriver* cache_driver) : cache_driver(cache_driver) {}
-  virtual ~SSDCacheAioRequest() = default;
-  virtual void cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override;
-  virtual void cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r) override;
-private:
-  SSDDriver* cache_driver;
-};
+namespace rgw { namespace cache {
 
 class SSDDriver : public CacheDriver {
 public:
@@ -49,8 +37,6 @@ public:
   static std::optional<Partition> get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type);
   static std::vector<Partition> list_partitions(const DoutPrefixProvider* dpp);
 
-  virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override;
-
   struct libaio_handler {
     rgw::Aio* throttle = nullptr;
     rgw::AioResult& r;
@@ -61,9 +47,7 @@ public:
       throttle->put(r);
     }
   };
-  template <typename ExecutionContext, typename CompletionToken>
-  auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
-                  off_t read_ofs, off_t read_len, CompletionToken&& token);
+
 protected:
   inline static std::unordered_map<std::string, Partition> partitions;
   std::unordered_map<std::string, Entry> entries;
@@ -90,6 +74,13 @@ struct libaio_aiocb_deleter {
     delete c;
   }
 };
+
+template <typename ExecutionContext, typename CompletionToken>
+  auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+                  off_t read_ofs, off_t read_len, CompletionToken&& token);
+
+rgw::Aio::OpFunc ssd_cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,
+                                off_t read_ofs, off_t read_len, const std::string& key);
 
 using unique_aio_cb_ptr = std::unique_ptr<struct aiocb, libaio_aiocb_deleter>;
 
