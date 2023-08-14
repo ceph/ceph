@@ -30,7 +30,7 @@ Install packages with cephadm
 .. prompt:: bash $
    :substitutions:
 
-   curl --silent --remote-name --location https://github.com/ceph/ceph/raw/|stable-release|/src/cephadm/cephadm
+   curl --silent --remote-name --location https://download.ceph.com/rpm-|stable-release|/el9/noarch/cephadm
    chmod +x cephadm
 
 #. Configure the Ceph repository based on the release name::
