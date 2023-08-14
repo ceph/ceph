@@ -91,7 +91,7 @@ void usage(ostream& out)
 "   lspools                          list pools\n"
 "   cppool <pool-name> <dest-pool>   copy content of a pool\n"
 "   purge <pool-name> --yes-i-really-really-mean-it\n"
-"                                    remove all objects from pool <pool-name> without removing it\n"
+"                                    remove all objects from pool <pool-name> without removing the pool itself\n"
 "   df                               show per-pool and total usage\n"
 "   ls                               list objects in pool\n\n"
 "\n"
