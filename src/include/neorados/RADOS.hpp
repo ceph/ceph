@@ -336,7 +336,7 @@ public:
   void set_fadvise_dontneed();
   void set_fadvise_nocache();
 
-  void cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+  void cmpext(uint64_t off, ceph::buffer::list cmp_bl,
 	      uint64_t* unmatch = nullptr);
   void cmpxattr(std::string_view name, cmp_op op,
 		const ceph::buffer::list& val);
@@ -584,12 +584,12 @@ public:
     return std::move(*this);
   }
 
-  ReadOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+  ReadOp& cmpext(uint64_t off, ceph::buffer::list cmp_bl,
 		 uint64_t* unmatch = nullptr) & {
     Op::cmpext(off, std::move(cmp_bl), unmatch);
     return *this;
   }
-  ReadOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+  ReadOp&& cmpext(uint64_t off, ceph::buffer::list cmp_bl,
 		  uint64_t* unmatch = nullptr) && {
     Op::cmpext(off, std::move(cmp_bl), unmatch);
     return std::move(*this);
@@ -827,22 +827,22 @@ public:
   WriteOp&& create(bool exclusive) && {
     return std::move(create(exclusive));
   }
-  WriteOp& write(uint64_t off, ceph::buffer::list&& bl) &;
-  WriteOp&& write(uint64_t off, ceph::buffer::list&& bl) && {
+  WriteOp& write(uint64_t off, ceph::buffer::list bl) &;
+  WriteOp&& write(uint64_t off, ceph::buffer::list bl) && {
     return std::move(write(off, std::move(bl)));
   }
-  WriteOp& write_full(ceph::buffer::list&& bl) &;
-  WriteOp&& write_full(ceph::buffer::list&& bl) && {
+  WriteOp& write_full(ceph::buffer::list bl) &;
+  WriteOp&& write_full(ceph::buffer::list bl) && {
     return std::move(write_full(std::move(bl)));
   }
   WriteOp& writesame(std::uint64_t off, std::uint64_t write_len,
-		     ceph::buffer::list&& bl) &;
+		     ceph::buffer::list bl) &;
   WriteOp&& writesame(std::uint64_t off, std::uint64_t write_len,
-		      ceph::buffer::list&& bl) && {
+		      ceph::buffer::list bl) && {
     return std::move(writesame(off, write_len, std::move(bl)));
   }
-  WriteOp& append(ceph::buffer::list&& bl) &;
-  WriteOp&& append(ceph::buffer::list&& bl) && {
+  WriteOp& append(ceph::buffer::list bl) &;
+  WriteOp&& append(ceph::buffer::list bl) && {
     return std::move(append(std::move(bl)));
   }
   WriteOp& remove() &;
@@ -862,9 +862,9 @@ public:
     return std::move(rmxattr(name));
   }
   WriteOp& setxattr(std::string_view name,
-		    ceph::buffer::list&& bl) &;
+		    ceph::buffer::list bl) &;
   WriteOp&& setxattr(std::string_view name,
-		     ceph::buffer::list&& bl) && {
+		     ceph::buffer::list bl) && {
     return std::move(setxattr(name, std::move(bl)));
   }
   WriteOp& rollback(uint64_t snapid) &;
@@ -877,8 +877,8 @@ public:
     const boost::container::flat_map<std::string, ceph::buffer::list>& map) && {
     return std::move(set_omap(map));
   }
-  WriteOp& set_omap_header(ceph::buffer::list&& bl) &;
-  WriteOp&& set_omap_header(ceph::buffer::list&& bl) && {
+  WriteOp& set_omap_header(ceph::buffer::list bl) &;
+  WriteOp&& set_omap_header(ceph::buffer::list bl) && {
     return std::move(set_omap_header(std::move(bl)));
   }
   WriteOp& clear_omap() &;
@@ -964,12 +964,12 @@ public:
     return std::move(*this);
   }
 
-  WriteOp& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+  WriteOp& cmpext(uint64_t off, ceph::buffer::list cmp_bl,
 		  uint64_t* unmatch = nullptr) & {
     Op::cmpext(off, std::move(cmp_bl), unmatch);
     return *this;
   }
-  WriteOp&& cmpext(uint64_t off, ceph::buffer::list&& cmp_bl,
+  WriteOp&& cmpext(uint64_t off, ceph::buffer::list cmp_bl,
 		   uint64_t* unmatch = nullptr) && {
     Op::cmpext(off, std::move(cmp_bl), unmatch);
     return std::move(*this);
