@@ -25,7 +25,7 @@ There are three ways to get packages:
 Install packages with cephadm
 =============================
 
-#. Download the cephadm script
+#. Download cephadm
 
 .. prompt:: bash $
    :substitutions:
@@ -35,7 +35,7 @@ Install packages with cephadm
 
 #. Configure the Ceph repository based on the release name::
 
-     ./cephadm add-repo --release nautilus
+     ./cephadm add-repo --release |stable-release|
 
    For Octopus (15.2.0) and later releases, you can also specify a specific
    version::
@@ -47,8 +47,8 @@ Install packages with cephadm
      ./cephadm add-repo --dev my-branch
 
 #. Install the appropriate packages.  You can install them using your
-   package management tool (e.g., APT, Yum) directly, or you can also
-   use the cephadm wrapper.  For example::
+   package management tool (e.g., APT, Yum) directly, or you can
+   use the cephadm wrapper command.  For example::
 
      ./cephadm install ceph-common
    
