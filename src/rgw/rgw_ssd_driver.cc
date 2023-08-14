@@ -217,16 +217,61 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
     return 0;
 }
 
-std::unique_ptr<CacheAioRequest> SSDDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp)
+template <typename Executor1, typename CompletionHandler>
+auto SSDDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& handler)
 {
-    return std::make_unique<SSDCacheAioRequest>(this);
+    auto p = Completion::create(ex1, std::move(handler));
+    return p;
+}
+
+template <typename ExecutionContext, typename CompletionToken>
+auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+                off_t read_ofs, off_t read_len, CompletionToken&& token)
+{
+    std::string location = partition_info.location + key;
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
+
+    using Op = AsyncReadOp;
+    using Signature = typename Op::Signature;
+    boost::asio::async_completion<CompletionToken, Signature> init(token);
+    auto p = Op::create(ctx.get_executor(), init.completion_handler);
+    auto& op = p->user_data;
+
+    int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
+    if(0 == ret) {
+        ret = ::aio_read(op.aio_cb.get());
+    }
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
+    if(ret < 0) {
+        auto ec = boost::system::error_code{-ret, boost::system::system_category()};
+        ceph::async::post(std::move(p), ec, bufferlist{});
+    } else {
+        (void)p.release();
+    }
+    return init.result.get();
+}
+
+rgw::Aio::OpFunc SSDDriver::ssd_cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,
+                                off_t read_ofs, off_t read_len, const std::string& key) {
+  return [this, dpp, y, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
+    ceph_assert(y);
+    ldpp_dout(dpp, 20) << "SSDCache: cache_read_op(): Read From Cache, oid=" << r.obj.oid << dendl;
+
+    using namespace boost::asio;
+    spawn::yield_context yield = y.get_yield_context();
+    async_completion<spawn::yield_context, void()> init(yield);
+    auto ex = get_associated_executor(init.completion_handler);
+
+    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
+    this->get_async(dpp, y.get_io_context(), key, read_ofs, read_len, bind_executor(ex, SSDDriver::libaio_handler{aio, r}));
+  };
 }
 
 rgw::AioResultList SSDDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id)
 {
     rgw_raw_obj r_obj;
     r_obj.oid = key;
-    return aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, this, ofs, len, key), cost, id);
+    return aio->get(r_obj, ssd_cache_read_op(dpp, y, this, ofs, len, key), cost, id);
 }
 
 void SSDDriver::libaio_write_completion_cb(AsyncWriteRequest* c)
@@ -318,7 +363,6 @@ int SSDDriver::AsyncWriteRequest::prepare_libaio_write_op(const DoutPrefixProvid
 void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval)
 {
   SSDDriver::AsyncWriteRequest* c = static_cast<SSDDriver::AsyncWriteRequest*>(sigval.sival_ptr);
-  ldpp_dout(c->dpp, 20) << "SSDCache: " << __func__ << "()" << dendl;
   c->priv_data->libaio_write_completion_cb(c);
 }
 
@@ -362,40 +406,6 @@ void SSDDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
     }
 
     ceph::async::dispatch(std::move(p), ec, std::move(op.result));
-}
-
-template <typename Executor1, typename CompletionHandler>
-auto SSDDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& handler)
-{
-    auto p = Completion::create(ex1, std::move(handler));
-    return p;
-}
-
-template <typename ExecutionContext, typename CompletionToken>
-auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
-                off_t read_ofs, off_t read_len, CompletionToken&& token)
-{
-    std::string location = partition_info.location + key;
-    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
-
-    using Op = AsyncReadOp;
-    using Signature = typename Op::Signature;
-    boost::asio::async_completion<CompletionToken, Signature> init(token);
-    auto p = Op::create(ctx.get_executor(), init.completion_handler);
-    auto& op = p->user_data;
-
-    int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
-    if(0 == ret) {
-        ret = ::aio_read(op.aio_cb.get());
-    }
-    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
-    if(ret < 0) {
-        auto ec = boost::system::error_code{-ret, boost::system::system_category()};
-        ceph::async::post(std::move(p), ec, bufferlist{});
-    } else {
-        (void)p.release();
-    }
-    return init.result.get();
 }
 
 int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs)
@@ -520,23 +530,6 @@ int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     return removexattr(location.c_str(), attr_name.c_str());
-}
-
-
-void SSDCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
-{
-    using namespace boost::asio;
-    spawn::yield_context yield = y.get_yield_context();
-    async_completion<spawn::yield_context, void()> init(yield);
-    auto ex = get_associated_executor(init.completion_handler);
-
-    ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): key=" << key << dendl;
-    cache_driver->get_async(dpp, y.get_io_context(), key, ofs, len, bind_executor(ex, SSDDriver::libaio_handler{aio, r}));
-}
-
-void SSDCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
-{
-    //TODO - implement cache_aio_write
 }
 
 } } // namespace rgw::cache
