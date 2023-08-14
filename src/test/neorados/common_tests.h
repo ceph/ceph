@@ -278,12 +278,35 @@ protected:
 			   boost::asio::use_awaitable, ver);
   }
 
+  auto execute(std::string_view oid, neorados::WriteOp&& op,
+	       neorados::IOContext ioc, std::uint64_t* ver = nullptr) {
+    return rados().execute(oid, std::move(ioc), std::move(op),
+			   boost::asio::use_awaitable, ver);
+  }
+
+  auto execute(std::string_view oid, neorados::ReadOp&& op,
+	       neorados::IOContext ioc, std::uint64_t* ver = nullptr) {
+    return rados().execute(oid, std::move(ioc), std::move(op), nullptr,
+			   boost::asio::use_awaitable, ver);
+  }
+
   boost::asio::awaitable<ceph::buffer::list>
   read(std::string_view oid, std::uint64_t off = 0, std::uint64_t len = 0) {
     ceph::buffer::list bl;
     neorados::ReadOp op;
     op.read(off, len, &bl);
     co_await rados().execute(oid, pool(), std::move(op),
+			     nullptr, boost::asio::use_awaitable);
+    co_return bl;
+  }
+
+  boost::asio::awaitable<ceph::buffer::list>
+  read(std::string_view oid, neorados::IOContext ioc, std::uint64_t off = 0,
+       std::uint64_t len = 0) {
+    ceph::buffer::list bl;
+    neorados::ReadOp op;
+    op.read(off, len, &bl);
+    co_await rados().execute(oid, std::move(ioc), std::move(op),
 			     nullptr, boost::asio::use_awaitable);
     co_return bl;
   }
