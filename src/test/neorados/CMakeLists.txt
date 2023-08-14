@@ -89,3 +89,83 @@ target_link_libraries(ceph_test_neorados_read_operations
 install(TARGETS
   ceph_test_neorados_read_operations
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_write_operations
+  write_operations.cc
+  )
+target_link_libraries(ceph_test_neorados_write_operations
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_write_operations
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_io
+  io.cc
+  )
+target_link_libraries(ceph_test_neorados_io
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_io
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_list
+  list.cc
+  )
+target_link_libraries(ceph_test_neorados_list
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_list
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_misc
+  misc.cc
+  )
+target_link_libraries(ceph_test_neorados_misc
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_misc
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_pool
+  pool.cc
+  )
+target_link_libraries(ceph_test_neorados_pool
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_pool
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
