@@ -459,7 +459,7 @@ void Op::set_fadvise_nocache() {
     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
 }
 
-void Op::cmpext(uint64_t off, bufferlist&& cmp_bl, int* s) {
+void Op::cmpext(uint64_t off, bufferlist cmp_bl, int* s) {
   reinterpret_cast<OpImpl*>(&impl)->op.cmpext(off, std::move(cmp_bl), nullptr,
 					      s);
 }
@@ -715,23 +715,23 @@ WriteOp& WriteOp::create(bool exclusive) & {
   return *this;
 }
 
-WriteOp& WriteOp::write(uint64_t off, bufferlist&& bl) & {
-  reinterpret_cast<OpImpl*>(&impl)->op.write(off, bl);
+WriteOp& WriteOp::write(uint64_t off, bufferlist bl) & {
+  reinterpret_cast<OpImpl*>(&impl)->op.write(off, std::move(bl));
   return *this;
 }
 
-WriteOp& WriteOp::write_full(bufferlist&& bl) & {
-  reinterpret_cast<OpImpl*>(&impl)->op.write_full(bl);
+WriteOp& WriteOp::write_full(bufferlist bl) & {
+  reinterpret_cast<OpImpl*>(&impl)->op.write_full(std::move(bl));
   return *this;
 }
 
-WriteOp& WriteOp::writesame(uint64_t off, uint64_t write_len, bufferlist&& bl) & {
-  reinterpret_cast<OpImpl*>(&impl)->op.writesame(off, write_len, bl);
+WriteOp& WriteOp::writesame(uint64_t off, uint64_t write_len, bufferlist bl) & {
+  reinterpret_cast<OpImpl*>(&impl)->op.writesame(off, write_len, std::move(bl));
   return *this;
 }
 
-WriteOp& WriteOp::append(bufferlist&& bl) & {
-  reinterpret_cast<OpImpl*>(&impl)->op.append(bl);
+WriteOp& WriteOp::append(bufferlist bl) & {
+  reinterpret_cast<OpImpl*>(&impl)->op.append(std::move(bl));
   return *this;
 }
 
@@ -756,8 +756,8 @@ WriteOp& WriteOp::rmxattr(std::string_view name) & {
 }
 
 WriteOp& WriteOp::setxattr(std::string_view name,
-			   bufferlist&& bl) & {
-  reinterpret_cast<OpImpl*>(&impl)->op.setxattr(name, bl);
+			   bufferlist bl) & {
+  reinterpret_cast<OpImpl*>(&impl)->op.setxattr(name, std::move(bl));
   return *this;
 }
 
@@ -772,8 +772,8 @@ WriteOp& WriteOp::set_omap(
   return *this;
 }
 
-WriteOp& WriteOp::set_omap_header(bufferlist&& bl) & {
-  reinterpret_cast<OpImpl*>(&impl)->op.omap_set_header(bl);
+WriteOp& WriteOp::set_omap_header(bufferlist bl) & {
+  reinterpret_cast<OpImpl*>(&impl)->op.omap_set_header(std::move(bl));
   return *this;
 }
 

@@ -349,7 +349,7 @@ void Op::assert_version(uint64_t ver) {
           &librados::TestIoCtxImpl::assert_version, _1, _2, ver));
 }
 
-void Op::cmpext(uint64_t off, ceph::buffer::list&& cmp_bl, int* s) {
+void Op::cmpext(uint64_t off, ceph::buffer::list cmp_bl, int* s) {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   librados::ObjectOperationTestImpl op = std::bind(
     &librados::TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl, _4);
@@ -522,14 +522,14 @@ WriteOp& WriteOp::create(bool exclusive) & {
   return *this;
 }
 
-WriteOp& WriteOp::write(uint64_t off, ceph::buffer::list&& bl) & {
+WriteOp& WriteOp::write(uint64_t off, ceph::buffer::list bl) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::write, _1, _2, bl, bl.length(), off, _5));
   return *this;
 }
 
-WriteOp& WriteOp::write_full(ceph::buffer::list&& bl) & {
+WriteOp& WriteOp::write_full(ceph::buffer::list bl) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::write_full, _1, _2, bl, _5));
@@ -558,7 +558,7 @@ WriteOp& WriteOp::zero(uint64_t off, uint64_t len) & {
 }
 
 WriteOp& WriteOp::writesame(std::uint64_t off, std::uint64_t write_len,
-			    ceph::buffer::list&& bl) & {
+			    ceph::buffer::list bl) & {
   auto o = *reinterpret_cast<librados::TestObjectOperationImpl**>(&impl);
   o->ops.push_back(std::bind(
     &librados::TestIoCtxImpl::writesame, _1, _2, bl, write_len, off, _5));

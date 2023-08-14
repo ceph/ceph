@@ -559,13 +559,25 @@ struct ObjectOperation {
   void write(uint64_t off, ceph::buffer::list& bl) {
     write(off, bl, 0, 0);
   }
+  void write(uint64_t off, ceph::buffer::list&& bl) {
+    write(off, bl, 0, 0);
+  }
   void write_full(ceph::buffer::list& bl) {
+    add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
+  }
+  void write_full(ceph::buffer::list&& bl) {
     add_data(CEPH_OSD_OP_WRITEFULL, 0, bl.length(), bl);
   }
   void writesame(uint64_t off, uint64_t write_len, ceph::buffer::list& bl) {
     add_writesame(CEPH_OSD_OP_WRITESAME, off, write_len, bl);
   }
+  void writesame(uint64_t off, uint64_t write_len, ceph::buffer::list&& bl) {
+    add_writesame(CEPH_OSD_OP_WRITESAME, off, write_len, bl);
+  }
   void append(ceph::buffer::list& bl) {
+    add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl);
+  }
+  void append(ceph::buffer::list&& bl) {
     add_data(CEPH_OSD_OP_APPEND, 0, bl.length(), bl);
   }
   void zero(uint64_t off, uint64_t len) {
@@ -1337,7 +1349,11 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_OMAPSETVALS, 0, bl.length(), bl);
   }
 
-  void omap_set_header(ceph::buffer::list &bl) {
+  void omap_set_header(ceph::buffer::list& bl) {
+    add_data(CEPH_OSD_OP_OMAPSETHEADER, 0, bl.length(), bl);
+  }
+
+  void omap_set_header(ceph::buffer::list&& bl) {
     add_data(CEPH_OSD_OP_OMAPSETHEADER, 0, bl.length(), bl);
   }
 
