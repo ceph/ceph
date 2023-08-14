@@ -263,6 +263,33 @@ bool CircularBoundedJournal::is_record_segment_seq_invalid(
       return print_invalid(r_header);
     }
   } else if (r_header.committed_to.segment_seq != cursor.seq.segment_seq) {
+    /*
+     * Assuing that seastore issues several records using submit_recods() 
+     * as shown in the following example. 
+     *
+     * Example )
+     * 	a. submit_record(a);
+     * 	b. submit_record(b);
+     *  c. submit_record(c);
+     *  d. roll to begin
+     *  e. submit_record(d);
+     *  f. submit_record(e);
+     *  g. submit_record(f);
+     *
+     * In this example, we need to consider the two cases.
+     * case 1)
+     * 	records a - e were issued in a batch manner
+     * case 2)
+     *  When starts to submit_record(e) at step 6, submit(b) has completed its finalize phase, 
+     *  so the header of e's committed_to points to the end of b.
+     *
+     * To handle these cases correctly, the following condition is added.
+     */
+    if ((r_header.committed_to.offset >= cursor.last_committed.offset &&
+	r_header.committed_to.segment_seq == cursor.last_committed.segment_seq) &&
+	r_header.committed_to.segment_seq == cursor.seq.segment_seq - 1) {
+      return false;
+    }
     return print_invalid(r_header);
   }
   return false;
