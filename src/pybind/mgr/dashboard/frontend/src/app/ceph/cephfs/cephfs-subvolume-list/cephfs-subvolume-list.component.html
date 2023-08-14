@@ -4,7 +4,8 @@
             [columns]="columns"
             selectionType="single"
             [hasDetails]="false"
-            (fetchData)="fetchData()">
+            (fetchData)="fetchData()"
+            (updateSelection)="updateSelection($event)">
 
     <div class="table-actions btn-toolbar">
       <cd-table-actions [permission]="permissions.cephfs"
@@ -21,9 +22,9 @@
              let-row="row">
   <cd-usage-bar *ngIf="row.info.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
                 [total]="row.info.bytes_quota"
-                [used]="row.info.bytes_pcent"
+                [used]="row.info.bytes_used"
                 [title]="row.name"
-                [calculatePerc]="false"
+                [showFreeToolTip]="false"
                 customLegend="Quota"
                 [customLegendValue]="row.info.bytes_quota"
                 decimals="2"></cd-usage-bar>

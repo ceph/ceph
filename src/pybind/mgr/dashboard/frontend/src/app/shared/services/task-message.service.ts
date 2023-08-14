@@ -356,14 +356,17 @@ export class TaskMessageService {
     'cephfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.volume(metadata)
     ),
+    'cephfs/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.volume(metadata)
+    ),
     'cephfs/subvolume/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.subvolume(metadata)
     ),
     'cephfs/subvolume/group/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.subvolumegroup(metadata)
-    ),
-    'cephfs/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
-      this.volume(metadata)
     )
   };
 

@@ -4,7 +4,7 @@
       <td class="text-left me-1">Used:</td>
       <td class="text-right"><strong> {{ isBinary ? (used | dimlessBinary) : (used | dimless) }}</strong></td>
     </tr>
-    <tr *ngIf="calculatePerc">
+    <tr *ngIf="calculatePerc && showFreeToolTip">
       <td class="text-left me-1">Free:</td>
       <td class="'text-right"><strong>{{ isBinary ? (total - used | dimlessBinary) : (total - used | dimless) }}</strong></td>
     </tr>
