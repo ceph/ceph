@@ -311,6 +311,11 @@ void JSONFormatter::add_value(std::string_view name, std::string_view val, bool 
   }
 }
 
+void JSONFormatter::dump_null(std::string_view name)
+{
+  add_value(name, "null");
+}
+
 void JSONFormatter::dump_unsigned(std::string_view name, uint64_t u)
 {
   add_value(name, u);
@@ -441,14 +446,20 @@ void XMLFormatter::open_array_section_in_ns(std::string_view name, const char *n
   open_section_in_ns(name, ns, NULL);
 }
 
+std::string XMLFormatter::get_xml_name(std::string_view name) const
+{
+  std::string e(name);
+  std::transform(e.begin(), e.end(), e.begin(),
+      [this](char c) { return this->to_lower_underscore(c); });
+  return e;
+}
+
 void XMLFormatter::close_section()
 {
   ceph_assert(!m_sections.empty());
   finish_pending_string();
 
-  std::string section = m_sections.back();
-  std::transform(section.begin(), section.end(), section.begin(),
-	 [this](char c) { return this->to_lower_underscore(c); });
+  auto section = get_xml_name(m_sections.back());
   m_sections.pop_back();
   print_spaces();
   m_ss << "</" << section << ">";
@@ -459,13 +470,18 @@ void XMLFormatter::close_section()
 template <class T>
 void XMLFormatter::add_value(std::string_view name, T val)
 {
-  std::string e(name);
-  std::transform(e.begin(), e.end(), e.begin(),
-      [this](char c) { return this->to_lower_underscore(c); });
-
+  auto e = get_xml_name(name);
   print_spaces();
   m_ss.precision(std::numeric_limits<T>::max_digits10);
   m_ss << "<" << e << ">" << val << "</" << e << ">";
+  if (m_pretty)
+    m_ss << "\n";
+}
+
+void XMLFormatter::dump_null(std::string_view name)
+{
+  print_spaces();
+  m_ss << "<" << get_xml_name(name) << " xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:nil=\"true\" />";
   if (m_pretty)
     m_ss << "\n";
 }
@@ -487,10 +503,7 @@ void XMLFormatter::dump_float(std::string_view name, double d)
 
 void XMLFormatter::dump_string(std::string_view name, std::string_view s)
 {
-  std::string e(name);
-  std::transform(e.begin(), e.end(), e.begin(),
-      [this](char c) { return this->to_lower_underscore(c); });
-
+  auto e = get_xml_name(name);
   print_spaces();
   m_ss << "<" << e << ">" << xml_stream_escaper(s) << "</" << e << ">";
   if (m_pretty)
@@ -499,10 +512,7 @@ void XMLFormatter::dump_string(std::string_view name, std::string_view s)
 
 void XMLFormatter::dump_string_with_attrs(std::string_view name, std::string_view s, const FormatterAttrs& attrs)
 {
-  std::string e(name);
-  std::transform(e.begin(), e.end(), e.begin(),
-      [this](char c) { return this->to_lower_underscore(c); });
-
+  auto e = get_xml_name(name);
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
   print_spaces();
@@ -523,9 +533,7 @@ void XMLFormatter::dump_format_va(std::string_view name, const char *ns, bool qu
 {
   char buf[LARGE_SIZE];
   size_t len = vsnprintf(buf, LARGE_SIZE, fmt, ap);
-  std::string e(name);
-  std::transform(e.begin(), e.end(), e.begin(),
-      [this](char c) { return this->to_lower_underscore(c); });
+  auto e = get_xml_name(name);
 
   print_spaces();
   if (ns) {
@@ -577,9 +585,7 @@ void XMLFormatter::open_section_in_ns(std::string_view name, const char *ns, con
     get_attrs_str(attrs, attrs_str);
   }
 
-  std::string e(name);
-  std::transform(e.begin(), e.end(), e.begin(),
-      [this](char c) { return this->to_lower_underscore(c); });
+  auto e = get_xml_name(name);
 
   if (ns) {
     m_ss << "<" << e << attrs_str << " xmlns=\"" << ns << "\">";
@@ -850,6 +856,11 @@ void TableFormatter::add_value(std::string_view name, T val) {
   m_vec[i].push_back(std::make_pair(get_section_name(name), m_ss.str()));
   m_ss.clear();
   m_ss.str("");
+}
+
+void TableFormatter::dump_null(std::string_view name)
+{
+  add_value(name, "null");
 }
 
 void TableFormatter::dump_unsigned(std::string_view name, uint64_t u)

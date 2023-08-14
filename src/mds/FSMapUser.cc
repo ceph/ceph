@@ -62,7 +62,7 @@ void FSMapUser::print(std::ostream& out) const
     out << " id " <<  p.second.cid << " name " << p.second.name << std::endl;
 }
 
-void FSMapUser::print_summary(ceph::Formatter *f, std::ostream *out)
+void FSMapUser::print_summary(ceph::Formatter *f, std::ostream *out) const
 {
   std::map<mds_role_t,std::string> by_rank;
   std::map<std::string,int> by_state;
