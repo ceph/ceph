@@ -70,6 +70,9 @@ struct FLTreeOnode final : Onode, Value {
     }
   };
 
+  bool is_alive() const {
+    return status != status_t::DELETED;
+  }
   const onode_layout_t &get_layout() const final {
     assert(status != status_t::DELETED);
     return *read_payload<onode_layout_t>();

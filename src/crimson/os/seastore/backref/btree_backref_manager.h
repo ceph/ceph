@@ -34,6 +34,13 @@ public:
   extent_types_t get_type() const final {
     return type;
   }
+
+protected:
+  std::unique_ptr<BtreeNodeMapping<paddr_t, laddr_t>> _duplicate(
+    op_context_t<paddr_t> ctx) const final {
+    return std::unique_ptr<BtreeNodeMapping<paddr_t, laddr_t>>(
+      new BtreeBackrefMapping(ctx));
+  }
 };
 
 using BackrefBtree = FixedKVBtree<
@@ -74,8 +81,6 @@ public:
   remove_mapping_ret remove_mapping(
     Transaction &t,
     paddr_t offset) final;
-
-  check_child_trackers_ret check_child_trackers(Transaction &t) final;
 
   scan_mapped_space_ret scan_mapped_space(
     Transaction &t,
