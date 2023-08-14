@@ -144,7 +144,7 @@ class SubvolumeBase(object):
         try:
             self.fs.stat(self.legacy_config_path)
             self.legacy_mode = True
-        except cephfs.Error as e:
+        except cephfs.Error:
             pass
 
         log.debug("loading config "
