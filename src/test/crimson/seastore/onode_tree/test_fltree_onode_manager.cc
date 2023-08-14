@@ -120,7 +120,11 @@ struct fltree_onode_manager_test_t
       }).unsafe_get0();
       std::invoke(f, t, *onode, p_kv->value);
       with_trans_intr(t, [&](auto &t) {
-        return manager->write_dirty(t, {onode});
+	if (onode->is_alive()) {
+	  return manager->write_dirty(t, {onode});
+	} else {
+	  return OnodeManager::write_dirty_iertr::now();
+	}
       }).unsafe_get0();
     });
   }

@@ -39,6 +39,8 @@ public:
    * Fetches mappings for laddr_t in range [offset, offset + len)
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
+   * For indirect lba mappings, get_mappings will always retrieve the original
+   * lba value.
    */
   using get_mappings_iertr = base_iertr;
   using get_mappings_ret = get_mappings_iertr::future<lba_pin_list_t>;
@@ -50,6 +52,8 @@ public:
    * Fetches mappings for a list of laddr_t in range [offset, offset + len)
    *
    * Future will not resolve until all pins have resolved (set_paddr called)
+   * For indirect lba mappings, get_mappings will always retrieve the original
+   * lba value.
    */
   virtual get_mappings_ret get_mappings(
     Transaction &t,
@@ -59,6 +63,8 @@ public:
    * Fetches the mapping for laddr_t
    *
    * Future will not resolve until the pin has resolved (set_paddr called)
+   * For indirect lba mappings, get_mapping will always retrieve the original
+   * lba value.
    */
   using get_mapping_iertr = base_iertr::extend<
     crimson::ct_error::enoent>;
@@ -81,11 +87,24 @@ public:
     laddr_t hint,
     extent_len_t len,
     paddr_t addr,
-    LogicalCachedExtent *nextent) = 0;
+    LogicalCachedExtent &nextent) = 0;
+
+  virtual alloc_extent_ret clone_extent(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len,
+    laddr_t intermediate_key,
+    paddr_t actual_addr,
+    laddr_t intermediate_base) = 0;
+
+  virtual alloc_extent_ret reserve_region(
+    Transaction &t,
+    laddr_t hint,
+    extent_len_t len) = 0;
 
   struct ref_update_result_t {
     unsigned refcount = 0;
-    paddr_t addr;
+    pladdr_t addr;
     extent_len_t length = 0;
   };
   using ref_iertr = base_iertr::extend<
@@ -99,7 +118,8 @@ public:
    */
   virtual ref_ret decref_extent(
     Transaction &t,
-    laddr_t addr) = 0;
+    laddr_t addr,
+    bool cascade_remove) = 0;
 
   /**
    * Increments ref count on extent
@@ -109,6 +129,16 @@ public:
   virtual ref_ret incref_extent(
     Transaction &t,
     laddr_t addr) = 0;
+
+  /**
+   * Increments ref count on extent
+   *
+   * @return returns resulting refcount
+   */
+  virtual ref_ret incref_extent(
+    Transaction &t,
+    laddr_t addr,
+    int delta) = 0;
 
   /**
    * Should be called after replay on each cached extent.
