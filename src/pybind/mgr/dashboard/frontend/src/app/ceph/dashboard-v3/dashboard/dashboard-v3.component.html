@@ -63,6 +63,9 @@
         <a class="ms-2 mt-n1 lead text-primary"
            [ngbPopover]="healthChecks"
            popoverClass="info-card-popover-cluster-status"
+           [openDelay]="300"
+           [closeDelay]="500"
+           triggers="mouseenter:mouseleave"
            *ngIf="healthData.health?.checks?.length"
            i18n>Cluster</a>
         <span class="ms-2 mt-n1 lead"
