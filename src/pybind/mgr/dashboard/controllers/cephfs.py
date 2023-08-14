@@ -744,3 +744,14 @@ class CephFSSubvolumeGroups(RESTController):
             raise DashboardException(
                 f'Failed to create subvolume group {group_name}: {err}'
             )
+
+    def set(self, vol_name: str, subvol_name: str, size: str):
+        if size:
+            error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_resize', None, {
+                'vol_name': vol_name, 'sub_name': subvol_name, 'new_size': size})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to update subvolume {subvol_name}: {err}'
+                )
+
+        return f'Subvolume {subvol_name} updated successfully'

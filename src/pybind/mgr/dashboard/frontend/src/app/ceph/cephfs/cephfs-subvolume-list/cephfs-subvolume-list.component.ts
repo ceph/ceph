@@ -107,15 +107,14 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () =>
-          this.modalService.show(
-            CephfsSubvolumeFormComponent,
-            {
-              fsName: this.fsName,
-              pools: this.pools
-            },
-            { size: 'lg' }
-          )
+        click: () => this.openModal(),
+        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
+      },
+      {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.openModal(true)
       }
     ];
 
@@ -142,5 +141,18 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  openModal(edit = false) {
+    this.modalService.show(
+      CephfsSubvolumeFormComponent,
+      {
+        fsName: this.fsName,
+        subVolumeName: this.selection?.first()?.name,
+        pools: this.pools,
+        isEdit: edit
+      },
+      { size: 'lg' }
+    );
   }
 }
