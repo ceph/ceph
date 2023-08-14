@@ -652,13 +652,24 @@ class RgwUserCapabilityTest(RgwTestCase):
         self.assertEqual(data['caps'][0]['perm'], 'read')
 
     def test_delete(self):
+        self._post(
+            '/api/rgw/user/teuth-test-user/capability',
+            params={
+                'type': 'metadata',
+                'perm': 'read',
+            })
+        self.assertStatus(201)
+        data = self.jsonBody()
+        self.assertEqual(len(data), 1)
+        data = data[0]
+        self.assertEqual(data['type'], 'metadata')
+        self.assertEqual(data['perm'], 'read')
+
         self._delete(
             '/api/rgw/user/teuth-test-user/capability',
             params={
                 'type': 'metadata',
-                'perm': 'write',
-                'type': 'keys',
-                'perm': '*'
+                'perm': 'read',
             })
         self.assertStatus(204)
 
