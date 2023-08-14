@@ -207,6 +207,35 @@ public:
     ObjectStore::CollectionHandle& ch,
     ghobject_t hoid,
     unsigned max);
+
+/**
+  * convert_malformed_key
+  *
+  * Gets a malformed key kv entry and returns all possible fixed entries.
+  *
+  * TODO: use the OSD to get information to map the hobject_t to a PG
+  *       instead of adding all possible EC shard prefixes.
+  */
+  static std::set<std::string> convert_malformed_key(
+    const std::string& old_key,
+    const bufferlist& value);
+
+/**
+  * convert_malformed
+  *
+  * Scans the SnapMapper for malformed keys created by a bug
+  * during upgrade from N (and earlier) to O (up to 16.2.11).
+  * Each detected key is replaced with a valid key instead.
+  * See: https://tracker.ceph.com/issues/62596
+  *
+  * TODO: avoid overwriting the fixed key if it already exists
+  */
+  static int convert_malformed(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid,
+    unsigned max_txn_size);
 #endif
 
   static void record_purged_snaps(
@@ -234,10 +263,14 @@ private:
   std::string to_legacy_raw_key(
     const std::pair<snapid_t, hobject_t> &to_map);
   static bool is_legacy_mapping(const std::string &to_test);
+  static bool is_malformed_mapping(const std::string &to_test);
 
   static std::string get_prefix(int64_t pool, snapid_t snap);
   std::string to_raw_key(
     const std::pair<snapid_t, hobject_t> &to_map) const;
+
+  static std::set<std::string> to_raw_key_no_shard_prefix(
+    const std::pair<snapid_t, hobject_t> &to_map);
 
   std::string to_raw_key(snapid_t snap, const hobject_t& clone) const;
 

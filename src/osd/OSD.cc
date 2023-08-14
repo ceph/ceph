@@ -3093,6 +3093,22 @@ will start to track new ops received afterwards.";
     pg_recovery_stats.reset();
   }
 
+  else if (prefix == "fix_malformed_snapmapper_keys") {
+    lock_guard l(osd_lock);
+    auto ch = service.meta_ch;
+    unsigned max = cct->_conf->osd_target_transaction_size;
+    auto hoid = make_snapmapper_oid();
+    int ret = SnapMapper::convert_malformed(cct, store.get(), ch, hoid, max);
+    if (ret < 0) {
+      ss << "Error coverting malformed keys: " << cpp_strerror(ret);
+      goto out;
+    } else if (ret) {
+      dout(20) << "Converted " << ret <<  " keys" << dendl;
+    } else {
+      dout(20) << "No malformed keys found" << dendl;
+    }
+  }
+
   else if (prefix == "perf histogram dump") {
     std::string logger;
     std::string counter;
@@ -4302,6 +4318,12 @@ void OSD::final_init()
     asok_hook,
     "reset pg recovery statistics");
   ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "fix_malformed_snapmapper_keys",
+    asok_hook,
+    "Scans and fixes SnapMapper malformed keys "
+    "created by bug during upgrade from N (and earlier) "
+    "to O (up to 16.2.11). See tracker #62596");
   r = admin_socket->register_command(
     "cache drop",
     asok_hook,

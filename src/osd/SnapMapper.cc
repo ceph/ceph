@@ -220,6 +220,26 @@ string SnapMapper::to_raw_key(
   return get_prefix(in.second.pool, in.first) + shard_prefix + in.second.to_str();
 }
 
+std::set<std::string> SnapMapper::to_raw_key_no_shard_prefix(
+  const pair<snapid_t, hobject_t> &in)
+{
+  std::set<std::string> possible_raw_keys;
+  // replicated:
+  possible_raw_keys.insert(
+    get_prefix(in.second.pool, in.first) + in.second.to_str());
+  // ec:
+  // shard id width is 8 bits
+  for (int8_t shard_id = 0;
+       shard_id < INT8_MAX;
+       shard_id++) {
+  possible_raw_keys.insert(
+    get_prefix(in.second.pool, in.first) +
+    make_shard_prefix(shard_id_t(shard_id)) +
+    in.second.to_str());
+  }
+  return possible_raw_keys;
+}
+
 std::string SnapMapper::to_raw_key(snapid_t snap, const hobject_t &clone) const
 {
   return get_prefix(clone.pool, snap) + shard_prefix + clone.to_str();
@@ -881,6 +901,11 @@ bool SnapMapper::is_legacy_mapping(const string &to_test)
     LEGACY_MAPPING_PREFIX;
 }
 
+bool SnapMapper::is_malformed_mapping(const string &to_test)
+{
+  return is_mapping(to_test) && (to_test.back() == '_');
+}
+
 #ifndef WITH_SEASTAR
 /* Octopus modified the SnapMapper key format from
  *
@@ -912,6 +937,14 @@ std::string SnapMapper::convert_legacy_key(
     SnapMapper::LEGACY_MAPPING_PREFIX.length());
   return SnapMapper::MAPPING_PREFIX + std::to_string(old.second.pool)
     + "_" + object_suffix;
+}
+
+std::set<std::string> SnapMapper::convert_malformed_key(
+  const std::string& old_key,
+  const ceph::buffer::list& value)
+{
+  auto old = from_raw(make_pair(old_key, value));
+  return to_raw_key_no_shard_prefix(old);
 }
 
 int SnapMapper::convert_legacy(
@@ -971,5 +1004,90 @@ int SnapMapper::convert_legacy(
     ceph_assert(r == 0);
   }
   return 0;
+}
+
+
+int SnapMapper::convert_malformed(
+  CephContext *cct,
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  ghobject_t hoid,
+  unsigned max_txn_size)
+{
+  dout(10) << __func__ << dendl;
+  uint64_t n = 0;
+  std::set<std::string> old_keys;
+
+  ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
+  if (!iter) {
+    return -EIO;
+  }
+
+  auto start = ceph::mono_clock::now();
+
+  iter->upper_bound(SnapMapper::MAPPING_PREFIX);
+  map<string, ceph::buffer::list> to_set;
+  while (iter->valid()) {
+    bool valid = is_mapping(iter->key());
+    if (valid) {
+      if (SnapMapper::is_malformed_mapping(iter->key())) {
+        dout(20) << __func__ << "malformed key: " << iter->key() << dendl;
+        old_keys.insert(iter->key());
+        auto possible_keys = convert_malformed_key(iter->key(), iter->value());
+        bool exist = false;
+        for (const auto& key : possible_keys) {
+          auto exist_iter = store->get_omap_iterator(ch, hoid);
+          if (!exist_iter) {
+            return -EIO;
+          }
+          exist_iter->lower_bound(key);
+          if (exist_iter->valid() && exist_iter->key() == key) {
+            // don't overwrite a correct key
+            dout(10) << __func__ << " key " << key
+                     << " already exists, skipping" << dendl;
+            exist = true;
+            break;
+          }
+        }
+        if (!exist) {
+          for (const auto& key : possible_keys) {
+            dout(10) << __func__ << " adding new key " << key << dendl;
+            to_set.emplace(key, iter->value());
+          }
+          ++n;
+        }
+      }
+      iter->next();
+    }
+    if (!valid || !iter->valid() || to_set.size() >= max_txn_size) {
+      ObjectStore::Transaction t;
+      t.omap_setkeys(ch->cid, hoid, to_set);
+      int r = store->queue_transaction(ch, std::move(t));
+      ceph_assert(r == 0);
+      to_set.clear();
+      if (!valid) {
+        // Stop iteration when raching the end of MAPPING_PREFIX region
+        break;
+      }
+      dout(10) << __func__ << " converted " << n << " keys" << dendl;
+    }
+  }
+
+  auto end = ceph::mono_clock::now();
+
+  dout(1) << __func__ << " converted " << n << " keys in "
+	  << timespan_str(end - start) << dendl;
+
+  // remove the old keys
+  {
+    dout(10) << __func__ << " removing " << old_keys.size()
+                         << " malformed keys" << dendl;
+    ObjectStore::Transaction t;
+    t.omap_rmkeys(ch->cid, hoid, old_keys);
+    int r = store->queue_transaction(ch, std::move(t));
+    ceph_assert(r == 0);
+  }
+
+  return n;
 }
 #endif // !WITH_SEASTAR
