@@ -23,7 +23,7 @@ seastar::future<> PGShardManager::load_pgs(crimson::os::FuturizedStore& store)
         auto[coll, shard_core] = coll_core;
 	spg_t pgid;
 	if (coll.is_pg(&pgid)) {
-          return pg_to_shard_mapping.maybe_create_pg(
+          return get_pg_to_shard_mapping().maybe_create_pg(
             pgid, shard_core
           ).then([this, pgid] (auto core) {
             return this->template with_remote_shard_state(
