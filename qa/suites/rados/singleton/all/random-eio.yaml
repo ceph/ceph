@@ -28,7 +28,6 @@ tasks:
 - full_sequential:
   - exec:
       client.0:
-        - sudo ceph tell osd.1 injectargs -- --filestore_debug_random_read_err=0.33
         - sudo ceph tell osd.1 injectargs -- --bluestore_debug_random_read_err=0.33
         - sudo ceph osd pool create test 16 16
         - sudo ceph osd pool set test size 3
@@ -42,5 +41,4 @@ tasks:
       create_pool: false
   - exec:
       client.0:
-        - sudo ceph tell osd.1 injectargs -- --filestore_debug_random_read_err=0.0
         - sudo ceph tell osd.1 injectargs -- --bluestore_debug_random_read_err=0.0
