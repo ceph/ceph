@@ -2,7 +2,6 @@ overrides:
   ceph:
      log-ignorelist:
        - overall HEALTH_
-       - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - exec:
     client.0:
