@@ -72,6 +72,11 @@ To remove a volume, run the following command:
 This removes a file system and its data and metadata pools. It also tries to
 remove MDS daemons using the enabled ceph-mgr orchestrator module.
 
+.. note:: After volume deletion, it is recommended to restart `ceph-mgr`
+   if a new file system is created on the same cluster and subvolume interface
+   is being used. Please see https://tracker.ceph.com/issues/49605#note-5
+   for more details.
+
 List volumes by running the following command:
 
     $ ceph fs volume ls
