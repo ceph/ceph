@@ -2,7 +2,8 @@
   <ng-container i18n="form title"
                 class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
 
-  <ng-container class="modal-content">
+  <ng-container class="modal-content"
+                *cdFormLoading="loading">
     <form name="subvolumegroupForm"
           #formDir="ngForm"
           [formGroup]="subvolumegroupForm"
@@ -25,7 +26,7 @@
                   i18n>This field is required.</span>
             <span class="invalid-feedback"
                   *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'notUnique')"
-                  i18n>The subvolumegroup already exists.</span>
+                  i18n>The subvolume group already exists.</span>
           </div>
         </div>
 
@@ -47,8 +48,8 @@
           <label class="cd-col-form-label"
                  for="size"
                  i18n>Size
-            <cd-helper>The size of the subvolumegropup is specified by setting a quota on it.
-                  If left blank or put 0, then quota will be infinite</cd-helper>
+            <cd-helper>The size of the subvolume group is specified by setting a quota on it.
+            If left blank or put 0, then quota will be infinite</cd-helper>
           </label>
           <div class="cd-col-form-input">
             <input class="form-control"
@@ -124,7 +125,9 @@
                                    [form]="subvolumegroupForm"
                                    inputField="mode"
                                    [isTableForOctalMode]="true"
-                                   [scopes]="scopes"></cd-checked-table-form>
+                                   [initialValue]="initialMode"
+                                   [scopes]="scopes"
+                                   [isDisabled]="isEdit"></cd-checked-table-form>
           </div>
         </div>
       </div>
