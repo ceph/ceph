@@ -33,10 +33,11 @@ command on a system that has git installed:
 
 	git clone https://github.com/ceph/ceph.git
 
-When the ceph/ceph repository has been cloned to your system, run the following
-command to check out the git submodules associated with the ceph/ceph
-repository: 
+When the `ceph/ceph` repository has been cloned to your system, run the
+following commands to move into the cloned `ceph/ceph` repository and to check
+out the git submodules associated with it:
 
+    cd ceph
 	git submodule update --init --recursive
 
 
