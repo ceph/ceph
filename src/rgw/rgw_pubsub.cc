@@ -676,12 +676,11 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
   return 0;
 }
 
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const {
-  return create_topic(dpp, name, rgw_pubsub_dest{}, "", "", y);
-}
-
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, const rgw_pubsub_dest& dest, 
-    const std::string& arn, const std::string& opaque_data, optional_yield y) const {
+int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
+                            const std::string& name,
+                            const rgw_pubsub_dest& dest, const std::string& arn,
+                            const std::string& opaque_data,
+                            const rgw_user& user, optional_yield y) const {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
@@ -693,7 +692,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& na
   }
  
   rgw_pubsub_topic& new_topic = topics.topics[name];
-  new_topic.user = rgw_user("", tenant);
+  new_topic.user = user;
   new_topic.name = name;
   new_topic.dest = dest;
   new_topic.arn = arn;
