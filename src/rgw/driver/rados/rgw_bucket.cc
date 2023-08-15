@@ -13,6 +13,7 @@
 #include "services/svc_user.h"
 
 #include "rgw_reshard.h"
+#include "rgw_pubsub.h"
 
 // stolen from src/cls/version/cls_version.cc
 #define VERSION_ATTR "ceph.objclass.version"
@@ -862,11 +863,9 @@ int RGWBucketAdminOp::sync_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpStat
 }
 
 static int bucket_stats(rgw::sal::Driver* driver,
-			const std::string& tenant_name,
-			const std::string& bucket_name,
-			Formatter *formatter,
-                        const DoutPrefixProvider *dpp, optional_yield y)
-{
+                        const std::string& tenant_name,
+                        const std::string& bucket_name, Formatter* formatter,
+                        const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
@@ -925,6 +924,17 @@ static int bucket_stats(rgw::sal::Driver* driver,
       cerr << "ERROR: caught buffer:error, couldn't decode TagSet" << std::endl;
     }
   }
+
+  // bucket notifications
+  RGWPubSub ps(driver, tenant_name);
+  rgw_pubsub_bucket_topics result;
+  const RGWPubSub::Bucket b(ps, bucket.get());
+  ret = b.get_topics(dpp, result, y);
+  if (ret < 0 && ret != -ENOENT) {
+    cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  result.dump(formatter);
 
   // TODO: bucket CORS
   // TODO: bucket LC
