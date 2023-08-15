@@ -46,11 +46,48 @@ operations. Do not create or manipulate pools with these names.
 List Pools
 ==========
 
-To list your cluster's pools, run the following command:
+There are multiple ways to get the list of pools in your cluster.
+
+To list just your cluster's pool names (good for scripting), execute:
+
+.. prompt:: bash $
+
+   ceph osd pool ls
+
+::
+
+   .rgw.root
+   default.rgw.log
+   default.rgw.control
+   default.rgw.meta
+
+To list your cluster's pools with the pool number, run the following command:
 
 .. prompt:: bash $
 
    ceph osd lspools
+
+::
+
+   1 .rgw.root
+   2 default.rgw.log
+   3 default.rgw.control
+   4 default.rgw.meta
+
+To list your cluster's pools with additional information, execute:
+
+.. prompt:: bash $
+
+   ceph osd pool ls detail
+
+::
+
+   pool 1 '.rgw.root' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 19 flags hashpspool stripe_width 0 application rgw read_balance_score 4.00
+   pool 2 'default.rgw.log' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 21 flags hashpspool stripe_width 0 application rgw read_balance_score 4.00
+   pool 3 'default.rgw.control' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 23 flags hashpspool stripe_width 0 application rgw read_balance_score 4.00
+   pool 4 'default.rgw.meta' replicated size 3 min_size 1 crush_rule 0 object_hash rjenkins pg_num 1 pgp_num 1 autoscale_mode on last_change 25 flags hashpspool stripe_width 0 pg_autoscale_bias 4 application rgw read_balance_score 4.00
+
+To get even more information, you can execute this command with the ``--format`` (or ``-f``) option and the ``json``, ``json-pretty``, ``xml`` or ``xml-pretty`` value.
 
 .. _createpool:
 
