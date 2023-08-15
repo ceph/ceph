@@ -368,7 +368,7 @@ class TestNVMEOFService:
     def test_nvmeof_dashboard_config(self, mock_resolve_ip):
         pass
 
-    @patch("cephadm.module.CephadmOrchestrator.get_mgr_ip", lambda _: '192.168.100.100')
+    @patch("cephadm.inventory.Inventory.get_addr", lambda _, __: '192.168.100.100')
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.module.CephadmOrchestrator.get_unique_name")
     def test_nvmeof_config(self, _get_name, _run_cephadm, cephadm_module: CephadmOrchestrator):
@@ -393,6 +393,7 @@ state_update_interval_sec = 5
 [ceph]
 pool = {pool}
 config_file = /etc/ceph/ceph.conf
+id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
 server_key = ./server.key

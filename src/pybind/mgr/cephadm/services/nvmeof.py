@@ -25,25 +25,26 @@ class NvmeofService(CephService):
         assert self.TYPE == daemon_spec.daemon_type
 
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-        igw_id = daemon_spec.daemon_id
+        nvmeof_gw_id = daemon_spec.daemon_id
+        host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
 
-        # TODO: fixme, we should restrict the permissions here to only the necessary ones
-        keyring = self.get_keyring_with_caps(self.get_auth_entity(igw_id),
-                                             ['mon', 'allow *',
-                                              'mds', 'allow *',
-                                              'mgr', 'allow *',
-                                              'osd', 'allow *'])
+        keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
+                                             ['mon', 'profile rbd',
+                                              'osd', 'allow all tag rbd *=*'])
 
         # TODO: check if we can force jinja2 to generate dicts with double quotes instead of using json.dumps
         transport_tcp_options = json.dumps(spec.transport_tcp_options) if spec.transport_tcp_options else None
+        name = '{}.{}'.format(utils.name_to_config_section('nvmeof'), nvmeof_gw_id)
+        rados_id = name[len('client.'):] if name.startswith('client.') else name
         context = {
             'spec': spec,
-            'name': '{}.{}'.format(utils.name_to_config_section('nvmeof'), igw_id),
-            'addr': self.mgr.get_mgr_ip(),
+            'name': name,
+            'addr': host_ip,
             'port': spec.port,
             'log_level': 'WARN',
             'rpc_socket': '/var/tmp/spdk.sock',
-            'transport_tcp_options': transport_tcp_options
+            'transport_tcp_options': transport_tcp_options,
+            'rados_id': rados_id
         }
         gw_conf = self.mgr.template.render('services/nvmeof/ceph-nvmeof.conf.j2', context)
 
