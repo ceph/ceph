@@ -34,6 +34,7 @@ tasks:
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
       - slow request
+      - \(POOL_APP_NOT_ENABLED\)
 - exec:
     client.0:
     - ceph progress off

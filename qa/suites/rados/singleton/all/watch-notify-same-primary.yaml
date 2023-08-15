@@ -30,5 +30,6 @@ tasks:
       - \(OSD_
       - \(PG_
       - \(OBJECT_DEGRADED\)
+      - \(POOL_APP_NOT_ENABLED\)
 - watch_notify_same_primary:
     clients: [client.0]

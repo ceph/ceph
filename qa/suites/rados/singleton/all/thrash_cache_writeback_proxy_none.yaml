@@ -22,6 +22,7 @@ tasks:
       - slow request
       - overall HEALTH_
       - \(CACHE_POOL_
+      - \(POOL_APP_NOT_ENABLED\)
 - exec:
     client.0:
       - sudo ceph osd pool create base 4

@@ -4,6 +4,7 @@ overrides:
     - but it is still running
     - objects unfound and apparently lost
     - slow request
+    - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         osd debug reject backfill probability: .1
