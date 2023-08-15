@@ -91,6 +91,13 @@ from cephadmlib.constants import (
     UNIT_DIR,
 )
 from cephadmlib.context import CephadmContext
+from cephadmlib.exceptions import (
+    ClusterAlreadyExists,
+    Error,
+    PortOccupiedError,
+    TimeoutExpired,
+    UnauthorizedRegistryError,
+)
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -313,22 +320,6 @@ class termcolor:
     yellow = '\033[93m'
     red = '\033[31m'
     end = '\033[0m'
-
-
-class Error(Exception):
-    pass
-
-
-class ClusterAlreadyExists(Exception):
-    pass
-
-
-class TimeoutExpired(Error):
-    pass
-
-
-class UnauthorizedRegistryError(Error):
-    pass
 
 ##################################
 
@@ -1515,10 +1506,6 @@ def get_supported_daemons():
     return supported_daemons
 
 ##################################
-
-
-class PortOccupiedError(Error):
-    pass
 
 
 def attempt_bind(ctx, s, address, port):
