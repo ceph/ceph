@@ -6,8 +6,6 @@
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
 
-#include "boost_redis/examples/sync_connection.hpp"
-
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
@@ -16,7 +14,6 @@ namespace rgw { namespace cache {
 namespace net = boost::asio;
 using boost::redis::config;
 using boost::redis::connection;
-using boost::redis::sync_connection;
 using boost::redis::request;
 using boost::redis::response;
  
@@ -35,11 +32,11 @@ class RedisCacheAioRequest: public CacheAioRequest {
 
 class RedisDriver : public CacheDriver {
   public:
-    RedisDriver(connection& _conn, Partition& _partition_info) : conn(_conn),
-								 partition_info(_partition_info),
-								 free_space(_partition_info.size), 
-								 outstanding_write_size(0)
+    RedisDriver(net::io_context& io_context, Partition& _partition_info) : partition_info(_partition_info),
+								           free_space(_partition_info.size), 
+								           outstanding_write_size(0)
     {
+      conn = new connection{boost::asio::make_strand(io_context)};
       add_partition_info(_partition_info);
     }
     virtual ~RedisDriver()
@@ -94,7 +91,7 @@ class RedisDriver : public CacheDriver {
     };
 
   protected:
-    connection& conn;
+    connection* conn;
 
     static std::unordered_map<std::string, Partition> partitions;
     std::unordered_map<std::string, Entry> entries;

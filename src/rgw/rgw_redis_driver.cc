@@ -1,5 +1,6 @@
 #include <boost/algorithm/string.hpp>
 #include "rgw_redis_driver.h"
+#include "common/async/blocked_completion.h"
 #include <boost/redis/src.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -63,10 +64,12 @@ int RedisDriver::remove_partition_info(Partition& info)
 
 template <typename T>
 auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<T>& resp, optional_yield y) {
-  assert(y); 
-  auto yield = y.get_yield_context();
-
-  return conn.async_exec(req, resp, yield[ec]);
+  if (y) {
+    auto yield = y.get_yield_context();
+    return conn->async_exec(req, resp, yield[ec]);
+  } else {
+    return conn->async_exec(req, resp, ceph::async::use_blocked[ec]);
+  }
 }
 
 bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) 
@@ -196,7 +199,7 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     return -EDESTADDRREQ;
   }
 
-  conn.async_run(cfg, {}, net::detached);
+  conn->async_run(cfg, {}, net::detached);
 
   return 0;
 }
@@ -582,10 +585,10 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   return std::get<0>(resp).value() - 1; /* Returns number of fields set */
 }
 
-static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& conn,
+static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection* conn,
                                  off_t read_ofs, off_t read_len, const std::string& key)
 {
-  return [y, &conn, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
+  return [y, conn, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
     using namespace boost::asio;
     yield_context yield = y.get_yield_context();
     async_completion<yield_context, void()> init(yield);
@@ -598,21 +601,7 @@ static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection& con
     auto s = std::make_shared<RedisDriver::redis_response>();
     auto& resp = s->resp;
 
-    /*sync_connection sync_conn;
-    config cfg;
-    cfg.addr.host = "127.0.0.1";
-    cfg.addr.port = "6379";
-    sync_conn.run(cfg);
-
-    sync_conn.exec(req, resp);
-    sync_conn.stop();
-
-    dout(0) << "Sam: " << std::get<0>(s->resp).value()<< dendl;
-
-    r.data.append(std::get<0>(s->resp).value().c_str());
-    aio->put(r);*/
-
-    conn.async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
+    conn->async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
   };
 }
 
