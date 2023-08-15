@@ -565,8 +565,6 @@ class OSDThrasher(Thrasher):
         self.live_osds.append(osd)
         if self.random_eio > 0 and osd == self.rerrosd:
             self.ceph_manager.set_config(self.rerrosd,
-                                         filestore_debug_random_read_err = self.random_eio)
-            self.ceph_manager.set_config(self.rerrosd,
                                          bluestore_debug_random_read_err = self.random_eio)
 
 
@@ -1407,9 +1405,6 @@ class OSDThrasher(Thrasher):
         self.rerrosd = self.live_osds[0]
         if self.random_eio > 0:
             self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'filestore_debug_random_read_err',
-                                          self.random_eio)
-            self.ceph_manager.inject_args('osd', self.rerrosd,
                                           'bluestore_debug_random_read_err',
                                           self.random_eio)
         self.log("starting do_thrash")
@@ -1442,8 +1437,6 @@ class OSDThrasher(Thrasher):
             time.sleep(delay)
         self.all_up()
         if self.random_eio > 0:
-            self.ceph_manager.inject_args('osd', self.rerrosd,
-                                          'filestore_debug_random_read_err', '0.0')
             self.ceph_manager.inject_args('osd', self.rerrosd,
                                           'bluestore_debug_random_read_err', '0.0')
         for pool in list(self.pools_to_fix_pgp_num):
