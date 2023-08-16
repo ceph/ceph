@@ -7,6 +7,9 @@ from tests.fixtures import with_cephadm_ctx, import_cephadm
 _cephadm = import_cephadm()
 
 
+_find_program_loc = 'cephadmlib.container_engine_base.find_program'
+
+
 def test_container_engine():
     with pytest.raises(NotImplementedError):
         _cephadm.ContainerEngine()
@@ -14,14 +17,14 @@ def test_container_engine():
     class PhonyContainerEngine(_cephadm.ContainerEngine):
         EXE = "true"
 
-    with mock.patch("cephadm.find_program") as find_program:
+    with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/true"
         pce = PhonyContainerEngine()
         assert str(pce) == "true (/usr/bin/true)"
 
 
 def test_podman():
-    with mock.patch("cephadm.find_program") as find_program:
+    with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/podman"
         pm = _cephadm.Podman()
         find_program.assert_called()
@@ -36,7 +39,7 @@ def test_podman():
 
 
 def test_podman_badversion():
-    with mock.patch("cephadm.find_program") as find_program:
+    with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/podman"
         pm = _cephadm.Podman()
         find_program.assert_called()
@@ -48,7 +51,7 @@ def test_podman_badversion():
 
 
 def test_docker():
-    with mock.patch("cephadm.find_program") as find_program:
+    with mock.patch(_find_program_loc) as find_program:
         find_program.return_value = "/usr/bin/docker"
         docker = _cephadm.Docker()
         assert str(docker) == "docker (/usr/bin/docker)"
