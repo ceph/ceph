@@ -67,4 +67,13 @@ export class CephfsSubvolumeGroupService {
       size: size
     });
   }
+
+  remove(volName: string, groupName: string) {
+    return this.http.delete(`${this.baseURL}/${volName}`, {
+      params: {
+        group_name: groupName
+      },
+      observe: 'response'
+    });
+  }
 }

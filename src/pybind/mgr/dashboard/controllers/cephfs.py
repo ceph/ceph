@@ -786,3 +786,13 @@ class CephFSSubvolumeGroups(RESTController):
                 f'Failed to update subvolume group {group_name}: {err}'
             )
         return f'Subvolume group {group_name} updated successfully'
+
+    def delete(self, vol_name: str, group_name: str):
+        error_code, _, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolumegroup_rm', None, {
+                'vol_name': vol_name, 'group_name': group_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to delete subvolume group {group_name}: {err}'
+            )
+        return f'Subvolume group {group_name} removed successfully'
