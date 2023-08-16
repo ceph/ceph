@@ -275,6 +275,15 @@ void ObjectStoreImitator::output_fragmentation_img(const std::string &path,
   if (path.empty() || n == 0)
     return;
 
+  uint64_t cells = n * n;
+  uint64_t cell_size = alloc->get_capacity() / cells;
+  if (cell_size < alloc->get_block_size()) {
+    derr << "Image dimensions too small, use a different n that's at least the "
+            "allocator block size"
+         << dendl;
+    return;
+  }
+
   ImageGenerator img_gen;
   if (!img_gen.init_out(path)) {
     derr << "Error initializing output file" << dendl;
@@ -305,9 +314,6 @@ void ObjectStoreImitator::output_fragmentation_img(const std::string &path,
       length = 0;
     }
   });
-
-  uint64_t cells = n * n;
-  uint64_t cell_size = alloc->get_capacity() / cells;
 
   auto it = free_extents.rbegin();
   while (it != free_extents.rend()) {
