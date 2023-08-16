@@ -148,7 +148,7 @@ def with_cephadm_ctx(
     with mock.patch('cephadm.attempt_bind'), \
          mock.patch('cephadm.call', return_value=('', '', 0)), \
          mock.patch('cephadm.call_timeout', return_value=0), \
-         mock.patch('cephadm.find_executable', return_value='foo'), \
+         mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'), \
          mock.patch('cephadm.get_container_info', return_value=None), \
          mock.patch('cephadm.is_available', return_value=True), \
          mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
