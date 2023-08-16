@@ -6,7 +6,9 @@ from typing import Dict, Any
 from .exceptions import Error
 
 
-def dict_get(d: Dict, key: str, default: Any = None, require: bool = False) -> Any:
+def dict_get(
+    d: Dict, key: str, default: Any = None, require: bool = False
+) -> Any:
     """
     Helper function to get a key from a dictionary.
     :param d: The dictionary to process.
