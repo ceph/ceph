@@ -146,6 +146,8 @@ def with_cephadm_ctx(
 
     _cephadm = import_cephadm()
     with mock.patch('cephadm.attempt_bind'), \
+         mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0)), \
+         mock.patch('cephadmlib.call_wrappers.call_timeout', return_value=0), \
          mock.patch('cephadm.call', return_value=('', '', 0)), \
          mock.patch('cephadm.call_timeout', return_value=0), \
          mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'), \

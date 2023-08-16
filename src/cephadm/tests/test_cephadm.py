@@ -1039,7 +1039,7 @@ class TestCephAdm(object):
             infer_config(ctx)
             assert ctx.config == result
 
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.call_wrappers.call')
     def test_extract_uid_gid_fail(self, _call):
         err = """Error: container_linux.go:370: starting container process caused: process_linux.go:459: container init caused: process_linux.go:422: setting cgroup config for procHooks process caused: Unit libpod-056038e1126191fba41d8a037275136f2d7aeec9710b9ee
 ff792c06d8544b983.scope not found.: OCI runtime error"""
@@ -2088,10 +2088,14 @@ class TestValidateRepo:
 class TestPull:
 
     @mock.patch('time.sleep')
-    @mock.patch('cephadm.call', return_value=('', '', 0))
     @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
     @mock.patch('cephadm.logger')
-    def test_error(self, _logger, _get_image_info_from_inspect, _call, _sleep):
+    def test_error(self, _logger, _get_image_info_from_inspect, _sleep, monkeypatch):
+        # manually create a mock and use pytest's monkeypatch fixture to set
+        # multiple targets to the *same* mock
+        _call = mock.MagicMock()
+        monkeypatch.setattr('cephadm.call', _call)
+        monkeypatch.setattr('cephadmlib.call_wrappers.call', _call)
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False
