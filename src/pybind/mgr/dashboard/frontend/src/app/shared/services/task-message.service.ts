@@ -373,6 +373,9 @@ export class TaskMessageService {
     ),
     'cephfs/subvolume/group/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
       this.subvolumegroup(metadata)
+    ),
+    'cephfs/subvolume/group/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.subvolumegroup(metadata)
     )
   };
 

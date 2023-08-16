@@ -122,6 +122,12 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
           )
       },
       {
+        name: this.actionLabels.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
+        click: () => this.openModal(true)
+      },
+      {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
