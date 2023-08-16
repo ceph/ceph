@@ -24,7 +24,11 @@ class Podman(ContainerEngine):
         return self._version
 
     def get_version(self, ctx: CephadmContext) -> None:
-        out, _, _ = call_throws(ctx, [self.path, 'version', '--format', '{{.Client.Version}}'], verbosity=CallVerbosity.QUIET)
+        out, _, _ = call_throws(
+            ctx,
+            [self.path, 'version', '--format', '{{.Client.Version}}'],
+            verbosity=CallVerbosity.QUIET,
+        )
         self._version = _parse_podman_version(out)
 
     def __str__(self) -> str:
@@ -56,11 +60,18 @@ def check_container_engine(ctx: CephadmContext) -> ContainerEngine:
     if not isinstance(engine, CONTAINER_PREFERENCE):
         # See https://github.com/python/mypy/issues/8993
         exes: List[str] = [i.EXE for i in CONTAINER_PREFERENCE]  # type: ignore
-        raise Error('No container engine binary found ({}). Try run `apt/dnf/yum/zypper install <container engine>`'.format(' or '.join(exes)))
+        raise Error(
+            'No container engine binary found ({}). Try run `apt/dnf/yum/zypper install <container engine>`'.format(
+                ' or '.join(exes)
+            )
+        )
     elif isinstance(engine, Podman):
         engine.get_version(ctx)
         if engine.version < MIN_PODMAN_VERSION:
-            raise Error('podman version %d.%d.%d or later is required' % MIN_PODMAN_VERSION)
+            raise Error(
+                'podman version %d.%d.%d or later is required'
+                % MIN_PODMAN_VERSION
+            )
     return engine
 
 
