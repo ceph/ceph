@@ -15,6 +15,9 @@ import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { Permissions } from '~/app/shared/models/permissions';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-cephfs-subvolume-group',
@@ -55,7 +58,8 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
     private cephfsSubvolumeGroup: CephfsSubvolumeGroupService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
-    private authStorageService: AuthStorageService
+    private authStorageService: AuthStorageService,
+    private taskWrapper: TaskWrapperService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -111,6 +115,12 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
         permission: 'update',
         icon: Icons.edit,
         click: () => this.openModal(true)
+      },
+      {
+        name: this.actionLabels.REMOVE,
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.removeSubVolumeModal()
       }
     ];
 
@@ -150,5 +160,19 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
       },
       { size: 'lg' }
     );
+  }
+
+  removeSubVolumeModal() {
+    const name = this.selection.first().name;
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: 'subvolume group',
+      itemNames: [name],
+      actionDescription: 'remove',
+      submitActionObservable: () =>
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/subvolume/group/remove', { subvolumegroupName: name }),
+          call: this.cephfsSubvolumeGroup.remove(this.fsName, name)
+        })
+    });
   }
 }
