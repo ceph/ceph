@@ -368,7 +368,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
     return -2;
 
   ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
-  int ret = cacheNode->delete_data(dpp, victim.cacheObj.objName, y);
+  int ret = cacheNode->del(dpp, victim.cacheObj.objName, y);
 
   if (!ret) {
     ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries(dpp)), ""/*local cache location*/); // Where else must this be set? -Sam
