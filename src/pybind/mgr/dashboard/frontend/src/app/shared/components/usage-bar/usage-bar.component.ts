@@ -24,6 +24,12 @@ export class UsageBarComponent implements OnChanges {
   calculatePerc = true;
   @Input()
   title = $localize`usage`;
+  @Input()
+  customLegend?: string;
+  @Input()
+  customLegendValue?: string;
+  @Input()
+  showFreeToolTip = true;
 
   usedPercentage: number;
   freePercentage: number;

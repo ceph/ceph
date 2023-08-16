@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+import json
 import logging
 import os
 from collections import defaultdict
+from typing import Any, Dict
 
 import cephfs
 import cherrypy
@@ -23,6 +25,7 @@ GET_QUOTAS_SCHEMA = {
 logger = logging.getLogger("controllers.rgw")
 
 
+# pylint: disable=R0904
 @APIRouter('/cephfs', Scope.CEPHFS)
 @APIDoc("Cephfs Management API", "Cephfs")
 class CephFS(RESTController):
@@ -36,6 +39,24 @@ class CephFS(RESTController):
     def list(self):
         fsmap = mgr.get("fs_map")
         return fsmap['filesystems']
+
+    def create(self, name: str, service_spec: Dict[str, Any]):
+        service_spec_str = '1 '
+        if 'labels' in service_spec['placement']:
+            for label in service_spec['placement']['labels']:
+                service_spec_str += f'label:{label},'
+            service_spec_str = service_spec_str[:-1]
+        if 'hosts' in service_spec['placement']:
+            for host in service_spec['placement']['hosts']:
+                service_spec_str += f'{host},'
+            service_spec_str = service_spec_str[:-1]
+
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_create', None,
+                                        {'name': name, 'placement': service_spec_str})
+        if error_code != 0:
+            raise RuntimeError(
+                f'Error creating volume {name} with placement {str(service_spec)}: {err}')
+        return f'Volume {name} created successfully'
 
     def get(self, fs_id):
         fs_id = self.fs_id_to_int(fs_id)
@@ -560,3 +581,132 @@ class CephFsUi(CephFS):
         except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths
+
+
+@APIRouter('/cephfs/subvolume', Scope.CEPHFS)
+@APIDoc('CephFS Subvolume Management API', 'CephFSSubvolume')
+class CephFSSubvolume(RESTController):
+
+    def get(self, vol_name: str):
+        error_code, out, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolume_ls', None, {'vol_name': vol_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to list subvolumes for volume {vol_name}: {err}'
+            )
+        subvolumes = json.loads(out)
+        for subvolume in subvolumes:
+            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
+                                              'vol_name': vol_name, 'sub_name': subvolume['name']})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to get info for subvolume {subvolume["name"]}: {err}'
+                )
+            subvolume['info'] = json.loads(out)
+        return subvolumes
+
+    @RESTController.Resource('GET')
+    def info(self, vol_name: str, subvol_name: str):
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
+            'vol_name': vol_name, 'sub_name': subvol_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get info for subvolume {subvol_name}: {err}'
+            )
+        return json.loads(out)
+
+    def create(self, vol_name: str, subvol_name: str, **kwargs):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_create', None, {
+            'vol_name': vol_name, 'sub_name': subvol_name, **kwargs})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create subvolume {subvol_name}: {err}'
+            )
+
+        return f'Subvolume {subvol_name} created successfully'
+
+    def set(self, vol_name: str, subvol_name: str, size: str):
+        if size:
+            error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_resize', None, {
+                'vol_name': vol_name, 'sub_name': subvol_name, 'new_size': size})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to update subvolume {subvol_name}: {err}'
+                )
+
+        return f'Subvolume {subvol_name} updated successfully'
+
+    def delete(self, vol_name: str, subvol_name: str):
+        error_code, _, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolume_rm', None, {
+                'vol_name': vol_name, 'sub_name': subvol_name})
+        if error_code != 0:
+            raise RuntimeError(
+                f'Failed to delete subvolume {subvol_name}: {err}'
+            )
+        return f'Subvolume {subvol_name} removed successfully'
+
+
+@APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
+@APIDoc("Cephfs Subvolume Group Management API", "CephfsSubvolumeGroup")
+class CephFSSubvolumeGroups(RESTController):
+
+    def get(self, vol_name):
+        if not vol_name:
+            raise DashboardException(
+                f'Error listing subvolume groups for {vol_name}')
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_ls',
+                                          None, {'vol_name': vol_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Error listing subvolume groups for {vol_name}')
+        subvolume_groups = json.loads(out)
+        for group in subvolume_groups:
+            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info',
+                                              None, {'vol_name': vol_name,
+                                                     'group_name': group['name']})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to get info for subvolume group {group["name"]}: {err}'
+                )
+            group['info'] = json.loads(out)
+        return subvolume_groups
+
+    @RESTController.Resource('GET')
+    def info(self, vol_name: str, group_name: str):
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info', None, {
+            'vol_name': vol_name, 'group_name': group_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get info for subvolume group {group_name}: {err}'
+            )
+        return json.loads(out)
+
+    def create(self, vol_name: str, group_name: str, **kwargs):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_create', None, {
+            'vol_name': vol_name, 'group_name': group_name, **kwargs})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create subvolume group {group_name}: {err}'
+            )
+
+    def set(self, vol_name: str, group_name: str, size: str):
+        if not size:
+            return f'Failed to update subvolume group {group_name}, size was not provided'
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_resize', None, {
+            'vol_name': vol_name, 'group_name': group_name, 'new_size': size})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to update subvolume group {group_name}: {err}'
+            )
+        return f'Subvolume group {group_name} updated successfully'
+
+    def delete(self, vol_name: str, group_name: str):
+        error_code, _, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolumegroup_rm', None, {
+                'vol_name': vol_name, 'group_name': group_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to delete subvolume group {group_name}: {err}'
+            )
+        return f'Subvolume group {group_name} removed successfully'

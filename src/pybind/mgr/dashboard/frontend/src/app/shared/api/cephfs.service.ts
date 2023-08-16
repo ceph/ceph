@@ -73,4 +73,18 @@ export class CephfsService {
       params
     });
   }
+
+  create(name: string, serviceSpec: object) {
+    return this.http.post(
+      this.baseURL,
+      { name: name, service_spec: serviceSpec },
+      {
+        observe: 'response'
+      }
+    );
+  }
+
+  isCephFsPool(pool: any) {
+    return _.indexOf(pool.application_metadata, 'cephfs') !== -1 && !pool.pool_name.includes('/');
+  }
 }
