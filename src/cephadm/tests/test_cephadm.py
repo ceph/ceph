@@ -228,11 +228,15 @@ class TestCephAdm(object):
         ("1.6.2-stable2", (1,6,2)),
     ])
     def test_parse_podman_version(self, test_input, expected):
-        assert _cephadm._parse_podman_version(test_input) == expected
+        from cephadmlib.container_engines import _parse_podman_version
+
+        assert _parse_podman_version(test_input) == expected
 
     def test_parse_podman_version_invalid(self):
+        from cephadmlib.container_engines import _parse_podman_version
+
         with pytest.raises(ValueError) as res:
-            _cephadm._parse_podman_version('inval.id')
+            _parse_podman_version('inval.id')
         assert 'inval' in str(res.value)
 
     @mock.patch('cephadm.logger')

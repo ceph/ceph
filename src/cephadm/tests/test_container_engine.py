@@ -8,13 +8,16 @@ _cephadm = import_cephadm()
 
 
 _find_program_loc = 'cephadmlib.container_engine_base.find_program'
+_call_throws_loc = 'cephadmlib.container_engines.call_throws'
 
 
 def test_container_engine():
-    with pytest.raises(NotImplementedError):
-        _cephadm.ContainerEngine()
+    from cephadmlib.container_engine_base import ContainerEngine
 
-    class PhonyContainerEngine(_cephadm.ContainerEngine):
+    with pytest.raises(NotImplementedError):
+        ContainerEngine()
+
+    class PhonyContainerEngine(ContainerEngine):
         EXE = "true"
 
     with mock.patch(_find_program_loc) as find_program:
@@ -30,7 +33,7 @@ def test_podman():
         find_program.assert_called()
         with pytest.raises(RuntimeError):
             pm.version
-        with mock.patch("cephadm.call_throws") as call_throws:
+        with mock.patch(_call_throws_loc) as call_throws:
             call_throws.return_value = ("4.9.9", None, None)
             with with_cephadm_ctx([]) as ctx:
                 pm.get_version(ctx)
@@ -43,7 +46,7 @@ def test_podman_badversion():
         find_program.return_value = "/usr/bin/podman"
         pm = _cephadm.Podman()
         find_program.assert_called()
-        with mock.patch("cephadm.call_throws") as call_throws:
+        with mock.patch(_call_throws_loc) as call_throws:
             call_throws.return_value = ("4.10.beta2", None, None)
             with with_cephadm_ctx([]) as ctx:
                 with pytest.raises(ValueError):
