@@ -105,6 +105,8 @@
   recommend that users with versioned buckets, especially those that existed
   on prior releases, use these new tools to check whether their buckets are
   affected and to clean them up accordingly.
+* mgr/snap-schedule: For clusters with multiple CephFS file systems, all the
+  snap-schedule commands now expect the '--fs' argument.
 
 >=18.0.0
 
