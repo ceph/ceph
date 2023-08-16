@@ -131,6 +131,8 @@ def download_cephadm(ctx, config, ref):
         # cephadm
         elif 'cephadm_git_url' in config and 'cephadm_branch' in config:
             _fetch_cephadm_from_github(ctx, config, ref)
+        elif 'compiled_cephadm_branch' in config:
+            _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name)
         else:
             _fetch_cephadm_from_chachra(ctx, config, cluster_name)
 
@@ -228,6 +230,55 @@ def _fetch_cephadm_from_chachra(ctx, config, cluster_name):
             flavor=flavor,
             branch=branch,
             sha1=sha1,
+    )
+    log.info("Discovered cachra url: %s", url)
+    ctx.cluster.run(
+        args=[
+            'curl', '--silent', '-L', url,
+            run.Raw('>'),
+            ctx.cephadm,
+            run.Raw('&&'),
+            'ls', '-l',
+            ctx.cephadm,
+        ],
+    )
+
+    # sanity-check the resulting file and set executable bit
+    cephadm_file_size = '$(stat -c%s {})'.format(ctx.cephadm)
+    ctx.cluster.run(
+        args=[
+            'test', '-s', ctx.cephadm,
+            run.Raw('&&'),
+            'test', run.Raw(cephadm_file_size), "-gt", run.Raw('1000'),
+            run.Raw('&&'),
+            'chmod', '+x', ctx.cephadm,
+        ],
+    )
+
+def _fetch_stable_branch_cephadm_from_chacra(ctx, config, cluster_name):
+    branch = config.get('compiled_cephadm_branch', 'reef')
+    flavor = config.get('flavor', 'default')
+
+    log.info(f'Downloading "compiled" cephadm from cachra for {branch}')
+
+    bootstrap_remote = ctx.ceph[cluster_name].bootstrap_remote
+    bp = packaging.get_builder_project()(
+        config.get('project', 'ceph'),
+        config,
+        ctx=ctx,
+        remote=bootstrap_remote,
+    )
+    log.info('builder_project result: %s' % (bp._result.json()))
+
+    # pull the cephadm binary from chacra
+    url = chacra.get_binary_url(
+            'cephadm',
+            project=bp.project,
+            distro=bp.distro.split('/')[0],
+            release=bp.distro.split('/')[1],
+            arch=bp.arch,
+            flavor=flavor,
+            branch=branch,
     )
     log.info("Discovered cachra url: %s", url)
     ctx.cluster.run(
