@@ -6,9 +6,6 @@
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
 
-#define dout_subsys ceph_subsys_rgw
-#define dout_context g_ceph_context
-
 namespace rgw { namespace cache { 
 
 namespace net = boost::asio;
@@ -83,7 +80,6 @@ class RedisDriver : public CacheDriver {
 
       /* Read Callback */
       void operator()(boost::system::error_code ec, long unsigned int size) const {
-	dout(0) << "Sam: here in read" << dendl;
 	r.result = -ec.value();
 	r.data.append(std::get<0>(s->resp).value().c_str());
 	throttle->put(r);
