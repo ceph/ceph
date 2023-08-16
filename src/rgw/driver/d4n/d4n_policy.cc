@@ -276,7 +276,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     while (freeSpace < block->size) /* Not enough space in local cache */
       freeSpace += eviction(dpp, cacheNode, y);
 
-    if (exist_key(key)) {
+    if (exist_key(key)) { /* Remote copy */
       try {
 	client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
 	  if (!reply.is_null()) {
