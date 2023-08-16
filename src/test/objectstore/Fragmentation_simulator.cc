@@ -239,8 +239,8 @@ struct RandomCWGenerator : public FragmentationSimulator::WorkloadGenerator {
     os->queue_transactions(ch, tls);
     wait_till_finish();
 
-    boost::uniform_int<> u_size(0, _1Mb * 4);
-    boost::uniform_int<> u_offset(0, _1Mb);
+    boost::uniform_int<> u_size(0, _1Mb * 16);
+    boost::uniform_int<> u_offset(0, _1Mb * 32);
 
     for (unsigned i{0}; i < 200; ++i) {
       tls.clear();
@@ -421,7 +421,7 @@ TEST_P(FragmentationSimulator, SimpleCWGenerator) {
 
 TEST_P(FragmentationSimulator, RandomCWGenerator) {
   std::string alloc = GetParam();
-  init(alloc, _1Mb * 256);
+  init(alloc, _1Gb);
   add_generator(std::make_shared<RandomCWGenerator>());
   begin_simulation(1, fmt::format("{}_random.ppm", alloc), 128);
 }
