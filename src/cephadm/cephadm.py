@@ -104,6 +104,7 @@ from cephadmlib.call_wrappers import (
     call_timeout,
     concurrent_tasks,
 )
+from cephadmlib.container_engine_base import ContainerEngine
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -181,18 +182,6 @@ class DeploymentType(Enum):
     # Reconfiguring a daemon. Rewrites config
     # files and potentially restarts daemon.
     RECONFIG = 'Reconfig'
-
-
-class ContainerEngine:
-    def __init__(self) -> None:
-        self.path = find_program(self.EXE)
-
-    @property
-    def EXE(self) -> str:
-        raise NotImplementedError()
-
-    def __str__(self) -> str:
-        return f'{self.EXE} ({self.path})'
 
 
 class Podman(ContainerEngine):
