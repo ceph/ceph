@@ -298,6 +298,9 @@ void ObjectStoreImitator::output_fragmentation_img(const std::string &path,
         continue;
       }
 
+      if (length < alloc->get_block_size())
+        break;
+
       free_extents.insert(length);
       length = 0;
     }
