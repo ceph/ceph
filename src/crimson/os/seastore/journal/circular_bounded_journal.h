@@ -117,28 +117,6 @@ public:
     return cjs.get_alloc_tail();
   }
 
-  using read_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
-  using read_record_ertr = read_ertr;
-  using read_record_ret = read_record_ertr::future<
-	std::optional<std::pair<record_group_header_t, bufferlist>>
-	>;
-  /*
-   * read_record
-   *
-   * read record from given address
-   *
-   * @param paddr_t to read
-   * @param expected_seq
-   *
-   */
-  read_record_ret read_record(paddr_t offset, segment_nonce_t magic);
-
-  read_record_ret return_record(record_group_header_t& header, bufferlist bl);
-
   void set_write_pipeline(WritePipeline *_write_pipeline) final {
     write_pipeline = _write_pipeline;
   }
@@ -208,6 +186,18 @@ public:
   
   CircularJournalSpace& get_cjs() {
     return cjs;
+  }
+
+  read_validate_record_metadata_ret test_read_validate_record_metadata(
+    scan_valid_records_cursor &cursor,
+    segment_nonce_t nonce)
+  {
+    return read_validate_record_metadata(cursor, nonce);
+  }
+
+  void test_initialize_cursor(scan_valid_records_cursor &cursor)
+  {
+    initialize_cursor(cursor);
   }
 
 private:
