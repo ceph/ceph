@@ -754,7 +754,7 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
        * immediately be assigned a rank).
        */
       if (old_state == DS::STATE_NULL) {
-        dout(1) << "Monitors have assigned me to become a standby." << dendl;
+        dout(1) << "Monitors have assigned me to become a standby" << dendl;
         beacon.set_want_state(*mdsmap, new_state);
       } else if (old_state == DS::STATE_STANDBY) {
         dout(5) << "I am still standby" << dendl;
