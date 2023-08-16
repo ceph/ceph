@@ -152,6 +152,11 @@ if(LINUX AND HAVE_LIBCRYPTSETUP)
           crypto/luks/test_mock_LoadRequest.cc)
 endif()
 
+# On Windows, we'll skip librbd unit tests for the time being, running just the
+# functional tests. The reason is that the unit tests require libcls*, which in
+# turn requires libos and libosd, however those libraries haven't been ported to
+# Windows.
+if(NOT WIN32)
 add_executable(unittest_librbd
   ${unittest_librbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
@@ -187,6 +192,7 @@ if(WITH_RBD_RWL OR WITH_RBD_SSD_CACHE)
   target_link_libraries(unittest_librbd
     librbd_plugin_pwl_cache)
 endif()
+endif(NOT WIN32)
 
 add_executable(ceph_test_librbd
   test_main.cc
