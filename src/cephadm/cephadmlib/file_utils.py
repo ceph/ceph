@@ -62,7 +62,9 @@ def populate_files(config_dir, config_files, uid, gid):
             f.write(config_content)
 
 
-def touch(file_path: str, uid: Optional[int] = None, gid: Optional[int] = None) -> None:
+def touch(
+    file_path: str, uid: Optional[int] = None, gid: Optional[int] = None
+) -> None:
     Path(file_path).touch()
     if uid and gid:
         os.chown(file_path, uid, gid)
@@ -70,8 +72,7 @@ def touch(file_path: str, uid: Optional[int] = None, gid: Optional[int] = None) 
 
 def write_tmp(s, uid, gid):
     # type: (str, int, int) -> IO[str]
-    tmp_f = tempfile.NamedTemporaryFile(mode='w',
-                                        prefix='ceph-tmp')
+    tmp_f = tempfile.NamedTemporaryFile(mode='w', prefix='ceph-tmp')
     os.fchown(tmp_f.fileno(), uid, gid)
     tmp_f.write(s)
     tmp_f.flush()
@@ -86,7 +87,7 @@ def makedirs(dir, uid, gid, mode):
     else:
         os.chmod(dir, mode)
     os.chown(dir, uid, gid)
-    os.chmod(dir, mode)   # the above is masked by umask...
+    os.chmod(dir, mode)  # the above is masked by umask...
 
 
 def recursive_chown(path: str, uid: int, gid: int) -> None:
