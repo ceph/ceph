@@ -142,6 +142,18 @@ const string PREFIX_ZONED_CL_INFO = "G";  // (per-zone cleaner metadata)
 
 const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
+// Label offsets where they might be replicated. It is possible on previous versions where these offsets
+// were already used so labels won't exist there.
+const vector<uint64_t> BDEV_LABEL_OFFSETS = {0, 1073741824, 107374182400, 1099511627776};
+
+// write a label in the first block.  always use this size.  note that
+// bluefs makes a matching assumption about the location of its
+// superblock (always the second block of the device).
+#define BDEV_LABEL_BLOCK_SIZE  4096
+
+// reserve: label (4k) + bluefs super (4k), which means we start at 8k.
+#define SUPER_RESERVED  8192
+
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
 
 
@@ -5456,16 +5468,19 @@ int BlueStore::_write_bdev_label(CephContext *cct,
     return fd;
   }
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
-  int r = bl.write_fd(fd);
-  if (r < 0) {
-    derr << __func__ << " failed to write to " << path
-	 << ": " << cpp_strerror(r) << dendl;
-    goto out;
+  int r = 0;
+  for (auto offset : BDEV_LABEL_OFFSETS) {
+    r = bl.write_fd(fd, offset);
+    if (r < 0) {
+      derr << __func__ << " failed to write to " << path
+        << ": " << cpp_strerror(r) << dendl;
+      goto out;
+    }
   }
   r = ::fsync(fd);
   if (r < 0) {
     derr << __func__ << " failed to fsync " << path
-	 << ": " << cpp_strerror(r) << dendl;
+      << ": " << cpp_strerror(r) << dendl;
   }
 out:
   VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -5476,43 +5491,46 @@ int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
 				bluestore_bdev_label_t *label)
 {
   dout(10) << __func__ << dendl;
-  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_RDONLY|O_CLOEXEC));
-  if (fd < 0) {
-    fd = -errno;
-    derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
-	 << dendl;
-    return fd;
-  }
   bufferlist bl;
-  int r = bl.read_fd(fd, BDEV_LABEL_BLOCK_SIZE);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
-  if (r < 0) {
-    derr << __func__ << " failed to read from " << path
-	 << ": " << cpp_strerror(r) << dendl;
-    return r;
-  }
+  string error;
+  bluestore_bdev_label_t tmp_label;
+  size_t crcs_failed = 0;
+  for (auto offset : BDEV_LABEL_OFFSETS) {
+    int r = bl.pread_file(path.c_str(), offset, BDEV_LABEL_BLOCK_SIZE, &error);
+    if (r < 0) {
+      derr << __func__ << " failed to read from " << path
+        << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
 
-  uint32_t crc, expected_crc;
-  auto p = bl.cbegin();
-  try {
-    decode(*label, p);
-    bufferlist t;
-    t.substr_of(bl, 0, p.get_off());
-    crc = t.crc32c(-1);
-    decode(expected_crc, p);
+    uint32_t crc, expected_crc;
+    auto p = bl.cbegin();
+    try {
+      decode(tmp_label, p);
+      bufferlist t;
+      t.substr_of(bl, 0, p.get_off());
+      crc = t.crc32c(-1);
+      decode(expected_crc, p);
+    }
+    catch (ceph::buffer::error& e) {
+      derr << __func__ << " unable to decode label at offset " << p.get_off()
+        << ": " << e.what()
+        << dendl;
+      return -ENOENT;
+    }
+    if (crc != expected_crc) {
+      derr << __func__ << " bad crc on label, expected " << expected_crc
+        << " != actual " << crc << " offset=" << offset << dendl;
+      crcs_failed++;
+      continue;
+    }
+    *label = tmp_label;
+    break;
   }
-  catch (ceph::buffer::error& e) {
-    derr << __func__ << " unable to decode label " << path.c_str()
-         << " at offset " << p.get_off()
-	 << ": " << e.what()
-	 << dendl;
-    return -ENOENT;
-  }
-  if (crc != expected_crc) {
-    derr << __func__ << " bad crc on label, expected " << expected_crc
-	 << " != actual " << crc << dendl;
+  if (crcs_failed == BDEV_LABEL_OFFSETS.size()) {
     return -EIO;
   }
+
   dout(10) << __func__ << " got " << *label << dendl;
   return 0;
 }
