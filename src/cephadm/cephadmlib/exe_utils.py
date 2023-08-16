@@ -8,7 +8,9 @@ from typing import Optional
 
 
 # copied from distutils
-def find_executable(executable: str, path: Optional[str] = None) -> Optional[str]:
+def find_executable(
+    executable: str, path: Optional[str] = None
+) -> Optional[str]:
     """Tries to find 'executable' in the directories listed in 'path'.
     A string listing directories separated by 'os.pathsep'; defaults to
     os.environ['PATH'].  Returns the complete filename or None if not found.
