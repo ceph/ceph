@@ -285,35 +285,43 @@ void ObjectStoreImitator::output_fragmentation_img(const std::string &path,
 
   img_gen.write_header(n, n);
 
-  uint64_t occupied_space{0};
-  for (const auto &[_, coll_ref] : coll_map)
-    for (const auto &[_, obj] : coll_ref->objects)
-      for (const auto [_, ext] : obj->extent_map) {
-        occupied_space += ext.length;
-      }
-
-  // Sort blocks into buckets to color them by decreasing size, blue -> red.
-  // Buckets are: 4K, 16K, 64K,... and 16Mb
-  // ie: 6K -> 16K bucket, 16K -> 16K bucket
-  std::map<uint64_t, std::vector<uint64_t>> free_space_hist;
-  uint64_t bucket_size{4 * _1Kb}, max_bucket_size{16 * _1Mb};
-  do {
-    free_space_hist[bucket_size] = {};
-    bucket_size >>= 2;
-  } while (bucket_size < max_bucket_size);
+  std::multiset<uint64_t> free_extents;
+  // if an extent is bigger than 16Mb, we will split it into multiple
+  // extents to visualize easier
+  uint64_t max_ext_size{16 * _1Mb};
 
   alloc->foreach ([&](uint64_t offset, uint64_t length) -> void {
     while (length > 0) {
-      if (length >= max_bucket_size) {
-        free_space_hist[max_bucket_size].push_back(length);
-        length -= max_bucket_size;
+      if (length >= max_ext_size) {
+        free_extents.insert(max_ext_size);
+        length -= max_ext_size;
         continue;
       }
 
-      auto it = std::prev(free_space_hist.upper_bound(length));
-      free_space_hist[it->first].push_back(length);
+      free_extents.insert(length);
+      length = 0;
     }
   });
+
+  uint64_t cells = n * n;
+  uint64_t cell_size = alloc->get_capacity() / cells;
+
+  auto it = free_extents.rbegin();
+  while (it != free_extents.rend()) {
+    uint64_t to_write = *it / cell_size;
+    double write_value = (double)*it / (double)max_ext_size;
+
+    while (to_write > 0) {
+      img_gen.write_ratio_red_blue(write_value);
+      to_write--;
+    }
+
+    it++;
+    cells -= to_write;
+  }
+
+  while (cells--)
+    img_gen.write_white_pixel();
 }
 
 // ------- Transactions -------

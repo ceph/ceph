@@ -219,7 +219,7 @@ private:
       unsigned char buf[] = {red, green, blue};
       o.write((char *)buf, sizeof(buf));
     }
-
+    void write_white_pixel() { write_pixel(255, 255, 255); }
     // 1: blue, 0: red
     void write_ratio_red_blue(double value) {
       uint8_t red{}, green{}, blue{};

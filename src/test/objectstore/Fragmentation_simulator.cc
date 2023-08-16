@@ -416,21 +416,21 @@ TEST_P(FragmentationSimulator, SimpleCWGenerator) {
   std::string alloc = GetParam();
   init(alloc, _1Gb);
   add_generator(std::make_shared<SimpleCWGenerator>());
-  begin_simulation(1, fmt::format("{}_simple.ppm", alloc), 128);
+  begin_simulation(1, fmt::format("{}_simple.ppm", alloc), 0);
 }
 
 TEST_P(FragmentationSimulator, RandomCWGenerator) {
   std::string alloc = GetParam();
-  init(alloc, _1Mb * 16);
+  init(alloc, _1Mb * 256);
   add_generator(std::make_shared<RandomCWGenerator>());
-  begin_simulation(1, fmt::format("{}_random.ppm", alloc), 16);
+  begin_simulation(1, fmt::format("{}_random.ppm", alloc), 128);
 }
 
 TEST_P(FragmentationSimulator, MultiThreadedCWGenerator) {
   std::string alloc = GetParam();
   init(alloc, _1Mb * 4);
   add_generator(std::make_shared<MultiThreadedCWGenerator>());
-  begin_simulation(1, fmt::format("{}_multi.ppm", alloc), 4);
+  begin_simulation(1, fmt::format("{}_multi.ppm", alloc), 0);
 }
 
 // ----------- main -----------
