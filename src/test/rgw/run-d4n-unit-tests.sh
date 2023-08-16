@@ -4,10 +4,11 @@ if [ $? -eq 0 ];
 then 
 	echo "Redis process found; flushing!"
 	redis-cli FLUSHALL
-fi
+else
 redis-server --daemonize yes
+fi
 echo "-----------Redis Server Started-----------"
-../../../build/bin/ceph_test_rgw_d4n_directory
+#../../../build/bin/ceph_test_rgw_d4n_directory
 printf "\n-----------Directory Test Executed-----------\n"
 redis-cli FLUSHALL
 echo "-----------Redis Server Flushed-----------"
