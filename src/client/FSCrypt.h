@@ -113,6 +113,7 @@ union FSCryptIV {
 };
 
 struct FSCryptPolicy {
+public:
   uint8_t version;
   uint8_t contents_encryption_mode;
   uint8_t filenames_encryption_mode;
@@ -208,11 +209,16 @@ struct FSCryptContext : public FSCryptPolicy {
 using FSCryptContextRef = std::shared_ptr<FSCryptContext>;
 
 class FSCryptDenc {
+protected:
   FSCryptContextRef ctx;
   FSCryptKeyRef master_key;
 
   std::vector<char> key;
   FSCryptIV iv;
+
+  int padding = 1;
+  int key_size = 0;
+  int iv_size = 0;
 
   EVP_CIPHER *cipher;
   EVP_CIPHER_CTX *cipher_ctx;
@@ -221,19 +227,25 @@ class FSCryptDenc {
   int calc_key(char ctx_identifier,
                int key_size,
                uint64_t block_num);
-public:
-  FSCryptDenc(EVP_CIPHER *cipher, std::vector<OSSL_PARAM> params);
-  ~FSCryptDenc();
 
-  void setup(FSCryptContextRef& _ctx,
+  bool do_setup_cipher(int encryption_mode);
+
+public:
+  FSCryptDenc();
+  virtual ~FSCryptDenc();
+
+  virtual bool setup_cipher() = 0;
+
+  void init_cipher(EVP_CIPHER *cipher, std::vector<OSSL_PARAM> params);
+  bool setup(FSCryptContextRef& _ctx,
              FSCryptKeyRef& _master_key);
 
   int calc_fname_key() {
-    return calc_key(HKDF_CONTEXT_PER_FILE_ENC_KEY, 32, 0);
+    return calc_key(HKDF_CONTEXT_PER_FILE_ENC_KEY, key_size, 0);
   }
 
   int calc_fdata_key(uint64_t block_num) {
-    return calc_key(HKDF_CONTEXT_PER_FILE_ENC_KEY, 64, block_num);
+    return calc_key(HKDF_CONTEXT_PER_FILE_ENC_KEY, key_size, block_num);
   }
 
   int decrypt(const char *in_data, int in_len,
@@ -246,7 +258,9 @@ using FSCryptDencRef = std::shared_ptr<FSCryptDenc>;
 
 class FSCryptFNameDenc : public FSCryptDenc {
 public:
-  FSCryptFNameDenc();
+  FSCryptFNameDenc() {}
+
+  bool setup_cipher() override;
 
   int get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name);
   int get_decrypted_fname(const std::string& b64enc, const std::string& alt_name, std::string *decrypted);
@@ -259,9 +273,11 @@ using FSCryptFNameDencRef = std::shared_ptr<FSCryptFNameDenc>;
 
 class FSCryptFDataDenc : public FSCryptDenc {
 public:
-  FSCryptFDataDenc();
+  FSCryptFDataDenc() {}
 
   using Segment = std::pair<uint64_t, uint64_t>;
+
+  bool setup_cipher() override;
 
   int decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const std::vector<Segment>& holes, bufferlist *bl);
   int encrypt_bl(uint64_t off, uint64_t len, bufferlist& bl, bufferlist *encbl);
