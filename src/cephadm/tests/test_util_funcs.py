@@ -542,11 +542,13 @@ VERSION_CODENAME=hpec nimda
     ],
 )
 def test_get_distro(monkeypatch, content, expected):
+    from cephadmlib.packagers import get_distro
+
     def _fake_open(*args, **kwargs):
         return io.StringIO(content)
 
     monkeypatch.setattr("builtins.open", _fake_open)
-    assert _cephadm.get_distro() == expected
+    assert get_distro() == expected
 
 
 class FakeContext:
