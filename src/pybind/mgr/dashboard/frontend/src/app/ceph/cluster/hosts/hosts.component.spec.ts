@@ -224,7 +224,7 @@ describe('HostsComponent', () => {
     const spans = fixture.debugElement.nativeElement.querySelectorAll(
       '.datatable-body-cell-label span'
     );
-    expect(spans[7].textContent).toBe('N/A');
+    expect(spans[7].textContent).toBe('-');
   });
 
   it('should test if host facts are unavailable if get_facts orch feature is not available', () => {
@@ -251,7 +251,7 @@ describe('HostsComponent', () => {
     const spans = fixture.debugElement.nativeElement.querySelectorAll(
       '.datatable-body-cell-label span'
     );
-    expect(spans[7].textContent).toBe('N/A');
+    expect(spans[7].textContent).toBe('-');
   });
 
   it('should test if memory/raw capacity columns shows N/A if facts are available but in fetching state', () => {
