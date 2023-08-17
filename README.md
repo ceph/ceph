@@ -1,23 +1,25 @@
 # Ceph - a scalable distributed storage system
 
-Please see https://ceph.com/ for current info.
+See https://ceph.com/ for current information about Ceph.
 
 
 ## Contributing Code
 
-Most of Ceph is dual licensed under the LGPL version 2.1 or 3.0.  Some
-miscellaneous code is under a BSD-style license or is public domain.
-The documentation is licensed under Creative Commons
-Attribution Share Alike 3.0 (CC-BY-SA-3.0).  There are a handful of headers
-included here that are licensed under the GPL.  Please see the file
-COPYING for a full inventory of licenses by file.
+Most of Ceph is dual-licensed under the LGPL version 2.1 or 3.0. Some
+miscellaneous code is either public domain or licensed under a BSD-style
+license.
 
-Code contributions must include a valid "Signed-off-by" acknowledging
-the license for the modified or contributed file.  Please see the file
-SubmittingPatches.rst for details on what that means and on how to
-generate and submit patches.
+The Ceph documentation is licensed under Creative Commons Attribution Share
+Alike 3.0 (CC-BY-SA-3.0). 
 
-We do not require assignment of copyright to contribute code; code is
+Some headers included in the `ceph/ceph` repository are licensed under the GPL.
+See the file `COPYING` for a full inventory of licenses by file.
+
+All code contributions must include a valid "Signed-off-by" line. See the file
+`SubmittingPatches.rst` for details on this and instructions on how to generate
+and submit patches.
+
+Assignment of copyright is not required to contribute code. Code is
 contributed under the terms of the applicable license.
 
 
