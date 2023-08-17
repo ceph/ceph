@@ -15,7 +15,8 @@ from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
 from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache
-from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter, allow_empty_body
+from . import APIDoc, APIRouter, DeletePermission, Endpoint, EndpointDoc, \
+    RESTController, UIRouter, UpdatePermission, allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
@@ -57,6 +58,41 @@ class CephFS(RESTController):
             raise RuntimeError(
                 f'Error creating volume {name} with placement {str(service_spec)}: {err}')
         return f'Volume {name} created successfully'
+
+    @EndpointDoc("Remove CephFS Volume",
+                 parameters={
+                     'name': (str, 'File System Name'),
+                 })
+    @allow_empty_body
+    @Endpoint('DELETE')
+    @DeletePermission
+    def remove(self, name):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_rm', None,
+                                        {'vol_name': name,
+                                         'yes-i-really-mean-it': "--yes-i-really-mean-it"})
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Error deleting volume {name}: {err}',
+                component='cephfs')
+        return f'Volume {name} removed successfully'
+
+    @EndpointDoc("Rename CephFS Volume",
+                 parameters={
+                     'name': (str, 'Existing FS Name'),
+                     'new_name': (str, 'New FS Name'),
+                 })
+    @allow_empty_body
+    @UpdatePermission
+    @Endpoint('PUT')
+    def rename(self, name: str, new_name: str):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_rename', None,
+                                        {'vol_name': name, 'new_vol_name': new_name,
+                                         'yes_i_really_mean_it': True})
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Error renaming volume {name} to {new_name}: {err}',
+                component='cephfs')
+        return f'Volume {name} renamed successfully to {new_name}'
 
     def get(self, fs_id):
         fs_id = self.fs_id_to_int(fs_id)
