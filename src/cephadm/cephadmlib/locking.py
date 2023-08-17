@@ -25,15 +25,14 @@ class Timeout(TimeoutError):
     """
 
     def __init__(self, lock_file: str) -> None:
-        """
-        """
         #: The path of the file lock.
         self.lock_file = lock_file
         return None
 
     def __str__(self) -> str:
-        temp = "The file lock '{}' could not be acquired."\
-               .format(self.lock_file)
+        temp = "The file lock '{}' could not be acquired.".format(
+            self.lock_file
+        )
         return temp
 
 
@@ -51,7 +50,9 @@ class _Acquire_ReturnProxy(object):
 
 
 class FileLock(object):
-    def __init__(self, ctx: CephadmContext, name: str, timeout: int = -1) -> None:
+    def __init__(
+        self, ctx: CephadmContext, name: str, timeout: int = -1
+    ) -> None:
         if not os.path.exists(LOCK_DIR):
             os.mkdir(LOCK_DIR, 0o700)
         self._lock_file = os.path.join(LOCK_DIR, name + '.lock')
@@ -73,7 +74,9 @@ class FileLock(object):
     def is_locked(self) -> bool:
         return self._lock_file_fd is not None
 
-    def acquire(self, timeout: Optional[int] = None, poll_intervall: float = 0.05) -> _Acquire_ReturnProxy:
+    def acquire(
+        self, timeout: Optional[int] = None, poll_intervall: float = 0.05
+    ) -> _Acquire_ReturnProxy:
         """
         Acquires the file lock or fails with a :exc:`Timeout` error.
         .. code-block:: python
@@ -115,23 +118,36 @@ class FileLock(object):
         try:
             while True:
                 if not self.is_locked:
-                    logger.log(QUIET_LOG_LEVEL, 'Acquiring lock %s on %s', lock_id,
-                               lock_filename)
+                    logger.log(
+                        QUIET_LOG_LEVEL,
+                        'Acquiring lock %s on %s',
+                        lock_id,
+                        lock_filename,
+                    )
                     self._acquire()
 
                 if self.is_locked:
-                    logger.log(QUIET_LOG_LEVEL, 'Lock %s acquired on %s', lock_id,
-                               lock_filename)
+                    logger.log(
+                        QUIET_LOG_LEVEL,
+                        'Lock %s acquired on %s',
+                        lock_id,
+                        lock_filename,
+                    )
                     break
                 elif timeout >= 0 and time.time() - start_time > timeout:
-                    logger.warning('Timeout acquiring lock %s on %s', lock_id,
-                                   lock_filename)
+                    logger.warning(
+                        'Timeout acquiring lock %s on %s',
+                        lock_id,
+                        lock_filename,
+                    )
                     raise Timeout(self._lock_file)
                 else:
                     logger.log(
                         QUIET_LOG_LEVEL,
                         'Lock %s not acquired on %s, waiting %s seconds ...',
-                        lock_id, lock_filename, poll_intervall
+                        lock_id,
+                        lock_filename,
+                        poll_intervall,
                     )
                     time.sleep(poll_intervall)
         except Exception:
