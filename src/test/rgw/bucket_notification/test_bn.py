@@ -3059,7 +3059,7 @@ def test_ps_s3_persistent_topic_stats():
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
-    delay = 20
+    delay = 30
     time.sleep(delay)
     http_server.close()
 
@@ -3070,7 +3070,7 @@ def test_ps_s3_persistent_topic_stats():
     assert_equal(result[1], 0)
 
     # create objects in the bucket (async)
-    number_of_objects = 10
+    number_of_objects = 100
     client_threads = []
     start_time = time.time()
     for i in range(number_of_objects):
