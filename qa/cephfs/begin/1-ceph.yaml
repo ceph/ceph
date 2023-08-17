@@ -3,3 +3,4 @@ log-rotate:
   ceph-osd: 10G
 tasks:
   - ceph:
+      create_rbd_pool: false
