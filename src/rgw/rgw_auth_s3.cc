@@ -589,6 +589,35 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
   return canonical_qs;
 }
 
+std::string get_v4_canonical_method(const req_state* s)
+{
+  /* If this is a OPTIONS request we need to compute the v4 signature for the
+   * intended HTTP method and not the OPTIONS request itself. */
+  if (s->op_type == RGW_OP_OPTIONS_CORS) {
+    const char *cors_method = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+
+    if (cors_method) {
+      /* Validate request method passed in access-control-request-method is valid. */
+      auto cors_flags = get_cors_method_flags(cors_method);
+      if (!cors_flags) {
+          ldpp_dout(s, 1) << "invalid access-control-request-method header = "
+                          << cors_method << dendl;
+          throw -EINVAL;
+      }
+
+      ldpp_dout(s, 10) << "canonical req method = " << cors_method
+                       << ", due to access-control-request-method header" << dendl;
+      return cors_method;
+    } else {
+      ldpp_dout(s, 1) << "invalid http options req missing "
+                      << "access-control-request-method header" << dendl;
+      throw -EINVAL;
+    }
+  }
+
+  return s->info.method;
+}
+
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
                          const std::string_view& signedheaders,

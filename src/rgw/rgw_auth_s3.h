@@ -583,6 +583,8 @@ static inline bool is_v4_payload_streamed(const char* const exp_payload_hash)
 
 std::string get_v4_canonical_qs(const req_info& info, bool using_qs);
 
+std::string get_v4_canonical_method(const req_state* s);
+
 boost::optional<std::string>
 get_v4_canonical_headers(const req_info& info,
                          const std::string_view& signedheaders,
