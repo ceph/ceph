@@ -1060,6 +1060,10 @@ struct interruptor
 public:
   using condition = InterruptCond;
 
+  static const void *get_interrupt_cond() {
+    return (const void*)interrupt_cond<InterruptCond>.interrupt_cond.get();
+  }
+
   template <typename FutureType>
   [[gnu::always_inline]]
   static interruptible_future_detail<InterruptCond, FutureType>

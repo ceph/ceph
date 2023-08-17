@@ -16,6 +16,8 @@ namespace {
   }
 }
 
+SET_SUBSYS(osd);
+
 namespace crimson::osd {
 
 RepRequest::RepRequest(crimson::net::ConnectionRef&& conn,
@@ -63,10 +65,12 @@ ClientRequest::PGPipeline &RepRequest::client_pp(PG &pg)
 seastar::future<> RepRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
-  logger().debug("{}: RepRequest::with_pg", *this);
+  LOG_PREFIX(RepRequest::with_pg);
+  DEBUGI("{}: RepRequest::with_pg", *this);
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    logger().debug("{}: pg present", *this);
+    LOG_PREFIX(RepRequest::with_pg);
+    DEBUGI("{}: pg present", *this);
     return this->template enter_stage<interruptor>(client_pp(*pg).await_map
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
