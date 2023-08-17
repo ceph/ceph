@@ -9,7 +9,7 @@ In distributed storage systems like Ceph, it is important to balance write and r
 and replication of data in a cluster, while read balancing ensures quick access and retrieval of data in a cluster. Both types of balancing are important
 in distributed systems for different reasons.
 
-Capacity (Upmap) Balancing
+Upmap Balancing
 ==========================
 
 Importance in a Cluster
