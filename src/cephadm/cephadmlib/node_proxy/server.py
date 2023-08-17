@@ -1,9 +1,9 @@
 import cherrypy
-from redfish_dell import RedfishDell
-from reporter import Reporter
-from util import Config, Logger
+from .redfish_dell import RedfishDell
+from .reporter import Reporter
+from .util import Config, Logger
 from typing import Dict
-from basesystem import BaseSystem
+from .basesystem import BaseSystem
 import sys
 import argparse
 
@@ -30,10 +30,10 @@ DEFAULT_CONFIG = {
     }
 }
 
-for env_var in DEVEL_ENV_VARS:
-    if os.environ.get(env_var) is None:
-        print(f"{env_var} environment variable must be set.")
-        sys.exit(1)
+#for env_var in DEVEL_ENV_VARS:
+#    if os.environ.get(env_var) is None:
+#        print(f"{env_var} environment variable must be set.")
+#        sys.exit(1)
 
 
 class Memory:
@@ -199,19 +199,19 @@ class API:
 
 def main() -> None:
 
-    parser = argparse.ArgumentParser(
-        prog='node-proxy',
-    )
-    parser.add_argument(
-        '--config',
-        dest='config',
-        type=str,
-        required=False,
-        default='/etc/ceph/node-proxy.yml'
-    )
+    # parser = argparse.ArgumentParser(
+    #     prog='node-proxy',
+    # )
+    # parser.add_argument(
+    #     '--config',
+    #     dest='config',
+    #     type=str,
+    #     required=False,
+    #     default='/etc/ceph/node-proxy.yml'
+    # )
 
-    args = parser.parse_args()
-    config = Config(args.config, default_config=DEFAULT_CONFIG)
+    # args = parser.parse_args()
+    config = Config('/etc/ceph/node-proxy.yml', default_config=DEFAULT_CONFIG)
 
     log = Logger(__name__, level=config.__dict__['logging']['level'])
     # must be passed as arguments

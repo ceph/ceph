@@ -1,8 +1,0 @@
-pyyaml
-types-PyYAML
-types-requests
-mypy
-flake8
-redfish
-CherryPy
-requests

@@ -1,5 +1,5 @@
-from redfish_system import RedfishSystem
-from util import Logger, normalize_dict, to_snake_case
+from .redfish_system import RedfishSystem
+from .util import Logger, normalize_dict, to_snake_case
 from typing import Dict, Any
 
 log = Logger(__name__)

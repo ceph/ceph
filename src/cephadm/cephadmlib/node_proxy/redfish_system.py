@@ -1,8 +1,8 @@
-from basesystem import BaseSystem
-from redfish_client import RedFishClient
+from .basesystem import BaseSystem
+from .redfish_client import RedFishClient
 from threading import Thread, Lock
 from time import sleep
-from util import Logger, retry, normalize_dict, to_snake_case
+from .util import Logger, retry, normalize_dict, to_snake_case
 from typing import Dict, Any, List
 
 log = Logger(__name__)
