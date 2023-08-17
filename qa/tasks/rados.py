@@ -272,6 +272,13 @@ def task(ctx, config):
                     )
                 tests[id_] = proc
             run.wait(tests.values())
+            wait_for_all_active_clean_pgs = config.get("wait_for_all_active_clean_pgs", False)
+            # usually set when we do min_size testing.
+            if  wait_for_all_active_clean_pgs:
+                # Make sure we finish the test first before deleting the pool.
+                # Mainly used for test_pool_min_size
+                manager.wait_for_clean()
+                manager.wait_for_all_osds_up(timeout=1800)
 
             for pool in created_pools:
                 manager.wait_snap_trimming_complete(pool);
