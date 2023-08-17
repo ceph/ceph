@@ -8,6 +8,10 @@
   For multi-site deployments that make any use of Server-Side Encryption, we
   recommended running this command against every bucket in every zone after all
   zones have upgraded.
+* CEPHFS: MDS evicts clients which are not advancing their request tids which causes
+  a large buildup of session metadata resulting in the MDS going read-only due to
+  the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`
+  config controls the maximum size that a (encoded) session metadata can grow.
 
 >=18.0.0
 
