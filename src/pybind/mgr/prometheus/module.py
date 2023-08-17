@@ -1641,7 +1641,6 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     def get_all_daemon_health_metrics(self) -> None:
         daemon_metrics = self.get_daemon_health_metrics()
-        self.log.debug('metrics jeje %s' % (daemon_metrics))
         for daemon_name, health_metrics in daemon_metrics.items():
             for health_metric in health_metrics:
                 path = 'daemon_health_metrics'
