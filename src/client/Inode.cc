@@ -136,7 +136,11 @@ void Inode::make_nosnap_relative_path(filepath& p)
     Dentry *dn = get_first_parent();
     ceph_assert(dn->dir && dn->dir->parent_inode);
     dn->dir->parent_inode->make_nosnap_relative_path(p);
-    p.push_dentry(dn->name);
+    if (dn->enc_name) {
+      p.push_dentry(*dn->enc_name);
+    } else {
+      p.push_dentry(dn->name);
+    }
   } else {
     p = filepath(ino);
   }
