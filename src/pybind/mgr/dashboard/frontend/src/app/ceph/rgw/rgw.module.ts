@@ -8,6 +8,7 @@ import { NgxPipeFunctionModule } from 'ngx-pipe-function';
 
 import { ActionLabels, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CRUDTableComponent } from '~/app/shared/datatable/crud-table/crud-table.component';
+
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { RgwBucketDetailsComponent } from './rgw-bucket-details/rgw-bucket-details.component';
@@ -25,6 +26,21 @@ import { RgwUserSubuserModalComponent } from './rgw-user-subuser-modal/rgw-user-
 import { RgwUserSwiftKeyModalComponent } from './rgw-user-swift-key-modal/rgw-user-swift-key-modal.component';
 import { RgwUserTabsComponent } from './rgw-user-tabs/rgw-user-tabs.component';
 import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.component';
+import { RgwMultisiteDetailsComponent } from './rgw-multisite-details/rgw-multisite-details.component';
+import { TreeModule } from '@circlon/angular-tree-component';
+import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
+import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
+import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
+import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
+import { RgwMultisiteZoneDeletionFormComponent } from './models/rgw-multisite-zone-deletion-form/rgw-multisite-zone-deletion-form.component';
+import { RgwMultisiteZonegroupDeletionFormComponent } from './models/rgw-multisite-zonegroup-deletion-form/rgw-multisite-zonegroup-deletion-form.component';
+import { RgwSystemUserComponent } from './rgw-system-user/rgw-system-user.component';
+import { RgwMultisiteMigrateComponent } from './rgw-multisite-migrate/rgw-multisite-migrate.component';
+import { RgwMultisiteImportComponent } from './rgw-multisite-import/rgw-multisite-import.component';
+import { RgwMultisiteExportComponent } from './rgw-multisite-export/rgw-multisite-export.component';
+import { CreateRgwServiceEntitiesComponent } from './create-rgw-service-entities/create-rgw-service-entities.component';
 
 @NgModule({
   imports: [
@@ -36,7 +52,9 @@ import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.compon
     NgbNavModule,
     RouterModule,
     NgbTooltipModule,
-    NgxPipeFunctionModule
+    NgxPipeFunctionModule,
+    TreeModule,
+    DataTableModule
   ],
   exports: [
     RgwDaemonListComponent,
@@ -62,7 +80,18 @@ import { CrudFormComponent } from '~/app/shared/forms/crud-form/crud-form.compon
     RgwUserCapabilityModalComponent,
     RgwUserSubuserModalComponent,
     RgwConfigModalComponent,
-    RgwUserTabsComponent
+    RgwUserTabsComponent,
+    RgwMultisiteDetailsComponent,
+    RgwMultisiteRealmFormComponent,
+    RgwMultisiteZonegroupFormComponent,
+    RgwMultisiteZoneFormComponent,
+    RgwMultisiteZoneDeletionFormComponent,
+    RgwMultisiteZonegroupDeletionFormComponent,
+    RgwSystemUserComponent,
+    RgwMultisiteMigrateComponent,
+    RgwMultisiteImportComponent,
+    RgwMultisiteExportComponent,
+    CreateRgwServiceEntitiesComponent
   ]
 })
 export class RgwModule {}
@@ -135,6 +164,26 @@ const routes: Routes = [
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
+  },
+  {
+    path: 'multisite',
+    canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'rgw/multisite',
+        redirectTo: 'error',
+        header: 'Multi-site not configured',
+        button_name: 'Add Multi-site Configuration',
+        button_route: '/rgw/multisite/create',
+        button_title: 'Add multi-site configuration (realms/zonegroups/zones)',
+        secondary_button_name: 'Import Multi-site Configuration',
+        secondary_button_route: 'rgw/multisite/import',
+        secondary_button_title:
+          'Import multi-site configuration (import realm token from a secondary cluster)'
+      },
+      breadcrumbs: 'Multisite'
+    },
+    children: [{ path: '', component: RgwMultisiteDetailsComponent }]
   }
 ];
 

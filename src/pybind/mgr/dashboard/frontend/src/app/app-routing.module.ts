@@ -337,7 +337,7 @@ const routes: Routes = [
       // Object Gateway
       {
         path: 'rgw',
-        canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
+        canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             uiApiPath: 'rgw',
