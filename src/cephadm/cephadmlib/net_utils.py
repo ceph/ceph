@@ -76,10 +76,13 @@ def port_in_use(ctx: CephadmContext, endpoint: EndPoint) -> bool:
         else:
             return _port_in_use(socket.AF_INET, endpoint.ip)
 
-    return any(_port_in_use(af, address) for af, address in (
-        (socket.AF_INET, '0.0.0.0'),
-        (socket.AF_INET6, '::')
-    ))
+    return any(
+        _port_in_use(af, address)
+        for af, address in (
+            (socket.AF_INET, '0.0.0.0'),
+            (socket.AF_INET6, '::'),
+        )
+    )
 
 
 def check_ip_port(ctx, ep):
@@ -126,7 +129,7 @@ def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
 def unwrap_ipv6(address):
     # type: (str) -> str
     if address.startswith('[') and address.endswith(']'):
-        return address[1: -1]
+        return address[1:-1]
     return address
 
 
@@ -151,7 +154,9 @@ def is_ipv6(address):
     try:
         return ipaddress.ip_address(address).version == 6
     except ValueError:
-        logger.warning('Address: {} is not a valid IP address'.format(address))
+        logger.warning(
+            'Address: {} is not a valid IP address'.format(address)
+        )
         return False
 
 
@@ -173,8 +178,9 @@ def get_ipv4_address(ifname):
             fcntl.ioctl(
                 sock.fileno(),
                 offset,
-                struct.pack('256s', bytes(ifname[:15], 'utf-8'))
-            )[20:24])
+                struct.pack('256s', bytes(ifname[:15], 'utf-8')),
+            )[20:24],
+        )
 
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -184,8 +190,7 @@ def get_ipv4_address(ifname):
         # interface does not have an ipv4 address
         return ''
 
-    dec_mask = sum([bin(int(i)).count('1')
-                    for i in dq_mask.split('.')])
+    dec_mask = sum([bin(int(i)).count('1') for i in dq_mask.split('.')])
     return '{}/{}'.format(addr, dec_mask)
 
 
@@ -202,7 +207,9 @@ def get_ipv6_address(ifname):
         field = iface_setting.split()
         if field[-1] == ifname:
             ipv6_raw = field[0]
-            ipv6_fmtd = ':'.join([ipv6_raw[_p:_p + 4] for _p in range(0, len(field[0]), 4)])
+            ipv6_fmtd = ':'.join(
+                [ipv6_raw[_p: _p + 4] for _p in range(0, len(field[0]), 4)]
+            )
             # apply naming rules using ipaddress module
             ipv6 = ipaddress.ip_address(ipv6_fmtd)
             return '{}/{}'.format(str(ipv6), int('0x{}'.format(field[2]), 16))
@@ -225,9 +232,9 @@ def get_fqdn():
 
 
 def get_ip_addresses(hostname: str) -> Tuple[List[str], List[str]]:
-    items = socket.getaddrinfo(hostname, None,
-                               flags=socket.AI_CANONNAME,
-                               type=socket.SOCK_STREAM)
+    items = socket.getaddrinfo(
+        hostname, None, flags=socket.AI_CANONNAME, type=socket.SOCK_STREAM
+    )
     ipv4_addresses = [i[4][0] for i in items if i[0] == socket.AF_INET]
     ipv6_addresses = [i[4][0] for i in items if i[0] == socket.AF_INET6]
     return ipv4_addresses, ipv6_addresses
