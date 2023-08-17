@@ -145,7 +145,7 @@ def with_cephadm_ctx(
         hostname = 'host1'
 
     _cephadm = import_cephadm()
-    with mock.patch('cephadm.attempt_bind'), \
+    with mock.patch('cephadmlib.net_utils.attempt_bind'), \
          mock.patch('cephadmlib.call_wrappers.call', return_value=('', '', 0)), \
          mock.patch('cephadmlib.call_wrappers.call_timeout', return_value=0), \
          mock.patch('cephadm.call', return_value=('', '', 0)), \
