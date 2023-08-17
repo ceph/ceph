@@ -2025,7 +2025,7 @@ class TestValidateRepo:
             with pytest.raises(_cephadm.Error, match=err_text):
                 pkg.validate()
         else:
-            with mock.patch('cephadm.urlopen', return_value=None):
+            with mock.patch('cephadmlib.packagers.urlopen', return_value=None):
                 pkg.validate()
 
     @pytest.mark.parametrize('values',
@@ -2089,7 +2089,7 @@ class TestValidateRepo:
         ctx.repo_url = 'http://localhost'
         pkg = _cephadm.create_packager(ctx, stable=release, version=version)
 
-        with mock.patch('cephadm.urlopen') as _urlopen:
+        with mock.patch('cephadmlib.packagers.urlopen') as _urlopen:
             _urlopen.side_effect = HTTPError(ctx.repo_url, 404, "not found", None, fp=None)
             if err_text:
                 with pytest.raises(_cephadm.Error, match=err_text):
