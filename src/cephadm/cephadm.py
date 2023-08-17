@@ -107,7 +107,12 @@ from cephadmlib.container_engines import (
     check_container_engine,
     find_container_engine,
 )
-from cephadmlib.data_utils import dict_get, dict_get_join
+from cephadmlib.data_utils import (
+    bytes_to_human,
+    dict_get,
+    dict_get_join,
+    with_units_to_int,
+)
 from cephadmlib.file_utils import (
     makedirs,
     populate_files,
@@ -6667,27 +6672,6 @@ def command_ls(ctx):
     print(json.dumps(ls, indent=4))
 
 
-def with_units_to_int(v: str) -> int:
-    if v.endswith('iB'):
-        v = v[:-2]
-    elif v.endswith('B'):
-        v = v[:-1]
-    mult = 1
-    if v[-1].upper() == 'K':
-        mult = 1024
-        v = v[:-1]
-    elif v[-1].upper() == 'M':
-        mult = 1024 * 1024
-        v = v[:-1]
-    elif v[-1].upper() == 'G':
-        mult = 1024 * 1024 * 1024
-        v = v[:-1]
-    elif v[-1].upper() == 'T':
-        mult = 1024 * 1024 * 1024 * 1024
-        v = v[:-1]
-    return int(float(v) * mult)
-
-
 def list_daemons(ctx, detail=True, legacy_dir=None):
     # type: (CephadmContext, bool, Optional[str]) -> List[Dict[str, str]]
     host_version: Optional[str] = None
@@ -8466,32 +8450,6 @@ def command_rescan_disks(ctx: CephadmContext) -> str:
             return f'Partial. {len(scan_files) - len(failures)} successful, {len(failures)} failure{plural} against: {", ".join(failures)}'
 
     return f'Ok. {len(all_scan_files)} adapters detected: {len(scan_files)} rescanned, {len(skipped)} skipped, {len(failures)} failed ({elapsed:.2f}s)'
-
-##################################
-
-
-def bytes_to_human(num, mode='decimal'):
-    # type: (float, str) -> str
-    """Convert a bytes value into it's human-readable form.
-
-    :param num: number, in bytes, to convert
-    :param mode: Either decimal (default) or binary to determine divisor
-    :returns: string representing the bytes value in a more readable format
-    """
-    unit_list = ['', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB']
-    divisor = 1000.0
-    yotta = 'YB'
-
-    if mode == 'binary':
-        unit_list = ['', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB']
-        divisor = 1024.0
-        yotta = 'YiB'
-
-    for unit in unit_list:
-        if abs(num) < divisor:
-            return '%3.1f%s' % (num, unit)
-        num /= divisor
-    return '%.1f%s' % (num, yotta)
 
 ##################################
 
