@@ -189,7 +189,7 @@ class RbdMirroringTest(DashboardTestCase):
         self._task_post('/api/block/mirroring/pool/rbd/bootstrap/peer', import_data)
         self.assertStatus(400)
 
-        # cannot import "youself" as peer
+        # cannot import "yourself" as peer
         import_data['direction'] = 'rx'
         self._task_post('/api/block/mirroring/pool/rbd/bootstrap/peer', import_data)
         self.assertStatus(400)

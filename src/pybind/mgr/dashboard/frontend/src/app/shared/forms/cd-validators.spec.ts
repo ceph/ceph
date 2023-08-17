@@ -608,7 +608,7 @@ describe('CdValidators', () => {
     });
   });
 
-  describe('dimmlessBinary validators', () => {
+  describe('dimlessBinary validators', () => {
     const i18nMock = (a: string, b: { value: string }) => a.replace('{{value}}', b.value);
 
     beforeEach(() => {

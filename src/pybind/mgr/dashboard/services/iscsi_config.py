@@ -67,7 +67,7 @@ class IscsiGatewaysConfig(object):
                         del config['gateways'][gateway_name]
                         cls._save_config(config)
                 except RequestException:
-                    # If gateway is not acessible, it should be removed manually
+                    # If gateway is not accessible, it should be removed manually
                     # or we will try to update automatically next time
                     continue
 

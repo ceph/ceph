@@ -528,7 +528,7 @@ describe('PoolFormComponent', () => {
       expect(component.getMaxSize()).toBe(3);
     });
 
-    it('should return the osd count as minimum if its lower the the rule minimum', () => {
+    it('should return the osd count as minimum if its lower the rule minimum', () => {
       component.info.osd_count = 0;
       formHelper.setValue('crushRule', component.info.crush_rules_replicated[0]);
       const control = form.get('crushRule');

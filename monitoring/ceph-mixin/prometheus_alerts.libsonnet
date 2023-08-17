@@ -442,7 +442,7 @@
           },
         },
         {
-          alert: 'CephPGUnavilableBlockingIO',
+          alert: 'CephPGUnavailableBlockingIO',
           'for': '1m',
           expr: '((ceph_health_detail{name="PG_AVAILABILITY"} == 1) - scalar(ceph_health_detail{name="OSD_DOWN"})) == 1',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.7.3' },
@@ -672,7 +672,7 @@
           expr: 'ceph_health_detail{name="CEPHADM_FAILED_DAEMON"} > 0',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.11.1' },
           annotations: {
-            summary: 'A ceph daemon manged by cephadm is down%(cluster)s' % $.MultiClusterSummary(),
+            summary: 'A ceph daemon managed by cephadm is down%(cluster)s' % $.MultiClusterSummary(),
             description: "A daemon managed by cephadm is no longer active. Determine, which daemon is down with 'ceph health detail'. you may start daemons with the 'ceph orch daemon start <daemon_id>'",
           },
         },
