@@ -364,7 +364,7 @@ class CephFS(RESTController):
                                      "No cephfs with id {0}".format(fs_id))
 
         # Decorate the metadata with some fields that will be
-        # indepdendent of whether it's a kernel or userspace
+        # independent of whether it's a kernel or userspace
         # client, so that the javascript doesn't have to grok that.
         for client in clients:
             if "ceph_version" in client['client_metadata']:  # pragma: no cover - no complexity

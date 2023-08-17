@@ -226,7 +226,7 @@ def get_inventories(hosts: Optional[List[str]] = None,
     :param hosts: Hostnames to query.
     :param refresh: Ask the Orchestrator to refresh the inventories. Note the this is an
                     asynchronous operation, the updated version of inventories need to
-                    be re-qeuried later.
+                    be re-queried later.
     :return: Returns list of inventory.
     :rtype: list
     """

@@ -77,7 +77,7 @@ def get_grafana_dashboards(base_dir):
                 dashboard_config = json.load(f)
                 uid = dashboard_config.get('uid')
                 # if it's not a grafana dashboard, skip checks
-                # Fields in a dasbhoard:
+                # Fields in a dashboard:
                 # https://grafana.com/docs/grafana/latest/dashboards/json-model/#json-fields
                 expected_fields = [
                     'id', 'uid', 'title', 'tags', 'style', 'timezone', 'editable',
