@@ -449,21 +449,80 @@ bool FSCryptKeyValidator::is_valid() const {
   return (handler->get_epoch() == epoch);
 }
 
-FSCryptDenc::FSCryptDenc(EVP_CIPHER *cipher, std::vector<OSSL_PARAM> params) : cipher(cipher),
-                                                                               cipher_ctx(EVP_CIPHER_CTX_new()),
-                                                                               cipher_params(std::move(params)) {}
+FSCryptDenc::FSCryptDenc() : cipher_ctx(EVP_CIPHER_CTX_new()) {}
 
-FSCryptFNameDenc::FSCryptFNameDenc(): FSCryptDenc(EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL),
-  { OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
-                                                 OSSL_PARAM_construct_end()} ) {}
+void FSCryptDenc::init_cipher(EVP_CIPHER *_cipher, std::vector<OSSL_PARAM> params)
+{
+  cipher = _cipher;
+  cipher_params = std::move(params);
+}
 
-FSCryptFDataDenc::FSCryptFDataDenc(): FSCryptDenc(EVP_CIPHER_fetch(NULL, "AES-256-XTS", NULL), {} ) {}
+struct fscrypt_cipher_opt {
+  const char *str;
+  bool cts_mode{false};
+  bool essiv{false};
+  int key_size;
+  int iv_size;
+};
 
-void FSCryptDenc::setup(FSCryptContextRef& _ctx,
+static std::map<int, fscrypt_cipher_opt> cipher_opt_map = {
+  {
+    FSCRYPT_MODE_AES_256_XTS, {
+      .str = "AES-256-XTS",
+      .key_size = 64,
+      .iv_size = 16,
+    }
+  },
+  {
+    FSCRYPT_MODE_AES_256_CTS, {
+      .str = "AES-256-CBC-CTS",
+      .cts_mode = true,
+      .key_size = 32,
+      .iv_size = 16,
+    }
+  },
+};
+
+bool FSCryptDenc::do_setup_cipher(int enc_mode)
+{
+  auto iter = cipher_opt_map.find(enc_mode);
+  if (iter == cipher_opt_map.end()) {
+    return false;
+  }
+
+  auto& opts = iter->second;
+  if (opts.cts_mode) {
+    init_cipher(EVP_CIPHER_fetch(NULL, opts.str, NULL),
+                { OSSL_PARAM_construct_utf8_string(OSSL_CIPHER_PARAM_CTS_MODE, (char *)"CS3", 0),
+                OSSL_PARAM_construct_end()} );
+  } else {
+    init_cipher(EVP_CIPHER_fetch(NULL, opts.str, NULL), {} );
+  }
+
+  padding = 4 << (ctx->flags & FSCRYPT_POLICY_FLAGS_PAD_MASK);
+  key_size = opts.key_size;
+  iv_size = opts.iv_size;
+
+  return true;
+}
+
+bool FSCryptFNameDenc::setup_cipher()
+{
+  return do_setup_cipher(ctx->filenames_encryption_mode);
+}
+
+bool FSCryptFDataDenc::setup_cipher()
+{
+  return do_setup_cipher(ctx->contents_encryption_mode);
+}
+
+bool FSCryptDenc::setup(FSCryptContextRef& _ctx,
                         FSCryptKeyRef& _master_key)
 {
   ctx = _ctx;
   master_key = _master_key;
+
+  return setup_cipher();
 }
 
 int FSCryptDenc::calc_key(char ctx_identifier,
@@ -482,31 +541,49 @@ int FSCryptDenc::calc_key(char ctx_identifier,
   return 0;
 }
 
+static void sha256(const char *buf, int len, char *hash)
+{   
+  ceph::crypto::ssl::SHA256 hasher;
+  hasher.Update((const unsigned char *)buf, len);
+  hasher.Final((unsigned char *)hash);
+}   
+
 int FSCryptDenc::decrypt(const char *in_data, int in_len,
                          char *out_data, int out_len)
 {
-    int total_len;
+  int total_len;
 
-    int key_size = key.size();
+  if ((int)key.size() != key_size) {
+    generic_dout(0) << "ERROR: unexpected encryption key size: " << key.size() << " (expected: " << key_size << ")" << dendl;
+    return -EINVAL;
+  }
 
-    if (out_len < (fscrypt_align_ofs(in_len))) {
-      return -ERANGE;
-    }
+  if (out_len < (fscrypt_align_ofs(in_len))) {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    return -ERANGE;
+  }
 
-    if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key.data(), iv.raw,
-			    0, cipher_params.data())) {
-      return -EINVAL;
-    }
+  if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key.data(), iv.raw,
+                          0, cipher_params.data())) {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    return -EINVAL;
+  }
 
-    int len;
+  int len;
 
-    if (EVP_DecryptUpdate(cipher_ctx, (uint8_t *)out_data, &len, (const uint8_t *)in_data, in_len) != 1) {
-      return -EINVAL;
-    }
+  if (EVP_DecryptUpdate(cipher_ctx, (uint8_t *)out_data, &len, (const uint8_t *)in_data, in_len) != 1) {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    return -EINVAL;
+  }
 
-    total_len = len;
+  total_len = len;
 
-    if (EVP_DecryptFinal_ex(cipher_ctx, (uint8_t *)out_data + len, &len) != 1) {
+    int ret = EVP_DecryptFinal_ex(cipher_ctx, (uint8_t *)out_data + len, &len);
+    if (ret != 1) {
+      int e = ERR_get_error();
+      char buf[512];
+
+generic_dout(0) << __FILE__ << ":" << __LINE__ << " ret=" << ret << " in_len=" << in_len << " total_len=" << total_len << " err=" << ERR_error_string(e, buf) << dendl;
       return -EINVAL;
     }
 
@@ -520,7 +597,10 @@ int FSCryptDenc::encrypt(const char *in_data, int in_len,
 {
     int total_len;
 
-    int key_size = key.size();
+    if ((int)key.size() != key_size) {
+      generic_dout(0) << "ERROR: unexpected encryption key size: " << key.size() << " (expected: " << key_size << ")" << dendl;
+      return -EINVAL;
+    }
 
     if (out_len < (fscrypt_align_ofs(in_len))) {
       return -ERANGE;
@@ -553,17 +633,10 @@ FSCryptDenc::~FSCryptDenc()
   EVP_CIPHER_CTX_free(cipher_ctx);
 }
 
-static void sha256(const char *buf, int len, char *hash)
-{   
-  ceph::crypto::ssl::SHA256 hasher;
-  hasher.Update((const unsigned char *)buf, len);
-  hasher.Final((unsigned char *)hash);
-}   
-
 int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string *encrypted, std::string *alt_name)
 {
   auto plain_size = plain.size();
-  int dec_size = (plain.size() + 31) & ~31; // FIXME, need to be based on policy
+  int dec_size = (plain.size() + padding - 1) & ~(padding - 1); // FIXME, need to be based on policy
   if (dec_size > NAME_MAX) {
     dec_size = NAME_MAX;
   }
@@ -886,7 +959,10 @@ FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *
 
   auto fscrypt_denc = gen_denc();
 
-  fscrypt_denc->setup(ctx, master_key);
+  if (!fscrypt_denc->setup(ctx, master_key)) {
+    generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: failed to setup denc" << dendl;
+    return nullptr;
+  }
 
   return fscrypt_denc;
 }
