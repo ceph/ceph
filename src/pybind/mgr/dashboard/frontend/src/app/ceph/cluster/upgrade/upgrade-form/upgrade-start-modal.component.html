@@ -14,7 +14,8 @@
                         spacingClass="mb-3"
                         *ngIf="showImageField"
                         i18n>Make sure to put the correct image. Passing an incorrect image can lead the cluster into an undesired state.</cd-alert-panel>
-        <div class="form-group row">
+        <div *ngIf="versions"
+             class="form-group row">
           <label class="cd-col-form-label"
                  [ngClass]="{'required': !showImageField}"
                  for="availableVersions"
@@ -42,7 +43,8 @@
           </div>
         </div>
 
-        <div class="form-group row">
+        <div *ngIf="versions"
+             class="form-group row">
           <div class="cd-col-form-offset">
             <div class="custom-control custom-checkbox">
               <input type="checkbox"
@@ -60,7 +62,7 @@
 
         <!-- Custom image name input-->
         <div class="form-group row"
-             *ngIf="showImageField">
+             *ngIf="showImageField || !versions">
           <label class="cd-col-form-label required"
                  for="customImageName"
                  i18n>Image</label>

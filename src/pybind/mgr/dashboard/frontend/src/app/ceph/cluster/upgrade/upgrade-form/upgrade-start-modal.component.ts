@@ -44,6 +44,13 @@ export class UpgradeStartModalComponent implements OnInit {
       useImage: new FormControl(false),
       customImageName: new FormControl(null)
     });
+    if (this.versions === undefined) {
+      const availableVersionsControl = this.upgradeForm.get('availableVersions');
+      availableVersionsControl.clearValidators();
+      const customImageNameControl = this.upgradeForm.get('customImageName');
+      customImageNameControl.setValidators(Validators.required);
+      customImageNameControl.updateValueAndValidity();
+    }
   }
 
   startUpgrade() {

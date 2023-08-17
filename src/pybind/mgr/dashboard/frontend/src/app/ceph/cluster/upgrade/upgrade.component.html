@@ -157,6 +157,9 @@
        class="text-success"></i>
     Cluster is up-to-date
   </span>
+  <a class="link-primary mb-2"
+     (click)="startUpgradeModal()"
+     i18n>Upgrade using custom image...</a>
 </ng-template>
 
 <ng-template #warningIcon>
@@ -197,6 +200,9 @@
       <i [ngClass]="[icons.danger]"></i>
       {{ errorMessage }}
     </span>
+    <a class="link-primary mb-2"
+       (click)="startUpgradeModal()"
+       i18n>Upgrade using custom image...</a>
   </div>
 </ng-template>
 
