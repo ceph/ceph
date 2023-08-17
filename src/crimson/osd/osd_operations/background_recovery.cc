@@ -34,6 +34,8 @@ namespace crimson {
   };
 }
 
+SET_SUBSYS(osd);
+
 namespace crimson::osd {
 
 template <class T>
@@ -70,9 +72,11 @@ void BackgroundRecoveryT<T>::dump_detail(Formatter *f) const
 template <class T>
 seastar::future<> BackgroundRecoveryT<T>::start()
 {
-  logger().debug("{}: start", *this);
-
   typename T::IRef ref = static_cast<T*>(this);
+  using interruptor = typename T::interruptor;
+
+  LOG_PREFIX(BackgroundRecoveryT<T>::start);
+  DEBUGDPPI("{}: start", *pg, *this);
   auto maybe_delay = seastar::now();
   if (delay) {
     maybe_delay = seastar::sleep(
@@ -84,14 +88,15 @@ seastar::future<> BackgroundRecoveryT<T>::start()
       return ss.with_throttle_while(
         std::move(trigger),
         this, get_scheduler_params(), [this] {
-          return T::interruptor::with_interruption([this] {
+          return interruptor::with_interruption([this] {
             return do_recovery();
           }, [](std::exception_ptr) {
             return seastar::make_ready_future<bool>(false);
           }, pg);
         }).handle_exception_type([ref, this](const std::system_error& err) {
+	  LOG_PREFIX(BackgroundRecoveryT<T>::start);
           if (err.code() == std::make_error_code(std::errc::interrupted)) {
-            logger().debug("{} recovery interruped: {}", *pg, err.what());
+            DEBUGDPPI("recovery interruped: {}", *pg, err.what());
             return seastar::now();
           }
           return seastar::make_exception_future<>(err);
@@ -115,7 +120,8 @@ UrgentRecovery::UrgentRecovery(
 UrgentRecovery::interruptible_future<bool>
 UrgentRecovery::do_recovery()
 {
-  logger().debug("{}: {}", __func__, *this);
+  LOG_PREFIX(UrgentRecovery::do_recovery);
+  DEBUGDPPI("{}: {}", *pg, __func__, *this);
   if (!pg->has_reset_since(epoch_started)) {
     return with_blocking_event<RecoveryBackend::RecoveryBlockingEvent,
 			       interruptor>([this] (auto&& trigger) {
@@ -180,11 +186,12 @@ PGPeeringPipeline &BackfillRecovery::peering_pp(PG &pg)
 BackfillRecovery::interruptible_future<bool>
 BackfillRecovery::do_recovery()
 {
-  logger().debug("{}", __func__);
+  LOG_PREFIX(BackfillRecovery::do_recovery);
+  DEBUGDPPI("{}", *pg, __func__);
 
   if (pg->has_reset_since(epoch_started)) {
-    logger().debug("{}: pg got reset since epoch_started={}",
-                   __func__, epoch_started);
+    DEBUGDPPI("{}: pg got reset since epoch_started={}",
+		*pg, __func__, epoch_started);
     return seastar::make_ready_future<bool>(false);
   }
   // TODO: limits
