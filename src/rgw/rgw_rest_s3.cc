@@ -5767,37 +5767,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   /* Craft canonical query string. std::moving later so non-const here. */
   auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
 
-  const char *req_meth = s->info.method;
-
-  /* If this is a OPTIONS request we need to compute the v4 signature for the
-   * intended HTTP method and not the OPTIONS request itself. */
-  if (s->op_type == RGW_OP_OPTIONS_CORS) {
-    /* Validate signature for CORS header if set otherwise use HTTP request method. */
-    const char *cors_method = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
-
-    if (cors_method) {
-      /* Validate request method passed in access-control-request-method is valid. */
-      auto cors_flags = get_cors_method_flags(cors_method);
-      if (!cors_flags) {
-          ldpp_dout(s, 1) << "invalid access-control-request-method header = "
-                          << cors_method << dendl;
-          throw -EINVAL;
-      }
-
-      req_meth = cors_method;
-      ldpp_dout(s, 10) << "setting canonical req method = " << cors_method
-                       << ", due to access-control-request-method header" << dendl;
-    } else {
-      ldpp_dout(s, 1) << "invalid http options req missing "
-                      << "access-control-request-method header" << dendl;
-      throw -EINVAL;
-    }
-  }
+  /* Craft canonical method. */
+  auto canonical_method = rgw::auth::s3::get_v4_canonical_method(s);
 
   /* Craft canonical request. */
   auto canonical_req_hash = \
     rgw::auth::s3::get_v4_canon_req_hash(s->cct,
-                                         req_meth,
+                                         std::move(canonical_method),
                                          std::move(canonical_uri),
                                          std::move(canonical_qs),
                                          std::move(*canonical_headers),
