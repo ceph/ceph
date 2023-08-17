@@ -219,7 +219,9 @@ public:
 /// CoTestBody has access to `rados`, a `neorados::RADOS` handle, and
 /// `pool`, a `neorados::IOContext` representing a pool that will be
 /// destroyed when the test exits.
-class NeoRadosTest : public CoroTest {
+///
+/// Derived classes must define `create_pool()` and `clean_pool()`.
+class NeoRadosTestBase : public CoroTest {
 private:
   const std::string prefix_{std::string{"test framework "} +
 			    testing::UnitTest::GetInstance()->
@@ -227,10 +229,13 @@ private:
 			    std::string{": "}};
 
   std::optional<neorados::RADOS> rados_;
+  neorados::IOContext pool_;
   const std::string pool_name_ = get_temp_pool_name(
     testing::UnitTest::GetInstance()->current_test_info()->name());
-  neorados::IOContext pool_;
   std::unique_ptr<DoutPrefix> dpp_;
+
+  virtual boost::asio::awaitable<uint64_t> create_pool() = 0;
+  virtual boost::asio::awaitable<void> clean_pool() = 0;
 
 protected:
 
@@ -290,19 +295,43 @@ public:
     rados_ = co_await neorados::RADOS::Builder{}
       .build(asio_context, boost::asio::use_awaitable);
     dpp_ = std::make_unique<DoutPrefix>(rados().cct(), 0, prefix().data());
-    pool_.set_pool(co_await create_pool(rados(), pool_name(),
-				    boost::asio::use_awaitable));
+    pool_.set_pool(co_await create_pool());
     co_return;
   }
 
-  ~NeoRadosTest() override = default;
+  ~NeoRadosTestBase() override = default;
 
   /// \brief Delete pool used for testing
   boost::asio::awaitable<void> CoTearDown() override {
-    co_await rados().delete_pool(pool().get_pool(),
-				 boost::asio::use_awaitable);
+    co_await clean_pool();
     co_return;
   }
+};
+
+/// \brief C++20 coroutine test harness for NeoRados on normal pools
+///
+/// The supplied pool is not erasure coded.
+class NeoRadosTest : public NeoRadosTestBase {
+private:
+  boost::asio::awaitable<uint64_t> create_pool() override {
+    co_return co_await ::create_pool(rados(), pool_name(),
+				     boost::asio::use_awaitable);
+  }
+
+  boost::asio::awaitable<void> clean_pool() override {
+    co_await rados().delete_pool(pool().get_pool(),
+				boost::asio::use_awaitable);
+  }
+};
+
+/// \brief C++20 coroutine test harness for NeoRados on erasure-coded
+/// pools
+///
+/// The supplied pool is erasure coded
+class NeoRadosECTest : public NeoRadosTestBase {
+private:
+  boost::asio::awaitable<uint64_t> create_pool() override;
+  boost::asio::awaitable<void> clean_pool() override;
 };
 
 /// \brief Helper macro for defining coroutine tests with a fixture
