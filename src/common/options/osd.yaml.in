@@ -286,8 +286,8 @@ options:
 - name: osd_scrub_min_interval
   type: float
   level: advanced
-  desc: Scrub each PG no more often than this interval
-  fmt_desc: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
+  desc: The desired interval between scrubs of a specific PG.
+  fmt_desc: The desired interval in seconds between scrubs of a specific PG
     when the Ceph Storage Cluster load is low.
   default: 1_day
   see_also:
@@ -326,8 +326,8 @@ options:
   type: float
   level: dev
   desc: Backoff ratio for scheduling scrubs
-  long_desc: This is the precentage of ticks that do NOT schedule scrubs, 66% means
-    that 1 out of 3 ticks will schedule scrubs
+  long_desc: Probability that a particular OSD tick instance will skip scrub scheduling.
+    66% means that approximately one of three ticks will cause scrub scheduling.
   default: 0.66
   with_legacy: true
 - name: osd_scrub_chunk_min
@@ -507,27 +507,24 @@ options:
     stats (inc. scrub/block duration) every this many seconds.
   default: 120
   with_legacy: false
-# when replicas are slow to respond to scrub resource reservations
-# Note: disable by using a very large value
 - name: osd_scrub_slow_reservation_response
   type: millisecs
   level: advanced
-  desc: Duration before issuing a cluster-log warning
-  long_desc: Waiting too long for a replica to respond (after at least half of the
-    replicas have responded).
+  desc: Maximum wait (milliseconds) for scrub reservations before issuing a cluster-log warning
+  long_desc: Waiting too long for a replica to respond to scrub resource reservation request
+   (after at least half of the replicas have responded). Disable by setting to a very large value.
   default: 2200
   min: 500
   see_also:
   - osd_scrub_reservation_timeout
   with_legacy: false
-# when a replica does not respond to scrub resource request
-# Note: disable by using a very large value
 - name: osd_scrub_reservation_timeout
   type: millisecs
   level: advanced
-  desc: Duration before aborting the scrub session
-  long_desc: Waiting too long for some replicas to respond to
-    scrub reservation requests.
+  desc: Maximum wait (milliseconds) for replicas' response to scrub reservation requests
+  long_desc: Maximum wait (milliseconds) for all replicas to respond to
+    scrub reservation requests, before the scrub session is aborted. Disable by setting
+    to a very large value.
   default: 5000
   min: 2000
   see_also:
