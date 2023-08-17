@@ -3,8 +3,8 @@ from redfish.rest.v1 import ServerDownOrUnreachableError, \
     InvalidCredentialsError
 import redfish
 import sys
-from util import Logger
-from baseclient import BaseClient
+from .util import Logger
+from .baseclient import BaseClient
 from typing import Dict
 
 log = Logger(__name__)
