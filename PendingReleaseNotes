@@ -28,6 +28,18 @@
     fixes and enhancements.
   * For more detailed information see:
     https://docs.ceph.com/en/quincy/rados/configuration/mclock-config-ref/
+* RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
+  multi-site. Previously, the replicas of such objects were corrupted on decryption.
+  A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
+  identify these original multipart uploads. The ``LastModified`` timestamp of any
+  identified object is incremented by 1ns to cause peer zones to replicate it again.
+  For multi-site deployments that make any use of Server-Side Encryption, we
+  recommended running this command against every bucket in every zone after all
+  zones have upgraded.
+* CEPHFS: MDS evicts clients which are not advancing their request tids which causes
+  a large buildup of session metadata resulting in the MDS going read-only due to
+  the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`
+  config controls the maximum size that a (encoded) session metadata can grow.
 
 * CEPHFS: After recovering a Ceph File System post following the disaster recovery
   procedure, the recovered files under `lost+found` directory can now be deleted.
