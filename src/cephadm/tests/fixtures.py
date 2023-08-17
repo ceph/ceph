@@ -67,6 +67,8 @@ def cephadm_fs(
     """
     use pyfakefs to stub filesystem calls
     """
+    from cephadmlib import constants
+
     uid = os.getuid()
     gid = os.getgid()
 
@@ -91,11 +93,11 @@ def cephadm_fs(
         except AttributeError:
             pass
 
-        fs.create_dir(_cephadm.DATA_DIR)
-        fs.create_dir(_cephadm.LOG_DIR)
-        fs.create_dir(_cephadm.LOCK_DIR)
-        fs.create_dir(_cephadm.LOGROTATE_DIR)
-        fs.create_dir(_cephadm.UNIT_DIR)
+        fs.create_dir(constants.DATA_DIR)
+        fs.create_dir(constants.LOG_DIR)
+        fs.create_dir(constants.LOCK_DIR)
+        fs.create_dir(constants.LOGROTATE_DIR)
+        fs.create_dir(constants.UNIT_DIR)
         fs.create_dir('/sys/block')
 
         yield fs
