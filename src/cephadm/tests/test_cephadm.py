@@ -47,6 +47,8 @@ class TestCephAdm(object):
 
     @mock.patch('cephadm.logger')
     def test_attempt_bind(self, _logger):
+        from cephadmlib.net_utils import PortOccupiedError, attempt_bind
+
         ctx = None
         address = None
         port = 0
@@ -57,7 +59,7 @@ class TestCephAdm(object):
             return _os_error
 
         for side_effect, expected_exception in (
-            (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
+            (os_error(errno.EADDRINUSE), PortOccupiedError),
             (os_error(errno.EAFNOSUPPORT), OSError),
             (os_error(errno.EADDRNOTAVAIL), OSError),
             (None, None),
@@ -65,36 +67,39 @@ class TestCephAdm(object):
             _socket = mock.Mock()
             _socket.bind.side_effect = side_effect
             try:
-                _cephadm.attempt_bind(ctx, _socket, address, port)
+                attempt_bind(ctx, _socket, address, port)
             except Exception as e:
                 assert isinstance(e, expected_exception)
             else:
                 if expected_exception is not None:
                     assert False
 
-    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadmlib.net_utils.attempt_bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use(self, _logger, _attempt_bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
+
         empty_ctx = None
 
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
-        _attempt_bind.side_effect = _cephadm.PortOccupiedError('msg')
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
+        _attempt_bind.side_effect = PortOccupiedError('msg')
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
     @mock.patch('cephadm.socket.socket.bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use_special_cases(self, _logger, _bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
         # port_in_use has special handling for
         # EAFNOSUPPORT and EADDRNOTAVAIL errno OSErrors.
         # If we get those specific errors when attempting
@@ -107,26 +112,28 @@ class TestCephAdm(object):
             return _os_error
 
         _bind.side_effect = os_error(errno.EADDRNOTAVAIL)
-        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
         assert in_use == False
 
         _bind.side_effect = os_error(errno.EAFNOSUPPORT)
-        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
         assert in_use == False
 
         # this time, have it raise the actual port taken error
         # so it should report the port is in use
         _bind.side_effect = os_error(errno.EADDRINUSE)
-        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
         assert in_use == True
 
-    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadmlib.net_utils.attempt_bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use_with_specific_ips(self, _logger, _attempt_bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
+
         empty_ctx = None
 
         def _fake_attempt_bind(ctx, s: socket.socket, addr: str, port: int) -> None:
-            occupied_error = _cephadm.PortOccupiedError('msg')
+            occupied_error = PortOccupiedError('msg')
             if addr.startswith('200'):
                 raise occupied_error
             if addr.startswith('100'):
@@ -135,10 +142,10 @@ class TestCephAdm(object):
 
         _attempt_bind.side_effect = _fake_attempt_bind
 
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -160,6 +167,8 @@ class TestCephAdm(object):
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
     def test_check_ip_port_failure(self, _logger, _socket):
+        from cephadmlib.net_utils import PortOccupiedError
+
         ctx = _cephadm.CephadmContext()
         ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
 
@@ -173,7 +182,7 @@ class TestCephAdm(object):
             ('::', socket.AF_INET6),
         ):
             for side_effect, expected_exception in (
-                (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
+                (os_error(errno.EADDRINUSE), PortOccupiedError),
                 (os_error(errno.EADDRNOTAVAIL), OSError),
                 (os_error(errno.EAFNOSUPPORT), OSError),
                 (None, None),
