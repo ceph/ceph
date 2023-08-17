@@ -2,7 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <map>
-#include <random>
 #include <boost/program_options.hpp>
 #include <boost/iterator/counting_iterator.hpp>
 
@@ -18,6 +17,7 @@
 
 #include "common/ceph_time.h"
 #include "messages/MOSDOp.h"
+#include "include/random.h"
 
 #include "crimson/auth/DummyAuth.h"
 #include "crimson/common/log.h"
@@ -575,6 +575,7 @@ static seastar::future<> run(
       const unsigned msg_len;
       bufferlist msg_data;
       const unsigned nr_depth;
+      const unsigned nonce_base;
       crimson::auth::DummyAuthClientServer dummy_auth;
 
       std::vector<ConnState> conn_states;
@@ -583,6 +584,7 @@ static seastar::future<> run(
              unsigned num_conns,
              unsigned msg_len,
              unsigned _depth,
+             unsigned nonce_base,
              std::optional<unsigned> server_sid)
         : sid{seastar::this_shard_id()},
           id{sid + num_clients - seastar::smp::count},
@@ -590,7 +592,8 @@ static seastar::future<> run(
           num_clients{num_clients},
           num_conns{num_conns},
           msg_len{msg_len},
-          nr_depth{_depth} {
+          nr_depth{_depth},
+          nonce_base{nonce_base} {
         if (is_active()) {
           for (unsigned i = 0; i < num_conns; ++i) {
             conn_states.emplace_back(nr_depth);
@@ -660,7 +663,7 @@ static seastar::future<> run(
               std::string name = client.get_name(i);
               conn_state.msgr = crimson::net::Messenger::create(
                   entity_name_t::OSD(client.id * client.num_conns + i),
-                  name, client.id * client.num_conns + i, true);
+                  name, client.nonce_base + client.id * client.num_conns + i, true);
               conn_state.msgr->set_default_policy(crimson::net::SocketPolicy::lossy_client(0));
               conn_state.msgr->set_auth_client(&client.dummy_auth);
               conn_state.msgr->set_auth_server(&client.dummy_auth);
@@ -1085,11 +1088,14 @@ static seastar::future<> run(
       if (mode == perf_mode_t::server) {
         return seastar::make_ready_future<test_state::Client*>(nullptr);
       } else {
+        unsigned nonce_base = ceph::util::generate_random_number<unsigned>();
+        logger().info("client nonce_base={}", nonce_base);
         return create_sharded<test_state::Client>(
           client_conf.num_clients,
           client_conf.num_conns,
           client_conf.block_size,
           client_conf.depth,
+          nonce_base,
           server_sid);
       }
     }),
