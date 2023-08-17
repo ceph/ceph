@@ -49,8 +49,8 @@ class D4NFilterDriver : public FilterDriver {
       partition_info.location = "RedisCache"; // figure out how to fill rest of partition information -Sam
 
       cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
-      objDir = new rgw::d4n::ObjectDirectory();
-      blockDir = new rgw::d4n::BlockDirectory();
+      objDir = new rgw::d4n::ObjectDirectory(io_context);
+      blockDir = new rgw::d4n::BlockDirectory(io_context);
       cacheBlock = new rgw::d4n::CacheBlock();
       policyDriver = new rgw::d4n::PolicyDriver("lfuda");
     }

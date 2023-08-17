@@ -236,15 +236,15 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
   /* Get victim cache block */
   CacheBlock victimBlock;
   victimBlock.cacheObj.objName = victimName;
-  BlockDirectory blockDir;
-  blockDir.init(cct);
+  //BlockDirectory blockDir;
+  //blockDir.init(cct);
 
-  int ret = blockDir.get_value(&victimBlock);
+  //int ret = blockDir.get_value(&victimBlock);
 
-  if (ret < 0)
+  //if (ret < 0)
     return {};
 
-  return victimBlock;
+  //return victimBlock;
 }
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) {

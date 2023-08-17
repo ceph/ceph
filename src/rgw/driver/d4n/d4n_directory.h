@@ -4,9 +4,17 @@
 #include <cpp_redis/cpp_redis>
 #include <string>
 #include <iostream>
+
 #include <boost/lexical_cast.hpp>
+#include <boost/redis/connection.hpp>
 
 namespace rgw { namespace d4n {
+
+namespace net = boost::asio;
+using boost::redis::config;
+using boost::redis::connection;
+using boost::redis::request;
+using boost::redis::response;
 
 struct Address {
   std::string host;
@@ -37,10 +45,16 @@ class Directory {
 
 class ObjectDirectory: public Directory { // weave into write workflow -Sam
   public:
-    ObjectDirectory() {}
-    ObjectDirectory(std::string host, int port) {
+    ObjectDirectory(net::io_context& io_context) {
+      conn = new connection{boost::asio::make_strand(io_context)};
+    }
+    ObjectDirectory(net::io_context& io_context, std::string host, int port) {
+      conn = new connection{boost::asio::make_strand(io_context)};
       addr.host = host;
       addr.port = port;
+    }
+    ~ObjectDirectory() {
+      delete conn;
     }
 
     void init(CephContext* _cct) {
@@ -59,6 +73,7 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
     int del_value(CacheObj* object);
 
   private:
+    connection* conn;
     cpp_redis::client client;
     Address addr;
     std::string build_index(CacheObj* object);
@@ -66,10 +81,16 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory() {}
-    BlockDirectory(std::string host, int port) {
+    BlockDirectory(net::io_context& io_context) {
+      conn = new connection{boost::asio::make_strand(io_context)};
+    }
+    BlockDirectory(net::io_context& io_context, std::string host, int port) {
+      conn = new connection{boost::asio::make_strand(io_context)};
       addr.host = host;
       addr.port = port;
+    }
+    ~BlockDirectory() {
+      delete conn;
     }
     
     void init(CephContext* _cct) {
@@ -90,6 +111,7 @@ class BlockDirectory: public Directory {
     int update_field(CacheBlock* block, std::string field, std::string value);
 
   private:
+    connection* conn;
     cpp_redis::client client;
     Address addr;
     std::string build_index(CacheBlock* block);
