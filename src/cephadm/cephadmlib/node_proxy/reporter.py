@@ -1,7 +1,7 @@
 from threading import Thread
 import requests
 import time
-from util import Logger
+from .util import Logger
 from typing import Any
 
 log = Logger(__name__)
