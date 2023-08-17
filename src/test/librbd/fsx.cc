@@ -209,6 +209,8 @@ FILE *	fsxlogf = NULL;
 int badoff = -1;
 int closeopen = 0;
 
+bool wnbd_disk = false;
+
 void
 vwarnc(int code, const char *fmt, va_list ap) {
   fprintf(stderr, "fsx: ");
@@ -2269,7 +2271,7 @@ doread(unsigned offset, unsigned size)
 	int ret;
 
 	offset -= offset % readbdy;
-	if (o_direct || ops == &wnbd_operations)
+	if (o_direct || wnbd_disk)
 		size -= size % readbdy;
 	if (size == 0) {
 		if (!quiet && testcalls > simulatedopcount && !o_direct)
@@ -2359,7 +2361,7 @@ dowrite(unsigned offset, unsigned size)
 	off_t newsize;
 
 	offset -= offset % writebdy;
-	if (o_direct || ops == &wnbd_operations)
+	if (o_direct || wnbd_disk)
 		size -= size % writebdy;
 	if (size == 0) {
 		if (!quiet && testcalls > simulatedopcount && !o_direct)
@@ -3457,6 +3459,7 @@ main(int argc, char **argv)
 		case 'M':
 			prt("rbd-wnbd mode enabled\n");
 			ops = &wnbd_operations;
+			wnbd_disk = true;
 			break;
 #endif
 		case 'L':
