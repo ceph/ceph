@@ -9,7 +9,7 @@ Feature: CephFS Management
         Given I am on the "cephfs" page
         And I click on "Create" button
         And enter "name" "test_cephfs"
-        And I click on "Create Volume" button
+        And I click on "Create File System" button
         Then I should see a row with "test_cephfs"
 
     Scenario: Edit CephFS Volume
@@ -17,7 +17,7 @@ Feature: CephFS Management
         And I select a row "test_cephfs"
         And I click on "Edit" button
         And enter "name" "test_cephfs_edit" in the modal
-        And I click on "Edit Volume" button
+        And I click on "Edit File System" button
         Then I should see a row with "test_cephfs_edit"
 
     Scenario: Remove CephFS Volume
@@ -26,5 +26,5 @@ Feature: CephFS Management
         And I click on "Remove" button from the table actions
         Then I should see the modal
         And I check the tick box in modal
-        And I click on "Remove Volume" button
+        And I click on "Remove File System" button
         Then I should not see a row with "test_cephfs_edit"
