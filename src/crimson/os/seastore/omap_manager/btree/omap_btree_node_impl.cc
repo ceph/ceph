@@ -235,11 +235,12 @@ OMapInnerNode::list(
       return trans_intr::repeat(
         [&, config, oc, this]() -> list_iertr::future<seastar::stop_iteration>
       {
-        if (iter == liter || result.size() == config.max_result_size) {
-          complete = iter == liter;
+        if (iter == liter) {
+          complete = true;
           return list_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
+	assert(result.size() < config.max_result_size);
         auto laddr = iter->get_val();
         return omap_load_extent(
           oc, laddr,
@@ -278,8 +279,12 @@ OMapInnerNode::list(
 	      }
             }
             result.merge(std::move(child_result));
+	    if (result.size() == config.max_result_size) {
+	      return list_iertr::make_ready_future<seastar::stop_iteration>(
+		seastar::stop_iteration::yes);
+	    }
             ++iter;
-            assert(child_complete || result.size() == config.max_result_size);
+            assert(child_complete);
             return list_iertr::make_ready_future<seastar::stop_iteration>(
               seastar::stop_iteration::no);
           });
