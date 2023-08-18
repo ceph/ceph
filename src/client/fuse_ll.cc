@@ -999,26 +999,12 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      auto& key_store = cfuse->client->fscrypt->get_key_store();
-
-      FSCryptKeyHandlerRef kh;
-
-      int r = key_store.create((const char *)arg->raw, arg->raw_size, kh);
+      int r = cfuse->client->add_fscrypt_key((const char *)arg->raw, arg->raw_size, nullptr);
       if (r < 0) {
         generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to create a new key: r=" << r << dendl;
         fuse_reply_err(req, -r);
         break;
       }
-
-      Fh *fh = (Fh*)fi->fh;
-      Inode *in = fh->inode.get();
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": XXXX ioctl ion=" << in->ino << dendl;
-
-      auto& k = kh->get_key();
-
-      const auto& identifier = k->get_identifier();
-
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": hkdf:\n" << fscrypt_hex_str(identifier.raw, sizeof(identifier.raw)) << dendl;
 
       fuse_reply_ioctl(req, 0, nullptr, 0);
       break;
@@ -1047,7 +1033,7 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       }
 
       /* FIXME: handle busy cases */
-      r = cfuse->client->fscrypt->get_key_store().invalidate(kid);
+      r = cfuse->client->remove_fscrypt_key(kid);
       if (r < 0) {
         fuse_reply_err(req, -r);
         break;
@@ -1090,37 +1076,13 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       Inode *in = fh->inode.get();
       generic_dout(0) << __FILE__ << ":" << __LINE__ << ": XXXX ioctl ino=" << in->ino << dendl;
 
-      if (in->fscrypt_auth.size() > 0) {
-        fuse_reply_err(req, EEXIST);
-        break;
-      }
-
-      FSCryptContext fsc;
-      fsc.init(policy);
-      fsc.generate_new_nonce();
-
-      UserPerm perms(ctx->uid, ctx->gid);
-
-      bufferlist env_bl;
-
-      fsc.encode(env_bl);
-
-      int r = cfuse->client->ll_setxattr(in, "ceph.fscrypt.auth", (void *)env_bl.c_str(), env_bl.length(), CEPH_XATTR_CREATE, perms);
+      int r = cfuse->client->ll_set_fscrypt_policy_v2(in, policy);
       if (r < 0) {
-        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to set fscrypt_auth attr: r=" << r << dendl;
         fuse_reply_err(req, -r);
         break;
       }
 
-      uint64_t fsize = 0;
-      r = cfuse->client->ll_setxattr(in, "ceph.fscrypt.file", (void *)&fsize, sizeof(fsize), CEPH_XATTR_CREATE, perms);
-      if (r < 0) {
-        generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to set fscrypt_file attr: r=" << r << dendl;
-        fuse_reply_err(req, -r);
-        break;
-      }
-
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": set fscrypt_auth attr: success" << dendl;
+      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": set fscrypt policy: success" << dendl;
 
       fuse_reply_ioctl(req, 0, nullptr, 0);
       break;

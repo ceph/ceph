@@ -17281,6 +17281,78 @@ void Client::set_uuid(const std::string& uuid)
   _close_sessions();
 }
 
+int Client::add_fscrypt_key(const char *key_data, int key_len,
+                            ceph_fscrypt_key_identifier *kid)
+{
+  auto& key_store = fscrypt->get_key_store();
+
+  FSCryptKeyHandlerRef kh;
+
+  int r = key_store.create((const char *)key_data, key_len, kh);
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "(): failed to create a new key: r=" << r << dendl;
+    return r;
+  }
+
+  auto& k = kh->get_key();
+
+  if (kid) {
+    *kid = k->get_identifier();
+  }
+
+  return 0;
+}
+
+int Client::remove_fscrypt_key(const ceph_fscrypt_key_identifier& kid)
+{
+  auto& key_store = fscrypt->get_key_store();
+
+  return key_store.invalidate(kid);
+}
+
+int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy)
+{
+  Fh *f = get_filehandle(fd);
+  if (!f) {
+    return -CEPHFS_EBADF;
+  }
+
+  return ll_set_fscrypt_policy_v2(f->inode.get(), policy);
+}
+
+int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy)
+{
+  if (in->fscrypt_auth.size() > 0) {
+    return -EEXIST;
+  }
+
+  FSCryptContext fsc;
+  fsc.init(policy);
+  fsc.generate_new_nonce();
+
+  UserPerm perms(in->uid, in->gid);
+
+  bufferlist env_bl;
+
+  fsc.encode(env_bl);
+
+  int r = ll_setxattr(in, "ceph.fscrypt.auth", (void *)env_bl.c_str(), env_bl.length(), CEPH_XATTR_CREATE, perms);
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "(): failed to set fscrypt_auth attr: r=" << r << dendl;
+    return r;
+  }
+
+  uint64_t fsize = 0;
+  r = ll_setxattr(in, "ceph.fscrypt.file", (void *)&fsize, sizeof(fsize), CEPH_XATTR_CREATE, perms);
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "(): failed to set fscrypt_file attr: r=" << r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+
 // called before mount. 0 means infinite
 void Client::set_session_timeout(unsigned timeout)
 {
