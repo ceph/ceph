@@ -2316,6 +2316,35 @@ extern "C" void ceph_finish_reclaim(class ceph_mount_info *cmount)
   cmount->get_client()->finish_reclaim();
 }
 
+extern "C" int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
+                                    const char *key_data, int key_len,
+                                    struct ceph_fscrypt_key_identifier *kid)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->add_fscrypt_key(key_data, key_len, kid);
+}
+
+extern "C" int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
+                                       const struct ceph_fscrypt_key_identifier *kid)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->remove_fscrypt_key(*kid);
+}
+
+extern "C" int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
+                                          int fd, const struct fscrypt_policy_v2 *policy)
+{
+  if (!cmount->is_mounted())
+    return -CEPHFS_ENOTCONN;
+
+  return cmount->get_client()->set_fscrypt_policy_v2(fd, *policy);
+}
+
+
 // This is deprecated, use ceph_ll_register_callbacks2 instead.
 extern "C" void ceph_ll_register_callbacks(class ceph_mount_info *cmount,
 					   struct ceph_client_callback_args *args)
