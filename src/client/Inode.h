@@ -36,6 +36,7 @@ struct Inode;
 class MetaRequest;
 class filepath;
 class Fh;
+class FSCrypt;
 
 class Cap {
 public:
@@ -180,7 +181,7 @@ struct Inode : RefCountedObject {
     return !!fscrypt_auth.size();
   }
 
-  FSCryptContextRef init_fscrypt_ctx();
+  FSCryptContextRef init_fscrypt_ctx(FSCrypt *fscrypt);
 
   void gen_inherited_fscrypt_auth(std::vector<uint8_t> *ctx);
 

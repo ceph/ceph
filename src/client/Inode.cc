@@ -831,9 +831,9 @@ void Inode::mark_caps_clean()
   dirty_cap_item.remove_myself();
 }
 
-FSCryptContextRef Inode::init_fscrypt_ctx()
+FSCryptContextRef Inode::init_fscrypt_ctx(FSCrypt *fscrypt)
 {
-  return FSCrypt::init_ctx(fscrypt_auth);
+  return fscrypt->init_ctx(fscrypt_auth);
 }
 
 void Inode::gen_inherited_fscrypt_auth(std::vector<uint8_t> *fsa)
