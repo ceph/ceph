@@ -11,7 +11,8 @@
 #include "crimson/common/log.h"
 #include "crimson/common/errorator.h"
 #ifndef NDEBUG
-#define INTR_FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).trace(FMT_MSG, ##__VA_ARGS__)
+#define INTR_FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(\
+  ceph_subsys_crimson_interrupt).trace(FMT_MSG, ##__VA_ARGS__)
 #else
 #define INTR_FUT_DEBUG(FMT_MSG, ...)
 #endif
