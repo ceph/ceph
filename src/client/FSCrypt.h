@@ -192,6 +192,10 @@ public:
 using FSCryptPolicyRef = std::shared_ptr<FSCryptPolicy>;
 
 struct FSCryptContext : public FSCryptPolicy {
+  CephContext *cct;
+
+  FSCryptContext(CephContext *_cct) : cct(_cct) {}
+
   uint8_t nonce[FSCRYPT_FILE_NONCE_SIZE];
 
   void decode_extra(bufferlist::const_iterator& bl) override {
@@ -210,6 +214,8 @@ using FSCryptContextRef = std::shared_ptr<FSCryptContext>;
 
 class FSCryptDenc {
 protected:
+  CephContext *cct;
+
   FSCryptContextRef ctx;
   FSCryptKeyRef master_key;
 
@@ -231,7 +237,7 @@ protected:
   bool do_setup_cipher(int encryption_mode);
 
 public:
-  FSCryptDenc();
+  FSCryptDenc(CephContext *_cct);
   virtual ~FSCryptDenc();
 
   virtual bool setup_cipher() = 0;
@@ -258,7 +264,7 @@ using FSCryptDencRef = std::shared_ptr<FSCryptDenc>;
 
 class FSCryptFNameDenc : public FSCryptDenc {
 public:
-  FSCryptFNameDenc() {}
+  FSCryptFNameDenc(CephContext *_cct) : FSCryptDenc(_cct) {}
 
   bool setup_cipher() override;
 
@@ -273,7 +279,7 @@ using FSCryptFNameDencRef = std::shared_ptr<FSCryptFNameDenc>;
 
 class FSCryptFDataDenc : public FSCryptDenc {
 public:
-  FSCryptFDataDenc() {}
+  FSCryptFDataDenc(CephContext *_cct) : FSCryptDenc(_cct) {}
 
   using Segment = std::pair<uint64_t, uint64_t>;
 
@@ -329,14 +335,16 @@ using FSCryptKeyValidatorRef = std::shared_ptr<FSCryptKeyValidator>;
 
 
 class FSCrypt {
+  CephContext *cct;
+
   FSCryptKeyStore key_store;
 
   FSCryptDenc *init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
                          std::function<FSCryptDenc *()> gen_denc);
 public:
-  FSCrypt() {}
+  FSCrypt(CephContext *_cct) : cct(_cct) {}
 
-  static FSCryptContextRef init_ctx(const std::vector<unsigned char>& fscrypt_auth);
+  FSCryptContextRef init_ctx(const std::vector<unsigned char>& fscrypt_auth);
 
   FSCryptKeyStore& get_key_store() {
     return key_store;

@@ -29,7 +29,8 @@
 
 #include <string.h>
 
-#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_client
+
 
 using ceph::crypto::HMACSHA512;
 /*
@@ -353,7 +354,7 @@ void FSCryptContext::generate_iv(uint64_t block_num, FSCryptIV& iv) const
 
 void FSCryptContext::generate_new_nonce()
 {
-  g_ceph_context->random()->get_bytes((char *)nonce, sizeof(nonce));
+  cct->random()->get_bytes((char *)nonce, sizeof(nonce));
 }
 
 void FSCryptKeyHandler::reset(int64_t _epoch, FSCryptKeyRef k)
@@ -449,7 +450,7 @@ bool FSCryptKeyValidator::is_valid() const {
   return (handler->get_epoch() == epoch);
 }
 
-FSCryptDenc::FSCryptDenc() : cipher_ctx(EVP_CIPHER_CTX_new()) {}
+FSCryptDenc::FSCryptDenc(CephContext *_cct) : cct(_cct), cipher_ctx(EVP_CIPHER_CTX_new()) {}
 
 void FSCryptDenc::init_cipher(EVP_CIPHER *_cipher, std::vector<OSSL_PARAM> params)
 {
@@ -554,25 +555,25 @@ int FSCryptDenc::decrypt(const char *in_data, int in_len,
   int total_len;
 
   if ((int)key.size() != key_size) {
-    generic_dout(0) << "ERROR: unexpected encryption key size: " << key.size() << " (expected: " << key_size << ")" << dendl;
+    ldout(cct, 0) << "ERROR: unexpected encryption key size: " << key.size() << " (expected: " << key_size << ")" << dendl;
     return -EINVAL;
   }
 
   if (out_len < (fscrypt_align_ofs(in_len))) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << dendl;
     return -ERANGE;
   }
 
   if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key.data(), iv.raw,
                           0, cipher_params.data())) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << dendl;
     return -EINVAL;
   }
 
   int len;
 
   if (EVP_DecryptUpdate(cipher_ctx, (uint8_t *)out_data, &len, (const uint8_t *)in_data, in_len) != 1) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << dendl;
     return -EINVAL;
   }
 
@@ -583,7 +584,6 @@ int FSCryptDenc::decrypt(const char *in_data, int in_len,
       int e = ERR_get_error();
       char buf[512];
 
-generic_dout(0) << __FILE__ << ":" << __LINE__ << " ret=" << ret << " in_len=" << in_len << " total_len=" << total_len << " err=" << ERR_error_string(e, buf) << dendl;
       return -EINVAL;
     }
 
@@ -598,7 +598,7 @@ int FSCryptDenc::encrypt(const char *in_data, int in_len,
     int total_len;
 
     if ((int)key.size() != key_size) {
-      generic_dout(0) << "ERROR: unexpected encryption key size: " << key.size() << " (expected: " << key_size << ")" << dendl;
+      ldout(cct, 0) << "ERROR: unexpected encryption key size: " << key.size() << " (expected: " << key_size << ")" << dendl;
       return -EINVAL;
     }
 
@@ -650,7 +650,7 @@ int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string 
                   enc_name, sizeof(enc_name));
 
   if (r < 0) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
     return r;
   }
 
@@ -685,7 +685,6 @@ int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, const std::
   int len = alt_name.size();
 
   const char *penc = (len == 0 ? enc : alt_name.c_str());
-generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): alt_name.size()=" << alt_name.size() << " alt_name=" << alt_name << dendl;
 
   if (len == 0) {
     len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
@@ -724,7 +723,7 @@ int FSCryptFNameDenc::get_encrypted_symlink(const std::string& plain, std::strin
                   slink_data.enc, sizeof(slink_data.enc));
 
   if (r < 0) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to encrypt filename" << dendl;
     return r;
   }
 
@@ -749,7 +748,7 @@ int FSCryptFNameDenc::get_decrypted_symlink(const std::string& b64enc, std::stri
   char dec_fname[NAME_MAX + 64]; /* some extra just in case */
 
   if (slink_data.len > len) { /* should never happen */
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: slink_data.len greater than decrypted buffer (slink_data.len=" << slink_data.len << ", len=" << len << ")" << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: slink_data.len greater than decrypted buffer (slink_data.len=" << slink_data.len << ", len=" << len << ")" << dendl;
     return -EIO;
   }
 
@@ -911,7 +910,7 @@ FSCryptContextRef FSCrypt::init_ctx(const std::vector<unsigned char>& fscrypt_au
     return nullptr;
   }
 
-  FSCryptContextRef ctx = std::make_shared<FSCryptContext>();
+  FSCryptContextRef ctx = std::make_shared<FSCryptContext>(cct);
 
   bufferlist bl;
   bl.append((const char *)fscrypt_auth.data(), fscrypt_auth.size());
@@ -920,7 +919,11 @@ FSCryptContextRef FSCrypt::init_ctx(const std::vector<unsigned char>& fscrypt_au
   try {
     ctx->decode(bliter);
   } catch (buffer::error& err) {
-    generic_dout(0) << __func__ << " " << " failed to decode fscrypt_auth:" << fscrypt_hex_str(fscrypt_auth.data(), fscrypt_auth.size()) << dendl;
+    if (fscrypt_auth.size()) {
+      ldout(cct, 0) << __func__ << " " << " failed to decode fscrypt_auth:" << fscrypt_hex_str(fscrypt_auth.data(), fscrypt_auth.size()) << dendl;
+    } else {
+      ldout(cct, 0) << __func__ << " " << " failed to decode fscrypt_auth: fscrypt_auth.size() == 0"  << dendl;
+    }
     return nullptr;
   }
 
@@ -937,12 +940,12 @@ FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *
   FSCryptKeyHandlerRef master_kh;
   int r = key_store.find(ctx->master_key_identifier, master_kh);
   if (r == 0) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key handler found" << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key handler found" << dendl;
   } else if (r == -ENOENT) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key handler not found" << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key handler not found" << dendl;
     return nullptr;
   } else {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": error: r=" << r << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": error: r=" << r << dendl;
     return nullptr;
   }
 
@@ -953,14 +956,14 @@ FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *
   auto& master_key = master_kh->get_key();
 
   if (!master_key) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key key is null" << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": fscrypt_key key is null" << dendl;
     return nullptr;
   }
 
   auto fscrypt_denc = gen_denc();
 
   if (!fscrypt_denc->setup(ctx, master_key)) {
-    generic_dout(0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: failed to setup denc" << dendl;
+    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: failed to setup denc" << dendl;
     return nullptr;
   }
 
@@ -970,7 +973,7 @@ FSCryptDenc *FSCrypt::init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *
 FSCryptFNameDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv, bool calc_key)
 {
   auto pdenc = init_denc(ctx, kv,
-                         []() { return new FSCryptFNameDenc(); });
+                         [&]() { return new FSCryptFNameDenc(cct); });
   if (!pdenc) {
     return nullptr;
   }
@@ -980,7 +983,7 @@ FSCryptFNameDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyVa
   if (calc_key) {
     int r = denc->calc_fname_key();
     if (r < 0) {
-      generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to init dencoder: r=" << r << dendl;
+      ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to init dencoder: r=" << r << dendl;
       return nullptr;
     }
   }
@@ -991,7 +994,7 @@ FSCryptFNameDencRef FSCrypt::get_fname_denc(FSCryptContextRef& ctx, FSCryptKeyVa
 FSCryptFDataDencRef FSCrypt::get_fdata_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv)
 {
   auto pdenc = init_denc(ctx, kv,
-                         []() { return new FSCryptFDataDenc(); });
+                         [&]() { return new FSCryptFDataDenc(cct); });
   if (!pdenc) {
     return nullptr;
   }

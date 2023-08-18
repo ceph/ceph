@@ -587,7 +587,7 @@ void Client::_pre_init()
 
   objecter_finisher.start();
   filer.reset(new Filer(objecter, &objecter_finisher));
-  fscrypt.reset(new FSCrypt());
+  fscrypt.reset(new FSCrypt(cct));
 
   objectcacher->start();
 }
@@ -1058,7 +1058,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->snap_btime = st->snap_btime;
     in->snap_metadata = st->snap_metadata;
     in->fscrypt_auth = st->fscrypt_auth;
-    in->fscrypt_ctx = in->init_fscrypt_ctx();
+    in->fscrypt_ctx = in->init_fscrypt_ctx(fscrypt.get());
     need_snapdir_attr_refresh = true;
   }
 
@@ -8216,7 +8216,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->fscrypt_auth = *aux;
-      in->fscrypt_ctx = in->init_fscrypt_ctx();
+      in->fscrypt_ctx = in->init_fscrypt_ctx(fscrypt.get());
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
       mask &= ~CEPH_SETATTR_FSCRYPT_AUTH;
     } else if (!in->caps_issued_mask(CEPH_CAP_AUTH_SHARED) ||
@@ -13259,7 +13259,7 @@ Inode *Client::open_snapdir(Inode *diri)
   if (!inode_map.count(vino)) {
     in = new Inode(this, vino, &diri->layout);
     in->fscrypt_auth = diri->fscrypt_auth; /* borrow parent fscrypt data */
-    in->fscrypt_ctx = in->init_fscrypt_ctx();
+    in->fscrypt_ctx = in->init_fscrypt_ctx(fscrypt.get());
     refresh_snapdir_attrs(in, diri);
     diri->flags |= I_SNAPDIR_OPEN;
     inode_map[vino] = in;
@@ -15212,7 +15212,7 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   req->fscrypt_file = dir->fscrypt_file;
 
   dir->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
-  auto fscrypt_ctx = FSCrypt::init_ctx(req->fscrypt_auth);
+  auto fscrypt_ctx = fscrypt->init_ctx(req->fscrypt_auth);
 
   if (fscrypt_ctx) {
     auto fscrypt_denc = fscrypt->get_fname_denc(fscrypt_ctx, nullptr, true);
@@ -17326,7 +17326,7 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
     return -EEXIST;
   }
 
-  FSCryptContext fsc;
+  FSCryptContext fsc(cct);
   fsc.init(policy);
   fsc.generate_new_nonce();
 
