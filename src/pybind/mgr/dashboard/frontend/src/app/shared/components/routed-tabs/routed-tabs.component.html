@@ -1,0 +1,12 @@
+<ul class="nav nav-tabs">
+  <li class="nav-item"
+      *ngFor="let tab of tabs">
+    <a class="nav-link"
+       [ngClass]="{active: tab.name === activeTab}"
+       [routerLink]="tab.route"
+       routerLinkActive="active"
+       ariaCurrentWhenActive="page"
+       [routerLinkActiveOptions]="{exact: true}"
+       i18n>{{ tab.name }}</a>
+  </li>
+</ul>
