@@ -1590,7 +1590,7 @@ def attempt_bind(ctx, s, address, port):
             logger.warning(msg)
             raise PortOccupiedError(msg)
         else:
-            raise Error(e)
+            raise e
     except Exception as e:
         raise Error(e)
     finally:
