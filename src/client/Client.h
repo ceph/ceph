@@ -334,6 +334,11 @@ public:
     return fscid;
   }
 
+  /* fscrypt */
+  int add_fscrypt_key(const char *key_data, int key_len, ceph_fscrypt_key_identifier *kid);
+  int remove_fscrypt_key(const ceph_fscrypt_key_identifier& kid);
+  int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
+
   int mds_command(
     const std::string &mds_spec,
     const std::vector<std::string>& cmd,
@@ -675,6 +680,8 @@ public:
   bool ll_handle_umask() {
     return acl_type != NO_ACL;
   }
+
+  int ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& policy);
 
   int ll_get_stripe_osd(struct Inode *in, uint64_t blockno,
 			file_layout_t* layout);
