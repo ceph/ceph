@@ -129,8 +129,8 @@ EOL
     if [[ -n $USE_MINGW_LLVM ]]; then
         cat >> $MINGW_CMAKE_FILE <<EOL
 add_definitions(-I$mingwX64IncludeDir)
-add_definitions(-march=native)
-add_definitions(-Wno-unknown-attributes)
+add_compile_options(-march=native)
+add_compile_options(-Wno-unknown-attributes)
 EOL
     fi
 fi
