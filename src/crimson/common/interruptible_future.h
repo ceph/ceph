@@ -114,6 +114,7 @@ struct interrupt_cond_t {
       ref_count);
   }
   void reset() {
+    assert(ref_count >= 1);
     if (--ref_count == 0) {
       INTR_FUT_DEBUG(
 	"{}: clearing interrupt_cond: {},{}",
