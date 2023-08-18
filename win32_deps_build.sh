@@ -40,8 +40,8 @@ dokanTag="v2.0.5.1000"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
 
-mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-msvcrt-ubuntu-18.04-x86_64.tar.xz"
-mingwLlvmSha256Sum="bc97745e702fb9e8f2a16f7d09dd5061ceeef16554dd12e542f619ce937e8d7a"
+mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-ucrt-ubuntu-18.04-x86_64.tar.xz"
+mingwLlvmSha256Sum="bc367753dea829d219be32e2e64e2d15d03158ce8e700ae5210ca3d78e6a07ea"
 mingwLlvmDir="${DEPS_DIR}/mingw-llvm"
 
 function _make() {
