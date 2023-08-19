@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 
 import collections
+from typing import Any, Dict
 
+from ..controllers.service import Service
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.orchestrator import OrchClient
 from ..tools import NotificationQueue
-from . import APIDoc, APIRouter, BaseController, Endpoint, EndpointDoc, ReadPermission
+from . import APIDoc, APIRouter, BaseController, CreatePermission, Endpoint, \
+    EndpointDoc, ReadPermission, UIRouter
 
 LOG_BUFFER_SIZE = 30
 
@@ -70,3 +74,58 @@ class Logs(BaseController):
             clog=list(self.log_buffer),
             audit_log=list(self.audit_buffer),
         )
+
+
+@UIRouter('/logs')
+class LogsStatus(BaseController):
+    @EndpointDoc("Check Logs Status")
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        orch = OrchClient.instance()
+        status: Dict[str, Any] = {'available': True, 'message': None}
+
+        if not orch.status()['available']:
+            return status
+
+        if (not orch.services.get('grafana')
+            or not orch.services.get('loki')
+                or not orch.services.get('promtail')):
+            status['available'] = False
+            status['message'] = """You need to configure loki and promtail along with grafana
+                                to use centralized logging. Please click on the configure
+                                button below to get started"""
+        return status
+
+    @Endpoint('POST')
+    @EndpointDoc("Configure Centralized Logging")
+    @CreatePermission
+    def configure(self):
+        service = Service()
+        orch = OrchClient.instance()
+
+        loki_spec = {
+            'service_type': 'loki'
+        }
+
+        promtail_spec = {
+            'service_type': 'promtail'
+        }
+
+        grafana_spec = {
+            'service_type': 'grafana'
+        }
+
+        if not orch.services.get('grafana'):
+            service.create(grafana_spec, 'grafana')
+
+        if not orch.services.get('loki'):
+            service.create(loki_spec, 'loki')
+
+        if not orch.services.get('promtail'):
+            service.create(promtail_spec, 'promtail')
+
+        CephService.send_command('mon', 'config set', who='global', name='log_to_file',
+                                 value='true')
+        CephService.send_command('mon', 'config set', who='global', name='mon_cluster_log_to_file',
+                                 value='true')

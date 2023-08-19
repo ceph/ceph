@@ -22,7 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
  */
 
-import { Component, Injector, OnDestroy } from '@angular/core';
+import { Component, Injector, Input, OnDestroy, OnInit } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { ActivatedRouteSnapshot, NavigationEnd, NavigationStart, Router } from '@angular/router';
 
@@ -36,7 +36,10 @@ import { BreadcrumbsResolver, IBreadcrumb } from '~/app/shared/models/breadcrumb
   templateUrl: './breadcrumbs.component.html',
   styleUrls: ['./breadcrumbs.component.scss']
 })
-export class BreadcrumbsComponent implements OnDestroy {
+export class BreadcrumbsComponent implements OnInit, OnDestroy {
+  @Input()
+  title: any[] = [];
+
   crumbs: IBreadcrumb[] = [];
   /**
    * Useful for e2e tests.
@@ -80,8 +83,12 @@ export class BreadcrumbsComponent implements OnDestroy {
       });
   }
 
+  ngOnInit(): void {
+    if (this.title?.length > 0) this.crumbs = this.title;
+  }
+
   ngOnDestroy(): void {
-    this.subscription.unsubscribe();
+    this.subscription?.unsubscribe();
   }
 
   private _resolveCrumbs(route: ActivatedRouteSnapshot): Observable<IBreadcrumb[]> {

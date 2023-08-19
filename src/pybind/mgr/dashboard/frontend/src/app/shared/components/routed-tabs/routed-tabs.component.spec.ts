@@ -8,9 +8,8 @@ describe('RoutedTabsComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ RoutedTabsComponent ]
-    })
-    .compileComponents();
+      declarations: [RoutedTabsComponent]
+    }).compileComponents();
   });
 
   beforeEach(() => {

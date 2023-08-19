@@ -1,13 +1,27 @@
 import { DatePipe } from '@angular/common';
 import { Component, Input, NgZone, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 
 import { NgbDateStruct } from '@ng-bootstrap/ng-bootstrap';
-import { Observable } from 'rxjs';
-import { map } from 'rxjs/operators';
 
-import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { LogsService } from '~/app/shared/api/logs.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { RoutedTabsInterface } from '~/app/shared/models/routed-tab.interface';
+
+export const LOGS_ROUTED_TABS: RoutedTabsInterface[] = [
+  {
+    name: 'Cluster',
+    route: '/logs/cluster'
+  },
+  {
+    name: 'Audit',
+    route: '/logs/audit'
+  },
+  {
+    name: 'Centralized',
+    route: '/logs/centralized'
+  }
+];
 
 @Component({
   selector: 'cd-logs',
@@ -28,9 +42,9 @@ export class LogsComponent implements OnInit, OnDestroy {
   @Input()
   showDownloadCopyButton = true;
   @Input()
-  defaultTab = '';
-  @Input()
   scrollable = false;
+  @Input()
+  showNavTabs = true;
 
   contentData: any;
   clog: Array<any>;
@@ -38,8 +52,8 @@ export class LogsComponent implements OnInit, OnDestroy {
   icons = Icons;
   clogText: string;
   auditLogText: string;
-  lokiServiceStatus$: Observable<boolean>;
-  promtailServiceStatus$: Observable<boolean>;
+  private routerUrl: string;
+  routedTabs = LOGS_ROUTED_TABS;
 
   interval: number;
   priorities: Array<{ name: string; value: string }> = [
@@ -62,15 +76,28 @@ export class LogsComponent implements OnInit, OnDestroy {
 
   constructor(
     private logsService: LogsService,
-    private cephService: CephServiceService,
     private datePipe: DatePipe,
-    private ngZone: NgZone
-  ) {}
+    private ngZone: NgZone,
+    private router: Router
+  ) {
+    this.routerUrl = this.router.url;
+  }
 
   ngOnInit() {
+    const url = this.routerUrl;
+    if (url.startsWith('/logs/audit')) {
+      this.showClusterLogs = false;
+      this.showDaemonLogs = false;
+    } else if (url.startsWith('/logs/centralized')) {
+      this.showClusterLogs = false;
+      this.showAuditLogs = false;
+    } else {
+      this.showAuditLogs = false;
+      this.showDaemonLogs = false;
+    }
+
     this.getInfo();
     this.ngZone.runOutsideAngular(() => {
-      this.getDaemonDetails();
       this.interval = window.setInterval(() => {
         this.ngZone.run(() => {
           this.getInfo();
@@ -81,19 +108,6 @@ export class LogsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     clearInterval(this.interval);
-  }
-
-  getDaemonDetails() {
-    this.lokiServiceStatus$ = this.cephService.getDaemons('loki').pipe(
-      map((data: any) => {
-        return data.length > 0 && data[0].status === 1;
-      })
-    );
-    this.promtailServiceStatus$ = this.cephService.getDaemons('promtail').pipe(
-      map((data: any) => {
-        return data.length > 0 && data[0].status === 1;
-      })
-    );
   }
 
   getInfo() {

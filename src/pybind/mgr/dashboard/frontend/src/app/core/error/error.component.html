@@ -1,12 +1,18 @@
+<cd-breadcrumbs *ngIf="breadcrumbs"
+                [title]="breadcrumbs"></cd-breadcrumbs>
+<cd-routed-tabs [tabs]="routedTabs"
+                [activeTab]="activeTab"
+                *ngIf="routedTabs"></cd-routed-tabs>
 <head>
   <title>Error Page</title>
   <base target="_blank">
 </head>
-<div class="container h-75">
+<div class="container"
+     [ngClass]="routedTabs ? 'h-50' : 'h-75'">
   <div class="row h-100 justify-content-center align-items-center">
     <div class="blank-page">
       <div *ngIf="header && message; else elseBlock">
-        <i [ngClass]="icon"
+        <i [ngClass]="[icon, icons.large3x]"
            class="mx-auto d-block"></i>
 
         <div class="mt-4 text-center">
@@ -38,16 +44,21 @@
 </div>
 
 <ng-template #configureButtonTpl>
-  <button class="btn btn-primary"
+  <button class="btn btn-accent"
           (click)="doConfigure()"
           [attr.title]="buttonTitle"
           *ngIf="uiConfig"
-          i18n>{{ buttonName }}</button>
+          i18n>{{ buttonName }}
+    <span *ngIf="loading">
+      <i [ngClass]="[icons.spinner, icons.spin]"></i>
+    </span>
+  </button>
 </ng-template>
 
 
 <ng-template #elseBlock>
-  <i class="fa fa-exclamation-triangle mx-auto d-block text-danger"></i>
+  <i class="fa fa-exclamation-triangle mx-auto d-block text-danger"
+     [ngClass]="[icons.large3x]"></i>
 
   <div class="mt-4 text-center">
     <h3 i18n><b>Page not Found</b></h3>

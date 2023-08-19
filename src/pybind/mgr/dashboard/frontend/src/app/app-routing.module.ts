@@ -11,7 +11,7 @@ import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
 import { HostFormComponent } from './ceph/cluster/hosts/host-form/host-form.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { InventoryComponent } from './ceph/cluster/inventory/inventory.component';
-import { LogsComponent } from './ceph/cluster/logs/logs.component';
+import { LogsComponent, LOGS_ROUTED_TABS } from './ceph/cluster/logs/logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
@@ -230,8 +230,40 @@ const routes: Routes = [
       },
       {
         path: 'logs',
-        component: LogsComponent,
-        data: { breadcrumbs: 'Observability/Logs' }
+        data: { breadcrumbs: 'Observability/Logs' },
+        children: [
+          { path: '', redirectTo: 'cluster', pathMatch: 'full' },
+          { path: 'cluster', component: LogsComponent },
+          { path: 'audit', component: LogsComponent },
+          {
+            path: 'centralized',
+            component: LogsComponent,
+            canActivate: [ModuleStatusGuardService],
+            data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'logs',
+                redirectTo: 'error',
+                header: $localize`Centralized logging is not configured`,
+                button_name: $localize`Configure Centralized Logging`,
+                component: 'Centralized logging',
+                uiConfig: true,
+                routedTabs: LOGS_ROUTED_TABS,
+                activeTab: 'Centralized',
+                redirectToAfterConfigure: '/logs/centralized',
+                breadcrumbs: [
+                  {
+                    text: 'Observability',
+                    path: null
+                  },
+                  {
+                    text: 'Logs',
+                    path: null
+                  }
+                ]
+              }
+            }
+          }
+        ]
       },
       {
         path: 'telemetry',

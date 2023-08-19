@@ -4,8 +4,10 @@ import { NavigationEnd, Router, RouterEvent } from '@angular/router';
 
 import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
+import { Icons } from '~/app/shared/enum/icons.enum';
 
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { RoutedTabsInterface } from '~/app/shared/models/routed-tab.interface';
 import { DocService } from '~/app/shared/services/doc.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
@@ -32,6 +34,13 @@ export class ErrorComponent implements OnDestroy, OnInit {
   secondaryButtonName: string;
   secondaryButtonTitle: string;
   component: string;
+  routedTabs: RoutedTabsInterface;
+  breadcrumbs: string;
+  activeTab: string;
+  redirectToAfterConfigure: string;
+  loading = false;
+
+  icons = Icons;
 
   constructor(
     private router: Router,
@@ -52,6 +61,7 @@ export class ErrorComponent implements OnDestroy, OnInit {
   doConfigure() {
     this.http.post(`ui-api/${this.uiApiPath}/configure`, {}).subscribe({
       next: () => {
+        this.loading = true;
         this.notificationService.show(NotificationType.info, `Configuring ${this.component}`);
       },
       error: (error: any) => {
@@ -59,7 +69,9 @@ export class ErrorComponent implements OnDestroy, OnInit {
       },
       complete: () => {
         setTimeout(() => {
-          this.router.navigate([this.uiApiPath]);
+          this.redirectToAfterConfigure
+            ? this.router.navigate([this.redirectToAfterConfigure])
+            : this.router.navigate([this.uiApiPath]);
           this.notificationService.show(NotificationType.success, `Configured ${this.component}`);
         }, 3000);
       }
@@ -88,6 +100,10 @@ export class ErrorComponent implements OnDestroy, OnInit {
       this.secondaryButtonName = history.state.secondary_button_name;
       this.secondaryButtonTitle = history.state.secondary_button_title;
       this.component = history.state.component;
+      this.routedTabs = history.state.routedTabs;
+      this.breadcrumbs = history.state.breadcrumbs;
+      this.activeTab = history.state.activeTab;
+      this.redirectToAfterConfigure = history.state.redirectToAfterConfigure;
       this.docUrl = this.docService.urlGenerator(this.section);
     } catch (error) {
       this.router.navigate(['/error']);
