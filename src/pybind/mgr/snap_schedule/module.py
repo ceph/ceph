@@ -97,10 +97,10 @@ class Module(MgrModule):
         '''
         Get current snapshot schedule for <path>
         '''
+        rc, fs, err = self._validate_fs(fs)
+        if rc < 0:
+            return rc, fs, err
         try:
-            rc, fs, err = self._validate_fs(fs)
-            if rc < 0:
-                return rc, fs, err
             scheds = self.client.list_snap_schedules(fs, path, recursive)
             self.log.debug(f'recursive is {recursive}')
         except CephfsConnectionException as e:
@@ -129,10 +129,10 @@ class Module(MgrModule):
         '''
         Set a snapshot schedule for <path>
         '''
+        rc, fs, err = self._validate_fs(fs)
+        if rc < 0:
+            return rc, fs, err
         try:
-            rc, fs, err = self._validate_fs(fs)
-            if rc < 0:
-                return rc, fs, err
             abs_path = path
             subvol = None
             self.client.store_snap_schedule(fs,
@@ -163,10 +163,10 @@ class Module(MgrModule):
         '''
         Remove a snapshot schedule for <path>
         '''
+        rc, fs, err = self._validate_fs(fs)
+        if rc < 0:
+            return rc, fs, err
         try:
-            rc, fs, err = self._validate_fs(fs)
-            if rc < 0:
-                return rc, fs, err
             abs_path = path
             self.client.rm_snap_schedule(fs, abs_path, repeat, start)
         except ValueError as e:
@@ -186,10 +186,10 @@ class Module(MgrModule):
         '''
         Set a retention specification for <path>
         '''
+        rc, fs, err = self._validate_fs(fs)
+        if rc < 0:
+            return rc, fs, err
         try:
-            rc, fs, err = self._validate_fs(fs)
-            if rc < 0:
-                return rc, fs, err
             abs_path = path
             self.client.add_retention_spec(fs, abs_path,
                                            retention_spec_or_period,
@@ -211,10 +211,10 @@ class Module(MgrModule):
         '''
         Remove a retention specification for <path>
         '''
+        rc, fs, err = self._validate_fs(fs)
+        if rc < 0:
+            return rc, fs, err
         try:
-            rc, fs, err = self._validate_fs(fs)
-            if rc < 0:
-                return rc, fs, err
             abs_path = path
             self.client.rm_retention_spec(fs, abs_path,
                                           retention_spec_or_period,
@@ -236,10 +236,10 @@ class Module(MgrModule):
         '''
         Activate a snapshot schedule for <path>
         '''
+        rc, fs, err = self._validate_fs(fs)
+        if rc < 0:
+            return rc, fs, err
         try:
-            rc, fs, err = self._validate_fs(fs)
-            if rc < 0:
-                return rc, fs, err
             abs_path = path
             self.client.activate_snap_schedule(fs, abs_path, repeat, start)
         except ValueError as e:
@@ -259,10 +259,10 @@ class Module(MgrModule):
         '''
         Deactivate a snapshot schedule for <path>
         '''
+        rc, fs, err = self._validate_fs(fs)
+        if rc < 0:
+            return rc, fs, err
         try:
-            rc, fs, err = self._validate_fs(fs)
-            if rc < 0:
-                return rc, fs, err
             abs_path = path
             self.client.deactivate_snap_schedule(fs, abs_path, repeat, start)
         except ValueError as e:
