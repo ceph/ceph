@@ -16,6 +16,7 @@ from .fixtures import (
     with_cephadm_ctx,
     mock_bad_firewalld,
     import_cephadm,
+    funkypatch,
 )
 
 from pyfakefs import fake_filesystem
@@ -2113,16 +2114,12 @@ class TestValidateRepo:
 
 
 class TestPull:
-
-    @mock.patch('time.sleep')
-    @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
-    @mock.patch('cephadm.logger')
-    def test_error(self, _logger, _get_image_info_from_inspect, _sleep, monkeypatch):
-        # manually create a mock and use pytest's monkeypatch fixture to set
-        # multiple targets to the *same* mock
-        _call = mock.MagicMock()
-        monkeypatch.setattr('cephadm.call', _call)
-        monkeypatch.setattr('cephadmlib.call_wrappers.call', _call)
+    def test_error(self, funkypatch):
+        funkypatch.patch('time.sleep')
+        funkypatch.patch('cephadm.logger')
+        _giifi = funkypatch.patch('cephadm.get_image_info_from_inspect')
+        _giifi.return_value = {}
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call')
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False
