@@ -94,11 +94,13 @@ public:
     ceph_assert(is_head());
     obs = std::move(_obs);
     ssc = std::move(_ssc);
+    fully_loaded = true;
   }
 
   void set_clone_state(ObjectState &&_obs) {
     ceph_assert(!is_head());
     obs = std::move(_obs);
+    fully_loaded = true;
   }
 
   /// pass the provided exception to any waiting consumers of this ObjectContext
@@ -108,6 +110,10 @@ public:
     if (recovery_read_marker) {
       drop_recovery_read();
     }
+  }
+
+  bool is_fully_loaded() const {
+    return fully_loaded;
   }
 
 private:
@@ -126,6 +132,7 @@ private:
 
   boost::intrusive::list_member_hook<> list_hook;
   uint64_t list_link_cnt = 0;
+  bool fully_loaded = false;
 
 public:
 
