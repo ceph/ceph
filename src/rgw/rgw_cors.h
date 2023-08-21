@@ -132,3 +132,15 @@ static inline int validate_name_string(std::string_view o) {
     return -1;
   return 0;
 }
+
+static inline uint8_t get_cors_method_flags(const char *req_meth) {
+  uint8_t flags = 0;
+
+  if (strcmp(req_meth, "GET") == 0) flags = RGW_CORS_GET;
+  else if (strcmp(req_meth, "POST") == 0) flags = RGW_CORS_POST;
+  else if (strcmp(req_meth, "PUT") == 0) flags = RGW_CORS_PUT;
+  else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
+  else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
+
+  return flags;
+}
