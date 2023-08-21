@@ -170,3 +170,15 @@ other daemons, please see :ref:`health-checks`.
     the actual cache size (in memory) is at least 50% greater than
     ``mds_cache_memory_limit`` (default 1GB). Modify ``mds_health_cache_threshold``
     to set the warning ratio.
+
+* ``MDS_CLIENTS_LAGGY``
+
+  Message
+    "Client *ID* is laggy; not evicted because some OSD(s) is/are laggy"
+
+  Description
+    If OSD(s) is laggy (due to certain conditions like network cut-off, etc)
+    then it might make clients laggy(session might get idle or cannot flush
+    dirty data for cap revokes). If ``defer_client_eviction_on_laggy_osds`` is
+    set to true (default true), client eviction will not take place and thus
+    this health warning will be generated.

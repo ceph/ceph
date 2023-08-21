@@ -331,7 +331,14 @@ public:
 
   bool terminating_sessions = false;
 
-  set<client_t> client_reclaim_gather;
+  std::set<client_t> client_reclaim_gather;
+
+  std::set<client_t> get_laggy_clients() const {
+    return laggy_clients;
+  }
+  void clear_laggy_clients() {
+    laggy_clients.clear();
+  }
 
 private:
   friend class MDSContinuation;
@@ -520,6 +527,9 @@ private:
   double caps_throttle_retry_request_timeout;
 
   size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
+
+  // record laggy clients due to laggy OSDs
+  std::set<client_t> laggy_clients;
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {
