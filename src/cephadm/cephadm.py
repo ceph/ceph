@@ -3135,6 +3135,15 @@ def _write_custom_conf_files(ctx: CephadmContext, daemon_type: str, daemon_id: s
             file_path = os.path.join(custom_config_dir, os.path.basename(ccf['mount_path']))
             with write_new(file_path, owner=(uid, gid), encoding='utf-8') as f:
                 f.write(ccf['content'])
+            # temporary workaround to make custom config files work for tcmu-runner
+            # container we deploy with iscsi until iscsi is refactored
+            if daemon_type == 'iscsi':
+                tcmu_config_dir = custom_config_dir + '.tcmu'
+                if not os.path.exists(tcmu_config_dir):
+                    makedirs(tcmu_config_dir, uid, gid, 0o755)
+                tcmu_file_path = os.path.join(tcmu_config_dir, os.path.basename(ccf['mount_path']))
+                with write_new(tcmu_file_path, owner=(uid, gid), encoding='utf-8') as f:
+                    f.write(ccf['content'])
 
 
 def get_parm(option: str) -> Dict[str, str]:
