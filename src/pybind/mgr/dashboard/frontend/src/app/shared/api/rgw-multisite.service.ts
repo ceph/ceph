@@ -25,4 +25,8 @@ export class RgwMultisiteService {
       return this.http.put(`${this.url}/migrate`, null, { params: params });
     });
   }
+
+  getSyncStatus() {
+    return this.http.get(`${this.url}/sync_status`);
+  }
 }
