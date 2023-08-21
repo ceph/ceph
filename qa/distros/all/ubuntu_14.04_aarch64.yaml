@@ -1,3 +1,4 @@
 os_type: ubuntu
 os_version: "14.04"
 arch: aarch64
+ktype: distro
