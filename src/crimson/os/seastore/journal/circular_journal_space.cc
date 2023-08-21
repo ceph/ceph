@@ -18,8 +18,9 @@ std::ostream &operator<<(std::ostream &out,
     const CircularJournalSpace::cbj_header_t &header)
 {
   return out << "cbj_header_t(" 
-	     << ", dirty_tail=" << header.dirty_tail
+	     << "dirty_tail=" << header.dirty_tail
 	     << ", alloc_tail=" << header.alloc_tail
+	     << ", magic=" << header.magic
              << ")";
 }
 
@@ -86,6 +87,15 @@ CircularJournalSpace::write(ceph::bufferlist&& to_write) {
   );
 }
 
+segment_nonce_t calc_new_nonce(
+  uint32_t crc,
+  unsigned char const *data,
+  unsigned length)
+{
+  crc &= std::numeric_limits<uint32_t>::max() >> 1;
+  return ceph_crc32c(crc, data, length);
+}
+
 CircularJournalSpace::open_ret CircularJournalSpace::open(bool is_mkfs) {
   std::ostringstream oss;
   oss << device_id_printer_t{get_device_id()};
@@ -103,13 +113,18 @@ CircularJournalSpace::open_ret CircularJournalSpace::open(bool is_mkfs) {
 	  get_records_start(),
 	  device->get_device_id())};
     head.alloc_tail = head.dirty_tail;
+    auto meta = device->get_meta();
+    head.magic = calc_new_nonce(
+      std::rand() % std::numeric_limits<uint32_t>::max(),
+      reinterpret_cast<const unsigned char *>(meta.seastore_id.bytes()),
+      sizeof(meta.seastore_id.uuid));
     encode(head, bl);
     header = head;
     set_written_to(head.dirty_tail);
     initialized = true;
     DEBUG(
-      "initialize header block in CircularJournalSpace length {}",
-      bl.length());
+      "initialize header block in CircularJournalSpace length {}, head: {}",
+      bl.length(), header);
     return write_header(
     ).safe_then([this]() {
       return open_ret(
