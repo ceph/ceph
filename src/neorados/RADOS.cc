@@ -408,10 +408,22 @@ struct OpImpl {
   OpImpl() = default;
 
   OpImpl(const OpImpl& rhs) = delete;
-  OpImpl(OpImpl&& rhs) = default;
+  OpImpl(OpImpl&& rhs)
+    : op(std::move(rhs.op)), mtime(std::move(rhs.mtime)) {
+    rhs.op = ObjectOperation{};
+    rhs.mtime.reset();
+  }
 
   OpImpl& operator =(const OpImpl& rhs) = delete;
-  OpImpl& operator =(OpImpl&& rhs) = default;
+  OpImpl& operator =(OpImpl&& rhs) {
+    op = std::move(rhs.op);
+    mtime = std::move(rhs.mtime);
+
+    rhs.op = ObjectOperation{};
+    rhs.mtime.reset();
+
+    return *this;
+  }
 };
 
 Op::Op() {
