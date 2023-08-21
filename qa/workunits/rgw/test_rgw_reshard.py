@@ -1,12 +1,10 @@
 #!/usr/bin/python3
 
-import logging as log
 import time
-import subprocess
+import logging as log
 import json
-import boto3
-import botocore.exceptions
 import os
+from common import exec_cmd, boto_connect, create_user
 
 """
 Rgw manual and dynamic resharding  testing against a running instance
@@ -18,11 +16,6 @@ Rgw manual and dynamic resharding  testing against a running instance
 #
 #
 
-log.basicConfig(level=log.DEBUG)
-log.getLogger('botocore').setLevel(log.CRITICAL)
-log.getLogger('boto3').setLevel(log.CRITICAL)
-log.getLogger('urllib3').setLevel(log.CRITICAL)
-
 """ Constants """
 USER = 'tester'
 DISPLAY_NAME = 'Testing'
@@ -32,23 +25,6 @@ BUCKET_NAME1 = 'myfoo'
 BUCKET_NAME2 = 'mybar'
 VER_BUCKET_NAME = 'myver'
 INDEX_POOL = 'default.rgw.buckets.index'
-
-
-def exec_cmd(cmd):
-    try:
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-        out, err = proc.communicate()
-        if proc.returncode == 0:
-            log.info('command succeeded')
-            if out is not None: log.info(out)
-            return out
-        else:
-            raise Exception("error: %s \nreturncode: %s" % (err, proc.returncode))
-    except Exception as e:
-        log.error('command failed')
-        log.error(e)
-        return False
-
 
 class BucketStats:
     def __init__(self, bucket_name, bucket_id, num_objs=0, size_kb=0, num_shards=0):
@@ -98,36 +74,9 @@ def main():
     """
     execute manual and dynamic resharding commands
     """
-    # create user
-    exec_cmd('radosgw-admin user create --uid %s --display-name %s --access-key %s --secret %s'
-                   % (USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY))
-
-    def boto_connect(portnum, ssl, proto):
-        endpoint = proto + '://localhost:' + portnum
-        conn = boto3.resource('s3',
-                              aws_access_key_id=ACCESS_KEY,
-                              aws_secret_access_key=SECRET_KEY,
-                              use_ssl=ssl,
-                              endpoint_url=endpoint,
-                              verify=False,
-                              config=None,
-                              )
-        try:
-            list(conn.buckets.limit(1)) # just verify we can list buckets
-        except botocore.exceptions.ConnectionError as e:
-            print(e)
-            raise
-        print('connected to', endpoint)
-        return conn
-
-    try:
-        connection = boto_connect('80', False, 'http')
-    except botocore.exceptions.ConnectionError:
-        try: # retry on non-privileged http port
-            connection = boto_connect('8000', False, 'http')
-        except botocore.exceptions.ConnectionError:
-            # retry with ssl
-            connection = boto_connect('443', True, 'https')
+    create_user(USER, DISPLAY_NAME, ACCESS_KEY, SECRET_KEY)
+    
+    connection = boto_connect(ACCESS_KEY, SECRET_KEY)
 
     # create a bucket
     bucket1 = connection.create_bucket(Bucket=BUCKET_NAME1)

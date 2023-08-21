@@ -464,6 +464,16 @@ class RGWRados
   int get_obj_head_ref(const DoutPrefixProvider *dpp, const rgw_placement_rule& target_placement_rule, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_obj_head_ref(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, rgw_rados_ref *ref);
+  
+  int clear_olh(const DoutPrefixProvider *dpp,
+                RGWObjectCtx& obj_ctx,
+                const rgw_obj& obj,
+                const RGWBucketInfo& bucket_info,
+                rgw_rados_ref& ref,
+                const std::string& tag,
+                const uint64_t ver,
+                optional_yield y);
+  
   uint64_t max_bucket_id;
 
   int get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx& rctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -1330,6 +1340,7 @@ public:
                              const DoutPrefixProvider *dpp);
 
   void bucket_index_guard_olh_op(const DoutPrefixProvider *dpp, RGWObjState& olh_state, librados::ObjectOperation& op);
+  void olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, const std::string& op_tag, optional_yield y);
   int olh_init_modification(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
   int olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
   int bucket_index_link_olh(const DoutPrefixProvider *dpp, 
@@ -1344,11 +1355,18 @@ public:
   int bucket_index_read_olh_log(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver_marker,
                                 map<uint64_t, vector<rgw_bucket_olh_log_entry> > *log, bool *is_truncated);
   int bucket_index_trim_olh_log(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& obj_state, const rgw_obj& obj_instance, uint64_t ver);
-  int bucket_index_clear_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance);
+  int bucket_index_clear_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const std::string& olh_tag, const rgw_obj& obj_instance);
   int apply_olh_log(const DoutPrefixProvider *dpp, RGWObjectCtx& ctx, RGWObjState& obj_state, const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                     bufferlist& obj_tag, map<uint64_t, vector<rgw_bucket_olh_log_entry> >& log,
                     uint64_t *plast_ver, rgw_zone_set *zones_trace = nullptr);
   int update_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWObjState *state, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_zone_set *zones_trace = nullptr);
+  int clear_olh(const DoutPrefixProvider *dpp,
+                RGWObjectCtx& obj_ctx,
+                const rgw_obj& obj,
+                const RGWBucketInfo& bucket_info,
+                const std::string& tag,
+                const uint64_t ver,
+                optional_yield y);
   int set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, const RGWBucketInfo& bucket_info, const rgw_obj& target_obj, bool delete_marker, rgw_bucket_dir_entry_meta *meta,
               uint64_t olh_epoch, ceph::real_time unmod_since, bool high_precision_time,
               optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_data_change = false);

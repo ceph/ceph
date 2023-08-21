@@ -5321,7 +5321,7 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, rgw::sal::RGWStore*
 
 static bool is_olh(map<string, bufferlist>& attrs)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_INFO);
+  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_OLH_VER);
   return (iter != attrs.end());
 }
 
@@ -6620,6 +6620,51 @@ int RGWRados::obj_operate(const DoutPrefixProvider *dpp, const RGWBucketInfo& bu
   return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, op, &outbl, null_yield);
 }
 
+void RGWRados::olh_cancel_modification(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+                                       RGWObjState& state, const rgw_obj& olh_obj,
+                                       const std::string& op_tag, optional_yield y)
+{
+  if (cct->_conf->rgw_debug_inject_olh_cancel_modification_err) {
+    // simulate the scenario where we fail to remove the pending xattr
+    return;
+  }
+
+  rgw_rados_ref ref;
+  int r = get_obj_head_ref(dpp, bucket_info, olh_obj, &ref);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " get_obj_head_ref() returned " << r << dendl;
+    return;
+  }
+  string attr_name = RGW_ATTR_OLH_PENDING_PREFIX;
+  attr_name.append(op_tag);
+
+  // first remove the relevant pending prefix
+  ObjectWriteOperation op;
+  bucket_index_guard_olh_op(dpp, state, op);
+  op.rmxattr(attr_name.c_str());
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, y);
+  if (r < 0) {
+    if (r != -ENOENT && r != -ECANCELED) {
+      ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " rmxattr rgw_rados_operate() returned " << r << dendl;
+    }
+    return;
+  }
+
+  if (auto iter = state.attrset.find(RGW_ATTR_OLH_INFO); iter == state.attrset.end()) {
+    // attempt to remove the OLH object if there are no pending ops,
+    // its olh info attr is empty, and its tag hasn't changed
+    ObjectWriteOperation rm_op;
+    bucket_index_guard_olh_op(dpp, state, rm_op);
+    rm_op.cmpxattr(RGW_ATTR_OLH_INFO, CEPH_OSD_CMPXATTR_OP_EQ, bufferlist());
+    cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true);
+    rm_op.remove();
+    r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &rm_op, y);
+  }
+  if (r < 0 && (r != -ENOENT && r != -ECANCELED)) {
+    ldpp_dout(dpp, 0) << __func__ << " target_obj=" << olh_obj << " olh rm rgw_rados_operate() returned " << r << dendl;
+  }
+}
+
 int RGWRados::olh_init_modification_impl(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag)
 {
   ObjectWriteOperation op;
@@ -6649,6 +6694,18 @@ int RGWRados::olh_init_modification_impl(const DoutPrefixProvider *dpp, const RG
   if (has_tag) {
     /* guard against racing writes */
     bucket_index_guard_olh_op(dpp, state, op);
+  } else if (state.exists) {
+    // This is the case where a null versioned object already exists for this key
+    // but it hasn't been initialized as an OLH object yet. We immediately add
+    // the RGW_ATTR_OLH_INFO attr so that the OLH points back to itself and
+    // therefore effectively makes this an unobservable modification.
+    op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, bufferlist());
+    RGWOLHInfo info;
+    info.target = olh_obj;
+    info.removed = false;
+    bufferlist bl;
+    encode(info, bl);
+    op.setxattr(RGW_ATTR_OLH_INFO, bl);    
   }
 
   if (!has_tag) {
@@ -7125,7 +7182,7 @@ int RGWRados::bucket_index_trim_olh_log(const DoutPrefixProvider *dpp, const RGW
   return 0;
 }
 
-int RGWRados::bucket_index_clear_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance)
+int RGWRados::bucket_index_clear_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const std::string& olh_tag, const rgw_obj& obj_instance)
 {
   rgw_rados_ref ref;
   int r = get_obj_head_ref(dpp, bucket_info, obj_instance, &ref);
@@ -7134,8 +7191,6 @@ int RGWRados::bucket_index_clear_olh(const DoutPrefixProvider *dpp, const RGWBuc
   }
 
   BucketShard bs(this);
-
-  string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
 
   cls_rgw_obj_key key(obj_instance.key.get_index_key_name(), string());
 
@@ -7303,35 +7358,89 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
     return r;
   }
 
+
+  if (need_to_remove) {
+    string olh_tag(state.olh_tag.c_str(), state.olh_tag.length());
+    r = clear_olh(dpp, obj_ctx, obj, bucket_info, ref, olh_tag, last_ver, null_yield);
+    if (r < 0 && r != -ECANCELED) {
+      ldpp_dout(dpp, 0) << "ERROR: could not clear olh, r=" << r << dendl;
+      return r;
+    }
+  }
+
   r = bucket_index_trim_olh_log(dpp, bucket_info, state, obj, last_ver);
-  if (r < 0) {
+  if (r < 0 && r != -ECANCELED) {
     ldpp_dout(dpp, 0) << "ERROR: could not trim olh log, r=" << r << dendl;
     return r;
   }
 
-  if (need_to_remove) {
-    ObjectWriteOperation rm_op;
+  return 0;
+}
 
-    rm_op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, olh_tag);
-    rm_op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_EQ, last_ver);
-    cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true); /* fail if found one of these, pending modification */
-    rm_op.remove();
+int RGWRados::clear_olh(const DoutPrefixProvider *dpp,
+                        RGWObjectCtx& obj_ctx,
+                        const rgw_obj& obj,
+                        const RGWBucketInfo& bucket_info,
+                        const std::string& tag,
+                        const uint64_t ver,
+                        optional_yield y) {
+  rgw_rados_ref ref;
+  int r = get_obj_head_ref(dpp, bucket_info, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  return clear_olh(dpp, obj_ctx, obj, bucket_info, ref, tag, ver, y);
+}
 
-    r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &rm_op, null_yield);
-    if (r == -ECANCELED) {
-      return 0; /* someone else won this race */
-    } else {
-      /* 
-       * only clear if was successful, otherwise we might clobber pending operations on this object
-       */
-      r = bucket_index_clear_olh(dpp, bucket_info, state, obj);
-      if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;
-        return r;
-      }
+int RGWRados::clear_olh(const DoutPrefixProvider *dpp,
+                        RGWObjectCtx& obj_ctx,
+                        const rgw_obj& obj,
+                        const RGWBucketInfo& bucket_info,
+                        rgw_rados_ref& ref,
+                        const std::string& tag,
+                        const uint64_t ver,
+                        optional_yield y) {
+  ObjectWriteOperation rm_op;
+
+  RGWObjState *s = nullptr;
+
+  int r = get_obj_state(dpp, &obj_ctx, bucket_info, obj, &s, false, y);
+  if (r < 0) {
+    return r;
+  }
+  map<string, bufferlist> pending_entries;
+  rgw_filter_attrset(s->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
+
+  map<string, bufferlist> rm_pending_entries;
+  check_pending_olh_entries(pending_entries, &rm_pending_entries);
+
+  if (!rm_pending_entries.empty()) {
+    r = remove_olh_pending_entries(dpp, bucket_info, *s, obj, rm_pending_entries);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: rm_pending_entries returned ret=" << r << dendl;
+      return r;
     }
   }
 
+  bufferlist tag_bl;
+  tag_bl.append(tag.c_str(), tag.length());
+  rm_op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, tag_bl);
+  rm_op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_EQ, ver);
+  cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true); /* fail if found one of these, pending modification */
+  rm_op.remove();
+
+  r = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &rm_op, y);
+  if (r == -ECANCELED) {
+    return r; /* someone else made a modification in the meantime */
+  }
+  /* 
+   * only clear if was successful, otherwise we might clobber pending operations on this object
+   */
+  r = bucket_index_clear_olh(dpp, bucket_info, tag, obj);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: could not clear bucket index olh entries r=" << r << dendl;
+    return r;
+  }
   return 0;
 }
 
@@ -7391,11 +7500,17 @@ int RGWRados::set_olh(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, cons
       }
       return ret;
     }
-    ret = bucket_index_link_olh(dpp, bucket_info, *state, target_obj, delete_marker,
-                                op_tag, meta, olh_epoch, unmod_since, high_precision_time,
-                                zones_trace, log_data_change);
+    if (cct->_conf->rgw_debug_inject_set_olh_err) {
+      // fail here to simulate the scenario of an unlinked object instance
+      ret = -cct->_conf->rgw_debug_inject_set_olh_err;
+    } else {
+        ret = bucket_index_link_olh(dpp, bucket_info, *state, target_obj, delete_marker,
+                                    op_tag, meta, olh_epoch, unmod_since, high_precision_time,
+                                    zones_trace, log_data_change);
+    }
     if (ret < 0) {
       ldpp_dout(dpp, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
+      olh_cancel_modification(dpp, bucket_info, *state, olh_obj, op_tag, y);
       if (ret == -ECANCELED) {
         // the bucket index rejected the link_olh() due to olh tag mismatch;
         // attempt to reconstruct olh head attributes based on the bucket index
@@ -7516,7 +7631,7 @@ int RGWRados::get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket
     return r;
   }
 
-  auto iter = attrset.find(RGW_ATTR_OLH_INFO);
+  auto iter = attrset.find(RGW_ATTR_OLH_VER);
   if (iter == attrset.end()) { /* not an olh */
     return -EINVAL;
   }
@@ -7618,9 +7733,13 @@ int RGWRados::follow_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& buc
     }
   }
 
-  auto iter = state->attrset.find(RGW_ATTR_OLH_INFO);
+  auto iter = state->attrset.find(RGW_ATTR_OLH_VER);
   if (iter == state->attrset.end()) {
     return -EINVAL;
+  }
+  iter = state->attrset.find(RGW_ATTR_OLH_INFO);
+  if (iter == state->attrset.end()) {
+    return -ENOENT;
   }
 
   RGWOLHInfo olh;
