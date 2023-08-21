@@ -265,7 +265,7 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "pacific" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "elector-pinging")'
     jq_success "$jqinput" "$jqfilter" "elector-pinging" || return 1
-    jqfilter='.monmap.features.persistent | length == 10'
+    jqfilter='.monmap.features.persistent | length == 11'
     jq_success "$jqinput" "$jqfilter" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "quincy")'
     jq_success "$jqinput" "$jqfilter" "quincy" || return 1
