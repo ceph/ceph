@@ -20,6 +20,7 @@ export class CephfsSubvolumeService {
   create(
     fsName: string,
     subVolumeName: string,
+    subVolumeGroupName: string,
     poolName: string,
     size: string,
     uid: number,
@@ -32,6 +33,7 @@ export class CephfsSubvolumeService {
       {
         vol_name: fsName,
         subvol_name: subVolumeName,
+        subvolgroup_name: subVolumeGroupName,
         pool_layout: poolName,
         size: size,
         uid: uid,
