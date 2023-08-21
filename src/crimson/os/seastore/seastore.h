@@ -144,6 +144,8 @@ public:
       CollectionRef c,
       const ghobject_t& oid) final;
 
+    /// std::get<1>(ret) returns end if and only if the listing has listed all
+    /// the items within the range, otherwise it returns the next key to be listed.
     seastar::future<std::tuple<std::vector<ghobject_t>, ghobject_t>> list_objects(
       CollectionRef c,
       const ghobject_t& start,
