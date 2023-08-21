@@ -42,7 +42,11 @@ class CreateSnapshotRequests:
     def wait_for_pending(self):
         with self.lock:
             while self.pending:
+                self.log.debug(
+                    "CreateSnapshotRequests.wait_for_pending: "
+                    "{} images".format(len(self.pending)))
                 self.condition.wait()
+        self.log.debug("CreateSnapshotRequests.wait_for_pending: done")
 
     def add(self, pool_id, namespace, image_id):
         image_spec = (pool_id, namespace, image_id)
@@ -264,6 +268,7 @@ class CreateSnapshotRequests:
 
         with self.lock:
             self.pending.remove(image_spec)
+            self.condition.notify()
             if not self.queue:
                 return
             image_spec = self.queue.pop(0)
@@ -304,7 +309,6 @@ class MirrorSnapshotScheduleHandler:
 
     lock = Lock()
     condition = Condition(lock)
-    thread = None
 
     def __init__(self, module):
         self.module = module
@@ -312,18 +316,26 @@ class MirrorSnapshotScheduleHandler:
         self.last_refresh_images = datetime(1970, 1, 1)
         self.create_snapshot_requests = CreateSnapshotRequests(self)
 
-        self.init_schedule_queue()
-
+        self.stop_thread = False
         self.thread = Thread(target=self.run)
+
+    def setup(self):
+        self.init_schedule_queue()
         self.thread.start()
 
-    def _cleanup(self):
+    def shutdown(self):
+        self.log.info("MirrorSnapshotScheduleHandler: shutting down")
+        self.stop_thread = True
+        if self.thread.is_alive():
+            self.log.debug("MirrorSnapshotScheduleHandler: joining thread")
+            self.thread.join()
         self.create_snapshot_requests.wait_for_pending()
+        self.log.info("MirrorSnapshotScheduleHandler: shut down")
 
     def run(self):
         try:
             self.log.info("MirrorSnapshotScheduleHandler: starting")
-            while True:
+            while not self.stop_thread:
                 refresh_delay = self.refresh_images()
                 with self.lock:
                     (image_spec, wait_time) = self.dequeue()
@@ -335,6 +347,9 @@ class MirrorSnapshotScheduleHandler:
                 with self.lock:
                     self.enqueue(datetime.now(), pool_id, namespace, image_id)
 
+        except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+            self.log.exception("MirrorSnapshotScheduleHandler: client blocklisted")
+            self.module.client_blocklisted.set()
         except Exception as ex:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
@@ -421,6 +436,8 @@ class MirrorSnapshotScheduleHandler:
                     self.log.debug(
                         "load_pool_images: adding image {}".format(name))
                     images[pool_id][namespace][image_id] = name
+        except rbd.ConnectionShutdown:
+            raise
         except Exception as e:
             self.log.error(
                 "load_pool_images: exception when scanning pool {}: {}".format(

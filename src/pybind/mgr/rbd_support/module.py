@@ -8,6 +8,7 @@ import rbd
 import traceback
 
 from mgr_module import MgrModule
+from threading import Thread, Event
 
 from .common import NotAuthorizedError
 from .mirror_snapshot_schedule import MirrorSnapshotScheduleHandler
@@ -156,13 +157,63 @@ class Module(MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        self.rados.wait_for_latest_osdmap()
+        self.client_blocklisted = Event()
+        self.module_ready = False
+        self.init_handlers()
+        self.recovery_thread = Thread(target=self.run)
+        self.recovery_thread.start()
+
+    def init_handlers(self):
         self.mirror_snapshot_schedule = MirrorSnapshotScheduleHandler(self)
         self.perf = PerfHandler(self)
         self.task = TaskHandler(self)
         self.trash_purge_schedule = TrashPurgeScheduleHandler(self)
 
+    def setup_handlers(self):
+        self.log.info("starting setup")
+        # new RADOS client is created and registered in the MgrMap
+        # implicitly here as 'rados' is a property attribute.
+        self.rados.wait_for_latest_osdmap()
+        self.mirror_snapshot_schedule.setup()
+        self.perf.setup()
+        self.task.setup()
+        self.trash_purge_schedule.setup()
+        self.log.info("setup complete")
+        self.module_ready = True
+
+    def run(self):
+        self.log.info("recovery thread starting")
+        try:
+            while True:
+                try:
+                    self.setup_handlers()
+                except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+                    self.log.exception("setup_handlers: client blocklisted")
+                    self.log.info("recovering from double blocklisting")
+                else:
+                    # block until RADOS client is blocklisted
+                    self.client_blocklisted.wait()
+                    self.log.info("recovering from blocklisting")
+                self.shutdown()
+                self.client_blocklisted.clear()
+                self.init_handlers()
+        except Exception as ex:
+            self.log.fatal("Fatal runtime error: {}\n{}".format(
+                ex, traceback.format_exc()))
+
+    def shutdown(self):
+        self.module_ready = False
+        self.mirror_snapshot_schedule.shutdown()
+        self.trash_purge_schedule.shutdown()
+        self.task.shutdown()
+        self.perf.shutdown()
+        # shut down client and deregister it from MgrMap
+        super().shutdown()
+
     def handle_command(self, inbuf, cmd):
+        if not self.module_ready:
+            return (-errno.EAGAIN, "",
+                    "rbd_support module is not ready, try again")
         # ensure we have latest pools available
         self.rados.wait_for_latest_osdmap()
 
@@ -188,6 +239,10 @@ class Module(MgrModule):
                     ex, traceback.format_exc()))
                 raise
 
+        except (rados.ConnectionShutdown, rbd.ConnectionShutdown) as ex:
+            self.log.debug("handle_command: client blocklisted")
+            self.client_blocklisted.set()
+            return -errno.EAGAIN, "", str(ex)
         except rados.Error as ex:
             return -ex.errno, "", str(ex)
         except rbd.OSError as ex:

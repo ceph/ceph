@@ -45,7 +45,6 @@ class PerfHandler:
     lock = Lock()
     query_condition = Condition(lock)
     refresh_condition = Condition(lock)
-    thread = None
 
     image_name_cache = {}
     image_name_refresh_time = datetime.fromtimestamp(0)
@@ -89,13 +88,24 @@ class PerfHandler:
         self.module = module
         self.log = module.log
 
+        self.stop_thread = False
         self.thread = Thread(target=self.run)
+
+    def setup(self):
         self.thread.start()
+
+    def shutdown(self):
+        self.log.info("PerfHandler: shutting down")
+        self.stop_thread = True
+        if self.thread.is_alive():
+            self.log.debug("PerfHandler: joining thread")
+            self.thread.join()
+        self.log.info("PerfHandler: shut down")
 
     def run(self):
         try:
             self.log.info("PerfHandler: starting")
-            while True:
+            while not self.stop_thread:
                 with self.lock:
                     self.scrub_expired_queries()
                     self.process_raw_osd_perf_counters()
@@ -106,6 +116,9 @@ class PerfHandler:
 
                 self.log.debug("PerfHandler: tick")
 
+        except (rados.ConnectionShutdown, rbd.ConnectionShutdown):
+            self.log.exception("PerfHandler: client blocklisted")
+            self.module.client_blocklisted.set()
         except Exception as ex:
             self.log.fatal("Fatal runtime error: {}\n{}".format(
                 ex, traceback.format_exc()))
