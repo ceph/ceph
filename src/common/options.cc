@@ -8456,13 +8456,13 @@ std::vector<Option> get_mds_options() {
     .set_long_description("This is the order of magnitude difference (in base 2) of the internal liveness decay counter and the number of capabilities the session holds. When this difference occurs, the MDS treats the session as quiescent and begins recalling capabilities."),
 
     Option("mds_session_cap_acquisition_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(10)
+    .set_default(30)
     .set_description("decay rate for session readdir caps leading to readdir throttle")
     .set_flag(Option::FLAG_RUNTIME)
     .set_long_description("The half-life for the session cap acquisition counter of caps acquired by readdir. This is used for throttling readdir requests from clients slow to release caps."),
 
     Option("mds_session_cap_acquisition_throttle", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(500000)
+    .set_default(100000)
     .set_description("throttle point for cap acquisition decay counter"),
 
     Option("mds_session_max_caps_throttle_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
