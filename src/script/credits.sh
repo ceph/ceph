@@ -16,8 +16,8 @@ declare -A author2lines
 declare -A organization2lines
 git log --no-merges --pretty='%ae' $range | sed -e "$remap" | sort -u > $TMP
 while read mail ; do
-    count=$(git log --numstat --author="$mail" --pretty='%h' $range |
-        egrep -v 'package-lock\.json|\.xlf' | # generated files that should be excluded from line counting
+    count=$(git log --numstat --author="$mail" --pretty='%h' --no-mailmap $range |
+        grep -E -v 'package-lock\.json|\.xlf' | # generated files that should be excluded from line counting
         perl -e 'while(<STDIN>) { if(/(\d+)\t(\d+)/) { $added += $1; $deleted += $2 } }; print $added + $deleted;')
     (( author2lines["${mail2author[$mail]}"] += $count ))
     (( organization2lines["${mail2organization[$mail]}"] += $count ))
