@@ -249,22 +249,34 @@ class interval_set {
  private:
   auto find_inc(T start) const {
     auto p = m.lower_bound(start);  // p->first >= start
-    if (p != m.begin() &&
-        (p == m.end() || p->first > start)) {
-      --p;   // might overlap?
-      if (p->first + p->second <= start)
-        ++p; // it doesn't.
+    if (p != m.end()) {
+      while (p != m.begin()) {
+        if (p->first <= start) {
+	  break;
+        } else {
+	  --p;   // might overlap?
+        }
+      }
+      if (p->first + p->second <= start) {
+	++p; // it doesn't.
+      }
     }
     return p;
   }
   
   auto find_inc_m(T start) {
     auto p = m.lower_bound(start);
-    if (p != m.begin() &&
-        (p == m.end() || p->first > start)) {
-      --p;   // might overlap?
-      if (p->first + p->second <= start)
-        ++p; // it doesn't.
+    if (p != m.end()) {
+      while (p != m.begin()) {
+        if (p->first <= start) {
+	  break;
+        } else {
+	  --p;   // might overlap?
+        }
+      }
+      if (p->first + p->second <= start) {
+	++p; // it doesn't.
+      }
     }
     return p;
   }
