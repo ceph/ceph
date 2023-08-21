@@ -1,7 +1,9 @@
+#include <thread>
+#include <gtest/gtest.h>
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
-#include <gtest/gtest.h>
 
 namespace net = boost::asio;
 using boost::redis::config;
@@ -12,21 +14,36 @@ using boost::redis::response;
 class ConnectionFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
+      conn = new connection{io};
+
+      /* Run context */
+      using Executor = net::io_context::executor_type;
+      using Work = net::executor_work_guard<Executor>;
+      work = new std::optional<Work>(io.get_executor());
+      worker = new std::thread([&] { io.run(); });
+      
       config cfg;
       cfg.addr.host = "127.0.0.1";
       cfg.addr.port = "6379";
-
-      conn = new connection{io};
 
       conn->async_run(cfg, {}, net::detached);
     }
 
     virtual void TearDown() {
+      io.stop();
+
       delete conn;
+      delete work;
+      delete worker;
     }
 
     net::io_context io;
     connection* conn;
+
+    using Executor = net::io_context::executor_type;
+    using Work = net::executor_work_guard<Executor>;
+    std::optional<Work>* work;
+    std::thread* worker;
 };
 
 TEST_F(ConnectionFixture, Ping) {
@@ -38,14 +55,14 @@ TEST_F(ConnectionFixture, Ping) {
   response<std::string> resp;
 
   conn->async_exec(req, resp, [&](auto ec, auto) {
-    if (!ec)
-      std::cout << "PING: " << std::get<0>(resp).value() << std::endl;
+    ASSERT_EQ((bool)ec, 0);
+    EXPECT_EQ(std::get<0>(resp).value(), "Hello world");
+
     conn->cancel();
   });
 
-  io.run();
-
-  ASSERT_EQ(std::get<0>(resp).value(), "Hello world");
+  *work = std::nullopt;
+  worker->join();
 }
 
 TEST_F(ConnectionFixture, HMSet) {
@@ -55,15 +72,14 @@ TEST_F(ConnectionFixture, HMSet) {
   req.push("HMSET", "key", "data", "value");
 
   conn->async_exec(req, resp, [&](auto ec, auto) {
-    if (!ec)
-      std::cout << "Result: " << std::get<0>(resp).value() << std::endl;
+    ASSERT_EQ((bool)ec, 0);
+    EXPECT_EQ(std::get<0>(resp).value(), "OK");
 
     conn->cancel();
   });
 
-  io.run();
-
-  ASSERT_EQ(std::get<0>(resp).value(), "OK");
+  *work = std::nullopt;
+  worker->join();
 }
 
 int main(int argc, char *argv[]) {
