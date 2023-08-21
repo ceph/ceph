@@ -69,6 +69,8 @@ void SessionMap::register_perfcounters()
   plb.add_u64(l_mdssm_avg_load, "average_load", "Average Load");
   plb.add_u64(l_mdssm_avg_session_uptime, "avg_session_uptime",
                "Average session uptime");
+  plb.add_u64(l_mdssm_metadata_threshold_sessions_evicted, "mdthresh_evicted",
+	      "Sessions evicted on reaching metadata threshold");
 
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
@@ -477,6 +479,7 @@ void SessionMap::save(MDSContext *onsave, version_t needv)
 			new C_OnFinisher(new C_IO_SM_Save(this, version),
 					 mds->finisher));
   apply_blocklist(to_blocklist);
+  logger->inc(l_mdssm_metadata_threshold_sessions_evicted, to_blocklist.size());
 }
 
 void SessionMap::_save_finish(version_t v)
@@ -924,6 +927,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
   }
 
   apply_blocklist(to_blocklist);
+  logger->inc(l_mdssm_metadata_threshold_sessions_evicted, to_blocklist.size());
 }
 
 // =================
