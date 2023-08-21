@@ -919,7 +919,7 @@ bool MgrMonitor::drop_active()
 
   /* blocklist RADOS clients in use by the mgr */
   for (const auto& a : pending_map.clients) {
-    mon.osdmon()->blocklist(a, until);
+    mon.osdmon()->blocklist(a.second, until);
   }
   request_proposal(mon.osdmon());
 
