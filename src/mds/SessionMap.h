@@ -45,6 +45,7 @@ enum {
   l_mdssm_total_load,
   l_mdssm_avg_load,
   l_mdssm_avg_session_uptime,
+  l_mdssm_metadata_threshold_sessions_evicted,
   l_mdssm_last,
 };
 
