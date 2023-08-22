@@ -2680,13 +2680,14 @@ public:
   }
 
   static int _write_bdev_label(CephContext* cct,
-			       const std::string &path, bluestore_bdev_label_t label);
+			       const std::string &path, bluestore_bdev_label_t label, 
+                               bool replicated=false);
   static int _read_bdev_label(CephContext* cct, const std::string &path,
-			      bluestore_bdev_label_t *label);
+			      bluestore_bdev_label_t *label, bool replicated=false);
 private:
   int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
-			       bool create);
-  int _set_bdev_label_size(const std::string& path, uint64_t size);
+			       bool create, bool replicated=false);
+  int _set_bdev_label_size(const std::string& path, uint64_t size, bool replicated=false);
 
   int _open_super_meta();
 
