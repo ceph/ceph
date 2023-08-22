@@ -101,8 +101,19 @@ To drain all daemons from a host, run a command of the following form:
 
    ceph orch host drain *<host>*
 
-The ``_no_schedule`` label will be applied to the host. See
-:ref:`cephadm-special-host-labels`.
+The ``_no_schedule`` and ``_no_conf_keyring`` labels will be applied to the
+host. See :ref:`cephadm-special-host-labels`.
+
+If you only want to drain daemons but leave managed ceph conf and keyring
+files on the host, you may pass the ``--keep-conf-keyring`` flag to the
+drain command.
+
+.. prompt:: bash #
+
+   ceph orch host drain *<host>* --keep-conf-keyring
+
+This will apply the ``_no_schedule`` label to the host but not the
+``_no_conf_keyring`` label.
 
 All OSDs on the host will be scheduled to be removed. You can check the progress of the OSD removal operation with the following command:
 
@@ -182,6 +193,12 @@ The following host labels have a special meaning to cephadm.  All start with ``_
   This label prevents cephadm from deploying daemons on this host.  If it is added to
   an existing host that already contains Ceph daemons, it will cause cephadm to move
   those daemons elsewhere (except OSDs, which are not removed automatically).
+
+* ``_no_conf_keyring``: *Do not deploy config files or keyrings on this host*.
+
+  This label is effectively the same as ``_no_schedule`` but instead of working for
+  daemons it works for client keyrings and ceph conf files that are being managed
+  by cephadm
 
 * ``_no_autotune_memory``: *Do not autotune memory on this host*.
 
