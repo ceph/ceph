@@ -1007,4 +1007,7 @@ add_ceph_unittest(unittest_weighted_shuffle)
 
 add_executable(unittest_intarith test_intarith.cc)
 add_ceph_unittest(unittest_intarith)
+
+add_executable(unittest_auto_shared_ptr test_auto_shared_ptr.cc)
+add_ceph_unittest(unittest_auto_shared_ptr)
 #make check ends here

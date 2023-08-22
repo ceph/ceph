@@ -18,6 +18,7 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
+#include "include/auto_shared_ptr.h"
 #include "MDSContext.h"
 #include "mdstypes.h"
 #include "CInode.h"
@@ -34,22 +35,16 @@ class CDentry;
 class MDSRankBase;
 struct MDPeerUpdate;
 
-class LogSegment {
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
+
+class LogSegment: public std::enable_shared_from_this<LogSegment> {
  public:
   using seq_t = uint64_t;
 
-  LogSegment(uint64_t _seq, loff_t off=-1) :
-    seq(_seq), offset(off), end(off),
-    dirty_dirfrags(member_offset(CDir, item_dirty)),
-    new_dirfrags(member_offset(CDir, item_new)),
-    dirty_inodes(member_offset(CInode, item_dirty)),
-    dirty_dentries(member_offset(CDentry, item_dirty)),
-    open_files(member_offset(CInode, item_open_file)),
-    dirty_parent_inodes(member_offset(CInode, item_dirty_parent)),
-    dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
-    dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
-    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
-  {}
+  [[nodiscard]] static AutoSharedLogSegment create(uint64_t _seq, loff_t off = -1)
+  {
+    return std::shared_ptr<LogSegment>(new LogSegment(_seq, off));
+  }
 
   void try_to_expire(MDSRankBase *mds, MDSGatherBuilder &gather_bld, int op_prio);
   void purge_inodes_finish(interval_set<inodeno_t>& inos){
@@ -104,6 +99,24 @@ class LogSegment {
   std::map<int,version_t> tablev;
 
   MDSContext::vec expiry_waiters;
+
+ private:
+  // clients should use the `create` method
+  LogSegment(uint64_t _seq, uint64_t off = UINT64_MAX)
+      : seq(_seq)
+      , offset(off)
+      , end(off)
+      , dirty_dirfrags(member_offset(CDir, item_dirty))
+      , new_dirfrags(member_offset(CDir, item_new))
+      , dirty_inodes(member_offset(CInode, item_dirty))
+      , dirty_dentries(member_offset(CDentry, item_dirty))
+      , open_files(member_offset(CInode, item_open_file))
+      , dirty_parent_inodes(member_offset(CInode, item_dirty_parent))
+      , dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir))
+      , dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest))
+      , dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
+  {
+  }
 };
 
 static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {

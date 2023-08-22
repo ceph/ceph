@@ -18,11 +18,14 @@
 #include "include/types.h"
 #include "MDSContext.h"
 #include "mds_table_types.h"
+#include "include/auto_shared_ptr.h"
 
 #include "messages/MMDSTableRequest.h"
 
 class MDSRank;
 class LogSegment;
+
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
 
 class MDSTableClient {
 public:
@@ -97,7 +100,7 @@ protected:
   std::list<_pending_prepare> waiting_for_reqid;
 
   // pending commits
-  std::map<version_t, LogSegment*> pending_commit;
+  std::map<version_t, AutoSharedLogSegment> pending_commit;
   std::map<version_t, MDSContext::vec > ack_waiters;
 };
 #endif

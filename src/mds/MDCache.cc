@@ -5738,7 +5738,7 @@ void MDCache::clean_open_file_lists()
 {
   dout(10) << "clean_open_file_lists" << dendl;
   
-  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+  for (auto p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        ++p) {
     LogSegment *ls = p->second;
@@ -6456,9 +6456,9 @@ void MDCache::do_file_recover()
 
 class C_MDC_RetryTruncate : public MDCacheContext {
   CInode *in;
-  LogSegment *ls;
+  AutoSharedLogSegment ls;
 public:
-  C_MDC_RetryTruncate(MDCache *c, CInode *i, LogSegment *l) :
+  C_MDC_RetryTruncate(MDCache *c, CInode *i, const AutoSharedLogSegment &l) :
     MDCacheContext(c), in(i), ls(l) {}
   void finish(int r) override {
     mdcache->_truncate_inode(in, ls);
@@ -6490,9 +6490,9 @@ void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 
 struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
   CInode *in;
-  LogSegment *ls;
+  AutoSharedLogSegment ls;
   uint32_t block_size;
-  C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, LogSegment *l, uint32_t bs) :
+  C_IO_MDC_TruncateWriteFinish(MDCache *c, CInode *i, const AutoSharedLogSegment &l, uint32_t bs) :
     MDCacheIOContext(c, false), in(i), ls(l), block_size(bs) {
   }
   void finish(int r) override {
@@ -6506,8 +6506,8 @@ struct C_IO_MDC_TruncateWriteFinish : public MDCacheIOContext {
 
 struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
   CInode *in;
-  LogSegment *ls;
-  C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, LogSegment *l) :
+  AutoSharedLogSegment ls;
+  C_IO_MDC_TruncateFinish(MDCache *c, CInode *i, const AutoSharedLogSegment &l) :
     MDCacheIOContext(c, false), in(i), ls(l) {
   }
   void finish(int r) override {
@@ -6727,7 +6727,7 @@ void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 void MDCache::start_recovered_truncates()
 {
   dout(10) << "start_recovered_truncates" << dendl;
-  for (map<uint64_t,LogSegment*>::iterator p = mds->mdlog->segments.begin();
+  for (auto p = mds->mdlog->segments.begin();
        p != mds->mdlog->segments.end();
        ++p) {
     LogSegment *ls = p->second;
@@ -6754,11 +6754,11 @@ void MDCache::start_recovered_truncates()
 
 class C_MDS_purge_completed_finish : public MDCacheLogContext {
   interval_set<inodeno_t> inos;
-  LogSegment *ls; 
+  AutoSharedLogSegment ls;
   version_t inotablev;
 public:
   C_MDS_purge_completed_finish(MDCache *m, const interval_set<inodeno_t>& _inos,
-			       LogSegment *_ls, version_t iv)
+			       const AutoSharedLogSegment &_ls, version_t iv)
     : MDCacheLogContext(m), inos(_inos), ls(_ls), inotablev(iv) {}
   void finish(int r) override {
     ceph_assert(r == 0);
@@ -6785,13 +6785,13 @@ void MDCache::purge_inodes(const interval_set<inodeno_t>& inos, LogSegment *ls)
   dout(10) << __func__ << " purging inos " << inos << " logseg " << ls->seq << dendl;
   // FIXME: handle non-default data pool and namespace
 
-  auto cb = new LambdaContext([this, inos, ls](int r){
+  auto cb = new LambdaContext([this, inos, sls = AutoSharedLogSegment(ls)](int r){
       ceph_assert(r == 0 || r == -2);
       mds->inotable->project_release_ids(inos);
       version_t piv = mds->inotable->get_projected_version();
       ceph_assert(piv != 0);
-      mds->mdlog->submit_entry(new EPurged(inos, ls->seq, piv),
-				     new C_MDS_purge_completed_finish(this, inos, ls, piv));
+      mds->mdlog->submit_entry(new EPurged(inos, sls->seq, piv),
+				     new C_MDS_purge_completed_finish(this, inos, sls, piv));
       mds->mdlog->flush();
     });
   

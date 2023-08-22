@@ -49,10 +49,12 @@
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "include/utime.h"
+#include "include/auto_shared_ptr.h"
 
 class MDSRankBase;
 class LogSegment;
 class EMetaBlob;
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
 
 // generic log event
 class LogEvent {
@@ -113,8 +115,10 @@ public:
   virtual EMetaBlob *get_metablob() { return NULL; }
 
 protected:
-  LogSegment* get_segment() { return _segment; }
-  LogSegment const* get_segment() const { return _segment; }
+  const AutoSharedLogSegment& get_segment() { return _segment; }
+  // converting to an auto_shared_ptr<const LogSegment>
+  // will cause creation of a temp shared ptr which might be redundant
+  const LogSegment * get_segment() const { return _segment.get(); }
 
   utime_t stamp;
 
@@ -125,7 +129,7 @@ private:
 
   EventType _type = 0;
   uint64_t _start_off = 0;
-  LogSegment *_segment = nullptr;
+  AutoSharedLogSegment _segment = nullptr;
 };
 
 #endif
