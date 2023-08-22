@@ -8,17 +8,12 @@ import { FormatterService } from '../services/formatter.service';
 export class DimlessBinaryPipe implements PipeTransform {
   constructor(private formatter: FormatterService) {}
 
-  transform(value: any): any {
-    return this.formatter.format_number(value, 1024, [
-      'B',
-      'KiB',
-      'MiB',
-      'GiB',
-      'TiB',
-      'PiB',
-      'EiB',
-      'ZiB',
-      'YiB'
-    ]);
+  transform(value: any, decimals: number = 1): any {
+    return this.formatter.format_number(
+      value,
+      1024,
+      ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB', 'EiB', 'ZiB', 'YiB'],
+      decimals
+    );
   }
 }

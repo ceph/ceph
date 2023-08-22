@@ -1,7 +1,7 @@
 export enum Promqls {
   USEDCAPACITY = 'ceph_cluster_total_used_bytes',
-  IPS = 'sum(rate(ceph_osd_op_w_in_bytes[1m]))',
-  OPS = 'sum(rate(ceph_osd_op_r_out_bytes[1m]))',
+  WRITEIOPS = 'sum(rate(ceph_pool_wr[1m]))',
+  READIOPS = 'sum(rate(ceph_pool_rd[1m]))',
   READLATENCY = 'avg_over_time(ceph_osd_apply_latency_ms[1m])',
   WRITELATENCY = 'avg_over_time(ceph_osd_commit_latency_ms[1m])',
   READCLIENTTHROUGHPUT = 'sum(rate(ceph_pool_rd_bytes[1m]))',
