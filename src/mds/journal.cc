@@ -1620,8 +1620,9 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
 	if (used_preallocated_ino) {
 	  if (!session->info.prealloc_inos.empty()) {
 	    inodeno_t ino = session->take_ino(used_preallocated_ino);
-	    session->info.prealloc_inos.erase(ino);
+            dout(5) "received ino " << ino << " from the session" << dendl;
 	    ceph_assert(ino == used_preallocated_ino);
+	    session->info.prealloc_inos.erase(ino);
 	  }
           mds->sessionmap.replay_dirty_session(session);
 	}
