@@ -417,6 +417,7 @@ public:
     ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
 	   state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
 	   state == LOCK_LOCK  || /* if we are a leader of a peer */
+	   state == LOCK_PREXLOCK || state == LOCK_SYNC ||
 	   is_locallock());
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
