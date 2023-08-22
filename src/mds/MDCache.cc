@@ -1748,7 +1748,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       metablob->add_primary_dentry(olddn, 0, true, false, false, need_snapflush);
       mut->add_cow_dentry(olddn);
     } else {
-      ceph_assert(dnl->is_remote());
+      ceph_assert(dnl->is_remote() || dnl->is_referent());
       CDentry *olddn = dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(), dn->alternate_name, oldfirst, follows);
       dout(10) << " olddn " << *olddn << dendl;
 
@@ -4326,8 +4326,8 @@ void MDCache::rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin)
       rejoin->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
                                 dn->first, dn->last,
 				dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
-				dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
-				dnl->is_remote() ? dnl->get_remote_d_type():0, 
+				(dnl->is_remote() || dnl->is_referent())? dnl->get_remote_ino():inodeno_t(0),
+				(dnl->is_remote() || dnl->is_referent())? dnl->get_remote_d_type():0,
 				dn->get_replica_nonce(),
 				dn->lock.get_state());
       dn->state_set(CDentry::STATE_REJOINING);
@@ -4797,7 +4797,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 	  dn = dir->lookup(ss.name, ss.snapid);
         }
         if (!dn) {
-	  if (d.is_remote()) {
+	  if (d.is_remote() || d.is_referent()) {
 	    dn = dir->add_remote_dentry(ss.name, d.remote_ino, d.remote_d_type, mempool::mds_co::string(d.alternate_name), d.first, ss.snapid);
 	  } else if (d.is_null()) {
 	    dn = dir->add_null_dentry(ss.name, d.first, ss.snapid);
@@ -5060,8 +5060,8 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 	    dout(10) << " had bad linkage for " << *dn << ", unlinking " << *in << dendl;
 	    dir->unlink_inode(dn);
 	  }
-        } else if (dnl->is_remote()) {
-	  if (!q.second.is_remote() ||
+        } else if (dnl->is_remote() || dnl->is_referent()) {
+	  if (!(q.second.is_remote() || q.second.is_referent()) ||
 	      q.second.remote_ino != dnl->get_remote_ino() ||
 	      q.second.remote_d_type != dnl->get_remote_d_type()) {
 	    dout(10) << " had bad linkage for " << *dn <<  dendl;
@@ -5074,7 +5074,7 @@ void MDCache::handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &ack)
 
 	// hmm, did we have the proper linkage here?
 	if (dnl->is_null() && !q.second.is_null()) {
-	  if (q.second.is_remote()) {
+	  if (q.second.is_remote() || q.second.is_referent()) {
 	    dn->dir->link_remote_inode(dn, q.second.remote_ino, q.second.remote_d_type);
 	  } else {
 	    CInode *in = get_inode(q.second.ino, q.first.snapid);
@@ -6173,8 +6173,8 @@ void MDCache::rejoin_send_acks()
 	  it->second->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->get_alternate_name(),
                                            dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
-					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
-					   dnl->is_remote() ? dnl->get_remote_d_type():0,
+					   (dnl->is_remote() || dnl->is_referent()) ? dnl->get_remote_ino():inodeno_t(0),
+					   (dnl->is_remote() || dnl->is_referent()) ? dnl->get_remote_d_type():0,
 					   ++r.second,
 					   dn->lock.get_replica_state());
 	  // peer missed MDentrylink message ?
@@ -7073,7 +7073,7 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
     clear_complete = true;
 
   // unlink the dentry
-  if (dnl->is_remote()) {
+  if (dnl->is_remote() || dnl->is_referent()) {
     // just unlink.
     dir->unlink_inode(dn, false);
   } else if (dnl->is_primary()) {
@@ -7294,7 +7294,7 @@ void MDCache::trim_non_auth()
       // add back into lru (at the top)
       auth_list.push_back(dn);
 
-      if (dnl->is_remote() && dnl->get_inode() && !dnl->get_inode()->is_auth())
+      if ((dnl->is_remote() || dnl->is_referent()) && dnl->get_inode() && !dnl->get_inode()->is_auth())
 	dn->unlink_remote(dnl);
     } else {
       // non-auth.  expire.
@@ -7303,7 +7303,7 @@ void MDCache::trim_non_auth()
 
       // unlink the dentry
       dout(10) << " removing " << *dn << dendl;
-      if (dnl->is_remote()) {
+      if (dnl->is_remote() || dnl->is_referent()) {
 	dir->unlink_inode(dn, false);
       } 
       else if (dnl->is_primary()) {
@@ -7428,7 +7428,7 @@ bool MDCache::trim_non_auth_subtree(CDir *dir)
       dout(20) << "trim_non_auth_subtree(" << dir << ") keeping dentry " << dn <<dendl;
     } else { // just remove it
       dout(20) << "trim_non_auth_subtree(" << dir << ") removing dentry " << dn << dendl;
-      if (dnl->is_remote())
+      if (dnl->is_remote() || dnl->is_referent())
         dir->unlink_inode(dn, false);
       dir->remove_dentry(dn);
     }
@@ -8553,7 +8553,7 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       // do we have inode?
       CInode *in = dnl->get_inode();
       if (!in) {
-        ceph_assert(dnl->is_remote());
+        ceph_assert(dnl->is_remote() || dnl->is_referent());
         // do i have it?
         in = get_inode(dnl->get_remote_ino());
         if (in) {
@@ -8839,7 +8839,7 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
   if (dnl->is_primary())
     return dnl->inode;
 
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent());
   CInode *in = get_inode(dnl->get_remote_ino());
   if (in) {
     dout(7) << "get_dentry_inode linking in remote in " << *in << dendl;
@@ -8882,7 +8882,7 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSContext 
 {
   if (r < 0) {
     CDentry::linkage_t *dnl = dn->get_projected_linkage();
-    if (dnl->is_remote() && dnl->get_remote_ino() == ino) {
+    if ((dnl->is_remote() || dnl->is_referent()) && dnl->get_remote_ino() == ino) {
       dout(0) << "open_remote_dentry_finish bad remote dentry " << *dn << dendl;
       dn->state_set(CDentry::STATE_BADREMOTEINO);
 
@@ -11281,7 +11281,7 @@ void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
       dout(10) << __func__ << "  primary " << *dnl->get_inode() << dendl;
       encode_replica_inode(dnl->get_inode(), p.first, m->bl,
 		      mds->mdsmap->get_up_features());
-    } else if (dnl->is_remote()) {
+    } else if (dnl->is_remote() || dnl->is_referent()) {
       encode_remote_dentry_link(dnl, m->bl);
     } else
       ceph_abort();   // aie, bad caller!
@@ -11420,7 +11420,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	straydn = NULL;
       } else {
 	ceph_assert(!straydn);
-	ceph_assert(dnl->is_remote());
+	ceph_assert(dnl->is_remote() || dnl->is_referent());
 	dn->dir->unlink_inode(dn);
       }
       ceph_assert(dnl->is_null());
@@ -13434,7 +13434,7 @@ void MDCache::repair_dirfrag_stats_work(const MDRequestRef& mdr)
 	frag_info.nsubdirs++;
       else
 	frag_info.nfiles++;
-    } else if (dnl->is_remote())
+    } else if (dnl->is_remote() || dnl->is_referent())
       frag_info.nfiles++;
   }
 

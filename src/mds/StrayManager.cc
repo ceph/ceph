@@ -609,7 +609,7 @@ class C_RetryEvalRemote : public StrayManagerContext {
       dn->get(CDentry::PIN_PTRWAITER);
     }
     void finish(int r) override {
-      if (dn->get_projected_linkage()->is_remote())
+      if (dn->get_projected_linkage()->is_remote() || dn->get_projected_linkage()->is_referent())
 	sm->eval_remote(dn);
       dn->put(CDentry::PIN_PTRWAITER);
     }

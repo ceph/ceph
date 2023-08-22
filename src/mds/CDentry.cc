@@ -79,6 +79,12 @@ ostream& operator<<(ostream& out, const CDentry& dn)
     out << ")";
   }
 
+  if (dn.get_linkage()->is_referent()) {
+    out << " REFERENT REMOTE(";
+    out << dn.get_linkage()->get_remote_d_type_string();
+    out << ")";
+  }
+
   if (!dn.lock.is_sync_and_unlocked())
     out << " " << dn.lock;
   if (!dn.versionlock.is_sync_and_unlocked())
@@ -280,7 +286,7 @@ void CDentry::link_remote(CDentry::linkage_t *dnl, CInode *in)
 
 void CDentry::unlink_remote(CDentry::linkage_t *dnl)
 {
-  ceph_assert(dnl->is_remote());
+  ceph_assert(dnl->is_remote() || dnl->is_referent());
   ceph_assert(dnl->inode);
   
   if (dnl == &linkage)
@@ -467,7 +473,7 @@ void CDentry::encode_lock_state(int type, bufferlist& bl)
     encode(c, bl);
     encode(linkage.get_inode()->ino(), bl);
   }
-  else if (linkage.is_remote()) {
+  else if (linkage.is_remote() || linkage.is_referent()) {
     c = 2;
     encode(c, bl);
     encode(linkage.get_remote_ino(), bl);
@@ -643,6 +649,7 @@ void CDentry::dump(Formatter *f) const
   
   f->dump_bool("is_primary", get_linkage()->is_primary());
   f->dump_bool("is_remote", get_linkage()->is_remote());
+  f->dump_bool("is_referent", get_linkage()->is_referent());
   f->dump_bool("is_null", get_linkage()->is_null());
   f->dump_bool("is_new", is_new());
   if (get_linkage()->get_inode()) {
@@ -653,6 +660,8 @@ void CDentry::dump(Formatter *f) const
 
   if (linkage.is_remote()) {
     f->dump_string("remote_type", linkage.get_remote_d_type_string());
+  } else if (linkage.is_referent()) {
+    f->dump_string("referent_type", linkage.get_remote_d_type_string());
   } else {
     f->dump_string("remote_type", "");
   }

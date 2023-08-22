@@ -921,7 +921,7 @@ void Migrator::maybe_split_export(CDir* dir, uint64_t max_size, bool null_okay,
 	dirfrag_size += null_size;
 	continue;
       }
-      if (dn->get_linkage()->is_remote()) {
+      if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent()) {
 	dirfrag_size += remote_size;
 	continue;
       }
@@ -1812,7 +1812,7 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
       continue;
     }
     
-    if (dn->get_linkage()->is_remote()) {
+    if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent()) {
       inodeno_t ino = dn->get_linkage()->get_remote_ino();
       unsigned char d_type = dn->get_linkage()->get_remote_d_type();
       auto& alternate_name = dn->alternate_name;
@@ -3559,7 +3559,7 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
 
       CDentry::decode_remote(icode, ino, d_type, alternate_name, blp);
 
-      if (dn->get_linkage()->is_remote()) {
+      if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
         ceph_assert(dn->get_alternate_name() == alternate_name);
       } else {

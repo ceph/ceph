@@ -250,7 +250,7 @@ bool CDir::check_rstats(bool scrub)
 	frag_info.nsubdirs++;
       else
 	frag_info.nfiles++;
-    } else if (dnl->is_remote())
+    } else if (dnl->is_remote() || dnl->is_referent())
       frag_info.nfiles++;
   }
 
@@ -343,7 +343,7 @@ void CDir::adjust_dentry_lru(CDentry *dn)
   bool bottom_lru;
   if (dn->get_linkage()->is_primary()) {
     bottom_lru = !is_auth() && inode->is_stray();
-  } else if (dn->get_linkage()->is_remote()) {
+  } else if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent()) {
     bottom_lru = false;
   } else {
     bottom_lru = !is_auth();
@@ -724,7 +724,7 @@ void CDir::unlink_inode_work(CDentry *dn)
 {
   CInode *in = dn->get_linkage()->get_inode();
 
-  if (dn->get_linkage()->is_remote()) {
+  if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent()) {
     // remote
     if (in) 
       dn->unlink_remote(dn->get_linkage());
@@ -935,7 +935,7 @@ void CDir::steal_dentry(CDentry *dn)
       // move dirty inode rstat to new dirfrag
       if (in->is_dirty_rstat())
 	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
-    } else if (dn->get_linkage()->is_remote()) {
+    } else if (dn->get_linkage()->is_remote() || dn->get_linkage()->is_referent()) {
       if (dn->get_linkage()->get_remote_d_type() == DT_DIR)
 	_fnode->fragstat.nsubdirs++;
       else
@@ -3290,7 +3290,7 @@ void CDir::verify_fragstat()
       else
 	c.nfiles++;
     }
-    if (dn->is_remote()) {
+    if (dn->is_remote() || dn->is_referent()) {
       if (dn->get_remote_d_type() == DT_DIR)
 	c.nsubdirs++;
       else
