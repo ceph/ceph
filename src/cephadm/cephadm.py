@@ -137,7 +137,7 @@ from cephadmlib.net_utils import (
 from cephadmlib.locking import FileLock
 from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
 from cephadmlib.packagers import create_packager, Packager
-from cephadmlib.logging import cephadm_init_logging
+from cephadmlib.logging import cephadm_init_logging, Highlight
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -201,12 +201,6 @@ class DeploymentType(Enum):
     # Reconfiguring a daemon. Rewrites config
     # files and potentially restarts daemon.
     RECONFIG = 'Reconfig'
-
-
-class termcolor:
-    yellow = '\033[93m'
-    red = '\033[31m'
-    end = '\033[0m'
 
 ##################################
 
@@ -1615,7 +1609,7 @@ For information regarding the latest stable release:
     https://docs.ceph.com/docs/{}/cephadm/install
 """.format(LATEST_STABLE_RELEASE)
         for line in warn.splitlines():
-            logger.warning('{}{}{}'.format(termcolor.yellow, line, termcolor.end))
+            logger.warning(line, extra=Highlight.WARNING.extra())
     return DEFAULT_IMAGE
 
 
@@ -2519,9 +2513,9 @@ def _get_container_mounts_for_type(
                 mounts[ceph_folder + '/monitoring/ceph-mixin/dashboards_out'] = '/etc/grafana/dashboards/ceph-dashboard'
                 mounts[ceph_folder + '/monitoring/ceph-mixin/prometheus_alerts.yml'] = '/etc/prometheus/ceph/ceph_default_alerts.yml'
             else:
-                logger.error('{}{}{}'.format(termcolor.red,
-                                             'Ceph shared source folder does not exist.',
-                                             termcolor.end))
+                logger.error(
+                    'Ceph shared source folder does not exist.',
+                    extra=Highlight.FAILURE.extra())
     except AttributeError:
         pass
     return mounts
