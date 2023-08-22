@@ -94,9 +94,8 @@ PGBackend::load_metadata(const hobject_t& oid)
         if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
           bufferlist bl = std::move(oiiter->second);
           try {
-            ret->os = ObjectState(
-              object_info_t(bl, oid),
-              true);
+            ret->os = ObjectState(object_info_t(bl), true);
+            ceph_assert(oid == ret->os.oi.soid);
           } catch (const buffer::error&) {
             logger().warn("unable to decode ObjectState");
             throw crimson::osd::invalid_argument();
@@ -1856,7 +1855,7 @@ void PGBackend::set_metadata(
   ceph_assert((obj.is_head() && ss) || (!obj.is_head() && !ss));
   {
     ceph::bufferlist bv;
-    oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+    oi.encode(bv, CEPH_FEATURES_ALL);
     txn.setattr(coll->get_cid(), ghobject_t{obj}, OI_ATTR, bv);
   }
   if (ss) {

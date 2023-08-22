@@ -635,7 +635,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     }
     DEBUGDPP("{}", pg, push_op->attrset[OI_ATTR]);
     object_info_t oi;
-    oi.decode_no_oid(push_op->attrset[OI_ATTR]);
+    oi.decode(push_op->attrset[OI_ATTR]);
     new_progress.first = false;
     return oi.version;
   });
@@ -1197,7 +1197,7 @@ ReplicatedRecoveryBackend::prep_push_target(
     t->remove(coll->get_cid(), target_oid);
     t->touch(coll->get_cid(), target_oid);
     object_info_t oi;
-    oi.decode_no_oid(attrs.at(OI_ATTR));
+    oi.decode(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,
                       oi.expected_object_size,
                       oi.expected_write_size,
@@ -1373,7 +1373,8 @@ ReplicatedRecoveryBackend::get_md_from_push_op(PushOp &push_op)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::get_md_from_push_op);
   object_info_t oi;
-  oi.decode_no_oid(push_op.attrset.at(OI_ATTR), push_op.soid);
+  oi.decode(push_op.attrset.at(OI_ATTR));
+  assert(oi.soid == push_op.soid);
 
   crimson::osd::SnapSetContextRef ssc;
   if (auto ss_attr_iter = push_op.attrset.find(SS_ATTR);
