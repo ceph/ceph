@@ -7945,37 +7945,51 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
+void OSD::trim_maps(epoch_t oldest, bool skip_maps)
 {
+  /* There's a possible leak here. skip_maps is set to true if the received
+   * MOSDMap message indicates that there's a discontinuity between
+   * the Monitor cluster's stored set of maps and our set of stored
+   * maps such that there is a "gap". This happens generally when an OSD
+   * is down for a while and the cluster has trimmed maps in the mean time.
+   *
+   * Because the superblock cannot represent two discontinuous sets of maps,
+   * OSD::handle_osd_map unconditionally sets superblock.oldest_map to the first
+   * map in the message. OSD::trim_maps here, however, will only trim up to
+   * service.map_cache.cached_key_lower_bound() resulting in the maps between
+   * service.map_cache.cached_key_lower_bound() and MOSDMap::get_first() being
+   * leaked. Note, trimming past service.map_cache.cached_key_lower_bound()
+   * here won't work as there may still be PGs with those map epochs recorded.
+   *
+   * Fixing this is future work: https://tracker.ceph.com/issues/61962
+   */
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
+  dout(20) <<  __func__ << ": min=" << min << " oldest_map="
+           << superblock.oldest_map << " skip_maps=" << skip_maps
+           << dendl;
   if (min <= superblock.oldest_map)
     return;
 
-  int num = 0;
+  // Trim from the superblock's oldest_map up to `min`.
+  // Break if we have exceeded the txn target size.
+  // If skip_maps is true, we will trim up `min` unconditionally.
   ObjectStore::Transaction t;
-  for (epoch_t e = superblock.oldest_map; e < min; ++e) {
-    dout(20) << " removing old osdmap epoch " << e << dendl;
-    t.remove(coll_t::meta(), get_osdmap_pobject_name(e));
-    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
-    superblock.oldest_map = e + 1;
-    num++;
-    if (num >= cct->_conf->osd_target_transaction_size && num >= nreceived) {
+  while (superblock.oldest_map < min) {
+    dout(20) << " removing old osdmap epoch " << superblock.oldest_map << dendl;
+    t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.oldest_map));
+    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.oldest_map));
+    ++superblock.oldest_map;
+    if (t.get_num_ops() > cct->_conf->osd_target_transaction_size) {
       service.publish_superblock(superblock);
       write_superblock(cct, superblock, t);
-      int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+      int tr = store->queue_transaction(service.meta_ch, t.claim_and_reset(), nullptr);
       ceph_assert(tr == 0);
-      num = 0;
-      if (!skip_maps) {
-	// skip_maps leaves us with a range of old maps if we fail to remove all
-	// of them before moving superblock.oldest_map forward to the first map
-	// in the incoming MOSDMap msg. so we should continue removing them in
-	// this case, even we could do huge series of delete transactions all at
-	// once.
-	break;
+      if (skip_maps == false) {
+        break;
       }
     }
   }
-  if (num > 0) {
+  if (t.get_num_ops() > 0) {
     service.publish_superblock(superblock);
     write_superblock(cct, superblock, t);
     int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
@@ -8103,6 +8117,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       m->put();
       return;
     }
+    // The superblock's oldest_map should be moved forward (skipped)
+    // to the `first` osdmap of the incoming MOSDMap message.
+    // Trim all of the skipped osdmaps before updating the oldest_map.
     skip_maps = true;
   }
 
@@ -8224,9 +8241,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (superblock.oldest_map) {
-    // make sure we at least keep pace with incoming maps
-    trim_maps(m->cluster_osdmap_trim_lower_bound,
-              last - first + 1, skip_maps);
+    trim_maps(m->cluster_osdmap_trim_lower_bound, skip_maps);
     pg_num_history.prune(superblock.oldest_map);
   }
 
