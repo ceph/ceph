@@ -84,7 +84,7 @@ public:
 
   void add_generator(WorkloadGeneratorRef gen);
   int begin_simulation(unsigned iterations, const std::string &img_path,
-                       unsigned img_size);
+                       unsigned img_dimension);
   void init(const std::string &alloc_type, uint64_t size,
             uint64_t min_alloc_size = 4096);
 
@@ -121,7 +121,7 @@ void FragmentationSimulator::add_generator(WorkloadGeneratorRef gen) {
 
 int FragmentationSimulator::begin_simulation(unsigned iterations,
                                              const std::string &img_path,
-                                             unsigned img_size) {
+                                             unsigned img_dimension) {
   ObjectStore::CollectionHandle ch = os->create_new_collection(coll_t::meta());
 
   ObjectStore::Transaction t;
@@ -142,7 +142,7 @@ int FragmentationSimulator::begin_simulation(unsigned iterations,
   os->print_per_object_fragmentation();
   os->print_per_access_fragmentation();
   os->print_allocator_profile();
-  os->output_fragmentation_img(img_path, img_size);
+  os->output_fragmentation_img(img_path, img_dimension);
 
   return 0;
 }
