@@ -131,6 +131,15 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   ``rgw_topic_require_publish_policy`` can be enabled to deny ``sns:Publish``
   permissions unless explicitly granted by topic policy.
 
+* CephFS: The `subvolume snapshot clone` command now depends on the config option
+  `snapshot_clone_no_wait` which is used to reject the clone operation when
+  all the cloner threads are busy. This config option is enabled by default which means 
+  that if no cloner threads are free, the clone request errors out with EAGAIN.
+  The value of the config option can be fetched by using:
+   `ceph config get mgr mgr/volumes/snapshot_clone_no_wait`
+  and it can be disabled by using:
+   `ceph config set mgr mgr/volumes/snapshot_clone_no_wait false`
+
 >=18.0.0
 
 * The RGW policy parser now rejects unknown principals by default. If you are
