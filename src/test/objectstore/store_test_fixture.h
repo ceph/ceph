@@ -8,7 +8,6 @@ class ObjectStore;
 
 class StoreTestFixture : virtual public ::testing::Test {
   const std::string type;
-  const std::string data_dir;
 
   std::stack<std::pair<std::string, std::string>> saved_settings;
   ConfigProxy* conf = nullptr;
@@ -16,6 +15,7 @@ class StoreTestFixture : virtual public ::testing::Test {
   std::string orig_death_test_style;
 
 public:
+  const std::string data_dir;
   std::unique_ptr<ObjectStore> store;
   ObjectStore::CollectionHandle ch;
 

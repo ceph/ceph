@@ -10194,6 +10194,37 @@ TEST_P(StoreTest, FixSMRWritePointer) {
   ASSERT_EQ(0, r);
 }
 
+TEST_P(StoreTest, CorruptedLabelRecovery) {
+  bufferlist bl;
+  bl.append_zero(16);
+  store->umount();
+  string block_file = data_dir + "/block";
+  int fd = ::open(block_file.c_str(), O_WRONLY|O_CLOEXEC|O_DIRECT);
+  if (fd == -1) {
+    cout << "error opening block file\n";
+    cout << errno;
+    abort();
+  }
+  // let's corrupt first label offset
+  int r = bl.write_fd(fd, 64);
+  if (r < 0) {
+    cout << "error writing block file\n";
+    cout << r << std::endl;
+    cout << errno << std::endl;
+    abort();
+  }
+  r = ::fsync(fd);
+  if (r == -1) {
+    cout << "error fsync block file\n";
+    cout << errno;
+    abort();
+  }
+  ::close(fd);
+  // now it should still go all ok
+  store->mount();
+}
+
+
 
 TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
   if (string(GetParam()) != "bluestore")
