@@ -18,6 +18,7 @@
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
+#include "include/auto_shared_ptr.h"
 
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
@@ -39,6 +40,8 @@ class Session;
 class ScatterLock;
 struct sr_t;
 struct MDLockCache;
+
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
 
 struct MutationImpl : public TrackedOp {
 public:
@@ -225,7 +228,7 @@ public:
 
   metareqid_t reqid;
   __u32 attempt = 0;      // which attempt for this request
-  LogSegment *ls = nullptr;  // the log segment i'm committing to
+  AutoSharedLogSegment ls = nullptr;  // the log segment i'm committing to
 
   // flag mutation as peer
   mds_rank_t peer_to_mds = MDS_RANK_NONE;  // this is a peer request if >= 0.
