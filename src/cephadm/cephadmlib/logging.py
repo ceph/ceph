@@ -3,10 +3,11 @@
 import enum
 import logging
 import logging.config
+import logging.handlers
 import os
 import sys
 
-from typing import List, Any, Dict, cast
+from typing import List, Any, Dict, Optional, cast
 
 from .context import CephadmContext
 from .constants import QUIET_LOG_LEVEL, LOG_DIR
@@ -42,6 +43,11 @@ class Highlight(enum.Enum):
         return f'{color}{s}{_termcolors.end.value}'
 
 
+class LogDestination(str, enum.Enum):
+    file = 'log_file'
+    syslog = 'syslog'
+
+
 class _Colorizer(logging.Formatter):
     def format(self, record: Any) -> str:
         res = super().format(record)
@@ -70,6 +76,13 @@ _log_file_handler = {
     'filename': '%s/cephadm.log' % LOG_DIR,
 }
 
+_syslog_handler = {
+    'level': 'DEBUG',
+    'class': 'logging.handlers.SysLogHandler',
+    'formatter': 'cephadm',
+    'address': '/dev/log',
+}
+
 
 # During normal cephadm operations (cephadm ls, gather-facts, etc ) we use:
 # stdout: for JSON output only
@@ -84,11 +97,12 @@ _logging_config = {
             'class': 'logging.StreamHandler',
         },
         'log_file': _log_file_handler,
+        'syslog': _syslog_handler,
     },
     'loggers': {
         '': {
             'level': 'DEBUG',
-            'handlers': ['console', 'log_file'],
+            'handlers': ['console'],
         }
     },
 }
@@ -102,7 +116,7 @@ _interactive_logging_config = {
     'filters': {
         'exclude_errors': {
             '()': _ExcludeErrorsFilter,
-        },
+        }
     },
     'disable_existing_loggers': True,
     'formatters': _common_formatters,
@@ -120,11 +134,12 @@ _interactive_logging_config = {
             'formatter': 'colorized',
         },
         'log_file': _log_file_handler,
+        'syslog': _syslog_handler,
     },
     'loggers': {
         '': {
             'level': 'DEBUG',
-            'handlers': ['console_stdout', 'console_stderr', 'log_file'],
+            'handlers': ['console_stdout', 'console_stderr'],
         }
     },
 }
@@ -142,20 +157,68 @@ _logrotate_data = """# created by cephadm
 """
 
 
+_VERBOSE_HANDLERS = [
+    'console',
+    'console_stdout',
+    LogDestination.file.value,
+    LogDestination.syslog.value,
+]
+
+
+_INTERACTIVE_CMDS = ['bootstrap', 'rm-cluster']
+
+
+def _copy(obj: Any) -> Any:
+    """Recursively copy mutable items in the logging config dictionaries."""
+    # copy.deepcopy fails to pickle the config dicts (sys.stderr, etc)
+    # so it's either implement our own basic recursive copy or allow
+    # the global objects to be mutated by _complete_logging_config
+    if isinstance(obj, dict):
+        return {k: _copy(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_copy(v) for v in obj]
+    return obj
+
+
+def _complete_logging_config(
+    interactive: bool, destinations: Optional[List[str]]
+) -> Dict[str, Any]:
+    """Return a logging configuration dict, based on the runtime parameters
+    cephadm was invoked with.
+    """
+    # Use _copy to avoid mutating the global dicts
+    lc = _copy(_logging_config)
+    if interactive:
+        lc = _copy(_interactive_logging_config)
+
+    handlers = lc['loggers']['']['handlers']
+    if not destinations:
+        handlers.append(LogDestination.file.value)
+    for dest in destinations or []:
+        handlers.append(LogDestination[dest])
+
+    return lc
+
+
 def cephadm_init_logging(
     ctx: CephadmContext, logger: logging.Logger, args: List[str]
 ) -> None:
     """Configure the logging for cephadm as well as updating the system
     to have the expected log dir and logrotate configuration.
+
+    The context's log_dest attribute, if not None, determines what
+    persistent logging destination to use. The LogDestination
+    enum provides valid destination values.
     """
     logging.addLevelName(QUIET_LOG_LEVEL, 'QUIET')
     if not os.path.exists(LOG_DIR):
         os.makedirs(LOG_DIR)
-    operations = ['bootstrap', 'rm-cluster']
-    if any(op in args for op in operations):
-        logging.config.dictConfig(_interactive_logging_config)
-    else:
-        logging.config.dictConfig(_logging_config)
+
+    lc = _complete_logging_config(
+        any(op in args for op in _INTERACTIVE_CMDS),
+        getattr(ctx, 'log_dest', None),
+    )
+    logging.config.dictConfig(lc)
 
     logger.setLevel(QUIET_LOG_LEVEL)
 
@@ -163,8 +226,16 @@ def cephadm_init_logging(
         with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
             f.write(_logrotate_data)
 
-    if ctx.verbose:
-        for handler in logger.handlers:
-            if handler.name in ['console', 'log_file', 'console_stdout']:
-                handler.setLevel(QUIET_LOG_LEVEL)
+    for handler in logger.handlers:
+        # the following little hack ensures that no matter how cephadm is named
+        # (eg. suffixed by a hash when copied by the mgr) we set a consistent
+        # syslog identifier. This way one can do things like run
+        # `journalctl -t cephadm`.
+        if handler.name == LogDestination.syslog:
+            # the space after the colon in the ident is significant!
+            cast(logging.handlers.SysLogHandler, handler).ident = 'cephadm: '
+        # set specific handlers to log extra level of detail when the verbose
+        # option is set
+        if ctx.verbose and handler.name in _VERBOSE_HANDLERS:
+            handler.setLevel(QUIET_LOG_LEVEL)
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
