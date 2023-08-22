@@ -478,13 +478,10 @@ public:
   /// Waits for exit barrier
   virtual std::optional<seastar::future<>> wait() = 0;
 
-  /// Releases pipeline stage, can only be called after wait
+  /// Releases pipeline resources, after or without waiting
   virtual void exit() = 0;
 
-  /// Releases pipeline resources without waiting on barrier
-  virtual void cancel() = 0;
-
-  /// Must ensure that resources are released, likely by calling cancel()
+  /// Must ensure that resources are released, likely by calling exit()
   virtual ~PipelineExitBarrierI() {}
 };
 
@@ -606,12 +603,8 @@ class OrderedExclusivePhaseT : public PipelineStageIT<T> {
       }
     }
 
-    void cancel() final {
-      exit();
-    }
-
     ~ExitBarrier() final {
-      cancel();
+      exit();
     }
   };
 
@@ -717,12 +710,8 @@ private:
       }
     }
 
-    void cancel() final {
-      exit();
-    }
-
     ~ExitBarrier() final {
-      cancel();
+      exit();
     }
   };
 
@@ -755,8 +744,6 @@ class UnorderedStageT : public PipelineStageIT<T> {
     }
 
     void exit() final {}
-
-    void cancel() final {}
 
     ~ExitBarrier() final {}
   };
