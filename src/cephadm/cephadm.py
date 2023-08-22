@@ -6,7 +6,6 @@ import ipaddress
 import io
 import json
 import logging
-from logging.config import dictConfig
 import os
 import platform
 import pwd
@@ -80,7 +79,6 @@ from cephadmlib.constants import (
     LOG_DIR_MODE,
     NO_DEPRECATED,
     PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
-    QUIET_LOG_LEVEL,
     SYSCTL_DIR,
     UNIT_DIR,
 )
@@ -139,11 +137,12 @@ from cephadmlib.net_utils import (
 from cephadmlib.locking import FileLock
 from cephadmlib.daemon_identity import DaemonIdentity
 from cephadmlib.packagers import create_packager, Packager
+from cephadmlib.logging import cephadm_init_logging
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
 
-logger: logging.Logger = None  # type: ignore
+logger = logging.getLogger()
 
 """
 You can invoke cephadm in two ways:
@@ -202,88 +201,6 @@ class DeploymentType(Enum):
     # Reconfiguring a daemon. Rewrites config
     # files and potentially restarts daemon.
     RECONFIG = 'Reconfig'
-
-
-# During normal cephadm operations (cephadm ls, gather-facts, etc ) we use:
-# stdout: for JSON output only
-# stderr: for error, debug, info, etc
-logging_config = {
-    'version': 1,
-    'disable_existing_loggers': True,
-    'formatters': {
-        'cephadm': {
-            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
-        },
-    },
-    'handlers': {
-        'console': {
-            'level': 'INFO',
-            'class': 'logging.StreamHandler',
-        },
-        'log_file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.WatchedFileHandler',
-            'formatter': 'cephadm',
-            'filename': '%s/cephadm.log' % LOG_DIR,
-        }
-    },
-    'loggers': {
-        '': {
-            'level': 'DEBUG',
-            'handlers': ['console', 'log_file'],
-        }
-    }
-}
-
-
-class ExcludeErrorsFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Only lets through log messages with log level below WARNING ."""
-        return record.levelno < logging.WARNING
-
-
-# When cephadm is used as standard binary (bootstrap, rm-cluster, etc) we use:
-# stdout: for debug and info
-# stderr: for errors and warnings
-interactive_logging_config = {
-    'version': 1,
-    'filters': {
-        'exclude_errors': {
-            '()': ExcludeErrorsFilter
-        }
-    },
-    'disable_existing_loggers': True,
-    'formatters': {
-        'cephadm': {
-            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
-        },
-    },
-    'handlers': {
-        'console_stdout': {
-            'level': 'INFO',
-            'class': 'logging.StreamHandler',
-            'filters': ['exclude_errors'],
-            'stream': sys.stdout
-        },
-        'console_stderr': {
-            'level': 'WARNING',
-            'class': 'logging.StreamHandler',
-            'stream': sys.stderr
-        },
-        'log_file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.WatchedFileHandler',
-            'formatter': 'cephadm',
-            'filename': '%s/cephadm.log' % LOG_DIR,
-        }
-    },
-    'loggers': {
-        '': {
-            'level': 'DEBUG',
-            'handlers': ['console_stdout', 'console_stderr', 'log_file'],
-        }
-    }
-}
 
 
 class termcolor:
@@ -9284,43 +9201,6 @@ def cephadm_init_ctx(args: List[str]) -> CephadmContext:
     return ctx
 
 
-def cephadm_init_logging(ctx: CephadmContext, args: List[str]) -> None:
-    """Configure the logging for cephadm as well as updating the system
-    to have the expected log dir and logrotate configuration.
-    """
-    logging.addLevelName(QUIET_LOG_LEVEL, 'QUIET')
-    global logger
-    if not os.path.exists(LOG_DIR):
-        os.makedirs(LOG_DIR)
-    operations = ['bootstrap', 'rm-cluster']
-    if any(op in args for op in operations):
-        dictConfig(interactive_logging_config)
-    else:
-        dictConfig(logging_config)
-
-    logger = logging.getLogger()
-    logger.setLevel(QUIET_LOG_LEVEL)
-
-    if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
-        with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
-            f.write("""# created by cephadm
-/var/log/ceph/cephadm.log {
-    rotate 7
-    daily
-    compress
-    missingok
-    notifempty
-    su root root
-}
-""")
-
-    if ctx.verbose:
-        for handler in logger.handlers:
-            if handler.name in ['console', 'log_file', 'console_stdout']:
-                handler.setLevel(QUIET_LOG_LEVEL)
-    logger.debug('%s\ncephadm %s' % ('-' * 80, args))
-
-
 def cephadm_require_root() -> None:
     """Exit if the process is not running as root."""
     if os.geteuid() != 0:
@@ -9347,7 +9227,7 @@ def main() -> None:
             sys.exit(1)
 
     cephadm_require_root()
-    cephadm_init_logging(ctx, av)
+    cephadm_init_logging(ctx, logger, av)
     try:
         # podman or docker?
         ctx.container_engine = find_container_engine(ctx)
