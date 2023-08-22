@@ -105,6 +105,7 @@ Code cleanup
 QA suite
 --------
 
+- [x] create qa/workunits/test_telemetry_(X-1)_x.sh
 - [ ] create qa/suites/upgrade/(X-1)-x
 - [x] remove qa/suites/upgrade/(X-3)-x-*
 - [x] create qa/releases/X.yaml
