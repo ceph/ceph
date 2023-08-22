@@ -137,7 +137,7 @@ from cephadmlib.net_utils import (
 from cephadmlib.locking import FileLock
 from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
 from cephadmlib.packagers import create_packager, Packager
-from cephadmlib.logging import cephadm_init_logging, Highlight
+from cephadmlib.logging import cephadm_init_logging, Highlight, LogDestination
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -8813,6 +8813,11 @@ def _get_parser():
         '--verbose', '-v',
         action='store_true',
         help='Show debug-level log messages')
+    parser.add_argument(
+        '--log-dest',
+        action='append',
+        choices=[v.name for v in LogDestination],
+        help='select one or more destination for persistent logging')
     parser.add_argument(
         '--timeout',
         type=int,
