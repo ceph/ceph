@@ -501,9 +501,13 @@ To initiate a clone operation use::
 
   $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name>
 
+.. note:: ``subvolume snapshot clone`` command depends upon the above mentioned config option ``snapshot_clone_no_wait``
+
 If a snapshot (source subvolume) is a part of non-default group, the group name needs to be specified::
 
   $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --group_name <subvol_group_name>
+
+If a snapshot (source subvolume) is a part of non-default group, the group name needs to be specified:
 
 Cloned subvolumes can be a part of a different group than the source snapshot (by default, cloned subvolumes are created in default group). To clone to a particular group use::
 
@@ -513,13 +517,15 @@ Similar to specifying a pool layout when creating a subvolume, pool layout can b
 
   $ ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
 
-Configure the maximum number of concurrent clones. The default is 4::
-
-  $ ceph config set mgr mgr/volumes/max_concurrent_clones <value>
-
 To check the status of a clone operation use::
 
-  $ ceph fs clone status <vol_name> <clone_name> [--group_name <group_name>]
+   ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
+
+To check the status of a clone operation use:
+
+.. prompt:: bash #
+
+   ceph fs clone status <vol_name> <clone_name> [--group_name <group_name>]
 
 A clone can be in one of the following states:
 
@@ -615,6 +621,29 @@ On successful cancellation, the cloned subvolume is moved to the ``canceled`` st
   }
 
 .. note:: The canceled cloned may be deleted by supplying the ``--force`` option to the `fs subvolume rm` command.
+
+Configurables
+~~~~~~~~~~~~~
+
+Configure the maximum number of concurrent clone operations. The default is 4:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/volumes/max_concurrent_clones <value>
+
+Configure the snapshot_clone_no_wait option :
+
+.. prompt:: bash #
+
+   ``snapshot_clone_no_wait`` config option is used to reject the clone creation request when the cloner threads 
+   ( which can be configured using above option i.e. ``max_concurrent_clones``) are not available.
+   It is enabled by default i.e. the value set is True, whereas it can be configured by using below command.
+
+   ceph config set mgr mgr/volumes/snapshot_clone_no_wait <bool>
+
+   The current value of ``snapshot_clone_no_wait`` can be fetched by using below command.
+
+   ceph config get mgr mgr/volumes/snapshot_clone_no_wait
 
 
 .. _subvol-pinning:
