@@ -1,5 +1,5 @@
 <ng-template #usageTooltipTpl>
-  <table>
+  <table *ngIf="!showMultisiteTooltip">
     <tr>
       <td class="text-left me-1">Used:</td>
       <td class="text-right"><strong> {{ isBinary ? (used | dimlessBinary) : (used | dimless) }}</strong></td>
@@ -11,6 +11,16 @@
     <tr *ngIf="customLegend">
       <td class="text-left me-1">{{ customLegend }}:</td>
       <td class="text-right"><strong>{{ isBinary ? (customLegendValue | dimlessBinary) : (customLegend[1] | dimless) }}</strong></td>
+    </tr>
+  </table>
+  <table *ngIf="showMultisiteTooltip">
+    <tr>
+      <td class="text-left">Total Shards:&nbsp;</td>
+      <td class="text-right"><strong> {{ total }}</strong></td>
+    </tr>
+    <tr *ngIf="calculatePerc">
+      <td class="text-left">Transferred Shards:&nbsp;</td>
+      <td class="'text-right"><strong>{{ used }}</strong></td>
     </tr>
   </table>
 </ng-template>
