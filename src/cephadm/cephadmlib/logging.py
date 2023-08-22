@@ -14,7 +14,7 @@ from .constants import QUIET_LOG_LEVEL, LOG_DIR
 # During normal cephadm operations (cephadm ls, gather-facts, etc ) we use:
 # stdout: for JSON output only
 # stderr: for error, debug, info, etc
-logging_config = {
+_logging_config = {
     'version': 1,
     'disable_existing_loggers': True,
     'formatters': {
@@ -43,7 +43,7 @@ logging_config = {
 }
 
 
-class ExcludeErrorsFilter(logging.Filter):
+class _ExcludeErrorsFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         """Only lets through log messages with log level below WARNING ."""
         return record.levelno < logging.WARNING
@@ -52,11 +52,11 @@ class ExcludeErrorsFilter(logging.Filter):
 # When cephadm is used as standard binary (bootstrap, rm-cluster, etc) we use:
 # stdout: for debug and info
 # stderr: for errors and warnings
-interactive_logging_config = {
+_interactive_logging_config = {
     'version': 1,
     'filters': {
         'exclude_errors': {
-            '()': ExcludeErrorsFilter
+            '()': _ExcludeErrorsFilter
         }
     },
     'disable_existing_loggers': True,
@@ -116,9 +116,9 @@ def cephadm_init_logging(
         os.makedirs(LOG_DIR)
     operations = ['bootstrap', 'rm-cluster']
     if any(op in args for op in operations):
-        logging.config.dictConfig(interactive_logging_config)
+        logging.config.dictConfig(_interactive_logging_config)
     else:
-        logging.config.dictConfig(logging_config)
+        logging.config.dictConfig(_logging_config)
 
     logger.setLevel(QUIET_LOG_LEVEL)
 
