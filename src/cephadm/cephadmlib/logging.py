@@ -1,11 +1,12 @@
 # logging.py - cephadm specific logging behavior
 
+import enum
 import logging
 import logging.config
 import os
 import sys
 
-from typing import List
+from typing import List, Any, Dict, cast
 
 from .context import CephadmContext
 from .constants import QUIET_LOG_LEVEL, LOG_DIR
@@ -17,9 +18,47 @@ class _ExcludeErrorsFilter(logging.Filter):
         return record.levelno < logging.WARNING
 
 
+class _termcolors(str, enum.Enum):
+    yellow = '\033[93m'
+    red = '\033[31m'
+    end = '\033[0m'
+
+
+class Highlight(enum.Enum):
+    FAILURE = 1
+    WARNING = 2
+
+    def extra(self) -> Dict[str, 'Highlight']:
+        """Return logging extra for the current kind of highlight."""
+        return {'highlight': self}
+
+    def _highlight(self, s: str) -> str:
+        color = {
+            self.FAILURE: _termcolors.red.value,
+            self.WARNING: _termcolors.yellow.value,
+        }[
+            cast(int, self)
+        ]  # cast works around mypy confusion wrt enums
+        return f'{color}{s}{_termcolors.end.value}'
+
+
+class _Colorizer(logging.Formatter):
+    def format(self, record: Any) -> str:
+        res = super().format(record)
+        highlight = getattr(record, 'highlight', None)
+        # checking sys.stderr here is a bit dirty but we know exactly
+        # how _Colorizer will be used, so it works for now
+        if highlight is not None and sys.stderr.isatty():
+            res = highlight._highlight(res)
+        return res
+
+
 _common_formatters = {
     'cephadm': {
         'format': '%(asctime)s %(thread)x %(levelname)s %(message)s',
+    },
+    'colorized': {
+        '()': _Colorizer,
     },
 }
 
@@ -78,6 +117,7 @@ _interactive_logging_config = {
             'level': 'WARNING',
             'class': 'logging.StreamHandler',
             'stream': sys.stderr,
+            'formatter': 'colorized',
         },
         'log_file': _log_file_handler,
     },
