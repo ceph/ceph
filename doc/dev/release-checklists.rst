@@ -106,9 +106,9 @@ QA suite
 --------
 
 - [ ] create qa/suites/upgrade/(X-1)-x
-- [ ] remove qa/suites/upgrade/(X-3)-x-*
-- [ ] create qa/releases/X.yaml
-- [ ] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
+- [x] remove qa/suites/upgrade/(X-3)-x-*
+- [x] create qa/releases/X.yaml
+- [x] create qa/suites/rados/thrash-old-clients/1-install/(X-1).yaml
 
 
 ceph-build
