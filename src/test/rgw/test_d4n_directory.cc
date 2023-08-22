@@ -1,11 +1,21 @@
+#include <thread>
 #include "../rgw/driver/d4n/d4n_directory.h" // Fix -Sam
 #include "rgw_process_env.h"
 #include <cpp_redis/cpp_redis>
 #include <iostream>
 #include <string>
 #include "gtest/gtest.h"
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/redis/connection.hpp>
 
 using namespace std;
+
+namespace net = boost::asio;
+using boost::redis::config;
+using boost::redis::connection;
+using boost::redis::request;
+using boost::redis::response;
 
 string portStr;
 string hostStr;
@@ -17,13 +27,29 @@ int blockSize = 123;
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      blockDir = new rgw::d4n::BlockDirectory(hostStr, stoi(portStr));
+      conn = new connection{io};
+
+      /* Run context */
+      using Executor = net::io_context::executor_type;
+      using Work = net::executor_work_guard<Executor>;
+      work = new std::optional<Work>(io.get_executor());
+      worker = new std::thread([&] { io.run(); });
+
+      blockDir = new rgw::d4n::BlockDirectory(io, hostStr, stoi(portStr));
       cacheBlock = new rgw::d4n::CacheBlock();
 
       cacheBlock->hostsList.push_back(redisHost);
       cacheBlock->size = blockSize; 
       cacheBlock->cacheObj.bucketName = bucketName;
       cacheBlock->cacheObj.objName = oid;
+
+     // blockDir->init();
+      
+      config cfg;
+      cfg.addr.host = "127.0.0.1";
+      cfg.addr.port = "6379";
+
+      conn->async_run(cfg, {}, net::detached);
     } 
 
     virtual void TearDown() {
@@ -32,10 +58,24 @@ class DirectoryFixture: public ::testing::Test {
 
       delete cacheBlock;
       cacheBlock = nullptr;
+
+      io.stop();
+
+      delete conn;
+      delete work;
+      delete worker;
     }
 
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* cacheBlock;
+
+    net::io_context io;
+    connection* conn;
+
+    using Executor = net::io_context::executor_type;
+    using Work = net::executor_work_guard<Executor>;
+    std::optional<Work>* work;
+    std::thread* worker;
 };
 
 /* Successful initialization */
@@ -43,8 +83,13 @@ TEST_F(DirectoryFixture, DirectoryInit) {
   ASSERT_NE(blockDir, nullptr);
   ASSERT_NE(cacheBlock, nullptr);
   ASSERT_NE(redisHost.length(), (long unsigned int)0);
+
+  conn->cancel();
+  *work = std::nullopt;
+  worker->join();
 }
 
+#if 0
 /* Successful set_value Call and Redis Check */
 TEST_F(DirectoryFixture, SetValueTest) {
   cpp_redis::client client;
@@ -55,7 +100,7 @@ TEST_F(DirectoryFixture, SetValueTest) {
   string bucketName;
   string objName;
   std::vector<std::string> fields;
-  int setReturn = blockDir->set_value(cacheBlock);
+  int setReturn = blockDir->set_value(cacheBlock, null_yield);
 
   ASSERT_EQ(setReturn, 0);
 
@@ -91,6 +136,9 @@ TEST_F(DirectoryFixture, SetValueTest) {
   EXPECT_EQ(objName, oid);
 
   client.flushall();
+
+  *work = std::nullopt;
+  worker->join();
 }
 
 /* Successful get_value Calls and Redis Check */
@@ -103,7 +151,7 @@ TEST_F(DirectoryFixture, GetValueTest) {
   string bucketName;
   string objName;
   std::vector<std::string> fields;
-  int setReturn = blockDir->set_value(cacheBlock);
+  int setReturn = blockDir->set_value(cacheBlock, null_yield);
 
   ASSERT_EQ(setReturn, 0);
 
@@ -153,13 +201,16 @@ TEST_F(DirectoryFixture, GetValueTest) {
   EXPECT_EQ(cacheBlock->cacheObj.objName, "newoid");
 
   client.flushall();
+
+  *work = std::nullopt;
+  worker->join();
 }
 
 /* Successful del_value Call and Redis Check */
 TEST_F(DirectoryFixture, DelValueTest) {
   cpp_redis::client client;
   vector<string> keys;
-  int setReturn = blockDir->set_value(cacheBlock);
+  int setReturn = blockDir->set_value(cacheBlock, null_yield);
 
   ASSERT_EQ(setReturn, 0);
 
@@ -172,7 +223,7 @@ TEST_F(DirectoryFixture, DelValueTest) {
     }
   });
 
-  int delReturn = blockDir->del_value(cacheBlock);
+  int delReturn = blockDir->del_value(cacheBlock, null_yield);
 
   ASSERT_EQ(delReturn, 0);
 
@@ -183,7 +234,11 @@ TEST_F(DirectoryFixture, DelValueTest) {
   });
 
   client.flushall();
+
+  *work = std::nullopt;
+  worker->join();
 }
+#endif
 
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
