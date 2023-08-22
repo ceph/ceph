@@ -824,7 +824,6 @@ def ceph_mdss(ctx, config):
 
     yield
 
-
 @contextlib.contextmanager
 def ceph_monitoring(daemon_type, ctx, config):
     """

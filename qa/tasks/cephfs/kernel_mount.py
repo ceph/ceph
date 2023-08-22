@@ -42,6 +42,8 @@ class KernelMount(CephFSMount):
 
         if not self.cephfs_mntpt:
             self.cephfs_mntpt = '/'
+        if not self.cephfs_name:
+            self.cephfs_name = 'cephfs'
 
         stderr = StringIO()
         try:
