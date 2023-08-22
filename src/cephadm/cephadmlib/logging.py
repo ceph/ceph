@@ -11,28 +11,40 @@ from .context import CephadmContext
 from .constants import QUIET_LOG_LEVEL, LOG_DIR
 
 
+class _ExcludeErrorsFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        """Only lets through log messages with log level below WARNING ."""
+        return record.levelno < logging.WARNING
+
+
+_common_formatters = {
+    'cephadm': {
+        'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
+    },
+}
+
+
+_log_file_handler = {
+    'level': 'DEBUG',
+    'class': 'logging.handlers.WatchedFileHandler',
+    'formatter': 'cephadm',
+    'filename': '%s/cephadm.log' % LOG_DIR,
+}
+
+
 # During normal cephadm operations (cephadm ls, gather-facts, etc ) we use:
 # stdout: for JSON output only
 # stderr: for error, debug, info, etc
 _logging_config = {
     'version': 1,
     'disable_existing_loggers': True,
-    'formatters': {
-        'cephadm': {
-            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
-        },
-    },
+    'formatters': _common_formatters,
     'handlers': {
         'console': {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
         },
-        'log_file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.WatchedFileHandler',
-            'formatter': 'cephadm',
-            'filename': '%s/cephadm.log' % LOG_DIR,
-        }
+        'log_file': _log_file_handler,
     },
     'loggers': {
         '': {
@@ -41,12 +53,6 @@ _logging_config = {
         }
     }
 }
-
-
-class _ExcludeErrorsFilter(logging.Filter):
-    def filter(self, record: logging.LogRecord) -> bool:
-        """Only lets through log messages with log level below WARNING ."""
-        return record.levelno < logging.WARNING
 
 
 # When cephadm is used as standard binary (bootstrap, rm-cluster, etc) we use:
@@ -60,11 +66,7 @@ _interactive_logging_config = {
         }
     },
     'disable_existing_loggers': True,
-    'formatters': {
-        'cephadm': {
-            'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
-        },
-    },
+    'formatters': _common_formatters,
     'handlers': {
         'console_stdout': {
             'level': 'INFO',
@@ -77,12 +79,7 @@ _interactive_logging_config = {
             'class': 'logging.StreamHandler',
             'stream': sys.stderr
         },
-        'log_file': {
-            'level': 'DEBUG',
-            'class': 'logging.handlers.WatchedFileHandler',
-            'formatter': 'cephadm',
-            'filename': '%s/cephadm.log' % LOG_DIR,
-        }
+        'log_file': _log_file_handler,
     },
     'loggers': {
         '': {
