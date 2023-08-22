@@ -2679,15 +2679,15 @@ public:
     return deferred_last_submitted;
   }
 
+  int _replicate_bdev_label(const std::string &path, bluestore_bdev_label_t label);
   static int _write_bdev_label(CephContext* cct,
-			       const std::string &path, bluestore_bdev_label_t label, 
-                               bool replicated=false);
+			       const std::string &path, bluestore_bdev_label_t label);
   static int _read_bdev_label(CephContext* cct, const std::string &path,
-			      bluestore_bdev_label_t *label, bool replicated=false);
+			      bluestore_bdev_label_t *label);
 private:
   int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
-			       bool create, bool replicated=false);
-  int _set_bdev_label_size(const std::string& path, uint64_t size, bool replicated=false);
+			       bool create);
+  int _set_bdev_label_size(const std::string& path, uint64_t size);
 
   int _open_super_meta();
 
