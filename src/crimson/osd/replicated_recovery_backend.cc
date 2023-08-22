@@ -480,7 +480,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     }
     logger().debug("read_metadata_for_push_op: {}", push_op->attrset[OI_ATTR]);
     object_info_t oi;
-    oi.decode_no_oid(push_op->attrset[OI_ATTR]);
+    oi.decode(push_op->attrset[OI_ATTR]);
     new_progress.first = false;
     return oi.version;
   });
@@ -692,7 +692,8 @@ ReplicatedRecoveryBackend::_handle_pull_response(
       [&pull_info, &recovery_waiter, &push_op](auto obc) {
         pull_info.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR), push_op.soid);
+        obc->obs.oi.decode(push_op.attrset.at(OI_ATTR));
+        assert(obc->obs.oi.soid == push_op.soid);
         pull_info.recovery_info.oi = obc->obs.oi;
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error_interruptible(crimson::ct_error::assert_all{});
@@ -1014,7 +1015,7 @@ ReplicatedRecoveryBackend::prep_push_target(
     t->remove(coll->get_cid(), target_oid);
     t->touch(coll->get_cid(), target_oid);
     object_info_t oi;
-    oi.decode_no_oid(attrs.at(OI_ATTR));
+    oi.decode(attrs.at(OI_ATTR));
     t->set_alloc_hint(coll->get_cid(), target_oid,
                       oi.expected_object_size,
                       oi.expected_write_size,
