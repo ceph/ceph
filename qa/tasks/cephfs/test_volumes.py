@@ -6970,6 +6970,11 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
 
+        # Disable the snapshot_clone_no_wait config option
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', False)
+        threads_available = self.config_get('mgr', 'mgr/volumes/snapshot_clone_no_wait')
+        self.assertEqual(threads_available, 'false')
+
         # schedule clones
         for clone in clones:
             self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone)
@@ -7428,6 +7433,159 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_with_no_wait_enabled(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone1, clone2, clone3 = self._gen_subvol_clone_name(3)
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=10)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Decrease number of cloner threads
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
+        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 2)
+
+        # Enable the snapshot_clone_no_wait config option
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', True)
+        threads_available = self.config_get('mgr', 'mgr/volumes/snapshot_clone_no_wait')
+        self.assertEqual(threads_available, 'true')
+
+        # Insert delay of 15 seconds at the beginning of the snapshot clone
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 15)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # schedule a clone2
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone2)
+
+        # schedule a clone3
+        cmd_ret = self.mgr_cluster.mon_manager.run_cluster_cmd(
+            args=["fs", "subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone3], check_status=False, stdout=StringIO(),
+            stderr=StringIO())
+        self.assertEqual(cmd_ret.returncode, errno.EAGAIN, "Expecting EAGAIN error")
+
+        # check clone1 status
+        self._wait_for_clone_to_complete(clone1)
+
+        # verify clone1
+        self._verify_clone(subvolume, snapshot, clone1)
+
+        # check clone2 status
+        self._wait_for_clone_to_complete(clone2)
+
+        # verify clone2
+        self._verify_clone(subvolume, snapshot, clone2)
+
+        # schedule clone3 , it should be successful this time
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone3)
+
+        # check clone3 status
+        self._wait_for_clone_to_complete(clone3)
+
+        # verify clone3
+        self._verify_clone(subvolume, snapshot, clone3)
+
+        # set number of cloner threads to default
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 4)
+        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 4)
+
+        # set the snapshot_clone_delay to default
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 0)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone1)
+        self._fs_cmd("subvolume", "rm", self.volname, clone2)
+        self._fs_cmd("subvolume", "rm", self.volname, clone3)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_with_no_wait_not_enabled(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone1, clone2, clone3 = self._gen_subvol_clone_name(3)
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=10)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # Disable the snapshot_clone_no_wait config option
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', False)
+        threads_available = self.config_get('mgr', 'mgr/volumes/snapshot_clone_no_wait')
+        self.assertEqual(threads_available, 'false')
+
+        # Decrease number of cloner threads
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
+        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 2)
+
+        # schedule a clone1
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
+
+        # schedule a clone2
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone2)
+
+        # schedule a clone3
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone3)
+
+        # check clone1 status
+        self._wait_for_clone_to_complete(clone1)
+
+        # verify clone1
+        self._verify_clone(subvolume, snapshot, clone1)
+
+        # check clone2 status
+        self._wait_for_clone_to_complete(clone2)
+
+        # verify clone2
+        self._verify_clone(subvolume, snapshot, clone2)
+
+        # check clone3 status
+        self._wait_for_clone_to_complete(clone3)
+
+        # verify clone3
+        self._verify_clone(subvolume, snapshot, clone3)
+
+        # set the snapshot_clone_no_wait config option to default
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', True)
+        threads_available = self.config_get('mgr', 'mgr/volumes/snapshot_clone_no_wait')
+        self.assertEqual(threads_available, 'true')
+
+        # set number of cloner threads to default
+        self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 4)
+        max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
+        self.assertEqual(max_concurrent_clones, 4)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone1)
+        self._fs_cmd("subvolume", "rm", self.volname, clone2)
+        self._fs_cmd("subvolume", "rm", self.volname, clone3)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
