@@ -8,6 +8,9 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/redis/connection.hpp>
 
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
+
 namespace rgw { namespace d4n {
 
 namespace net = boost::asio;
@@ -57,10 +60,21 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
       delete conn;
     }
 
-    void init(CephContext* _cct) {
-      cct = _cct;
-      addr.host = cct->_conf->rgw_d4n_host;
-      addr.port = cct->_conf->rgw_d4n_port;
+    int init(/*CephContext* _cct, const DoutPrefixProvider* dpp*/) {
+      //cct = _cct;
+
+      config cfg;
+      cfg.addr.host = "127.0.0.1";//cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
+      cfg.addr.port = "6379";//std::to_string(cct->_conf->rgw_d4n_port);
+
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
+	//ldpp_dout(dpp, 10) << "D4N Directory: Object directory endpoint was not configured correctly" << dendl;
+	return -EDESTADDRREQ;
+      }
+
+      conn->async_run(cfg, {}, net::detached);
+
+      return 0;
     }
 
     int find_client(cpp_redis::client* client);
@@ -93,20 +107,31 @@ class BlockDirectory: public Directory {
       delete conn;
     }
     
-    void init(CephContext* _cct) {
-      cct = _cct;
-      addr.host = cct->_conf->rgw_d4n_host;
-      addr.port = cct->_conf->rgw_d4n_port;
+    int init(/*CephContext* _cct, const DoutPrefixProvider* dpp*/) {
+      //cct = _cct;
+
+      config cfg;
+      cfg.addr.host = "127.0.0.1";//cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
+      cfg.addr.port = "6379";//std::to_string(cct->_conf->rgw_d4n_port);
+
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
+	//ldpp_dout(dpp, 10) << "D4N Directory: Block directory endpoint was not configured correctly" << dendl;
+	return -EDESTADDRREQ;
+      }
+
+      conn->async_run(cfg, {}, net::detached); 
+
+      return 0;
     }
 	
     int find_client(cpp_redis::client* client);
-    int exist_key(std::string key);
+    int exist_key(std::string key, optional_yield y);
     Address get_addr() { return addr; }
 
-    int set_value(CacheBlock* block);
+    int set_value(CacheBlock* block, optional_yield y);
     int get_value(CacheBlock* block);
     int copy_value(CacheBlock* block, CacheBlock* copyBlock);
-    int del_value(CacheBlock* block);
+    int del_value(CacheBlock* block, optional_yield y);
 
     int update_field(CacheBlock* block, std::string field, std::string value);
 

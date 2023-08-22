@@ -1,10 +1,18 @@
+#include "common/async/blocked_completion.h"
 #include "d4n_directory.h"
 #include <time.h>
 
-#define dout_subsys ceph_subsys_rgw
-#define dout_context g_ceph_context
-
 namespace rgw { namespace d4n {
+
+template <typename T>
+auto redis_exec(connection* conn, boost::system::error_code ec, boost::redis::request req, boost::redis::response<T>& resp, optional_yield y) {
+  if (y) {
+    auto yield = y.get_yield_context();
+    return conn->async_exec(req, resp, yield[ec]);
+  } else {
+    return conn->async_exec(req, resp, ceph::async::use_blocked[ec]);
+  }
+}
 
 int ObjectDirectory::find_client(cpp_redis::client* client) {
   if (client->is_connected())
@@ -207,8 +215,8 @@ std::string BlockDirectory::build_index(CacheBlock* block) {
   return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + boost::lexical_cast<std::string>(block->blockId);
 }
 
-int BlockDirectory::exist_key(std::string key) {
-  int result = 0;
+int BlockDirectory::exist_key(std::string key, optional_yield y) {
+/*  int result = 0;
   std::vector<std::string> keys;
   keys.push_back(key);
   
@@ -226,44 +234,54 @@ int BlockDirectory::exist_key(std::string key) {
     client.sync_commit(std::chrono::milliseconds(1000));
   } catch(std::exception &e) {}
 
-  return result;
-}
-
-int BlockDirectory::set_value(CacheBlock* block) {
-  /* Creating the index based on objName */
-  std::string result;
-  std::string key = build_index(block);
-  if (!client.is_connected()) { 
-    find_client(&client);
-  }
-
-  /* Every set will be new */
-  if (addr.host == "" || addr.port == 0) {
-    dout(10) << "RGW D4N Directory: Directory endpoint not configured correctly" << dendl;
-    return -2;
-  }
-    
-  std::string endpoint = addr.host + ":" + std::to_string(addr.port);
-  std::vector< std::pair<std::string, std::string> > list;
-    
-  /* Creating a list of the entry's properties */
-  list.push_back(make_pair("key", key));
-  list.push_back(make_pair("size", std::to_string(block->size)));
-  list.push_back(make_pair("globalWeight", std::to_string(block->globalWeight)));
-  list.push_back(make_pair("bucketName", block->cacheObj.bucketName));
-  list.push_back(make_pair("objName", block->cacheObj.objName));
-  list.push_back(make_pair("hosts", endpoint)); 
+  return result;*/
+  response<int> resp;
 
   try {
-    client.hmset(key, list, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_string();
-      }
-    });
+    boost::system::error_code ec;
+    request req;
+    req.push("EXISTS", key);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
 
-    if (result != "OK") {
+    if (ec)
+      return false;
+  } catch(std::exception &e) {}
+
+  return std::get<0>(resp).value();
+}
+
+int BlockDirectory::set_value(CacheBlock* block, optional_yield y) {
+  std::string key = build_index(block);
+    
+  /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
+  std::string endpoint = addr.host + ":" + std::to_string(addr.port);
+  std::list<std::string> redisValues;
+    
+  /* Creating a redisValues of the entry's properties */
+  redisValues.push_back("key");
+  redisValues.push_back(key);
+  redisValues.push_back("objName");
+  redisValues.push_back(block->cacheObj.objName);
+  redisValues.push_back("bucketName");
+  redisValues.push_back(block->cacheObj.bucketName);
+  redisValues.push_back("creationTime");
+  redisValues.push_back(std::to_string(block->cacheObj.creationTime)); 
+  redisValues.push_back("dirty");
+  redisValues.push_back(std::to_string(block->cacheObj.dirty));
+  redisValues.push_back("hosts");
+  redisValues.push_back(endpoint);
+
+  try {
+    boost::system::error_code ec;
+    response<std::string> resp;
+
+    request req;
+    req.push_range("HMSET", key, redisValues);
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -281,7 +299,7 @@ int BlockDirectory::get_value(CacheBlock* block) {
     find_client(&client);
   }
 
-  if (exist_key(key)) {
+  //if (exist_key(key)) {
     std::string hosts;
     std::string size;
     std::string bucketName;
@@ -323,13 +341,35 @@ int BlockDirectory::get_value(CacheBlock* block) {
     } catch(std::exception &e) {
       keyExist = -1;
     }
-  }
+ // }
 
   return keyExist;
 }
 
-int BlockDirectory::del_value(CacheBlock* block) {
-  int result = 0;
+int BlockDirectory::del_value(CacheBlock* block, optional_yield y) {
+  std::string key = build_index(block);
+
+  if (exist_key(key, y)) {
+    try {
+      boost::system::error_code ec;
+      response<int> resp;
+      request req;
+      req.push("DEL", key);
+
+      redis_exec(conn, ec, req, resp, y);
+
+      if (ec)
+        return -1;
+
+      return std::get<0>(resp).value() - 1; 
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    return 0; /* No delete was necessary */
+  }
+
+/*  int result = 0;
   std::vector<std::string> keys;
   std::string key = build_index(block);
   keys.push_back(key);
@@ -338,7 +378,7 @@ int BlockDirectory::del_value(CacheBlock* block) {
     find_client(&client);
   }
   
-  if (exist_key(key)) {
+  if (exist_key(key, y)) {
     try {
       client.del(keys, [&result](cpp_redis::reply &reply) {
         if (reply.is_integer()) {
@@ -352,8 +392,8 @@ int BlockDirectory::del_value(CacheBlock* block) {
       return -1;
     }
   } else {
-    return -2;
-  }
+    return -2; // update logic -Sam
+  }*/
 }
 
 int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value) { // represent in cache block too -Sam
@@ -364,7 +404,7 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
     find_client(&client);
   }
   
-  if (exist_key(key)) {
+//  if (exist_key(key)) {
     if (field == "hostsList") {
       /* Append rather than overwrite */
       std::string hosts;
@@ -413,7 +453,7 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
     } catch(std::exception &e) {
       return -1;
     }
-  }
+ // }
 
   return 0;
 }
