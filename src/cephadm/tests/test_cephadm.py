@@ -58,8 +58,8 @@ class TestCephAdm(object):
 
         for side_effect, expected_exception in (
             (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-            (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
-            (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
+            (os_error(errno.EAFNOSUPPORT), OSError),
+            (os_error(errno.EADDRNOTAVAIL), OSError),
             (None, None),
         ):
             _socket = mock.Mock()
@@ -77,20 +77,68 @@ class TestCephAdm(object):
     def test_port_in_use(self, _logger, _attempt_bind):
         empty_ctx = None
 
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         _attempt_bind.side_effect = _cephadm.PortOccupiedError('msg')
-        assert _cephadm.port_in_use(empty_ctx, 9100) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+
+    @mock.patch('cephadm.socket.socket.bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_special_cases(self, _logger, _bind):
+        # port_in_use has special handling for
+        # EAFNOSUPPORT and EADDRNOTAVAIL errno OSErrors.
+        # If we get those specific errors when attempting
+        # to bind to the ip:port we should not say the
+        # port is in use
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        _bind.side_effect = os_error(errno.EADDRNOTAVAIL)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        _bind.side_effect = os_error(errno.EAFNOSUPPORT)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        # this time, have it raise the actual port taken error
+        # so it should report the port is in use
+        _bind.side_effect = os_error(errno.EADDRINUSE)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == True
+
+    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_with_specific_ips(self, _logger, _attempt_bind):
+        empty_ctx = None
+
+        def _fake_attempt_bind(ctx, s: socket.socket, addr: str, port: int) -> None:
+            occupied_error = _cephadm.PortOccupiedError('msg')
+            if addr.startswith('200'):
+                raise occupied_error
+            if addr.startswith('100'):
+                if port == 4567:
+                    raise occupied_error
+
+        _attempt_bind.side_effect = _fake_attempt_bind
+
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -126,8 +174,8 @@ class TestCephAdm(object):
         ):
             for side_effect, expected_exception in (
                 (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-                (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
-                (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
+                (os_error(errno.EADDRNOTAVAIL), OSError),
+                (os_error(errno.EAFNOSUPPORT), OSError),
                 (None, None),
             ):
                 mock_socket_obj = mock.Mock()

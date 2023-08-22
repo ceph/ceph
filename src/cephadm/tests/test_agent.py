@@ -433,8 +433,8 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
     host = AGENT_ID
     device_enhanced_scan = False
 
-    def _fake_port_in_use(ctx, port):
-        if port == open_listener_port:
+    def _fake_port_in_use(ctx, endpoint):
+        if endpoint.port == open_listener_port:
             return False
         return True
 
