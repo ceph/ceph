@@ -111,42 +111,53 @@ To install:
  
 ### CMake Options
 
-If you run the `cmake` command by hand, there are many options you can
-set with "-D". For example, the option to build the RADOS Gateway is
-defaulted to ON. To build without the RADOS Gateway:
+The `-D` flag can be used with `cmake` to speed up the process of building Ceph
+and to customize the build.
+
+#### Building without RADOS Gateway
+
+The RADOS Gateway is built by default. To build Ceph without the RADOS Gateway,
+run a command of the following form:
 
 	cmake -DWITH_RADOSGW=OFF [path to top-level ceph directory]
 
-Another example below is building with debugging and alternate locations 
-for a couple of external dependencies:
+#### Building with debugging and arbitrary dependency locations 
+
+Run a command of the following form to build Ceph with debugging and alternate
+locations for some external dependencies:
 
 	cmake -DCMAKE_INSTALL_PREFIX=/opt/ceph -DCMAKE_C_FLAGS="-Og -g3 -gdwarf-4" \
 	..
 
 Ceph has several bundled dependencies such as Boost, RocksDB and Arrow. By
-default, cmake will build these bundled dependencies from source instead of
-using libraries that are already installed on the system. You can opt-in to
-using these system libraries, provided they meet the minimum version required
-by Ceph, with cmake options like `WITH_SYSTEM_BOOST`:
+default, `cmake` builds these bundled dependencies from source instead of using
+libraries that are already installed on the system. You can opt to use these
+system libraries, as long as they meet Ceph's version requirements. To use
+system libraries, use `cmake` options like `WITH_SYSTEM_BOOST`, as in the
+following example:
 
 	cmake -DWITH_SYSTEM_BOOST=ON [...]
 
-To view an exhaustive list of -D options, you can invoke `cmake` with:
+To view an exhaustive list of -D options, invoke `cmake -LH`:
 
 	cmake -LH
 
-If you often pipe `ninja` to `less` and would like to maintain the
-diagnostic colors for errors and warnings (and if your compiler
-supports it), you can invoke `cmake` with:
+#### Preserving diagnostic colors
+
+If you pipe `ninja` to `less` and would like to preserve the diagnostic colors
+in the output in order to make errors and warnings more legible, run the
+following command:  
 
 	cmake -DDIAGNOSTICS_COLOR=always ...
 
-Then you'll get the diagnostic colors when you execute:
+The above command works only with supported compilers.
+
+The diagnostic colors will be visible when the following command is run: 
 
 	ninja | less -R
 
-Other available values for 'DIAGNOSTICS_COLOR' are 'auto' (default) and
-'never'.
+Other available values for `DIAGNOSTICS_COLOR` are `auto` (default) and
+`never`.
 
 
 ## Building a source tarball
