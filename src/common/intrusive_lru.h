@@ -141,11 +141,13 @@ class intrusive_lru {
 
   // an element in the lru_set has no users,
   // mark it as unreferenced and try to evict.
-  void mark_as_unreferenced(base_t &b) {
+  void mark_as_unreferenced(base_t &b, bool do_evict) {
     assert(b.is_referenced());
     unreferenced_list.push_back(b);
     b.lru = nullptr;
-    evict();
+    if (do_evict) {
+      evict();
+    }
   }
 
 public:
@@ -168,6 +170,23 @@ public:
       access(*iter);
       return {TRef(static_cast<T*>(&*iter)), true};
     }
+  }
+
+  /*
+   * Clears all elements
+   */
+  template <class F>
+  void clear(F &&on_clear) {
+    for (auto i = lru_set.begin(); i != lru_set.end(); i++) {
+      on_clear((T&)(*i));
+      if ((*i).lru) {
+	mark_as_unreferenced(*i, false);
+      }
+    }
+    lru_set.clear_and_dispose([](auto *p) {
+      if (p->use_count == 0)
+	delete p;
+    });
   }
 
   /*
@@ -196,6 +215,15 @@ public:
       f(TRef{static_cast<T*>(&v)});
     }
   }
+
+#ifndef NDEBUG
+  template <class F>
+  void for_each_unreferenced(F&& f) {
+    for (auto &v : unreferenced_list) {
+      f(TRef{static_cast<T*>(&v)});
+    }
+  }
+#endif
 
   /**
    * Returns the TRef corresponding to k if it exists or
@@ -236,7 +264,11 @@ void intrusive_ptr_release(intrusive_lru_base<Config> *p) {
   assert(p->use_count > 0);
   --p->use_count;
   if (p->use_count == 0) {
-    p->lru->mark_as_unreferenced(*p);
+    if (p->is_referenced()) {
+      p->lru->mark_as_unreferenced(*p, true);
+    } else {
+      delete p;
+    }
   }
 }
 

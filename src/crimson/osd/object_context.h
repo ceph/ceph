@@ -64,6 +64,7 @@ class ObjectContext : public ceph::common::intrusive_lru_base<
 public:
   ObjectState obs;
   SnapSetContextRef ssc;
+  bool invalidated_by_interval_change = false;
   // the watch / notify machinery rather stays away from the hot and
   // frequented paths. std::map is used mostly because of developer's
   // convenience.
@@ -245,6 +246,12 @@ public:
   bool maybe_get_excl() {
     return lock.try_lock_for_excl();
   }
+
+  ~ObjectContext() {
+    assert(!list_hook.is_linked());
+    assert(!set_hook.is_linked());
+    assert(!obc_accessing_hook.is_linked());
+  }
 };
 using ObjectContextRef = ObjectContext::Ref;
 
@@ -262,6 +269,12 @@ public:
     return obc_lru.get(hoid);
   }
 
+  void clear() {
+    obc_lru.clear([](auto &obc) {
+      obc.invalidated_by_interval_change = true;
+    });
+  }
+
   void clear_range(const hobject_t &from,
                    const hobject_t &to) {
     obc_lru.clear_range(from, to);
@@ -271,6 +284,18 @@ public:
   void for_each(F&& f) {
     obc_lru.for_each(std::forward<F>(f));
   }
+
+#ifndef NDEBUG
+  bool all_invalidated() {
+    bool all_invalidated = true;
+    obc_lru.for_each_unreferenced([&](auto obc) {
+      if (!obc->invalidated_by_interval_change) {
+	all_invalidated = false;
+      }
+    });
+    return all_invalidated;
+  }
+#endif
 
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const crimson::common::ConfigProxy& conf,

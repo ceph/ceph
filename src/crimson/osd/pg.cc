@@ -1524,6 +1524,22 @@ void PG::on_change(ceph::os::Transaction &t) {
     client_request_orderer.clear_and_cancel(*this);
   }
   scrubber.on_interval_change();
+  obc_registry.clear();
+}
+
+void PG::on_flushed() {
+  // will be needed for unblocking IO operations/peering
+  if (!is_peered() || !is_primary()) {
+    bool empty = true;
+    obc_registry.for_each([&empty](ObjectContextRef obc) {
+      assert(obc);
+      logger().error("unexpected obc: {} {}",
+        (void*)obc.get(), obc->get_oid());
+      empty = false;
+    });
+    ceph_assert(empty);
+    ceph_assert(obc_registry.all_invalidated());
+  }
 }
 
 void PG::context_registry_on_change() {

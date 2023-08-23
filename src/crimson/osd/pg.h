@@ -185,9 +185,7 @@ public:
     }));
   }
 
-  void on_flushed() final {
-    // will be needed for unblocking IO operations/peering
-  }
+  void on_flushed() final;
 
   template <typename T>
   void start_peering_event_operation(T &&evt, float delay = 0) {
