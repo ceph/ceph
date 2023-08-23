@@ -1459,12 +1459,13 @@ int PeerReplayer::do_sync_snaps(const std::string &dir_root) {
     }
     std::chrono::duration<double> duration = clock::now() - start;
     set_last_synced_stat(dir_root, it->first, it->second, duration.count());
-    if (--snaps_per_cycle == 0) {
-      break;
-    }
 
     last_snap_name = it->second;
     last_snap_id = it->first;
+
+    if (--snaps_per_cycle < 1) {
+      break;
+    }
   }
 
   return 0;
