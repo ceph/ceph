@@ -1,0 +1,5 @@
+tasks:
+- cephadm:
+    roleless: true
+    image: quay.ceph.io/ceph-ci/ceph:reef
+    compiled_cephadm_branch: reef
