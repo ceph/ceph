@@ -69,6 +69,10 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   totalProvisionedNotAvailableTooltipTpl: TemplateRef<any>;
   @ViewChild('forcePromoteConfirmation', { static: true })
   forcePromoteConfirmation: TemplateRef<any>;
+  @ViewChild('usedTmpl', { static: true })
+  usedTmpl: TemplateRef<any>;
+  @ViewChild('totalUsedTmpl', { static: true })
+  totalUsedTmpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -272,6 +276,26 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         pipe: this.dimlessBinaryPipe
       },
       {
+        name: $localize`Used`,
+        prop: 'disk_usage',
+        cellClass: 'text-right',
+        flexGrow: 1,
+        pipe: this.dimlessBinaryPipe,
+        sortable: false,
+        headerTemplate: this.usedTmpl,
+        cellTemplate: this.provisionedNotAvailableTooltipTpl
+      },
+      {
+        name: $localize`Total used`,
+        prop: 'total_disk_usage',
+        cellClass: 'text-right',
+        flexGrow: 1,
+        pipe: this.dimlessBinaryPipe,
+        sortable: false,
+        headerTemplate: this.totalUsedTmpl,
+        cellTemplate: this.totalProvisionedNotAvailableTooltipTpl
+      },
+      {
         name: $localize`Objects`,
         prop: 'num_objs',
         flexGrow: 1,
@@ -286,24 +310,6 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         cellClass: 'text-right',
         sortable: false,
         pipe: this.dimlessBinaryPipe
-      },
-      {
-        name: $localize`Provisioned`,
-        prop: 'disk_usage',
-        cellClass: 'text-center',
-        flexGrow: 1,
-        pipe: this.dimlessBinaryPipe,
-        sortable: false,
-        cellTemplate: this.provisionedNotAvailableTooltipTpl
-      },
-      {
-        name: $localize`Total provisioned`,
-        prop: 'total_disk_usage',
-        cellClass: 'text-center',
-        flexGrow: 1,
-        pipe: this.dimlessBinaryPipe,
-        sortable: false,
-        cellTemplate: this.totalProvisionedNotAvailableTooltipTpl
       },
       {
         name: $localize`Parent`,
