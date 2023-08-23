@@ -362,6 +362,7 @@ class TestCephAdm(object):
     @mock.patch('cephadm.get_deployment_container')
     @mock.patch('cephadm.read_configuration_source', lambda c: {})
     @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
+    @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: ('ceph', 'ceph'))
     def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _fetch_configs, _deploy_daemon, _file_lock, _logger):
         """
         test that crush location for mon is set if it is included in config_json
