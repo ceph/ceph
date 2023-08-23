@@ -231,8 +231,12 @@ if [[ -z $SKIP_DLL_COPY ]]; then
         $lz4Dir/lib/dll/liblz4-1.dll
         $sslDir/bin/libcrypto-1_1-x64.dll
         $sslDir/bin/libssl-1_1-x64.dll
-        $mingwLibpthreadDir/libwinpthread-1.dll
-        $boostDir/lib/*.dll)
+        $mingwLibpthreadDir/libwinpthread-1.dll)
+    if [[ $ENABLE_SHARED == "ON" ]]; then
+        required_dlls+=(
+            $boostDir/lib/*.dll
+        )
+    fi
     if [[ -n $USE_MINGW_LLVM ]]; then
         required_dlls+=(
             $mingwTargetLibDir/libc++.dll

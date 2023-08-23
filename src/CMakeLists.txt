@@ -814,7 +814,8 @@ if(WITH_LIBCEPHFS)
       OUTPUT_NAME cephfs
       VERSION 2.0.0
       SOVERSION 2)
-    if(NOT APPLE)
+    if(NOT APPLE AND NOT
+        (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL Clang))
       foreach(name ceph-common client osdc)
         set_property(TARGET cephfs APPEND_STRING PROPERTY
           LINK_FLAGS " -Wl,--exclude-libs,lib${name}.a")
