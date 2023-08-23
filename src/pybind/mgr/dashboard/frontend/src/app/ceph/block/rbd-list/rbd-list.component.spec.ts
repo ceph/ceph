@@ -127,7 +127,7 @@ describe('RbdListComponent', () => {
         '.datatable-body-cell-label span'
       );
       // check image with disk usage = null & fast-diff disabled
-      expect(spanWithoutFastDiff[6].textContent).toBe('N/A');
+      expect(spanWithoutFastDiff[4].textContent).toBe('N/A');
 
       images[0]['features_name'] = ['layering', 'exclusive-lock', 'object-map', 'fast-diff'];
       component.images = images;
