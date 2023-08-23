@@ -1450,4 +1450,14 @@ public:
  }
 };
 
+
+class PGLockWrapper {
+ public:
+  PGLockWrapper(PGRef locked_pg) : m_pg{locked_pg} {}
+  PGRef pg() const { return m_pg; }
+  ~PGLockWrapper();
+ private:
+  PGRef m_pg;
+};
+
 #endif

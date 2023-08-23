@@ -22,9 +22,11 @@
 #include "include/utime_fmt.h"
 #include "osd/osd_types_fmt.h"
 
+#include "osd_scrub_sched.h"
 #include "ScrubStore.h"
 #include "scrub_backend.h"
 #include "scrub_machine.h"
+
 
 using std::list;
 using std::pair;
@@ -508,7 +510,7 @@ void PgScrubber::rm_from_osd_scrubbing()
     dout(15) << fmt::format(
 		    "{}: prev. state: {}", __func__, registration_state())
 	     << dendl;
-    m_osds->get_scrub_services().remove_from_osd_queue(m_scrub_job);
+    m_osds->get_scrub_pg_services().remove_from_osd_queue(m_scrub_job);
   }
 }
 
@@ -531,7 +533,7 @@ void PgScrubber::on_pg_activate(const requested_scrub_t& request_flags)
 
   auto suggested = m_osds->get_scrub_services().determine_scrub_time(
       request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
-  m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
+  m_osds->get_scrub_pg_services().register_with_osd(m_scrub_job, suggested);
 
   dout(10) << fmt::format(
 		  "{}: <flags:{}> {} <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
@@ -563,7 +565,7 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
     ceph_assert(m_pg->is_locked());
     auto suggested = m_osds->get_scrub_services().determine_scrub_time(
 	request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
-    m_osds->get_scrub_services().update_job(m_scrub_job, suggested);
+    m_osds->get_scrub_pg_services().update_job(m_scrub_job, suggested);
     m_pg->publish_stats_to_osd();
   }
 
@@ -1687,9 +1689,9 @@ void PgScrubber::on_replica_reservation_timeout()
   }
 }
 
-void PgScrubber::set_reserving_now()
+bool PgScrubber::set_reserving_now()
 {
-  m_osds->get_scrub_services().set_reserving_now();
+  return m_osds->get_scrub_services().set_reserving_now();
 }
 
 void PgScrubber::clear_reserving_now()
@@ -2085,7 +2087,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	false /* is periodic? unknown, actually */};
     }
   }
-  if (m_scrub_job->state != ScrubQueue::qu_state_t::registered) {
+  if (m_scrub_job->state != Scrub::qu_state_t::registered) {
     return pg_scrubbing_status_t{utime_t{},
 				 0,
 				 pg_scrub_sched_status_t::not_queued,
@@ -2168,7 +2170,7 @@ PgScrubber::PgScrubber(PG* pg)
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
   m_fsm->initiate();
 
-  m_scrub_job = ceph::make_ref<ScrubQueue::ScrubJob>(m_osds->cct,
+  m_scrub_job = ceph::make_ref<Scrub::ScrubJob>(m_osds->cct,
 						     m_pg->pg_id,
 						     m_osds->get_nodeid());
 }
@@ -2264,7 +2266,7 @@ void PgScrubber::replica_handling_done()
 
 std::chrono::milliseconds PgScrubber::get_scrub_sleep_time() const
 {
-  return m_osds->get_scrub_services().scrub_sleep_time(
+  return m_osds->get_scrub_pg_services().scrub_sleep_time(
     m_flags.required);
 }
 
@@ -2469,7 +2471,7 @@ void ReplicaReservations::release_replica(pg_shard_t peer, epoch_t epoch)
 ReplicaReservations::ReplicaReservations(
   PG* pg,
   pg_shard_t whoami,
-  ScrubQueue::ScrubJobRef scrubjob,
+  Scrub::ScrubJobRef scrubjob,
   const ConfigProxy& conf)
     : m_pg{pg}
     , m_acting_set{pg->get_actingset()}

@@ -23,10 +23,12 @@ set(osd_srcs
   OSDCap.cc
   scrubber/pg_scrubber.cc
   scrubber/osd_scrub_sched.cc
+  scrubber/osd_scrub.cc
   scrubber/PrimaryLogScrub.cc
   scrubber/scrub_machine.cc
   scrubber/ScrubStore.cc
   scrubber/scrub_backend.cc
+  scrubber/scrub_resources.cc
   Watch.cc
   Session.cc
   SnapMapper.cc

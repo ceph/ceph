@@ -53,7 +53,7 @@
 #include "common/EventTrace.h"
 #include "osd/osd_perf_counters.h"
 #include "common/Finisher.h"
-#include "scrubber/osd_scrub_sched.h"
+#include "scrubber/osd_scrub.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -239,30 +239,18 @@ public:
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
  private:
-  /**
-   * The entity that maintains the set of PGs we may scrub (i.e. - those that we
-   * are their primary), and schedules their scrubbing.
-   */
-  ScrubQueue m_scrub_queue;
+  /// the entity that offloads all scrubbing-related operations
+  OsdScrub m_osd_scrub;
 
  public:
-  ScrubQueue& get_scrub_services() { return m_scrub_queue; }
+  OsdScrub& get_scrub_services() { return m_osd_scrub; }
 
-  /**
-   * A callback used by the ScrubQueue object to initiate a scrub on a specific PG.
-   *
-   * The request might fail for multiple reasons, as ScrubQueue cannot by its own
-   * check some of the PG-specific preconditions and those are checked here. See
-   * attempt_t definition.
-   *
-   * @param pgid to scrub
-   * @param allow_requested_repair_only
-   * @return a Scrub::attempt_t detailing either a success, or the failure reason.
-   */
-  Scrub::schedule_result_t initiate_a_scrub(
-    spg_t pgid,
-    bool allow_requested_repair_only) final;
+  /// a possibly subset of the above, to be used by the PGs directly
+  OsdScrub& get_scrub_pg_services() {
+    return m_osd_scrub;
+  }
 
+  std::optional<PGLockWrapper> get_locked_pg(spg_t pgid) final;
 
  private:
   // -- agent shared state --
@@ -1869,7 +1857,6 @@ protected:
   // -- scrubbing --
   void sched_scrub();
   void resched_all_scrubs();
-  bool scrub_random_backoff();
 
   // -- status reporting --
   MPGStats *collect_pg_stats();
