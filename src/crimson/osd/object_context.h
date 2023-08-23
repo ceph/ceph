@@ -130,7 +130,7 @@ private:
     });
   }
 
-  boost::intrusive::list_member_hook<> list_hook;
+  boost::intrusive::list_member_hook<> obc_accessing_hook;
   uint64_t list_link_cnt = 0;
   bool fully_loaded = false;
 
@@ -154,7 +154,7 @@ public:
   using obc_accessing_option_t = boost::intrusive::member_hook<
     ObjectContext,
     boost::intrusive::list_member_hook<>,
-    &ObjectContext::list_hook>;
+    &ObjectContext::obc_accessing_hook>;
 
   template<RWState::State Type, typename InterruptCond = void, typename Func>
   auto with_lock(Func&& func) {
