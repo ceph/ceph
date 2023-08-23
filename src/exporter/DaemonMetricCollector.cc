@@ -122,6 +122,9 @@ void DaemonMetricCollector::dump_asok_metrics() {
     for (auto &perf_group_item : counter_schema) {
       std::string perf_group = {perf_group_item.key().begin(),
                                 perf_group_item.key().end()};
+      if (!perf_group_item.value().is_array() && !counter_dump[perf_group].is_array()) {
+        continue;
+      }
       json_array perf_group_schema_array = perf_group_item.value().as_array();
       json_array perf_group_dump_array = counter_dump[perf_group].as_array();
       for (auto schema_itr = perf_group_schema_array.begin(),
