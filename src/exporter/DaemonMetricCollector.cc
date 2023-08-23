@@ -160,8 +160,10 @@ void DaemonMetricCollector::dump_asok_metrics() {
             labels.insert(multisite_labels_and_name.first.begin(), multisite_labels_and_name.first.end());
             counter_name = multisite_labels_and_name.second;
           }
-          auto perf_values = counters_values.at(counter_name_init);
-          dump_asok_metric(counter_group, perf_values, counter_name, labels);
+          if (counters_values.find(counter_name_init) != counters_values.end()) {
+            auto perf_values = counters_values.at(counter_name_init);
+            dump_asok_metric(counter_group, perf_values, counter_name, labels);
+          }
         }
       }
     }
