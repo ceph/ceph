@@ -6,6 +6,7 @@ SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
 
 USE_MINGW_LLVM=${USE_MINGW_LLVM:-}
+ENABLE_SHARED=${ENABLE_SHARED:-OFF}
 
 num_vcpus=$(nproc)
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
@@ -236,14 +237,31 @@ EOL
 
 ./bootstrap.sh
 
+if [[ $ENABLE_SHARED == "ON" ]]; then
+    b2_link="shared"
+else
+    b2_link="static"
+fi
+
 ./b2 install --user-config=user-config.jam toolset=$b2toolset \
     target-os=windows release \
-    link=static,shared \
+    link=$b2_link \
     threadapi=win32 --prefix=$boostDir \
     address-model=64 architecture=x86 \
     binary-format=pe abi=ms -j $NUM_WORKERS \
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \
     --without-python --without-mpi --without-log --without-wave
+
+if [[ -n $USE_MINGW_LLVM && $ENABLE_SHARED == "ON" ]]; then
+    # b2 doesn't generate import libs when using mingw-llvm. We'll tell cmake
+    # to use the dlls instead of import libs, which mingw is capable of.
+    #
+    # TODO: consider dropping this if we get to fix Boost's clang-linux.jam
+    # file. Worth mentioning that Boost might drop the import libs altogether:
+    # https://github.com/bfgroup/b2/issues/278
+    find $boostDir/lib/cmake -name "*.cmake" \
+        -exec sed -i 's/IMPORTED_LOCATION_RELEASE/IMPORTED_IMPLIB_RELEASE/g' {} \;
+fi
 
 echo "Building libbacktrace."
 cd $depsSrcDir
