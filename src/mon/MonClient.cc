@@ -705,7 +705,11 @@ void MonClient::_finish_auth(int auth_err)
   // the one the MonCommand is targeting.
   if (!auth_err && active_con) {
     ceph_assert(auth);
-    _check_auth_tickets();
+    if (auto err = _check_auth_tickets(); err) {
+      lderr(cct) << __func__
+                 << " _check_auth_tickets failed with " << err << dendl;
+      _reopen_session();
+    }
   } else if (auth_err == -EAGAIN && !active_con) {
     ldout(cct,10) << __func__ 
                   << " auth returned EAGAIN, reopening the session to try again"
@@ -961,8 +965,11 @@ void MonClient::tick()
   auto reschedule_tick = make_scope_guard([this] {
       schedule_tick();
     });
-
-  _check_auth_tickets();
+  if (auto err = _check_auth_tickets(); err) {
+    lderr(cct) << __func__
+               << " _check_auth_tickets failed with " << err << dendl;
+    return _reopen_session();
+  }
   _check_tell_commands();
   
   if (_hunting()) {
@@ -1070,7 +1077,10 @@ int MonClient::_check_auth_tickets()
       auto m = ceph::make_message<MAuth>();
       m->protocol = auth->get_protocol();
       auth->prepare_build_request();
-      auth->build_request(m->auth_payload);
+      if (auto err = auth->build_request(m->auth_payload); err) {
+	lderr(cct) << "build_request failed with " << err << dendl;
+	return err;
+      }
       _send_mon_message(m);
     }
 
@@ -1778,7 +1788,10 @@ int MonConnection::handle_auth_reply_more(
 				&auth_meta->connection_secret);
   if (r == -EAGAIN) {
     auth->prepare_build_request();
-    auth->build_request(*reply);
+    if (auto err = auth->build_request(*reply); err) {
+      lderr(cct) << __func__ << " build_request returned " << err << dendl;
+      return err;
+    }
     ldout(cct, 10) << __func__ << " responding with " << reply->length()
 		   << " bytes" << dendl;
     r = 0;
@@ -1935,11 +1948,14 @@ int MonConnection::authenticate(MAuthReply *m)
   auto p = m->result_bl.cbegin();
   int ret = auth->handle_response(m->result, p, nullptr, nullptr);
   if (ret == -EAGAIN) {
-    auto ma = new MAuth;
+    auto ma = ceph::make_message<MAuth>();
     ma->protocol = auth->get_protocol();
     auth->prepare_build_request();
-    auth->build_request(ma->auth_payload);
-    con->send_message(ma);
+    if (auto err = auth->build_request(ma->auth_payload); err) {
+      lderr(cct) << "build_request failed with " << err << dendl;
+      return err;
+    }
+    con->send_message(ma.release());
   }
   if (ret == 0 && pending_tell_command) {
     con->send_message2(std::move(pending_tell_command));
