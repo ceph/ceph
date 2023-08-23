@@ -540,36 +540,28 @@ void SnapMapper::add_oid(
   backend.set_keys(to_add, t);
 }
 
-int SnapMapper::get_next_objects_to_trim(
+void SnapMapper::get_objects_by_prefixes(
   snapid_t snap,
   unsigned max,
   vector<hobject_t> *out)
 {
-  ceph_assert(out);
-  ceph_assert(out->empty());
-
-  // if max would be 0, we return ENOENT and the caller would mistakenly
-  // trim the snaptrim queue
-  ceph_assert(max > 0);
-  int r = 0;
-
-  /// \todo cache the prefixes-set in update_bits()
-  for (set<string>::iterator i = prefixes.begin();
-       i != prefixes.end() && out->size() < max && r == 0;
-       ++i) {
-    string prefix(get_prefix(pool, snap) + *i);
+  /// maintain the prefix_itr between calls to avoid searching depleted prefixes
+  for ( ; prefix_itr != prefixes.end(); prefix_itr++) {
+    string prefix(get_prefix(pool, snap) + *prefix_itr);
     string pos = prefix;
     while (out->size() < max) {
       pair<string, ceph::buffer::list> next;
-      r = backend.get_next(pos, &next);
+      // access RocksDB (an expensive operation!)
+      int r = backend.get_next(pos, &next);
       dout(20) << __func__ << " get_next(" << pos << ") returns " << r
 	       << " " << next << dendl;
       if (r != 0) {
-	break; // Done
+	return; // Done
       }
 
       if (next.first.substr(0, prefix.size()) !=
 	  prefix) {
+	// TBD: we access the DB twice for the first object of each iterator...
 	break; // Done with this prefix
       }
 
@@ -583,14 +575,58 @@ int SnapMapper::get_next_objects_to_trim(
       out->push_back(next_decoded.second);
       pos = next.first;
     }
+
+    if (out->size() >= max) {
+      return;
+    }
   }
+}
+
+int SnapMapper::get_next_objects_to_trim(
+  snapid_t snap,
+  unsigned max,
+  vector<hobject_t> *out)
+{
+  ceph_assert(out);
+  ceph_assert(out->empty());
+
+  // if max would be 0, we return ENOENT and the caller would mistakenly
+  // trim the snaptrim queue
+  ceph_assert(max > 0);
+
+  // The prefix_itr is bound to a prefix_itr_snap so if we trim another snap
+  // we must reset the prefix_itr (should not happen normally)
+  if (prefix_itr_snap != snap) {
+    dout(10) << __func__ << "::Reset prefix_itr(unexpcted) snap was changed from <"
+	     << prefix_itr_snap << "> to <" << snap << ">" << dendl;
+    reset_prefix_itr(snap);
+  }
+
+  // when reaching the end of the DB reset the prefix_ptr and verify
+  // we didn't miss objects which were added after we started trimming
+  // This should never happen in reality because the snap was logically deleted
+  // before trimming starts (and so no new clone-objects could be added)
+  // For more info see PG::filter_snapc()
+  //
+  // We still like to be extra careful and run one extra loop over all prefeixes
+  get_objects_by_prefixes(snap, max, out);
+  if (out->size() == 0) {
+    dout(10) << __func__ << "::Reset prefix_itr after a complete trim!" << dendl;
+    reset_prefix_itr(snap);
+    get_objects_by_prefixes(snap, max, out);
+
+    bool osd_debug_trim_objects = cct->_conf.get_val<bool>("osd_debug_trim_objects");
+    if (osd_debug_trim_objects) {
+      ceph_assert(out->size() == 0);
+    }
+  }
+
   if (out->size() == 0) {
     return -ENOENT;
   } else {
     return 0;
   }
 }
-
 
 int SnapMapper::remove_oid(
   const hobject_t &oid,
