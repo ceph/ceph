@@ -956,7 +956,7 @@ class RgwMultisite:
     def create_realm(self, realm_name: str, default: bool):
         rgw_realm_create_cmd = ['realm', 'create']
         cmd_create_realm_options = ['--rgw-realm', realm_name]
-        if default != 'false':
+        if default:
             cmd_create_realm_options.append('--default')
         rgw_realm_create_cmd += cmd_create_realm_options
         try:
