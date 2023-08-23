@@ -281,6 +281,24 @@ private:
   tl::expected<object_snaps, SnapMapReaderI::result_t> get_snaps_common(
     const hobject_t &hoid) const;
 
+  /// file @out vector with the first objects with @snap as a snap
+  void get_objects_by_prefixes(
+    snapid_t snap,
+    unsigned max,
+    std::vector<hobject_t> *out);
+
+  std::set<std::string>           prefixes;
+  // maintain a current active prefix
+  std::set<std::string>::iterator prefix_itr;
+  // associate the active prefix with a snap
+  snapid_t                        prefix_itr_snap;
+
+  // reset the prefix iterator to the first prefix hash
+  void reset_prefix_itr(snapid_t snap) {
+    prefix_itr_snap = snap;
+    prefix_itr      = prefixes.begin();
+  }
+
  public:
   static std::string make_shard_prefix(shard_id_t shard) {
     if (shard == shard_id_t::NO_SHARD)
@@ -309,7 +327,6 @@ private:
     update_bits(mask_bits);
   }
 
-  std::set<std::string> prefixes;
   /// Update bits in case of pg split or merge
   void update_bits(
     uint32_t new_bits  ///< [in] new split bits
@@ -323,6 +340,12 @@ private:
     for (auto i = _prefixes.begin(); i != _prefixes.end(); ++i) {
       prefixes.insert(shard_prefix + *i);
     }
+
+    reset_prefix_itr(CEPH_NOSNAP);
+  }
+
+  const std::set<std::string>::iterator get_prefix_itr() {
+    return prefix_itr;
   }
 
   /// Update snaps for oid, empty new_snaps removes the mapping
