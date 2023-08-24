@@ -88,6 +88,7 @@ groups:
           description: "{{ $value | humanize }}% or {{ with query \"count(ceph_osd_up == 0)\" }}{{ . | first | value }}{{ end }} of {{ with query \"count(ceph_osd_up)\" }}{{ . | first | value }}{{ end }} OSDs are down (>= 10%). The following OSDs are down: {{- range query \"(ceph_osd_up * on(ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0\" }} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}"
           summary: "More than 10% of OSDs are down"
         expr: "count(ceph_osd_up == 0) / count(ceph_osd_up) * 100 >= 10"
+        for: 5m
         labels:
           oid: "1.3.6.1.4.1.50495.1.2.1.4.1"
           severity: "critical"
