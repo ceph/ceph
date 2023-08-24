@@ -50,38 +50,8 @@ int SSDDriver::remove_partition_info(Partition& info)
     return partitions.erase(key);
 }
 
-int SSDDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len)
-{
-    auto ret = entries.emplace(key, Entry(key, offset, len));
-    return ret.second;
-}
-
-int SSDDriver::remove_entry(const DoutPrefixProvider* dpp, std::string key)
-{
-    return entries.erase(key);
-}
-
-std::optional<Entry> SSDDriver::get_entry(const DoutPrefixProvider* dpp, std::string key)
-{
-    auto iter = entries.find(key);
-    if (iter != entries.end()) {
-        return iter->second;
-    }
-
-    return std::nullopt;
-}
-
-std::vector<Entry> SSDDriver::list_entries(const DoutPrefixProvider* dpp)
-{
-    std::vector<Entry> entries_v;
-    for (auto& it : entries) {
-        entries_v.emplace_back(it.second);
-    }
-    return entries_v;
-}
-
 SSDDriver::SSDDriver(Partition& partition_info) : partition_info(partition_info),
-                                                    free_space(partition_info.size), outstanding_write_size(0)
+                                                    free_space(partition_info.size)
 {
     add_partition_info(partition_info);
 }
@@ -130,10 +100,6 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 
 int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
 {
-    if (key_exists(dpp, key)) {
-        return 0;
-    }
-
     std::string location = partition_info.location + key;
 
     ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
@@ -170,15 +136,11 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
         }
     }
 
-    return insert_entry(dpp, key, 0, len);
+    return 0;
 }
 
 int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs)
 {
-    if (!key_exists(dpp, key)) {
-        return -ENOENT;
-    }
-
     char buffer[len];
     std::string location = partition_info.location + key;
 
@@ -278,8 +240,6 @@ void SSDDriver::libaio_write_completion_cb(AsyncWriteRequest* c)
 {
     efs::space_info space = efs::space(partition_info.location);
     this->free_space = space.available;
-
-    insert_entry(c->dpp, c->key, 0, c->cb->aio_nbytes);
 }
 
 int SSDDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
@@ -318,7 +278,7 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
     efs::space_info space = efs::space(partition_info.location);
     this->free_space = space.available;
 
-    return remove_entry(dpp, key);
+    return 0;
 }
 
 int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data)

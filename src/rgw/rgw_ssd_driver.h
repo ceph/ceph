@@ -26,11 +26,6 @@ public:
   virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val) override;
   int delete_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name);
 
-  /* Entry */
-  virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) override { return entries.count(key) != 0; }
-  virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) override;
-  virtual size_t get_num_entries(const DoutPrefixProvider* dpp) override { return entries.size(); }
-
   /* Partition */
   virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
   virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; }
@@ -50,17 +45,12 @@ public:
 
 protected:
   inline static std::unordered_map<std::string, Partition> partitions;
-  std::unordered_map<std::string, Entry> entries;
   Partition partition_info;
   uint64_t free_space;
-  uint64_t outstanding_write_size;
   CephContext* cct;
 
   int add_partition_info(Partition& info);
   int remove_partition_info(Partition& info);
-  int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
-  int remove_entry(const DoutPrefixProvider* dpp, std::string key);
-  std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
 
 private:
 
