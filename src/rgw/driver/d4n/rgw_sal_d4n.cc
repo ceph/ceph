@@ -51,6 +51,8 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next) : FilterDriver(_next)
   blockDir = new rgw::d4n::BlockDirectory();
   cacheBlock = new rgw::d4n::CacheBlock();
   policyDriver = new rgw::d4n::PolicyDriver("lfuda");
+  cache = rgw::sal::LRUCache(cacheDriver);
+
 }
 
  D4NFilterDriver::~D4NFilterDriver()
@@ -519,7 +521,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
     " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-    if (source->driver->get_cache_driver()->key_exists(dpp, oid_in_cache)) { 
+    if (source->driver->get_lru_cache().key_exists(dpp, oid_in_cache)) { 
       // Read From Cache
       auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id); 
 
@@ -537,7 +539,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
       " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-      if ((part_len != obj_max_req_size) && source->driver->get_cache_driver()->key_exists(dpp, oid_in_cache)) {
+      if ((part_len != obj_max_req_size) && source->driver->get_lru_cache().key_exists(dpp, oid_in_cache)) {
         // Read From Cache
         auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id);  
 
@@ -735,17 +737,24 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     }
   }
 
+  int ret = 0;
   //Accumulating data from backend store into rgw_get_obj_max_req_size sized chunks and then writing to cache
   if (write_to_cache) {
     const std::lock_guard l(d3n_get_data.d3n_lock);
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
-      filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
+      ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
+      if (ret == 0) {
+        filter->get_lru_cache().insert(save_dpp, LRUCache::Entry{oid, ofs, bl.length()}); //TODO - move to flush, where operation actually completes
+      }
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
-      filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
+      ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
+      if (ret == 0) {
+        filter->get_lru_cache().insert(save_dpp, LRUCache::Entry{oid, ofs, bl.length()});
+      }
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
       uint64_t rem_space = rgw_get_obj_max_req_size - bl_rem.length();
       uint64_t len_to_copy = rem_space > bl.length() ? bl.length() : rem_space;
@@ -758,7 +767,10 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
         ofs += bl_rem.length();
 
-        filter->get_cache_driver()->put_async(save_dpp, oid, bl_rem, bl_rem.length(), source->get_attrs());
+        ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl_rem, bl_rem.length(), source->get_attrs());
+        if (ret == 0) {
+          filter->get_lru_cache().insert(save_dpp, LRUCache::Entry{oid, ofs, bl_rem.length()});
+        }
 
         bl_rem.clear();
         bl_rem = std::move(bl);
