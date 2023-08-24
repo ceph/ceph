@@ -25,10 +25,6 @@ class RedisDriver : public CacheDriver {
       remove_partition_info(partition_info);
     }
 
-    /* Entry */
-    virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) override;
-    virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) override;
-    virtual size_t get_num_entries(const DoutPrefixProvider* dpp) override;
     //int update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight); // may need to exist for base class -Sam
 
     /* Partition */
@@ -71,16 +67,12 @@ class RedisDriver : public CacheDriver {
     cpp_redis::client client;
     rgw::d4n::Address addr;
     static std::unordered_map<std::string, Partition> partitions;
-    std::unordered_map<std::string, Entry> entries;
     Partition partition_info;
     uint64_t free_space;
     uint64_t outstanding_write_size;
     CephContext* cct;
 
     int find_client(const DoutPrefixProvider* dpp);
-    int insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len);
-    std::optional<Entry> get_entry(const DoutPrefixProvider* dpp, std::string key);
-    int remove_entry(const DoutPrefixProvider* dpp, std::string key);
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
 
