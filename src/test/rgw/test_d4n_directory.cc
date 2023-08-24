@@ -1,16 +1,12 @@
-#include <thread>
-#include "../rgw/driver/d4n/d4n_directory.h" // Fix -Sam
-#include "rgw_process_env.h"
-#include <cpp_redis/cpp_redis>
 #include <iostream>
-#include <string>
-#include "gtest/gtest.h"
+#include <spawn/spawn.hpp>
+
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
-#include <spawn/spawn.hpp>
 
-using namespace std;
+#include "gtest/gtest.h"
+#include "../rgw/driver/d4n/d4n_directory.h" // Fix -Sam
 
 namespace net = boost::asio;
 using boost::redis::config;
@@ -18,35 +14,34 @@ using boost::redis::connection;
 using boost::redis::request;
 using boost::redis::response;
 
-string portStr;
-string hostStr;
-string redisHost = "";
+std::string portStr;
+std::string hostStr;
+std::string redisHost = "";
 
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      conn = new connection{io};
+      dir = new rgw::d4n::BlockDirectory{io, hostStr, stoi(portStr)};
+      block = new rgw::d4n::CacheBlock{
+        .cacheObj = {
+	  .objName = "testName",
+	  .bucketName = "testBucket",
+	  .creationTime = 0,
+	  .dirty = false,
+	  .hostsList = {redisHost}
+	},
+	.version = 0,
+	.size = 0,
+	.hostsList = {redisHost}
+      };
 
-      /* Run context */
-      using Executor = net::io_context::executor_type;
-      using Work = net::executor_work_guard<Executor>;
-      work = new std::optional<Work>(io.get_executor());
-      worker = new std::thread([&] { io.run(); });
+      conn = new connection{boost::asio::make_strand(io)};
 
-      /* Create block directory and cache block */
-      blockDir = new rgw::d4n::BlockDirectory(io, hostStr, stoi(portStr));
-      block = new rgw::d4n::CacheBlock();
+      ASSERT_NE(block, nullptr);
+      ASSERT_NE(dir, nullptr);
+      ASSERT_NE(conn, nullptr);
 
-      block->version = 0;
-      block->size = 0; 
-      block->globalWeight = 0; 
-      block->hostsList.push_back(redisHost);
-
-      block->cacheObj.objName = "testName";
-      block->cacheObj.bucketName = "testBucket";
-      block->cacheObj.creationTime = 0;
-      block->cacheObj.dirty = false;
-      block->cacheObj.hostsList.push_back(redisHost);
+      dir->init();
 
       /* Run fixture's connection */
       config cfg;
@@ -57,26 +52,16 @@ class DirectoryFixture: public ::testing::Test {
     } 
 
     virtual void TearDown() {
-      delete blockDir;
-      delete block;
-
-      io.stop();
-
       delete conn;
-      delete work;
-      delete worker;
+      delete block;
+      delete dir;
     }
 
-    rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* block;
+    rgw::d4n::BlockDirectory* dir;
 
     net::io_context io;
     connection* conn;
-
-    using Executor = net::io_context::executor_type;
-    using Work = net::executor_work_guard<Executor>;
-    std::optional<Work>* work;
-    std::thread* worker;
 
     std::vector<std::string> vals{"0", "0", "0", redisHost, 
                                    "testName", "testBucket", "0", "0", redisHost};
@@ -84,44 +69,31 @@ class DirectoryFixture: public ::testing::Test {
                                    "objName", "bucketName", "creationTime", "dirty", "objHosts"};
 };
 
-/* Successful initialization */
-TEST_F(DirectoryFixture, DirectoryInit) {
-  ASSERT_NE(blockDir, nullptr);
-  ASSERT_NE(block, nullptr);
-  ASSERT_NE(redisHost.length(), (long unsigned int)0);
-
-  conn->cancel();
-  *work = std::nullopt;
-  worker->join();
-}
-
-TEST(BlockDirectory, SetValueYield)
+TEST_F(DirectoryFixture, SetValueYield)
 {
-  boost::asio::io_context io;
-  auto dir = rgw::d4n::BlockDirectory{io, hostStr, stoi(portStr)};
-  dir.init();
+  spawn::spawn(io, [this] (yield_context yield) {
+    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
+    dir->shutdown();
+  });
 
-  spawn::spawn(io, [&io, &dir] (yield_context yield) {
-        auto block = rgw::d4n::CacheBlock{
-              .cacheObj = {
-                .objName = "testName",
-                .bucketName = "testBucket",
-                .creationTime = 0,
-                .dirty = false,
-                .hostsList = {redisHost}
-              },
-              .version = 0,
-              .size = 0,
-              .hostsList = {redisHost}
-            };
+    request req;
+    req.push_range("HMGET", "testBucket_testName_0", fields);
+    req.push("FLUSHALL");
 
-        ASSERT_EQ(0, dir.set_value(&block, optional_yield{io, yield}));
-        dir.shutdown();
-      });
+    response< std::vector<std::string>,
+	      boost::redis::ignore_t > resp;
+
+    conn->async_exec(req, resp, [&](auto ec, auto) {
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), vals);
+
+      conn->cancel();
+    });
 
   io.run();
 }
 
+#if 0
 /* Successful set_value Call and Redis Check */
 TEST_F(DirectoryFixture, SetValueTest) {
   blockDir->init();
@@ -129,58 +101,22 @@ TEST_F(DirectoryFixture, SetValueTest) {
 
   ASSERT_EQ(setReturn, 0);
 
-  #if 0
   vector<std::string> results;
   request req;
-  req.push_range("HGETALL", "testBucket_testName_0");
-  //req.push_range("HMGET", "testBucket_testName_0", fields);
-  //req.push("FLUSHALL");
+  req.push_range("HMGET", "testBucket_testName_0", fields);
+  req.push("FLUSHALL");
 
-  response< std::map<std::string, std::string>,
+  response< std::vector<std::string>,
             boost::redis::ignore_t > resp;
 
   conn->async_exec(req, resp, [&](auto ec, auto) {
     ASSERT_EQ((bool)ec, false);
-
-    /*for (auto const& pair : std::get<0>(resp).value()) {
-      results.push_back(pair.second);
-    }
     EXPECT_EQ(results, vals);*/
-
-
-    for (auto const& pair : std::get<0>(resp).value()) {
-      if (pair.first == "version")
-	EXPECT_EQ(pair.second, vals[0]);
-      else if (pair.first == "size")
-	EXPECT_EQ(pair.second, vals[1]);
-      else if (pair.first == "globalWeight")
-	EXPECT_EQ(pair.second, vals[2]);
-      else if (pair.first == "blockHosts")
-	EXPECT_EQ(pair.second, vals[3]);
-      else if (pair.first == "objName")
-	EXPECT_EQ(pair.second, vals[4]);
-      else if (pair.first == "bucketName")
-	EXPECT_EQ(pair.second, vals[5]);
-      else if (pair.first == "creationTime")
-	EXPECT_EQ(pair.second, vals[6]);
-      else if (pair.first == "dirty")
-	EXPECT_EQ(pair.second, vals[7]);
-      else if (pair.first == "objHosts")
-	EXPECT_EQ(pair.second, vals[8]);
-      else
-        EXPECT_EQ(false, true); /* Redundant fail; this statement should not be entered */
-    }
 
     conn->cancel();
   });
-  #endif
-
-  blockDir->shutdown();
-  *work = std::nullopt;
-  worker->join();
 }
 
-#if 0
 /* Successful get_value Calls and Redis Check */
 TEST_F(DirectoryFixture, GetValueTest) {
   blockDir->init();
@@ -257,7 +193,7 @@ int main(int argc, char *argv[]) {
     hostStr = argv[1];
     portStr = argv[2];
   } else {
-    cout << "Incorrect number of arguments." << std::endl;
+    std::cout << "Incorrect number of arguments." << std::endl;
     return -1;
   }
 
