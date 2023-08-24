@@ -501,7 +501,24 @@ class ExportMgr:
 
         aeresults = AppliedExportResults()
         for export in exports:
-            aeresults.append(self._change_export(cluster_id, export))
+            try:
+                aeresults.append(self._apply_export(cluster_id, export))
+            except NotImplementedError:
+                # in theory, the NotImplementedError here may be raised by a hook back to
+                # an orchestration module. If the orchestration module supports it the NFS
+                # servers may be restarted. If not supported the expectation is that an
+                # (unfortunately generic) NotImplementedError will be raised. We then
+                # indicate to the user that manual intervention may be needed now that the
+                # configuration changes have been applied.
+                ret = {
+                    "pseudo": export['pseudo'],
+                    "state": "warning",
+                    "msg": "changes applied (Manual restart of NFS Pods required)",
+                }
+                aeresults.append(ret)
+            except Exception as ex:
+                log.exception(f'Failed to apply export: {ex}')
+                raise ErrorResponse.wrap(ex)
         return aeresults
 
     def _read_export_config(self, cluster_id: str, export_config: str) -> List[Dict]:
@@ -524,26 +541,6 @@ class ExportMgr:
         if isinstance(j, list):
             return j  # j is already a list object
         return [j]  # return a single object list, with j as the only item
-
-    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, str]:
-        try:
-            return self._apply_export(cluster_id, export)
-        except NotImplementedError:
-            # in theory, the NotImplementedError here may be raised by a hook back to
-            # an orchestration module. If the orchestration module supports it the NFS
-            # servers may be restarted. If not supported the expectation is that an
-            # (unfortunately generic) NotImplementedError will be raised. We then
-            # indicate to the user that manual intervention may be needed now that the
-            # configuration changes have been applied.
-            return {
-                "pseudo": export['pseudo'],
-                "state": "warning",
-                "msg": "changes applied (Manual restart of NFS Pods required)",
-            }
-        except Exception as ex:
-            msg = f'Failed to apply export: {ex}'
-            log.exception(msg)
-            return {"state": "error", "msg": msg}
 
     def _update_user_id(
             self,
