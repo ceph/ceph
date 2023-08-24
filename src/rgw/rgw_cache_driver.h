@@ -12,12 +12,6 @@ struct Partition {
     uint64_t size;
 };
 
-struct Entry {
-  std::string key;
-  off_t offset;
-  uint64_t len;
-};
-
 class CacheDriver {
   public:
     CacheDriver() {}
@@ -36,11 +30,6 @@ class CacheDriver {
     virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) = 0;
     virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) = 0;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) = 0;
-
-    /* Entry */
-    virtual bool key_exists(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;
-    virtual std::vector<Entry> list_entries(const DoutPrefixProvider* dpp) = 0;
-    virtual size_t get_num_entries(const DoutPrefixProvider* dpp) = 0;
 
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) = 0;
