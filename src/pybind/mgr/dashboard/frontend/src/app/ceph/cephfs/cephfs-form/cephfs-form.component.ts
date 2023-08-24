@@ -63,7 +63,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = $localize`volume`;
+    this.resource = $localize`File System`;
     this.hosts = {
       options: [],
       messages: new SelectMessages({

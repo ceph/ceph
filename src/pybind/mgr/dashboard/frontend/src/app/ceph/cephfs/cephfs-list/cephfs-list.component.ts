@@ -66,16 +66,17 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
         flexGrow: 2
       },
       {
-        name: $localize`Created`,
-        prop: 'mdsmap.created',
-        flexGrow: 2,
-        pipe: this.cdDatePipe
-      },
-      {
         name: $localize`Enabled`,
         prop: 'mdsmap.enabled',
-        flexGrow: 1,
+        flexGrow: 2,
         cellTransformation: CellTemplate.checkIcon
+      },
+      {
+        name: $localize`Created`,
+        prop: 'mdsmap.created',
+        flexGrow: 1,
+        pipe: this.cdDatePipe,
+        cellTransformation: CellTemplate.timeAgo
       }
     ];
     this.tableActions = [
