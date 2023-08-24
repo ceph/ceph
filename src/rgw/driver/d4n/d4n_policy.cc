@@ -214,6 +214,7 @@ int LFUDAPolicy::get_min_avg_weight() {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode) {
+  #if 0
   std::vector<rgw::cache::Entry> entries = cacheNode->list_entries(dpp);
   std::string victimName;
   int minWeight = INT_MAX;
@@ -243,7 +244,8 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
 
   if (ret < 0)
     return {};
-
+  #endif
+  CacheBlock victimBlock;
   return victimBlock;
 }
 
@@ -267,7 +269,8 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 
   int age = get_age();
 
-  if (cacheNode->key_exists(dpp, block->cacheObj.objName)) { /* Local copy */ 
+  bool key_exists = true; //cacheNode->key_exists(dpp, block->cacheObj.objName) //TODO- correct this
+  if (key_exists) { /* Local copy */ 
     localWeight += age;
   } else {
     std::string hosts;
@@ -371,7 +374,8 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   int ret = cacheNode->delete_data(dpp, victim.cacheObj.objName);
 
   if (!ret) {
-    ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries(dpp)), ""/*local cache location*/); // Where else must this be set? -Sam
+    uint64_t num_entries = 100; //cacheNode->get_num_entries(dpp) TODO - correct this
+    ret = set_min_avg_weight(avgWeight - (localWeight/num_entries), ""/*local cache location*/); // Where else must this be set? -Sam
 
     if (!ret) {
       int age = get_age();
