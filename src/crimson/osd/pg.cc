@@ -1454,14 +1454,19 @@ void PG::on_change(ceph::os::Transaction &t) {
 }
 
 void PG::context_registry_on_change() {
-    obc_registry.for_each([](ObjectContextRef obc) {
-      assert(obc);
-      for (auto j = obc->watchers.begin();
-           j != obc->watchers.end();
-           j = obc->watchers.erase(j)) {
-        j->second->discard_state();
-      }
+  std::vector<seastar::shared_ptr<crimson::osd::Watch>> watchers;
+  obc_registry.for_each([&watchers](ObjectContextRef obc) {
+    assert(obc);
+    for (auto j = obc->watchers.begin();
+         j != obc->watchers.end();
+         j = obc->watchers.erase(j)) {
+      watchers.emplace_back(j->second);
+    }
   });
+
+  for (auto &watcher : watchers) {
+    watcher->discard_state();
+  }
 }
 
 bool PG::can_discard_op(const MOSDOp& m) const {
