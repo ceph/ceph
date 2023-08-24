@@ -116,7 +116,7 @@ TEST(BlockDirectory, SetValueYield)
             };
 
         ASSERT_EQ(0, dir.set_value(&block, optional_yield{io, yield}));
-        dir.conn_cancel();
+        dir.shutdown();
       });
 
   io.run();
@@ -175,6 +175,7 @@ TEST_F(DirectoryFixture, SetValueTest) {
   });
   #endif
 
+  blockDir->shutdown();
   *work = std::nullopt;
   worker->join();
 }

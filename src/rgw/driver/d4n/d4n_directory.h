@@ -96,16 +96,12 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
 class BlockDirectory: public Directory {
   public:
     BlockDirectory(net::io_context& io_context) {
-      conn = new connection{boost::asio::make_strand(io_context)};
+      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
     }
     BlockDirectory(net::io_context& io_context, std::string host, int port) {
-      conn = new connection{boost::asio::make_strand(io_context)};
+      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
       addr.host = host;
       addr.port = port;
-    }
-    ~BlockDirectory() {
-      conn->cancel();
-      delete conn;
     }
     
     int init(/*CephContext* _cct, const DoutPrefixProvider* dpp*/) {
@@ -124,6 +120,7 @@ class BlockDirectory: public Directory {
 
       return 0;
     }
+    void shutdown();
 	
     int find_client(cpp_redis::client* client);
     int exist_key(std::string key, optional_yield y);
@@ -135,10 +132,9 @@ class BlockDirectory: public Directory {
     int del_value(CacheBlock* block, optional_yield y);
 
     int update_field(CacheBlock* block, std::string field, std::string value);
-    auto conn_cancel() { conn->cancel(); }
 
   private:
-    connection* conn;
+    std::shared_ptr<connection> conn;
     cpp_redis::client client;
     Address addr;
     std::string build_index(CacheBlock* block);

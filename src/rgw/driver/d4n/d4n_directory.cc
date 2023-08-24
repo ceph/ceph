@@ -1,19 +1,46 @@
+#include <boost/asio/consign.hpp>
 #include "common/async/blocked_completion.h"
 #include "d4n_directory.h"
 #include <time.h>
 
 namespace rgw { namespace d4n {
 
+// initiate a call to async_exec() on the connection's executor
+struct initiate_exec {
+  std::shared_ptr<boost::redis::connection> conn;
+  boost::redis::request req;
+
+  using executor_type = boost::redis::connection::executor_type;
+  executor_type get_executor() const noexcept { return conn->get_executor(); }
+
+  template <typename Handler, typename Response>
+  void operator()(Handler handler, Response& resp)
+  {
+    conn->async_exec(req, resp, boost::asio::consign(std::move(handler), conn));
+  }
+};
+
+template <typename Response, typename CompletionToken>
+auto async_exec(std::shared_ptr<connection> conn,
+                const boost::redis::request& req,
+                Response& resp, CompletionToken&& token)
+{
+  return boost::asio::async_initiate<CompletionToken,
+         void(boost::system::error_code, std::size_t)>(
+      initiate_exec{std::move(conn), req}, token, resp);
+}
+
 template <typename T>
-void redis_exec(connection* conn, boost::system::error_code& ec,
+void redis_exec(std::shared_ptr<connection> conn,
+                boost::system::error_code& ec,
                 const boost::redis::request& req,
                 boost::redis::response<T>& resp, optional_yield y)
 {
   if (y) {
     auto yield = y.get_yield_context();
-    conn->async_exec(req, resp, yield[ec]);
+    async_exec(std::move(conn), req, resp, yield[ec]);
   } else {
-    conn->async_exec(req, resp, ceph::async::use_blocked[ec]);
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
   }
 }
 
@@ -450,6 +477,12 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
  // }
 
   return 0;
+}
+
+void BlockDirectory::shutdown()
+{
+  // call cancel() on the connection's executor
+  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 
 } } // namespace rgw::d4n
