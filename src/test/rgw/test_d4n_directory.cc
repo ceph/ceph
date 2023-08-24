@@ -8,6 +8,7 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
+#include <spawn/spawn.hpp>
 
 using namespace std;
 
@@ -92,6 +93,33 @@ TEST_F(DirectoryFixture, DirectoryInit) {
   conn->cancel();
   *work = std::nullopt;
   worker->join();
+}
+
+TEST(BlockDirectory, SetValueYield)
+{
+  boost::asio::io_context io;
+  auto dir = rgw::d4n::BlockDirectory{io, hostStr, stoi(portStr)};
+  dir.init();
+
+  spawn::spawn(io, [&io, &dir] (yield_context yield) {
+        auto block = rgw::d4n::CacheBlock{
+              .cacheObj = {
+                .objName = "testName",
+                .bucketName = "testBucket",
+                .creationTime = 0,
+                .dirty = false,
+                .hostsList = {redisHost}
+              },
+              .version = 0,
+              .size = 0,
+              .hostsList = {redisHost}
+            };
+
+        ASSERT_EQ(0, dir.set_value(&block, optional_yield{io, yield}));
+        dir.conn_cancel();
+      });
+
+  io.run();
 }
 
 /* Successful set_value Call and Redis Check */
