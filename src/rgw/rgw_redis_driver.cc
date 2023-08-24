@@ -43,28 +43,6 @@ int RedisDriver::find_client(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) 
-{
-  auto ret = entries.emplace(key, Entry(key, offset, len));
-  return ret.second;
-}
-
-std::optional<Entry> RedisDriver::get_entry(const DoutPrefixProvider* dpp, std::string key) 
-{
-  auto iter = entries.find(key);
-
-  if (iter != entries.end()) {
-    return iter->second;
-  }
-
-  return std::nullopt;
-}
-
-int RedisDriver::remove_entry(const DoutPrefixProvider* dpp, std::string key) 
-{
-  return entries.erase(key);
-}
-
 int RedisDriver::add_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
@@ -77,44 +55,6 @@ int RedisDriver::remove_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
   return partitions.erase(key);
-}
-
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key) 
-{
-  int result;
-  std::string entry = partition_info.location + key;
-  std::vector<std::string> keys;
-  keys.push_back(entry);
-
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {}
-
-  return result;
-}
-
-std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) 
-{
-  std::vector<Entry> result;
-
-  for (auto it = entries.begin(); it != entries.end(); ++it) 
-    result.push_back(it->second);
-
-  return result;
-}
-
-size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) 
-{
-  return entries.size();
 }
 
 /*
@@ -247,7 +187,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
     return -1;
   }
 
-  return insert_entry(dpp, key, 0, len); // why is offset necessarily 0? -Sam
+  return 0; // why is offset necessarily 0? -Sam
 }
 
 int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs) 
@@ -257,9 +197,8 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
   if (!client.is_connected()) 
     find_client(dpp);
     
-  if (key_exists(dpp, key)) {
     /* Retrieve existing values from cache */
-    try {
+  try {
       client.hgetall(entry, [&bl, &attrs](cpp_redis::reply &reply) {
 	if (reply.is_array()) {
 	  auto arr = reply.as_array();
@@ -283,10 +222,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
     } catch(std::exception &e) {
       return -1;
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
-  }
+
 
   return 0;
 }
@@ -299,18 +235,16 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   if (!client.is_connected()) 
     find_client(dpp);
 
-  if (key_exists(dpp, key)) {
-    try {
-      client.hget(entry, "data", [&value](cpp_redis::reply &reply) {
-        if (!reply.is_null()) {
-          value = reply.as_string();
-        }
-      });
+  try {
+    client.hget(entry, "data", [&value](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        value = reply.as_string();
+      }
+    });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return -1;
-    }
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
   }
 
   try { // do we want key check here? -Sam
@@ -345,10 +279,9 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   if (!client.is_connected()) 
     find_client(dpp);
 
-  if (key_exists(dpp, key)) {
-    int exists = -2;
+  int exists = -2;
 
-    try {
+  try {
       client.hexists(entry, "data", [&exists](cpp_redis::reply &reply) {
 	if (!reply.is_null()) {
 	  exists = reply.as_integer();
@@ -376,8 +309,6 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
 
 	if (!result) {
 	  return -1;
-	} else {
-	  return remove_entry(dpp, key);
 	}
       } catch(std::exception &e) {
 	return -1;
@@ -385,9 +316,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
     } else {
       return 0; /* No delete was necessary */
     }
-  } else {
-    return 0; /* No delete was necessary */
-  }
+  return 0;
 }
 
 int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs) 
@@ -397,8 +326,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
   if (!client.is_connected()) 
     find_client(dpp);
 
-  if (key_exists(dpp, key)) {
-    try {
+  try {
       client.hgetall(entry, [&attrs](cpp_redis::reply &reply) {
 	if (reply.is_array()) { 
 	  auto arr = reply.as_array();
@@ -420,10 +348,6 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
     } catch(std::exception &e) {
       return -1;
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
-  }
 
   return 0;
 }
@@ -438,29 +362,24 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
   if (!client.is_connected()) 
     find_client(dpp);
 
-  if (key_exists(dpp, key)) {
-    /* Every attr set will be treated as new */
-    try {
-      std::string result;
-      auto redisAttrs = build_attrs(&attrs);
-	
-      client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-	if (!reply.is_null()) {
-	  result = reply.as_string();
-	}
-      });
+  /* Every attr set will be treated as new */
+  try {
+    std::string result;
+    auto redisAttrs = build_attrs(&attrs);
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-
-      if (result != "OK") {
-	return -1;
+    client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_string();
       }
-    } catch(std::exception &e) {
-      return -1;
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != "OK") {
+return -1;
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return 0;
@@ -473,28 +392,23 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
   if (!client.is_connected()) 
     find_client(dpp);
 
-  if (key_exists(dpp, key)) {
-    try {
-      std::string result;
-      auto redisAttrs = build_attrs(&attrs);
+  try {
+    std::string result;
+    auto redisAttrs = build_attrs(&attrs);
 
-      client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-        if (!reply.is_null()) {
-          result = reply.as_string();
-        }
-      });
-
-      client.sync_commit(std::chrono::milliseconds(1000));
-
-      if (result != "OK") {
-        return -1;
+    client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        result = reply.as_string();
       }
-    } catch(std::exception &e) {
+    });
+
+    client.sync_commit(std::chrono::milliseconds(1000));
+
+    if (result != "OK") {
       return -1;
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return 0;
@@ -507,55 +421,53 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   if (!client.is_connected()) 
     find_client(dpp);
 
-  if (key_exists(dpp, key)) {
-    std::vector<std::string> getFields;
+  std::vector<std::string> getFields;
 
-    try {
-      client.hgetall(entry, [&getFields](cpp_redis::reply &reply) {
-	if (reply.is_array()) {
-	  auto arr = reply.as_array();
-    
-	  if (!arr[0].is_null()) {
-	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
-	      getFields.push_back(arr[i].as_string());
-	    }
-	  }
-	}
-      });
-
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return -1;
+  try {
+    client.hgetall(entry, [&getFields](cpp_redis::reply &reply) {
+if (reply.is_array()) {
+  auto arr = reply.as_array();
+  
+  if (!arr[0].is_null()) {
+    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
+      getFields.push_back(arr[i].as_string());
     }
+  }
+}
+    });
 
-    auto redisAttrs = build_attrs(&del_attrs);
-    std::vector<std::string> redisFields;
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
+  }
 
-    std::transform(begin(redisAttrs), end(redisAttrs), std::back_inserter(redisFields),
-      [](auto const& pair) { return pair.first; });
+  auto redisAttrs = build_attrs(&del_attrs);
+  std::vector<std::string> redisFields;
 
-    /* Only delete attributes that have been stored */
-    for (const auto& it : redisFields) {
-      if (std::find(getFields.begin(), getFields.end(), it) == getFields.end()) {
-        redisFields.erase(std::find(redisFields.begin(), redisFields.end(), it));
+  std::transform(begin(redisAttrs), end(redisAttrs), std::back_inserter(redisFields),
+    [](auto const& pair) { return pair.first; });
+
+  /* Only delete attributes that have been stored */
+  for (const auto& it : redisFields) {
+    if (std::find(getFields.begin(), getFields.end(), it) == getFields.end()) {
+      redisFields.erase(std::find(redisFields.begin(), redisFields.end(), it));
+    }
+  }
+
+  try {
+    int result = 0;
+
+    client.hdel(entry, redisFields, [&result](cpp_redis::reply &reply) {
+      if (reply.is_integer()) {
+        result = reply.as_integer();
       }
-    }
+    });
 
-    try {
-      int result = 0;
+    client.sync_commit(std::chrono::milliseconds(1000));
 
-      client.hdel(entry, redisFields, [&result](cpp_redis::reply &reply) {
-        if (reply.is_integer()) {
-          result = reply.as_integer();
-        }
-      });
-
-      client.sync_commit(std::chrono::milliseconds(1000));
-
-      return result - 1;
-    } catch(std::exception &e) {
-      return -1;
-    }
+    return result - 1;
+  } catch(std::exception &e) {
+    return -1;
   }
 
   ldpp_dout(dpp, 20) << "RGW Redis Cache: Object is not in cache." << dendl;
@@ -570,42 +482,37 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   if (!client.is_connected()) 
     find_client(dpp);
 
-  if (key_exists(dpp, key)) {
-    int exists = -2;
-    std::string getValue;
+  int exists = -2;
+  std::string getValue;
 
-    /* Ensure field was set */
-    try {
-      client.hexists(entry, attr_name, [&exists](cpp_redis::reply& reply) {
-	if (!reply.is_null()) {
-	  exists = reply.as_integer();
-	}
-      });
+  /* Ensure field was set */
+  try {
+    client.hexists(entry, attr_name, [&exists](cpp_redis::reply& reply) {
+      if (!reply.is_null()) {
+        exists = reply.as_integer();
+      }
+    });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return {};
-    }
-    
-    if (!exists) {
-      ldpp_dout(dpp, 20) << "RGW Redis Cache: Attribute was not set." << dendl;
-      return {};
-    }
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return {};
+  }
+  
+  if (!exists) {
+    ldpp_dout(dpp, 20) << "RGW Redis Cache: Attribute was not set." << dendl;
+    return {};
+  }
 
-    /* Retrieve existing value from cache */
-    try {
-      client.hget(entry, attr_name, [&exists, &attrValue](cpp_redis::reply &reply) {
-	if (!reply.is_null()) {
-	  attrValue = reply.as_string();
-	}
-      });
+  /* Retrieve existing value from cache */
+  try {
+    client.hget(entry, attr_name, [&exists, &attrValue](cpp_redis::reply &reply) {
+      if (!reply.is_null()) {
+        attrValue = reply.as_string();
+      }
+    });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return {};
-    }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object is not in cache." << dendl;
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
     return {};
   }
 
@@ -620,22 +527,17 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   if (!client.is_connected()) 
     find_client(dpp);
     
-  if (key_exists(dpp, key)) {
-    /* Every attr set will be treated as new */
-    try {
-      client.hset(entry, attr_name, attrVal, [&result](cpp_redis::reply& reply) {
-	if (!reply.is_null()) {
-	  result = reply.as_integer();
-	}
-      });
+  /* Every attr set will be treated as new */
+  try {
+    client.hset(entry, attr_name, attrVal, [&result](cpp_redis::reply& reply) {
+    if (!reply.is_null()) {
+        result = reply.as_integer();
+      }
+    });
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
-      return -1;
-    }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object is not in cache." << dendl;
-    return -2; 
+    client.sync_commit(std::chrono::milliseconds(1000));
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return result - 1;
