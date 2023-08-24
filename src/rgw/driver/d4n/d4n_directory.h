@@ -34,9 +34,9 @@ struct CacheObj {
 
 struct CacheBlock {
   CacheObj cacheObj;
-  uint64_t blockId; /* RADOS object block ID */
+  uint64_t version; /* RADOS object block ID */
   uint64_t size; /* Block size in bytes */
-  int globalWeight = 0;
+  int globalWeight = 0; /* LFUDA policy variable */
   std::vector<std::string> hostsList; /* List of hostnames <ip:port> of block locations */
 };
 
@@ -129,11 +129,12 @@ class BlockDirectory: public Directory {
     Address get_addr() { return addr; }
 
     int set_value(CacheBlock* block, optional_yield y);
-    int get_value(CacheBlock* block);
+    int get_value(CacheBlock* block, optional_yield y);
     int copy_value(CacheBlock* block, CacheBlock* copyBlock);
     int del_value(CacheBlock* block, optional_yield y);
 
     int update_field(CacheBlock* block, std::string field, std::string value);
+    auto conn_cancel() { conn->cancel(); }
 
   private:
     connection* conn;

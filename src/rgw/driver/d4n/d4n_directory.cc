@@ -8,10 +8,12 @@ template <typename T>
 auto redis_exec(connection* conn, boost::system::error_code ec, boost::redis::request req, boost::redis::response<T>& resp, optional_yield y) {
   if (y) {
     auto yield = y.get_yield_context();
-    return conn->async_exec(req, resp, yield[ec]);
+    conn->async_exec(req, resp, yield[ec]);
   } else {
-    return conn->async_exec(req, resp, ceph::async::use_blocked[ec]);
+    conn->async_exec(req, resp, ceph::async::use_blocked[ec]);
   }
+
+  return conn->cancel();
 }
 
 int ObjectDirectory::find_client(cpp_redis::client* client) {
@@ -212,29 +214,10 @@ int BlockDirectory::find_client(cpp_redis::client* client) {
 }
 
 std::string BlockDirectory::build_index(CacheBlock* block) {
-  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + boost::lexical_cast<std::string>(block->blockId);
+  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + boost::lexical_cast<std::string>(block->version);
 }
 
 int BlockDirectory::exist_key(std::string key, optional_yield y) {
-/*  int result = 0;
-  std::vector<std::string> keys;
-  keys.push_back(key);
-  
-  if (!client.is_connected()) {
-    return result;
-  }
-
-  try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer();
-      }
-    });
-    
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {}
-
-  return result;*/
   response<int> resp;
 
   try {
@@ -244,7 +227,7 @@ int BlockDirectory::exist_key(std::string key, optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (ec)
+    if ((bool)ec)
       return false;
   } catch(std::exception &e) {}
 
@@ -259,8 +242,15 @@ int BlockDirectory::set_value(CacheBlock* block, optional_yield y) {
   std::list<std::string> redisValues;
     
   /* Creating a redisValues of the entry's properties */
-  redisValues.push_back("key");
-  redisValues.push_back(key);
+  redisValues.push_back("version");
+  redisValues.push_back(std::to_string(block->version));
+  redisValues.push_back("size");
+  redisValues.push_back(std::to_string(block->size));
+  redisValues.push_back("globalWeight");
+  redisValues.push_back(std::to_string(block->globalWeight));
+  redisValues.push_back("blockHosts");
+  redisValues.push_back(endpoint); // Set in filter -Sam
+
   redisValues.push_back("objName");
   redisValues.push_back(block->cacheObj.objName);
   redisValues.push_back("bucketName");
@@ -269,8 +259,8 @@ int BlockDirectory::set_value(CacheBlock* block, optional_yield y) {
   redisValues.push_back(std::to_string(block->cacheObj.creationTime)); 
   redisValues.push_back("dirty");
   redisValues.push_back(std::to_string(block->cacheObj.dirty));
-  redisValues.push_back("hosts");
-  redisValues.push_back(endpoint);
+  redisValues.push_back("objHosts");
+  redisValues.push_back(endpoint); // Set in filter -Sam
 
   try {
     boost::system::error_code ec;
@@ -281,7 +271,7 @@ int BlockDirectory::set_value(CacheBlock* block, optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (std::get<0>(resp).value() != "OK" || ec) {
+    if (std::get<0>(resp).value() != "OK" || (bool)ec) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -291,15 +281,16 @@ int BlockDirectory::set_value(CacheBlock* block, optional_yield y) {
   return 0;
 }
 
-int BlockDirectory::get_value(CacheBlock* block) {
-  int keyExist = -2;
+int BlockDirectory::get_value(CacheBlock* block, optional_yield y) {
+  //int keyExist = -2;
   std::string key = build_index(block);
 
+/*
   if (!client.is_connected()) {
     find_client(&client);
-  }
+  }*/
 
-  //if (exist_key(key)) {
+  if (exist_key(key, y)) {
     std::string hosts;
     std::string size;
     std::string bucketName;
@@ -313,6 +304,7 @@ int BlockDirectory::get_value(CacheBlock* block) {
     fields.push_back("objName");
 
     try {
+/*
       client.hmget(key, fields, [&key, &hosts, &size, &bucketName, &objName, &keyExist](cpp_redis::reply &reply) {
         if (reply.is_array()) {
 	  auto arr = reply.as_array();
@@ -332,18 +324,18 @@ int BlockDirectory::get_value(CacheBlock* block) {
 
       if (keyExist < 0 ) {
         return keyExist;
-      }
+      }*/
 
       /* Currently, there can only be one host */ // update -Sam
       block->size = std::stoi(size);
       block->cacheObj.bucketName = bucketName;
       block->cacheObj.objName = objName;
     } catch(std::exception &e) {
-      keyExist = -1;
+      //keyExist = -1;
     }
- // }
+  }
 
-  return keyExist;
+  return 0;//keyExist;
 }
 
 int BlockDirectory::del_value(CacheBlock* block, optional_yield y) {
@@ -357,6 +349,7 @@ int BlockDirectory::del_value(CacheBlock* block, optional_yield y) {
       req.push("DEL", key);
 
       redis_exec(conn, ec, req, resp, y);
+      conn->cancel();
 
       if (ec)
         return -1;
