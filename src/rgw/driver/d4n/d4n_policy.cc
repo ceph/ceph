@@ -237,6 +237,7 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
   if (ret < 0)
     return {};
 
+  CacheBlock victimBlock;
   return victimBlock;
 }
 
@@ -380,7 +381,8 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   int ret = cacheNode->del(dpp, victim.cacheObj.objName, y);
 
   if (!ret) {
-    ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries(dpp)), ""/*local cache location*/, y); // Where else must this be set? -Sam
+    uint64_t num_entries = 100; //cacheNode->get_num_entries(dpp) TODO - correct this
+    ret = set_min_avg_weight(avgWeight - (localWeight/num_entries), ""/*local cache location*/, y); // Where else must this be set? -Sam
 
     if (!ret) {
       int age = get_age(y);
