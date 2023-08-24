@@ -39,6 +39,10 @@ export class UrlsCollection extends PageHelper {
     logs: { url: '#/logs', id: 'cd-logs' },
 
     // RGW Daemons
-    'rgw daemons': { url: '#/rgw/daemon', id: 'cd-rgw-daemon-list' }
+    'rgw daemons': { url: '#/rgw/daemon', id: 'cd-rgw-daemon-list' },
+
+    // CephFS
+    cephfs: { url: '#/cephfs', id: 'cd-cephfs-list' },
+    'create cephfs': { url: '#/cephfs/create', id: 'cd-cephfs-form' }
   };
 }

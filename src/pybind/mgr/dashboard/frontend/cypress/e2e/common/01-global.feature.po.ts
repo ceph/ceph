@@ -62,9 +62,9 @@ And('{string} option {string}', (action: string, labels: string) => {
  * @param field ID of the field that needs to be filled out.
  * @param value Value that should be filled in the field.
  */
-And('enter {string} {string}', (field: string, value: string) => {
+And('enter {string} {string} in the modal', (field: string, value: string) => {
   cy.get('cd-modal').within(() => {
-    cy.get(`input[id=${field}]`).type(value);
+    cy.get(`input[id=${field}]`).clear().type(value);
   });
 });
 
@@ -184,4 +184,15 @@ And('I should see row {string} have {string} on this tab', (row: string, options
       }
     });
   }
+});
+
+/**
+ * Fills in the given field using the value provided
+ * @param field ID of the field that needs to be filled out.
+ * @param value Value that should be filled in the field.
+ */
+And('enter {string} {string}', (field: string, value: string) => {
+  cy.get('.cd-col-form').within(() => {
+    cy.get(`input[id=${field}]`).clear().type(value);
+  });
 });

@@ -37,6 +37,6 @@ export default defineConfig({
     baseUrl: 'https://localhost:4200/',
     excludeSpecPattern: ['*.po.ts', '**/orchestrator/**'],
     experimentalSessionAndOrigin: true,
-    specPattern: 'cypress/e2e/**/*-spec.{js,jsx,ts,tsx}',
+    specPattern: 'cypress/e2e/**/*-spec.{js,jsx,ts,tsx,feature}',
   },
 })
