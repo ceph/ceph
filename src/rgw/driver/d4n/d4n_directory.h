@@ -104,6 +104,7 @@ class BlockDirectory: public Directory {
       addr.port = port;
     }
     ~BlockDirectory() {
+      conn->cancel();
       delete conn;
     }
     
