@@ -62,28 +62,6 @@ void redis_exec(std::shared_ptr<connection> conn, boost::system::error_code& ec,
   }
 }
 
-int RedisDriver::insert_entry(const DoutPrefixProvider* dpp, std::string key, off_t offset, uint64_t len) 
-{
-  auto ret = entries.emplace(key, Entry(key, offset, len));
-  return ret.second - 1;
-}
-
-std::optional<Entry> RedisDriver::get_entry(const DoutPrefixProvider* dpp, std::string key) 
-{
-  auto iter = entries.find(key);
-
-  if (iter != entries.end()) {
-    return iter->second;
-  }
-
-  return std::nullopt;
-}
-
-int RedisDriver::remove_entry(const DoutPrefixProvider* dpp, std::string key) 
-{
-  return entries.erase(key) - 1;
-}
-
 int RedisDriver::add_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
@@ -96,40 +74,6 @@ int RedisDriver::remove_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
   return partitions.erase(key);
-}
-
-bool RedisDriver::key_exists(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) 
-{
-  std::string entry = partition_info.location + key;
-  response<int> resp;
-
-  try {
-    boost::system::error_code ec;
-    request req;
-    req.push("EXISTS", entry);
-
-    redis_exec(conn, ec, req, resp, y);
-
-    if (ec)
-      return false;
-  } catch(std::exception &e) {}
-
-  return std::get<0>(resp).value();
-}
-
-std::vector<Entry> RedisDriver::list_entries(const DoutPrefixProvider* dpp) 
-{
-  std::vector<Entry> result;
-
-  for (auto it = entries.begin(); it != entries.end(); ++it) 
-    result.push_back(it->second);
-
-  return result;
-}
-
-size_t RedisDriver::get_num_entries(const DoutPrefixProvider* dpp) 
-{
-  return entries.size();
 }
 
 /*
@@ -257,42 +201,37 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
     return -1;
   }
 
-  return insert_entry(dpp, key, 0, len); // why is offset necessarily 0? -Sam
+  return 0; // why is offset necessarily 0? -Sam
 }
 
 int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   
-  if (key_exists(dpp, key, y)) {
-    /* Retrieve existing values from cache */
-    try {
-      boost::system::error_code ec;
-      response< std::map<std::string, std::string> > resp;
-      request req;
-      req.push("HGETALL", entry);
+  /* Retrieve existing values from cache */
+  try {
+    boost::system::error_code ec;
+    response< std::map<std::string, std::string> > resp;
+    request req;
+    req.push("HGETALL", entry);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
-	return -1;
-
-      for (auto const& it : std::get<0>(resp).value()) {
-	if (it.first == "data") {
-	  bl.append(it.second);
-	} else {
-	  buffer::list bl_value;
-	  bl_value.append(it.second);
-	  attrs.insert({it.first, bl_value});
-	  bl_value.clear();
-	}
-      }
-    } catch(std::exception &e) {
+    if (ec)
       return -1;
+
+    for (auto const& it : std::get<0>(resp).value()) {
+      if (it.first == "data") {
+	bl.append(it.second);
+      } else {
+	buffer::list bl_value;
+	bl_value.append(it.second);
+	attrs.insert({it.first, bl_value});
+	bl_value.clear();
+      }
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return 0;
@@ -328,22 +267,20 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   std::string value;
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key, y)) {
-    try {
-      boost::system::error_code ec;
-      response<std::string> resp;
-      request req;
-      req.push("HGET", entry, "data");
+  try {
+    boost::system::error_code ec;
+    response<std::string> resp;
+    request req;
+    req.push("HGET", entry, "data");
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
-	return -1;
-
-      value = std::get<0>(resp).value();
-    } catch(std::exception &e) {
+    if (ec)
       return -1;
-    }
+
+    value = std::get<0>(resp).value();
+  } catch(std::exception &e) {
+    return -1;
   }
 
   try { // do we want key check here? -Sam
@@ -371,76 +308,62 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key, y)) {
-    response<int> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("HEXISTS", entry, "data");
 
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return -1;
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  if (std::get<0>(resp).value()) {
     try {
       boost::system::error_code ec;
       request req;
-      req.push("HEXISTS", entry, "data");
+      req.push("HDEL", entry, "data");
 
       redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
+      if (!std::get<0>(resp).value() || ec) {
 	return -1;
+      }
     } catch(std::exception &e) {
       return -1;
     }
 
-    if (std::get<0>(resp).value()) {
-      try {
-	boost::system::error_code ec;
-	request req;
-	req.push("HDEL", entry, "data");
-
-	redis_exec(conn, ec, req, resp, y);
-
-	if (!std::get<0>(resp).value() || ec) {
-	  return -1;
-	} else {
-	  return remove_entry(dpp, key);
-	}
-      } catch(std::exception &e) {
-	return -1;
-      }
-    } else {
-      return 0; /* No delete was necessary */
-    }
-  } else {
-    return 0; /* No delete was necessary */
-  }
+  return 0;
 }
 
 int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key, y)) {
-    try {
-      boost::system::error_code ec;
-      response< std::map<std::string, std::string> > resp;
-      request req;
-      req.push("HGETALL", entry);
+  try {
+    boost::system::error_code ec;
+    response< std::map<std::string, std::string> > resp;
+    request req;
+    req.push("HGETALL", entry);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
-	return -1;
-
-      for (auto const& it : std::get<0>(resp).value()) {
-	if (it.first != "data") {
-	  buffer::list bl_value;
-	  bl_value.append(it.second);
-	  attrs.insert({it.first, bl_value});
-	  bl_value.clear();
-	}
-      }
-    } catch(std::exception &e) {
+    if (ec)
       return -1;
+
+    for (auto const& it : std::get<0>(resp).value()) {
+      if (it.first != "data") {
+	buffer::list bl_value;
+	bl_value.append(it.second);
+	attrs.insert({it.first, bl_value});
+	bl_value.clear();
+      }
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return 0;
@@ -453,28 +376,23 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
       
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key, y)) {
-    /* Every attr set will be treated as new */
-    try {
-      boost::system::error_code ec;
-      response<std::string> resp;
-      std::string result;
-      std::list<std::string> redisAttrs = build_attrs(&attrs);
+  /* Every attr set will be treated as new */
+  try {
+    boost::system::error_code ec;
+    response<std::string> resp;
+    std::string result;
+    std::list<std::string> redisAttrs = build_attrs(&attrs);
 
-      request req;
-      req.push_range("HMSET", entry, redisAttrs);
+    request req;
+    req.push_range("HMSET", entry, redisAttrs);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (std::get<0>(resp).value() != "OK" || ec) {
-	return -1;
-      }
-    } catch(std::exception &e) {
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return 0;
@@ -484,26 +402,21 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key, y)) {
-    try {
-      boost::system::error_code ec;
-      response<std::string> resp;
-      auto redisAttrs = build_attrs(&attrs);
+  try {
+    boost::system::error_code ec;
+    response<std::string> resp;
+    auto redisAttrs = build_attrs(&attrs);
 
-      request req;
-      req.push_range("HMSET", entry, redisAttrs);
+    request req;
+    req.push_range("HMSET", entry, redisAttrs);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (std::get<0>(resp).value() != "OK" || ec) {
-        return -1;
-      }
-    } catch(std::exception &e) {
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object was not retrievable." << dendl;
-    return -2;
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return 0;
@@ -513,26 +426,22 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key, y)) {
-    try {
-      boost::system::error_code ec;
-      response<int> resp;
-      auto redisAttrs = build_attrs(&del_attrs);
+  try {
+    boost::system::error_code ec;
+    response<int> resp;
+    auto redisAttrs = build_attrs(&del_attrs);
 
-      request req;
-      req.push_range("HDEL", entry, redisAttrs);
+    request req;
+    req.push_range("HDEL", entry, redisAttrs);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
-	return -1;
-
-      return std::get<0>(resp).value() - del_attrs.size();  /* Returns number of fields deleted */
-    } catch(std::exception &e) {
+    if (ec)
       return -1;
-    }
-  } else {
-    return 0; /* No delete was necessary */
+
+    return std::get<0>(resp).value() - del_attrs.size();  /* Returns number of fields deleted */
+  } catch(std::exception &e) {
+    return -1;
   }
 }
 
@@ -541,43 +450,38 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   std::string entry = partition_info.location + key;
   response<std::string> value;
 
-  if (key_exists(dpp, key, y)) {
-    response<int> resp;
+  response<int> resp;
 
-    /* Ensure field was set */
-    try {
-      boost::system::error_code ec;
-      request req;
-      req.push("HEXISTS", entry, attr_name);
+  /* Ensure field was set */
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("HEXISTS", entry, attr_name);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
-	return {};
-    } catch(std::exception &e) {
+    if (ec)
       return {};
-    }
-    
-    if (!std::get<0>(resp).value()) {
-      ldpp_dout(dpp, 20) << "RGW Redis Cache: Attribute was not set." << dendl;
+  } catch(std::exception &e) {
+    return {};
+  }
+  
+  if (!std::get<0>(resp).value()) {
+    ldpp_dout(dpp, 20) << "RGW Redis Cache: Attribute was not set." << dendl;
+    return {};
+  }
+
+  /* Retrieve existing value from cache */
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("HGET", entry, attr_name);
+
+    redis_exec(conn, ec, req, value, y);
+
+    if (ec)
       return {};
-    }
-
-    /* Retrieve existing value from cache */
-    try {
-      boost::system::error_code ec;
-      request req;
-      req.push("HGET", entry, attr_name);
-
-      redis_exec(conn, ec, req, value, y);
-
-      if (ec)
-	return {};
-    } catch(std::exception &e) {
-      return {};
-    }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object is not in cache." << dendl;
+  } catch(std::exception &e) {
     return {};
   }
 
@@ -589,23 +493,18 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   std::string entry = partition_info.location + key;
   response<int> resp;
     
-  if (key_exists(dpp, key, y)) {
-    /* Every attr set will be treated as new */
-    try {
-      boost::system::error_code ec;
-      request req;
-      req.push("HSET", entry, attr_name, attr_val);
+  /* Every attr set will be treated as new */
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("HSET", entry, attr_name, attr_val);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
-	return {};
-    } catch(std::exception &e) {
-      return -1;
-    }
-  } else {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Object is not in cache." << dendl;
-    return -2; 
+    if (ec)
+      return {};
+  } catch(std::exception &e) {
+    return -1;
   }
 
   return std::get<0>(resp).value() - 1; /* Returns number of fields set */
