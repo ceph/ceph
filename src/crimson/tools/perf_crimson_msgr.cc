@@ -608,8 +608,8 @@ static seastar::future<> run(
 
       void ms_handle_connect(
           crimson::net::ConnectionRef conn,
-          seastar::shard_id new_shard) override {
-        ceph_assert_always(new_shard == seastar::this_shard_id());
+          seastar::shard_id prv_shard) override {
+        ceph_assert_always(prv_shard == seastar::this_shard_id());
         assert(is_active());
         unsigned index = static_cast<ConnectionPriv&>(conn->get_user_private()).index;
         auto &conn_state = conn_states[index];

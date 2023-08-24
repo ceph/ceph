@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <vector>
+
 #include <seastar/core/shared_future.hh>
 #include <seastar/util/later.hh>
 
@@ -447,7 +449,10 @@ public:
   seastar::future<> do_send_keepalive();
 
   seastar::future<> to_new_sid(
-      seastar::shard_id new_sid, ConnectionFRef);
+      crosscore_t::seq_t cc_seq,
+      seastar::shard_id new_sid,
+      ConnectionFRef,
+      std::optional<bool> is_replace);
 
   void dispatch_reset(bool is_replace);
 
@@ -472,7 +477,16 @@ public:
 
   seastar::future<> do_out_dispatch(shard_states_t &ctx);
 
-  ceph::bufferlist sweep_out_pending_msgs_to_sent(
+#ifdef UNIT_TESTS_BUILT
+  struct sweep_ret {
+    ceph::bufferlist bl;
+    std::vector<ceph::msgr::v2::Tag> tags;
+  };
+  sweep_ret
+#else
+  ceph::bufferlist
+#endif
+  sweep_out_pending_msgs_to_sent(
       bool require_keepalive,
       std::optional<utime_t> maybe_keepalive_ack,
       bool require_ack);
