@@ -122,6 +122,23 @@ TEST_F(ConnectionFixture, HMGET) {
   worker->join();
 }
 
+TEST_F(ConnectionFixture, HSET) {
+  request req;
+  response<int> resp;
+
+  req.push_range("HSET", "key", std::map<std::string, std::string>{{"field", "value"}});
+
+  conn->async_exec(req, resp, [&](auto ec, auto) {
+    ASSERT_EQ((bool)ec, 0);
+    EXPECT_EQ(std::get<0>(resp).value(), 1);
+
+    conn->cancel();
+  });
+
+  *work = std::nullopt;
+  worker->join();
+}
+
 TEST_F(ConnectionFixture, FLUSHALL) {
   request req;
   response<std::string, boost::redis::ignore_t> resp;
