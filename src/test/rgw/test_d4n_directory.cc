@@ -84,7 +84,7 @@ class DirectoryFixture: public ::testing::Test {
 TEST_F(DirectoryFixture, SetValueYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
-    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
     dir->shutdown();
 
     boost::system::error_code ec;
@@ -108,7 +108,7 @@ TEST_F(DirectoryFixture, SetValueYield)
 TEST_F(DirectoryFixture, GetValueYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
-    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
 
     {
       boost::system::error_code ec;
@@ -122,7 +122,7 @@ TEST_F(DirectoryFixture, GetValueYield)
       EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
 
-    ASSERT_EQ(0, dir->get_value(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->get(block, optional_yield{io, yield}));
     EXPECT_EQ(block->cacheObj.objName, "newoid");
     dir->shutdown();
 
@@ -141,10 +141,42 @@ TEST_F(DirectoryFixture, GetValueYield)
   io.run();
 }
 
+TEST_F(DirectoryFixture, CopyValueYield)
+{
+  spawn::spawn(io, [this] (yield_context yield) {
+    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->copy(block, "copyTestName", "copyBucketName", optional_yield{io, yield}));
+    dir->shutdown();
+
+    boost::system::error_code ec;
+    request req;
+    req.push("EXISTS", "copyBucketName_copyTestName_0");
+    req.push_range("HMGET", "copyBucketName_copyTestName_0", fields);
+    req.push("FLUSHALL");
+
+    response<int, std::vector<std::string>, 
+	     boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value(), 1);
+
+    auto copyVals = vals;
+    copyVals[4] = "copyTestName";
+    copyVals[5] = "copyBucketName";
+    EXPECT_EQ(std::get<1>(resp).value(), copyVals);
+
+    conn->cancel();
+  });
+
+  io.run();
+}
+
 TEST_F(DirectoryFixture, DelValueYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
-    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
 
     {
       boost::system::error_code ec;
@@ -158,7 +190,7 @@ TEST_F(DirectoryFixture, DelValueYield)
       EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
 
-    ASSERT_EQ(0, dir->del_value(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->del(block, optional_yield{io, yield}));
     dir->shutdown();
 
     {
@@ -183,34 +215,21 @@ TEST_F(DirectoryFixture, DelValueYield)
 TEST_F(DirectoryFixture, UpdateValueYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
-    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("EXISTS", "testBucket_testName_0");
-      response<int> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-
-      ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value(), 1);
-    }
-
-    ASSERT_EQ(0, dir->del_value(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->update_field(block, "objName", "newTestName", optional_yield{io, yield}));
     dir->shutdown();
 
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", "testBucket_testName_0");
+      req.push("HGET", "testBucket_testName_0", "objName");
       req.push("FLUSHALL");
-      response<int, boost::redis::ignore_t> resp;
+      response<std::string, boost::redis::ignore_t> resp;
 
       conn->async_exec(req, resp, yield[ec]);
 
       ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value(), 0);
+      EXPECT_EQ(std::get<0>(resp).value(), "newTestName");
     }
 
     conn->cancel();
