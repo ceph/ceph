@@ -333,35 +333,51 @@ int RGWRESTConn::get_resource(const DoutPrefixProvider *dpp,
 		     RGWHTTPManager *mgr,
 		     optional_yield y)
 {
-  string url;
-  int ret = get_url(url);
-  if (ret < 0)
-    return ret;
+  int ret = 0;
 
-  param_vec_t params;
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+  for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+    string url;
+    ret = get_url(url);
+    if (ret < 0)
+      return ret;
 
-  if (extra_params) {
-    params.insert(params.end(), extra_params->begin(), extra_params->end());
+    param_vec_t params;
+
+    if (extra_params) {
+      params.insert(params.end(), extra_params->begin(), extra_params->end());
+    }
+
+    populate_params(params, nullptr, self_zone_group);
+
+    RGWStreamIntoBufferlist cb(bl);
+
+    RGWRESTStreamReadRequest req(cct, url, &cb, NULL, &params, api_name, host_style);
+
+    map<string, string> headers;
+    if (extra_headers) {
+      headers.insert(extra_headers->begin(), extra_headers->end());
+    }
+
+    ret = req.send_request(dpp, &key, headers, resource, mgr, send_data);
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
+      return ret;
+    }
+
+    ret = req.complete_request(y);
+    if (ret == -EIO) {
+      if (tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+        ldpp_dout(dpp, 20) << __func__  << "(): failed to get resource. retries=" << tries << dendl;
+        continue;
+      }
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 5) << __func__ << ": complete_request() returned ret=" << ret << dendl;
+    }
+    break;
   }
-
-  populate_params(params, nullptr, self_zone_group);
-
-  RGWStreamIntoBufferlist cb(bl);
-
-  RGWRESTStreamReadRequest req(cct, url, &cb, NULL, &params, api_name, host_style);
-
-  map<string, string> headers;
-  if (extra_headers) {
-    headers.insert(extra_headers->begin(), extra_headers->end());
-  }
-
-  ret = req.send_request(dpp, &key, headers, resource, mgr, send_data);
-  if (ret < 0) {
-    ldpp_dout(dpp, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
-    return ret;
-  }
-
-  return req.complete_request(y);
+  return ret;
 }
 
 int RGWRESTConn::send_resource(const DoutPrefixProvider *dpp, const std::string& method,
