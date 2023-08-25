@@ -15,9 +15,11 @@
 #include "include/mempool.h"
 #include "include/demangle.h"
 
+#ifndef _GNU_SOURCE
 // Thread local variables should save index, not &shard[index],
 // because shard[] is defined in the class
 static thread_local size_t thread_shard_index = mempool::num_shards;
+#endif
 
 // default to debug_mode off
 bool mempool::debug_mode = false;
@@ -95,9 +97,21 @@ size_t mempool::pool_t::allocated_items() const
 
 void mempool::pool_t::adjust_count(ssize_t items, ssize_t bytes)
 {
-  thread_shard_index = (thread_shard_index == num_shards) ? pick_a_shard_int() : thread_shard_index;
-  shard[thread_shard_index].items += items;
-  shard[thread_shard_index].bytes += bytes;
+#ifndef _GNU_SOURCE
+  // fallback for lack of sched_getcpu()
+  const size_t shard_index = []() {
+    if (thread_shard_index == num_shards) {
+      thread_shard_index = pick_a_shard_int();
+    }
+    return thread_shard_index;
+  }();
+#else
+  // the expected path: we alway pick the shard for a cpu core
+  // a thread is executing on.
+  const size_t shard_index = pick_a_shard_int();
+#endif
+  shard[shard_index].items += items;
+  shard[shard_index].bytes += bytes;
 }
 
 void mempool::pool_t::get_stats(

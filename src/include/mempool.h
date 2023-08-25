@@ -26,6 +26,10 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 
+#ifdef _GNU_SOURCE
+#  include <sched.h>
+#endif
+
 #include "common/Formatter.h"
 #include "common/ceph_atomic.h"
 #include "include/ceph_assert.h"
@@ -265,11 +269,21 @@ public:
   void adjust_count(ssize_t items, ssize_t bytes);
 
   static size_t pick_a_shard_int() {
+#ifndef _GNU_SOURCE
     // Dirt cheap, see:
     //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
     size_t me = (size_t)pthread_self();
     size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
     return i;
+#else
+    // a thread local storage is actually just an approximation;
+    // what we truly want is a _cpu local storage_.
+    //
+    // on the architectures we care about sched_getcpu() is
+    // a syscall-handled-in-userspace (vdso!). it grabs the cpu
+    // id kernel exposes to a task on context switch.
+    return sched_getcpu() & ((1 << num_shard_bits) - 1);
+#endif
   }
 
   shard_t* pick_a_shard() {
