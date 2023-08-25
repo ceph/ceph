@@ -202,7 +202,6 @@ void StrayManager::_purge_stray_purged(
     pf->version = dir->pre_dirty();
 
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
-    mds->mdlog->start_entry(le);
 
     le->metablob.add_dir_context(dir);
     auto& dl = le->metablob.add_dir(dn->dir, true);
@@ -230,7 +229,6 @@ void StrayManager::_purge_stray_purged(
     dn->push_projected_linkage(); // NULL
 
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray");
-    mds->mdlog->start_entry(le);
 
     // update dirfrag fragstat, rstat
     CDir *dir = dn->get_dir();

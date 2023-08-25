@@ -126,13 +126,23 @@ const BackgroundMapValue& Background::get_table_value(const std::string& key) co
 //(2) Executes the script
 //(3) Sleep (configurable)
 void Background::run() {
-  lua_State* const L = luaL_newstate();
-  rgw::lua::lua_state_guard lguard(L);
-  open_standard_libs(L);
-  set_package_path(L, luarocks_path);
-  create_debug_action(L, cct);
-  create_background_metatable(L);
   const DoutPrefixProvider* const dpp = &dp;
+  lua_state_guard lguard(cct->_conf->rgw_lua_max_memory_per_state, dpp);
+  auto L = lguard.get();
+  if (!L) {
+    ldpp_dout(dpp, 1) << "Failed to create state for Lua background thread" << dendl;
+    return;
+  }
+  try {
+    open_standard_libs(L);
+    set_package_path(L, luarocks_path);
+    create_debug_action(L, cct);
+    create_background_metatable(L);
+  } catch (const std::runtime_error& e) { 
+    ldpp_dout(dpp, 1) << "Failed to create initial setup of Lua background thread. error " 
+      << e.what() << dendl;
+    return;
+  }
 
   while (!stopped) {
     if (paused) {
@@ -159,7 +169,7 @@ void Background::run() {
           ldpp_dout(dpp, 1) << "Lua ERROR: " << err << dendl;
           failed = true;
         }
-      } catch (const std::exception& e) {
+      } catch (const std::runtime_error& e) {
         ldpp_dout(dpp, 1) << "Lua ERROR: " << e.what() << dendl;
         failed = true;
       }
@@ -174,7 +184,10 @@ void Background::run() {
 }
 
 void Background::create_background_metatable(lua_State* L) {
-  create_metatable<rgw::lua::RGWTable>(L, true, &rgw_map, &table_mutex);
+  static const char* background_table_name = "RGW";
+  create_metatable<RGWTable>(L, "", background_table_name, true, &rgw_map, &table_mutex);
+  lua_getglobal(L, background_table_name);
+  ceph_assert(lua_istable(L, -1));
 }
 
 } //namespace rgw::lua

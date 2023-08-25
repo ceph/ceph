@@ -674,6 +674,7 @@ enum class OPT {
   BUCKET_RADOS_LIST,
   BUCKET_SHARD_OBJECTS,
   BUCKET_OBJECT_SHARD,
+  BUCKET_RESYNC_ENCRYPTED_MULTIPART,
   POLICY,
   POOL_ADD,
   POOL_RM,
@@ -894,6 +895,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket shard objects", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket shard object", OPT::BUCKET_SHARD_OBJECTS },
   { "bucket object shard", OPT::BUCKET_OBJECT_SHARD },
+  { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "policy", OPT::POLICY },
   { "pool add", OPT::POOL_ADD },
   { "pool rm", OPT::POOL_RM },
@@ -4294,7 +4296,10 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_GET
                           && opt_cmd != OPT::PUBSUB_TOPIC_RM
                           && opt_cmd != OPT::PUBSUB_NOTIFICATION_RM
-                          && opt_cmd != OPT::PUBSUB_TOPIC_STATS  ) {
+                          && opt_cmd != OPT::PUBSUB_TOPIC_STATS
+			  && opt_cmd != OPT::SCRIPT_PUT
+			  && opt_cmd != OPT::SCRIPT_GET
+			  && opt_cmd != OPT::SCRIPT_RM) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -7179,6 +7184,47 @@ int main(int argc, const char **argv)
     formatter->flush(cout);
   }
 
+  if (opt_cmd == OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART) {
+    // repair logic for replication of encrypted multipart uploads:
+    // https://tracker.ceph.com/issues/46062
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!rados_driver) {
+      cerr << "ERROR: this command can only work when the cluster "
+          "has a RADOS backing store." << std::endl;
+      return EPERM;
+    }
+
+    // fail if recovery wouldn't generate replication log entries
+    if (!rados_driver->svc()->zone->need_to_log_data() && !yes_i_really_mean_it) {
+      cerr << "This command is only necessary for replicated buckets." << std::endl;
+      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EPERM;
+    }
+
+    formatter->open_object_section("modified");
+    encode_json("bucket", bucket->get_name(), formatter.get());
+    encode_json("bucket_id", bucket->get_bucket_id(), formatter.get());
+
+    ret = rados_driver->getRados()->bucket_resync_encrypted_multipart(
+        dpp(), null_yield, rados_driver, bucket->get_info(),
+        marker, stream_flusher);
+    if (ret < 0) {
+      return -ret;
+    }
+    formatter->close_section();
+    formatter->flush(cout);
+    return 0;
+  }
+
   if (opt_cmd == OPT::BUCKET_CHOWN) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket name not specified" << std::endl;
@@ -8293,6 +8339,10 @@ next:
         // TODO: decode torrent info for display as json?
         formatter->dump_string("torrent", "<contains binary data>");
         handled = true;
+      } else if (iter->first == RGW_ATTR_PG_VER) {
+        handled = decode_dump<uint64_t>("pg_ver", bl, formatter.get());
+      } else if (iter->first == RGW_ATTR_SOURCE_ZONE) {
+        handled = decode_dump<uint32_t>("source_zone", bl, formatter.get());
       }
 
       if (!handled)

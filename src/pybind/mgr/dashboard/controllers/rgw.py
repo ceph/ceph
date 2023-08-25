@@ -108,6 +108,14 @@ class RgwMultisiteStatus(RESTController):
                                                          secret_key)
         return result
 
+    @RESTController.Collection(method='GET', path='/sync_status')
+    @allow_empty_body
+    # pylint: disable=W0102,W0613
+    def get_sync_status(self):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_multisite_sync_status()
+        return result
+
 
 @APIRouter('/rgw/daemon', Scope.RGW)
 @APIDoc("RGW Daemon Management API", "RgwDaemon")

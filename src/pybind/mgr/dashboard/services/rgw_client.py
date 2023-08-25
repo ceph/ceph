@@ -945,7 +945,7 @@ class RgwMultisite:
     def create_realm(self, realm_name: str, default: bool):
         rgw_realm_create_cmd = ['realm', 'create']
         cmd_create_realm_options = ['--rgw-realm', realm_name]
-        if default != 'false':
+        if default:
             cmd_create_realm_options.append('--default')
         rgw_realm_create_cmd += cmd_create_realm_options
         try:
@@ -1528,3 +1528,130 @@ class RgwMultisite:
                 and len(rgw_zone_list['zones']) < 1:
             is_multisite_configured = False
         return is_multisite_configured
+
+    def get_multisite_sync_status(self):
+        rgw_multisite_sync_status_cmd = ['sync', 'status']
+        try:
+            exit_code, out, _ = mgr.send_rgwadmin_command(rgw_multisite_sync_status_cmd, False)
+            if exit_code > 0:
+                raise DashboardException('Unable to get multisite sync status',
+                                         http_status_code=500, component='rgw')
+            if out:
+                return self.process_data(out)
+        except SubprocessError as error:
+            raise DashboardException(error, http_status_code=500, component='rgw')
+        return {}
+
+    def process_data(self, data):
+        primary_zone_data, metadata_sync_data = self.extract_metadata_and_primary_zone_data(data)
+        datasync_info = self.extract_datasync_info(data)
+        replica_zones_info = [self.extract_replica_zone_data(item) for item in datasync_info]
+
+        replica_zones_info_object = {
+            'metadataSyncInfo': metadata_sync_data,
+            'dataSyncInfo': replica_zones_info,
+            'primaryZoneData': primary_zone_data
+        }
+
+        return replica_zones_info_object
+
+    def extract_metadata_and_primary_zone_data(self, data):
+        primary_zone_info, metadata_sync_infoormation = self.extract_zones_data(data)
+
+        primary_zone_tree = primary_zone_info.split('\n') if primary_zone_info else []
+        realm = self.get_primary_zonedata(primary_zone_tree[0])
+        zonegroup = self.get_primary_zonedata(primary_zone_tree[1])
+        zone = self.get_primary_zonedata(primary_zone_tree[2])
+
+        primary_zone_data = [realm, zonegroup, zone]
+        metadata_sync_data = self.extract_metadata_sync_data(metadata_sync_infoormation)
+
+        return primary_zone_data, metadata_sync_data
+
+    def extract_zones_data(self, data):
+        result = data
+        primary_zone_info = result.split('metadata sync')[0] if 'metadata sync' in result else None
+        metadata_sync_infoormation = result.split('metadata sync')[1] if 'metadata sync' in result else None  # noqa E501  #pylint: disable=line-too-long
+        return primary_zone_info, metadata_sync_infoormation
+
+    def extract_metadata_sync_data(self, metadata_sync_infoormation):
+        metadata_sync_info = metadata_sync_infoormation.split('data sync source')[0].strip() if 'data sync source' in metadata_sync_infoormation else None  # noqa E501  #pylint: disable=line-too-long
+
+        if metadata_sync_info == 'no sync (zone is master)':
+            return metadata_sync_info
+
+        metadata_sync_data = {}
+        metadata_sync_info_array = metadata_sync_info.split('\n') if metadata_sync_info else []
+        metadata_sync_data['syncstatus'] = metadata_sync_info_array[1].strip() if len(metadata_sync_info_array) > 1 else None  # noqa E501  #pylint: disable=line-too-long
+
+        for item in metadata_sync_info_array:
+            self.extract_metadata_sync_info(metadata_sync_data, item)
+
+        metadata_sync_data['totalShards'] = metadata_sync_data['incrementalSync'][1] if len(metadata_sync_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
+        metadata_sync_data['usedShards'] = int(metadata_sync_data['incrementalSync'][1]) - int(metadata_sync_data['behindShards'])  # noqa E501  #pylint: disable=line-too-long
+        return metadata_sync_data
+
+    def extract_metadata_sync_info(self, metadata_sync_data, item):
+        if 'full sync' in item and item.endswith('shards'):
+            metadata_sync_data['fullSync'] = self.get_shards_info(item.strip()).split('/')
+        elif 'incremental sync' in item:
+            metadata_sync_data['incrementalSync'] = self.get_shards_info(item.strip()).split('/')
+        elif 'data is behind' in item or 'data is caught up' in item:
+            metadata_sync_data['dataSyncStatus'] = item.strip()
+
+            if 'data is behind' in item:
+                metadata_sync_data['behindShards'] = self.get_behind_shards(item)
+
+    def extract_datasync_info(self, data):
+        metadata_sync_infoormation = data.split('metadata sync')[1] if 'metadata sync' in data else None  # noqa E501  #pylint: disable=line-too-long
+        if 'data sync source' in metadata_sync_infoormation:
+            datasync_info = metadata_sync_infoormation.split('data sync source')[1].split('source:')
+            return datasync_info
+        return []
+
+    def extract_replica_zone_data(self, datasync_item):
+        replica_zone_data = {}
+        datasync_info_array = datasync_item.split('\n')
+        replica_zone_name = self.get_primary_zonedata(datasync_info_array[0])
+        replica_zone_data['name'] = replica_zone_name.strip()
+        replica_zone_data['syncstatus'] = datasync_info_array[1].strip()
+        replica_zone_data['fullSyncStatus'] = datasync_info_array
+        for item in datasync_info_array:
+            self.extract_metadata_sync_info(replica_zone_data, item)
+
+        if 'incrementalSync' in replica_zone_data:
+            replica_zone_data['totalShards'] = int(replica_zone_data['incrementalSync'][1]) if len(replica_zone_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
+
+            if 'behindShards' in replica_zone_data:
+                replica_zone_data['usedShards'] = (int(replica_zone_data['incrementalSync'][1]) - int(replica_zone_data['behindShards'])) if len(replica_zone_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
+            else:
+                replica_zone_data['usedShards'] = replica_zone_data['totalShards']
+
+        return replica_zone_data
+
+    def get_primary_zonedata(self, data):
+        regex = r'\(([^)]+)\)'
+        match = re.search(regex, data)
+
+        if match and match.group(1):
+            return match.group(1)
+
+        return ''
+
+    def get_shards_info(self, data):
+        regex = r'\d+/\d+'
+        match = re.search(regex, data)
+
+        if match:
+            return match.group(0)
+
+        return None
+
+    def get_behind_shards(self, data):
+        regex = r'on\s+(\d+)\s+shards'
+        match = re.search(regex, data, re.IGNORECASE)
+
+        if match:
+            return match.group(1)
+
+        return None

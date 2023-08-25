@@ -127,9 +127,6 @@ public:
     Transaction &t,
     paddr_t offset) = 0;
 
-  using check_child_trackers_ret = base_iertr::future<>;
-  virtual check_child_trackers_ret check_child_trackers(Transaction &t) = 0;
-
   /**
    * scan all extents in both tree and cache,
    * including backref extents, logical extents and lba extents,

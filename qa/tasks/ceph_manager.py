@@ -1529,8 +1529,6 @@ class CephManager:
         self.CEPH_CMD = ['sudo'] + pre + ['timeout', '120', 'ceph',
                                           '--cluster', self.cluster]
         self.RADOS_CMD = pre + ['rados', '--cluster', self.cluster]
-        self.run_ceph_w_prefix = ['sudo', 'daemon-helper', 'kill', 'ceph',
-                                  '--cluster', self.cluster]
 
         pools = self.list_pools()
         self.pools = {}
@@ -1630,7 +1628,7 @@ class CephManager:
                               'cluster', 'audit', ...
         :type watch_channel: str
         """
-        args = self.run_ceph_w_prefix + ['-w']
+        args = ['sudo', 'daemon-helper', 'kill', 'ceph', '--cluster', self.cluster, '-w']
         if watch_channel is not None:
             args.append("--watch-channel")
             args.append(watch_channel)

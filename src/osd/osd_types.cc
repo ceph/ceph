@@ -3788,6 +3788,18 @@ void PastIntervals::pg_interval_t::dump(Formatter *f) const
   f->dump_int("up_primary", up_primary);
 }
 
+ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
+{
+  return out << i.fmt_print();
+}
+
+std::string PastIntervals::pg_interval_t::fmt_print() const
+{
+  return fmt::format(
+      "interval({}-{} up {}({}) acting {}({}){})", first, last, up, up_primary,
+      acting, primary, maybe_went_rw ? " maybe_went_rw" : "");
+}
+
 void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>& o)
 {
   o.push_back(new pg_interval_t);
@@ -3852,14 +3864,16 @@ struct compact_interval_t {
     decode(acting, bl);
     DECODE_FINISH(bl);
   }
+  std::string fmt_print() const {
+    return fmt::format("([{},{}] acting={})", first, last, acting);
+  }
   static void generate_test_instances(list<compact_interval_t*> & o) {
     /* Not going to be used, we'll generate pi_compact_rep directly */
   }
 };
 ostream &operator<<(ostream &o, const compact_interval_t &rhs)
 {
-  return o << "([" << rhs.first << "," << rhs.last
-	   << "] acting " << rhs.acting << ")";
+  return o << rhs.fmt_print();
 }
 WRITE_CLASS_ENCODER(compact_interval_t)
 
@@ -3936,6 +3950,10 @@ public:
     return out << "([" << first << "," << last
 	       << "] all_participants=" << all_participants
 	       << " intervals=" << intervals << ")";
+  }
+  std::string print() const override {
+    return fmt::format("([{},{}] all_participants={} intervals={})",
+                       first, last, all_participants, intervals);
   }
   void encode(ceph::buffer::list &bl) const override {
     ENCODE_START(1, 1, bl);
@@ -4029,22 +4047,29 @@ PastIntervals &PastIntervals::operator=(const PastIntervals &rhs)
 
 ostream& operator<<(ostream& out, const PastIntervals &i)
 {
-  if (i.past_intervals) {
-    return i.past_intervals->print(out);
-  } else {
-    return out << "(empty)";
-  }
+  return out << i.fmt_print();
 }
 
-ostream& operator<<(ostream& out, const PastIntervals::PriorSet &i)
+std::string PastIntervals::fmt_print() const {
+  return past_intervals ? past_intervals->print() : "(empty)";
+}
+
+
+std::string PastIntervals::PriorSet::fmt_print() const
 {
-  return out << "PriorSet("
-	     << "ec_pool: " << i.ec_pool
-	     << ", probe: " << i.probe
-	     << ", down: " << i.down
-	     << ", blocked_by: " << i.blocked_by
-	     << ", pg_down: " << i.pg_down
-	     << ")";
+  return fmt::format(
+      "PriorSet("
+      "ec_pool: {}, "
+      "probe: {}, "
+      "down: {}, "
+      "blocked_by: {}, "
+      "pg_down: {})",
+      ec_pool, probe, down, blocked_by, pg_down);
+}
+
+ostream& operator<<(ostream& out, const PastIntervals::PriorSet &pset)
+{
+  return out << pset.fmt_print();
 }
 
 void PastIntervals::decode(ceph::buffer::list::const_iterator &bl)
@@ -4389,19 +4414,6 @@ bool PastIntervals::PriorSet::affected_by_map(
 
   return false;
 }
-
-ostream& operator<<(ostream& out, const PastIntervals::pg_interval_t& i)
-{
-  out << "interval(" << i.first << "-" << i.last
-      << " up " << i.up << "(" << i.up_primary << ")"
-      << " acting " << i.acting << "(" << i.primary << ")";
-  if (i.maybe_went_rw)
-    out << " maybe_went_rw";
-  out << ")";
-  return out;
-}
-
-
 
 // -- pg_query_t --
 
@@ -4805,11 +4817,15 @@ void ObjectCleanRegions::generate_test_instances(list<ObjectCleanRegions*>& o)
   o.back()->mark_object_new();
 }
 
+std::string ObjectCleanRegions::fmt_print() const
+{
+  return fmt::format("clean_offsets: {}, clean_omap: {}, new_object: {}",
+                     clean_offsets, clean_omap, new_object);
+}
+
 ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
 {
-  return out << "clean_offsets: " << ocr.clean_offsets
-             << ", clean_omap: " << ocr.clean_omap
-             << ", new_object: " << ocr.new_object;
+  return out << ocr.fmt_print();
 }
 
 // -- pg_log_entry_t --
@@ -5023,26 +5039,33 @@ void pg_log_entry_t::generate_test_instances(list<pg_log_entry_t*>& o)
 
 ostream& operator<<(ostream& out, const pg_log_entry_t& e)
 {
-  out << e.version << " (" << e.prior_version << ") "
-      << std::left << std::setw(8) << e.get_op_name() << ' '
-      << e.soid << " by " << e.reqid << " " << e.mtime
-      << " " << e.return_code;
-  if (!e.op_returns.empty()) {
-    out << " " << e.op_returns;
+  return out << e.fmt_print();
+}
+
+std::string pg_log_entry_t::fmt_print() const
+{
+  std::string pos_op_returns{};
+  if (!op_returns.empty()) {
+    pos_op_returns = fmt::format(" {}", op_returns);
   }
-  if (e.snaps.length()) {
-    vector<snapid_t> snaps;
-    ceph::buffer::list c = e.snaps;
+
+  std::string pos_snaps{};
+  if (snaps.length()) {
+    std::vector<snapid_t> decoded_snaps;
+    ceph::buffer::list c = snaps;
     auto p = c.cbegin();
     try {
-      decode(snaps, p);
+      ::decode(decoded_snaps, p);
     } catch (...) {
-      snaps.clear();
+      decoded_snaps.clear();
     }
-    out << " snaps " << snaps;
+    pos_snaps = fmt::format(" snaps {}", decoded_snaps);
   }
-  out << " ObjectCleanRegions " << e.clean_regions;
-  return out;
+
+  return fmt::format(
+      "{} ({}) {:<8} {} by {} {} {}{}{} ObjectCleanRegions {}", version,
+      prior_version, get_op_name(), soid, reqid, mtime, return_code,
+      pos_op_returns, pos_snaps, clean_regions);
 }
 
 // -- pg_log_dup_t --
@@ -5972,6 +5995,13 @@ void watch_info_t::dump(Formatter *f) const
   f->close_section();
 }
 
+std::string watch_info_t::fmt_print() const
+{
+  return fmt::format(
+      "watch(cookie {} {}s {})", cookie, timeout_seconds, addr);
+}
+
+
 void watch_info_t::generate_test_instances(list<watch_info_t*>& o)
 {
   o.push_back(new watch_info_t);
@@ -6542,7 +6572,7 @@ void ObjectRecoveryProgress::decode(ceph::buffer::list::const_iterator &bl)
 
 ostream &operator<<(ostream &out, const ObjectRecoveryProgress &prog)
 {
-  return prog.print(out);
+  return out << prog.fmt_print();
 }
 
 void ObjectRecoveryProgress::generate_test_instances(
@@ -6563,14 +6593,16 @@ void ObjectRecoveryProgress::generate_test_instances(
 
 ostream &ObjectRecoveryProgress::print(ostream &out) const
 {
-  return out << "ObjectRecoveryProgress("
-	     << ( first ? "" : "!" ) << "first, "
-	     << "data_recovered_to:" << data_recovered_to
-	     << ", data_complete:" << ( data_complete ? "true" : "false" )
-	     << ", omap_recovered_to:" << omap_recovered_to
-	     << ", omap_complete:" << ( omap_complete ? "true" : "false" )
-	     << ", error:" << ( error ? "true" : "false" )
-	     << ")";
+  return out << fmt_print();
+}
+
+std::string ObjectRecoveryProgress::fmt_print() const {
+  return fmt::format(
+      "ObjectRecoveryProgress({}first, data_recovered_to: {}, "
+      "data_complete: {}, omap_recovered_to: {}, omap_complete: "
+      "{}, error: {})",
+      (first ? "" : "!"), data_recovered_to, data_complete, omap_recovered_to,
+      omap_complete, error);
 }
 
 void ObjectRecoveryProgress::dump(Formatter *f) const
@@ -6659,19 +6691,15 @@ void ObjectRecoveryInfo::dump(Formatter *f) const
 
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf)
 {
-  return inf.print(out);
+  return out << inf.fmt_print();
 }
 
-ostream &ObjectRecoveryInfo::print(ostream &out) const
+std::string ObjectRecoveryInfo::fmt_print() const
 {
-  return out << "ObjectRecoveryInfo("
-	     << soid << "@" << version
-	     << ", size: " << size
-	     << ", copy_subset: " << copy_subset
-	     << ", clone_subset: " << clone_subset
-	     << ", snapset: " << ss
-	     << ", object_exist: " << object_exist
-	     << ")";
+  return fmt::format(
+      "ObjectRecoveryInfo({}@{}, size: {}, copy_subset: {}, "
+      "clone_subset: {}, snapset: {}, object_exist: {})",
+      soid, version, size, copy_subset, clone_subset, ss, object_exist);
 }
 
 // -- PushReplyOp --

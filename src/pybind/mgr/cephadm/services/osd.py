@@ -13,6 +13,7 @@ from ceph.utils import datetime_to_str, str_to_datetime
 from datetime import datetime
 import orchestrator
 from cephadm.serve import CephadmServe
+from cephadm.utils import SpecialHostLabels
 from ceph.utils import datetime_now
 from orchestrator import OrchestratorError, DaemonDescription
 from mgr_module import MonCommandFailed
@@ -42,7 +43,7 @@ class OSDService(CephService):
                     host, drive_group))
                 return None
             # skip this host if we cannot schedule here
-            if self.mgr.inventory.has_label(host, '_no_schedule'):
+            if self.mgr.inventory.has_label(host, SpecialHostLabels.DRAIN_DAEMONS):
                 return None
 
             osd_id_claims_for_host = osd_id_claims.filtered_by_host(host)

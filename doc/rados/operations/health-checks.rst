@@ -1226,8 +1226,8 @@ The health check will be silenced for a specific pool only if
 POOL_APP_NOT_ENABLED
 ____________________
 
-A pool exists that contains one or more objects, but the pool has not been
-tagged for use by a particular application.
+A pool exists but the pool has not been tagged for use by a particular
+application.
 
 To resolve this issue, tag the pool for use by an application. For
 example, if the pool is used by RBD, run the following command:

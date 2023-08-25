@@ -476,23 +476,40 @@ commands. ::
 Rate Limit Management
 =====================
 
-The Ceph Object Gateway enables you to set rate limits on users and buckets. 
-Rate limit includes the maximum number of read ops and write ops per minute
-and how many bytes per minute could be written or read per user or per bucket.
-Requests that are using GET or HEAD method in the REST request are considered as "read requests", otherwise they are considered as "write requests".
-Every Object Gateway tracks per user and bucket metrics separately, these metrics are not shared with other gateways.
-That means that the desired limits configured should be divide by the number of active Object Gateways.
-For example, if userA should be limited by 10 ops per minute and there are 2 Object Gateways in the cluster,
-the limit over userA should be 5 (10 ops per minute / 2 RGWs).
-if the requests are ``not`` balanced between RGWs, the rate limit may be underutilized.
-For example, if the ops limit is 5 and there are 2 RGWs, ``but`` the Load Balancer send load only to one of those RGWs,
-The effective limit would be 5 ops, because this limit is enforced per RGW.
-If there is a limit reached for bucket not for user or vice versa the request would be cancelled as well.
-The bandwidth counting happens after the request is being accepted, as a result, even if in the middle of the request the bucket/user has reached its bandwidth limit this request will proceed.
-The RGW will keep a "debt" of used bytes more than the configured value and will prevent this user/bucket from sending more requests until there "debt" is being paid.
-The "debt" maximum size is twice the max-read/write-bytes per minute.
-If userA has 1 byte read limit per minute and this user tries to GET 1 GB object, the user will be able to do it.
-After userA completes this 1GB operation, the RGW will block the user request for up to 2 minutes until userA will be able to send GET request again.
+The Ceph Object Gateway makes it possible to set rate limits on users and
+buckets.  "Rate limit" includes the maximum number of read operations (read
+ops) and write operations (write ops) per minute and the number of bytes per
+minute that can be written or read per user or per bucket.
+
+Operations that use the ``GET`` method or the ``HEAD`` method in their REST
+requests are "read requests". All other requests are "write requests".  
+
+Each object gateway tracks per-user metrics separately from bucket metrics.
+These metrics are not shared with other gateways. The configured limits should
+be divided by the number of active object gateways. For example, if "user A" is
+to be be limited to 10 ops per minute and there are two object gateways in the
+cluster, then the limit on "user A" should be ``5`` (10 ops per minute / 2
+RGWs).  If the requests are **not** balanced between RGWs, the rate limit might
+be underutilized. For example: if the ops limit is ``5`` and there are two
+RGWs, **but** the Load Balancer sends load to only one of those RGWs, the
+effective limit is 5 ops, because this limit is enforced per RGW. If the rate
+limit that has been set for the bucket has been reached but the rate limit that
+has been set for the user has not been reached, then the request is cancelled.
+The contrary holds as well: if the rate limit that has been set for the user
+has been reached but the rate limit that has been set for the bucket has not
+been reached, then the request is cancelled.
+
+The accounting of bandwidth happens only after a request has been accepted.
+This means that requests will proceed even if the bucket rate limit or user
+rate limit is reached during the execution of the request. The RGW keeps track
+of a "debt" consisting of bytes used in excess of the configured value; users
+or buckets that incur this kind of debt are prevented  from sending more
+requests until the "debt" has been repaid. The maximum size of the "debt" is
+twice the max-read/write-bytes per minute. If "user A" is subject to a 1-byte
+read limit per minute and they attempt to GET an object that is 1 GB in size,
+then the ``GET`` action will fail. After "user A" has completed this 1 GB
+operation, RGW blocks the user's requests for up to two minutes. After this
+time has elapsed, "user A" will be able to send ``GET`` requests again.
 
 
 - **Bucket:** The ``--bucket`` option allows you to specify a rate limit for a
@@ -652,10 +669,12 @@ user usage within date ranges too.
 Options include: 
 
 - **Start Date:** The ``--start-date`` option allows you to filter usage
-  stats from a particular start date (**format:** ``yyyy-mm-dd[HH:MM:SS]``).
+  stats from a particular start date and an optional start time
+  (**format:** ``yyyy-mm-dd [HH:MM:SS]``).
 
 - **End Date:** The ``--end-date`` option allows you to filter usage up
-  to a particular date (**format:** ``yyyy-mm-dd[HH:MM:SS]``). 
+  to a particular date and an optional end time
+  (**format:** ``yyyy-mm-dd [HH:MM:SS]``). 
   
 - **Log Entries:** The ``--show-log-entries`` option allows you to specify
   whether or not to include log entries with the usage stats 

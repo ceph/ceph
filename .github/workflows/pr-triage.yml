@@ -14,11 +14,11 @@ jobs:
           sync-labels: ''
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Assign to Dashboard project
-        # https://github.com/marketplace/actions/add-to-github-projects?version=v0.4.1
-        uses: actions/add-to-project@4756e6330fe1e0a736690d3cfd9f11c9399c2ed4
+        # https://github.com/marketplace/actions/add-to-github-projects?version=v0.5.0
+        uses: actions/add-to-project@31b3f3ccdc584546fc445612dec3f38ff5edb41c
         with:
           project-url: https://github.com/orgs/ceph/projects/2
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
           labeled: dashboard
       - name: Assign milestone based on target brach name
         # https://github.com/marketplace/actions/pull-request-milestone?version=v1.3.0

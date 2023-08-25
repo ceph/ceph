@@ -9,12 +9,10 @@ import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { SharedModule } from '~/app/shared/shared.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
-import { CardComponent } from './card/card.component';
 import { DashboardAreaChartComponent } from './dashboard-area-chart/dashboard-area-chart.component';
 import { DashboardPieComponent } from './dashboard-pie/dashboard-pie.component';
 import { DashboardTimeSelectorComponent } from './dashboard-time-selector/dashboard-time-selector.component';
 import { DashboardV3Component } from './dashboard/dashboard-v3.component';
-import { CardRowComponent } from './card-row/card-row.component';
 import { PgSummaryPipe } from './pg-summary.pipe';
 
 @NgModule({
@@ -34,14 +32,12 @@ import { PgSummaryPipe } from './pg-summary.pipe';
 
   declarations: [
     DashboardV3Component,
-    CardComponent,
     DashboardPieComponent,
-    CardRowComponent,
     PgSummaryPipe,
     DashboardAreaChartComponent,
     DashboardTimeSelectorComponent
   ],
 
-  exports: [DashboardV3Component]
+  exports: [DashboardV3Component, DashboardAreaChartComponent, DashboardTimeSelectorComponent]
 })
 export class DashboardV3Module {}

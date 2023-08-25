@@ -141,6 +141,53 @@ class TestExportPin(CephFSTestCase):
         self.assertEqual(self.mount_a.getfattr("1", "ceph.dir.pin"), '1')
         self.assertEqual(self.mount_a.getfattr("1/2", "ceph.dir.pin"), '0')
 
+    def test_export_pin_many(self):
+        """
+        That large numbers of export pins don't slow down the MDS in unexpected ways.
+        """
+
+        def getlrg():
+            return self.fs.rank_asok(['perf', 'dump', 'mds_log'])['mds_log']['evlrg']
+
+        # vstart.sh sets mds_debug_subtrees to True. That causes a ESubtreeMap
+        # to be written out every event. Yuck!
+        self.config_set('mds', 'mds_debug_subtrees', False)
+        self.mount_a.run_shell_payload("rm -rf 1")
+
+        # flush everything out so ESubtreeMap is the only event in the log
+        self.fs.rank_asok(["flush", "journal"], rank=0)
+        lrg = getlrg()
+
+        n = 5000
+        self.mount_a.run_shell_payload(f"""
+mkdir top
+setfattr -n ceph.dir.pin -v 1 top
+for i in `seq 0 {n-1}`; do
+    path=$(printf top/%08d $i)
+    mkdir "$path"
+    touch "$path/file"
+    setfattr -n ceph.dir.pin -v 0 "$path"
+done
+""")
+
+        subtrees = []
+        subtrees.append(('/top', 1))
+        for i in range(0, n):
+            subtrees.append((f"/top/{i:08}", 0))
+        self._wait_subtrees(subtrees, status=self.status, timeout=300, rank=1)
+
+        self.assertGreater(getlrg(), lrg)
+
+        # flush everything out so ESubtreeMap is the only event in the log
+        self.fs.rank_asok(["flush", "journal"], rank=0)
+
+        # now do some trivial work on rank 0, verify journaling is not slowed down by thousands of subtrees
+        start = time.time()
+        lrg = getlrg()
+        self.mount_a.run_shell_payload('cd top/00000000 && for i in `seq 1 10000`; do mkdir $i; done;')
+        self.assertLessEqual(getlrg()-1, lrg) # at most one ESubtree separating events
+        self.assertLess(time.time()-start, 120)
+
     def test_export_pin_cache_drop(self):
         """
         That the export pin does not prevent empty (nothing in cache) subtree merging.

@@ -22,11 +22,9 @@ add_subdirectory(librados_test_stub)
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
-if(WITH_RBD AND NOT WIN32)
-  # librbd tests require libcls*, which in turn require libos and libosd, which
-  # haven't been ported to Windows yet.
+if(WITH_RBD)
   add_subdirectory(librbd)
-endif(WITH_RBD AND NOT WIN32)
+endif()
 if (WITH_CEPHFS)
   add_subdirectory(mds)
 endif()

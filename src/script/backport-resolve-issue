@@ -522,7 +522,10 @@ Ceph version:     base {}, target {}'''
         maybe_stable = "v{}.{}".format(x, y)
         assert ver_to_release()[maybe_stable], \
             "SHA1 {} is not based on any known stable release ({})".format(sha1, maybe_stable)
-        tv = "v{}.{}.{}".format(x, y, int(z) + 1)
+        if int(y) == 0:
+            tv = "v{}.{}.{}".format(x, 1, z)
+        else:
+            tv = "v{}.{}.{}".format(x, y, int(z) + 1)
         if tv in version2version_id:
             self.target_version = tv
         else:

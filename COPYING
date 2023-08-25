@@ -9,7 +9,7 @@ License: LGPL-2.1 or LGPL-3 (see COPYING-LGPL2.1 and COPYING-LGPL3)
 
 Files: cmake/modules/FindPython*
 Copyright:
-    Copyright 2000-2020 Kitware, Inc. and Contributors
+    Copyright 2000-2023 Kitware, Inc. and Contributors
 License: BSD 3-clause
 
 Files: cmake/modules/FindLTTngUST.cmake

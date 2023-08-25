@@ -11,6 +11,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(PG_
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       global:
         osd heartbeat grace: 40

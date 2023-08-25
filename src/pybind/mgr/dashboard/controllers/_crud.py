@@ -155,7 +155,7 @@ class Container:
         raise NotImplementedError
 
     def to_dict(self, key=''):
-        # intialize the schema of this container
+        # initialize the schema of this container
         ui_schemas = []
         control_schema = {
             'type': self._property_type(),

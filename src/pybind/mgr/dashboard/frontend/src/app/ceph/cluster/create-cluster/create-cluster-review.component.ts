@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CephServiceSpec } from '~/app/shared/models/service.interface';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
@@ -39,7 +40,8 @@ export class CreateClusterReviewComponent implements OnInit {
     let dbDevices = 0;
     let dbDeviceCapacity = 0;
 
-    this.hostService.list('true').subscribe((resp: object[]) => {
+    const hostContext = new CdTableFetchDataContext(() => undefined);
+    this.hostService.list(hostContext.toParams(), 'true').subscribe((resp: object[]) => {
       this.hosts = resp;
       this.hostsCount = this.hosts.length;
       _.forEach(this.hosts, (hostKey) => {

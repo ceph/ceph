@@ -14,6 +14,7 @@ from ceph.deployment.service_spec import (
     ArgumentList,
     CephExporterSpec,
     GeneralArgList,
+    InitContainerSpec,
     MONSpec,
     RGWSpec,
     ServiceSpec,
@@ -39,7 +40,7 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
     """
     # despite this mapping entity names to daemons, self.TYPE within
     # the CephService class refers to service types, not daemon types
-    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress', 'ceph-exporter']:
+    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter']:
         return AuthEntity(f'client.{daemon_type}.{daemon_id}')
     elif daemon_type in ['crash', 'agent']:
         if host == "":
@@ -66,10 +67,12 @@ class CephadmDaemonDeploySpec:
                  daemon_type: Optional[str] = None,
                  ip: Optional[str] = None,
                  ports: Optional[List[int]] = None,
+                 port_ips: Optional[Dict[str, str]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
                  extra_container_args: Optional[ArgumentList] = None,
                  extra_entrypoint_args: Optional[ArgumentList] = None,
+                 init_containers: Optional[List[InitContainerSpec]] = None,
                  ):
         """
         A data struction to encapsulate `cephadm deploy ...
@@ -97,6 +100,11 @@ class CephadmDaemonDeploySpec:
 
         # TCP ports used by the daemon
         self.ports: List[int] = ports or []
+        # mapping of ports to IP addresses for ports
+        # we know we will only bind to on a specific IP.
+        # Useful for allowing multiple daemons to bind
+        # to the same port on different IPs on the same node
+        self.port_ips: Dict[str, str] = port_ips or {}
         self.ip: Optional[str] = ip
 
         # values to be populated during generate_config calls
@@ -109,6 +117,7 @@ class CephadmDaemonDeploySpec:
 
         self.extra_container_args = extra_container_args
         self.extra_entrypoint_args = extra_entrypoint_args
+        self.init_containers = init_containers
 
     def __setattr__(self, name: str, value: Any) -> None:
         if value is not None and name in ('extra_container_args', 'extra_entrypoint_args'):
@@ -243,6 +252,7 @@ class CephadmService(metaclass=ABCMeta):
                 spec, 'extra_container_args') else None,
             extra_entrypoint_args=spec.extra_entrypoint_args if hasattr(
                 spec, 'extra_entrypoint_args') else None,
+            init_containers=getattr(spec, 'init_containers', None),
         )
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:

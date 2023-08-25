@@ -8,4 +8,5 @@ import { Component, Input } from '@angular/core';
 export class CdLabelComponent {
   @Input() key?: string;
   @Input() value?: string;
+  @Input() tooltipText?: string;
 }

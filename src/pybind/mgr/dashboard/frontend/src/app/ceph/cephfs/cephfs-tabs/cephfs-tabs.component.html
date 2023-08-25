@@ -12,6 +12,23 @@
         </cd-cephfs-detail>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="subvolumes">
+      <a ngbNavLink
+         i18n>Subvolumes</a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-subvolume-list [fsName]="selection.mdsmap.fs_name"
+                                  [pools]="details.pools"></cd-cephfs-subvolume-list>
+      </ng-template>
+    </ng-container>
+    <ng-container ngbNavItem="subvolume-groups">
+      <a ngbNavLink
+         i18n>Subvolume groups</a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-subvolume-group [fsName]="selection.mdsmap.fs_name"
+                                   [pools]="details.pools">
+        </cd-cephfs-subvolume-group>
+      </ng-template>
+    </ng-container>
     <ng-container ngbNavItem="clients">
       <a ngbNavLink>
         <ng-container i18n>Clients</ng-container>

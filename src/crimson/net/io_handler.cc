@@ -63,7 +63,12 @@ IOHandler::~IOHandler()
   assert(!conn_ref);
 }
 
-ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
+#ifdef UNIT_TESTS_BUILT
+IOHandler::sweep_ret
+#else
+ceph::bufferlist
+#endif
+IOHandler::sweep_out_pending_msgs_to_sent(
   bool require_keepalive,
   std::optional<utime_t> maybe_keepalive_ack,
   bool require_ack)
@@ -71,25 +76,45 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
   std::size_t num_msgs = out_pending_msgs.size();
   ceph::bufferlist bl;
 
+#ifdef UNIT_TESTS_BUILT
+  std::vector<Tag> tags;
+#endif
+
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
     bl.append(frame_assembler->get_buffer(keepalive_frame));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = KeepAliveFrame::tag;
+    tags.push_back(tag);
+#endif
   }
 
   if (unlikely(maybe_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*maybe_keepalive_ack);
     bl.append(frame_assembler->get_buffer(keepalive_ack_frame));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = KeepAliveFrameAck::tag;
+    tags.push_back(tag);
+#endif
   }
 
   if (require_ack && num_msgs == 0u) {
     auto ack_frame = AckFrame::Encode(in_seq);
     bl.append(frame_assembler->get_buffer(ack_frame));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = AckFrame::tag;
+    tags.push_back(tag);
+#endif
   }
 
   std::for_each(
       out_pending_msgs.begin(),
       out_pending_msgs.begin()+num_msgs,
-      [this, &bl](const MessageFRef& msg) {
+      [this, &bl
+#ifdef UNIT_TESTS_BUILT
+        , &tags
+#endif
+      ](const MessageFRef& msg) {
     // set priority
     msg->get_header().src = conn.messenger.get_myname();
 
@@ -114,6 +139,10 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(frame_assembler->get_buffer(message));
+#ifdef UNIT_TESTS_BUILT
+    auto tag = MessageFrame::tag;
+    tags.push_back(tag);
+#endif
   });
 
   if (!conn.policy.lossy) {
@@ -123,7 +152,12 @@ ceph::bufferlist IOHandler::sweep_out_pending_msgs_to_sent(
         std::make_move_iterator(out_pending_msgs.end()));
   }
   out_pending_msgs.clear();
+
+#ifdef UNIT_TESTS_BUILT
+  return sweep_ret{std::move(bl), tags};
+#else
   return bl;
+#endif
 }
 
 seastar::future<> IOHandler::send(MessageFRef msg)
@@ -293,13 +327,6 @@ void IOHandler::do_set_io_state(
     ceph_assert_always(protocol_is_connected == true);
     assign_frame_assembler(std::move(fa));
     dispatch_in = true;
-#ifdef UNIT_TESTS_BUILT
-    if (conn.interceptor) {
-      // FIXME: doesn't support cross-core
-      conn.interceptor->register_conn_ready(
-          conn.get_local_shared_foreign_from_this());
-    }
-#endif
   } else if (prv_state == io_state_t::open) {
     // from open
     ceph_assert_always(protocol_is_connected == true);
@@ -561,36 +588,7 @@ IOHandler::dispatch_accept(
     ConnectionFRef conn_fref,
     bool is_replace)
 {
-  ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-  if (!crosscore.proceed_or_wait(cc_seq)) {
-    logger().debug("{} got {} dispatch_accept(), wait at {}",
-                   conn, cc_seq, crosscore.get_in_seq());
-    return crosscore.wait(cc_seq
-    ).then([this, cc_seq, new_sid, is_replace,
-            conn_fref=std::move(conn_fref)]() mutable {
-      return dispatch_accept(cc_seq, new_sid, std::move(conn_fref), is_replace);
-    });
-  }
-
-  logger().debug("{} got {} dispatch_accept(new_sid={}, replace={}) at {}",
-                 conn, cc_seq, new_sid, is_replace, io_stat_printer{*this});
-  if (get_io_state() == io_state_t::drop) {
-    assert(!protocol_is_connected);
-    // it is possible that both io_handler and protocolv2 are
-    // trying to close each other from different cores simultaneously.
-    return to_new_sid(new_sid, std::move(conn_fref));
-  }
-  // protocol_is_connected can be from true to true here if the replacing is
-  // happening to a connected connection.
-  protocol_is_connected = true;
-  ceph_assert_always(conn_ref);
-  auto _conn_ref = conn_ref;
-  auto fut = to_new_sid(new_sid, std::move(conn_fref));
-
-  dispatchers.ms_handle_accept(_conn_ref, new_sid, is_replace);
-  // user can make changes
-
-  return fut;
+  return to_new_sid(cc_seq, new_sid, std::move(conn_fref), is_replace);
 }
 
 seastar::future<>
@@ -599,35 +597,7 @@ IOHandler::dispatch_connect(
     seastar::shard_id new_sid,
     ConnectionFRef conn_fref)
 {
-  ceph_assert_always(seastar::this_shard_id() == get_shard_id());
-  if (!crosscore.proceed_or_wait(cc_seq)) {
-    logger().debug("{} got {} dispatch_connect(), wait at {}",
-                   conn, cc_seq, crosscore.get_in_seq());
-    return crosscore.wait(cc_seq
-    ).then([this, cc_seq, new_sid,
-            conn_fref=std::move(conn_fref)]() mutable {
-      return dispatch_connect(cc_seq, new_sid, std::move(conn_fref));
-    });
-  }
-
-  logger().debug("{} got {} dispatch_connect({}) at {}",
-                 conn, cc_seq, new_sid, io_stat_printer{*this});
-  if (get_io_state() == io_state_t::drop) {
-    assert(!protocol_is_connected);
-    // it is possible that both io_handler and protocolv2 are
-    // trying to close each other from different cores simultaneously.
-    return to_new_sid(new_sid, std::move(conn_fref));
-  }
-  ceph_assert_always(protocol_is_connected == false);
-  protocol_is_connected = true;
-  ceph_assert_always(conn_ref);
-  auto _conn_ref = conn_ref;
-  auto fut = to_new_sid(new_sid, std::move(conn_fref));
-
-  dispatchers.ms_handle_connect(_conn_ref, new_sid);
-  // user can make changes
-
-  return fut;
+  return to_new_sid(cc_seq, new_sid, std::move(conn_fref), std::nullopt);
 }
 
 seastar::future<>
@@ -650,18 +620,56 @@ IOHandler::cleanup_prv_shard(seastar::shard_id prv_sid)
 
 seastar::future<>
 IOHandler::to_new_sid(
+    crosscore_t::seq_t cc_seq,
     seastar::shard_id new_sid,
-    ConnectionFRef conn_fref)
+    ConnectionFRef conn_fref,
+    std::optional<bool> is_replace)
 {
-  /*
-   * Note:
-   * - It must be called before user is aware of the new core (through dispatching);
-   * - Messenger must wait the returned future for futher operations to prevent racing;
-   * - In general, the below submitted continuation should be the first one from the prv sid
-   *   to the new sid;
-   */
+  ceph_assert_always(seastar::this_shard_id() == get_shard_id());
+  if (!crosscore.proceed_or_wait(cc_seq)) {
+    logger().debug("{} got {} to_new_sid(), wait at {}",
+                   conn, cc_seq, crosscore.get_in_seq());
+    return crosscore.wait(cc_seq
+    ).then([this, cc_seq, new_sid, is_replace,
+            conn_fref=std::move(conn_fref)]() mutable {
+      return to_new_sid(cc_seq, new_sid, std::move(conn_fref), is_replace);
+    });
+  }
 
-  assert(seastar::this_shard_id() == get_shard_id());
+  bool is_accept_or_connect = is_replace.has_value();
+  logger().debug("{} got {} to_new_sid_1(new_sid={}, {}) at {}",
+                 conn, cc_seq, new_sid,
+                 fmt::format("{}",
+                   is_accept_or_connect ?
+                   (*is_replace ? "accept(replace)" : "accept(!replace)") :
+                   "connect"),
+                 io_stat_printer{*this});
+  auto next_cc_seq = ++cc_seq;
+
+  if (get_io_state() != io_state_t::drop) {
+    ceph_assert_always(conn_ref);
+    if (new_sid != seastar::this_shard_id()) {
+      dispatchers.ms_handle_shard_change(conn_ref, new_sid, is_accept_or_connect);
+      // user can make changes
+    }
+  } else {
+    // it is possible that both io_handler and protocolv2 are
+    // trying to close each other from different cores simultaneously.
+    assert(!protocol_is_connected);
+  }
+
+  if (get_io_state() != io_state_t::drop) {
+    if (is_accept_or_connect) {
+      // protocol_is_connected can be from true to true here if the replacing is
+      // happening to a connected connection.
+    } else {
+      ceph_assert_always(protocol_is_connected == false);
+    }
+    protocol_is_connected = true;
+  } else {
+    assert(!protocol_is_connected);
+  }
+
   bool is_dropped = false;
   if (get_io_state() == io_state_t::drop) {
     is_dropped = true;
@@ -679,29 +687,49 @@ IOHandler::to_new_sid(
   assert(new_sid == get_shard_id());
 
   return seastar::smp::submit_to(new_sid,
-      [this, is_dropped, prv_sid, conn_fref=std::move(conn_fref)]() mutable {
-    logger().debug("{} see new_sid in io_handler(new_sid) from {}, is_dropped={}",
-                   conn, prv_sid, is_dropped);
+      [this, next_cc_seq, is_dropped, prv_sid, is_replace, conn_fref=std::move(conn_fref)]() mutable {
+    logger().debug("{} got {} to_new_sid_2(prv_sid={}, is_dropped={}, {}) at {}",
+                   conn, next_cc_seq, prv_sid, is_dropped,
+                   fmt::format("{}",
+                     is_replace.has_value() ?
+                     (*is_replace ? "accept(replace)" : "accept(!replace)") :
+                     "connect"),
+                   io_stat_printer{*this});
 
     ceph_assert_always(seastar::this_shard_id() == get_shard_id());
     ceph_assert_always(get_io_state() != io_state_t::open);
     ceph_assert_always(!maybe_dropped_sid.has_value());
-
-    ceph_assert_always(!conn_ref);
-    conn_ref = make_local_shared_foreign(std::move(conn_fref));
+    ceph_assert_always(crosscore.proceed_or_wait(next_cc_seq));
 
     if (is_dropped) {
-      // the follow up cleanups will be done in the prv_sid
+      ceph_assert_always(get_io_state() == io_state_t::drop);
       ceph_assert_always(shard_states->assert_closed_and_exit());
       maybe_dropped_sid = prv_sid;
+      // cleanup_prv_shard() will be done in a follow-up close_io()
     } else {
-      // may be at io_state_t::drop
-      // cleanup the prvious shard
+      // possible at io_state_t::drop
+
+      // previous shard is not cleaned,
+      // but close_io() is responsible to clean up the current shard,
+      // so cleanup the previous shard here.
       shard_states->dispatch_in_background(
           "cleanup_prv_sid", conn, [this, prv_sid] {
         return cleanup_prv_shard(prv_sid);
       });
       maybe_notify_out_dispatch();
+    }
+
+    ceph_assert_always(!conn_ref);
+    // assign even if already dropping
+    conn_ref = make_local_shared_foreign(std::move(conn_fref));
+
+    if (get_io_state() != io_state_t::drop) {
+      if (is_replace.has_value()) {
+        dispatchers.ms_handle_accept(conn_ref, prv_sid, *is_replace);
+      } else {
+        dispatchers.ms_handle_connect(conn_ref, prv_sid);
+      }
+      // user can make changes
     }
   });
 }
@@ -790,25 +818,32 @@ IOHandler::do_out_dispatch(shard_states_t &ctx)
         });
       }
 
+      auto require_keepalive = need_keepalive;
+      need_keepalive = false;
+      auto maybe_keepalive_ack = next_keepalive_ack;
+      next_keepalive_ack = std::nullopt;
       auto to_ack = ack_left;
       assert(to_ack == 0 || in_seq > 0);
-      return frame_assembler->write<false>(
-        sweep_out_pending_msgs_to_sent(
-          need_keepalive, next_keepalive_ack, to_ack > 0)
-      ).then([this, prv_keepalive_ack=next_keepalive_ack, to_ack, &ctx] {
+      ack_left = 0;
+#ifdef UNIT_TESTS_BUILT
+      auto ret = sweep_out_pending_msgs_to_sent(
+          require_keepalive, maybe_keepalive_ack, to_ack > 0);
+      return frame_assembler->intercept_frames(ret.tags, true
+      ).then([this, bl=std::move(ret.bl)]() mutable {
+        return frame_assembler->write<false>(std::move(bl));
+      }
+#else
+      auto bl = sweep_out_pending_msgs_to_sent(
+          require_keepalive, maybe_keepalive_ack, to_ack > 0);
+      return frame_assembler->write<false>(std::move(bl)
+#endif
+      ).then([this, &ctx] {
         if (ctx.get_io_state() != io_state_t::open) {
           return frame_assembler->flush<false>(
           ).then([] {
             return seastar::make_ready_future<stop_t>(stop_t::no);
           });
         }
-
-        need_keepalive = false;
-        if (next_keepalive_ack == prv_keepalive_ack) {
-          next_keepalive_ack = std::nullopt;
-        }
-        assert(ack_left >= to_ack);
-        ack_left -= to_ack;
 
         // FIXME: may leak a flush if state is changed after return and before
         // the next repeat body.

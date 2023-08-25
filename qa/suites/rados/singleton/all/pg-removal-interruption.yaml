@@ -21,6 +21,7 @@ tasks:
       - \(OSDMAP_FLAGS\)
       - \(OSD_
       - \(PG_
+      - \(POOL_APP_NOT_ENABLED\)
 - exec:
     client.0:
       - sudo ceph osd pool create foo 128 128

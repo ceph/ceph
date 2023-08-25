@@ -29,9 +29,10 @@ class GrafanaService(CephadmService):
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         assert self.TYPE == daemon_spec.daemon_type
+        prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
         deps = []  # type: List[str]
-        if self.mgr.secure_monitoring_stack and self.mgr.prometheus_web_user and self.mgr.prometheus_web_password:
-            deps.append(f'{hash(self.mgr.prometheus_web_user + self.mgr.prometheus_web_password)}')
+        if self.mgr.secure_monitoring_stack and prometheus_user and prometheus_password:
+            deps.append(f'{hash(prometheus_user + prometheus_password)}')
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
 
         prom_services = []  # type: List[str]
@@ -58,8 +59,8 @@ class GrafanaService(CephadmService):
         oneline_root_cert = '\\n'.join([line.strip() for line in root_cert.splitlines()])
         grafana_data_sources = self.mgr.template.render('services/grafana/ceph-dashboard.yml.j2',
                                                         {'hosts': prom_services,
-                                                         'prometheus_user': self.mgr.prometheus_web_user,
-                                                         'prometheus_password': self.mgr.prometheus_web_password,
+                                                         'prometheus_user': prometheus_user,
+                                                         'prometheus_password': prometheus_password,
                                                          'cephadm_root_ca': oneline_root_cert,
                                                          'security_enabled': self.mgr.secure_monitoring_stack,
                                                          'loki_host': loki_host})
@@ -191,6 +192,8 @@ class GrafanaService(CephadmService):
 class AlertmanagerService(CephadmService):
     TYPE = 'alertmanager'
     DEFAULT_SERVICE_PORT = 9093
+    USER_CFG_KEY = 'alertmanager/web_user'
+    PASS_CFG_KEY = 'alertmanager/web_password'
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
@@ -279,15 +282,16 @@ class AlertmanagerService(CephadmService):
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
 
         if self.mgr.secure_monitoring_stack:
-            if self.mgr.alertmanager_web_user and self.mgr.alertmanager_web_password:
-                deps.append(f'{hash(self.mgr.alertmanager_web_user + self.mgr.alertmanager_web_password)}')
+            alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
+            if alertmanager_user and alertmanager_password:
+                deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
             node_ip = self.mgr.inventory.get_addr(daemon_spec.host)
             host_fqdn = self._inventory_get_fqdn(daemon_spec.host)
             cert, key = self.mgr.http_server.service_discovery.ssl_certs.generate_cert(
                 host_fqdn, node_ip)
             context = {
-                'alertmanager_web_user': self.mgr.alertmanager_web_user,
-                'alertmanager_web_password': password_hash(self.mgr.alertmanager_web_password),
+                'alertmanager_web_user': alertmanager_user,
+                'alertmanager_web_password': password_hash(alertmanager_password),
             }
             return {
                 "files": {
@@ -343,6 +347,8 @@ class PrometheusService(CephadmService):
     TYPE = 'prometheus'
     DEFAULT_SERVICE_PORT = 9095
     DEFAULT_MGR_PROMETHEUS_PORT = 9283
+    USER_CFG_KEY = 'prometheus/web_user'
+    PASS_CFG_KEY = 'prometheus/web_password'
 
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
@@ -397,10 +403,13 @@ class PrometheusService(CephadmService):
         mgr_prometheus_sd_url = f'{srv_end_point}service=mgr-prometheus'  # always included
         ceph_exporter_sd_url = f'{srv_end_point}service=ceph-exporter'  # always included
 
+        alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
+        prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
+
         # generate the prometheus configuration
         context = {
-            'alertmanager_web_user': self.mgr.alertmanager_web_user,
-            'alertmanager_web_password': self.mgr.alertmanager_web_password,
+            'alertmanager_web_user': alertmanager_user,
+            'alertmanager_web_password': alertmanager_password,
             'secure_monitoring_stack': self.mgr.secure_monitoring_stack,
             'service_discovery_username': self.mgr.http_server.service_discovery.username,
             'service_discovery_password': self.mgr.http_server.service_discovery.password,
@@ -412,8 +421,8 @@ class PrometheusService(CephadmService):
         }
 
         web_context = {
-            'prometheus_web_user': self.mgr.prometheus_web_user,
-            'prometheus_web_password': password_hash(self.mgr.prometheus_web_password),
+            'prometheus_web_user': prometheus_user,
+            'prometheus_web_password': password_hash(prometheus_password),
         }
 
         if self.mgr.secure_monitoring_stack:
@@ -482,10 +491,12 @@ class PrometheusService(CephadmService):
         # re-deploy prometheus if the mgr has changed (due to a fail-over i.e).
         deps.append(self.mgr.get_active_mgr().name())
         if self.mgr.secure_monitoring_stack:
-            if self.mgr.prometheus_web_user and self.mgr.prometheus_web_password:
-                deps.append(f'{hash(self.mgr.prometheus_web_user + self.mgr.prometheus_web_password)}')
-            if self.mgr.alertmanager_web_user and self.mgr.alertmanager_web_password:
-                deps.append(f'{hash(self.mgr.alertmanager_web_user + self.mgr.alertmanager_web_password)}')
+            alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
+            prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
+            if prometheus_user and prometheus_password:
+                deps.append(f'{hash(prometheus_user + prometheus_password)}')
+            if alertmanager_user and alertmanager_password:
+                deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         deps.append(f'secure_monitoring_stack:{self.mgr.secure_monitoring_stack}')
         # add dependency on ceph-exporter daemons
         deps += [d.name() for d in self.mgr.cache.get_daemons_by_service('ceph-exporter')]

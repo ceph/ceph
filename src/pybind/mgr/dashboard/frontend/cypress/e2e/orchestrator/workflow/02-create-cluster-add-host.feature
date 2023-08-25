@@ -12,7 +12,7 @@ Feature: Cluster expansion host addition
     Scenario Outline: Add hosts
         Given I am on the "Add Hosts" section
         When I click on "Add" button
-        And enter "hostname" "<hostname>"
+        And enter "hostname" "<hostname>" in the modal
         And select options "<labels>"
         And I click on "Add Host" button
         Then I should not see the modal
@@ -43,7 +43,7 @@ Feature: Cluster expansion host addition
     Scenario: Add hosts using pattern 'ceph-node-[01-02]'
         Given I am on the "Add Hosts" section
         When I click on "Add" button
-        And enter "hostname" "ceph-node-[01-02]"
+        And enter "hostname" "ceph-node-[01-02]" in the modal
         And I click on "Add Host" button
         Then I should not see the modal
         And I should see rows with following entries
@@ -51,11 +51,11 @@ Feature: Cluster expansion host addition
             | ceph-node-01 |
             | ceph-node-02 |
 
-    Scenario: Add exisiting host and verify it failed
+    Scenario: Add existing host and verify it failed
         Given I am on the "Add Hosts" section
         And I should see a row with "ceph-node-00"
         When I click on "Add" button
-        And enter "hostname" "ceph-node-00"
+        And enter "hostname" "ceph-node-00" in the modal
         Then I should see an error in "hostname" field
 
     Scenario Outline: Add and remove labels on host

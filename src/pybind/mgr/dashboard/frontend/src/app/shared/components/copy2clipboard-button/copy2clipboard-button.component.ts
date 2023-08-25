@@ -17,6 +17,9 @@ export class Copy2ClipboardButtonComponent {
   @Input()
   byId = true;
 
+  @Input()
+  showIconOnly = false;
+
   icons = Icons;
 
   constructor(private toastr: ToastrService) {}

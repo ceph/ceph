@@ -325,7 +325,7 @@ if(NOT TARGET RapidJSON::RapidJSON)
 endif()
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
-set(WITH_FMT_VERSION "7.0.0" CACHE
+set(WITH_FMT_VERSION "8.1.1" CACHE
   STRING "build with fmt version")
 find_package(fmt ${WITH_FMT_VERSION} QUIET)
 if(fmt_FOUND)
@@ -337,8 +337,6 @@ else()
   add_subdirectory(fmt)
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
-  target_compile_definitions(fmt PUBLIC
-    $<$<BOOL:${WIN32}>:FMT_USE_TZSET=0>)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 

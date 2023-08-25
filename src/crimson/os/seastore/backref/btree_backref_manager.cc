@@ -114,10 +114,9 @@ BtreeBackrefManager::get_mapping(
       } else {
 	TRACET("{} got {}, {}",
 	       c.trans, offset, iter.get_key(), iter.get_val());
-	auto e = iter.get_pin(c);
 	return get_mapping_ret(
 	  interruptible::ready_future_marker{},
-	  std::move(e));
+	  iter.get_pin(c));
       }
     });
   });
@@ -151,7 +150,7 @@ BtreeBackrefManager::get_mappings(
 	  TRACET("{}~{} got {}, {}, repeat ...",
 	         c.trans, offset, end, pos.get_key(), pos.get_val());
 	  ceph_assert((pos.get_key().add_offset(pos.get_val().len)) > offset);
-	  ret.push_back(pos.get_pin(c));
+	  ret.emplace_back(pos.get_pin(c));
 	  return BackrefBtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
@@ -248,7 +247,8 @@ BtreeBackrefManager::new_mapping(
 	  });
 	});
     }).si_then([c](auto &&state) {
-      return state.ret->get_pin(c);
+      return new_mapping_iertr::make_ready_future<BackrefMappingRef>(
+	state.ret->get_pin(c));
     });
 }
 
@@ -329,17 +329,6 @@ BtreeBackrefManager::merge_cached_backrefs(
     });
     return merge_cached_backrefs_iertr::make_ready_future<journal_seq_t>(
       std::move(inserted_to));
-  });
-}
-
-BtreeBackrefManager::check_child_trackers_ret
-BtreeBackrefManager::check_child_trackers(
-  Transaction &t) {
-  auto c = get_context(t);
-  return with_btree<BackrefBtree>(
-    cache, c,
-    [c](auto &btree) {
-    return btree.check_child_trackers(c);
   });
 }
 

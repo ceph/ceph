@@ -53,6 +53,14 @@ public:
   seastar::future<> close_clean_yielded();
 
 #ifdef UNIT_TESTS_BUILT
+  bool is_ready() const {
+    return state == state_t::READY;
+  }
+
+  bool is_standby() const {
+    return state == state_t::STANDBY;
+  }
+
   bool is_closed_clean() const {
     return closed_clean;
   }

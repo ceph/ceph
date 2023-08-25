@@ -76,6 +76,7 @@ class DeployMeta:
     rank_generation = _DataField(field_type=_or_none(int))
     extra_container_args = _DataField(field_type=_or_none(list))
     extra_entrypoint_args = _DataField(field_type=_or_none(list))
+    init_containers = _DataField(field_type=_or_none(list))
 
     def __init__(
         self,
@@ -89,6 +90,7 @@ class DeployMeta:
         rank_generation: Optional[int] = None,
         extra_container_args: Optional[List[Union[str, Dict[str, Any]]]] = None,
         extra_entrypoint_args: Optional[List[Union[str, Dict[str, Any]]]] = None,
+        init_containers: Optional[List[Dict[str, Any]]] = None,
     ):
         self.data = dict(init_data or {})
         # set fields
@@ -100,6 +102,8 @@ class DeployMeta:
         self.rank_generation = rank_generation
         self.extra_container_args = extra_container_args
         self.extra_entrypoint_args = extra_entrypoint_args
+        if init_containers:
+            self.init_containers = init_containers
 
     def get_data(self) -> Dict[str, Any]:
         return self.data

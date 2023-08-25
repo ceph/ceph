@@ -26,7 +26,7 @@ namespace crimson::osd {
 class PGShardManager {
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
   seastar::sharded<ShardServices> &shard_services;
-  PGShardMapping &pg_to_shard_mapping;
+  seastar::sharded<PGShardMapping> &pg_to_shard_mapping;
 
 #define FORWARD_CONST(FROM_METHOD, TO_METHOD, TARGET)		\
   template <typename... Args>					\
@@ -50,7 +50,7 @@ public:
   PGShardManager(
     seastar::sharded<OSDSingletonState> &osd_singleton_state,
     seastar::sharded<ShardServices> &shard_services,
-    PGShardMapping &pg_to_shard_mapping)
+    seastar::sharded<PGShardMapping> &pg_to_shard_mapping)
   : osd_singleton_state(osd_singleton_state),
     shard_services(shard_services),
     pg_to_shard_mapping(pg_to_shard_mapping) {}
@@ -71,6 +71,8 @@ public:
   }
   auto &get_local_state() { return get_shard_services().local_state; }
   auto &get_local_state() const { return get_shard_services().local_state; }
+  auto &get_pg_to_shard_mapping() { return pg_to_shard_mapping.local(); }
+  auto &get_pg_to_shard_mapping() const { return pg_to_shard_mapping.local(); }
 
   seastar::future<> update_map(local_cached_map_t &&map) {
     get_osd_singleton_state().update_map(
@@ -187,7 +189,7 @@ public:
     logger.debug("{}: can_create", *op);
 
     get_local_state().registry.remove_from_registry(*op);
-    return pg_to_shard_mapping.maybe_create_pg(
+    return get_pg_to_shard_mapping().maybe_create_pg(
       op->get_pgid()
     ).then([this, op = std::move(op)](auto core) mutable {
       return this->template with_remote_shard_state_and_op<T>(
@@ -231,7 +233,7 @@ public:
     logger.debug("{}: !can_create", *op);
 
     get_local_state().registry.remove_from_registry(*op);
-    return pg_to_shard_mapping.maybe_create_pg(
+    return get_pg_to_shard_mapping().maybe_create_pg(
       op->get_pgid()
     ).then([this, op = std::move(op)](auto core) mutable {
       return this->template with_remote_shard_state_and_op<T>(
@@ -307,19 +309,19 @@ public:
    */
   template <typename F>
   void for_each_pgid(F &&f) const {
-    return pg_to_shard_mapping.for_each_pgid(
+    return get_pg_to_shard_mapping().for_each_pgid(
       std::forward<F>(f));
   }
 
   auto get_num_pgs() const {
-    return pg_to_shard_mapping.get_num_pgs();
+    return get_pg_to_shard_mapping().get_num_pgs();
   }
 
   seastar::future<> broadcast_map_to_pgs(epoch_t epoch);
 
   template <typename F>
   auto with_pg(spg_t pgid, F &&f) {
-    core_id_t core = pg_to_shard_mapping.get_pg_mapping(pgid);
+    core_id_t core = get_pg_to_shard_mapping().get_pg_mapping(pgid);
     return with_remote_shard_state(
       core,
       [pgid, f=std::move(f)](auto &local_state, auto &local_service) mutable {

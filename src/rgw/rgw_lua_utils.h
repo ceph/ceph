@@ -20,22 +20,24 @@ template<class... Ts>
 struct is_variant<std::variant<Ts...>> : 
     std::true_type {};
 
+class DoutPrefixProvider;
+
 namespace rgw::lua {
 
 // push ceph time in string format: "%Y-%m-%d %H:%M:%S"
 template <typename CephTime>
-void pushtime(lua_State* L, const CephTime& tp)
+const char* pushtime(lua_State* L, const CephTime& tp)
 {
   const auto tt = CephTime::clock::to_time_t(tp);
   const auto tm = *std::localtime(&tt);
   char buff[64];
-  std::strftime(buff, sizeof(buff), "%Y-%m-%d %H:%M:%S", &tm);
-  lua_pushstring(L, buff);
+  const auto len = std::strftime(buff, sizeof(buff), "%Y-%m-%d %H:%M:%S", &tm);
+  return lua_pushlstring(L, buff, len+1);
 }
 
-inline void pushstring(lua_State* L, std::string_view str)
+static inline const char* pushstring(lua_State* L, std::string_view str)
 {
-  lua_pushlstring(L, str.data(), str.size());
+  return lua_pushlstring(L, str.data(), str.size());
 }
 
 inline void pushvalue(lua_State* L, const std::string& value) {
@@ -64,21 +66,16 @@ inline void unsetglobal(lua_State* L, const char* name)
 void stack_dump(lua_State* L);
 
 class lua_state_guard {
-  lua_State* l;
+  const std::size_t max_memory;
+  const DoutPrefixProvider* const dpp;
+  lua_State* const state;
 public:
-  lua_state_guard(lua_State* _l) : l(_l) {
-    if (perfcounter) {
-      perfcounter->inc(l_rgw_lua_current_vms, 1);
-    }
-  }
-  ~lua_state_guard() {
-    lua_close(l);
-    if (perfcounter) {
-      perfcounter->dec(l_rgw_lua_current_vms, 1);
-    }
-  }
-  void reset(lua_State* _l=nullptr) {l = _l;}
+  lua_state_guard(std::size_t _max_memory, const DoutPrefixProvider* _dpp);
+  ~lua_state_guard();
+  lua_State* get() { return state; }
 };
+
+int dostring(lua_State* L, const char* str);
 
 constexpr const int MAX_LUA_VALUE_SIZE = 1000;
 constexpr const int MAX_LUA_KEY_ENTRIES = 100000;
@@ -100,45 +97,57 @@ constexpr auto ONE_RETURNVAL    = 1;
 constexpr auto TWO_RETURNVALS   = 2;
 constexpr auto THREE_RETURNVALS = 3;
 constexpr auto FOUR_RETURNVALS  = 4;
-// utility functions to create a metatable
+
+// create_metatable() is a utility functions to create a metatable
 // and tie it to an unnamed table
 //
-// add an __index method to it, to allow reading values
+// it add an __index method to it, to allow reading values
 // if "readonly" parameter is set to "false", it will also add
 // a __newindex method to it, to allow writing values
 // if the "toplevel" parameter is set to "true", it will name the
 // table as well as the metatable, this would allow direct access from
 // the lua script.
+// the name of the metatable will be a fully qualified name, based on the names
+// of the metatables that contain it, separated by dots.
+// it also adds a __len and  __pairs methods for iterable entities.
 //
 // The MetaTable is expected to be a class with the following members:
-// Name (static function returning the unique name of the metatable)
-// TableName (static function returning the unique name of the table - needed only for "toplevel" tables)
 // Type (typename) - the type of the "upvalue" (the type that the meta table represent)
 // IndexClosure (static function return "int" and accept "lua_State*") 
 // NewIndexClosure (static function return "int" and accept "lua_State*") 
+// PairsClosure (static function return "int" and accept "lua_State*") 
+// LenClosure (static function return "int" and accept "lua_State*") 
+//
 // e.g.
 // struct MyStructMetaTable {
-//   static std::string TableName() {
-//     return "MyStruct";
-//   }
 //
 //   using Type = MyStruct;
 //
 //   static int IndexClosure(lua_State* L) {
-//     const auto value = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+//     const auto name = tatable_name_upvalue(L);
+//     const auto value = reinterpret_cast<const Type*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 //     ...
 //   }
 
 //   static int NewIndexClosure(lua_State* L) {
+//     const auto name = table_name_upvalue(L);
 //     auto value = reinterpret_cast<Type*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
 //     ...
 //   }
 // };
 //
+// If the structs inherits from EmptyMetatable then the only function that needs 
+// to be implemented is IndexClosure. The other functions are implemented in 
+// the base class stating that the table is "readonly" and "not-iterable".
 
 template<typename MetaTable, typename... Upvalues>
-void create_metatable(lua_State* L, bool toplevel, Upvalues... upvalues)
+void create_metatable(lua_State* L, std::string_view parent_name, std::string_view field_name,
+    bool toplevel, Upvalues... upvalues)
 {
+  const std::string qualified_name(fmt::format("{}{}{}", 
+        parent_name,
+        (parent_name.empty() ? "" : "."),
+        field_name));
   constexpr auto upvals_size = sizeof...(upvalues);
   const std::array<void*, upvals_size> upvalue_arr = {upvalues...};
   // create table
@@ -147,34 +156,44 @@ void create_metatable(lua_State* L, bool toplevel, Upvalues... upvalues)
     // duplicate the table to make sure it remain in the stack
     lua_pushvalue(L, -1);
     // give table a name (in cae of "toplevel")
-    lua_setglobal(L, MetaTable::TableName().c_str());
+    lua_setglobal(L, qualified_name.c_str());
   }
-  // create metatable
-  [[maybe_unused]] const auto rc = luaL_newmetatable(L, MetaTable::Name().c_str());
+
+  // create/reuse metatable
+  const auto metatable_is_new = luaL_newmetatable(L, qualified_name.c_str());
+  if (!metatable_is_new) {
+    // tie metatable to table
+    lua_setmetatable(L, -2);
+    return;
+  }
+
   const auto table_stack_pos = lua_gettop(L);
 
   // add "index" closure to metatable
   lua_pushliteral(L, "__index");
+  pushstring(L, qualified_name);
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
-  lua_pushcclosure(L, MetaTable::IndexClosure, upvals_size);
+  lua_pushcclosure(L, MetaTable::IndexClosure, upvals_size+1);
   lua_rawset(L, table_stack_pos);
 
   // add "newindex" closure to metatable
   lua_pushliteral(L, "__newindex");
+  pushstring(L, qualified_name);
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
-  lua_pushcclosure(L, MetaTable::NewIndexClosure, upvals_size);
+  lua_pushcclosure(L, MetaTable::NewIndexClosure, upvals_size+1);
   lua_rawset(L, table_stack_pos);
 
   // add "pairs" closure to metatable
   lua_pushliteral(L, "__pairs");
+  pushstring(L, qualified_name);
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
-  lua_pushcclosure(L, MetaTable::PairsClosure, upvals_size);
+  lua_pushcclosure(L, MetaTable::PairsClosure, upvals_size+1);
   lua_rawset(L, table_stack_pos);
 
   // add "len" closure to metatable
@@ -182,24 +201,24 @@ void create_metatable(lua_State* L, bool toplevel, Upvalues... upvalues)
   for (const auto upvalue : upvalue_arr) {
     lua_pushlightuserdata(L, upvalue);
   }
+  // "name" is not needed at the "len" closure
   lua_pushcclosure(L, MetaTable::LenClosure, upvals_size);
   lua_rawset(L, table_stack_pos);
 
-  // tie metatable and table
-  ceph_assert(lua_gettop(L) == table_stack_pos);
+  // tie metatable to table
   lua_setmetatable(L, -2);
 }
 
 template<typename MetaTable>
-void create_metatable(lua_State* L, bool toplevel, std::unique_ptr<typename MetaTable::Type>& ptr)
+void create_metatable(lua_State* L, const std::string_view parent_name, const std::string_view field_name,
+    bool toplevel, std::unique_ptr<typename MetaTable::Type>& ptr)
 {
   if (ptr) {
-    create_metatable<MetaTable>(L, toplevel, reinterpret_cast<void*>(ptr.get()));
+    create_metatable<MetaTable>(L, parent_name, field_name, toplevel, reinterpret_cast<void*>(ptr.get()));
   } else {
     lua_pushnil(L);
   }
 }
-
 // following struct may be used as a base class for other MetaTable classes
 // note, however, this is not mandatory to use it as a base
 struct EmptyMetaTable {
@@ -252,17 +271,31 @@ void open_standard_libs(lua_State* L);
 
 typedef int MetaTableClosure(lua_State* L);
 
+// get iterator name from table name
+inline std::string get_iterator_name(const std::string_view name) {
+  return fmt::format("{}.Iterator", name);
+}
+
+// the fully qualified name of the table is expected to be the 1st upvalue of the closure
+inline const char* table_name_upvalue(lua_State* L) {
+  const auto name = reinterpret_cast<const char*>(lua_tostring(L, lua_upvalueindex(FIRST_UPVAL)));
+  ceph_assert(name);
+  return name;
+}
+
 // copy the input iterator into a new iterator with memory allocated as userdata
 // - allow for string conversion of the iterator (into its key)
 // - storing the iterator in the metadata table to be used for iterator invalidation handling
 // - since we have only one iterator per map/table we don't allow for nested loops or another iterationn
 // after breaking out of an iteration
 template<typename MapType>
-typename MapType::iterator* create_iterator_metadata(lua_State* L, const typename MapType::iterator& start_it, const typename MapType::iterator& end_it) {
+typename MapType::iterator* create_iterator_metadata(lua_State* L, const std::string_view name, 
+    const typename MapType::iterator& start_it, const typename MapType::iterator& end_it) {
   using Iterator = typename MapType::iterator;
+  const std::string qualified_name = get_iterator_name(name);
   // create metatable for userdata
   // metatable is created before the userdata to save on allocation if the metatable already exists
-  const auto metatable_is_new = luaL_newmetatable(L, typeid(typename MapType::key_type).name());
+  const auto metatable_is_new = luaL_newmetatable(L, qualified_name.c_str());
   const auto metatable_pos = lua_gettop(L);
   int userdata_pos;
   Iterator* new_it = nullptr;
@@ -274,8 +307,7 @@ typename MapType::iterator* create_iterator_metadata(lua_State* L, const typenam
     auto old_it = reinterpret_cast<typename MapType::iterator*>(lua_touserdata(L, -1));
     // verify we are not mid-iteration
     if (*old_it != end_it) {
-      luaL_error(L, "Trying to iterate '%s' before previous iteration finished", 
-          typeid(typename MapType::key_type).name());
+      luaL_error(L, "Trying to iterate '%s' before previous iteration finished", name.data());
       return nullptr;
     } 
     // we use the same memory buffer
@@ -324,10 +356,12 @@ typename MapType::iterator* create_iterator_metadata(lua_State* L, const typenam
   return new_it;
 }
 
+// when a value of a table is erased while the table is being iterated
+// this function allows updating the stored iterator with a new valid one
 template<typename MapType>
-void update_erased_iterator(lua_State* L, const typename MapType::iterator& old_it, const typename MapType::iterator& new_it) {
+void update_erased_iterator(lua_State* L, const std::string_view name, const typename MapType::iterator& old_it, const typename MapType::iterator& new_it) {
   // a metatable exists for the iterator
-  if (luaL_getmetatable(L, typeid(typename MapType::key_type).name()) != LUA_TNIL) {
+  if (luaL_getmetatable(L, get_iterator_name(name).c_str()) != LUA_TNIL) {
     const auto metatable_pos = lua_gettop(L);
     lua_pushliteral(L, "__iterator");
     if (lua_rawget(L, metatable_pos) != LUA_TNIL) {
@@ -351,7 +385,8 @@ template<typename MapType=std::map<std::string, std::string>>
 int StringMapWriteableNewIndex(lua_State* L) {
   static_assert(std::is_constructible<typename MapType::key_type, const char*>());
   static_assert(std::is_constructible<typename MapType::mapped_type, const char*>());
-  const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+  const auto name = table_name_upvalue(L);
+  const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
   ceph_assert(map);
 
   const char* index = luaL_checkstring(L, 2);
@@ -370,7 +405,7 @@ int StringMapWriteableNewIndex(lua_State* L) {
     // erase the element. since in lua: "t[index] = nil" is removing the entry at "t[index]"
     if (const auto it = map->find(index); it != map->end()) {
       // index was found
-      update_erased_iterator<MapType>(L, it, map->erase(it));
+      update_erased_iterator<MapType>(L, name, it, map->erase(it));
     }
   }
 
@@ -385,7 +420,8 @@ int StringMapWriteableNewIndex(lua_State* L) {
 template<typename MapType, typename ValueMetaType=void>
 int next(lua_State* L) {
   using Iterator = typename MapType::iterator;
-  auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
+  const auto name = table_name_upvalue(L);
+  auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
   ceph_assert(map);
   Iterator* next_it = nullptr;
 
@@ -393,12 +429,12 @@ int next(lua_State* L) {
     // pop the 2 nils
     lua_pop(L, 2);
     // create userdata
-    next_it = create_iterator_metadata<MapType>(L, map->begin(), map->end());
+    next_it = create_iterator_metadata<MapType>(L, name, map->begin(), map->end());
   } else {
     next_it = reinterpret_cast<Iterator*>(lua_touserdata(L, 2));
-    ceph_assert(next_it);
     *next_it = std::next(*next_it);
   }
+  ceph_assert(next_it);
 
   if (*next_it == map->end()) {
     // index of the last element was provided
@@ -420,22 +456,35 @@ int next(lua_State* L) {
     std::visit([L](auto&& value) { pushvalue(L, value); }, value);
   } else {
     // as a metatable
-    create_metatable<ValueMetaType>(L, false, &(value));
+    create_metatable<ValueMetaType>(L, name, (*next_it)->first,
+        false, &(value));
   }
   // return key, value
   return TWO_RETURNVALS;
 }
 
+// a generic "Pairs" utility function that could be used as the metatable's "PairsClosure" function
+template<typename MapType, MetaTableClosure Next=next<MapType>>
+int Pairs(lua_State* L) {
+    const auto name = table_name_upvalue(L);
+    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
+    ceph_assert(map);
+    pushstring(L, name);
+    lua_pushlightuserdata(L, map);
+    lua_pushcclosure(L, Next, TWO_UPVALS); // push the "next()" function
+    lua_pushnil(L);                        // indicate this is the first call
+    // return next, nil
+
+    return TWO_RETURNVALS;
+}
+
+
 template<typename MapType=std::map<std::string, std::string>,
   MetaTableClosure NewIndex=EmptyMetaTable::NewIndexClosure>
 struct StringMapMetaTable : public EmptyMetaTable {
-
-  static std::string TableName() {return "StringMap";}
-  static std::string Name() {return TableName() + "Meta";}
-
   static int IndexClosure(lua_State* L) {
-    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ceph_assert(map);
+    std::ignore = table_name_upvalue(L);
+    const auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -453,14 +502,7 @@ struct StringMapMetaTable : public EmptyMetaTable {
   }
 
   static int PairsClosure(lua_State* L) {
-    auto map = reinterpret_cast<MapType*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ceph_assert(map);
-    lua_pushlightuserdata(L, map);
-    lua_pushcclosure(L, next<MapType>, ONE_UPVAL); // push the "next()" function
-    lua_pushnil(L);                                // indicate this is the first call
-    // return next, nil
-
-    return TWO_RETURNVALS;
+    return Pairs<MapType>(L);
   }
   
   static int LenClosure(lua_State* L) {

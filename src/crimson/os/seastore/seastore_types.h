@@ -488,6 +488,7 @@ constexpr device_off_t decode_device_off(internal_paddr_t addr) {
 struct seg_paddr_t;
 struct blk_paddr_t;
 struct res_paddr_t;
+struct pladdr_t;
 struct paddr_t {
 public:
   // P_ADDR_MAX == P_ADDR_NULL == paddr_t{}
@@ -668,6 +669,8 @@ private:
                      static_cast<u_device_off_t>(offset)) {}
 
   friend struct paddr_le_t;
+  friend struct pladdr_le_t;
+
 };
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs);
@@ -1030,6 +1033,103 @@ struct __attribute((packed)) laddr_le_t {
     laddr = val;
     return *this;
   }
+};
+
+constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
+
+struct pladdr_t {
+  std::variant<laddr_t, paddr_t> pladdr;
+
+  pladdr_t() = default;
+  pladdr_t(const pladdr_t &) = default;
+  pladdr_t(laddr_t laddr)
+    : pladdr(laddr) {}
+  pladdr_t(paddr_t paddr)
+    : pladdr(paddr) {}
+
+  bool is_laddr() const {
+    return pladdr.index() == 0;
+  }
+
+  bool is_paddr() const {
+    return pladdr.index() == 1;
+  }
+
+  pladdr_t& operator=(paddr_t paddr) {
+    pladdr = paddr;
+    return *this;
+  }
+
+  pladdr_t& operator=(laddr_t laddr) {
+    pladdr = laddr;
+    return *this;
+  }
+
+  bool operator==(const pladdr_t &) const = default;
+
+  paddr_t get_paddr() const {
+    assert(pladdr.index() == 1);
+    return paddr_t(std::get<1>(pladdr));
+  }
+
+  laddr_t get_laddr() const {
+    assert(pladdr.index() == 0);
+    return laddr_t(std::get<0>(pladdr));
+  }
+
+};
+
+std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr);
+
+enum class addr_type_t : uint8_t {
+  PADDR=0,
+  LADDR=1,
+  MAX=2	// or NONE
+};
+
+struct __attribute((packed)) pladdr_le_t {
+  ceph_le64 pladdr = ceph_le64(PL_ADDR_NULL);
+  addr_type_t addr_type = addr_type_t::MAX;
+
+  pladdr_le_t() = default;
+  pladdr_le_t(const pladdr_le_t &) = default;
+  explicit pladdr_le_t(const pladdr_t &addr)
+    : pladdr(
+	ceph_le64(
+	  addr.is_laddr() ?
+	    std::get<0>(addr.pladdr) :
+	    std::get<1>(addr.pladdr).internal_paddr)),
+      addr_type(
+	addr.is_laddr() ?
+	  addr_type_t::LADDR :
+	  addr_type_t::PADDR)
+  {}
+
+  operator pladdr_t() const {
+    if (addr_type == addr_type_t::LADDR) {
+      return pladdr_t(laddr_t(pladdr));
+    } else {
+      assert(addr_type == addr_type_t::PADDR);
+      return pladdr_t(paddr_t(pladdr));
+    }
+  }
+};
+
+template <typename T>
+struct min_max_t {};
+
+template <>
+struct min_max_t<laddr_t> {
+  static constexpr laddr_t max = L_ADDR_MAX;
+  static constexpr laddr_t min = L_ADDR_MIN;
+  static constexpr laddr_t null = L_ADDR_NULL;
+};
+
+template <>
+struct min_max_t<paddr_t> {
+  static constexpr paddr_t max = P_ADDR_MAX;
+  static constexpr paddr_t min = P_ADDR_MIN;
+  static constexpr paddr_t null = P_ADDR_NULL;
 };
 
 // logical offset, see LBAManager, TransactionManager
@@ -2056,6 +2156,7 @@ struct scan_valid_records_cursor {
   journal_seq_t seq;
   journal_seq_t last_committed;
   std::size_t num_consumed_records = 0;
+  extent_len_t block_size = 0;
 
   struct found_record_group_t {
     paddr_t offset;
@@ -2082,10 +2183,12 @@ struct scan_valid_records_cursor {
     return seq.offset.as_seg_paddr().get_segment_off();
   }
 
+  extent_len_t get_block_size() const {
+    return block_size;
+  }
+
   void increment_seq(segment_off_t off) {
-    auto& seg_addr = seq.offset.as_seg_paddr();
-    seg_addr.set_segment_off(
-      seg_addr.get_segment_off() + off);
+    seq.offset = seq.offset.add_offset(off);
   }
 
   void emplace_record_group(const record_group_header_t&, ceph::bufferlist&&);
@@ -2129,6 +2232,7 @@ template <> struct fmt::formatter<crimson::os::seastore::laddr_list_t> : fmt::os
 template <> struct fmt::formatter<crimson::os::seastore::omap_root_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_list_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::paddr_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::pladdr_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::placement_hint_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::device_type_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::record_group_header_t> : fmt::ostream_formatter {};

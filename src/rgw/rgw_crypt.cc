@@ -661,6 +661,7 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
                                                CephContext* cct,
                                                RGWGetObj_Filter* next,
                                                std::unique_ptr<BlockCrypt> crypt,
+                                               std::vector<size_t> parts_len,
                                                optional_yield y)
     :
     RGWGetObj_Filter(next),
@@ -671,7 +672,8 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
     ofs(0),
     end(0),
     cache(),
-    y(y)
+    y(y),
+    parts_len(std::move(parts_len))
 {
   block_size = this->crypt->get_block_size();
 }
@@ -679,8 +681,10 @@ RGWGetObj_BlockDecrypt::RGWGetObj_BlockDecrypt(const DoutPrefixProvider *dpp,
 RGWGetObj_BlockDecrypt::~RGWGetObj_BlockDecrypt() {
 }
 
-int RGWGetObj_BlockDecrypt::read_manifest(const DoutPrefixProvider *dpp, bufferlist& manifest_bl) {
-  parts_len.clear();
+int RGWGetObj_BlockDecrypt::read_manifest_parts(const DoutPrefixProvider *dpp,
+                                                const bufferlist& manifest_bl,
+                                                std::vector<size_t>& parts_len)
+{
   RGWObjManifest manifest;
   if (manifest_bl.length()) {
     auto miter = manifest_bl.cbegin();
@@ -697,10 +701,8 @@ int RGWGetObj_BlockDecrypt::read_manifest(const DoutPrefixProvider *dpp, bufferl
       }
       parts_len.back() += mi.get_stripe_size();
     }
-    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
-      for (size_t i = 0; i<parts_len.size(); i++) {
-        ldpp_dout(dpp, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
-      }
+    for (size_t i = 0; i<parts_len.size(); i++) {
+      ldpp_dout(dpp, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
     }
   }
   return 0;
@@ -1191,23 +1193,20 @@ int rgw_s3_prepare_encrypt(req_state* s,
         crypt_http_responses["x-amz-server-side-encryption-aws-kms-key-id"] = std::string(key_id);
         crypt_http_responses["x-amz-server-side-encryption-context"] = std::move(cooked_context);
         return 0;
-      } else if (req_sse == "AES256") {
-        /* SSE-S3: fall through to logic to look for vault or test key */
-      } else {
+      } else if (req_sse != "AES256") {
         ldpp_dout(s, 5) << "ERROR: Invalid value for header x-amz-server-side-encryption"
                          << dendl;
         s->err.message = "Server Side Encryption with KMS managed key requires "
           "HTTP header x-amz-server-side-encryption : aws:kms or AES256";
         return -EINVAL;
       }
-    } else {
-  /*no encryption*/
-      return 0;
-    }
 
-    /* from here on we are only handling SSE-S3 (req_sse=="AES256") */
+      if (s->cct->_conf->rgw_crypt_sse_s3_backend != "vault") {
+        s->err.message = "Request specifies Server Side Encryption "
+            "but server configuration does not support this.";
+        return -EINVAL;
+      }
 
-    if (s->cct->_conf->rgw_crypt_sse_s3_backend == "vault") {
       ldpp_dout(s, 5) << "RGW_ATTR_BUCKET_ENCRYPTION ALGO: "
               <<  req_sse << dendl;
       std::string_view context = "";
@@ -1250,10 +1249,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
       crypt_http_responses["x-amz-server-side-encryption"] = "AES256";
 
       return 0;
-    }
-
-    /* SSE-S3 and no backend, check if there is a test key */
-    if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
+    } else if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
       std::string master_encryption_key;
       try {
         master_encryption_key = from_base64(s->cct->_conf->rgw_crypt_default_encryption_key);
@@ -1292,10 +1288,8 @@ int rgw_s3_prepare_encrypt(req_state* s,
       ::ceph::crypto::zeroize_for_security(actual_key, sizeof(actual_key));
       return 0;
     }
-    s->err.message = "Request specifies Server Side Encryption "
-                     "but server configuration does not support this.";
-    return -EINVAL;
   }
+  return 0;
 }
 
 

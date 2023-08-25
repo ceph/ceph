@@ -1,9 +1,11 @@
 # https://tracker.ceph.com/issues/45802
 # https://tracker.ceph.com/issues/51282
 # https://tracker.ceph.com/issues/61168
+# https://tracker.ceph.com/issues/62504
 overrides:
   ceph:
     log-ignorelist:
     - \(PG_AVAILABILITY\)
     - \(PG_DEGRADED\)
     - \(POOL_APP_NOT_ENABLED\)
+    - not have an application enabled

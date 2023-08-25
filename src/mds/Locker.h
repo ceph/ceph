@@ -114,7 +114,6 @@ public:
 
   void xlock_export(const MutationImpl::lock_iterator& it, MutationImpl *mut);
   void xlock_import(SimpleLock *lock);
-  void xlock_downgrade(SimpleLock *lock, MutationImpl *mut);
 
   void try_simple_eval(SimpleLock *lock);
   bool simple_rdlock_try(SimpleLock *lock, MDSContext *con);

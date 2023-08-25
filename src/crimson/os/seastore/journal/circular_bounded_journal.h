@@ -21,6 +21,7 @@
 #include <list>
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/journal/circular_journal_space.h"
+#include "crimson/os/seastore/record_scanner.h"
 
 namespace crimson::os::seastore::journal {
 
@@ -55,7 +56,7 @@ using RBMDevice = random_block_device::RBMDevice;
 
 constexpr uint64_t DEFAULT_BLOCK_SIZE = 4096;
 
-class CircularBoundedJournal : public Journal {
+class CircularBoundedJournal : public Journal, RecordScanner {
 public:
   CircularBoundedJournal(
       JournalTrimmer &trimmer, RBMDevice* device, const std::string &path);
@@ -116,28 +117,6 @@ public:
     return cjs.get_alloc_tail();
   }
 
-  using read_ertr = crimson::errorator<
-    crimson::ct_error::input_output_error,
-    crimson::ct_error::invarg,
-    crimson::ct_error::enoent,
-    crimson::ct_error::erange>;
-  using read_record_ertr = read_ertr;
-  using read_record_ret = read_record_ertr::future<
-	std::optional<std::pair<record_group_header_t, bufferlist>>
-	>;
-  /*
-   * read_record
-   *
-   * read record from given address
-   *
-   * @param paddr_t to read
-   * @param expected_seq
-   *
-   */
-  read_record_ret read_record(paddr_t offset, segment_seq_t expected_seq);
-
-  read_record_ret return_record(record_group_header_t& header, bufferlist bl);
-
   void set_write_pipeline(WritePipeline *_write_pipeline) final {
     write_pipeline = _write_pipeline;
   }
@@ -179,10 +158,46 @@ public:
 
   submit_record_ret do_submit_record(record_t &&record, OrderingHandle &handle);
 
+  void try_read_rolled_header(scan_valid_records_cursor &cursor) {
+    paddr_t addr = convert_abs_addr_to_paddr(
+      get_records_start(),
+      get_device_id());
+    cursor.seq.offset = addr;
+    cursor.seq.segment_seq += 1;
+  }
+
+  void initialize_cursor(scan_valid_records_cursor& cursor) final {
+    cursor.block_size = get_block_size();
+  };
+
+  Journal::replay_ret replay_segment(
+    cbj_delta_handler_t &handler, scan_valid_records_cursor& cursor);
+
+  read_ret read(paddr_t start, size_t len) final;
+
+  bool is_record_segment_seq_invalid(scan_valid_records_cursor &cursor,
+    record_group_header_t &h) final;
+
+  int64_t get_segment_end_offset(paddr_t addr) final {
+    return get_journal_end();
+  }
+
   // Test interfaces
   
   CircularJournalSpace& get_cjs() {
     return cjs;
+  }
+
+  read_validate_record_metadata_ret test_read_validate_record_metadata(
+    scan_valid_records_cursor &cursor,
+    segment_nonce_t nonce)
+  {
+    return read_validate_record_metadata(cursor, nonce);
+  }
+
+  void test_initialize_cursor(scan_valid_records_cursor &cursor)
+  {
+    initialize_cursor(cursor);
   }
 
 private:

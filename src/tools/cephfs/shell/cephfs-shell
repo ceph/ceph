@@ -917,7 +917,7 @@ class CephFSShell(Cmd):
         return self.complete_filenames(text, line, begidx, endidx)
 
     ls_parser = argparse.ArgumentParser(
-        description='Copy a file from Ceph File System from Local Directory.')
+        description='List all the files and directories in the current working directory.')
     ls_parser.add_argument('-l', '--long', action='store_true',
                            help='Detailed list of items in the directory.')
     ls_parser.add_argument('-r', '--reverse', action='store_true',
@@ -1122,7 +1122,8 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    mv_parser = argparse.ArgumentParser(description='Move File.')
+    mv_parser = argparse.ArgumentParser(description='Rename a file or Move a file\
+                                         from source path to the destination.')
     mv_parser.add_argument('src_path', type=str, action=path_to_bytes,
                            help='Source File Path.')
     mv_parser.add_argument('dest_path', type=str, action=path_to_bytes,
@@ -1189,7 +1190,7 @@ class CephFSShell(Cmd):
         """
         return self.complete_filenames(text, line, begidx, endidx)
 
-    cat_parser = argparse.ArgumentParser(description='')
+    cat_parser = argparse.ArgumentParser(description='Print contents of a file')
     cat_parser.add_argument('paths', help='Name of Files', action=path_to_bytes,
                             nargs='+')
 
@@ -1245,7 +1246,7 @@ class CephFSShell(Cmd):
         index_dict = {1: self.path_complete}
         return self.index_based_complete(text, line, begidx, endidx, index_dict)
 
-    lcd_parser = argparse.ArgumentParser(description='')
+    lcd_parser = argparse.ArgumentParser(description='Moves into the given local directory')
     lcd_parser.add_argument('path', type=str, action=path_to_bytes, help='Path')
 
     @with_argparser(lcd_parser)

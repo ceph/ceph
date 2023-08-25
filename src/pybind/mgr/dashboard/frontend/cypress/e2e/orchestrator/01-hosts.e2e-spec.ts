@@ -14,7 +14,7 @@ describe('Hosts page', () => {
       cy.fixture('orchestrator/services.json').as('services');
     });
 
-    it('should not add an exsiting host', function () {
+    it('should not add an existing host', function () {
       const hostname = Cypress._.sample(this.hosts).name;
       hosts.navigateTo('add');
       hosts.add(hostname, true);

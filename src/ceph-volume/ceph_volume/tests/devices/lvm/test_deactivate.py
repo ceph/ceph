@@ -56,4 +56,4 @@ class TestDeactivate(object):
         p_get_lvs.return_value = [FooVolume]
 
         deactivate.deactivate_osd(0)
-        p_dm_close.assert_called_with('123')
+        p_dm_close.assert_called_with(mapping='123', skip_path_check=True)

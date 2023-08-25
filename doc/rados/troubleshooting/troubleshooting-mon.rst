@@ -175,7 +175,7 @@ the quorum is formed by only two monitors, and *c* is in the quorum as a
   ``IP:PORT`` combination, the **lower** the rank. In this case, because
   ``127.0.0.1:6789`` is lower than the other two ``IP:PORT`` combinations,
   ``mon.a`` has the highest rank: namely, rank 0.
-
+  
 
 Most Common Monitor Issues
 ===========================
@@ -317,18 +317,21 @@ Scrap the monitor and redeploy
 
 Inject a monmap into the monitor
 
-  Usually the safest path. You should grab the monmap from the remaining
-  monitors and inject it into the monitor with the corrupted/lost monmap.
-
   These are the basic steps:
 
-  1. Is there a formed quorum? If so, grab the monmap from the quorum::
+  Retrieve the ``monmap`` from the surviving monitors and inject it into the
+  monitor whose ``monmap`` is corrupted or lost.
+
+  Implement this solution by carrying out the following procedure:
+
+  1. Is there a quorum of monitors? If so, retrieve the ``monmap`` from the
+     quorum::
 
       $ ceph mon getmap -o /tmp/monmap
 
-  2. No quorum? Grab the monmap directly from another monitor (this
-     assumes the monitor you are grabbing the monmap from has id ID-FOO
-     and has been stopped)::
+  2. If there is no quorum, then retrieve the ``monmap`` directly from another
+     monitor that has been stopped (in this example, the other monitor has
+     the ID ``ID-FOO``)::
 
       $ ceph-mon -i ID-FOO --extract-monmap /tmp/monmap
 
@@ -340,9 +343,9 @@ Inject a monmap into the monitor
 
   5. Start the monitor
 
-  Please keep in mind that the ability to inject monmaps is a powerful
-  feature that can cause havoc with your monitors if misused as it will
-  overwrite the latest, existing monmap kept by the monitor.
+  .. warning:: Injecting ``monmaps`` can cause serious problems because doing
+     so will overwrite the latest existing ``monmap`` stored on the monitor. Be
+     careful!
 
 
 Clock Skews

@@ -291,6 +291,12 @@ public:
   Transaction(const Transaction& other) = default;
   Transaction& operator=(const Transaction& other) = default;
 
+  Transaction claim_and_reset() {
+    auto ret = Transaction();
+    std::swap(*this, ret);
+    return ret;
+  }
+
   // expose object_index for FileStore::Op's benefit
   const std::map<ghobject_t, uint32_t>& get_object_index() const {
     return object_index;

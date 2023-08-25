@@ -181,13 +181,13 @@ class C_IO_Wrapper : public MDSIOContext
 {
 protected:
   bool async;
-  MDSContext *wrapped;
+  Context *wrapped;
   void finish(int r) override {
     wrapped->complete(r);
     wrapped = nullptr;
   }
 public:
-  C_IO_Wrapper(MDSRank *mds_, MDSContext *wrapped_) :
+  C_IO_Wrapper(MDSRank *mds_, Context *wrapped_) :
     MDSIOContext(mds_), async(true), wrapped(wrapped_) {
     ceph_assert(wrapped != NULL);
   }
