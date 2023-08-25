@@ -12152,7 +12152,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
    * blocks.  We use 4MB only because it is big enough, and because it
    * actually *is* the (ceph) default block size.
    */
-  stbuf->f_frsize = CEPH_4M_BLOCK_SIZE;
+  const int CEPH_BLOCK_SHIFT = 22;
+  stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
+  stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
   stbuf->f_files = total_files_on_fs;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
@@ -12192,19 +12194,11 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // Special case: if there is a size quota set on the Inode acting
     // as the root for this client mount, then report the quota status
     // as the filesystem statistics.
-    fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_4M_BLOCK_SHIFT;
-    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_4M_BLOCK_SHIFT;
+    const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
+    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
     // It is possible for a quota to be exceeded: arithmetic here must
     // handle case where used > total.
-    fsblkcnt_t free = total > used ? total - used : 0;
-
-    // For quota size less than 4KB, report the total=used=4KB,free=0
-    // when quota is full and total=free=4KB, used=0 otherwise.
-    if (!total) {
-      total = 1;
-      free = quota_root->quota.max_bytes > quota_root->rstat.rbytes ? 1 : 0;
-      stbuf->f_frsize = CEPH_4K_BLOCK_SIZE;
-    }
+    const fsblkcnt_t free = total > used ? total - used : 0;
 
     stbuf->f_blocks = total;
     stbuf->f_bfree = free;
@@ -12213,11 +12207,10 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // General case: report the cluster statistics returned from RADOS. Because
     // multiple pools may be used without one filesystem namespace via
     // layouts, this is the most correct thing we can do.
-    stbuf->f_blocks = stats.kb >> CEPH_4K_BLOCK_SHIFT;
-    stbuf->f_bfree = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
-    stbuf->f_bavail = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
+    stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   }
-  stbuf->f_bsize = stbuf->f_frsize;
 
   return rval;
 }
