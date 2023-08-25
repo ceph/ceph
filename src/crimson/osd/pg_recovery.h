@@ -36,6 +36,9 @@ public:
   void on_backfill_reserved();
   void dispatch_backfill_event(
     boost::intrusive_ptr<const boost::statechart::event_base> evt);
+  void backfill_target_finished() {
+    backfill_state->backfill_target_done();
+  }
 
   seastar::future<> stop() { return seastar::now(); }
 private:

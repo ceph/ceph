@@ -73,6 +73,8 @@ BackfillState::Initial::Initial(my_context ctx)
   }
   ceph_assert(peering_state().get_backfill_targets().size());
   ceph_assert(!backfill_state().last_backfill_started.is_max());
+  backfill_state().replicas_in_backfill =
+    peering_state().get_backfill_targets().size();
 }
 
 boost::statechart::result
@@ -470,8 +472,6 @@ BackfillState::Waiting::react(ObjectPushed evt)
                                backfill_state().backfill_info,
                                backfill_state().peer_backfill_info)) {
     return transit<Enqueuing>();
-  } else if (backfill_state().progress_tracker->tracked_objects_completed()) {
-    return transit<Done>();
   } else {
     // we still have something to wait on
     logger().debug("Waiting::react() on ObjectPushed; still waiting");

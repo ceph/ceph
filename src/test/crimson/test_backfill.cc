@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <algorithm>
 #include <cstdlib>
 #include <deque>
@@ -308,6 +311,9 @@ void BackfillFixture::maybe_flush()
 void BackfillFixture::update_peers_last_backfill(
   const hobject_t& new_last_backfill)
 {
+  if (new_last_backfill.is_max()) {
+    schedule_event(crimson::osd::BackfillState::RequestDone{});
+  }
 }
 
 bool BackfillFixture::budget_available() const
@@ -356,6 +362,7 @@ TEST(backfill, same_primary_same_replica)
   ).get_result();
 
   cluster_fixture.next_round();
+  cluster_fixture.next_round();
   EXPECT_CALL(cluster_fixture, backfilled);
   cluster_fixture.next_round();
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));
@@ -377,6 +384,7 @@ TEST(backfill, one_empty_replica)
   cluster_fixture.next_round();
   cluster_fixture.next_round();
   cluster_fixture.next_round(2);
+  cluster_fixture.next_round();
   EXPECT_CALL(cluster_fixture, backfilled);
   cluster_fixture.next_round();
   EXPECT_TRUE(cluster_fixture.all_stores_look_like(reference_store));

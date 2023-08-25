@@ -117,8 +117,8 @@ RecoveryBackend::handle_backfill_finish_ack(
   logger().debug("{}", __func__);
   ceph_assert(pg.is_primary());
   ceph_assert(crimson::common::local_conf()->osd_kill_backfill_at != 3);
-  // TODO:
-  // finish_recovery_op(hobject_t::get_max());
+  auto recovery_handler = pg.get_recovery_handler();
+  recovery_handler->backfill_target_finished();
   return seastar::now();
 }
 
