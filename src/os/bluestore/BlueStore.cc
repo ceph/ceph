@@ -9286,6 +9286,15 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   if (r < 0) {
     return r;
   }
+
+  if (repair) {
+    string p = path + "/block";
+    bluestore_bdev_label_t label;
+    _read_bdev_label(cct, p, &label);
+    _replicate_bdev_label(p, label);
+  }
+
+
   auto close_db = make_scope_guard([&] {
     _close_db_and_around();
   });
