@@ -6,7 +6,9 @@
 #include <boost/redis/connection.hpp>
 
 #include "gtest/gtest.h"
-#include "driver/d4n/d4n_directory.h" // Fix -Sam
+#include "common/ceph_argparse.h"
+#include "rgw_auth_registry.h"
+#include "driver/d4n/d4n_directory.h"
 
 namespace net = boost::asio;
 using boost::redis::config;
@@ -21,6 +23,16 @@ std::string redisHost = "";
 class DirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
+      std::vector<const char*> args;
+      std::string conf_file_list;
+      std::string cluster = "";
+      CephInitParameters iparams = ceph_argparse_early_args(
+	args, CEPH_ENTITY_TYPE_CLIENT,
+	&cluster, &conf_file_list);
+
+      auto cct = common_preinit(iparams, CODE_ENVIRONMENT_UTILITY, {}); 
+      auto dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Directory Test: ");
+
       dir = new rgw::d4n::BlockDirectory{io, hostStr, stoi(portStr)};
       block = new rgw::d4n::CacheBlock{
         .cacheObj = {
@@ -41,7 +53,7 @@ class DirectoryFixture: public ::testing::Test {
       ASSERT_NE(dir, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      dir->init();
+      dir->init(cct, dpp);
 
       /* Run fixture's connection */
       config cfg;
@@ -66,10 +78,9 @@ class DirectoryFixture: public ::testing::Test {
     std::vector<std::string> vals{"0", "0", "0", redisHost, 
                                    "testName", "testBucket", "0", "0", redisHost};
     std::vector<std::string> fields{"version", "size", "globalWeight", "blockHosts", 
-                                   "objName", "bucketName", "creationTime", "dirty", "objHosts"};
+				     "objName", "bucketName", "creationTime", "dirty", "objHosts"};
 };
 
-/* Successful set_value Calls and Redis Check */
 TEST_F(DirectoryFixture, SetValueYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
@@ -94,7 +105,6 @@ TEST_F(DirectoryFixture, SetValueYield)
   io.run();
 }
 
-/* Successful get_value Calls and Redis Check */
 TEST_F(DirectoryFixture, GetValueYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
@@ -104,7 +114,6 @@ TEST_F(DirectoryFixture, GetValueYield)
       boost::system::error_code ec;
       request req;
       req.push("HSET", "testBucket_testName_0", "objName", "newoid");
-
       response<int> resp;
 
       conn->async_exec(req, resp, yield[ec]);
@@ -132,71 +141,83 @@ TEST_F(DirectoryFixture, GetValueYield)
   io.run();
 }
 
-#if 0
-/* Successful get_value Calls and Redis Check */
-TEST_F(DirectoryFixture, GetValueTest) {
-  blockDir->init();
-  int setReturn = blockDir->set_value(block, null_yield);
+TEST_F(DirectoryFixture, DelValueYield)
+{
+  spawn::spawn(io, [this] (yield_context yield) {
+    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
 
-  ASSERT_EQ(setReturn, 0);
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", "testBucket_testName_0");
+      response<int> resp;
 
-  /* Check if object name in directory instance matches redis update */
-  request req;
-  req.push("HSET", "testBucket_testName_0");
-  req.push("FLUSHALL");
+      conn->async_exec(req, resp, yield[ec]);
 
-  response<std::string, boost::redis::ignore_t> resp;
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 1);
+    }
 
-  conn->async_exec(req, resp, [&](auto ec, auto) {
-    ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value(), "OK");
+    ASSERT_EQ(0, dir->del_value(block, optional_yield{io, yield}));
+    dir->shutdown();
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", "testBucket_testName_0");
+      req.push("FLUSHALL");
+      response<int, boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
+    }
 
     conn->cancel();
   });
 
-  int getReturn = blockDir->get_value(block, null_yield);
-
-  ASSERT_EQ(getReturn, 0);
-
-  *work = std::nullopt;
-  worker->join();
-
-  EXPECT_EQ(block->cacheObj.objName, "newoid");
+  io.run();
 }
 
-/* Successful del_value Call and Redis Check */
-TEST_F(DirectoryFixture, DelValueTest) {
-  cpp_redis::client client;
-  vector<string> keys;
-  int setReturn = blockDir->set_value(block, null_yield);
+TEST_F(DirectoryFixture, UpdateValueYield)
+{
+  spawn::spawn(io, [this] (yield_context yield) {
+    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
 
-  ASSERT_EQ(setReturn, 0);
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", "testBucket_testName_0");
+      response<int> resp;
 
-  /* Ensure entry exists in directory before deletion */
-  keys.push_back("rgw-object:" + oid + ":block-directory");
+      conn->async_exec(req, resp, yield[ec]);
 
-  client.exists(keys, [](cpp_redis::reply& reply) {
-    if (reply.is_integer()) {
-      ASSERT_EQ(reply.as_integer(), 1);
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 1);
     }
+
+    ASSERT_EQ(0, dir->del_value(block, optional_yield{io, yield}));
+    dir->shutdown();
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", "testBucket_testName_0");
+      req.push("FLUSHALL");
+      response<int, boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
+    }
+
+    conn->cancel();
   });
 
-  int delReturn = blockDir->del_value(block, null_yield);
-
-  ASSERT_EQ(delReturn, 0);
-
-  client.exists(keys, [](cpp_redis::reply& reply) {
-    if (reply.is_integer()) {
-      ASSERT_EQ(reply.as_integer(), 0);  /* Zero keys exist */
-    }
-  });
-
-  client.flushall();
-
-  *work = std::nullopt;
-  worker->join();
+  io.run();
 }
-#endif
 
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
