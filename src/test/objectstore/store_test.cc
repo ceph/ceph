@@ -3245,7 +3245,8 @@ TEST_P(StoreTest, SimpleCloneTest) {
   int r;
   coll_t cid;
 
-  SetDeathTestStyle("threadsafe");
+  SetVal(g_conf(), "objectstore_debug_throw_on_failed_txc", "true");
+  g_conf().apply_changes(nullptr);
 
   auto ch = store->create_new_collection(cid);
   {
@@ -3531,8 +3532,12 @@ TEST_P(StoreTest, SimpleCloneTest) {
     ObjectStore::Transaction t;
     t.remove_collection(cid);
     cerr << "Invalid rm coll" << std::endl;
-    PrCtl unset_dumpable;
-    EXPECT_DEATH(queue_transaction(store, ch, std::move(t)), "");
+    try {
+      queue_transaction(store, ch, std::move(t));
+      FAIL() << "remove_collection failed to return ENOTEMPTY.";
+    } catch (int err) {
+      ASSERT_EQ(err, -ENOTEMPTY);
+    }
   }
   {
     ObjectStore::Transaction t;
@@ -3554,8 +3559,12 @@ TEST_P(StoreTest, SimpleCloneTest) {
     t.remove(cid, hoid);
     t.remove(cid, hoid2);
     t.remove_collection(cid);
-    PrCtl unset_dumpable;
-    EXPECT_DEATH(queue_transaction(store, ch, std::move(t)), "");
+    try {
+      queue_transaction(store, ch, std::move(t));
+      FAIL() << "remove_collection failed to return ENOTEMPTY.";
+    } catch (int err) {
+      ASSERT_EQ(err, -ENOTEMPTY);
+    }
   }
   {
     ObjectStore::Transaction t;
