@@ -2055,6 +2055,12 @@ private:
       txc->seq = ++last_seq;
       q.push_back(*txc);
     }
+    void undo_queue(TransContext* txc) {
+      std::lock_guard l(qlock);
+      ceph_assert(&q.back() == txc);
+      --last_seq;
+      q.pop_back();
+    }
 
     void drain() {
       std::unique_lock l(qlock);
