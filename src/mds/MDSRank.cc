@@ -3867,6 +3867,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_session_cap_acquisition_throttle",
     "mds_session_max_caps_throttle_ratio",
     "mds_symlink_recovery",
+    "mds_session_metadata_threshold",
     NULL
   };
   return KEYS;
