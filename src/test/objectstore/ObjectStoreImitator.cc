@@ -5,12 +5,167 @@
  * Author: Tri Dao, daominhtri0503@gmail.com
  */
 #include "test/objectstore/ObjectStoreImitator.h"
+#include "common/Clock.h"
+#include "common/Finisher.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "include/intarith.h"
+#include "os/bluestore/bluestore_types.h"
+#include <algorithm>
+#include <cmath>
 
-#define dout_context cct
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_test
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
+
+// ---------- Allocator ----------
+
+void ObjectStoreImitator::release_alloc(PExtentVector &old_extents) {
+  utime_t start = ceph_clock_now();
+  alloc->release(old_extents);
+  alloc_ops++;
+  alloc_time += static_cast<double>(ceph_clock_now() - start);
+}
+
+int64_t ObjectStoreImitator::allocate_alloc(uint64_t want_size,
+                                            uint64_t block_size,
+                                            uint64_t max_alloc_size,
+                                            int64_t hint,
+                                            PExtentVector *extents) {
+  utime_t start = ceph_clock_now();
+  int64_t ret =
+      alloc->allocate(want_size, block_size, max_alloc_size, hint, extents);
+  alloc_time += static_cast<double>(ceph_clock_now() - start);
+  return ret;
+}
+
+// ---------- Object -----------
+
+void ObjectStoreImitator::Object::punch_hole(uint64_t offset, uint64_t length,
+                                             PExtentVector &old_extents) {
+  if (extent_map.empty())
+    return;
+
+  PExtentVector to_be_punched;
+  std::vector<uint64_t> deleted_keys;
+  uint64_t end = offset + length;
+
+  uint64_t re_add_key{0};
+  bluestore_pextent_t re_add;
+
+  dout(20) << "current extents:" << dendl;
+  for (auto &[l_off, e] : extent_map) {
+    dout(20) << "l_off " << l_off << ", off " << e.offset << ", len "
+             << e.length << dendl;
+  }
+
+  dout(20) << "wants to punch: off " << offset << ", len " << length << dendl;
+
+  auto it = extent_map.lower_bound(offset);
+  if ((it == extent_map.end() || it->first > offset) &&
+      it != extent_map.begin()) {
+    it = std::prev(it);
+
+    // diff between where we need to punch and current position
+    auto diff = offset - it->first;
+    dout(20) << "diff " << diff << " , p_off " << it->first << dendl;
+
+    // offset will be inside this extent
+    // otherwise skip over this extent and assume 'offset' has been passed
+    if (diff < it->second.length) {
+      // the hole is bigger than the remaining of the extent
+      if (end > it->first + it->second.length) {
+        to_be_punched.emplace_back(it->second.offset + diff,
+                                   it->second.length - diff);
+      } else { // else the hole is entirely in this extent
+        to_be_punched.emplace_back(it->second.offset + diff, length);
+
+        re_add_key = end;
+        re_add.offset = it->second.offset + diff + length;
+        re_add.length = it->second.length - diff - length;
+
+        dout(20) << "re_add: off " << re_add.offset << ", len " << re_add.length
+                 << dendl;
+      }
+
+      // Modify the remaining extent's length
+      it->second.length = diff;
+    }
+
+    it++;
+  }
+
+  // this loop is only valid when 'it' is in the hole
+  while (it != extent_map.end() && it->first < end) {
+    if (it->first + it->second.length > end) { // last extent to punched
+      uint64_t remaining = it->first + it->second.length - end;
+      uint64_t punched = it->second.length - remaining;
+
+      to_be_punched.emplace_back(it->second.offset, punched);
+      deleted_keys.push_back(it->first);
+
+      re_add.offset = it->second.offset + punched;
+      re_add.length = remaining;
+      re_add_key = it->first + punched;
+
+      it++;
+      break;
+    }
+
+    deleted_keys.push_back(it->first);
+    to_be_punched.push_back(it->second);
+    it++;
+  }
+
+  for (auto k : deleted_keys) {
+    extent_map.erase(k);
+  }
+
+  if (re_add.length > 0) {
+    extent_map[re_add_key] = re_add;
+  }
+
+  old_extents = to_be_punched;
+  dout(20) << "to be deleted:" << dendl;
+  for (auto e : to_be_punched) {
+    dout(20) << "off " << e.offset << ", len " << e.length << dendl;
+  }
+}
+
+void ObjectStoreImitator::Object::append(PExtentVector &ext, uint64_t offset) {
+  for (auto &e : ext) {
+    ceph_assert(e.length > 0);
+    dout(20) << "adding off " << offset << ", len " << e.length << dendl;
+    extent_map[offset] = e;
+    offset += e.length;
+  }
+}
+
+void ObjectStoreImitator::Object::verify_extents() {
+  dout(20) << "Verifying extents:" << dendl;
+  uint64_t prev{0};
+  for (auto &[l_off, ext] : extent_map) {
+    dout(20) << "logical offset: " << l_off << ", extent offset: " << ext.offset
+             << ", extent length: " << ext.length << dendl;
+
+    ceph_assert(ext.is_valid());
+    ceph_assert(ext.length > 0);
+
+    // Making sure that extents don't overlap
+    ceph_assert(prev <= l_off);
+    prev = l_off + ext.length;
+  }
+}
+
+uint64_t ObjectStoreImitator::Object::ext_length() {
+  uint64_t ret{0};
+  for (auto &[_, ext] : extent_map) {
+    ret += ext.length;
+  }
+  return ret;
+}
+
+// ---------- ObjectStoreImitator ----------
 
 void ObjectStoreImitator::init_alloc(const std::string &alloc_type,
                                      uint64_t size) {
@@ -20,18 +175,98 @@ void ObjectStoreImitator::init_alloc(const std::string &alloc_type,
 }
 
 void ObjectStoreImitator::print_status() {
-  std::cout << std::hex
-            << "Fragmentation score: " << alloc->get_fragmentation_score()
-            << " , fragmentation: " << alloc->get_fragmentation()
-            << ", allocator type " << alloc->get_type() << ", capacity 0x"
-            << alloc->get_capacity() << ", block size 0x"
-            << alloc->get_block_size() << ", free 0x" << alloc->get_free()
-            << std::dec << std::endl;
+  dout(0) << std::hex
+          << "Fragmentation score: " << alloc->get_fragmentation_score()
+          << " , fragmentation: " << alloc->get_fragmentation()
+          << ", allocator type: " << alloc->get_type() << ", capacity 0x"
+          << alloc->get_capacity() << ", block size 0x"
+          << alloc->get_block_size() << ", free 0x" << alloc->get_free()
+          << std::dec << dendl;
 }
 
 void ObjectStoreImitator::verify_objects(CollectionHandle &ch) {
   Collection *c = static_cast<Collection *>(ch.get());
-  c->verify_objects();
+  for (auto &[_, obj] : c->objects) {
+    obj->verify_extents();
+  }
+}
+
+void ObjectStoreImitator::print_per_object_fragmentation() {
+  for (auto &[_, coll_ref] : coll_map) {
+    double coll_total{0};
+    for (auto &[id, obj] : coll_ref->objects) {
+      double frag_score{1};
+      unsigned i{2};
+      uint64_t ext_size = 0;
+
+      PExtentVector extents;
+      for (auto &[_, ext] : obj->extent_map) {
+        extents.push_back(ext);
+        ext_size += ext.length;
+      }
+
+      std::sort(extents.begin(), extents.end(),
+                [](bluestore_pextent_t &a, bluestore_pextent_t &b) {
+                  return a.length > b.length;
+                });
+
+      for (auto &ext : extents) {
+        double ext_frag =
+            std::pow(((double)ext.length / (double)ext_size), (double)i++);
+        frag_score -= ext_frag;
+      }
+
+      coll_total += frag_score;
+      dout(5) << "Object: " << id.hobj.oid.name
+              << ", hash: " << id.hobj.get_hash()
+              << " fragmentation score: " << frag_score << dendl;
+    }
+    double avg = coll_total / coll_ref->objects.size();
+    dout(0) << "Collection average obj fragmentation: " << avg
+            << ", coll: " << coll_ref->get_cid().to_str() << dendl;
+  }
+}
+
+void ObjectStoreImitator::print_per_access_fragmentation() {
+  for (auto &[_, coll_ref] : coll_map) {
+    double coll_blks_read{0}, coll_jmps{0};
+    for (auto &[id, read_ops] : coll_ref->read_ops) {
+      unsigned blks{0}, jmps{0};
+      for (auto &op : read_ops) {
+        blks += op.blks;
+        jmps += op.jmps;
+      }
+
+      double avg_blks_read = (double)blks / read_ops.size();
+      coll_blks_read += avg_blks_read;
+
+      double avg_jmps = (double)jmps / read_ops.size();
+      coll_jmps += avg_jmps;
+
+      double avg_jmps_per_blk = (double)jmps / (double)blks;
+
+      dout(5) << "Object: " << id.hobj.oid.name
+              << ", average blks read: " << avg_blks_read
+              << ", average jumps: " << avg_jmps
+              << ", average jumps per block: " << avg_jmps_per_blk << dendl;
+    }
+
+    double coll_avg_blks_read = coll_blks_read / coll_ref->objects.size();
+    double coll_avg_jumps = coll_jmps / coll_ref->objects.size();
+    double coll_avg_jmps_per_blk = coll_avg_jumps / coll_avg_blks_read;
+
+    dout(0) << "Collection average total blks: " << coll_avg_blks_read
+            << ", collection average jumps: " << coll_avg_jumps
+            << ", collection average jumps per block: " << coll_avg_jmps_per_blk
+            << ", coll: " << coll_ref->get_cid().to_str() << dendl;
+  }
+}
+
+void ObjectStoreImitator::print_allocator_profile() {
+  double avg = alloc_time / alloc_ops;
+  dout(0) << "Total alloc ops latency: " << alloc_time
+          << ", total ops: " << alloc_ops
+          << ", average alloc op latency: " << avg << dendl;
 }
 
 // ------- Transactions -------
@@ -40,17 +275,41 @@ int ObjectStoreImitator::queue_transactions(CollectionHandle &ch,
                                             std::vector<Transaction> &tls,
                                             TrackedOpRef op,
                                             ThreadPool::TPHandle *handle) {
+  std::list<Context *> on_applied, on_commit, on_applied_sync;
+  ObjectStore::Transaction::collect_contexts(tls, &on_applied, &on_commit,
+                                             &on_applied_sync);
+  Collection *c = static_cast<Collection *>(ch.get());
+
   for (std::vector<Transaction>::iterator p = tls.begin(); p != tls.end();
        ++p) {
     _add_transaction(&(*p));
   }
 
   if (handle)
-    handle->suspend_tp_timeout();
-
-  if (handle)
     handle->reset_tp_timeout();
 
+  // Immediately complete contexts
+  for (auto c : on_applied_sync) {
+    c->complete(0);
+  }
+
+  if (!on_applied.empty()) {
+    if (c->commit_queue) {
+      c->commit_queue->queue(on_applied);
+    } else {
+      for (auto c : on_applied) {
+        c->complete(0);
+      }
+    }
+  }
+
+  if (!on_commit.empty()) {
+    for (auto c : on_commit) {
+      c->complete(0);
+    }
+  }
+
+  verify_objects(ch);
   return 0;
 }
 
@@ -73,6 +332,7 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
   }
 
   std::vector<ObjectRef> ovec(i.objects.size());
+  uint64_t prev_pool_id = META_POOL_ID;
 
   for (int pos = 0; i.have_op(); ++pos) {
     Transaction::Op *op = i.decode_op();
@@ -84,6 +344,13 @@ void ObjectStoreImitator::_add_transaction(Transaction *t) {
 
     // collection operations
     CollectionRef &c = cvec[op->cid];
+
+    // validate all collections are in the same pool
+    spg_t pgid;
+    if (!!c && c->cid.is_pg(&pgid)) {
+      ceph_assert(prev_pool_id == pgid.pool() || prev_pool_id == META_POOL_ID);
+      prev_pool_id = pgid.pool();
+    }
 
     switch (op->op) {
     case Transaction::OP_RMCOLL: {
@@ -325,50 +592,98 @@ int ObjectStoreImitator::_do_zero(CollectionRef &c, ObjectRef &o,
                                   uint64_t offset, size_t length) {
   PExtentVector old_extents;
   o->punch_hole(offset, length, old_extents);
-  alloc->release(old_extents);
+  release_alloc(old_extents);
   return 0;
 }
 
 int ObjectStoreImitator::_do_read(Collection *c, ObjectRef &o, uint64_t offset,
-                                  size_t len, ceph::buffer::list &bl,
+                                  size_t length, ceph::buffer::list &bl,
                                   uint32_t op_flags, uint64_t retry_count) {
-  auto data = std::string(len, 'a');
+  auto data = std::string(length, 'a');
   bl.append(data);
+
+  // Keeping track of read ops to evaluate per-access fragmentation
+  ReadOp op(offset, length);
+  bluestore_pextent_t last_ext;
+  uint64_t end = length + offset;
+
+  auto it = o->extent_map.lower_bound(offset);
+  if ((it == o->extent_map.end() || it->first > offset) &&
+      it != o->extent_map.begin()) {
+    it = std::prev(it);
+
+    auto diff = offset - it->first;
+    if (diff < it->second.length) {
+      // end not in this extent
+      if (end > it->first + it->second.length) {
+        op.blks += div_round_up(it->second.length - diff, min_alloc_size);
+      } else { // end is within this extent so we take up the entire length
+        op.blks += div_round_up(length, min_alloc_size);
+      }
+
+      last_ext = it->second;
+      it++;
+    }
+  }
+
+  while (it != o->extent_map.end() && it->first < end) {
+    auto extent = it->second;
+    if (last_ext.length > 0 &&
+        last_ext.offset + last_ext.length != extent.offset) {
+      op.jmps++;
+    }
+
+    if (extent.length > length) {
+      op.blks += div_round_up(length, min_alloc_size);
+      break;
+    }
+
+    op.blks += div_round_up(extent.length, min_alloc_size);
+    length -= extent.length;
+    it++;
+  }
+
+  c->read_ops[o->oid].push_back(op);
+  dout(20) << "blks: " << op.blks << ", jmps: " << op.jmps
+           << ", offset: " << op.offset << ", length: " << op.length << dendl;
+
   return bl.length();
 }
 
 int ObjectStoreImitator::_do_write(CollectionRef &c, ObjectRef &o,
                                    uint64_t offset, uint64_t length,
                                    bufferlist &bl, uint32_t fadvise_flags) {
-  ceph_assert(length == bl.length());
-
-  int r = 0;
-  uint64_t end = length + offset;
-
   if (length == 0) {
     return 0;
   }
+  ceph_assert(length == bl.length());
+
+  if (offset + length > o->size) {
+    o->size = offset + length;
+  }
+
+  if (length < min_alloc_size) {
+    return 0;
+  }
+
+  // roundup offset, consider the beginning as deffered
+  offset = p2roundup(offset, min_alloc_size);
+  // align length, consider the end as deffered
+  length = p2align(length, min_alloc_size);
 
   PExtentVector punched;
   o->punch_hole(offset, length, punched);
-  alloc->release(punched);
+  release_alloc(punched);
 
   // all writes will trigger an allocation
-  r = _do_alloc_write(c, o, bl);
+  int r = _do_alloc_write(c, o, bl, offset, length);
   if (r < 0) {
     derr << __func__ << " _do_alloc_write failed with " << cpp_strerror(r)
          << dendl;
-    goto out;
+    return r;
   }
 
-  if (end > o->size) {
-    o->size = end;
-  }
-
-  r = 0;
-
-out:
-  return r;
+  return 0;
 }
 
 int ObjectStoreImitator::_do_clone_range(CollectionRef &c, ObjectRef &oldo,
@@ -396,22 +711,22 @@ int ObjectStoreImitator::_write(CollectionRef &c, ObjectRef &o, uint64_t offset,
 }
 
 int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
-                                         bufferlist &bl) {
+                                         bufferlist &bl, uint64_t offset,
+                                         uint64_t length) {
 
   // No compression for now
-  uint64_t need = p2roundup(static_cast<uint64_t>(bl.length()), min_alloc_size);
-
+  uint64_t need = length;
   PExtentVector prealloc;
 
   int64_t prealloc_left =
-      alloc->allocate(need, min_alloc_size, need, 0, &prealloc);
+      allocate_alloc(need, min_alloc_size, need, 0, &prealloc);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
     derr << __func__ << " failed to allocate 0x" << std::hex << need
-         << " allocated 0x " << (prealloc_left < 0 ? 0 : prealloc_left)
+         << " allocated 0x" << (prealloc_left < 0 ? 0 : prealloc_left)
          << " min_alloc_size 0x" << min_alloc_size << " available 0x "
          << alloc->get_free() << std::dec << dendl;
     if (prealloc.size())
-      alloc->release(prealloc);
+      release_alloc(prealloc);
 
     return -ENOSPC;
   }
@@ -439,7 +754,7 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
     }
   }
 
-  o->append(extents);
+  o->append(extents, offset);
 
   if (prealloc_left > 0) {
     PExtentVector old_extents;
@@ -449,7 +764,7 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
       ++prealloc_pos;
     }
 
-    alloc->release(old_extents);
+    release_alloc(old_extents);
   }
 
   ceph_assert(prealloc_pos == prealloc.end());
@@ -459,13 +774,14 @@ int ObjectStoreImitator::_do_alloc_write(CollectionRef coll, ObjectRef &o,
 
 void ObjectStoreImitator::_do_truncate(CollectionRef &c, ObjectRef &o,
                                        uint64_t offset) {
-  if (offset == o->size)
+  // current size already satisfied
+  if (offset >= o->size)
     return;
 
   PExtentVector old_extents;
   o->punch_hole(offset, o->size - offset, old_extents);
   o->size = offset;
-  alloc->release(old_extents);
+  release_alloc(old_extents);
 }
 
 int ObjectStoreImitator::_rename(CollectionRef &c, ObjectRef &oldo,
@@ -797,7 +1113,6 @@ void ObjectStoreImitator::_do_remove_collection(CollectionRef *c) {
 int ObjectStoreImitator::_create_collection(const coll_t &cid, unsigned bits,
                                             CollectionRef *c) {
   int r;
-  bufferlist bl;
 
   {
     std::unique_lock l(coll_lock);
@@ -813,7 +1128,6 @@ int ObjectStoreImitator::_create_collection(const coll_t &cid, unsigned bits,
     new_coll_map.erase(p);
   }
 
-  encode((*c)->cnode, bl);
   r = 0;
 
 out:

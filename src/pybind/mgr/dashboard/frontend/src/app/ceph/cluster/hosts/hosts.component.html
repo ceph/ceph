@@ -13,6 +13,9 @@
                 selectionType="single"
                 [searchableObjects]="true"
                 [hasDetails]="hasTableDetails"
+                [serverSide]="true"
+                [count]="count"
+                [maxLimit]="25"
                 (setExpandedRow)="setExpandedRow($event)"
                 (updateSelection)="updateSelection($event)"
                 [toolHeader]="!hideToolHeader">
@@ -82,10 +85,31 @@
                 *ngIf="showSubmit">Are you sure you want to continue?</ng-container>
 </ng-template>
 
+
+<ng-template #hostMetricTmpl
+             let-value="value">
+  <div *ngIf="validValue(value)">
+    <span>{{ value }}</span>
+  </div>
+  <div *ngIf="!validValue(value)">
+    <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
+  </div>
+</ng-template>
+
+<ng-template #hostDimlessTmpl
+             let-value="value">
+  <div *ngIf="!validValue(value)">
+    <span ngbTooltip="Not available. Data could not be fetched from Ceph">-</span>
+  </div>
+  <div *ngIf="validValue(value)">
+    <span>{{ value | dimlessBinary }}</span>
+  </div>
+</ng-template>
+
 <ng-template #orchTmpl>
   <span i18n
         i18n-ngbTooltip
-        ngbTooltip="Data will be available only if Orchestrator is available.">N/A</span>
+        ngbTooltip="Data will be available only if Orchestrator is available.">-</span>
 </ng-template>
 
 <ng-template #flashTmpl>

@@ -196,7 +196,7 @@ class OsdHelper(object):
                 self.available = available
                 self.path = path
 
-        def create_invetory_host(host, devices_data):
+        def create_inventory_host(host, devices_data):
             inventory_host = mock.Mock()
             inventory_host.devices.devices = []
             for data in devices_data:
@@ -209,7 +209,7 @@ class OsdHelper(object):
         for device in devices_data:
             hosts.add(device['host'])
 
-        inventory = [create_invetory_host(host, devices_data) for host in hosts]
+        inventory = [create_inventory_host(host, devices_data) for host in hosts]
         orch_client_mock.inventory.list.return_value = inventory
 
 

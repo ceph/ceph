@@ -5,7 +5,7 @@ import logging
 import re
 from enum import IntEnum
 from functools import partial
-from typing import NamedTuple, Optional, no_type_check
+from typing import Any, Dict, NamedTuple, Optional, no_type_check
 
 import cherrypy
 import rbd
@@ -642,7 +642,7 @@ class RbdMirroringStatus(BaseController):
     @Endpoint()
     @ReadPermission
     def status(self):
-        status = {'available': True, 'message': None}
+        status: Dict[str, Any] = {'available': True, 'message': None}
         orch_status = OrchClient.instance().status()
 
         # if the orch is not available we can't create the service

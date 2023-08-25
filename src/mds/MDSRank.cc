@@ -38,6 +38,9 @@
 #include "mon/MonClient.h"
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
+#include "events/ESubtreeMap.h"
+#include "events/ELid.h"
+#include "Mutation.h"
 
 
 #include "MDSRank.h"
@@ -89,7 +92,8 @@ private:
 
     // I need to seal off the current segment, and then mark all
     // previous segments for expiry
-    mdlog->start_new_segment();
+    auto sle = mdcache->create_subtree_map();
+    mdlog->submit_entry(sle);
 
     Context *ctx = new LambdaContext([this](int r) {
         handle_flush_mdlog(r);
@@ -1473,9 +1477,11 @@ void MDSRank::send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &
   messenger->send_to_mds(ref_t<Message>(m).detach(), addr);
 }
 
-void MDSRank::forward_message_mds(const cref_t<MClientRequest>& m, mds_rank_t mds)
+void MDSRank::forward_message_mds(MDRequestRef& mdr, mds_rank_t mds)
 {
   ceph_assert(mds != whoami);
+
+  auto m = mdr->release_client_request();
 
   /*
    * don't actually forward if non-idempotent!
@@ -1488,6 +1494,10 @@ void MDSRank::forward_message_mds(const cref_t<MClientRequest>& m, mds_rank_t md
 
   // tell the client where it should go
   auto session = get_session(m);
+  if (!session) {
+    dout(1) << "no session found, failed to forward client request " << mdr << dendl;
+    return;
+  }
   auto f = make_message<MClientRequestForward>(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend);
   send_message_client(f, session);
 }
@@ -1736,7 +1746,8 @@ void MDSRank::starting_done()
   ceph_assert(is_starting());
   request_state(MDSMap::STATE_ACTIVE);
 
-  mdlog->start_new_segment();
+  auto sle = mdcache->create_subtree_map();
+  mdlog->submit_entry(sle);
 
   // sync snaptable cache
   snapclient->sync(new C_MDSInternalNoop);
@@ -2154,7 +2165,8 @@ void MDSRank::boot_create()
   mdlog->create(fin.new_sub());
 
   // open new journal segment, but do not journal subtree map (yet)
-  mdlog->prepare_new_segment();
+  auto le = new ELid();
+  mdlog->submit_entry(le);
 
   if (whoami == mdsmap->get_root()) {
     dout(3) << "boot_create creating fresh hierarchy" << dendl;
@@ -2189,8 +2201,10 @@ void MDSRank::boot_create()
   ceph_assert(g_conf()->mds_kill_create_at != 1);
 
   // ok now journal it
-  mdlog->journal_segment_subtree_map(fin.new_sub());
+  auto sle = mdcache->create_subtree_map();
+  mdlog->submit_entry(sle);
   mdlog->flush();
+  mdlog->wait_for_safe(fin.new_sub());
 
   // Usually we do this during reconnect, but creation skips that.
   objecter->enable_blocklist_events();
@@ -2607,9 +2621,29 @@ void MDSRankDispatcher::handle_asok_command(
   int r = 0;
   CachedStackStringStream css;
   bufferlist outbl;
-  if (command == "dump_ops_in_flight" ||
-      command == "ops") {
+  dout(10) << __func__ << ": " << command << dendl;
+  if (command == "dump_ops_in_flight") {
     if (!op_tracker.dump_ops_in_flight(f)) {
+      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+    }
+  } else if (command == "ops") {
+    vector<string> flags;
+    cmd_getval(cmdmap, "flags", flags);
+    std::unique_lock l(mds_lock, std::defer_lock);
+    auto lambda = OpTracker::default_dumper;
+    if (flags.size()) {
+      /* use std::function if we actually want to capture flags someday */
+      lambda = [](const TrackedOp& op, Formatter* f) {
+        auto* req = dynamic_cast<const MDRequestImpl*>(&op);
+        if (req) {
+          req->dump_with_mds_lock(f);
+        } else {
+          op.dump_type(f);
+        }
+      };
+      l.lock();
+    }
+    if (!op_tracker.dump_ops_in_flight(f, false, {""}, false, lambda)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
   } else if (command == "dump_blocked_ops") {
@@ -3780,6 +3814,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "clog_to_syslog_level",
     "fsid",
     "host",
+    "mds_alternate_name_max",
     "mds_bal_fragment_dirs",
     "mds_bal_fragment_interval",
     "mds_bal_fragment_size_max",
@@ -3787,19 +3822,36 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_cache_mid",
     "mds_cache_reservation",
     "mds_cache_trim_decay_rate",
+    "mds_cap_acquisition_throttle_retry_request_time",
     "mds_cap_revoke_eviction_timeout",
+    "mds_debug_subtrees",
+    "mds_dir_max_entries",
     "mds_dump_cache_threshold_file",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
+    "mds_export_ephemeral_distributed",
     "mds_export_ephemeral_random",
     "mds_export_ephemeral_random_max",
-    "mds_export_ephemeral_distributed",
+    "mds_extraordinary_events_dump_interval",
+    "mds_forward_all_requests_to_auth",
     "mds_health_cache_threshold",
+    "mds_heartbeat_grace",
+    "mds_heartbeat_reset_grace",
+    "mds_inject_journal_corrupt_dentry_first",
     "mds_inject_migrator_session_race",
+    "mds_inject_rename_corrupt_dentry_first",
+    "mds_kill_shutdown_at",
+    "mds_log_event_large_threshold",
+    "mds_log_events_per_segment",
+    "mds_log_major_segment_event_ratio",
+    "mds_log_max_events",
+    "mds_log_max_segments",
     "mds_log_pause",
+    "mds_log_skip_corrupt_events",
+    "mds_log_skip_unbounded_events",
+    "mds_max_caps_per_client",
     "mds_max_export_size",
     "mds_max_purge_files",
-    "mds_forward_all_requests_to_auth",
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
     "mds_max_snaps_per_dir",
@@ -3811,19 +3863,10 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_recall_warning_decay_rate",
     "mds_request_load_average_decay_rate",
     "mds_session_cache_liveness_decay_rate",
-    "mds_heartbeat_reset_grace",
-    "mds_heartbeat_grace",
     "mds_session_cap_acquisition_decay_rate",
-    "mds_max_caps_per_client",
     "mds_session_cap_acquisition_throttle",
     "mds_session_max_caps_throttle_ratio",
-    "mds_cap_acquisition_throttle_retry_request_time",
-    "mds_alternate_name_max",
-    "mds_dir_max_entries",
     "mds_symlink_recovery",
-    "mds_extraordinary_events_dump_interval",
-    "mds_inject_rename_corrupt_dentry_first",
-    "mds_inject_journal_corrupt_dentry_first",
     NULL
   };
   return KEYS;
@@ -3900,12 +3943,10 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
 
     dout(10) << "flushing conf change to components: " << changed << dendl;
 
-    if (changed.count("mds_log_pause") && !g_conf()->mds_log_pause) {
-      mdlog->kick_submitter();
-    }
     sessionmap.handle_conf_change(changed);
     server->handle_conf_change(changed);
     mdcache->handle_conf_change(changed, *mdsmap);
+    mdlog->handle_conf_change(changed, *mdsmap);
     purge_queue.handle_conf_change(changed, *mdsmap);
   }));
 }

@@ -12,7 +12,7 @@ export class UsersPageHelper extends PageHelper {
   create(tenant: string, user_id: string, fullname: string, email: string, maxbuckets: string) {
     // Enter in user_id
     cy.get('#user_id').type(user_id);
-    // Show Tenanat
+    // Show Tenant
     cy.get('#show_tenant').click({ force: true });
     // Enter in tenant
     cy.get('#tenant').type(tenant);

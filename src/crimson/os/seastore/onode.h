@@ -62,6 +62,7 @@ public:
       default_metadata_range(dmr)
   {}
 
+  virtual bool is_alive() const = 0;
   virtual const onode_layout_t &get_layout() const = 0;
   virtual onode_layout_t &get_mutable_layout(Transaction &t) = 0;
   virtual ~Onode() = default;

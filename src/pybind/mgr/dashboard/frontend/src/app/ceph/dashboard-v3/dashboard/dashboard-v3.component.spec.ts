@@ -18,8 +18,6 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { PgCategoryService } from '../../shared/pg-category.service';
-import { CardRowComponent } from '../card-row/card-row.component';
-import { CardComponent } from '../card/card.component';
 import { DashboardPieComponent } from '../dashboard-pie/dashboard-pie.component';
 import { PgSummaryPipe } from '../pg-summary.pipe';
 import { DashboardV3Component } from './dashboard-v3.component';
@@ -138,13 +136,7 @@ describe('Dashbord Component', () => {
 
   configureTestBed({
     imports: [RouterTestingModule, HttpClientTestingModule, ToastrModule.forRoot(), SharedModule],
-    declarations: [
-      DashboardV3Component,
-      CardComponent,
-      DashboardPieComponent,
-      CardRowComponent,
-      PgSummaryPipe
-    ],
+    declarations: [DashboardV3Component, DashboardPieComponent, PgSummaryPipe],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
       { provide: SummaryService, useClass: SummaryServiceMock },

@@ -46,7 +46,7 @@ public:
   void decode(ceph::buffer::list::const_iterator& bl);
 
   void print(std::ostream& out) const;
-  void print_summary(ceph::Formatter *f, std::ostream *out);
+  void print_summary(ceph::Formatter *f, std::ostream *out) const;
 
   static void generate_test_instances(std::list<FSMapUser*>& ls);
 
@@ -57,7 +57,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser::fs_info_t)
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser)
 
-inline std::ostream& operator<<(std::ostream& out, FSMapUser& m) {
+inline std::ostream& operator<<(std::ostream& out, const FSMapUser& m) {
   m.print_summary(NULL, &out);
   return out;
 }

@@ -63,6 +63,10 @@ public:
     }
   }
 
+  static inline constexpr utime_t max() {
+    return utime_t{time_t{std::numeric_limits<uint32_t>::max()}, 999'999'999ul};
+  }
+
   // cons
   constexpr utime_t() { tv.tv_sec = 0; tv.tv_nsec = 0; }
   constexpr utime_t(time_t s, int n) { tv.tv_sec = s; tv.tv_nsec = n; normalize(); }

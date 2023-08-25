@@ -117,7 +117,7 @@ void MDSTableClient::handle_request(const cref_t<MMDSTableRequest> &m)
       pending_commit.erase(tid);
 
       // log ACK.
-      mds->mdlog->start_submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
+      mds->mdlog->submit_entry(new ETableClient(table, TABLESERVER_OP_ACK, tid),
 				     new C_LoggedAck(this, tid));
     } else {
       dout(10) << "got stray ack on tid " << tid << ", ignoring" << dendl;

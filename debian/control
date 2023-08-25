@@ -187,7 +187,7 @@ Description: debugging symbols for ceph-base
 
 Package: cephadm
 Architecture: linux-any
-Recommends: podman (>= 2.0.2) | docker.io
+Recommends: podman (>= 2.0.2) | docker.io | docker-ce
 Depends: lvm2,
 	 ${python3:Depends},
 Description: cephadm utility to bootstrap ceph daemons with systemd and containers

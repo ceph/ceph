@@ -507,7 +507,7 @@ int ErasureCodeClay::repair_one_lost_chunk(map<int, bufferlist> &recovered_data,
     }
   }
 
-  int lost_chunk;
+  int lost_chunk = 0;
   int count = 0;
   for ([[maybe_unused]] auto& [node, bl] : recovered_data) {
     lost_chunk = node;

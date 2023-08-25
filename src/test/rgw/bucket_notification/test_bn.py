@@ -35,7 +35,7 @@ from .api import PSTopicS3, \
     admin
 
 from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal, assert_in
+from nose.tools import assert_not_equal, assert_equal, assert_in, assert_true
 import boto.s3.tagging
 
 # configure logging for the tests module
@@ -43,6 +43,7 @@ log = logging.getLogger(__name__)
 
 TOPIC_SUFFIX = "_topic"
 NOTIFICATION_SUFFIX = "_notif"
+UID_PREFIX = "superman"
 
 
 num_buckets = 0
@@ -531,7 +532,7 @@ def connection2():
 def another_user(tenant=None):
     access_key = str(time.time())
     secret_key = str(time.time())
-    uid = 'superman' + str(time.time())
+    uid = UID_PREFIX + str(time.time())
     if tenant:
         _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
     else:
@@ -666,6 +667,8 @@ def test_ps_s3_topic_admin_on_master():
     result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant])  
     parsed_result = json.loads(result[0])
     assert_equal(parsed_result['arn'], topic_arn3)
+    matches = [tenant, UID_PREFIX]
+    assert_true( all([x in parsed_result['user'] for x in matches]))
 
     # delete topic 3
     _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant])  
@@ -3056,7 +3059,7 @@ def test_ps_s3_persistent_topic_stats():
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
-    delay = 20
+    delay = 30
     time.sleep(delay)
     http_server.close()
 
@@ -3067,7 +3070,7 @@ def test_ps_s3_persistent_topic_stats():
     assert_equal(result[1], 0)
 
     # create objects in the bucket (async)
-    number_of_objects = 10
+    number_of_objects = 100
     client_threads = []
     start_time = time.time()
     for i in range(number_of_objects):

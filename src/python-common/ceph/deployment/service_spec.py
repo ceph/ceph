@@ -6,8 +6,21 @@ from collections import OrderedDict
 from contextlib import contextmanager
 from functools import wraps
 from ipaddress import ip_network, ip_address
-from typing import Optional, Dict, Any, List, Union, Callable, Iterable, Type, TypeVar, cast, \
-    NamedTuple, Mapping, Iterator
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    Iterator,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import yaml
 
@@ -617,16 +630,16 @@ class ServiceSpec(object):
     Details of service creation.
 
     Request to the orchestrator for a cluster of daemons
-    such as MDS, RGW, iscsi gateway, MONs, MGRs, Prometheus
+    such as MDS, RGW, iscsi gateway, nvmeof gateway, MONs, MGRs, Prometheus
 
     This structure is supposed to be enough information to
     start the services.
     """
-    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi loki promtail mds mgr mon nfs ' \
+    KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi nvmeof loki promtail mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ceph-exporter ' \
                           'container ingress cephfs-mirror snmp-gateway jaeger-tracing ' \
                           'elasticsearch jaeger-agent jaeger-collector jaeger-query'.split()
-    REQUIRES_SERVICE_ID = 'iscsi mds nfs rgw container ingress '.split()
+    REQUIRES_SERVICE_ID = 'iscsi nvmeof mds nfs rgw container ingress '.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -642,6 +655,7 @@ class ServiceSpec(object):
             'osd': DriveGroupSpec,
             'mds': MDSSpec,
             'iscsi': IscsiServiceSpec,
+            'nvmeof': NvmeofServiceSpec,
             'alertmanager': AlertManagerSpec,
             'ingress': IngressSpec,
             'container': CustomContainerSpec,
@@ -702,8 +716,8 @@ class ServiceSpec(object):
         #: ``prometheus``) or (``container``) for custom containers.
         self.service_type = service_type
 
-        #: The name of the service. Required for ``iscsi``, ``mds``, ``nfs``, ``osd``, ``rgw``,
-        #: ``container``, ``ingress``
+        #: The name of the service. Required for ``iscsi``, ``nvmeof``, ``mds``, ``nfs``, ``osd``,
+        #: ``rgw``, ``container``, ``ingress``
         self.service_id = None
 
         if self.service_type in self.REQUIRES_SERVICE_ID or self.service_type == 'osd':
@@ -1108,6 +1122,100 @@ class RGWSpec(ServiceSpec):
 yaml.add_representer(RGWSpec, ServiceSpec.yaml_representer)
 
 
+class NvmeofServiceSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'nvmeof',
+                 service_id: Optional[str] = None,
+                 name: Optional[str] = None,
+                 group: Optional[str] = None,
+                 port: Optional[int] = None,
+                 pool: Optional[str] = None,
+                 enable_auth: bool = False,
+                 server_key: Optional[str] = None,
+                 server_cert: Optional[str] = None,
+                 client_key: Optional[str] = None,
+                 client_cert: Optional[str] = None,
+                 spdk_path: Optional[str] = None,
+                 tgt_path: Optional[str] = None,
+                 timeout: Optional[int] = 60,
+                 conn_retries: Optional[int] = 10,
+                 transports: Optional[str] = 'tcp',
+                 transport_tcp_options: Optional[Dict[str, int]] =
+                 {"in_capsule_data_size": 8192, "max_io_qpairs_per_ctrlr": 7},
+                 tgt_cmd_extra_args: Optional[str] = None,
+                 placement: Optional[PlacementSpec] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 config: Optional[Dict[str, str]] = None,
+                 networks: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'nvmeof'
+        super(NvmeofServiceSpec, self).__init__('nvmeof', service_id=service_id,
+                                                placement=placement, unmanaged=unmanaged,
+                                                preview_only=preview_only,
+                                                config=config, networks=networks,
+                                                extra_container_args=extra_container_args,
+                                                extra_entrypoint_args=extra_entrypoint_args,
+                                                custom_configs=custom_configs)
+
+        #: RADOS pool where ceph-nvmeof config data is stored.
+        self.pool = pool
+        #: ``port`` port of the nvmeof gateway
+        self.port = port or 5500
+        #: ``name`` name of the nvmeof gateway
+        self.name = name
+        #: ``group`` name of the nvmeof gateway
+        self.group = group
+        #: ``enable_auth`` enables user authentication on nvmeof gateway
+        self.enable_auth = enable_auth
+        #: ``server_key`` gateway server key
+        self.server_key = server_key or './server.key'
+        #: ``server_cert`` gateway server certificate
+        self.server_cert = server_cert or './server.crt'
+        #: ``client_key`` client key
+        self.client_key = client_key or './client.key'
+        #: ``client_cert`` client certificate
+        self.client_cert = client_cert or './client.crt'
+        #: ``spdk_path`` path to SPDK
+        self.spdk_path = spdk_path or '/usr/local/bin/nvmf_tgt'
+        #: ``tgt_path`` nvmeof target path
+        self.tgt_path = tgt_path or '/usr/local/bin/nvmf_tgt'
+        #: ``timeout`` ceph connectivity timeout
+        self.timeout = timeout
+        #: ``conn_retries`` ceph connection retries number
+        self.conn_retries = conn_retries
+        #: ``transports`` tcp
+        self.transports = transports
+        #: List of extra arguments for transports in the form opt=value
+        self.transport_tcp_options: Optional[Dict[str, int]] = transport_tcp_options
+        #: ``tgt_cmd_extra_args`` extra arguments for the nvmf_tgt process
+        self.tgt_cmd_extra_args = tgt_cmd_extra_args
+
+    def get_port_start(self) -> List[int]:
+        return [5500, 4420, 8009]
+
+    def validate(self) -> None:
+        #  TODO: what other parameters should be validated as part of this function?
+        super(NvmeofServiceSpec, self).validate()
+
+        if not self.pool:
+            raise SpecValidationError('Cannot add NVMEOF: No Pool specified')
+
+        if self.enable_auth:
+            if not any([self.server_key, self.server_cert, self.client_key, self.client_cert]):
+                raise SpecValidationError(
+                    'enable_auth is true but client/server certificates are missing')
+
+        if self.transports not in ['tcp']:
+            raise SpecValidationError('Invalid transport. Valid values are tcp')
+
+
+yaml.add_representer(NvmeofServiceSpec, ServiceSpec.yaml_representer)
+
+
 class IscsiServiceSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'iscsi',
@@ -1277,6 +1385,103 @@ class IngressSpec(ServiceSpec):
 yaml.add_representer(IngressSpec, ServiceSpec.yaml_representer)
 
 
+class InitContainerSpec(object):
+    """An init container is not a service that lives on its own, but rather
+    is used to run and exit prior to a service container starting in order
+    to help initialize some aspect of the container environment.
+    For example: a command to pre-populate a DB file with expected values
+    before the server starts.
+    """
+
+    _basic_fields = [
+        'image',
+        'entrypoint',
+        'volume_mounts',
+        'envs',
+        'privileged',
+    ]
+    _fields = _basic_fields + ['entrypoint_args']
+
+    def __init__(
+        self,
+        image: Optional[str] = None,
+        entrypoint: Optional[str] = None,
+        entrypoint_args: Optional[GeneralArgList] = None,
+        volume_mounts: Optional[Dict[str, str]] = None,
+        envs: Optional[List[str]] = None,
+        privileged: Optional[bool] = None,
+    ):
+        self.image = image
+        self.entrypoint = entrypoint
+        self.entrypoint_args: Optional[ArgumentList] = None
+        if entrypoint_args:
+            self.entrypoint_args = ArgumentSpec.from_general_args(
+                entrypoint_args
+            )
+        self.volume_mounts = volume_mounts
+        self.envs = envs
+        self.privileged = privileged
+        self.validate()
+
+    def validate(self) -> None:
+        if all(getattr(self, key) is None for key in self._fields):
+            raise SpecValidationError(
+                'At least one parameter must be set (no values were specified)'
+            )
+
+    def to_json(self, flatten_args: bool = False) -> Dict[str, Any]:
+        data: Dict[str, Any] = {}
+        for key in self._basic_fields:
+            value = getattr(self, key, None)
+            if value is not None:
+                data[key] = value
+        if self.entrypoint_args and flatten_args:
+            data['entrypoint_args'] = sum(
+                (ea.to_args() for ea in self.entrypoint_args), []
+            )
+        elif self.entrypoint_args:
+            data['entrypoint_args'] = ArgumentSpec.map_json(
+                self.entrypoint_args
+            )
+        return data
+
+    def __repr__(self) -> str:
+        vals = ((key, getattr(self, key)) for key in self._fields)
+        contents = ", ".join(f'{key}={val!r}' for key, val in vals if val)
+        return f'InitContainerSpec({contents})'
+
+    @classmethod
+    def from_json(cls, data: Dict[str, Any]) -> 'InitContainerSpec':
+        return cls(
+            image=data.get('image'),
+            entrypoint=data.get('entrypoint'),
+            entrypoint_args=data.get('entrypoint_args'),
+            volume_mounts=data.get('volume_mounts'),
+            envs=data.get('envs'),
+            privileged=data.get('privileged'),
+        )
+
+    @classmethod
+    def import_values(
+        cls, values: List[Union['InitContainerSpec', Dict[str, Any]]]
+    ) -> List['InitContainerSpec']:
+        out: List[InitContainerSpec] = []
+        for value in values:
+            if isinstance(value, dict):
+                out.append(cls.from_json(value))
+            elif isinstance(value, cls):
+                out.append(value)
+            elif hasattr(value, 'to_json'):
+                # This is a workaround for silly ceph mgr object/type identity
+                # mismatches due to multiple python interpreters in use.
+                out.append(cls.from_json(value.to_json()))
+            else:
+                raise SpecValidationError(
+                    f"Unknown type for InitContainerSpec: {type(value)}"
+                )
+        return out
+
+
 class CustomContainerSpec(ServiceSpec):
     def __init__(self,
                  service_type: str = 'container',
@@ -1302,6 +1507,7 @@ class CustomContainerSpec(ServiceSpec):
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
+                 init_containers: Optional[List[Union['InitContainerSpec', Dict[str, Any]]]] = None,
                  ):
         assert service_type == 'container'
         assert service_id is not None
@@ -1327,6 +1533,11 @@ class CustomContainerSpec(ServiceSpec):
         self.ports = ports
         self.dirs = dirs
         self.files = files
+        self.init_containers: Optional[List['InitContainerSpec']] = None
+        if init_containers:
+            self.init_containers = InitContainerSpec.import_values(
+                init_containers
+            )
 
     def config_json(self) -> Dict[str, Any]:
         """
@@ -1358,6 +1569,15 @@ class CustomContainerSpec(ServiceSpec):
             raise SpecValidationError(
                 '"files" and "custom_configs" are mutually exclusive '
                 '(and both serve the same purpose)')
+
+    # use quotes for OrderedDict, getting this to work across py 3.6, 3.7
+    # and 3.7+ is suprisingly difficult
+    def to_json(self) -> "OrderedDict[str, Any]":
+        data = super().to_json()
+        ics = data.get('spec', {}).get('init_containers')
+        if ics:
+            data['spec']['init_containers'] = [ic.to_json() for ic in ics]
+        return data
 
 
 yaml.add_representer(CustomContainerSpec, ServiceSpec.yaml_representer)

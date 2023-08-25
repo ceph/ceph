@@ -352,6 +352,30 @@ export class TaskMessageService {
     ),
     'crud-component/id': this.newTaskMessage(this.commonOperations.delete, (id) =>
       this.crudMessageId(id)
+    ),
+    'cephfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.volume(metadata)
+    ),
+    'cephfs/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.volume(metadata)
+    ),
+    'cephfs/subvolume/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/group/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.subvolumegroup(metadata)
+    ),
+    'cephfs/subvolume/group/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.subvolumegroup(metadata)
+    ),
+    'cephfs/subvolume/group/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.subvolumegroup(metadata)
     )
   };
 
@@ -406,6 +430,18 @@ export class TaskMessageService {
       }
     });
     return $localize`${message}`;
+  }
+
+  volume(metadata: any) {
+    return $localize`'${metadata.volumeName}'`;
+  }
+
+  subvolume(metadata: any) {
+    return $localize`subvolume '${metadata.subVolumeName}'`;
+  }
+
+  subvolumegroup(metadata: any) {
+    return $localize`subvolume group '${metadata.subvolumegroupName}'`;
   }
 
   crudMessageId(id: string) {

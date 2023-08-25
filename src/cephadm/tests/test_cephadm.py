@@ -58,8 +58,8 @@ class TestCephAdm(object):
 
         for side_effect, expected_exception in (
             (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-            (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
-            (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
+            (os_error(errno.EAFNOSUPPORT), OSError),
+            (os_error(errno.EADDRNOTAVAIL), OSError),
             (None, None),
         ):
             _socket = mock.Mock()
@@ -77,20 +77,68 @@ class TestCephAdm(object):
     def test_port_in_use(self, _logger, _attempt_bind):
         empty_ctx = None
 
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         _attempt_bind.side_effect = _cephadm.PortOccupiedError('msg')
-        assert _cephadm.port_in_use(empty_ctx, 9100) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+
+    @mock.patch('cephadm.socket.socket.bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_special_cases(self, _logger, _bind):
+        # port_in_use has special handling for
+        # EAFNOSUPPORT and EADDRNOTAVAIL errno OSErrors.
+        # If we get those specific errors when attempting
+        # to bind to the ip:port we should not say the
+        # port is in use
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        _bind.side_effect = os_error(errno.EADDRNOTAVAIL)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        _bind.side_effect = os_error(errno.EAFNOSUPPORT)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        # this time, have it raise the actual port taken error
+        # so it should report the port is in use
+        _bind.side_effect = os_error(errno.EADDRINUSE)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == True
+
+    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_with_specific_ips(self, _logger, _attempt_bind):
+        empty_ctx = None
+
+        def _fake_attempt_bind(ctx, s: socket.socket, addr: str, port: int) -> None:
+            occupied_error = _cephadm.PortOccupiedError('msg')
+            if addr.startswith('200'):
+                raise occupied_error
+            if addr.startswith('100'):
+                if port == 4567:
+                    raise occupied_error
+
+        _attempt_bind.side_effect = _fake_attempt_bind
+
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -126,8 +174,8 @@ class TestCephAdm(object):
         ):
             for side_effect, expected_exception in (
                 (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-                (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
-                (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
+                (os_error(errno.EADDRNOTAVAIL), OSError),
+                (os_error(errno.EAFNOSUPPORT), OSError),
                 (None, None),
             ):
                 mock_socket_obj = mock.Mock()
@@ -1030,90 +1078,6 @@ ff792c06d8544b983.scope not found.: OCI runtime error"""
                 cluster_network=None,
                 ipv6_cluster_network=False
             )
-
-
-class TestCustomContainer(unittest.TestCase):
-    cc: _cephadm.CustomContainer
-
-    def setUp(self):
-        self.cc = _cephadm.CustomContainer(
-            'e863154d-33c7-4350-bca5-921e0467e55b',
-            'container',
-            config_json={
-                'entrypoint': 'bash',
-                'gid': 1000,
-                'args': [
-                    '--no-healthcheck',
-                    '-p 6800:6800'
-                ],
-                'envs': ['SECRET=password'],
-                'ports': [8080, 8443],
-                'volume_mounts': {
-                    '/CONFIG_DIR': '/foo/conf',
-                    'bar/config': '/bar:ro'
-                },
-                'bind_mounts': [
-                    [
-                        'type=bind',
-                        'source=/CONFIG_DIR',
-                        'destination=/foo/conf',
-                        ''
-                    ],
-                    [
-                        'type=bind',
-                        'source=bar/config',
-                        'destination=/bar:ro',
-                        'ro=true'
-                    ]
-                ]
-            },
-            image='docker.io/library/hello-world:latest'
-        )
-
-    def test_entrypoint(self):
-        self.assertEqual(self.cc.entrypoint, 'bash')
-
-    def test_uid_gid(self):
-        self.assertEqual(self.cc.uid, 65534)
-        self.assertEqual(self.cc.gid, 1000)
-
-    def test_ports(self):
-        self.assertEqual(self.cc.ports, [8080, 8443])
-
-    def test_get_container_args(self):
-        result = self.cc.get_container_args()
-        self.assertEqual(result, [
-            '--no-healthcheck',
-            '-p 6800:6800'
-        ])
-
-    def test_get_container_envs(self):
-        result = self.cc.get_container_envs()
-        self.assertEqual(result, ['SECRET=password'])
-
-    def test_get_container_mounts(self):
-        result = self.cc.get_container_mounts('/xyz')
-        self.assertDictEqual(result, {
-            '/CONFIG_DIR': '/foo/conf',
-            '/xyz/bar/config': '/bar:ro'
-        })
-
-    def test_get_container_binds(self):
-        result = self.cc.get_container_binds('/xyz')
-        self.assertEqual(result, [
-            [
-                'type=bind',
-                'source=/CONFIG_DIR',
-                'destination=/foo/conf',
-                ''
-            ],
-            [
-                'type=bind',
-                'source=/xyz/bar/config',
-                'destination=/bar:ro',
-                'ro=true'
-            ]
-        ])
 
 
 class TestMaintenance:

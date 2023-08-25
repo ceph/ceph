@@ -14,6 +14,7 @@ cmake_policy(SET CMP0065 NEW)
 cmake_policy(SET CMP0074 NEW)
 cmake_policy(SET CMP0075 NEW)
 cmake_policy(SET CMP0093 NEW)
+cmake_policy(SET CMP0094 NEW)
 foreach(policy CMP0127 CMP0135)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
@@ -46,6 +47,7 @@ if(WIN32)
   # https://github.com/msys2/MINGW-packages/issues/3319
   add_definitions(
     -D_WIN32_WINNT=${WIN32_WINNT}
+    -DFMT_USE_TZSET=0
     -DBOOST_THREAD_PROVIDES_GENERIC_SHARED_MUTEX_ON_WIN
     -DBOOST_THREAD_V2_SHARED_MUTEX
   )

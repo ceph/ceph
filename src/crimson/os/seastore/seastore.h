@@ -353,6 +353,10 @@ public:
       uint64_t offset, size_t len,
       ceph::bufferlist &&bl,
       uint32_t fadvise_flags);
+    tm_ret _clone(
+      internal_context_t &ctx,
+      OnodeRef &onode,
+      OnodeRef &d_onode);
     tm_ret _zero(
       internal_context_t &ctx,
       OnodeRef &onode,

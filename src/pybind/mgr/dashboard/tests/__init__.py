@@ -120,7 +120,7 @@ class ControllerTestCase(helper.CPWebCase):
             inst = ctrl()
 
             # We need to cache the controller endpoints because
-            # BaseController#endpoints method is not idempontent
+            # BaseController#endpoints method is not idempotent
             # and a controller might be needed by more than one
             # unit test.
             if ctrl not in cls._endpoints_cache:

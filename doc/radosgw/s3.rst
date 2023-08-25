@@ -91,13 +91,7 @@ The following common request header fields are not supported:
 +----------------------------+------------+
 | Name                       | Type       |
 +============================+============+
-| **Server**                 | Response   |
-+----------------------------+------------+
-| **x-amz-delete-marker**    | Response   |
-+----------------------------+------------+
 | **x-amz-id-2**             | Response   |
-+----------------------------+------------+
-| **x-amz-version-id**       | Response   |
 +----------------------------+------------+
 
 .. _Amazon S3 API: http://docs.aws.amazon.com/AmazonS3/latest/API/APIRest.html

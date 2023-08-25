@@ -30,6 +30,7 @@ overrides:
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
       - slow request
+      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - install:
 - ceph:

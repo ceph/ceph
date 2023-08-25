@@ -112,8 +112,8 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           Validators.required
         ]
       }),
-      access_key: new FormControl(null),
-      secret_key: new FormControl(null),
+      access_key: new FormControl(null, Validators.required),
+      secret_key: new FormControl(null, Validators.required),
       placementTarget: new FormControl(null),
       placementDataPool: new FormControl(''),
       placementIndexPool: new FormControl(null),
@@ -324,15 +324,5 @@ export class RgwMultisiteZoneFormComponent implements OnInit {
           }
         );
     }
-  }
-
-  checkUrlArray(endpoints: string) {
-    let endpointsArray = [];
-    if (endpoints.includes(',')) {
-      endpointsArray = endpoints.split(',');
-    } else {
-      endpointsArray.push(endpoints);
-    }
-    return endpointsArray;
   }
 }
