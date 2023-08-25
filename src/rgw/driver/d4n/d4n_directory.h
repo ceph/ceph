@@ -53,27 +53,21 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
     }
     ObjectDirectory(net::io_context& io_context, std::string host, int port) {
       conn = new connection{boost::asio::make_strand(io_context)};
-      addr.host = host;
-      addr.port = port;
-    }
-    ~ObjectDirectory() {
-      delete conn;
     }
 
-    int init(/*CephContext* _cct, const DoutPrefixProvider* dpp*/) {
-      //cct = _cct;
+    int init(CephContext* cct, const DoutPrefixProvider* dpp) {
+      this->cct = cct;
 
       config cfg;
-      cfg.addr.host = "127.0.0.1";//cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
-      cfg.addr.port = "6379";//std::to_string(cct->_conf->rgw_d4n_port);
+      cfg.addr.host = cct->_conf->rgw_d4n_host; // same or different address from block directory? -Sam
+      cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
 
       if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	//ldpp_dout(dpp, 10) << "D4N Directory: Object directory endpoint was not configured correctly" << dendl;
+	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Object directory endpoint was not configured correctly" << dendl;
 	return -EDESTADDRREQ;
       }
 
       conn->async_run(cfg, {}, net::detached);
-
       return 0;
     }
 
@@ -81,10 +75,10 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
     int exist_key(std::string key);
     Address get_addr() { return addr; }
 
-    int set_value(CacheObj* object);
-    int get_value(CacheObj* object);
-    int copy_value(CacheObj* object, CacheObj* copyObject);
-    int del_value(CacheObj* object);
+    int set(CacheObj* object);
+    int get(CacheObj* object);
+    int copy(CacheObj* object, CacheObj* copyObject);
+    int del(CacheObj* object);
 
   private:
     connection* conn;
@@ -100,43 +94,37 @@ class BlockDirectory: public Directory {
     }
     BlockDirectory(net::io_context& io_context, std::string host, int port) {
       conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-      addr.host = host;
-      addr.port = port;
     }
     
-    int init(/*CephContext* _cct, const DoutPrefixProvider* dpp*/) {
-      //cct = _cct;
+    int init(CephContext* cct, const DoutPrefixProvider* dpp) {
+      this->cct = cct;
 
       config cfg;
-      cfg.addr.host = "127.0.0.1";//cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
-      cfg.addr.port = "6379";//std::to_string(cct->_conf->rgw_d4n_port);
+      cfg.addr.host = cct->_conf->rgw_d4n_host;
+      cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
 
-      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	//ldpp_dout(dpp, 10) << "D4N Directory: Block directory endpoint was not configured correctly" << dendl;
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) { // add logs to other methods -Sam
+	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Block directory endpoint was not configured correctly" << dendl;
 	return -EDESTADDRREQ;
       }
 
       conn->async_run(cfg, {}, net::detached); 
-
       return 0;
     }
-    void shutdown();
 	
-    int find_client(cpp_redis::client* client);
     int exist_key(std::string key, optional_yield y);
-    Address get_addr() { return addr; }
+    void shutdown();
 
-    int set_value(CacheBlock* block, optional_yield y);
-    int get_value(CacheBlock* block, optional_yield y);
-    int copy_value(CacheBlock* block, CacheBlock* copyBlock);
-    int del_value(CacheBlock* block, optional_yield y);
+    int set(CacheBlock* block, optional_yield y);
+    int get(CacheBlock* block, optional_yield y);
+    int copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y);
+    int del(CacheBlock* block, optional_yield y);
 
-    int update_field(CacheBlock* block, std::string field, std::string value);
+    int update_field(CacheBlock* block, std::string field, std::string value, optional_yield y);
 
   private:
     std::shared_ptr<connection> conn;
-    cpp_redis::client client;
-    Address addr;
+
     std::string build_index(CacheBlock* block);
 };
 

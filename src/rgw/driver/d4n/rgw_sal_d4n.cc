@@ -42,8 +42,8 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   cacheDriver->initialize(cct, dpp);
 
-  //objDir->init(cct, dpp);
-  //blockDir->init(cct, dpp);
+  objDir->init(cct, dpp);
+  blockDir->init(cct, dpp);
 
   policyDriver->init(); 
   policyDriver->cachePolicy->init(cct);
@@ -122,24 +122,13 @@ int D4NFilterObject::copy_object(User* user,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  /* Build cache block copy */
-  rgw::d4n::CacheBlock* copyCacheBlock = new rgw::d4n::CacheBlock(); // How will this copy work in lfuda? -Sam
-
-  copyCacheBlock->hostsList.push_back(driver->get_cache_block()->hostsList[0]); 
-  copyCacheBlock->size = driver->get_cache_block()->size;
-  copyCacheBlock->size = driver->get_cache_block()->globalWeight; // Do we want to reset the global weight? -Sam
-  copyCacheBlock->cacheObj.bucketName = dest_bucket->get_name();
-  copyCacheBlock->cacheObj.objName = dest_object->get_key().get_oid();
-  
-  int copy_valueReturn = driver->get_block_dir()->set_value(copyCacheBlock, y);
+  int copy_valueReturn = driver->get_block_dir()->copy(driver->get_cache_block(), dest_object->get_name(), dest_bucket->get_name(), y);
 
   if (copy_valueReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Block directory copy operation failed." << dendl;
   } else {
     ldpp_dout(dpp, 20) << "D4N Filter: Block directory copy operation succeeded." << dendl;
   }
-
-  delete copyCacheBlock;
 
   /* Append additional metadata to attributes */
   rgw::sal::Attrs baseAttrs = this->get_attrs();
@@ -377,8 +366,6 @@ std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvi
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
 {
-  objDir->init();
-  blockDir->init();
   std::unique_ptr<Writer> writer = next->get_atomic_writer(dpp, y, nextObject(obj),
 							   owner, ptail_placement_rule,
 							   olh_epoch, unique_tag);
@@ -681,7 +668,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     cb->handle_data(bl, ofs, len);
   } else {
     / Block directory check /
-    int getDirReturn = source->driver->get_block_dir()->get_value(source->driver->get_cache_block()); 
+    int getDirReturn = source->driver->get_block_dir()->get(source->driver->get_cache_block()); 
 
     if (getDirReturn >= -1) {
       if (getDirReturn == -1) {
@@ -709,7 +696,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     } else {
       / Write tier retrieval /
       ldpp_dout(dpp, 20) << "D4N Filter: Block directory get operation failed." << dendl;
-      getDirReturn = source->driver->get_obj_dir()->get_value(&(source->driver->get_cache_block()->cacheObj));
+      getDirReturn = source->driver->get_obj_dir()->get(&(source->driver->get_cache_block()->cacheObj));
 
       if (getDirReturn >= -1) {
 	if (getDirReturn == -1) {
@@ -751,7 +738,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 	  source->driver->get_cache_block()->cacheObj.bucketName = source->get_bucket()->get_name();
 	  source->driver->get_cache_block()->cacheObj.objName = source->get_key().get_oid();
 
-	  int setDirReturn = tempBlockDir->set_value(source->driver->get_cache_block());
+	  int setDirReturn = tempBlockDir->set(source->driver->get_cache_block());
 
 	  if (setDirReturn < 0) {
 	    ldpp_dout(dpp, 20) << "D4N Filter: Block directory set operation failed." << dendl;
@@ -824,7 +811,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y)
 {
-  int delDirReturn = source->driver->get_block_dir()->del_value(source->driver->get_cache_block(), y);
+  int delDirReturn = source->driver->get_block_dir()->del(source->driver->get_cache_block(), y);
 
   if (delDirReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Block directory delete operation failed." << dendl;
@@ -891,13 +878,13 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 {
   rgw::d4n::BlockDirectory* tempBlockDir = driver->get_block_dir();
 
-  driver->get_cache_block()->hostsList.push_back(tempBlockDir->get_addr().host + ":" + 
-		  				   std::to_string(tempBlockDir->get_addr().port)); 
+  driver->get_cache_block()->hostsList.push_back(tempBlockDir->cct->_conf->rgw_d4n_host + ":" + 
+		  				   std::to_string(tempBlockDir->cct->_conf->rgw_d4n_port)); 
   driver->get_cache_block()->size = accounted_size;
   driver->get_cache_block()->cacheObj.bucketName = obj->get_bucket()->get_name();
   driver->get_cache_block()->cacheObj.objName = obj->get_key().get_oid();
 
-  int setDirReturn = tempBlockDir->set_value(driver->get_cache_block(), y);
+  int setDirReturn = tempBlockDir->set(driver->get_cache_block(), y);
 
   if (setDirReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation failed." << dendl;
