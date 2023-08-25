@@ -529,7 +529,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         t->action = allValue : t->notaction = allValue);
     } else {
       for (auto& p : actpairs) {
-        if (match_policy({s, l}, p.name, MATCH_POLICY_ACTION)) {
+        if (match_policy(string(s, l), p.name, MATCH_POLICY_ACTION)) {
           is_validaction = true;
           (w->id == TokenID::Action ? t->action[p.bit] = 1 : t->notaction[p.bit] = 1);
         }
