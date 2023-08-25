@@ -6,7 +6,7 @@
 #include <boost/redis/connection.hpp>
 
 #include "gtest/gtest.h"
-#include "../rgw/driver/d4n/d4n_directory.h" // Fix -Sam
+#include "driver/d4n/d4n_directory.h" // Fix -Sam
 
 namespace net = boost::asio;
 using boost::redis::config;
@@ -69,13 +69,14 @@ class DirectoryFixture: public ::testing::Test {
                                    "objName", "bucketName", "creationTime", "dirty", "objHosts"};
 };
 
+/* Successful set_value Calls and Redis Check */
 TEST_F(DirectoryFixture, SetValueYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
     ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
     dir->shutdown();
-  });
 
+    boost::system::error_code ec;
     request req;
     req.push_range("HMGET", "testBucket_testName_0", fields);
     req.push("FLUSHALL");
@@ -83,40 +84,55 @@ TEST_F(DirectoryFixture, SetValueYield)
     response< std::vector<std::string>,
 	      boost::redis::ignore_t > resp;
 
-    conn->async_exec(req, resp, [&](auto ec, auto) {
-      ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value(), vals);
+    conn->async_exec(req, resp, yield[ec]);
 
-      conn->cancel();
-    });
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value(), vals);
+    conn->cancel();
+  });
+
+  io.run();
+}
+
+/* Successful get_value Calls and Redis Check */
+TEST_F(DirectoryFixture, GetValueYield)
+{
+  spawn::spawn(io, [this] (yield_context yield) {
+    ASSERT_EQ(0, dir->set_value(block, optional_yield{io, yield}));
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("HSET", "testBucket_testName_0", "objName", "newoid");
+
+      response<int> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
+    }
+
+    ASSERT_EQ(0, dir->get_value(block, optional_yield{io, yield}));
+    EXPECT_EQ(block->cacheObj.objName, "newoid");
+    dir->shutdown();
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("FLUSHALL");
+      response<boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+    }
+
+    conn->cancel();
+  });
 
   io.run();
 }
 
 #if 0
-/* Successful set_value Call and Redis Check */
-TEST_F(DirectoryFixture, SetValueTest) {
-  blockDir->init();
-  int setReturn = blockDir->set_value(block, null_yield);
-
-  ASSERT_EQ(setReturn, 0);
-
-  vector<std::string> results;
-  request req;
-  req.push_range("HMGET", "testBucket_testName_0", fields);
-  req.push("FLUSHALL");
-
-  response< std::vector<std::string>,
-            boost::redis::ignore_t > resp;
-
-  conn->async_exec(req, resp, [&](auto ec, auto) {
-    ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(results, vals);*/
-
-    conn->cancel();
-  });
-}
-
 /* Successful get_value Calls and Redis Check */
 TEST_F(DirectoryFixture, GetValueTest) {
   blockDir->init();
