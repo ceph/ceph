@@ -7787,6 +7787,7 @@ int BlueStore::_mount()
 
 int BlueStore::umount()
 {
+  dout(5) << __func__ << dendl;
   ceph_assert(_kv_only || mounted);
   _osr_drain_all();
 
@@ -14366,7 +14367,13 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
            << " not handled on operation " << op->op
            << " (op " << pos << ", counting from 0)" << dendl;
       _dump_transaction<0>(cct, t);
-      ceph_abort_msg("unexpected error");
+      if (!g_conf().get_val<bool>("objectstore_debug_throw_on_failed_txc")) {
+	ceph_abort_msg("unexpected error");
+      } else {
+	txc->osr->undo_queue(txc);
+	delete txc;
+	throw r;
+      }
     }
 
     // these operations implicity create the object
@@ -14612,7 +14619,13 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
              << dendl;
         derr << msg << dendl;
         _dump_transaction<0>(cct, t);
-	ceph_abort_msg("unexpected error");
+	if (!g_conf().get_val<bool>("objectstore_debug_throw_on_failed_txc")) {
+	  ceph_abort_msg("unexpected error");
+	} else {
+	  txc->osr->undo_queue(txc);
+	  delete txc;
+	  throw r;
+	}
       }
     }
   }

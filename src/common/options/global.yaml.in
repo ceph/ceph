@@ -6360,3 +6360,9 @@ options:
   default: 0
   services:
   - mgr
+- name: objectstore_debug_throw_on_failed_txc
+  type: bool
+  level: dev
+  desc: Enables exception throwing instead of process abort on transaction submission error.
+  default: false
+  with_legacy: false
