@@ -96,7 +96,7 @@ curl-based installation
 
 * First, determine what version of Ceph you will need. You can use the releases
   page to find the `latest active releases <https://docs.ceph.com/en/latest/releases/#active-releases>`_.
-  For example, we might look at that page and find that ``17.2.6`` is the latest
+  For example, we might look at that page and find that ``18.2.0`` is the latest
   active release.
 
 * Use ``curl`` to fetch a build of cephadm for that release.
@@ -104,7 +104,7 @@ curl-based installation
   .. prompt:: bash #
      :substitutions:
 
-     CEPH_RELEASE=17.2.6 # replace this with the active release
+     CEPH_RELEASE=18.2.0 # replace this with the active release
      curl --silent --remote-name --location https://download.ceph.com/rpm-${CEPH_RELEASE}/el9/noarch/cephadm
 
   Ensure the ``cephadm`` file is executable:
