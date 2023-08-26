@@ -891,11 +891,11 @@ class TestSubvolumeGroups(TestVolumesHelper):
     def test_subvolume_group_create_with_size(self):
         # create group with size -- should set quota
         group = self._generate_random_group_name()
-        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1073741824")
 
         # get group metadata
         group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
-        self.assertEqual(group_info["bytes_quota"], 1000000000)
+        self.assertEqual(group_info["bytes_quota"], 1073741824)
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -1015,11 +1015,11 @@ class TestSubvolumeGroups(TestVolumesHelper):
         self._fs_cmd("subvolumegroup", "create", self.volname, group)
 
         # try creating w/ same subvolume name with size -- should set quota
-        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1000000000")
+        self._fs_cmd("subvolumegroup", "create", self.volname, group, "1073741824") // 1GB
 
         # get group metadata
         group_info = json.loads(self._get_subvolume_group_info(self.volname, group))
-        self.assertEqual(group_info["bytes_quota"], 1000000000)
+        self.assertEqual(group_info["bytes_quota"], 1073741824)
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -1447,8 +1447,8 @@ class TestSubvolumeGroups(TestVolumesHelper):
         and the resulting quota matches the expected size.
         """
 
-        osize = self.DEFAULT_FILE_SIZE*1024*1024*20
-        # create group with 20MB quota
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*16
+        # create group with 16MB quota
         group = self._generate_random_group_name()
         self._fs_cmd("subvolumegroup", "create", self.volname, group,
                      "--size", str(osize), "--mode=777")
@@ -1466,8 +1466,8 @@ class TestSubvolumeGroups(TestVolumesHelper):
         subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
         self.assertNotEqual(subvolpath, None)
 
-        # create one file of 10MB
-        file_size=self.DEFAULT_FILE_SIZE*10
+        # create one file of 8MB
+        file_size=self.DEFAULT_FILE_SIZE*8
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
                                                                              number_of_files,
@@ -1501,8 +1501,8 @@ class TestSubvolumeGroups(TestVolumesHelper):
         when --no_shrink is given and the quota did not change.
         """
 
-        osize = self.DEFAULT_FILE_SIZE*1024*1024*20
-        # create group with 20MB quota
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*16
+        # create group with 16MB quota
         group = self._generate_random_group_name()
         self._fs_cmd("subvolumegroup", "create", self.volname, group,
                      "--size", str(osize), "--mode=777")
@@ -1520,8 +1520,8 @@ class TestSubvolumeGroups(TestVolumesHelper):
         subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
         self.assertNotEqual(subvolpath, None)
 
-        # create one file of 10MB
-        file_size=self.DEFAULT_FILE_SIZE*10
+        # create one file of 8MB
+        file_size=self.DEFAULT_FILE_SIZE*8
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
                                                                              number_of_files,
@@ -1635,7 +1635,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
         That a subvolume group can be resized to an infinite size and the future writes succeed.
         """
 
-        osize = self.DEFAULT_FILE_SIZE*1024*1024*5
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*8
         # create group with 5MB quota
         group = self._generate_random_group_name()
         self._fs_cmd("subvolumegroup", "create", self.volname, group,
@@ -1654,8 +1654,8 @@ class TestSubvolumeGroups(TestVolumesHelper):
         subvolpath = self._get_subvolume_path(self.volname, subvolname, group_name=group)
         self.assertNotEqual(subvolpath, None)
 
-        # create 4 files of 1MB
-        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=4)
+        # create 7 files of 1MB
+        self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=7)
 
         try:
             # write two files of 1MB file to exceed the quota
@@ -1986,11 +1986,11 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
 
         # try creating w/ same subvolume name with size -- should set quota
-        self._fs_cmd("subvolume", "create", self.volname, subvolume, "1000000000")
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "1073741824")
 
         # get subvolume metadata
         subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
-        self.assertEqual(subvol_info["bytes_quota"], 1000000000)
+        self.assertEqual(subvol_info["bytes_quota"], 1073741824)
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
@@ -3313,7 +3313,7 @@ class TestSubvolumes(TestVolumesHelper):
         and the resulting quota matches the expected size.
         """
 
-        osize = self.DEFAULT_FILE_SIZE*1024*1024*20
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*16
         # create subvolume
         subvolname = self._generate_random_subvolume_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize), "--mode=777")
@@ -3322,8 +3322,8 @@ class TestSubvolumes(TestVolumesHelper):
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
         self.assertNotEqual(subvolpath, None)
 
-        # create one file of 10MB
-        file_size=self.DEFAULT_FILE_SIZE*10
+        # create one file of 8MB
+        file_size=self.DEFAULT_FILE_SIZE*8
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
                                                                              number_of_files,
@@ -3360,7 +3360,7 @@ class TestSubvolumes(TestVolumesHelper):
         when --no_shrink is given and the quota did not change.
         """
 
-        osize = self.DEFAULT_FILE_SIZE*1024*1024*20
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*16
         # create subvolume
         subvolname = self._generate_random_subvolume_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize), "--mode=777")
@@ -3369,8 +3369,8 @@ class TestSubvolumes(TestVolumesHelper):
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
         self.assertNotEqual(subvolpath, None)
 
-        # create one file of 10MB
-        file_size=self.DEFAULT_FILE_SIZE*10
+        # create one file of 8MB
+        file_size=self.DEFAULT_FILE_SIZE*8
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
                                                                              number_of_files,
@@ -3408,15 +3408,15 @@ class TestSubvolumes(TestVolumesHelper):
         That the subvolume can be expanded from a full subvolume and future writes succeed.
         """
 
-        osize = self.DEFAULT_FILE_SIZE*1024*1024*10
-        # create subvolume of quota 10MB and make sure it exists
+        osize = self.DEFAULT_FILE_SIZE*1024*1024*8
+        # create subvolume of quota 8MB and make sure it exists
         subvolname = self._generate_random_subvolume_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size", str(osize), "--mode=777")
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
         self.assertNotEqual(subvolpath, None)
 
-        # create one file of size 10MB and write
-        file_size=self.DEFAULT_FILE_SIZE*10
+        # create one file of size 8MB and write
+        file_size=self.DEFAULT_FILE_SIZE*8
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
                                                                              number_of_files,
@@ -3424,7 +3424,7 @@ class TestSubvolumes(TestVolumesHelper):
         filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, self.DEFAULT_NUMBER_OF_FILES+3)
         self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
 
-        # create a file of size 5MB and try write more
+        # create a file of size 4MB and try write more
         file_size=file_size // 2
         number_of_files=1
         log.debug("filling subvolume {0} with {1} file of size {2}MB".format(subvolname,
@@ -3434,7 +3434,7 @@ class TestSubvolumes(TestVolumesHelper):
         try:
             self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
         except CommandFailedError:
-            # Not able to write. So expand the subvolume more and try writing the 5MB file again
+            # Not able to write. So expand the subvolume more and try writing the 4MB file again
             nsize = osize*2
             self._fs_cmd("subvolume", "resize", self.volname, subvolname, str(nsize))
             try:
@@ -3487,7 +3487,7 @@ class TestSubvolumes(TestVolumesHelper):
         # create subvolume
         subvolname = self._generate_random_subvolume_name()
         self._fs_cmd("subvolume", "create", self.volname, subvolname, "--size",
-                     str(self.DEFAULT_FILE_SIZE*1024*1024*5), "--mode=777")
+                     str(self.DEFAULT_FILE_SIZE*1024*1024*4), "--mode=777")
 
         # make sure it exists
         subvolpath = self._get_subvolume_path(self.volname, subvolname)
@@ -5920,7 +5920,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--namespace-isolated", "--size", str(osize), "--mode=777")
 
         # do some IO
-        self._do_subvolume_io(subvolume, number_of_files=8)
+        self._do_subvolume_io(subvolume, number_of_files=10)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
@@ -7621,7 +7621,7 @@ class TestMisc(TestVolumesHelper):
             self.assertIn(feature, subvol_info["features"], msg="expected feature '{0}' in subvolume".format(feature))
 
         # resize
-        nsize = self.DEFAULT_FILE_SIZE*1024*1024*10
+        nsize = self.DEFAULT_FILE_SIZE*1024*1024*12
         self._fs_cmd("subvolume", "resize", self.volname, subvolume, str(nsize))
         subvol_info = json.loads(self._get_subvolume_info(self.volname, subvolume))
         for md in subvol_md:
