@@ -682,7 +682,14 @@ public:
     std::vector<int>& newup, int up_primary,
     std::vector<int>& newacting, int acting_primary,
     PeeringCtx &rctx);
-  void handle_activate_map(PeeringCtx &rctx);
+
+  /**
+   *  \note: handle_activate_map() is not guaranteed to be called for
+   *  each epoch in sequence. Thus we supply it with the full range of
+   *  epochs that were skipped.
+   */
+  void handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at);
+
   void handle_initialize(PeeringCtx &rxcx);
   void handle_query_state(ceph::Formatter *f);
 
