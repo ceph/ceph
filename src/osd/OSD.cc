@@ -3109,6 +3109,21 @@ will start to track new ops received afterwards.";
     }
   }
 
+  else if (prefix == "cleanup_snapmapper_possible_keys") {
+    lock_guard l(osd_lock);
+    auto ch = service.meta_ch;
+    auto hoid = make_snapmapper_oid();
+    int ret = SnapMapper::remove_possible_keys(cct, store.get(), ch, hoid);
+    if (ret < 0) {
+      ss << "Error: " << cpp_strerror(ret);
+      goto out;
+    } else if (ret) {
+      dout(20) << "Removed " << ret <<  " keys" << dendl;
+    } else {
+      dout(20) << "No keys to cleanup found" << dendl;
+    }
+  }
+
   else if (prefix == "perf histogram dump") {
     std::string logger;
     std::string counter;
@@ -4324,6 +4339,11 @@ void OSD::final_init()
     "Scans and fixes SnapMapper malformed keys "
     "created by bug during upgrade from N (and earlier) "
     "to O (up to 16.2.11). See tracker #62596");
+  r = admin_socket->register_command(
+    "cleanup_snapmapper_possible_keys",
+    asok_hook,
+    "cleanup snapmapper possible keys");
+  ceph_assert(r == 0);
   r = admin_socket->register_command(
     "cache drop",
     asok_hook,

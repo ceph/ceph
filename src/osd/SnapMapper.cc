@@ -44,6 +44,8 @@ const string SnapMapper::LEGACY_MAPPING_PREFIX = "MAP_";
 const string SnapMapper::MAPPING_PREFIX = "SNA_";
 const string SnapMapper::OBJECT_PREFIX = "OBJ_";
 
+const string SnapMapper::MAPPING_CLEANUP_KEY = "MAPPING_CLEANUP_KEY";
+
 const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
 /*
@@ -1054,6 +1056,13 @@ int SnapMapper::convert_malformed(
             dout(10) << __func__ << " adding new key " << key << dendl;
             to_set.emplace(key, iter->value());
           }
+          ceph::buffer::list bl;
+          encode(possible_keys, bl);
+          dout(10) << __func__ << " adding cleanup key "
+                   << SnapMapper::MAPPING_CLEANUP_KEY + iter->key()
+                   << dendl;
+          to_set.emplace(SnapMapper::MAPPING_CLEANUP_KEY + iter->key(),
+                         bl);
           ++n;
         }
       }
@@ -1089,5 +1098,57 @@ int SnapMapper::convert_malformed(
   }
 
   return n;
+}
+
+int SnapMapper::remove_possible_keys(
+  CephContext *cct,
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  ghobject_t hoid)
+{
+  dout(10) << __func__ << dendl;
+  uint64_t num_removed = 0;
+
+  auto iter = store->get_omap_iterator(ch, hoid);
+  if (!iter) {
+    return -EIO;
+  }
+
+  auto start = ceph::mono_clock::now();
+
+  iter->upper_bound(SnapMapper::MAPPING_CLEANUP_KEY);
+
+  while (iter->valid()) {
+
+    if (iter->key().find(SnapMapper::MAPPING_CLEANUP_KEY) != 0) {
+      break;
+    }
+
+    std::set<std::string> possible_keys;
+    auto v = iter->value();
+    auto p = v.cbegin();
+    decode(possible_keys, p);
+
+    dout(10) << __func__ << " possible keys decoded "
+             << possible_keys.size() << dendl;
+
+    possible_keys.insert(iter->key());
+
+    // remove the possible keys
+    {
+      ObjectStore::Transaction t;
+      t.omap_rmkeys(ch->cid, hoid, possible_keys);
+      int r = store->queue_transaction(ch, std::move(t));
+      ceph_assert(r == 0);
+    }
+    num_removed += possible_keys.size();
+    iter->next();
+  }
+
+  auto end = ceph::mono_clock::now();
+  dout(1) << __func__ << " removed " << num_removed << " keys in "
+	      << timespan_str(end - start) << dendl;
+
+  return 0;
 }
 #endif // !WITH_SEASTAR

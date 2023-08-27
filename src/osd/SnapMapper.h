@@ -157,6 +157,7 @@ public:
   static const std::string LEGACY_MAPPING_PREFIX;
   static const std::string MAPPING_PREFIX;
   static const std::string OBJECT_PREFIX;
+  static const std::string MAPPING_CLEANUP_KEY;
   static const char *PURGED_SNAP_EPOCH_PREFIX;
   static const char *PURGED_SNAP_PREFIX;
 
@@ -236,6 +237,20 @@ public:
     ObjectStore::CollectionHandle& ch,
     ghobject_t hoid,
     unsigned max_txn_size);
+
+/**
+  * remove_possible_keys
+  *
+  * SnapMapper::convert_malformed() inserts all the possible keys.
+  * Remove the extra keys inserted once `force_reremove_snap` was used.
+  *
+  * TODO: bound to transaction size
+  */
+  static int remove_possible_keys(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid);
 #endif
 
   static void record_purged_snaps(
