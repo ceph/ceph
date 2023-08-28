@@ -226,6 +226,20 @@ For the reverse situation:
 The ``home/patrick`` directory and its children will be pinned to rank 2
 because its export pin overrides the policy on ``home``.
 
+To remove a partitioning policy, remove the respective extended attribute
+or set the value to 0.
+
+.. code::bash
+   $ setfattr -n ceph.dir.pin.distributed -v 0 home
+   # or
+   $ setfattr -x ceph.dir.pin.distributed home
+
+For export pins, remove the extended attribute or set the extended attribute
+value to `-1`.
+
+.. code::bash
+   $ setfattr -n ceph.dir.pin -v -1 home
+
 
 Dynamic subtree partitioning with Balancer on specific ranks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
