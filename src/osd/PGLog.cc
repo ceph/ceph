@@ -1277,6 +1277,7 @@ seastar::future<> PGLog::rebuild_missing_set_with_deletes_crimson(
 	  log_entry.version,
 	  eversion_t(),
 	  log_entry.is_delete());
+	return seastar::now();
       }),
       crimson::ct_error::enodata::handle([] { ceph_abort("unexpected enodata"); })
       ).then([] {
