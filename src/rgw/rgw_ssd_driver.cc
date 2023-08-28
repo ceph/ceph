@@ -179,6 +179,39 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
     return 0;
 }
 
+int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y)
+{
+    std::string location = partition_info.location + key;
+
+    ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
+    FILE *cache_file = nullptr;
+    int r = 0;
+    size_t nbytes = 0;
+
+    cache_file = fopen(location.c_str(), "a+");
+    if (cache_file == nullptr) {
+        ldpp_dout(dpp, 0) << "ERROR: put::fopen file has return error, errno=" << errno << dendl;
+        return -errno;
+    }
+
+    nbytes = fwrite(bl_data.c_str(), 1, bl_data.length(), cache_file);
+    if (nbytes != bl_data.length()) {
+        ldpp_dout(dpp, 0) << "ERROR: append_data: fwrite has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << bl_data.length() << dendl;
+        return -EIO;
+    }
+
+    r = fclose(cache_file);
+    if (r != 0) {
+        ldpp_dout(dpp, 0) << "ERROR: append_data::fclose file has return error, errno=" << errno << dendl;
+        return -errno;
+    }
+
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
+
+    return 0;
+}
+
 template <typename Executor1, typename CompletionHandler>
 auto SSDDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& handler)
 {
@@ -277,15 +310,6 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
 
     efs::space_info space = efs::space(partition_info.location);
     this->free_space = space.available;
-
-    return 0;
-}
-
-int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y)
-{
-    std::string location = partition_info.location + key;
-
-    //TODO - Implement append_data
 
     return 0;
 }
