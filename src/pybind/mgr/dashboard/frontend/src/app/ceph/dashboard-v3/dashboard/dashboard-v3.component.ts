@@ -23,6 +23,7 @@ import { SummaryService } from '~/app/shared/services/summary.service';
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
+import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -65,6 +66,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     WRITECLIENTTHROUGHPUT: '',
     RECOVERYBYTES: ''
   };
+  telemetryEnabled: boolean;
+  telemetryURL = 'https://telemetry-public.ceph.com/';
   timerGetPrometheusDataSub: Subscription;
   timerTime = 30000;
   readonly lastHourDateObject = {
@@ -72,6 +75,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     end: moment().unix(),
     step: 14
   };
+  origin = window.location.origin;
 
   constructor(
     private summaryService: SummaryService,
@@ -81,6 +85,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
     public prometheusService: PrometheusService,
+    private mgrModuleService: MgrModuleService,
     private refreshIntervalService: RefreshIntervalService,
     public prometheusAlertService: PrometheusAlertService
   ) {
@@ -97,8 +102,16 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     });
     this.getPrometheusData(this.lastHourDateObject);
     this.getDetailsCardData();
+    this.getTelemetryReport();
   }
 
+  getTelemetryText(): string {
+    return this.telemetryEnabled
+      ? 'Cluster telemetry is active'
+      : 'Cluster telemetry is inactive. To Activate the Telemetry, \
+       click settings icon on top navigation bar and select \
+       Telemetry configration.';
+  }
   ngOnDestroy() {
     this.interval.unsubscribe();
     if (this.timerGetPrometheusDataSub) {
@@ -171,5 +184,11 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       queries,
       this.queriesResults
     );
+  }
+
+  private getTelemetryReport() {
+    this.mgrModuleService.getConfig('telemetry').subscribe((resp: any) => {
+      this.telemetryEnabled = resp?.enabled;
+    });
   }
 }

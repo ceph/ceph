@@ -13,6 +13,31 @@
         <dd i18n>{{ detailsCardData.orchestrator || 'Orchestrator is not available' }}</dd>
         <dt>Ceph version</dt>
         <dd>{{ detailsCardData.cephVersion }}</dd>
+        <dt>Cluster API</dt>
+        <dd>
+          <a routerLink="/api-docs"
+             target="_blank">
+            {{ origin }}/api-docs
+            <i class="fa fa-external-link"></i>
+          </a>
+        </dd>
+        <ng-container>
+          <dt>Telemetry Dashboard
+            <span
+              class="badge"
+              [ngClass]="telemetryEnabled ? 'badge-success' : 'badge-secondary'"
+              [ngbTooltip]="getTelemetryText()" >
+              {{ telemetryEnabled ? 'Active' : 'Inactive' }}
+            </span>
+          </dt>
+          <dd>
+            <a target="_blank"
+               [href]="telemetryURL">
+               {{ telemetryURL }}
+              <i class="fa fa-external-link"></i>
+            </a>
+          </dd>
+        </ng-container>
       </dl>
     </cd-card>
 
