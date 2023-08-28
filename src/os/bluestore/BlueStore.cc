@@ -5468,20 +5468,22 @@ int BlueStore::_replicate_bdev_label(const string &path, bluestore_bdev_label_t 
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
   for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+    if (offset >= bdev->get_size()) {
+      continue;
+    }
     bool existing_allocation_in_offset = true;
     alloc->foreach([&](uint64_t allocation_offset, uint64_t allocation_length) {
       if (offset >= allocation_offset && offset <= allocation_offset+allocation_length) {
         existing_allocation_in_offset = false;
       }
     });
-    // don't write label to a place where there exist allocations
-    if (existing_allocation_in_offset) {
-      dout(20) << "Skipping replicated label offset=" << offset 
-        << " because of existing allocation" << dendl;
-      continue;
+
+    if (!existing_allocation_in_offset) {
+      alloc->init_rm_free(offset, min_alloc_size);
     }
 
-    alloc->init_rm_free(offset, min_alloc_size);
+    dout(10) << __func__ << " replicating label in offset=" << offset << dendl;
+
     r = bl.write_fd(fd, offset);
     if (r < 0) {
       derr << __func__ << " failed to write to " << path
@@ -7849,13 +7851,6 @@ int BlueStore::_mount()
   int r = _open_db_and_around(false);
   if (r < 0) {
     return r;
-  }
-
-  if (cct->_conf->bluestore_label_replicate_on_mount) {
-    string p = path + "/block";
-    bluestore_bdev_label_t label;
-    _read_bdev_label(cct, p, &label);
-    _replicate_bdev_label(path + "/block", label);
   }
 
   auto close_db = make_scope_guard([&] {
