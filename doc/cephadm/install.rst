@@ -167,7 +167,7 @@ You must pass the IP address of the Ceph cluster's first host to the ``ceph
 bootstrap`` command, so you'll need to know the IP address of that host.
 
 .. important:: ``ssh`` must be installed and running in order for the
-   bootstrapping procedure to succeed. test
+   bootstrapping procedure to succeed.
 
 .. note:: If there are multiple networks and interfaces, be sure to choose one
    that will be accessible by any host accessing the Ceph cluster.
