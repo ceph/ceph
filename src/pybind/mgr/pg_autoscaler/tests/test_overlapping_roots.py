@@ -52,8 +52,9 @@ class TestPgAutoscaler(object):
         overlapped_roots = set()
         osdmap = OSDMAP(pools)
         crush = CRUSH(rules, osd_dic)
-        roots, overlapped_roots = self.autoscaler.identify_subtrees_and_overlaps(osdmap,
-                                                                                 crush, result, overlapped_roots, roots)
+        roots, overlapped_roots = self.autoscaler.identify_subtrees_and_overlaps(
+            osdmap, pools, crush, result, overlapped_roots, roots
+        )
         assert overlapped_roots == expected_overlapped_roots
 
     def test_subtrees_and_overlaps(self):
@@ -93,7 +94,8 @@ class TestPgAutoscaler(object):
             },
         ]
         pools = {
-            0: {
+            "data": {
+                "pool": 0,
                 "pool_name": "data",
                 "pg_num_target": 1024,
                 "size": 3,
@@ -104,7 +106,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 1024,
             },
-            1: {
+            "metadata": {
+                "pool": 1,
                 "pool_name": "metadata",
                 "pg_num_target": 64,
                 "size": 3,
@@ -115,7 +118,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 64,
             },
-            4: {
+            "libvirt-pool": {
+                "pool": 4,
                 "pool_name": "libvirt-pool",
                 "pg_num_target": 32,
                 "size": 3,
@@ -124,7 +128,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 128,
             },
-            93: {
+            ".rgw.root": {
+                "pool": 93,
                 "pool_name": ".rgw.root",
                 "pg_num_target": 32,
                 "size": 3,
@@ -133,7 +138,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            94: {
+            "default.rgw.control": {
+                "pool": 94,
                 "pool_name": "default.rgw.control",
                 "pg_num_target": 32,
                 "size": 3,
@@ -142,7 +148,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            95: {
+            "default.rgw.meta": {
+                "pool": 95,
                 "pool_name": "default.rgw.meta",
                 "pg_num_target": 32,
                 "size": 3,
@@ -151,7 +158,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            96: {
+            "default.rgw.log": {
+                "pool": 96,
                 "pool_name": "default.rgw.log",
                 "pg_num_target": 32,
                 "size": 3,
@@ -160,7 +168,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            97: {
+            "default.rgw.buckets.index": {
+                "pool": 97,
                 "pool_name": "default.rgw.buckets.index",
                 "pg_num_target": 32,
                 "size": 3,
@@ -169,7 +178,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            98: {
+            "default.rgw.buckets.data": {
+                "pool": 98,
                 "pool_name": "default.rgw.buckets.data",
                 "pg_num_target": 32,
                 "size": 3,
@@ -178,7 +188,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 128,
             },
-            99: {
+            "default.rgw.buckets.non-ec": {
+                "pool": 99,
                 "pool_name": "default.rgw.buckets.non-ec",
                 "pg_num_target": 32,
                 "size": 3,
@@ -187,7 +198,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            100: {
+            "device_health_metrics": {
+                "pool": 100,
                 "pool_name": "device_health_metrics",
                 "pg_num_target": 1,
                 "size": 3,
@@ -198,7 +210,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 1,
             },
-            113: {
+            "cephfs.teuthology.meta": {
+                "pool": 113,
                 "pool_name": "cephfs.teuthology.meta",
                 "pg_num_target": 64,
                 "size": 3,
@@ -210,7 +223,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 512,
             },
-            114: {
+            "cephfs.teuthology.data": {
+                "pool": 114,
                 "pool_name": "cephfs.teuthology.data",
                 "pg_num_target": 256,
                 "size": 3,
@@ -222,7 +236,8 @@ class TestPgAutoscaler(object):
                 "expected_final_pg_target": 1024,
                 "expected_final_pg_target": 256,
             },
-            117: {
+            "cephfs.scratch.meta": {
+                "pool": 117,
                 "pool_name": "cephfs.scratch.meta",
                 "pg_num_target": 32,
                 "size": 3,
@@ -234,7 +249,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 64,
             },
-            118: {
+            "cephfs.scratch.data": {
+                "pool": 118,
                 "pool_name": "cephfs.scratch.data",
                 "pg_num_target": 32,
                 "size": 3,
@@ -243,7 +259,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 128,
             },
-            119: {
+            "cephfs.teuthology.data-ec": {
+                "pool": 119,
                 "pool_name": "cephfs.teuthology.data-ec",
                 "pg_num_target": 1024,
                 "size": 6,
@@ -254,7 +271,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 1024,
             },
-            121: {
+            "cephsqlite": {
+                "pool": 121,
                 "pool_name": "cephsqlite",
                 "pg_num_target": 32,
                 "size": 3,
@@ -304,7 +322,8 @@ class TestPgAutoscaler(object):
             },
         ]
         pools = {
-            0: {
+            "data": {
+                "pool": 0,
                 "pool_name": "data",
                 "pg_num_target": 1024,
                 "size": 3,
@@ -315,7 +334,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 1024,
             },
-            1: {
+            "metadata": {
+                "pool": 1,
                 "pool_name": "metadata",
                 "pg_num_target": 64,
                 "size": 3,
@@ -326,7 +346,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 64,
             },
-            4: {
+            "libvirt-pool": {
+                "pool": 4,
                 "pool_name": "libvirt-pool",
                 "pg_num_target": 32,
                 "size": 3,
@@ -335,7 +356,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 128,
             },
-            93: {
+            ".rgw.root": {
+                "pool": 93,
                 "pool_name": ".rgw.root",
                 "pg_num_target": 32,
                 "size": 3,
@@ -344,7 +366,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            94: {
+            "default.rgw.control": {
+                "pool": 94,
                 "pool_name": "default.rgw.control",
                 "pg_num_target": 32,
                 "size": 3,
@@ -353,7 +376,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            95: {
+            "default.rgw.meta": {
+                "pool": 95,
                 "pool_name": "default.rgw.meta",
                 "pg_num_target": 32,
                 "size": 3,
@@ -362,7 +386,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            96: {
+            "default.rgw.log": {
+                "pool": 96,
                 "pool_name": "default.rgw.log",
                 "pg_num_target": 32,
                 "size": 3,
@@ -371,7 +396,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            97: {
+            "default.rgw.buckets.index": {
+                "pool": 97,
                 "pool_name": "default.rgw.buckets.index",
                 "pg_num_target": 32,
                 "size": 3,
@@ -380,7 +406,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            98: {
+            "default.rgw.buckets.data": {
+                "pool": 98,
                 "pool_name": "default.rgw.buckets.data",
                 "pg_num_target": 32,
                 "size": 3,
@@ -389,7 +416,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 128,
             },
-            99: {
+            "default.rgw.buckets.non-ec": {
+                "pool": 99,
                 "pool_name": "default.rgw.buckets.non-ec",
                 "pg_num_target": 32,
                 "size": 3,
@@ -398,7 +426,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 32,
             },
-            100: {
+            "device_health_metrics": {
+                "pool": 100,
                 "pool_name": "device_health_metrics",
                 "pg_num_target": 1,
                 "size": 3,
@@ -409,7 +438,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 1,
             },
-            113: {
+            "cephfs.teuthology.meta": {
+                "pool": 113,
                 "pool_name": "cephfs.teuthology.meta",
                 "pg_num_target": 64,
                 "size": 3,
@@ -421,7 +451,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 512,
             },
-            114: {
+            "cephfs.teuthology.data": {
+                "pool": 114,
                 "pool_name": "cephfs.teuthology.data",
                 "pg_num_target": 256,
                 "size": 3,
@@ -433,7 +464,8 @@ class TestPgAutoscaler(object):
                 "expected_final_pg_target": 1024,
                 "expected_final_pg_target": 256,
             },
-            117: {
+            "cephfs.scratch.meta": {
+                "pool": 117,
                 "pool_name": "cephfs.scratch.meta",
                 "pg_num_target": 32,
                 "size": 3,
@@ -445,7 +477,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 64,
             },
-            118: {
+            "cephfs.scratch.data": {
+                "pool": 118,
                 "pool_name": "cephfs.scratch.data",
                 "pg_num_target": 32,
                 "size": 3,
@@ -454,7 +487,8 @@ class TestPgAutoscaler(object):
                 "options": {},
                 "expected_final_pg_target": 128,
             },
-            119: {
+            "cephfs.teuthology.data-ec": {
+                "pool": 119,
                 "pool_name": "cephfs.teuthology.data-ec",
                 "pg_num_target": 1024,
                 "size": 6,
@@ -465,7 +499,8 @@ class TestPgAutoscaler(object):
                 },
                 "expected_final_pg_target": 1024,
             },
-            121: {
+            "cephsqlite": {
+                "pool": 121,
                 "pool_name": "cephsqlite",
                 "pg_num_target": 32,
                 "size": 3,
