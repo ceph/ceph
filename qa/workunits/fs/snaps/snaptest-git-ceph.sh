@@ -2,6 +2,10 @@
 
 set -e
 
+# increase the cache size
+sudo git config --global http.sslVerify false
+sudo git config --global http.postBuffer 1048576000
+
 git clone https://git.ceph.com/ceph.git
 cd ceph
 
