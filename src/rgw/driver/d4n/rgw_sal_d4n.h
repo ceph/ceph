@@ -28,62 +28,6 @@
 #include <boost/intrusive/list.hpp>
 
 namespace rgw { namespace sal {
-// Temporarily added to d4n filter driver - need to figure out the best way to incorporate this as part of Policy Manager
-class LRUCache {
-  public:
-    struct Entry : public boost::intrusive::list_base_hook<> {
-      std::string key;
-      uint64_t offset;
-      uint64_t len;
-      Entry(std::string& key, uint64_t offset, uint64_t len) : key(key), offset(offset), len(len) {}
-    };
-  private:
-    //The disposer object function
-    struct Entry_delete_disposer {
-      void operator()(Entry *e) {
-        delete e;
-      }
-    };
-    typedef boost::intrusive::list<Entry> List;
-    List entries_lru_list;
-    std::unordered_map<std::string, Entry*> entries_map;
-    rgw::cache::CacheDriver* cacheDriver;
-  
-    void evict() {
-      auto p = entries_lru_list.front();
-      entries_map.erase(entries_map.find(p.key));
-      entries_lru_list.pop_front_and_dispose(Entry_delete_disposer());
-    }
-  
-  public:
-    LRUCache() = default;
-    LRUCache(rgw::cache::CacheDriver* cacheDriver) : cacheDriver(cacheDriver) {} //in case we want to access cache backend apis from here
-
-    void insert(const DoutPrefixProvider* dpp, const Entry& entry) {
-      erase(dpp, entry);
-      //TODO - Get free space using cache api and if there isn't enough space then evict
-      Entry *e = new Entry(entry);
-      entries_lru_list.push_back(*e);
-      entries_map.emplace(entry.key, e);
-    }
-
-  bool erase(const DoutPrefixProvider* dpp, const Entry& entry) {
-    auto p = entries_map.find(entry.key);
-    if (p == entries_map.end()) {
-      return false;
-    }
-    entries_map.erase(p);
-    entries_lru_list.erase_and_dispose(entries_lru_list.iterator_to(*(p->second)), Entry_delete_disposer());
-    return true;
-  }
-
-  bool key_exists(const DoutPrefixProvider* dpp, const std::string& key) {
-    if (entries_map.count(key) != 0) {
-      return true;
-    }
-    return false;
-  }
-};
 
 class D4NFilterDriver : public FilterDriver {
   private:
@@ -92,7 +36,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* cacheBlock;
     rgw::d4n::PolicyDriver* policyDriver;
-    rgw::sal::LRUCache cache;
+    rgw::d4n::PolicyDriver* lruPolicyDriver;
 
   public:
     D4NFilterDriver(Driver* _next);
@@ -115,8 +59,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
     rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
-    rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver; }
-    rgw::sal::LRUCache& get_lru_cache() { return cache; }
+    rgw::d4n::PolicyDriver* get_policy_driver() { return lruPolicyDriver; }
 };
 
 class D4NFilterUser : public FilterUser {
@@ -155,14 +98,14 @@ class D4NFilterObject : public FilterObject {
       public:
 	class D4NFilterGetCB: public RGWGetDataCB {
 	  private:
-	    D4NFilterDriver* filter; // don't need -Sam ?
+	    D4NFilterDriver* filter;
 	    std::string oid;
 	    D4NFilterObject* source;
 	    RGWGetDataCB* client_cb;
 	    uint64_t ofs = 0, len = 0;
 	    bufferlist bl_rem;
 	    bool last_part{false};
-	    D3nGetObjData d3n_get_data; // should make d4n version? -Sam
+	    std::mutex d4n_get_data_lock;
 	    bool write_to_cache{true};
 
 	  public:
