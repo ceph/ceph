@@ -1990,6 +1990,11 @@ paths:
         required: true
         schema:
           type: string
+      - default: false
+        in: query
+        name: retain_snapshots
+        schema:
+          type: boolean
       responses:
         '202':
           content:

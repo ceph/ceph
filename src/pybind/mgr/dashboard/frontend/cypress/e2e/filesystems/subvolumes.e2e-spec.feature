@@ -38,7 +38,7 @@ Feature: CephFS Subvolume management
         When I select a row "test_subvolume" in the expanded row
         And I click on "Remove" button from the table actions in the expanded row
         And I check the tick box in modal
-        And I click on "Remove subvolume" button
+        And I click on "Remove Subvolume" button
         Then I should not see a row with "test_subvolume" in the expanded row
 
     Scenario: Remove CephFS Volume
