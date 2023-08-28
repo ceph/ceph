@@ -400,12 +400,61 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   return victim.size;
 }
 
+int LRUPolicy::exist_key(std::string key)
+{
+  if (entries_map.count(key) != 0) {
+      return true;
+    }
+    return false;
+}
+
+int LRUPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode)
+{
+  uint64_t freeSpace = cacheNode->get_free_space(dpp);
+  while(freeSpace < block->size) {
+    freeSpace = eviction(dpp, cacheNode);
+  }
+  return 0;
+}
+
+uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode)
+{
+  auto p = entries_lru_list.front();
+  entries_map.erase(entries_map.find(p.key));
+  entries_lru_list.pop_front_and_dispose(Entry_delete_disposer());
+  cacheNode->delete_data(dpp, p.key, null_yield);
+  return cacheNode->get_free_space(dpp);
+}
+
+void LRUPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode)
+{
+  erase(dpp, key);
+
+  Entry *e = new Entry(key, offset, len);
+  entries_lru_list.push_back(*e);
+  entries_map.emplace(key, e);
+}
+
+bool LRUPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key)
+{
+  auto p = entries_map.find(key);
+  if (p == entries_map.end()) {
+    return false;
+  }
+  entries_map.erase(p);
+  entries_lru_list.erase_and_dispose(entries_lru_list.iterator_to(*(p->second)), Entry_delete_disposer());
+  return true;
+}
+
 int PolicyDriver::init() {
   if (policyName == "lfuda") {
     cachePolicy = new LFUDAPolicy();
     return 0;
-  } else
-    return -1;
+  } else if (policyName == "lru") {
+    cachePolicy = new LRUPolicy();
+    return 0;
+  }
+  return -1;
 }
 
 } } // namespace rgw::d4n
