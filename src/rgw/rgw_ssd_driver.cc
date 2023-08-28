@@ -238,6 +238,9 @@ int SSDDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& ke
         return -EIO;
     }
 
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
+
     return remove_entry(dpp, key);
 }
 
