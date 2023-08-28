@@ -54,6 +54,11 @@ package (i.e., sysvinit, systemd).
 - **B**: Ceph provides packages and has done basic tests on the software in them.
 - **C**: Ceph provides packages only. No tests have been done on these releases.
 
+Ceph does not require a specific Linux distribution. Ceph can run on any
+distribution that includes a supported kernel and supported system startup
+framework, for example ``sysvinit`` or ``systemd``. Ceph is sometimes ported to
+non-Linux systems but these are not supported by the core Ceph effort.
+
 .. note::
    **For Centos 7 Users** 
    
