@@ -32,6 +32,7 @@ class CachePolicy {
     virtual int exist_key(std::string key, optional_yield y) = 0;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
+    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode) = 0;
 };
 
 class LFUDAPolicy : public CachePolicy {
@@ -72,6 +73,34 @@ class LFUDAPolicy : public CachePolicy {
     virtual int exist_key(std::string key, optional_yield y) override;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
+    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode) override {}
+};
+
+class LRUPolicy : public CachePolicy {
+  public:
+  struct Entry : public boost::intrusive::list_base_hook<> {
+      std::string key;
+      uint64_t offset;
+      uint64_t len;
+      Entry(std::string& key, uint64_t offset, uint64_t len) : key(key), offset(offset), len(len) {}
+  };
+  LRUPolicy() = default;
+  private:
+    //The disposer object function
+    struct Entry_delete_disposer {
+      void operator()(Entry *e) {
+        delete e;
+      }
+    };
+    typedef boost::intrusive::list<Entry> List;
+    List entries_lru_list;
+    std::unordered_map<std::string, Entry*> entries_map;
+  public:
+    virtual int exist_key(std::string key) override;
+    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode) override;
+    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode) override;
+    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode) override;
+    bool erase(const DoutPrefixProvider* dpp, const std::string& key);
 };
 
 class PolicyDriver {
