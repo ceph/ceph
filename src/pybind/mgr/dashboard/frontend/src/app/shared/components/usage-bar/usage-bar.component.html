@@ -34,7 +34,7 @@
        [attr.aria-label]="{ title }"
        i18n-aria-label="The title of this usage bar is { title }"
        [style.width]="usedPercentage + '%'">
-    <span>{{ usedPercentage | number: '1.0-' + decimals }}%</span>
+    <span [style.color]="usedPercentage < 60 ? 'black' : 'white'">{{ usedPercentage | number: '1.0-' + decimals }}%</span>
   </div>
   <div class="progress-bar bg-freespace"
        role="progressbar"
