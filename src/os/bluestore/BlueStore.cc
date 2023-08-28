@@ -7851,10 +7851,12 @@ int BlueStore::_mount()
     return r;
   }
 
-  string p = path + "/block";
-  bluestore_bdev_label_t label;
-  _read_bdev_label(cct, p, &label);
-  _replicate_bdev_label(path + "/block", label);
+  if (cct->_conf->bluestore_label_replicate_on_mount) {
+    string p = path + "/block";
+    bluestore_bdev_label_t label;
+    _read_bdev_label(cct, p, &label);
+    _replicate_bdev_label(path + "/block", label);
+  }
 
   auto close_db = make_scope_guard([&] {
     if (!mounted) {
