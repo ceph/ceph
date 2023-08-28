@@ -1,5 +1,5 @@
 import { Component, Input, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { UntypedFormControl } from '@angular/forms';
 
 import { NgbCalendar, NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 import moment from 'moment';
@@ -12,7 +12,7 @@ import { Subscription } from 'rxjs';
 })
 export class DateTimePickerComponent implements OnInit {
   @Input()
-  control: FormControl;
+  control: UntypedFormControl;
 
   @Input()
   hasSeconds = true;

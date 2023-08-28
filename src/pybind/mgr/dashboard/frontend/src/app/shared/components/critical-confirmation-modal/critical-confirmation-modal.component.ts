@@ -1,5 +1,5 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable } from 'rxjs';
@@ -33,7 +33,7 @@ export class CriticalConfirmationModalComponent implements OnInit {
 
   ngOnInit() {
     const controls = {
-      confirmation: new FormControl(false, [Validators.requiredTrue])
+      confirmation: new UntypedFormControl(false, [Validators.requiredTrue])
     };
     if (this.childFormGroup) {
       controls['child'] = this.childFormGroup;
