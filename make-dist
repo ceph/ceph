@@ -195,8 +195,7 @@ boost_version=1.82.0
 download_boost $boost_version a6e1ab9b0860e6a2881dd7b21fe9f737a095e5f33a3a874afc6a345228597ee6 \
                https://boostorg.jfrog.io/artifactory/main/release/$boost_version/source \
                https://download.ceph.com/qa
-download_liburing 0.7 8e2842cfe947f3a443af301bdd6d034455536c38a455c7a700d0c1ad165a7543 \
-                  https://github.com/axboe/liburing/archive \
+download_liburing 0.7 05d0cf8493d573c76b11abfcf34aabc7153affebe17ff95f9ae88b0de062a59d \
                   https://git.kernel.dk/cgit/liburing/snapshot
 pmdk_version=1.10
 download_pmdk $pmdk_version 08dafcf94db5ac13fac9139c92225d9aa5f3724ea74beee4e6ca19a01a2eb20c \
