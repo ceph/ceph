@@ -204,13 +204,16 @@ public:
   /**
    * handle successful authentication (msgr2)
    *
-   * Authenticated result/state will be attached to the Connection.
+   * Authenticated result/state will be attached to the Connection. This is
+   * called via the MonClient.
+   *
+   * Do not acquire locks in this method! It is considered "fast" delivery.
    *
    * return 1 for success
    * return 0 for no action (let another Dispatcher handle it)
    * return <0 for failure (failure to parse caps, for instance)
    */
-  virtual int ms_handle_authentication(Connection *con) {
+  virtual int ms_handle_fast_authentication(Connection *con) {
     return 0;
   }
 
