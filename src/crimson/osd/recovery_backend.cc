@@ -217,8 +217,9 @@ RecoveryBackend::scan_for_backfill(
       bi.end = std::move(next);
       bi.version = pg.get_info().last_update;
       bi.objects = std::move(*version_map);
-      logger().debug("{} BackfillInterval filled, leaving",
-                     "scan_for_backfill");
+      logger().debug("{} BackfillInterval filled, leaving, {}",
+                     "scan_for_backfill",
+		     bi);
       return seastar::make_ready_future<BackfillInterval>(std::move(bi));
     });
   });
