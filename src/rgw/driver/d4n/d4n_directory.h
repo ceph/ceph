@@ -24,7 +24,7 @@ struct CacheObj {
 
 struct CacheBlock {
   CacheObj cacheObj;
-  uint64_t blockId; /* RADOS object block ID */
+  uint64_t blockId; /* block ID */
   uint64_t size; /* Block size in bytes */
   int globalWeight = 0;
   std::vector<std::string> hostsList; /* List of hostnames <ip:port> of block locations */
