@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, TemplateRef } from '@angular/core';
-import { FormGroup } from '@angular/forms';
+import { UntypedFormGroup } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -28,11 +28,11 @@ export class ConfirmationModalComponent implements OnInit, OnDestroy {
 
   // Component only
   boundCancel = this.cancel.bind(this);
-  confirmationForm: FormGroup;
+  confirmationForm: UntypedFormGroup;
   private canceled = false;
 
   constructor(public activeModal: NgbActiveModal) {
-    this.confirmationForm = new FormGroup({});
+    this.confirmationForm = new UntypedFormGroup({});
   }
 
   ngOnInit() {
