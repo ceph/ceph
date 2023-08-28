@@ -5,6 +5,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ToastrModule } from 'ngx-toastr';
 import { RouterTestingModule } from '@angular/router/testing';
+import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
 describe('CephfsSubvolumeListComponent', () => {
   let component: CephfsSubvolumeListComponent;
@@ -13,7 +14,8 @@ describe('CephfsSubvolumeListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [CephfsSubvolumeListComponent],
-      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), RouterTestingModule]
+      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), RouterTestingModule],
+      providers: [NgbActiveModal]
     }).compileComponents();
   });
 
