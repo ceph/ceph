@@ -12,6 +12,7 @@
  *
  */
 
+#include <fcntl.h>
 #include <glob.h>
 #include <stdio.h>
 #include <string.h>
@@ -10229,7 +10230,7 @@ TEST_P(StoreTest, CorruptedLabelFsck) {
   bl.append_zero(16);
   store->umount();
   string block_file = data_dir + "/block";
-  int fd = ::open(block_file.c_str(), O_WRONLY|O_CLOEXEC|O_DIRECT);
+  int fd = ::open(block_file.c_str(), O_RDWR|O_CLOEXEC|O_DIRECT);
   if (fd == -1) {
     cout << "error opening block file\n";
     cout << errno;
@@ -10249,10 +10250,19 @@ TEST_P(StoreTest, CorruptedLabelFsck) {
     cout << errno;
     abort();
   }
-  ::close(fd);
   // now it should still go all ok
   ASSERT_EQ(store->fsck(false), 0);
-  ASSERT_EQ(store->fsck(true), 0);
+  ASSERT_EQ(store->repair(false), 0);
+  bufferlist read_bl;
+  ASSERT_EQ(read_bl.read_fd(fd, 4096), 4096);
+  ::close(fd);
+  bool ok = 0;
+  for (int i = 0; i < 16; i++) {
+    if (read_bl[64 + i] != 0) {
+      ok = true;
+    }
+  }
+  ASSERT_EQ(ok, true);
   store->mount();
 }
 
