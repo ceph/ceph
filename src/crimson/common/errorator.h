@@ -599,7 +599,9 @@ private:
       static_assert((... && std::is_invocable_v<ErrorVisitorT,
                                                 AllowedErrors>),
                     "provided Error Visitor is not exhaustive");
-
+      static_assert(std::is_void_v<ValueT> ? std::is_invocable_v<ValueFuncT>
+		                           : std::is_invocable_v<ValueFuncT, ValueT>,
+                    "Value Func is not invocable with future's value");
       using value_func_result_t =
         typename std::conditional_t<std::is_void_v<ValueT>,
 				    std::invoke_result<ValueFuncT>,
