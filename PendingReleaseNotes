@@ -32,6 +32,14 @@
   in certain recovery scenarios, e.g., monitor database lost and rebuilt, and
   the restored file system is expected to have the same ID as before.
 
+>=16.2.15
+----------
+* `ceph config dump --format <json|xml>` output will display the localized
+  option names instead of its normalized version. For e.g.,
+  "mgr/prometheus/x/server_port" will be displayed instead of
+  "mgr/prometheus/server_port". This matches the output of the non pretty-print
+  formatted version of the command.
+
 >= 16.2.14
 ----------
 
