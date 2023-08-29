@@ -227,8 +227,8 @@ static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
 // for the cpu local storage the cache-line alignment is a pure
 // penalty as it hurts the cache density
 struct shard_t {
-  ceph::atomic<size_t> bytes = {0};
-  ceph::atomic<size_t> items = {0};
+  size_t bytes = {0};
+  size_t items = {0};
 };
 #endif
 
