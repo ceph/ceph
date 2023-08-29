@@ -205,6 +205,24 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
+static size_t pick_a_shard_int() {
+#ifndef _GNU_SOURCE
+  // Dirt cheap, see:
+  //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
+  size_t me = (size_t)pthread_self();
+  size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
+  return i;
+#else
+  // a thread local storage is actually just an approximation;
+  // what we truly want is a _cpu local storage_.
+  //
+  // on the architectures we care about sched_getcpu() is
+  // a syscall-handled-in-userspace (vdso!). it grabs the cpu
+  // id kernel exposes to a task on context switch.
+  return sched_getcpu() & ((1 << num_shard_bits) - 1);
+#endif
+}
+
 //
 // Align shard to a cacheline.
 //
@@ -244,8 +262,15 @@ const char *get_pool_name(pool_index_t ix);
 struct type_t {
   const char *type_name;
   size_t item_size;
-  ceph::atomic<ssize_t> items = {0};  // signed
+  struct type_shard_t {
+    ceph::atomic<ssize_t> items = {0}; // signed
+    char __padding[128 - sizeof(ceph::atomic<ssize_t>)];
+  } __attribute__ ((aligned (128)));
+  type_shard_t shards[num_shards];
 };
+
+static_assert(sizeof(type_t::type_shard_t) == 128,
+	      "type_shard_t should be cacheline-sized");
 
 struct type_info_hash {
   std::size_t operator()(const std::type_info& k) const {
@@ -259,6 +284,8 @@ class pool_t {
   mutable std::mutex lock;  // only used for types list
   std::unordered_map<const char *, type_t> type_map;
 
+  template<pool_index_t, typename T>
+  friend class pool_allocator;
 public:
   //
   // How much this pool consumes. O(<num_shards>)
@@ -267,29 +294,6 @@ public:
   size_t allocated_items() const;
 
   void adjust_count(ssize_t items, ssize_t bytes);
-
-  static size_t pick_a_shard_int() {
-#ifndef _GNU_SOURCE
-    // Dirt cheap, see:
-    //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
-    size_t me = (size_t)pthread_self();
-    size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
-    return i;
-#else
-    // a thread local storage is actually just an approximation;
-    // what we truly want is a _cpu local storage_.
-    //
-    // on the architectures we care about sched_getcpu() is
-    // a syscall-handled-in-userspace (vdso!). it grabs the cpu
-    // id kernel exposes to a task on context switch.
-    return sched_getcpu() & ((1 << num_shard_bits) - 1);
-#endif
-  }
-
-  shard_t* pick_a_shard() {
-    size_t i = pick_a_shard_int();
-    return &shard[i];
-  }
 
   type_t *get_type(const std::type_info& ti, size_t size) {
     std::lock_guard<std::mutex> l(lock);
@@ -353,11 +357,12 @@ public:
 
   T* allocate(size_t n, void *p = nullptr) {
     size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes += total;
-    shard->items += n;
+    const auto shid = pick_a_shard_int();
+    auto& shard = pool->shard[shid];
+    shard.bytes += total;
+    shard.items += n;
     if (type) {
-      type->items += n;
+      type->shards[shid].items += n;
     }
     T* r = reinterpret_cast<T*>(new char[total]);
     return r;
@@ -365,22 +370,24 @@ public:
 
   void deallocate(T* p, size_t n) {
     size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes -= total;
-    shard->items -= n;
+    const auto shid = pick_a_shard_int();
+    auto& shard = pool->shard[shid];
+    shard.bytes -= total;
+    shard.items -= n;
     if (type) {
-      type->items -= n;
+      type->shards[shid].items -= n;
     }
     delete[] reinterpret_cast<char*>(p);
   }
 
   T* allocate_aligned(size_t n, size_t align, void *p = nullptr) {
     size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes += total;
-    shard->items += n;
+    const auto shid = pick_a_shard_int();
+    auto& shard = pool->shard[shid];
+    shard.bytes += total;
+    shard.items += n;
     if (type) {
-      type->items += n;
+      type->shards[shid].items += n;
     }
     char *ptr;
     int rc = ::posix_memalign((void**)(void*)&ptr, align, total);
@@ -392,11 +399,12 @@ public:
 
   void deallocate_aligned(T* p, size_t n) {
     size_t total = sizeof(T) * n;
-    shard_t *shard = pool->pick_a_shard();
-    shard->bytes -= total;
-    shard->items -= n;
+    const auto shid = pick_a_shard_int();
+    auto& shard = pool->shard[shid];
+    shard.bytes -= total;
+    shard.items -= n;
     if (type) {
-      type->items -= n;
+      type->shards[shid].items -= n;
     }
     aligned_free(p);
   }
