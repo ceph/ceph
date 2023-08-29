@@ -205,7 +205,6 @@ enum {
   num_shards = 1 << num_shard_bits
 };
 
-#ifndef _GNU_SOURCE
 //
 // Align shard to a cacheline.
 //
@@ -217,20 +216,12 @@ enum {
 // bytes.
 //
 struct shard_t {
-  ceph::atomic<size_t> bytes = {0};
-  ceph::atomic<size_t> items = {0};
+  size_t bytes = {0};
+  size_t items = {0};
   char __padding[128 - sizeof(ceph::atomic<size_t>)*2];
 } __attribute__ ((aligned (128)));
 
 static_assert(sizeof(shard_t) == 128, "shard_t should be cacheline-sized");
-#else
-// for the cpu local storage the cache-line alignment is a pure
-// penalty as it hurts the cache density
-struct shard_t {
-  size_t bytes = {0};
-  size_t items = {0};
-};
-#endif
 
 struct stats_t {
   ssize_t items = 0;
