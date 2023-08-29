@@ -11,7 +11,7 @@ import re
 import xml.etree.ElementTree as ET  # noqa: N814
 from subprocess import SubprocessError
 
-from mgr_util import build_url
+from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -19,6 +19,7 @@ from ..exceptions import DashboardException
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
 from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
+from .ceph_service import CephService
 
 try:
     from typing import Any, Dict, List, Optional, Tuple, Union
@@ -87,8 +88,18 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    daemon.host = daemon_info['metadata']['hostname']
+    rgw_dns_name = CephService.send_command('mon', 'config get',
+                                            who=name_to_config_section('rgw.' + daemon_info['metadata']['id']),  # noqa E501 #pylint: disable=line-too-long
+                                            key='rgw_dns_name').rstrip()
+
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
+
+    if rgw_dns_name:
+        daemon.host = rgw_dns_name
+    elif daemon.ssl:
+        daemon.host = daemon_info['metadata']['hostname']
+    else:
+        daemon.host = _parse_addr(daemon_info['addr'])
 
     return daemon
 
