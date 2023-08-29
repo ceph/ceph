@@ -127,8 +127,12 @@ void mempool::pool_t::get_stats(
     for (auto &p : type_map) {
       std::string n = ceph_demangle(p.second.type_name);
       stats_t &s = (*by_type)[n];
-      s.bytes = p.second.items * p.second.item_size;
-      s.items = p.second.items;
+      s.bytes = 0;
+      s.items = 0;
+      for (size_t i = 0 ; i < num_shards; ++i) {
+        s.bytes += p.second.shards[i].items * p.second.item_size;
+        s.items += p.second.shards[i].items;
+      }
     }
   }
 }
