@@ -970,7 +970,7 @@ void OpsExecuter::CloningContext::apply_to(
   ObjectContext& processed_obc) &&
 {
   log_entry.mtime = processed_obc.obs.oi.mtime;
-  log_entries.emplace_back(std::move(log_entry));
+  log_entries.insert(log_entries.begin(), std::move(log_entry));
   processed_obc.ssc->snapset = std::move(new_snapset);
 }
 
@@ -985,7 +985,7 @@ OpsExecuter::flush_clone_metadata(
   auto maybe_snap_mapped = interruptor::now();
   if (cloning_ctx) {
     std::move(*cloning_ctx).apply_to(log_entries, *obc);
-    const auto& coid = log_entries.back().soid;
+    const auto& coid = log_entries.front().soid;
     const auto& cloned_snaps = obc->ssc->snapset.clone_snaps[coid.snap];
     maybe_snap_mapped = snap_map_clone(
       coid,
