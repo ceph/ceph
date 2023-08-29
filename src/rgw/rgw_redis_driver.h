@@ -2,9 +2,13 @@
 
 #include <aio.h>
 #include <boost/redis/connection.hpp>
+
 #include "common/async/completion.h"
 #include "rgw_common.h"
 #include "rgw_cache_driver.h"
+
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 namespace rgw { namespace cache { 
 
@@ -33,7 +37,7 @@ class RedisDriver : public CacheDriver {
 								           free_space(_partition_info.size), 
 								           outstanding_write_size(0)
     {
-      conn = new connection{boost::asio::make_strand(io_context)};
+      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
       add_partition_info(_partition_info);
     }
     virtual ~RedisDriver()
@@ -60,18 +64,19 @@ class RedisDriver : public CacheDriver {
     virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
     virtual int append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) override;
     virtual int delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) override;
-    virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) override;
     virtual int set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) override;
+    virtual int get_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) override;
     virtual int update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) override;
     virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) override;
-    virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) override;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) override;
+    virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) override;
 
     virtual std::unique_ptr<CacheAioRequest> get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) override { return std::make_unique<RedisCacheAioRequest>(this); }
 
     struct redis_response {
       boost::redis::response<std::string> resp;
     };
+    void shutdown();
 
     struct redis_aio_handler { 
       rgw::Aio* throttle = nullptr;
@@ -87,7 +92,7 @@ class RedisDriver : public CacheDriver {
     };
 
   protected:
-    connection* conn;
+    std::shared_ptr<connection> conn;
 
     static std::unordered_map<std::string, Partition> partitions;
     std::unordered_map<std::string, Entry> entries;
@@ -101,8 +106,6 @@ class RedisDriver : public CacheDriver {
     int remove_entry(const DoutPrefixProvider* dpp, std::string key);
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
-    template <typename T>
-    auto redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<T>& resp, optional_yield y);
 };
 
 } } // namespace rgw::cache
