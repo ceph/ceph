@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <concepts>
 #include <coroutine>
 #include <cstddef>
@@ -31,6 +32,7 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <boost/asio/experimental/co_composed.hpp>
@@ -311,6 +313,14 @@ protected:
     co_return bl;
   }
 
+  boost::asio::awaitable<void>
+  create_obj(std::string_view oid) {
+    neorados::WriteOp op;
+    op.create(true);
+    co_return co_await rados().execute(oid, pool(), std::move(op),
+				       boost::asio::use_awaitable);
+  }
+
 public:
 
   /// \brief Create RADOS handle and pool for the test
@@ -496,4 +506,14 @@ inline auto from_buffer_list(const ceph::buffer::list& bl)
   auto bi = bl.begin();
   decode(t, bi);
   return t;
+}
+
+/// \brief Wait for a specified time
+///
+/// \param dur Time to wait.
+template<typename Rep, typename Period>
+boost::asio::awaitable<void> wait_for(std::chrono::duration<Rep, Period> dur)
+{
+  boost::asio::steady_timer t(co_await boost::asio::this_coro::executor, dur);
+  co_return co_await t.async_wait(boost::asio::use_awaitable);
 }

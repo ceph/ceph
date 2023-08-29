@@ -35,7 +35,7 @@ namespace buffer = ceph::buffer;
 CORO_TEST_F(neocls_handler_error, test_handler_error, NeoRadosTest)
 {
   std::string_view oid = "obj";
-  co_await create_obj(rados(), oid, pool(), asio::use_awaitable);
+  co_await create_obj(oid);
 
   {
     neorados::ReadOp op;
