@@ -70,7 +70,7 @@ int main(int argc, const char **argv)
 	  while(1) {
 	    size_t i;
 	    if (sharding) {
-	      i = mempool::pool_t::pick_a_shard_int();
+	      i = mempool::pick_a_shard_int();
 	    } else {
 	      i = 0;
 	    }
