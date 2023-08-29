@@ -132,8 +132,6 @@ map<uint64_t, EstimateResult> dedup_estimates;  // chunk size -> result
 
 using namespace librados;
 unsigned default_op_size = 1 << 26;
-unsigned default_max_thread = 2;
-int32_t default_report_period = 10;
 ceph::mutex glock = ceph::make_mutex("glock");
 
 po::options_description make_usage() {
@@ -169,8 +167,8 @@ po::options_description make_usage() {
     ("chunk-algorithm", po::value<std::string>(), ": <fixed|fastcdc>, set chunk-algorithm")
     ("fingerprint-algorithm", po::value<std::string>(), ": <sha1|sha256|sha512>, set fingerprint-algorithm")
     ("chunk-pool", po::value<std::string>(), ": set chunk pool name")
-    ("max-thread", po::value<int>(), ": set max thread")
-    ("report-period", po::value<int>(), ": set report-period")
+    ("max-thread", po::value<int>()->default_value(2), ": set max thread")
+    ("report-period", po::value<int>()->default_value(10), ": set report-period")
     ("max-seconds", po::value<int>(), ": set max runtime")
     ("max-read-size", po::value<int>(), ": set max read size")
     ("pool", po::value<std::string>(), ": set pool name")
@@ -616,7 +614,7 @@ public:
     std::shared_mutex fingerprint_lock;
     const utime_t start = ceph_clock_now();
     utime_t next_report;
-    const uint32_t report_period = default_report_period;
+    const uint32_t report_period;
     size_t total_bytes = 0;
   };
 
@@ -1029,8 +1027,8 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   uint64_t chunk_size = 8192;
   uint64_t min_chunk_size = 8192;
   uint64_t max_chunk_size = 4*1024*1024;
-  unsigned max_thread = default_max_thread;
-  uint32_t report_period = default_report_period;
+  unsigned max_thread = get_opts_max_thread(opts);
+  uint32_t report_period = get_opts_report_period(opts);
   uint64_t max_read_size = default_op_size;
   uint64_t max_seconds = 0;
   int ret;
@@ -1069,8 +1067,6 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   } else {
     cout << "4MB is set as max chunk size by default" << std::endl;
   }
-  max_thread = get_opts_max_thread(opts);
-  report_period = get_opts_report_period(opts);
   if (opts.count("max-seconds")) {
     max_seconds = opts["max-seconds"].as<int>();
   } else {
@@ -1188,9 +1184,9 @@ int chunk_scrub_common(const po::variables_map &opts)
   std::string object_name, target_object_name;
   string chunk_pool_name, op_name;
   int ret;
-  unsigned max_thread = default_max_thread;
+  unsigned max_thread = get_opts_max_thread(opts);
   std::map<std::string, std::string>::const_iterator i;
-  uint32_t report_period = default_report_period;
+  uint32_t report_period = get_opts_report_period(opts);
   ObjectCursor begin;
   ObjectCursor end;
   librados::pool_stat_t s; 
@@ -1341,8 +1337,6 @@ int chunk_scrub_common(const po::variables_map &opts)
     return 0;
   }
 
-  max_thread = get_opts_max_thread(opts);
-  report_period = get_opts_report_period(opts);
   glock.lock();
   begin = chunk_io_ctx.object_list_begin();
   end = chunk_io_ctx.object_list_end();
@@ -1578,7 +1572,7 @@ int make_crawling_daemon(const po::variables_map &opts)
   string base_pool_name = get_opts_pool_name(opts);
   string chunk_pool_name = get_opts_chunk_pool(opts);
   unsigned max_thread = get_opts_max_thread(opts);
-  uint32_t report_period = default_report_period;
+  uint32_t report_period = get_opts_report_period(opts);
 
   bool loop = false;
   if (opts.count("loop")) {
@@ -1602,7 +1596,6 @@ int make_crawling_daemon(const po::variables_map &opts)
   }
 
   std::string chunk_algo = get_opts_chunk_algo(opts);
-  report_period = get_opts_report_period(opts);
 
   Rados rados;
   int ret = rados.init_with_context(g_ceph_context);
