@@ -412,6 +412,8 @@ private:
   // used to trigger zeros into read (debug / verify)
   std::atomic<uint64_t> inject_read_zeros{0};
 
+  ceph::coarse_real_time next_flush_compact;
+
   void _init_logger();
   void _shutdown_logger();
   void _update_logger_stats();

@@ -16,6 +16,9 @@
 #define dout_subsys ceph_subsys_bluefs
 #undef dout_prefix
 #define dout_prefix *_dout << "bluefs "
+
+#define FLUSH_COMPACT_INTERVAL 86400
+
 using TOPNSPC::common::cmd_getval;
 
 using std::byte;
@@ -3697,7 +3700,10 @@ int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
   if (old_dirty_seq) {
     _flush_and_sync_log_LD(old_dirty_seq);
   }
-  _maybe_compact_log_LNF_NF_LD_D();
+  if (next_flush_compact <= ceph::coarse_real_clock::now()) {
+    _maybe_compact_log_LNF_NF_LD_D();
+    next_flush_compact = ceph::coarse_real_clock::now() + make_timespan(FLUSH_COMPACT_INTERVAL);
+  }
 
   return 0;
 }
