@@ -236,7 +236,9 @@ public:
     ObjectStore *store,
     ObjectStore::CollectionHandle& ch,
     ghobject_t hoid,
-    unsigned max_txn_size);
+    unsigned max_txn_size,
+    bool& stop,
+    std::string& last_key);
 
   static bool _convert_malformed(
     CephContext *cct,

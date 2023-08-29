@@ -3094,18 +3094,24 @@ will start to track new ops received afterwards.";
   }
 
   else if (prefix == "fix_malformed_snapmapper_keys") {
-    lock_guard l(osd_lock);
     auto ch = service.meta_ch;
     unsigned max = cct->_conf->osd_target_transaction_size;
     auto hoid = make_snapmapper_oid();
-    int ret = SnapMapper::convert_malformed(cct, store.get(), ch, hoid, max);
-    if (ret < 0) {
-      ss << "Error coverting malformed keys: " << cpp_strerror(ret);
-      goto out;
-    } else if (ret) {
-      dout(20) << "Converted " << ret <<  " keys" << dendl;
-    } else {
-      dout(20) << "No malformed keys found" << dendl;
+    bool stop = false;
+    string last_key = SnapMapper::MAPPING_PREFIX;
+    while (!stop) {
+      lock_guard l(osd_lock);
+      int ret = SnapMapper::convert_malformed(cct, store.get(),
+                                              ch, hoid, max,
+                                              stop, last_key);
+      if (ret < 0) {
+        ss << "Error coverting malformed keys: " << cpp_strerror(ret);
+        goto out;
+      } else if (ret) {
+        dout(20) << "Converted " << ret <<  " keys" << dendl;
+      } else {
+        dout(20) << "No malformed keys found" << dendl;
+      }
     }
   }
 

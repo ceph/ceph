@@ -1014,10 +1014,13 @@ int SnapMapper::convert_malformed(
   ObjectStore *store,
   ObjectStore::CollectionHandle& ch,
   ghobject_t hoid,
-  unsigned max_txn_size)
+  unsigned max_txn_size,
+  bool& stop,
+  std::string& last_key)
 {
   dout(10) << __func__ << dendl;
   uint64_t n = 0;
+  uint64_t iter_count = 0;
   std::set<std::string> old_keys;
 
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
@@ -1027,13 +1030,20 @@ int SnapMapper::convert_malformed(
 
   auto start = ceph::mono_clock::now();
 
-  iter->upper_bound(SnapMapper::MAPPING_PREFIX);
+  iter->lower_bound(last_key);
   map<string, ceph::buffer::list> to_set;
+  if (!iter->valid()) {
+    stop = true;
+    dout(10) << __func__ << " error, stopping" << dendl;
+    return 0;
+  }
   while (iter->valid()) {
     bool valid = is_mapping(iter->key());
     if (valid) {
+      last_key = iter->key();
       if (SnapMapper::is_malformed_mapping(iter->key())) {
-        if(_convert_malformed(cct, store, ch, hoid, iter, old_keys, to_set)){
+        if (_convert_malformed(cct, store, ch, hoid,
+                               iter, old_keys, to_set)){
           ++n;
         }
       }
@@ -1045,12 +1055,20 @@ int SnapMapper::convert_malformed(
       int r = store->queue_transaction(ch, std::move(t));
       ceph_assert(r == 0);
       to_set.clear();
-      if (!valid) {
-        // Stop iteration when raching the end of MAPPING_PREFIX region
+      if (!valid || !iter->valid()) {
+        // Stop iteration when reaching the end of MAPPING_PREFIX region
+        stop = true;
         break;
       }
       dout(10) << __func__ << " converted " << n << " keys" << dendl;
     }
+
+    if (iter_count > max_txn_size) {
+        dout(10) << __func__ << " stopping after " << max_txn_size
+                 << " scanned keys" << dendl;
+        break;
+    }
+    iter_count++;
   }
 
   auto end = ceph::mono_clock::now();
