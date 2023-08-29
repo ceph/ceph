@@ -2690,7 +2690,7 @@ private:
   // here or you will have great woe and misery.
 
   template<typename Callback, typename...Args>
-  decltype(auto) with_osdmap(Callback&& cb, Args&&... args) {
+  decltype(auto) with_osdmap(Callback&& cb, Args&&... args) const {
     std::shared_lock l(rwlock);
     return std::forward<Callback>(cb)(*osdmap, std::forward<Args>(args)...);
   }
