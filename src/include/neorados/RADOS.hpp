@@ -118,6 +118,9 @@ private:
   std::aligned_storage_t<impl_size> impl;
 };
 
+inline constexpr std::uint64_t snap_dir = -1;
+inline constexpr std::uint64_t snap_head = -2;
+
 // Not the same as the librados::IoCtx, but it does gather together
 // some of the same metadata. Since we're likely to do multiple
 // operations in the same pool or namespace, it doesn't make sense to
@@ -1449,6 +1452,13 @@ public:
       }, consigned);
   }
 
+  template<boost::asio::completion_token_for<SimpleOpSig> CompletionToken>
+  auto create_pool_snap(const IOContext& pool, std::string snap_name,
+			CompletionToken&& token) {
+    return create_pool_snap(pool.get_pool(), std::move(snap_name),
+			    std::forward<CompletionToken>(token));
+  }
+
   using SMSnapSig = void(boost::system::error_code, std::uint64_t);
   using SMSnapComp = boost::asio::any_completion_handler<SMSnapSig>;
   template<boost::asio::completion_token_for<SMSnapSig> CompletionToken>
@@ -1459,7 +1469,7 @@ public:
 	boost::asio::get_associated_executor(token, get_executor())));
     return boost::asio::async_initiate<decltype(consigned), SMSnapSig>(
       [pool, this](auto&& handler) mutable {
-	allocage_selfmanaged_snap_(pool, std::move(handler));
+	allocate_selfmanaged_snap_(pool, std::move(handler));
       }, consigned);
   }
 
@@ -1477,16 +1487,48 @@ public:
   }
 
   template<boost::asio::completion_token_for<SimpleOpSig> CompletionToken>
-  auto delete_selfmanaged_snap(int64_t pool, std::string snap_name,
+  auto delete_selfmanaged_snap(int64_t pool, std::uint64_t snap,
 			       CompletionToken&& token) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
 	boost::asio::get_associated_executor(token, get_executor())));
     return boost::asio::async_initiate<decltype(consigned), SimpleOpSig>(
-      [pool, snap_name = std::move(snap_name), this](auto&& handler) mutable {
-	delete_selfmanaged_snap_(pool, std::move(snap_name),
-				 std::move(handler));
+      [pool, snap, this](auto&& handler) mutable {
+	delete_selfmanaged_snap_(pool, snap, std::move(handler));
       }, consigned);
+  }
+
+  bool get_self_managed_snaps_mode(std::int64_t pool) const;
+  bool get_self_managed_snaps_mode(std::string_view pool) const;
+  bool get_self_managed_snaps_mode(const IOContext& pool) const {
+    return get_self_managed_snaps_mode(pool.get_pool());
+  }
+
+  std::vector<std::uint64_t> list_snaps(std::int64_t pool) const;
+  std::vector<std::uint64_t> list_snaps(std::string_view pool) const;
+  std::vector<std::uint64_t> list_snaps(const IOContext& pool) const {
+    return list_snaps(pool.get_pool());
+  }
+
+  std::uint64_t lookup_snap(std::int64_t pool, std::string_view snap) const;
+  std::uint64_t lookup_snap(std::string_view pool, std::string_view snap) const;
+  std::uint64_t lookup_snap(const IOContext& pool, std::string_view snap) const {
+    return lookup_snap(pool.get_pool(), snap);
+  }
+
+  std::string get_snap_name(std::int64_t pool, std::uint64_t snap) const;
+  std::string get_snap_name(std::string_view pool, std::uint64_t snap) const;
+  std::string get_snap_name(const IOContext& pool, std::uint64_t snap) const {
+    return get_snap_name(pool.get_pool(), snap);
+  }
+
+  ceph::real_time get_snap_timestamp(std::int64_t pool,
+				     std::uint64_t snap) const;
+  ceph::real_time get_snap_timestamp(std::string_view pool,
+				     std::uint64_t snap) const;
+  ceph::real_time get_snap_timestamp(const IOContext& pool,
+				     std::uint64_t snap) const {
+    return get_snap_timestamp(pool.get_pool(), snap);
   }
 
   template<boost::asio::completion_token_for<SimpleOpSig> CompletionToken>
@@ -1850,6 +1892,7 @@ private:
 
 enum class errc {
   pool_dne = 1,
+  snap_dne,
   invalid_snapcontext
 };
 

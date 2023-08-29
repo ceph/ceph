@@ -1120,6 +1120,157 @@ void RADOS::delete_selfmanaged_snap_(std::int64_t pool,
       }));
 }
 
+bool RADOS::get_self_managed_snaps_mode(std::int64_t pool) const {
+  return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
+    const auto pgpool = osdmap.get_pg_pool(pool);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    return pgpool->is_unmanaged_snaps_mode();
+  });
+}
+
+bool RADOS::get_self_managed_snaps_mode(std::string_view pool) const {
+  return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
+    int64_t poolid = osdmap.lookup_pg_pool_name(pool);
+    if (poolid < 0) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    const auto pgpool = osdmap.get_pg_pool(poolid);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    return pgpool->is_unmanaged_snaps_mode();
+  });
+}
+
+std::vector<std::uint64_t> RADOS::list_snaps(std::int64_t pool) const {
+  return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
+    const auto pgpool = osdmap.get_pg_pool(pool);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    std::vector<std::uint64_t> snaps;
+    for (const auto& [snapid, snapinfo] : pgpool->snaps) {
+      snaps.push_back(snapid);
+    }
+    return snaps;
+  });
+}
+
+std::vector<std::uint64_t> RADOS::list_snaps(std::string_view pool) const {
+  return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
+    int64_t poolid = osdmap.lookup_pg_pool_name(pool);
+    if (poolid < 0) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    const auto pgpool = osdmap.get_pg_pool(poolid);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    std::vector<std::uint64_t> snaps;
+    for (const auto& [snapid, snapinfo] : pgpool->snaps) {
+      snaps.push_back(snapid);
+    }
+    return snaps;
+  });
+}
+
+std::uint64_t RADOS::lookup_snap(std::int64_t pool, std::string_view snap) const {
+  return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
+    const auto pgpool = osdmap.get_pg_pool(pool);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    for (const auto& [id, snapinfo] : pgpool->snaps) {
+      if (snapinfo.name == snap) return id;
+    }
+    throw bs::system_error(bs::error_code(errc::snap_dne));
+  });
+}
+
+std::uint64_t RADOS::lookup_snap(std::string_view pool, std::string_view snap) const {
+  return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
+    int64_t poolid = osdmap.lookup_pg_pool_name(pool);
+    if (poolid < 0) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    const auto pgpool = osdmap.get_pg_pool(poolid);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    for (const auto& [id, snapinfo] : pgpool->snaps) {
+      if (snapinfo.name == snap) return id;
+    }
+    throw bs::system_error(bs::error_code(errc::snap_dne));
+  });
+}
+
+std::string RADOS::get_snap_name(std::int64_t pool, std::uint64_t snap) const {
+  return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
+    const auto pgpool = osdmap.get_pg_pool(pool);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
+      throw bs::system_error(bs::error_code(errc::snap_dne));
+    } else {
+      return i->second.name;
+    }
+  });
+}
+std::string RADOS::get_snap_name(std::string_view pool,
+				 std::uint64_t snap) const {
+  return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
+    int64_t poolid = osdmap.lookup_pg_pool_name(pool);
+    if (poolid < 0) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    const auto pgpool = osdmap.get_pg_pool(poolid);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
+      throw bs::system_error(bs::error_code(errc::snap_dne));
+    } else {
+      return i->second.name;
+    }
+  });
+}
+
+ceph::real_time RADOS::get_snap_timestamp(std::int64_t pool,
+					  std::uint64_t snap) const {
+  return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
+    const auto pgpool = osdmap.get_pg_pool(pool);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
+      throw bs::system_error(bs::error_code(errc::snap_dne));
+    } else {
+      return i->second.stamp.to_real_time();
+    }
+  });
+}
+ceph::real_time RADOS::get_snap_timestamp(std::string_view pool,
+					  std::uint64_t snap) const {
+  return impl->objecter->with_osdmap([pool, snap](const OSDMap& osdmap) {
+    int64_t poolid = osdmap.lookup_pg_pool_name(pool);
+    if (poolid < 0) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    const auto pgpool = osdmap.get_pg_pool(poolid);
+    if (!pgpool) {
+      throw bs::system_error(bs::error_code(errc::pool_dne));
+    }
+    if (auto i = pgpool->snaps.find(snap); i == pgpool->snaps.cend()) {
+      throw bs::system_error(bs::error_code(errc::snap_dne));
+    } else {
+      return i->second.stamp.to_real_time();
+    }
+  });
+}
+
 void RADOS::create_pool_(std::string name,
 			 std::optional<int> crush_rule,
 			 SimpleOpComp c)
@@ -1652,7 +1803,8 @@ const char* category::message(int ev, char*,
   switch (static_cast<errc>(ev)) {
   case errc::pool_dne:
     return "Pool does not exist";
-
+  case errc::snap_dne:
+    return "Snapshot does not exist";
   case errc::invalid_snapcontext:
     return "Invalid snapcontext";
   }
@@ -1668,6 +1820,8 @@ bs::error_condition category::default_error_condition(int ev) const noexcept {
   switch (static_cast<errc>(ev)) {
   case errc::pool_dne:
     return ceph::errc::does_not_exist;
+  case errc::snap_dne:
+    return ceph::errc::does_not_exist;
   case errc::invalid_snapcontext:
     return bs::errc::invalid_argument;
   }
@@ -1681,6 +1835,11 @@ bool category::equivalent(int ev, const bs::error_condition& c) const noexcept {
       return true;
     }
   }
+  if (static_cast<errc>(ev) == errc::snap_dne) {
+    if (c == bs::errc::no_such_file_or_directory) {
+      return true;
+    }
+  }
 
   return default_error_condition(ev) == c;
 }
@@ -1688,6 +1847,8 @@ bool category::equivalent(int ev, const bs::error_condition& c) const noexcept {
 int category::from_code(int ev) const noexcept {
   switch (static_cast<errc>(ev)) {
   case errc::pool_dne:
+    return -ENOENT;
+  case errc::snap_dne:
     return -ENOENT;
   case errc::invalid_snapcontext:
     return -EINVAL;
