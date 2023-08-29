@@ -238,6 +238,15 @@ public:
     ghobject_t hoid,
     unsigned max_txn_size);
 
+  static bool _convert_malformed(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid,
+    ObjectMap::ObjectMapIterator& iter,
+    std::set<std::string>& old_keys,
+    std::map<std::string, ceph::buffer::list>& to_set);
+
 /**
   * remove_possible_keys
   *

@@ -1033,36 +1033,7 @@ int SnapMapper::convert_malformed(
     bool valid = is_mapping(iter->key());
     if (valid) {
       if (SnapMapper::is_malformed_mapping(iter->key())) {
-        dout(20) << __func__ << "malformed key: " << iter->key() << dendl;
-        old_keys.insert(iter->key());
-        auto possible_keys = convert_malformed_key(iter->key(), iter->value());
-        bool exist = false;
-        for (const auto& key : possible_keys) {
-          auto exist_iter = store->get_omap_iterator(ch, hoid);
-          if (!exist_iter) {
-            return -EIO;
-          }
-          exist_iter->lower_bound(key);
-          if (exist_iter->valid() && exist_iter->key() == key) {
-            // don't overwrite a correct key
-            dout(10) << __func__ << " key " << key
-                     << " already exists, skipping" << dendl;
-            exist = true;
-            break;
-          }
-        }
-        if (!exist) {
-          for (const auto& key : possible_keys) {
-            dout(10) << __func__ << " adding new key " << key << dendl;
-            to_set.emplace(key, iter->value());
-          }
-          ceph::buffer::list bl;
-          encode(possible_keys, bl);
-          dout(10) << __func__ << " adding cleanup key "
-                   << SnapMapper::MAPPING_CLEANUP_KEY + iter->key()
-                   << dendl;
-          to_set.emplace(SnapMapper::MAPPING_CLEANUP_KEY + iter->key(),
-                         bl);
+        if(_convert_malformed(cct, store, ch, hoid, iter, old_keys, to_set)){
           ++n;
         }
       }
@@ -1098,6 +1069,48 @@ int SnapMapper::convert_malformed(
   }
 
   return n;
+}
+
+bool SnapMapper::_convert_malformed(
+  CephContext *cct,
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  ghobject_t hoid,
+  ObjectMap::ObjectMapIterator& iter,
+  std::set<std::string>& old_keys,
+  std::map<std::string, ceph::buffer::list>& to_set)
+{
+  dout(20) << __func__ << "malformed key: " << iter->key() << dendl;
+  old_keys.insert(iter->key());
+  auto possible_keys = convert_malformed_key(iter->key(), iter->value());
+  bool exist = false;
+  for (const auto& key : possible_keys) {
+    auto exist_iter = store->get_omap_iterator(ch, hoid);
+    ceph_assert(exist_iter);
+    exist_iter->lower_bound(key);
+    if (exist_iter->valid() && exist_iter->key() == key) {
+      // don't overwrite a correct key
+      dout(10) << __func__ << " key " << key
+               << " already exists, skipping" << dendl;
+      exist = true;
+      break;
+    }
+  }
+  if (!exist) {
+    for (const auto& key : possible_keys) {
+       dout(10) << __func__ << " adding new key " << key << dendl;
+       to_set.emplace(key, iter->value());
+    }
+    ceph::buffer::list bl;
+    encode(possible_keys, bl);
+    dout(10) << __func__ << " adding cleanup key "
+             << SnapMapper::MAPPING_CLEANUP_KEY + iter->key()
+             << dendl;
+    to_set.emplace(SnapMapper::MAPPING_CLEANUP_KEY + iter->key(),
+                   bl);
+    return true;
+  }
+  return false;
 }
 
 int SnapMapper::remove_possible_keys(
