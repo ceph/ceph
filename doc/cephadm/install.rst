@@ -317,17 +317,20 @@ its status with:
 Adding Hosts
 ============
 
-Next, add all hosts to the cluster by following :ref:`cephadm-adding-hosts`.
+Add all hosts to the cluster by following the instructions in
+:ref:`cephadm-adding-hosts`.
 
-By default, a ``ceph.conf`` file and a copy of the ``client.admin`` keyring
-are maintained in ``/etc/ceph`` on all hosts with the ``_admin`` label, which is initially
-applied only to the bootstrap host. We usually recommend that one or more other hosts be
-given the ``_admin`` label so that the Ceph CLI (e.g., via ``cephadm shell``) is easily
-accessible on multiple hosts. To add the ``_admin`` label to additional host(s):
+By default, a ``ceph.conf`` file and a copy of the ``client.admin`` keyring are
+maintained in ``/etc/ceph`` on all hosts that have the ``_admin`` label. This
+label is initially applied only to the bootstrap host. We usually recommend
+that one or more other hosts be given the ``_admin`` label so that the Ceph CLI
+(for example, via ``cephadm shell``) is easily accessible on multiple hosts. To add
+the ``_admin`` label to additional host(s), run a command of the following form:
 
   .. prompt:: bash #
 
     ceph orch host label add *<host>* _admin
+
 
 Adding additional MONs
 ======================
