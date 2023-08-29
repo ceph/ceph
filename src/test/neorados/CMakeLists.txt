@@ -169,3 +169,35 @@ target_link_libraries(ceph_test_neorados_pool
 install(TARGETS
   ceph_test_neorados_pool
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_snapshots
+  snapshots.cc
+  )
+target_link_libraries(ceph_test_neorados_snapshots
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_snapshots
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_neorados_watch_notify
+  watch_notify.cc
+  )
+target_link_libraries(ceph_test_neorados_watch_notify
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_watch_notify
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
