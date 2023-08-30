@@ -1672,6 +1672,18 @@ protected:
   void note_up_osd(int osd);
   friend struct C_OnMapCommit;
 
+  std::optional<epoch_t> get_epoch_from_osdmap_object(const ghobject_t& osdmap);
+  /**
+   * trim_stale_maps
+   *
+   * trim_maps had a possible (rare) leak which resulted in stale osdmaps.
+   * This method will cleanup any existing osdmap from the store
+   * in the range of 0 up to the superblock's oldest_map.
+   * @return number of stale osdmaps which were removed.
+   * See: https://tracker.ceph.com/issues/61962
+   */
+  int trim_stale_maps();
+
   bool advance_pg(
     epoch_t advance_to,
     PG *pg,
