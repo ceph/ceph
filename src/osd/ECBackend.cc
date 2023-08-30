@@ -2250,13 +2250,15 @@ bool ECBackend::RMWPipeline::try_finish_rmw()
 	waiting_commit.empty()) {
       // submit a dummy transaction to kick the rollforward
       auto tid = get_parent()->get_tid();
-      Op *nop = tid_to_op_map[tid].get();
+      auto nop = std::make_unique<ECClassicalOp>();
+      //dout(20) << __func__ << " nop=" << (void*)nop << dendl;
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->roll_forward_to = op->version;
       nop->tid = tid;
       nop->reqid = op->reqid;
       waiting_reads.push_back(*nop);
+      tid_to_op_map[tid] = std::move(nop);
     }
   }
 
