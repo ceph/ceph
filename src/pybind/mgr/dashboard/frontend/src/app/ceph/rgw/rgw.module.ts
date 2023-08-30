@@ -93,7 +93,7 @@ const routes: Routes = [
     path: 'roles',
     data: {
       breadcrumbs: 'Roles',
-      resource: 'api.rgw.user.roles@1.0',
+      resource: 'api.rgw.roles@1.0',
       tabs: [
         {
           name: 'Users',
