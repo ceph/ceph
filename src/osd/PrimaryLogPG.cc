@@ -427,6 +427,7 @@ void PrimaryLogPG::on_local_recover(
       recovery_info.oi.prior_version = recovery_info.oi.version;
       recovery_info.oi.version = latest->version;
       bufferlist bl;
+      dout(0) << __func__ << ":" << __LINE__ << " bf encode recovery_info.oi.pool=" << recovery_info.oi.soid.pool << dendl;
       encode(recovery_info.oi, bl,
 	       get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       ceph_assert(!pool.info.is_erasure());
@@ -4795,6 +4796,7 @@ int PrimaryLogPG::trim_object(
     coi.prior_version = coi.version;
     coi.version = ctx->at_version;
     bl.clear();
+    dout(0) << __func__ << ":" << __LINE__ << " bf encode coi.pool=" << coi.soid.pool << dendl;
     encode(coi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     t->setattr(coid, OI_ATTR, bl);
 
@@ -4895,6 +4897,7 @@ int PrimaryLogPG::trim_object(
     attrs[SS_ATTR] = std::move(bl);
 
     bl.clear();
+    dout(0) << __func__ << ":" << __LINE__ << " XXX encode head_obc->obs.oi.pool=" << head_obc->obs.oi.soid.pool << dendl;
     encode(head_obc->obs.oi, bl,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
     attrs[OI_ATTR] = std::move(bl);
@@ -8516,6 +8519,7 @@ void PrimaryLogPG::_make_clone(
   object_info_t *poi)
 {
   bufferlist bv;
+  dout(0) << __func__ << ":" << __LINE__ << " XXX encode poi->soid.pool=" << poi->soid.pool << dendl;
   encode(*poi, bv, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
   t->clone(coid, head);
@@ -8984,6 +8988,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
     bufferlist bv(sizeof(ctx->new_obs.oi));
     encode(ctx->new_obs.oi, bv,
 	     get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+    dout(0) << __func__ << ":" << __LINE__ << " bf encode new_obs.oi.pool=" << ctx->new_obs.oi.soid.pool << dendl;
     attrs[OI_ATTR] = std::move(bv);
 
     // snapset
@@ -11802,6 +11807,7 @@ void PrimaryLogPG::handle_watch_timeout(WatchRef watch)
   oi.prior_version = obc->obs.oi.version;
   oi.version = ctx->at_version;
   bufferlist bl;
+  dout(0) << __func__ << ":" << __LINE__ << " XXX encode oi.soid.pool=" << oi.soid.pool << dendl;
   encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
   t->setattr(obc->obs.oi.soid, OI_ATTR, bl);
 
@@ -11834,6 +11840,7 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   bool can_create,
   const map<string, bufferlist, less<>> *attrs)
 {
+  dout(0) << __func__ << ":" << __LINE__ << ": soid.pool=" << soid.pool << dendl;
   auto it_objects = recovery_state.get_pg_log().get_log().objects.find(soid);
   ceph_assert(
     attrs || !recovery_state.get_pg_log().get_missing().is_missing(soid) ||
@@ -11855,8 +11862,10 @@ ObjectContextRef PrimaryLogPG::get_object_context(
       auto it_oi = attrs->find(OI_ATTR);
       ceph_assert(it_oi != attrs->end());
       bv = it_oi->second;
+      dout(0) << __func__ << ":" << __LINE__ << " bv came from OI_ATTR" << dendl;
     } else {
       int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
+      dout(0) << __func__ << ":" << __LINE__ << " bv came from objects_get_attr()" << dendl;
       if (r < 0) {
 	if (!can_create) {
 	  dout(10) << __func__ << ": no obc for soid "
@@ -11885,11 +11894,16 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     try {
       bufferlist::const_iterator bliter = bv.begin();
       decode(oi, bliter);
+      dout(0) << __func__ << ":" << __LINE__ << " just after bv decode oi.soid.pool=" << oi.soid.pool << dendl;
     } catch (...) {
       dout(0) << __func__ << ": obc corrupt: " << soid << dendl;
       return ObjectContextRef();   // -ENOENT!
     }
 
+    dout(0) << "soid.pool=" << (int64_t)oi.soid.pool
+	    << " info.pgid.pool()=" << (int64_t)info.pgid.pool()
+    	    << dendl;
+    ceph_assert(oi.soid.pool == (int64_t)info.pgid.pool());
     ceph_assert(oi.soid.pool == (int64_t)info.pgid.pool());
 
     obc = object_contexts.lookup_or_create(oi.soid);
@@ -12320,6 +12334,7 @@ int PrimaryLogPG::recover_missing(
   PGBackend::RecoveryHandle *h)
 {
   dout(10) << __func__ << " sar: " << scrub_after_recovery << dendl;
+  dout(0) << __func__ << ":" << __LINE__ << ": soid.pool=" << soid.pool << dendl;
 
   if (recovery_state.get_missing_loc().is_unfound(soid)) {
     dout(7) << __func__ << " " << soid
@@ -12382,6 +12397,7 @@ int PrimaryLogPG::recover_missing(
 	return PULL_NONE;
       }
     }
+    dout(0) << __func__ << ":" << __LINE__ << ": head.pool=" << head.pool << dendl;
     head_obc = get_object_context(
       head,
       false,
@@ -13406,7 +13422,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
     eversion_t need = item.need;
 
     dout(10) << __func__ << " "
-             << soid << " " << item.need
+             << soid << " soid.pool=" << soid.pool << " " << item.need
 	     << (missing.is_missing(soid) ? " (missing)":"")
 	     << (missing.is_missing(head) ? " (missing head)":"")
              << (recovering.count(soid) ? " (recovering)":"")
@@ -13437,6 +13453,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
 	      ObjectStore::Transaction t;
 	      bufferlist b2;
+              dout(0) << __func__ << ":" << __LINE__ << " XXX encode obc->obs.oi.soid.pool=" << obc->obs.oi.soid.pool << dendl;
 	      obc->obs.oi.encode(
 		b2,
 		get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
@@ -13496,6 +13513,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
       }
     }
 
+    dout(0) << __LINE__ << ": soid.pool=" << soid.pool << dendl;
     if (!recovering.count(soid)) {
       if (recovering.count(head)) {
 	++skipped;
@@ -14640,6 +14658,7 @@ void PrimaryLogPG::hit_set_persist()
   bufferlist bss;
   encode(ctx->new_snapset, bss);
   bufferlist boi(sizeof(ctx->new_obs.oi));
+  dout(0) << __func__ << ":" << __LINE__ << " XXX encode ctx->new_obs.oi.soid.pool=" << ctx->new_obs.oi.soid.pool << dendl;
   encode(ctx->new_obs.oi, boi,
 	   get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
