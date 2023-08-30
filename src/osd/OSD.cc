@@ -3078,6 +3078,19 @@ will start to track new ops received afterwards.";
       f, false, logger, counter);
   }
 
+  else if (prefix == "trim stale osdmaps") {
+    // osd_lock is not taken since trimming won't go past
+    // the superblock's oldest_map. The superblock won't
+    // be updated. Only the stored stale (no longer referenced)
+    // osdmaps are removed.
+    int ret = trim_stale_maps();
+    if (ret < 0) {
+     ss << " Error trimming stale osdmaps: " << cpp_strerror(ret);
+     goto out;
+    }
+    dout(20) << fmt::format("Trimmed {} osdmaps", ret) << dendl;
+  }
+
   else if (prefix == "cache drop") {
     lock_guard l(osd_lock);
     dout(20) << "clearing all caches" << dendl;
@@ -4302,6 +4315,12 @@ void OSD::final_init()
     "reset_pg_recovery_stats",
     asok_hook,
     "reset pg recovery statistics");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "trim stale osdmaps",
+    asok_hook,
+    "cleanup any existing osdmap from the store "
+    "in the range of 0 up to the superblock's oldest_map.");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "cache drop",
@@ -7875,6 +7894,57 @@ void OSD::trim_maps(epoch_t oldest)
   // we should not trim past service.map_cache.cached_key_lower_bound() 
   // as there may still be PGs with those map epochs recorded.
   ceph_assert(min <= service.map_cache.cached_key_lower_bound());
+}
+
+std::optional<epoch_t> OSD::get_epoch_from_osdmap_object(const ghobject_t& osdmap) {
+  const auto& name = osdmap.hobj.oid.name;
+  string osdmap_prefix = "osdmap.";
+  auto osdmap_pos = name.find(osdmap_prefix);
+  if (osdmap_pos == string::npos) {
+    return std::nullopt;
+  }
+  auto osdmap_string = name.substr(osdmap_pos + osdmap_prefix.size());
+  return stoul(osdmap_string);
+}
+
+int OSD::trim_stale_maps()
+{
+  int num_removed = 0;
+  vector<ghobject_t> objects;
+  int r = store->collection_list(
+      service.meta_ch,
+      ghobject_t{},
+      ghobject_t::get_max(),
+      INT_MAX,
+      &objects,
+      NULL);
+  if (r != 0) {
+    derr << __func__ << " list collection " << service.meta_ch
+         << " got: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ObjectStore::Transaction t;
+  for (const auto& osdmap_obj : objects) {
+    if (auto epoch = get_epoch_from_osdmap_object(osdmap_obj);
+        epoch.has_value() && epoch < superblock.get_oldest_map()) {
+      dout(20) << __func__ << " removing stale osdmap epoch "
+               << epoch << dendl;
+      t.remove(coll_t::meta(), osdmap_obj);
+    }
+    if (t.get_num_ops() > cct->_conf->osd_target_transaction_size) {
+      num_removed += t.get_num_ops();
+      int tr = store->queue_transaction(service.meta_ch, t.claim_and_reset(), nullptr);
+      ceph_assert(tr == 0);
+    }
+  }
+
+  if (t.get_num_ops() > 0) {
+    num_removed += t.get_num_ops();
+    int tr = store->queue_transaction(service.meta_ch, t.claim_and_reset(), nullptr);
+    ceph_assert(tr == 0);
+  }
+
+  return num_removed;
 }
 
 void OSD::handle_osd_map(MOSDMap *m)
