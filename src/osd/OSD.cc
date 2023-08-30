@@ -8199,6 +8199,9 @@ void OSD::handle_osd_map(MOSDMap *m)
     pg_num_history.prune(superblock.get_oldest_map());
   }
   superblock.insert_osdmap_epochs(first, last);
+  if (superblock.maps.num_intervals() > 1) {
+    dout(10) << __func__ << " osd map gap " << superblock.maps << dendl;
+  }
   superblock.current_epoch = last;
 
   // note in the superblock that we were clean thru the prior epoch
