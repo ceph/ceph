@@ -12,7 +12,7 @@ import time
 import logging
 import sys
 from threading import Lock, Condition, Event
-from typing import no_type_check
+from typing import no_type_check, NewType
 import urllib
 from functools import wraps
 if sys.version_info >= (3, 3):
@@ -28,6 +28,8 @@ T = TypeVar('T')
 
 if TYPE_CHECKING:
     from mgr_module import MgrModule
+
+ConfEntity = NewType('ConfEntity', str)
 
 Module_T = TypeVar('Module_T', bound="MgrModule")
 
@@ -801,3 +803,15 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
             return result
         return wrapper
     return outer
+
+def name_to_config_section(name: str) -> ConfEntity:
+    """
+    Map from daemon names to ceph entity names (as seen in config)
+    """
+    daemon_type = name.split('.', 1)[0]
+    if daemon_type in ['rgw', 'rbd-mirror', 'nfs', 'crash', 'iscsi']:
+        return ConfEntity('client.' + name)
+    elif daemon_type in ['mon', 'osd', 'mds', 'mgr', 'client']:
+        return ConfEntity(name)
+    else:
+        return ConfEntity('mon')
