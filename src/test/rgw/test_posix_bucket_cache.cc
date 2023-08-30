@@ -17,6 +17,8 @@
 #include <fmt/format.h>
 
 #include <gtest/gtest.h>
+#include "common/common_init.h"
+#include "global/global_init.h"
 
 using namespace std::chrono_literals;
 
@@ -39,10 +41,20 @@ protected:
   static constexpr std::string_view bucket1_marker = ""; // start at the beginning
 
   DoutPrefixProvider* dpp{nullptr};
+  std::vector<std::string> bvec;
 
   class MockSalDriver
   {
+    std::vector<const char *> args;
+
   public:
+    boost::intrusive_ptr<CephContext> cct;
+    MockSalDriver() {
+      /* Proceed with environment setup */
+      cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+                        CODE_ENVIRONMENT_UTILITY,
+                        CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+    }
     /* called by BucketCache layer when a new object is discovered
      * by inotify or similar */
     int mint_listing_entry(
@@ -50,6 +62,7 @@ protected:
 
       return 0;
     }
+    CephContext *ctx(void) { return cct.get(); }
   }; /* MockSalDriver */
 
   class MockSalBucket
