@@ -3533,58 +3533,41 @@ void BlueFS::_wait_for_aio(FileWriter *h)
 
 void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_LNF_NF_LD_D*/
 {
-  bool flushed_sum = false;
-  {
-    std::unique_lock hl(h->lock);
-    size_t max_size = 1ull << 30; // cap to 1GB
-    while (len > 0) {
-      bool need_flush = true;
-      auto l0 = h->get_buffer_length();
-      if (l0 < max_size) {
-	size_t l = std::min(len, max_size - l0);
-	h->append(buf, l);
-	buf += l;
-	len -= l;
-	need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
-      }
-      if (need_flush) {
-	bool flushed = false;
-	int r = _flush_F(h, true, &flushed);
-	ceph_assert(r == 0);
-	flushed_sum |= flushed;
-	// make sure we've made any progress with flush hence the
-	// loop doesn't iterate forever
-	ceph_assert(h->get_buffer_length() < max_size);
-      }
+
+  std::unique_lock hl(h->lock);
+  size_t max_size = 1ull << 30; // cap to 1GB
+  while (len > 0) {
+    bool need_flush = true;
+    auto l0 = h->get_buffer_length();
+    if (l0 < max_size) {
+      size_t l = std::min(len, max_size - l0);
+      h->append(buf, l);
+      buf += l;
+      len -= l;
+      need_flush = h->get_buffer_length() >= cct->_conf->bluefs_min_flush_size;
     }
-  }
-  if (flushed_sum) {
-    _maybe_compact_log_LNF_NF_LD_D();
+    if (need_flush) {
+      int r = _flush_F(h, true);
+      ceph_assert(r == 0);
+      // make sure we've made any progress with flush hence the
+      // loop doesn't iterate forever
+      ceph_assert(h->get_buffer_length() < max_size);
+    }
   }
 }
 
 void BlueFS::flush(FileWriter *h, bool force)/*_WF_LNF_NF_LD_D*/
 {
-  bool flushed = false;
-  int r;
-  {
-    std::unique_lock hl(h->lock);
-    r = _flush_F(h, force, &flushed);
-    ceph_assert(r == 0);
-  }
-  if (r == 0 && flushed) {
-    _maybe_compact_log_LNF_NF_LD_D();
-  }
+  std::unique_lock hl(h->lock);
+  int r = _flush_F(h, force);
+  ceph_assert(r == 0);
 }
 
-int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
+int BlueFS::_flush_F(FileWriter *h, bool force)
 {
   ceph_assert(ceph_mutex_is_locked(h->lock));
   uint64_t length = h->get_buffer_length();
   uint64_t offset = h->pos;
-  if (flushed) {
-    *flushed = false;
-  }
   if (!force &&
       length < cct->_conf->bluefs_min_flush_size) {
     dout(10) << __func__ << " " << h << " ignoring, length " << length
@@ -3601,11 +3584,7 @@ int BlueFS::_flush_F(FileWriter *h, bool force, bool *flushed)
            << std::hex << offset << "~" << length << std::dec
 	   << " to " << h->file->fnode << dendl;
   ceph_assert(h->pos <= h->file->fnode.size);
-  int r = _flush_range_F(h, offset, length);
-  if (flushed) {
-    *flushed = true;
-  }
-  return r;
+  return _flush_range_F(h, offset, length);
 }
 
 // Flush for bluefs special files.
@@ -3704,7 +3683,6 @@ int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
     _maybe_compact_log_LNF_NF_LD_D();
     next_flush_compact = ceph::coarse_real_clock::now() + make_timespan(FLUSH_COMPACT_INTERVAL);
   }
-
   return 0;
 }
 
