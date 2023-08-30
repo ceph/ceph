@@ -282,17 +282,6 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, MutationRef& 
     dir->remove_dentry(dn);
   }
 
-  // Once we are here normally the waiter list are mostly empty
-  // but in corner case that the clients pass a invalidate ino,
-  // which maybe under unlinking, the link caller will add the
-  // request to the waiter list. We need try to wake them up
-  // anyway.
-  MDSContext::vec finished;
-  in->take_waiting(CInode::WAIT_UNLINK, finished);
-  if (!finished.empty()) {
-    mds->queue_waiters(finished);
-  }
-
   // drop inode
   inodeno_t ino = in->ino();
   if (in->is_dirty())
