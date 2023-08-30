@@ -88,7 +88,6 @@ public:
   static const int STATE_PURGINGPINNED =  (1<<5);
   static const int STATE_BOTTOMLRU =    (1<<6);
   static const int STATE_UNLINKING =    (1<<7);
-  static const int STATE_REINTEGRATING = (1<<8);
   // stray dentry needs notification of releasing reference
   static const int STATE_STRAY =	STATE_NOTIFYREF;
   static const int MASK_STATE_IMPORT_KEPT = STATE_BOTTOMLRU;
@@ -102,9 +101,8 @@ public:
 
   static const unsigned EXPORT_NONCE = 1;
 
-  const static uint64_t WAIT_UNLINK_STATE       = (1<<0);
-  const static uint64_t WAIT_UNLINK_FINISH      = (1<<1);
-  const static uint64_t WAIT_REINTEGRATE_FINISH = (1<<2);
+  const static uint64_t WAIT_UNLINK_STATE  = (1<<0);
+  const static uint64_t WAIT_UNLINK_FINISH = (1<<1);
   uint32_t replica_unlinking_ref = 0;
 
   CDentry(std::string_view n, __u32 h,
