@@ -7260,7 +7260,9 @@ void Server::handle_client_link(MDRequestRef& mdr)
   SnapRealm *target_realm = target_pin->find_snaprealm();
   if (target_pin != dir->inode &&
       target_realm->get_subvolume_ino() !=
-      dir->inode->find_snaprealm()->get_subvolume_ino()) {
+      dir->inode->find_snaprealm()->get_subvolume_ino() &&
+      /* The inode is temporarily located in the stray dir pending reintegration */
+      !target_pin->is_stray()) {
     dout(7) << "target is in different subvolume, failing..." << dendl;
     respond_to_request(mdr, -CEPHFS_EXDEV);
     return;
