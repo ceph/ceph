@@ -146,12 +146,10 @@ int ReplicatedBackend::recover_object(
   )
 {
   dout(10) << __func__ << ": " << hoid << dendl;
-  dout(0) << __func__ << ":" << __LINE__ << ": hoid.pool=" << hoid.pool << dendl;
   RPGHandle *h = static_cast<RPGHandle *>(_h);
   if (get_parent()->get_local_missing().is_missing(hoid)) {
     ceph_assert(!obc);
     // pull
-    dout(0) << __func__ << ":" << __LINE__ << "about to prepare_pull(): hoid.pool=" << hoid.pool << dendl;
     prepare_pull(
       v,
       hoid,
@@ -1368,7 +1366,6 @@ void ReplicatedBackend::prepare_pull(
   ObjectContextRef headctx,
   RPGHandle *h)
 {
-  dout(0) << __func__ << ":" << __LINE__ << ": soid.pool=" << soid.pool << dendl;
   const auto missing_iter = get_parent()->get_local_missing().get_items().find(soid);
   ceph_assert(missing_iter != get_parent()->get_local_missing().get_items().end());
   eversion_t _v = missing_iter->second.need;
@@ -1478,8 +1475,6 @@ void ReplicatedBackend::prepare_pull(
   pull_info.recovery_progress = op.recovery_progress;
   pull_info.cache_dont_need = h->cache_dont_need;
   pull_info.lock_manager = std::move(lock_manager);
-  dout(0) << __func__ << ":" << __LINE__ << ": pull_info.soid.pool=" << pull_info.soid.pool << dendl;
-  dout(0) << __func__ << ":" << __LINE__ << ": pull_info.recovery_info.soid.pool=" << pull_info.recovery_info.soid.pool << dendl;
 }
 
 /*
@@ -1843,7 +1838,6 @@ bool ReplicatedBackend::handle_pull_response(
     for (auto& a : attrset) {
       a.second.rebuild();
     }
-    dout(0) << __func__ << ":" << __LINE__ << ": pull_info.recovery_info.soid.pool=" << pull_info.recovery_info.soid.pool << dendl;
     pull_info.obc = get_parent()->get_obc(pull_info.recovery_info.soid, attrset);
     if (attrset.find(SS_ATTR) != attrset.end()) {
       bufferlist ssbv = attrset.at(SS_ATTR);

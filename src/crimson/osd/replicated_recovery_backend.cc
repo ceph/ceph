@@ -476,14 +476,11 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     }
     push_op->omap_header.claim_append(std::move(bl));
     for (auto&& [key, val] : attrs) {
-      logger().debug("read_metadata_for_push_op: adding attr {}, val {}", key, val);
       push_op->attrset.emplace(std::move(key), std::move(val));
     }
-    ceph_assert(push_op->attrset.count(OI_ATTR) > 0);
     logger().debug("read_metadata_for_push_op: {}", push_op->attrset[OI_ATTR]);
     object_info_t oi;
     oi.decode(push_op->attrset[OI_ATTR]);
-    logger().debug("read_metadata_for_push_op: soid={} soid.pool={}", oi.soid, oi.soid.pool);
     new_progress.first = false;
     return oi.version;
   });
@@ -635,7 +632,6 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
         [this, &pull_op](auto st) {
         ObjectRecoveryInfo &recovery_info = pull_op.recovery_info;
         ObjectRecoveryProgress &progress = pull_op.recovery_progress;
-        logger().debug("handle_pull: soid={}, progress={}", pull_op.soid, progress);
         if (progress.first && recovery_info.size == ((uint64_t) -1)) {
           // Adjust size and copy_subset
           recovery_info.size = st.st_size;
