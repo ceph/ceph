@@ -210,7 +210,7 @@ constexpr segment_id_t NULL_SEG_ID = MAX_SEG_ID;
 
 /* Monotonically increasing segment seq, uniquely identifies
  * the incarnation of a segment */
-using segment_seq_t = uint32_t;
+using segment_seq_t = uint64_t;
 static constexpr segment_seq_t MAX_SEG_SEQ =
   std::numeric_limits<segment_seq_t>::max();
 static constexpr segment_seq_t NULL_SEG_SEQ = MAX_SEG_SEQ;
