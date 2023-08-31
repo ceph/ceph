@@ -100,7 +100,7 @@ struct collection_manager_test_t :
   }
 };
 
-TEST_F(collection_manager_test_t, basic)
+TEST_P(collection_manager_test_t, basic)
 {
   run_async([this] {
     coll_root_t coll_root = get_root();
@@ -137,7 +137,7 @@ TEST_F(collection_manager_test_t, basic)
   });
 }
 
-TEST_F(collection_manager_test_t, overflow)
+TEST_P(collection_manager_test_t, overflow)
 {
   run_async([this] {
     coll_root_t coll_root = get_root();
@@ -158,7 +158,7 @@ TEST_F(collection_manager_test_t, overflow)
   });
 }
 
-TEST_F(collection_manager_test_t, update)
+TEST_P(collection_manager_test_t, update)
 {
   run_async([this] {
     coll_root_t coll_root = get_root();
@@ -184,3 +184,12 @@ TEST_F(collection_manager_test_t, update)
     checking_mappings(coll_root);
   });
 }
+
+INSTANTIATE_TEST_SUITE_P(
+  collection_manager_test,
+  collection_manager_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);
