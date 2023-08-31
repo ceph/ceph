@@ -10,8 +10,9 @@ This is the fourteenth backport release in the Pacific series.
 Notable Changes
 ---------------
 
-* CEPHFS: After recovering a Ceph File System post following the disaster recovery
-  procedure, the recovered files under `lost+found` directory can now be deleted.
+* CephFS: After recovering a Ceph File System post following the disaster
+  recovery procedure, the recovered files under `lost+found` directory can now
+  be deleted.
 
 * `ceph mgr dump` command now displays the name of the mgr module that
   registered a RADOS client in the `name` field added to elements of the
@@ -204,6 +205,7 @@ Changelog
 * tools/cephfs-data-scan: support for multi-datapool (`pr#50523 <https://github.com/ceph/ceph/pull/50523>`_, Mykola Golub)
 * vstart: check mgr status after starting mgr (`pr#51604 <https://github.com/ceph/ceph/pull/51604>`_, Rongqi Sun)
 * Wip nitzan fixing few rados/test.sh (`pr#49943 <https://github.com/ceph/ceph/pull/49943>`_, Nitzan Mordechai)
+* qa: add subvolume option flavors (`pr#51509 <https://github.com/ceph/ceph/pull/51509>`_, Milind Changire, Venky Shankar)
 
 v16.2.13 Pacific
 ================
@@ -213,7 +215,7 @@ This is the thirteenth backport release in the Pacific series.
 Notable Changes
 ---------------
 
-* CEPHFS: Rename the `mds_max_retries_on_remount_failure` option to
+* CephFS: Rename the `mds_max_retries_on_remount_failure` option to
   `client_max_retries_on_remount_failure` and move it from mds.yaml.in to
   mds-client.yaml.in because this option was only used by MDS client from its
   birth.
