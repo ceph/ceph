@@ -8232,6 +8232,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   size_t auxsize = 0;
   filepath path;
   MetaRequest *req;
+  std::vector<uint8_t> alt_aux;
+  std::vector<uint8_t> *paux = aux;
 
   if (aux)
     auxsize = aux->size();
@@ -8392,18 +8394,34 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   }
 
   if (mask & CEPH_SETATTR_SIZE) {
-    if ((uint64_t)stx->stx_size >= mdsmap->get_max_filesize()) {
+    auto stx_size = stx->stx_size;
+
+    if (in->fscrypt_ctx &&
+        (!(mask & CEPH_SETATTR_FSCRYPT_FILE))) {
+      stx_size = fscrypt_next_block_start(stx_size);
+      ldout(cct,10) << "fscrypt: set file size: orig stx_size=" << stx->stx_size <<" new stx_size=" << stx_size << dendl;
+
+      alt_aux.resize(sizeof(stx->stx_size));
+      memcpy(alt_aux.data(), &stx->stx_size, sizeof(stx->stx_size));
+      paux = &alt_aux;
+
+      mask |= CEPH_SETATTR_FSCRYPT_FILE;
+    }
+
+    if ((uint64_t)stx_size >= mdsmap->get_max_filesize()) {
       //too big!
-      ldout(cct,10) << "unable to set size to " << stx->stx_size << ". Too large!" << dendl;
+      ldout(cct,10) << "unable to set size to " << stx_size << ". Too large!" << dendl;
       return -CEPHFS_EFBIG;
     }
 
-    ldout(cct,10) << "changing size to " << stx->stx_size << dendl;
+    ldout(cct,10) << "changing size to " << stx_size << dendl;
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL) &&
         !(mask & CEPH_SETATTR_KILL_SGUID) &&
-        stx->stx_size >= in->size) {
-      if (stx->stx_size > in->size) {
-        in->size = in->reported_size = stx->stx_size;
+        stx_size >= in->size) {
+      if (stx_size > in->size) {
+        in->size = in->reported_size = stx_size;
+        in->cap_dirtier_uid = perms.uid();
+        in->cap_dirtier_gid = perms.gid();
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
         mask &= ~(CEPH_SETATTR_SIZE);
         mask |= CEPH_SETATTR_MTIME;
@@ -8412,7 +8430,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         mask &= ~(CEPH_SETATTR_SIZE);
       }
     } else {
-      args.setattr.size = stx->stx_size;
+      args.setattr.size = stx_size;
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD |
                     CEPH_CAP_FILE_WR;
     }
@@ -8424,11 +8442,15 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 
     if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_EXCL)) {
       in->ctime = ceph_clock_now();
-      in->fscrypt_file = *aux;
+      in->cap_dirtier_uid = perms.uid();
+      in->cap_dirtier_gid = perms.gid();
+      if (paux) {
+        in->fscrypt_file = *paux;
+      }
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
       mask &= ~CEPH_SETATTR_FSCRYPT_FILE;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
-               in->fscrypt_file != *aux) {
+               (paux && in->fscrypt_file != *paux)) {
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
     } else {
       mask &= ~CEPH_SETATTR_FSCRYPT_FILE;
@@ -8503,8 +8525,8 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   req->inode_drop = inode_drop;
   if (mask & CEPH_SETATTR_FSCRYPT_AUTH) {
     req->fscrypt_auth = *aux;
-  } else if (mask & CEPH_SETATTR_FSCRYPT_FILE) {
-    req->fscrypt_file = *aux;
+  } else if (mask & CEPH_SETATTR_FSCRYPT_FILE && paux) {
+    req->fscrypt_file = *paux;
   }
   req->head.args.setattr.mask = mask;
   req->regetattr_mask = mask;

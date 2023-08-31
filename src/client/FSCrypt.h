@@ -37,6 +37,10 @@ static inline uint64_t fscrypt_block_start(uint64_t ofs) {
   return ofs & ~(FSCRYPT_BLOCK_SIZE - 1);
 }
 
+static inline uint64_t fscrypt_next_block_start(uint64_t ofs) {
+  return (ofs + FSCRYPT_BLOCK_SIZE - 1) & ~(FSCRYPT_BLOCK_SIZE - 1);
+}
+
 static inline std::string fscrypt_hex_str(const void *p, int len)
 {
   if (!p) {
