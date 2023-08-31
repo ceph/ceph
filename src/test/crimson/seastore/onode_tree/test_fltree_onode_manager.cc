@@ -272,13 +272,14 @@ TEST_P(fltree_onode_manager_test_t, 2_synthetic)
   run_async([this] {
     uint64_t block_size = tm->get_block_size();
     auto pool = KVPool<onode_item_t>::create_range(
-        {0, 100}, {32, 64, 128, 256, 512}, block_size);
+        {0, 10000}, {32, 64, 128, 256, 512}, block_size);
     auto start = pool.begin();
     auto end = pool.end();
     with_onodes_write(start, end,
         [](auto& t, auto& onode, auto& item) {
       item.initialize(t, onode);
     });
+    restart();
     validate_onodes(start, end);
 
     validate_list_onodes(pool);
@@ -289,6 +290,7 @@ TEST_P(fltree_onode_manager_test_t, 2_synthetic)
         [](auto& t, auto& onode, auto& item) {
       item.modify(t, onode);
     });
+    restart();
     validate_onodes(start, end);
 
     pool.shuffle();
@@ -298,6 +300,7 @@ TEST_P(fltree_onode_manager_test_t, 2_synthetic)
         [](auto& t, auto& onode, auto& item) {
       item.modify(t, onode);
     });
+    restart();
     validate_onodes(start, end);
 
     pool.shuffle();
@@ -310,6 +313,7 @@ TEST_P(fltree_onode_manager_test_t, 2_synthetic)
         return manager->erase_onode(t, onode_ref);
       }).unsafe_get0();
     });
+    restart();
     validate_erased(rd_start, rd_end);
     pool.erase_from_random(rd_start, rd_end);
     start = pool.begin();
