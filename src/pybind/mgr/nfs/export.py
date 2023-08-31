@@ -166,9 +166,13 @@ class AppliedExportResults:
 
     def __init__(self) -> None:
         self.changes: List[Dict[str, str]] = []
+        self.exceptions: List[Exception] = []
         self.has_error = False
 
-    def append(self, value: Dict[str, str]) -> None:
+    def append(self, value: Dict[str, Any]) -> None:
+        exc = value.pop('exception', None)
+        if exc is not None:
+            self.exceptions.append(exc)
         if value.get("state", "") == "error":
             self.has_error = True
         self.changes.append(value)
@@ -178,6 +182,10 @@ class AppliedExportResults:
 
     def mgr_return_value(self) -> int:
         return -errno.EIO if self.has_error else 0
+
+    def raise_if_exception(self) -> None:
+        if self.has_error and len(self.exceptions) == 1:
+            raise self.exceptions[0]
 
 
 class ExportMgr:
@@ -502,6 +510,7 @@ class ExportMgr:
         aeresults = AppliedExportResults()
         for export in exports:
             aeresults.append(self._change_export(cluster_id, export))
+        aeresults.raise_if_exception()
         return aeresults
 
     def _read_export_config(self, cluster_id: str, export_config: str) -> List[Dict]:
@@ -525,7 +534,7 @@ class ExportMgr:
             return j  # j is already a list object
         return [j]  # return a single object list, with j as the only item
 
-    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, str]:
+    def _change_export(self, cluster_id: str, export: Dict) -> Dict[str, Any]:
         try:
             return self._apply_export(cluster_id, export)
         except NotImplementedError:
@@ -543,7 +552,7 @@ class ExportMgr:
         except Exception as ex:
             msg = f'Failed to apply export: {ex}'
             log.exception(msg)
-            return {"state": "error", "msg": msg}
+            return {"state": "error", "msg": msg, "exception": ex}
 
     def _update_user_id(
             self,
