@@ -42,8 +42,10 @@ CircularJournalSpace::roll_ertr::future<> CircularJournalSpace::roll() {
     get_records_start(),
     get_device_id());
   auto seq = get_written_to();
+  seq.segment_seq++;
+  assert(seq.segment_seq < MAX_SEG_SEQ);
   set_written_to(
-    journal_seq_t{++seq.segment_seq, paddr});
+    journal_seq_t{seq.segment_seq, paddr});
   return roll_ertr::now();
 }
 
