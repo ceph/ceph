@@ -51,10 +51,11 @@ export class CephfsSubvolumeService {
     });
   }
 
-  remove(fsName: string, subVolumeName: string) {
+  remove(fsName: string, subVolumeName: string, retainSnapshots: boolean = false) {
     return this.http.delete(`${this.baseURL}/${fsName}`, {
       params: {
-        subvol_name: subVolumeName
+        subvol_name: subVolumeName,
+        retain_snapshots: retainSnapshots
       },
       observe: 'response'
     });

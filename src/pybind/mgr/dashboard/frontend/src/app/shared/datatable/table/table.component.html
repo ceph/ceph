@@ -347,7 +347,8 @@
   <span data-toggle="tooltip"
         [title]="value"
         class="font-monospace">{{ value | path }}
-    <cd-copy-2-clipboard-button [source]="value"
+    <cd-copy-2-clipboard-button *ngIf="value"
+                                [source]="value"
                                 [byId]="false"
                                 [showIconOnly]="true">
     </cd-copy-2-clipboard-button>

@@ -57,7 +57,7 @@ And('I click on submit button', () => {
  * by ticking the 'Are you sure?' box.
  */
 Then('I check the tick box in modal', () => {
-  cy.get('cd-modal .custom-control-label').click();
+  cy.get('cd-modal input#confirmation').click();
 });
 
 And('I confirm to {string}', (action: string) => {
