@@ -329,8 +329,18 @@ class RgwClient(RestClient):
         RgwClient._daemons = _get_daemons()
 
         # The API access key and secret key are mandatory for a minimal configuration.
+        realms = []
+        _, out, _ = mgr.send_rgwadmin_command(['realm', 'list'])
+        if out:
+            realms = out.get('realms', [])
+
         if not (Settings.RGW_API_ACCESS_KEY and Settings.RGW_API_SECRET_KEY):
             configure_rgw_credentials()
+        else:
+            if realms:
+                if not type(Settings.RGW_API_ACCESS_KEY) is dict:
+                    configure_rgw_credentials()
+
 
         if not daemon_name:
             # Select 1st daemon:
