@@ -1545,7 +1545,7 @@ class RgwMultisite:
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_multisite_sync_status_cmd, False)
             if exit_code > 0:
-                raise DashboardException('Unable to get multisite sync status',
+                raise DashboardException('Unable to get sync status',
                                          http_status_code=500, component='rgw')
             if out:
                 return self.process_data(out)
@@ -1555,8 +1555,10 @@ class RgwMultisite:
 
     def process_data(self, data):
         primary_zone_data, metadata_sync_data = self.extract_metadata_and_primary_zone_data(data)
-        datasync_info = self.extract_datasync_info(data)
-        replica_zones_info = [self.extract_replica_zone_data(item) for item in datasync_info]
+        replica_zones_info = []
+        if metadata_sync_data != {}:
+            datasync_info = self.extract_datasync_info(data)
+            replica_zones_info = [self.extract_replica_zone_data(item) for item in datasync_info]
 
         replica_zones_info_object = {
             'metadataSyncInfo': metadata_sync_data,
@@ -1575,7 +1577,10 @@ class RgwMultisite:
         zone = self.get_primary_zonedata(primary_zone_tree[2])
 
         primary_zone_data = [realm, zonegroup, zone]
-        metadata_sync_data = self.extract_metadata_sync_data(metadata_sync_infoormation)
+        zonegroup_info = self.get_zonegroup(zonegroup)
+        metadata_sync_data = {}
+        if len(zonegroup_info['zones']) > 1:
+            metadata_sync_data = self.extract_metadata_sync_data(metadata_sync_infoormation)
 
         return primary_zone_data, metadata_sync_data
 
