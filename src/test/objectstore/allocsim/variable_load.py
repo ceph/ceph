@@ -7,7 +7,7 @@ import argparse
 import logging
 import random
 
-logger = logging.getLogger("iots")
+logger = logging.getLogger("vw")
 
 """
 Workloads are defined based on sinusiodal waves.
@@ -68,14 +68,14 @@ class Idue:
   def due(self, x: float) -> float:
     return 0
 
-class workload_sine(Idue):
+class WorkloadSine(Idue):
   #set of default ranges for random to select from
   #defaut "cnt=3 amp=500-1000 period=90-120 shift=0-1 supp=1"
-  default_amp: str = '500-1000'
-  default_period: str = '30-60'
-  default_shift: str = '0-1'
-  default_supp: str = '1'
-  default_cnt: int = 3
+  DEFAULT_AMP: str = '500-1000'
+  DEFAULT_PERIOD: str = '30-60'
+  DEFAULT_SHIFT: str = '0-1'
+  DEFAULT_SUPP: str = '1'
+  DEFAULT_CNT: int = 3
   class AFS:
     def __init__(self, A: float, F:float, S:float) -> None:
       assert(F > 0)
@@ -132,9 +132,9 @@ class workload_sine(Idue):
       self.P = 1
 
     #don't care if cnt==0, lame workload is still a workload
-    amps =    construct('amp',    self.default_amp)
-    periods = construct('period', self.default_period)
-    shifts =  construct('shift',  self.default_shift)
+    amps =    construct('amp',    self.DEFAULT_AMP)
+    periods = construct('period', self.DEFAULT_PERIOD)
+    shifts =  construct('shift',  self.DEFAULT_SHIFT)
     assert(len(amps) == cnt)
     assert(len(periods) == cnt)
     assert(len(shifts) == cnt)
@@ -152,10 +152,11 @@ class workload_sine(Idue):
       s -= i.AdivF * math.cos(i.F * x + i.S)
     return s - self.due0
 
-class workload_custom(Idue):
+#here to signal future extension by eval()
+class WorkloadCustom(Idue):
   pass
 
-class workload:
+class Workload:
   def __init__(self, name: str, due: Idue) -> None:
     self.name = name
     self.due = due
@@ -237,9 +238,10 @@ class workload:
     cumulative_todo = self.work_needed_until(now - self.start_time)
     if now > self.reporting_next:
       print_report(now)
-    ops_to_schedule = int(cumulative_todo) - (self.ops_started + self.ops_skipped)
-    self.ops_started += ops_to_schedule
-    self.ops_done += ops_to_schedule
+    ops_to_schedule = int(cumulative_todo) - self.ops_started
+    if (ops_to_schedule > 0):
+      self.ops_started += ops_to_schedule
+      self.ops_done += ops_to_schedule
     wup = threading.Timer(0.01, self.dry_schedule_ops)
     wup.start()
     return
@@ -259,7 +261,7 @@ class workload:
       time.sleep(0.01)
     logger.debug("workload %s stopped" % self.name)
 
-#end workload class
+#end Workload class
 
 def print_report(now):
   elapsed = now - workloads[0].start_time
@@ -271,25 +273,24 @@ def print_report(now):
   print("time=%7.3f" % elapsed + \
         " iops=%d" % iops)
 
-def run(workloads, runtime):
+def run(workloads, args):
   cluster = rados.Rados(conffile='ceph.conf')
   cluster.connect()
-  pool_name = 'test'
-  ioctx = cluster.open_ioctx(pool_name)
+  ioctx = cluster.open_ioctx(args.pool)
 
   for w in workloads:
     w.start(ioctx)
 
-  time.sleep(runtime);
+  time.sleep(args.runtime);
   for w in workloads:
     w.stop()
 
   ioctx.close()
 
-def dry_run(workloads, runtime):
+def dry_run(workloads, args):
   for w in workloads:
     w.dry_start()
-  time.sleep(runtime/10);
+  time.sleep(args.runtime/10);
   for w in workloads:
     w.stop()
 
@@ -297,13 +298,73 @@ workloads = list()
 
 def main():
   parser = argparse.ArgumentParser(
-      prog='Variable OSD load generator')
+    prog='variable_load.py',
+    formatter_class=argparse.RawDescriptionHelpFormatter,
+    description='''\
+Generates workload with selectable IO fluctuation.
+''',
+    epilog='''\
+WORKLOAD
+   The workload defines operation density at given time.
+   It is implemented as a sum of sinusoidal waves.
+
+   The keywords in workload definition are:
+
+   cnt     integer, count of primitive sin waves, Default: 3
+   amp     float, amplitude of sine wave, Default: 500-1000
+   period  float, period of sine wave, Default: 90-120
+   shift   float, shift of sine wave, Default: 0-1; maps into 0-2pi
+   supp    float, horizontal shift of sine wave, Default: 1; values 0-1 are useful
+   rand    integer, a random seed used for multivalue random selection
+
+   AMP, PERIOD, SHIFT
+   These are multivalues that let you directly specify different values
+   for different sine wave components. Value can be either provided directly
+   or randomly picked from specified range.
+      Example: cnt=8 amp=1000,2000-5000,10-100
+      8 sine wave components will be created,
+      #0 - 1000
+      #1 - random from range 2000-5000
+      #2 to #7 - random from range 10-100
+
+   SUPP
+   By default sine wave components are modified by +1 to always get possitive values.
+   supp > 1:
+     The workload will never reach 0.
+       Example: cnt=1 amp=1000 supp=1.5
+       The result is a sine wave workload from 500op/s to 1500op/s
+   supp in (0-1):
+     The workload will completely died down
+       Example: cnt=1 amp=1000 supp=0.5
+
+   EXAMPLES:
+   1) 100 seconds of nicely fluctuating 0 - ~4000 workload
+     #variable_load.py --workload "cnt=4 amp=500-1500 period=10-20" --runtime 100 --pool test
+
+   2) Just prediction of 100 seconds of workload that periodically vanishes
+     #variable_load.py --workload "cnt=4 amp=500-1500 period=10-20 supp=0.3" --dry-run
+
+   3) Separated peaks of high IOs with ~35s period
+     #variable_load.py --workload "cnt=4 amp=2000-2500 period=30-40 supp=0.2"
+
+   4) Noise workload with 200 to 500 iops
+     #variable_load.py --workload "cnt=6 amp=50-150 period=10-30" --runtime 10000 --pool mypool
+
+   5) High peaks superimposed on noise
+     #variable_load.py --runtime 10000 --pool mypool \
+      --workload "cnt=4 amp=2000-2500 period=30-40 supp=0.2" \
+      --workload "cnt=6 amp=50-150 period=10-30"
+''')
   parser.add_argument('--debug_level', type=str, default='1')
   parser.add_argument('--dry-run', action='store_true', default=False)
-  parser.add_argument('--runtime', required=False, type=int, default=60)
-  parser.add_argument('--workload', action='append', required=False, type=str, #nargs='*', 
+  parser.add_argument('--runtime', required=False, type=int, default=60,
+                      help='do not connect to a cluster, only calculate load')
+  parser.add_argument('--workload', action='append', required=False, type=str,
+                      default=list(),
                       help='Space separated list workload specs. '
                       'Default: "cnt=3 amp=500-1000 period=90-120 shift=0-1 supp=1"')
+  parser.add_argument('--pool', required=False, type=str, default='test',
+                      help='ceph pool to use for testing')
   args = parser.parse_args()
 
   log_levels = {
@@ -316,8 +377,11 @@ def main():
   }
 
   logging.basicConfig(level=log_levels[args.debug_level])
-  logger = logging.getLogger("iots")
   logger.setLevel(log_levels[args.debug_level])
+
+  if len(args.workload) == 0:
+    logger.critical("No workload defined")
+    return
 
   wcnt = 0
   for i in args.workload:
@@ -327,15 +391,15 @@ def main():
       if j.find('=') != -1:
         k = j.split('=')
         wdict[k[0]] = k[1]
-    wsine = workload_sine(wdict);
-    w = workload("workload_%d" % wcnt, wsine)
+    wsine = WorkloadSine(wdict);
+    w = Workload("workload_%d" % wcnt, wsine)
     wcnt = wcnt + 1
     workloads.append(w)
 
   if args.dry_run:
-    dry_run(workloads, args.runtime)
+    dry_run(workloads, args)
   else:
-    run(workloads, args.runtime)
+    run(workloads, args)
 
 
 if __name__ == '__main__':
