@@ -439,6 +439,27 @@ class RgwBucket(RgwRESTController):
         return CephService.get_encryption_config(daemon_name)
 
 
+@UIRouter('/rgw/bucket', Scope.RGW)
+class RgwBucketUi(RgwBucket):
+    @Endpoint('GET')
+    @ReadPermission
+    # pylint: disable=W0613
+    def buckets_and_users_count(self, daemon_name=None):
+        buckets_count = 0
+        users_count = 0
+        daemon_object = RgwDaemon()
+        daemons = json.loads(daemon_object.list())
+        for daemon in daemons:
+            buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
+            users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
+            users_count += len(users)
+            buckets_count += len(buckets)
+        return {
+            'buckets_count': buckets_count,
+            'users_count': users_count
+        }
+
+
 @APIRouter('/rgw/user', Scope.RGW)
 @APIDoc("RGW User Management API", "RgwUser")
 class RgwUser(RgwRESTController):
