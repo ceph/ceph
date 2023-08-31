@@ -52,7 +52,7 @@ class D4NFilterDriver : public FilterDriver {
       objDir = new rgw::d4n::ObjectDirectory(io_context);
       blockDir = new rgw::d4n::BlockDirectory(io_context);
       cacheBlock = new rgw::d4n::CacheBlock();
-      policyDriver = new rgw::d4n::PolicyDriver("lfuda");
+      policyDriver = new rgw::d4n::PolicyDriver(io_context, "lfuda");
     }
     virtual ~D4NFilterDriver() {
       delete cacheDriver;

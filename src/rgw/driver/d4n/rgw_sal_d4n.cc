@@ -46,7 +46,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   blockDir->init(cct, dpp);
 
   policyDriver->init(); 
-  policyDriver->cachePolicy->init(cct);
+  policyDriver->get_cache_policy()->init(cct, dpp);
   
   return 0;
 }
@@ -648,7 +648,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 
   /*
   / Execute cache replacement policy /
-  int policyRet = source->driver->get_policy_driver()->cachePolicy->get_block(dpp, source->driver->get_cache_block(), 
+  int policyRet = source->driver->get_policy_driver()->get_cache_policy()->get_block(dpp, source->driver->get_cache_block(), 
 		    source->driver->get_cache_driver(), y);
   
   if (policyRet < 0) {

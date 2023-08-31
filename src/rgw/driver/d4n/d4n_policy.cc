@@ -1,216 +1,209 @@
 #include "d4n_policy.h"
-
-#define dout_subsys ceph_subsys_rgw
-#define dout_context g_ceph_context
+#include "common/async/blocked_completion.h"
 
 namespace rgw { namespace d4n {
 
-int CachePolicy::find_client(const DoutPrefixProvider* dpp, cpp_redis::client* client) {
-  if (client->is_connected())
-    return 0;
+// initiate a call to async_exec() on the connection's executor
+struct initiate_exec {
+  std::shared_ptr<boost::redis::connection> conn;
+  boost::redis::request req;
 
-  if (get_addr().host == "" || get_addr().port == 0) {
-    ldpp_dout(dpp, 10) << "RGW D4N Policy: D4N policy endpoint was not configured correctly" << dendl;
-    return -EDESTADDRREQ;
+  using executor_type = boost::redis::connection::executor_type;
+  executor_type get_executor() const noexcept { return conn->get_executor(); }
+
+  template <typename Handler, typename Response>
+  void operator()(Handler handler, Response& resp)
+  {
+    conn->async_exec(req, resp, boost::asio::consign(std::move(handler), conn));
   }
+};
 
-  client->connect(get_addr().host, get_addr().port, nullptr);
-
-  if (!client->is_connected())
-    return -ECONNREFUSED;
-
-  return 0;
+template <typename Response, typename CompletionToken>
+auto async_exec(std::shared_ptr<connection> conn,
+                const boost::redis::request& req,
+                Response& resp, CompletionToken&& token)
+{
+  return boost::asio::async_initiate<CompletionToken,
+         void(boost::system::error_code, std::size_t)>(
+      initiate_exec{std::move(conn), req}, token, resp);
 }
 
-int CachePolicy::exist_key(std::string key) {
-  int result = -1;
-  std::vector<std::string> keys;
-  keys.push_back(key);
-
-  if (!client.is_connected()) {
-    return result;
+template <typename T>
+void redis_exec(std::shared_ptr<connection> conn, boost::system::error_code& ec, boost::redis::request& req, boost::redis::response<T>& resp, optional_yield y)
+{
+  if (y) {
+    auto yield = y.get_yield_context();
+    async_exec(std::move(conn), req, resp, yield[ec]);
+  } else {
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
   }
-
-  try {
-    client.exists(keys, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {}
-
-  return result;
 }
 
-int LFUDAPolicy::set_age(int age) {
-  int result = 0;
-
+int LFUDAPolicy::set_age(int age, optional_yield y) {
   try {
-    client.hset("lfuda", "age", std::to_string(age), [&result](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-	result = reply.as_integer(); 
-      }
-    }); 
+    boost::system::error_code ec;
+    response<int> resp;
+    request req;
+    req.push("HSET", "lfuda", "age", std::to_string(age));
 
-    client.sync_commit();
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return {};
+
+    return std::get<0>(resp).value(); /* Returns number of fields set */
   } catch(std::exception &e) {
     return -1;
   }
-
-  return result - 1;
 }
 
-int LFUDAPolicy::get_age() {
-  int ret = 0;
-  int age = -1;
+int LFUDAPolicy::get_age(optional_yield y) {
+  response<int> resp;
 
   try {
-    client.hexists("lfuda", "age", [&ret](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-        ret = reply.as_integer();
-      }
-    });
+    boost::system::error_code ec;
+    request req;
+    req.push("HEXISTS", "lfuda", "age");
 
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {
-    return -1;
-  }
+    redis_exec(conn, ec, req, resp, y);
 
-  if (!ret) {
-    ret = set_age(0); /* Initialize age */
-
-    if (!ret) {
-      return 0; /* Success */
-    } else {
+    if (ec)
       return -1;
-    };
-  }
-
-  try {
-    client.hget("lfuda", "age", [&age](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-        age = std::stoi(reply.as_string());
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
   } catch(std::exception &e) {
     return -1;
   }
 
-  return age;
+  if (!std::get<0>(resp).value()) {
+    if (!set_age(0, y)) /* Initialize age */
+      return 0;
+    else
+      return -1;
+  }
+
+  try { 
+    boost::system::error_code ec;
+    response<std::string> value;
+    request req;
+    req.push("HGET", "lfuda", "age");
+      
+    redis_exec(conn, ec, req, value, y);
+
+    if (ec)
+      return -1;
+
+    return std::stoi(std::get<0>(value).value());
+  } catch(std::exception &e) {
+    return -1;
+  }
 }
 
-int LFUDAPolicy::set_global_weight(std::string key, int weight) {
-  int result = 0;
-
+int LFUDAPolicy::set_global_weight(std::string key, int weight, optional_yield y) {
   try {
-    client.hset(key, "globalWeight", std::to_string(weight), [&result](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-	result = reply.as_integer();
-      }
-    }); 
+    boost::system::error_code ec;
+    response<int> resp;
+    request req;
+    req.push("HSET", key, "globalWeight", std::to_string(weight));
 
-    client.sync_commit();
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return {};
+
+    return std::get<0>(resp).value(); /* Returns number of fields set */
   } catch(std::exception &e) {
     return -1;
   }
-
-  return result - 1;
 }
 
-int LFUDAPolicy::get_global_weight(std::string key) {
-  int weight = -1;
+int LFUDAPolicy::get_global_weight(std::string key, optional_yield y) {
+  try { 
+    boost::system::error_code ec;
+    response<std::string> resp;
+    request req;
+    req.push("HGET", key, "globalWeight");
+      
+    redis_exec(conn, ec, req, resp, y);
 
-  try {
-    client.hget(key, "globalWeight", [&weight](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-	weight = reply.as_integer();
-      }
-    });
+    if (ec)
+      return -1;
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    return std::stoi(std::get<0>(resp).value());
   } catch(std::exception &e) {
     return -1;
   }
-
-  return weight;
 }
 
-int LFUDAPolicy::set_min_avg_weight(size_t weight, std::string cacheLocation) {
-  int result = 0;
+int LFUDAPolicy::set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y) {
+  try {
+    boost::system::error_code ec;
+    response<int> resp;
+    request req;
+    req.push("HSET", "lfuda", "minAvgWeight:cache", cacheLocation);
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return {};
+  } catch(std::exception &e) {
+    return -1;
+  }
+  
+  try {
+    boost::system::error_code ec;
+    response<int> resp;
+    request req;
+    req.push("HSET", "lfuda", "minAvgWeight:weight", cacheLocation);
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return {};
+
+    return std::get<0>(resp).value(); /* Returns number of fields set */
+  } catch(std::exception &e) {
+    return -1;
+  }
+}
+
+int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
+  response<int> resp;
 
   try {
-    client.hset("lfuda", "minAvgWeight:cache", cacheLocation, [&result](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-	result = reply.as_integer();
-      }
-    }); 
+    boost::system::error_code ec;
+    request req;
+    req.push("HEXISTS", "lfuda", "minAvgWeight:cache");
 
-    client.sync_commit();
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return -1;
   } catch(std::exception &e) {
     return -1;
   }
 
-  if (result == 1) {
-    result = 0;
-    try {
-      client.hset("lfuda", "minAvgWeight:weight", std::to_string(weight), [&result](cpp_redis::reply& reply) {
-	if (!reply.is_null()) {
-	  result = reply.as_integer();
-	}
-      }); 
-
-      client.sync_commit();
-    } catch(std::exception &e) {
+  if (!std::get<0>(resp).value()) {
+    if (!set_min_avg_weight(INT_MAX, ""/* local cache location or keep empty? */, y)) { /* Initialize minimum average weight */
+      return INT_MAX;
+    } else {
       return -1;
     }
   }
 
-  return result - 1;
-}
+  try { 
+    boost::system::error_code ec;
+    response<std::string> value;
+    request req;
+    req.push("HGET", "lfuda", "minAvgWeight:weight");
+      
+    redis_exec(conn, ec, req, value, y);
 
-int LFUDAPolicy::get_min_avg_weight() {
-  int ret = 0;
-  int weight = -1;
-
-  try {
-    client.hexists("lfuda", "minAvgWeight:cache", [&ret](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-        ret = reply.as_integer();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {
-    return -1;
-  }
-
-  if (!ret) {
-    ret = set_min_avg_weight(INT_MAX, ""/* local cache location or keep empty? */); /* Initialize minimum average weight */
-
-    if (!ret) {
-      return INT_MAX; /* Success */
-    } else {
+    if (ec)
       return -1;
-    };
-  }
 
-  try {
-    client.hget("lfuda", "minAvgWeight:weight", [&weight](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-        weight = std::stoi(reply.as_string());
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
+    return std::stoi(std::get<0>(value).value());
   } catch(std::exception &e) {
     return -1;
   }
-
-  return weight;
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
@@ -223,7 +216,7 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
 
     if (!std::stoi(localWeightStr)) { // maybe do this in some sort of initialization procedure instead of here? -Sam
       /* Local weight hasn't been set */
-      int ret = cacheNode->set_attr(dpp, it->key, "localWeight", std::to_string(get_age()), y); 
+      int ret = cacheNode->set_attr(dpp, it->key, "localWeight", std::to_string(get_age(y)), y); 
 
       if (ret < 0)
 	return {};
@@ -236,28 +229,43 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
   /* Get victim cache block */
   CacheBlock victimBlock;
   victimBlock.cacheObj.objName = victimName;
-  //BlockDirectory blockDir;
-  //blockDir.init(cct);
+  BlockDirectory blockDir(io);
+  blockDir.init(cct, dpp);
 
-  //int ret = blockDir.get_value(&victimBlock);
+  int ret = blockDir.get(&victimBlock, y);
 
-  //if (ret < 0)
+  if (ret < 0)
     return {};
 
-  //return victimBlock;
+  return victimBlock;
+}
+
+int LFUDAPolicy::exist_key(std::string key, optional_yield y) {
+  response<int> resp;
+
+  try { 
+    boost::system::error_code ec;
+    request req;
+    req.push("EXISTS", key);
+  
+    redis_exec(conn, ec, req, resp, y);
+    
+    if (ec)
+      return false;
+  } catch(std::exception &e) {}
+
+  return std::get<0>(resp).value();
 }
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
   std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
   std::string localWeightStr = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight", y); // change to block name eventually -Sam
   int localWeight = -1;
-
-  if (!client.is_connected())
-    find_client(dpp, &client);
+  response<std::string> resp;
 
   if (localWeightStr.empty()) { // figure out where to set local weight -Sam
-    int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(get_age()), y); 
-    localWeight = get_age();
+    int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(get_age(y)), y); 
+    localWeight = get_age(y);
 
     if (ret < 0)
       return -1;
@@ -265,26 +273,26 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     localWeight = std::stoi(localWeightStr);
   }
 
-  int age = get_age();
+  int age = get_age(y);
 
   if (cacheNode->key_exists(dpp, block->cacheObj.objName, y)) { /* Local copy */ 
     localWeight += age;
   } else {
-    std::string hosts;
     uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
     while (freeSpace < block->size) /* Not enough space in local cache */
       freeSpace += eviction(dpp, cacheNode, y);
 
-    if (exist_key(key)) { /* Remote copy */
+    if (exist_key(key, y)) { /* Remote copy */
       try {
-	client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
-	  if (!reply.is_null()) {
-	    hosts = reply.as_string();
-	  }
-	});
+	boost::system::error_code ec;
+	request req;
+	req.push("HGET", key, "blockHosts");
+	  
+	redis_exec(conn, ec, req, resp, y);
 
-	client.sync_commit(std::chrono::milliseconds(1000));
+	if (ec)
+	  return -1;
       } catch(std::exception &e) {
 	return -1;
       }
@@ -293,11 +301,11 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
     }
 
     // should not hold local cache IP if in this else statement -Sam
-    if (hosts.length() > 0) { /* Remote copy */
-      int globalWeight = get_global_weight(key);
+    if (std::get<0>(resp).value().length() > 0) { /* Remote copy */
+      int globalWeight = get_global_weight(key, y);
       globalWeight += age;
       
-      if (set_global_weight(key, globalWeight))
+      if (set_global_weight(key, globalWeight, y))
 	return -1;
     } else { /* No remote copy */
       // do I need to add the block to the local cache here? -Sam
@@ -319,20 +327,21 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   }
 
   std::string key = "rgw-object:" + victim.cacheObj.objName + ":directory";
-  std::string hosts;
-  int globalWeight = get_global_weight(key);
+  int globalWeight = get_global_weight(key, y);
   int localWeight = std::stoi(cacheNode->get_attr(dpp, victim.cacheObj.objName, "localWeight", y)); // change to block name eventually -Sam
-  int avgWeight = get_min_avg_weight();
+  int avgWeight = get_min_avg_weight(y);
+  response<std::string> resp;
 
-  if (exist_key(key)) {
+  if (exist_key(key, y)) {
     try {
-      client.hget(key, "hostsList", [&hosts](cpp_redis::reply& reply) {
-	if (!reply.is_null()) {
-	  hosts = reply.as_string();
-	}
-      });
+      boost::system::error_code ec;
+      request req;
+      req.push("HGET", key, "blockHosts");
+	
+      redis_exec(conn, ec, req, resp, y);
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+      if (ec)
+	return -1;
     } catch(std::exception &e) {
       return -1;
     }
@@ -340,13 +349,13 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
     return -2; 
   }
 
-  if (hosts.empty()) { /* Last copy */
+  if (std::get<0>(resp).value().empty()) { /* Last copy */
     if (globalWeight > 0) {
       localWeight += globalWeight;
       int ret = cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight), y);
 
       if (!ret)
-        ret = set_global_weight(key, 0);
+        ret = set_global_weight(key, 0, y);
       else
         return -1;
 
@@ -364,19 +373,19 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 
   globalWeight += localWeight;
 
-  if (set_global_weight(key, globalWeight))
+  if (set_global_weight(key, globalWeight, y))
     return -2;
 
   ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
   int ret = cacheNode->del(dpp, victim.cacheObj.objName, y);
 
   if (!ret) {
-    ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries(dpp)), ""/*local cache location*/); // Where else must this be set? -Sam
+    ret = set_min_avg_weight(avgWeight - (localWeight/cacheNode->get_num_entries(dpp)), ""/*local cache location*/, y); // Where else must this be set? -Sam
 
     if (!ret) {
-      int age = get_age();
+      int age = get_age(y);
       age = std::max(localWeight, age);
-      ret = set_age(age);
+      ret = set_age(age, y);
       
       if (ret)
 	return -1;
@@ -390,9 +399,15 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   return victim.size;
 }
 
+void LFUDAPolicy::shutdown()
+{
+  // call cancel() on the connection's executor
+  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
+}
+
 int PolicyDriver::init() {
   if (policyName == "lfuda") {
-    cachePolicy = new LFUDAPolicy();
+    cachePolicy = new LFUDAPolicy(io);
     return 0;
   } else
     return -1;

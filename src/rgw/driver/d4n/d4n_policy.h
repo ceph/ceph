@@ -1,7 +1,5 @@
 #pragma once
 
-#include <string>
-#include <iostream>
 #include <cpp_redis/cpp_redis>
 #include <boost/redis/connection.hpp>
 
@@ -9,65 +7,87 @@
 #include "d4n_directory.h"
 #include "../../rgw_redis_driver.h"
 
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
+
 namespace rgw { namespace d4n {
 
-class CachePolicy {
-  private:
-    cpp_redis::client client;
-    Address addr;
+namespace net = boost::asio;
+using boost::redis::config;
+using boost::redis::connection;
+using boost::redis::request;
+using boost::redis::response;
 
+class CachePolicy {
   public:
     CephContext* cct;
 
-    CachePolicy() : addr() {}
-    virtual ~CachePolicy() = default;
+    CachePolicy() {}
+    virtual ~CachePolicy() = default; 
 
-    virtual void init(CephContext *_cct) {
-      cct = _cct;
-      addr.host = cct->_conf->rgw_d4n_host;
-      addr.port = cct->_conf->rgw_d4n_port;
+    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp) {
+      this->cct = cct;
+      return 0;
     }
-    virtual int find_client(const DoutPrefixProvider* dpp, cpp_redis::client* client) = 0;
-    virtual int exist_key(std::string key) = 0;
-    virtual Address get_addr() { return addr; }
+    virtual int exist_key(std::string key, optional_yield y) = 0;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
 };
 
 class LFUDAPolicy : public CachePolicy {
   private:
-    cpp_redis::client client;
+    net::io_context& io;
+    std::shared_ptr<connection> conn;
 
   public:
-    LFUDAPolicy() : CachePolicy() {}
+    LFUDAPolicy(net::io_context& io_context) : CachePolicy(), io(io_context) {
+      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
+    }
 
-    int set_age(int age);
-    int get_age();
-    int set_global_weight(std::string key, int weight);
-    int get_global_weight(std::string key);
-    int set_min_avg_weight(size_t weight, std::string cacheLocation);
-    int get_min_avg_weight();
+    int set_age(int age, optional_yield y);
+    int get_age(optional_yield y);
+    int set_global_weight(std::string key, int weight, optional_yield y);
+    int get_global_weight(std::string key, optional_yield y);
+    int set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y);
+    int get_min_avg_weight(optional_yield y);
     CacheBlock find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y);
+    void shutdown();
 
-    virtual int find_client(const DoutPrefixProvider* dpp, cpp_redis::client* client) override { return CachePolicy::find_client(dpp, client); }
-    virtual int exist_key(std::string key) override { return CachePolicy::exist_key(key); }
+    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp) {
+      this->cct = cct;
+
+      config cfg;
+      cfg.addr.host = cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
+      cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
+
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
+	ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
+	return -EDESTADDRREQ;
+      }
+
+      conn->async_run(cfg, {}, net::detached);
+
+      return 0;
+    }
+    virtual int exist_key(std::string key, optional_yield y) override;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
 };
 
 class PolicyDriver {
   private:
+    net::io_context& io;
     std::string policyName;
-
-  public:
     CachePolicy* cachePolicy;
 
-    PolicyDriver(std::string _policyName) : policyName(_policyName) {}
+  public:
+    PolicyDriver(net::io_context& io_context, std::string _policyName) : io(io_context), policyName(_policyName) {}
     ~PolicyDriver() {
       delete cachePolicy;
     }
 
     int init();
+    CachePolicy* get_cache_policy() { return cachePolicy; }
 };
 
 } } // namespace rgw::d4n
