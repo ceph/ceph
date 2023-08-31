@@ -21,6 +21,8 @@ import { FormControl } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
+import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolumegroup.model';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -61,14 +63,19 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
   selectedName: string = '';
 
   subVolumes$: Observable<CephfsSubvolume[]>;
+  subVolumeGroups$: Observable<CephfsSubvolumeGroup[]>;
   subject = new ReplaySubject<CephfsSubvolume[]>();
+  groupsSubject = new ReplaySubject<CephfsSubvolume[]>();
+
+  activeGroupName: string = '';
 
   constructor(
     private cephfsSubVolume: CephfsSubvolumeService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private authStorageService: AuthStorageService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -123,15 +130,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () =>
-          this.modalService.show(
-            CephfsSubvolumeFormComponent,
-            {
-              fsName: this.fsName,
-              pools: this.pools
-            },
-            { size: 'lg' }
-          )
+        click: () => this.openModal()
       },
       {
         name: this.actionLabels.EDIT,
@@ -147,16 +146,17 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       }
     ];
 
-    this.subVolumes$ = this.subject.pipe(
+    this.getSubVolumes();
+
+    this.subVolumeGroups$ = this.groupsSubject.pipe(
       switchMap(() =>
-        this.cephfsSubVolume.get(this.fsName).pipe(
+        this.cephfsSubvolumeGroupService.get(this.fsName).pipe(
           catchError(() => {
             this.context.error();
             return of(null);
           })
         )
-      ),
-      shareReplay(1)
+      )
     );
   }
 
@@ -166,6 +166,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
 
   ngOnChanges() {
     this.subject.next();
+    this.groupsSubject.next();
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -178,6 +179,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       {
         fsName: this.fsName,
         subVolumeName: this.selection?.first()?.name,
+        subVolumeGroupName: this.activeGroupName,
         pools: this.pools,
         isEdit: edit
       },
@@ -204,6 +206,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
             call: this.cephfsSubVolume.remove(
               this.fsName,
               this.selectedName,
+              this.activeGroupName,
               this.removeForm.getValue('retainSnapshots')
             )
           })
@@ -215,5 +218,24 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
             }
           })
     });
+  }
+
+  selectSubVolumeGroup(subVolumeGroupName: string) {
+    this.activeGroupName = subVolumeGroupName;
+    this.getSubVolumes(subVolumeGroupName);
+  }
+
+  getSubVolumes(subVolumeGroupName = '') {
+    this.subVolumes$ = this.subject.pipe(
+      switchMap(() =>
+        this.cephfsSubVolume.get(this.fsName, subVolumeGroupName).pipe(
+          catchError(() => {
+            this.context.error();
+            return of(null);
+          })
+        )
+      ),
+      shareReplay(1)
+    );
   }
 }
