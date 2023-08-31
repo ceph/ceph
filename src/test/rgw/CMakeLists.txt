@@ -59,6 +59,25 @@ install(TARGETS ceph_test_rgw_d4n_filter DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 if(WITH_RADOSGW_D4N)
+add_executable(ceph_test_rgw_d4n_policy
+  test_d4n_policy.cc
+  )
+target_include_directories(ceph_test_rgw_d4n_policy
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE
+  rgw_common
+  librados
+  ceph-common
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+  target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE spawn)
+install(TARGETS ceph_test_rgw_d4n_policy DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
+
+if(WITH_RADOSGW_D4N)
 add_executable(ceph_test_rgw_redis_driver
   test_redis_driver.cc
   )
