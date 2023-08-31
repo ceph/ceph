@@ -1237,6 +1237,19 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSCon
 	  send_lock_message(lock, LOCK_AC_SYNC, softdata);
 	}
 	break;
+      case LOCK_XLOCKSNAP:
+	if (lock->get_sm() == &sm_filelock) {
+	  int pending = lock->gcaps_allowed(CAP_ANY) ||
+	                lock->gcaps_allowed(CAP_LONER) ||
+			lock->gcaps_allowed(CAP_XLOCKER);
+	  int revoke = ~pending & (loner_issued | other_issued | xlocker_issued);
+
+	  // wait for 'Fb' to be revoked
+	  if (revoke & CEPH_CAP_GBUFFER) {
+	    return;
+	  }
+	}
+	break;
       }
 
     }
