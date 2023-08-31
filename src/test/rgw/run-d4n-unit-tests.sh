@@ -7,15 +7,18 @@ then
 else
 redis-server --daemonize yes
 fi
-echo "-----------Redis Server Started-----------"
-#../../../build/bin/ceph_test_rgw_d4n_directory
+
+../../../build/bin/ceph_test_rgw_d4n_directory
 printf "\n-----------Directory Test Executed-----------\n"
+
 redis-cli FLUSHALL
-echo "-----------Redis Server Flushed-----------"
-../../../build/bin/ceph_test_rgw_d4n_filter
-printf "\n-----------Filter Test Executed-----------\n"
-redis-cli FLUSHALL
-echo "-----------Redis Server Flushed-----------"
+../../../build/bin/ceph_test_rgw_redis_driver
+printf "\n-----------Redis Driver Test Executed-----------\n"
+
+#../../../build/bin/ceph_test_rgw_d4n_filter
+#printf "\n-----------Filter Test Executed-----------\n"
+#redis-cli FLUSHALL
+
 REDIS_PID=$(lsof -i4TCP:6379 -sTCP:LISTEN -t)
 kill $REDIS_PID
 echo "-----------Redis Server Stopped-----------"
