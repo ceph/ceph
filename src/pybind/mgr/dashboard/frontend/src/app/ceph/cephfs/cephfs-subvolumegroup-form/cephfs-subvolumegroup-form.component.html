@@ -61,6 +61,9 @@
                    placeholder="e.g., 10GiB"
                    defaultUnit="GiB"
                    cdDimlessBinary>
+            <span *ngIf="subvolumegroupForm.showError('size', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
           </div>
         </div>
 
