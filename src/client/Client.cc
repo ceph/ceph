@@ -10338,20 +10338,12 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     cflags |= CEPH_O_LAZY;
 
   int cmode = ceph_flags_to_mode(cflags);
-#if 0
-  if (in->dir) {
-    auto diri = in->dir->parent_inode;
-    if (diri && diri->fscrypt_ctx) {
-      if (want & CEPH_FILE_MODE_WR) {
-        want |= CEPH_FILE_MODE_RD;
-      }
-    }
-  }
-#endif
-#warning FIXME
-  if (cmode & CEPH_FILE_MODE_WR) {
+
+  if (in->fscrypt_ctx &&
+      cmode & CEPH_FILE_MODE_WR) {
     cmode |= CEPH_FILE_MODE_RD;
   }
+
   int want = ceph_caps_for_mode(cmode);
   int result = 0;
 
@@ -14945,8 +14937,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   int cmode = ceph_flags_to_mode(cflags);
 
-#warning FIXME caps
-  if (cmode & CEPH_FILE_MODE_WR) {
+  if (dir->fscrypt_ctx &&
+      cmode & CEPH_FILE_MODE_WR) {
     cmode |= CEPH_FILE_MODE_RD;
   }
 
