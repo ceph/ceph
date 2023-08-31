@@ -14,7 +14,7 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
 from ..services.exception import handle_cephfs_error
-from ..tools import ViewCache
+from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, DeletePermission, Endpoint, EndpointDoc, \
     RESTController, UIRouter, UpdatePermission, allow_empty_body
 
@@ -722,14 +722,17 @@ class CephFSSubvolume(RESTController):
 
         return f'Subvolume {subvol_name} updated successfully'
 
-    def delete(self, vol_name: str, subvol_name: str):
+    def delete(self, vol_name: str, subvol_name: str, retain_snapshots: bool = False):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name}
+        retain_snapshots = str_to_bool(retain_snapshots)
+        if retain_snapshots:
+            params['retain_snapshots'] = 'True'
         error_code, _, err = mgr.remote(
-            'volumes', '_cmd_fs_subvolume_rm', None, {
-                'vol_name': vol_name, 'sub_name': subvol_name})
+            'volumes', '_cmd_fs_subvolume_rm', None, params)
         if error_code != 0:
-            raise RuntimeError(
-                f'Failed to delete subvolume {subvol_name}: {err}'
-            )
+            raise DashboardException(
+                msg=f'Failed to remove subvolume {subvol_name}: {err}',
+                component='cephfs')
         return f'Subvolume {subvol_name} removed successfully'
 
 

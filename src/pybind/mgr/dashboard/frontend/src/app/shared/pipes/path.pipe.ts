@@ -5,6 +5,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 })
 export class PathPipe implements PipeTransform {
   transform(value: unknown): string {
+    if (!value) return '';
     const splittedPath = value.toString().split('/');
 
     if (splittedPath[0] === '') {
