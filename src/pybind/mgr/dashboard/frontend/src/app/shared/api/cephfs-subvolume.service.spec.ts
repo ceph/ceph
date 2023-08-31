@@ -35,7 +35,9 @@ describe('CephfsSubvolumeService', () => {
 
   it('should call remove', () => {
     service.remove('testFS', 'testSubvol').subscribe();
-    const req = httpTesting.expectOne('api/cephfs/subvolume/testFS?subvol_name=testSubvol');
+    const req = httpTesting.expectOne(
+      'api/cephfs/subvolume/testFS?subvol_name=testSubvol&retain_snapshots=false'
+    );
     expect(req.request.method).toBe('DELETE');
   });
 });

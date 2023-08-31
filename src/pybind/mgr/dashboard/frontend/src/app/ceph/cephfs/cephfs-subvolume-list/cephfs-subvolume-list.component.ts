@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
+import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { Observable, ReplaySubject, of } from 'rxjs';
 import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
@@ -14,16 +14,20 @@ import { ModalService } from '~/app/shared/services/modal.service';
 import { CephfsSubvolumeFormComponent } from '../cephfs-subvolume-form/cephfs-subvolume-form.component';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permissions } from '~/app/shared/models/permissions';
-import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { FormControl } from '@angular/forms';
+import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
+import { CdForm } from '~/app/shared/forms/cd-form';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
   templateUrl: './cephfs-subvolume-list.component.html',
   styleUrls: ['./cephfs-subvolume-list.component.scss']
 })
-export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
+export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnChanges {
   @ViewChild('quotaUsageTpl', { static: true })
   quotaUsageTpl: any;
 
@@ -39,6 +43,9 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
   @ViewChild('quotaSizeTpl', { static: true })
   quotaSizeTpl: any;
 
+  @ViewChild('removeTmpl', { static: true })
+  removeTmpl: TemplateRef<any>;
+
   @Input() fsName: string;
   @Input() pools: any[];
 
@@ -46,8 +53,12 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
   selection = new CdTableSelection();
+  removeForm: CdFormGroup;
   icons = Icons;
   permissions: Permissions;
+  modalRef: NgbModalRef;
+  errorMessage: string = '';
+  selectedName: string = '';
 
   subVolumes$: Observable<CephfsSubvolume[]>;
   subject = new ReplaySubject<CephfsSubvolume[]>();
@@ -59,6 +70,7 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
     private authStorageService: AuthStorageService,
     private taskWrapper: TaskWrapperService
   ) {
+    super();
     this.permissions = this.authStorageService.getPermissions();
   }
 
@@ -174,16 +186,34 @@ export class CephfsSubvolumeListComponent implements OnInit, OnChanges {
   }
 
   removeSubVolumeModal() {
-    const name = this.selection.first().name;
-    this.modalService.show(CriticalConfirmationModalComponent, {
-      itemDescription: 'subvolume',
-      itemNames: [name],
-      actionDescription: 'remove',
-      submitActionObservable: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('cephfs/subvolume/remove', { subVolumeName: name }),
-          call: this.cephfsSubVolume.remove(this.fsName, name)
-        })
+    this.removeForm = new CdFormGroup({
+      retainSnapshots: new FormControl(false)
+    });
+    this.errorMessage = '';
+    this.selectedName = this.selection.first().name;
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      actionDescription: 'Remove',
+      itemNames: [this.selectedName],
+      itemDescription: 'Subvolume',
+      childFormGroup: this.removeForm,
+      childFormGroupTemplate: this.removeTmpl,
+      submitAction: () =>
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('cephfs/subvolume/remove', { subVolumeName: this.selectedName }),
+            call: this.cephfsSubVolume.remove(
+              this.fsName,
+              this.selectedName,
+              this.removeForm.getValue('retainSnapshots')
+            )
+          })
+          .subscribe({
+            complete: () => this.modalRef.close(),
+            error: (error) => {
+              this.modalRef.componentInstance.stopLoadingSpinner();
+              this.errorMessage = error.error.detail;
+            }
+          })
     });
   }
 }
