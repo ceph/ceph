@@ -36,12 +36,11 @@ int Resetter::init(mds_role_t role_, const std::string &type, bool hard)
     return r;
   }
 
-  auto fs = fsmap->get_filesystem(role.fscid);
-  ceph_assert(nullptr != fs);
+  auto& fs = fsmap->get_filesystem(role.fscid);
 
   is_mdlog = false;
   if (type == "mdlog") {
-    JournalPointer jp(role.rank, fs->mds_map.get_metadata_pool());
+    JournalPointer jp(role.rank, fs.get_mds_map().get_metadata_pool());
     int rt = 0;
     if (hard) {
       jp.front = role.rank + MDS_INO_LOG_OFFSET;
@@ -78,11 +77,10 @@ int Resetter::reset()
   bool done;
   int r;
 
-  auto fs =  fsmap->get_filesystem(role.fscid);
-  ceph_assert(fs != nullptr);
+  auto& fs = fsmap->get_filesystem(role.fscid);
 
   Journaler journaler("resetter", ino,
-      fs->mds_map.get_metadata_pool(),
+      fs.get_mds_map().get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC,
       objecter, 0, 0, &finisher);
   {
@@ -147,16 +145,16 @@ int Resetter::reset()
 
 int Resetter::reset_hard()
 {
-  auto fs =  fsmap->get_filesystem(role.fscid);
+  auto& fs = fsmap->get_filesystem(role.fscid);
+  auto& mds_map = fs.get_mds_map();
   
   Journaler journaler("resetter", ino,
-    fs->mds_map.get_metadata_pool(),
+    mds_map.get_metadata_pool(),
     CEPH_FS_ONDISK_MAGIC,
     objecter, 0, 0, &finisher);
   journaler.set_writeable();
 
-  file_layout_t default_log_layout = MDCache::gen_default_log_layout(
-      fsmap->get_filesystem(role.fscid)->mds_map);
+  file_layout_t default_log_layout = MDCache::gen_default_log_layout(mds_map);
   journaler.create(&default_log_layout, g_conf()->mds_journal_format);
 
   C_SaferCond cond;

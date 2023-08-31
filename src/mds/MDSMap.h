@@ -382,7 +382,7 @@ public:
   }
 
   // features
-  uint64_t get_up_features();
+  uint64_t get_up_features() const;
 
   /**
    * Get MDS ranks which are in but not up.
@@ -669,7 +669,6 @@ protected:
 
   bool inline_data_enabled = false;
 
-  uint64_t cached_up_features = 0;
 private:
   inline static const std::map<int, std::string> flag_display = {
     {CEPH_MDSMAP_NOT_JOINABLE, "joinable"}, //inverse for user display

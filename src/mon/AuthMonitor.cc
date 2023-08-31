@@ -1705,15 +1705,16 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
 
-    std::shared_ptr<const Filesystem> fs;
+    const Filesystem* fs = nullptr;
     if (filesystem != "*" && filesystem != "all") {
-      fs = mon.mdsmon()->get_fsmap().get_filesystem(filesystem);
+      const auto& fsmap = mon.mdsmon()->get_fsmap();
+      fs = fsmap.get_filesystem(filesystem);
       if (fs == nullptr) {
 	ss << "filesystem " << filesystem << " does not exist.";
 	err = -EINVAL;
 	goto done;
       } else {
-	mon_cap_string += " fsname=" + std::string(fs->mds_map.get_fs_name());
+	mon_cap_string += " fsname=" + std::string(fs->get_mds_map().get_fs_name());
       }
     }
 
@@ -1760,7 +1761,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       mds_cap_string += "allow " + cap;
 
       if (filesystem != "*" && filesystem != "all" && fs != nullptr) {
-	mds_cap_string += " fsname=" + std::string(fs->mds_map.get_fs_name());
+	mds_cap_string += " fsname=" + std::string(fs->get_mds_map().get_fs_name());
       }
 
       if (path != "/") {
