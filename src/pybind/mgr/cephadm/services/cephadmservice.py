@@ -10,7 +10,14 @@ from typing import TYPE_CHECKING, List, Callable, TypeVar, \
 
 from mgr_module import HandleCommandResult, MonCommandFailed
 
-from ceph.deployment.service_spec import ServiceSpec, RGWSpec, CephExporterSpec, MONSpec
+from ceph.deployment.service_spec import (
+    ArgumentList,
+    CephExporterSpec,
+    GeneralArgList,
+    MONSpec,
+    RGWSpec,
+    ServiceSpec,
+)
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6
 from mgr_util import build_url, merge_dicts
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus
@@ -32,7 +39,7 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
     """
     # despite this mapping entity names to daemons, self.TYPE within
     # the CephService class refers to service types, not daemon types
-    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'ingress', 'ceph-exporter']:
+    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter']:
         return AuthEntity(f'client.{daemon_type}.{daemon_id}')
     elif daemon_type in ['crash', 'agent']:
         if host == "":
@@ -59,10 +66,11 @@ class CephadmDaemonDeploySpec:
                  daemon_type: Optional[str] = None,
                  ip: Optional[str] = None,
                  ports: Optional[List[int]] = None,
+                 port_ips: Optional[Dict[str, str]] = None,
                  rank: Optional[int] = None,
                  rank_generation: Optional[int] = None,
-                 extra_container_args: Optional[List[str]] = None,
-                 extra_entrypoint_args: Optional[List[str]] = None,
+                 extra_container_args: Optional[ArgumentList] = None,
+                 extra_entrypoint_args: Optional[ArgumentList] = None,
                  ):
         """
         A data struction to encapsulate `cephadm deploy ...
@@ -80,14 +88,21 @@ class CephadmDaemonDeploySpec:
         # for run_cephadm.
         self.keyring: Optional[str] = keyring
 
+        # FIXME: finish removing this
         # For run_cephadm. Would be great to have more expressive names.
-        self.extra_args: List[str] = extra_args or []
+        # self.extra_args: List[str] = extra_args or []
+        assert not extra_args
 
         self.ceph_conf = ceph_conf
         self.extra_files = extra_files or {}
 
         # TCP ports used by the daemon
         self.ports: List[int] = ports or []
+        # mapping of ports to IP addresses for ports
+        # we know we will only bind to on a specific IP.
+        # Useful for allowing multiple daemons to bind
+        # to the same port on different IPs on the same node
+        self.port_ips: Dict[str, str] = port_ips or {}
         self.ip: Optional[str] = ip
 
         # values to be populated during generate_config calls
@@ -144,9 +159,13 @@ class CephadmDaemonDeploySpec:
             ports=self.ports,
             rank=self.rank,
             rank_generation=self.rank_generation,
-            extra_container_args=self.extra_container_args,
-            extra_entrypoint_args=self.extra_entrypoint_args,
+            extra_container_args=cast(GeneralArgList, self.extra_container_args),
+            extra_entrypoint_args=cast(GeneralArgList, self.extra_entrypoint_args),
         )
+
+    @property
+    def extra_args(self) -> List[str]:
+        return []
 
 
 class CephadmService(metaclass=ABCMeta):

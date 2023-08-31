@@ -58,6 +58,7 @@ from .services.cephadmservice import MonService, MgrService, MdsService, RgwServ
 from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
+from .services.nvmeof import NvmeofService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
@@ -106,6 +107,7 @@ os._exit = os_exit_noop   # type: ignore
 DEFAULT_IMAGE = 'quay.io/ceph/ceph:v18'
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
+DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:0.0.2'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
 DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
@@ -200,6 +202,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_prometheus',
             default=DEFAULT_PROMETHEUS_IMAGE,
             desc='Prometheus container image',
+        ),
+        Option(
+            'container_image_nvmeof',
+            default=DEFAULT_NVMEOF_IMAGE,
+            desc='Nvme-of container image',
         ),
         Option(
             'container_image_grafana',
@@ -487,6 +494,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.mode = ''
             self.container_image_base = ''
             self.container_image_prometheus = ''
+            self.container_image_nvmeof = ''
             self.container_image_grafana = ''
             self.container_image_alertmanager = ''
             self.container_image_node_exporter = ''
@@ -603,7 +611,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
             PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
-            IngressService, CustomContainerService, CephfsMirrorService,
+            IngressService, CustomContainerService, CephfsMirrorService, NvmeofService,
             CephadmAgent, CephExporterService, SNMPGatewayService, ElasticSearchService,
             JaegerQueryService, JaegerAgentService, JaegerCollectorService
         ]
@@ -615,6 +623,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.mgr_service: MgrService = cast(MgrService, self.cephadm_services['mgr'])
         self.osd_service: OSDService = cast(OSDService, self.cephadm_services['osd'])
         self.iscsi_service: IscsiService = cast(IscsiService, self.cephadm_services['iscsi'])
+        self.nvmeof_service: NvmeofService = cast(NvmeofService, self.cephadm_services['nvmeof'])
 
         self.scheduled_async_actions: List[Callable] = []
 
@@ -842,6 +851,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 ssh_config_fname))
 
     def _process_ls_output(self, host: str, ls: List[Dict[str, Any]]) -> None:
+        def _as_datetime(value: Optional[str]) -> Optional[datetime.datetime]:
+            return str_to_datetime(value) if value is not None else None
+
         dm = {}
         for d in ls:
             if not d['style'].startswith('cephadm'):
@@ -850,51 +862,55 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 continue
             if '.' not in d['name']:
                 continue
-            sd = orchestrator.DaemonDescription()
-            sd.last_refresh = datetime_now()
-            for k in ['created', 'started', 'last_configured', 'last_deployed']:
-                v = d.get(k, None)
-                if v:
-                    setattr(sd, k, str_to_datetime(d[k]))
-            sd.daemon_type = d['name'].split('.')[0]
-            if sd.daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
-                logger.warning(f"Found unknown daemon type {sd.daemon_type} on host {host}")
+            daemon_type = d['name'].split('.')[0]
+            if daemon_type not in orchestrator.KNOWN_DAEMON_TYPES:
+                logger.warning(f"Found unknown daemon type {daemon_type} on host {host}")
                 continue
 
-            sd.daemon_id = '.'.join(d['name'].split('.')[1:])
-            sd.hostname = host
-            sd.container_id = d.get('container_id')
-            if sd.container_id:
+            container_id = d.get('container_id')
+            if container_id:
                 # shorten the hash
-                sd.container_id = sd.container_id[0:12]
-            sd.container_image_name = d.get('container_image_name')
-            sd.container_image_id = d.get('container_image_id')
-            sd.container_image_digests = d.get('container_image_digests')
-            sd.memory_usage = d.get('memory_usage')
-            sd.memory_request = d.get('memory_request')
-            sd.memory_limit = d.get('memory_limit')
-            sd.cpu_percentage = d.get('cpu_percentage')
-            sd._service_name = d.get('service_name')
-            sd.deployed_by = d.get('deployed_by')
-            sd.version = d.get('version')
-            sd.ports = d.get('ports')
-            sd.ip = d.get('ip')
-            sd.rank = int(d['rank']) if d.get('rank') is not None else None
-            sd.rank_generation = int(d['rank_generation']) if d.get(
+                container_id = container_id[0:12]
+            rank = int(d['rank']) if d.get('rank') is not None else None
+            rank_generation = int(d['rank_generation']) if d.get(
                 'rank_generation') is not None else None
-            sd.extra_container_args = d.get('extra_container_args')
-            sd.extra_entrypoint_args = d.get('extra_entrypoint_args')
+            status, status_desc = None, 'unknown'
             if 'state' in d:
-                sd.status_desc = d['state']
-                sd.status = {
+                status_desc = d['state']
+                status = {
                     'running': DaemonDescriptionStatus.running,
                     'stopped': DaemonDescriptionStatus.stopped,
                     'error': DaemonDescriptionStatus.error,
                     'unknown': DaemonDescriptionStatus.error,
                 }[d['state']]
-            else:
-                sd.status_desc = 'unknown'
-                sd.status = None
+            sd = orchestrator.DaemonDescription(
+                daemon_type=daemon_type,
+                daemon_id='.'.join(d['name'].split('.')[1:]),
+                hostname=host,
+                container_id=container_id,
+                container_image_id=d.get('container_image_id'),
+                container_image_name=d.get('container_image_name'),
+                container_image_digests=d.get('container_image_digests'),
+                version=d.get('version'),
+                status=status,
+                status_desc=status_desc,
+                created=_as_datetime(d.get('created')),
+                started=_as_datetime(d.get('started')),
+                last_configured=_as_datetime(d.get('last_configured')),
+                last_deployed=_as_datetime(d.get('last_deployed')),
+                memory_usage=d.get('memory_usage'),
+                memory_request=d.get('memory_request'),
+                memory_limit=d.get('memory_limit'),
+                cpu_percentage=d.get('cpu_percentage'),
+                service_name=d.get('service_name'),
+                ports=d.get('ports'),
+                ip=d.get('ip'),
+                deployed_by=d.get('deployed_by'),
+                rank=rank,
+                rank_generation=rank_generation,
+                extra_container_args=d.get('extra_container_args'),
+                extra_entrypoint_args=d.get('extra_entrypoint_args'),
+            )
             dm[sd.name()] = sd
         self.log.debug('Refreshed host %s daemons (%d)' % (host, len(dm)))
         self.cache.update_host_daemons(host, dm)
@@ -1186,7 +1202,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             if code:
                 return 1, '', ('check-host failed:\n' + '\n'.join(err))
         except ssh.HostConnectionError as e:
-            self.log.exception(f"check-host failed for '{host}' at addr ({e.addr}) due to connection failure: {str(e)}")
+            self.log.exception(
+                f"check-host failed for '{host}' at addr ({e.addr}) due to connection failure: {str(e)}")
             return 1, '', ('check-host failed:\n'
                            + f"Failed to connect to {host} at address ({e.addr}): {str(e)}")
         except OrchestratorError:
@@ -1467,6 +1484,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             )).strip()
         elif daemon_type == 'prometheus':
             image = self.container_image_prometheus
+        elif daemon_type == 'nvmeof':
+            image = self.container_image_nvmeof
         elif daemon_type == 'grafana':
             image = self.container_image_grafana
         elif daemon_type == 'alertmanager':
@@ -1657,7 +1676,8 @@ Then run the following:
 
                 if d.daemon_type != 'osd':
                     self.cephadm_services[daemon_type_to_service(str(d.daemon_type))].pre_remove(d)
-                    self.cephadm_services[daemon_type_to_service(str(d.daemon_type))].post_remove(d, is_failed_deploy=False)
+                    self.cephadm_services[daemon_type_to_service(
+                        str(d.daemon_type))].post_remove(d, is_failed_deploy=False)
                 else:
                     cmd_args = {
                         'prefix': 'osd purge-actual',
@@ -1675,7 +1695,8 @@ Then run the following:
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
         self.ssh.reset_con(host)
-        self.offline_hosts_remove(host)  # if host was in offline host list, we should remove it now.
+        # if host was in offline host list, we should remove it now.
+        self.offline_hosts_remove(host)
         self.event.set()  # refresh stray health check
         self.log.info('Removed host %s' % host)
         return "Removed {} host '{}'".format('offline' if offline else '', host)
@@ -2653,7 +2674,8 @@ Then run the following:
             # an explicit dependency is added for each service-type to force a reconfig
             # whenever the number of daemons for those service-type changes from 0 to greater
             # than zero and vice versa.
-            deps += [s for s in ['node-exporter', 'alertmanager'] if self.cache.get_daemons_by_service(s)]
+            deps += [s for s in ['node-exporter', 'alertmanager']
+                     if self.cache.get_daemons_by_service(s)]
             if len(self.cache.get_daemons_by_type('ingress')) > 0:
                 deps.append('ingress')
             # add dependency on ceph-exporter daemons
@@ -3002,6 +3024,7 @@ Then run the following:
                 'rgw': PlacementSpec(count=2),
                 'ingress': PlacementSpec(count=2),
                 'iscsi': PlacementSpec(count=1),
+                'nvmeof': PlacementSpec(count=1),
                 'rbd-mirror': PlacementSpec(count=2),
                 'cephfs-mirror': PlacementSpec(count=1),
                 'nfs': PlacementSpec(count=1),
@@ -3225,7 +3248,8 @@ Then run the following:
         if self.inventory.get_host_with_state("maintenance"):
             raise OrchestratorError("Upgrade aborted - you have host(s) in maintenance state")
         if self.offline_hosts:
-            raise OrchestratorError(f"Upgrade aborted - Some host(s) are currently offline: {self.offline_hosts}")
+            raise OrchestratorError(
+                f"Upgrade aborted - Some host(s) are currently offline: {self.offline_hosts}")
         if daemon_types is not None and services is not None:
             raise OrchestratorError('--daemon-types and --services are mutually exclusive')
         if daemon_types is not None:
