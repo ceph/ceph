@@ -11,9 +11,3 @@
 .btn:disabled {
   pointer-events: none;
 }
-
-cd-table-key-value {
-  ::ng-deep .table-scroller {
-    overflow: unset;
-  }
-}
