@@ -10,3 +10,9 @@ tasks:
       - ceph nfs cluster create foo
 - cephadm.wait_for_service:
     service: nfs.foo
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - ganesha conf is defaulting to empty

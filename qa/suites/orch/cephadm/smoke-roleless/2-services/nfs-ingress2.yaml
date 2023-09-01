@@ -68,3 +68,9 @@ tasks:
             while ! timeout 1 cat /mnt/foo/testfile ; do true ; done
             echo "Mount is back!"
         done
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - ganesha conf is defaulting to empty

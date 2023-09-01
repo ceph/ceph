@@ -88,3 +88,9 @@ tasks:
     host.a:
       - ceph nfs export rm foo /foouser
       - ceph nfs cluster rm foo
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - ganesha conf is defaulting to empty

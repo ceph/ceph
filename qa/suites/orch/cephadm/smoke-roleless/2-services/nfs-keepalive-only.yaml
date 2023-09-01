@@ -53,3 +53,9 @@ tasks:
       - mount -t nfs {{VIP0}}:/fake /mnt/foo
       - echo test > /mnt/foo/testfile
       - sync
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - ganesha conf is defaulting to empty

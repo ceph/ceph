@@ -66,3 +66,9 @@ tasks:
           ceph orch daemon start $haproxy
           while ! ceph orch ps | grep $haproxy | grep running; do sleep 1 ; done
         done
+
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - ganesha conf is defaulting to empty
