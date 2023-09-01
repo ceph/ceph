@@ -10,3 +10,4 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - \(CEPHADM_STRAY_DAEMON\)

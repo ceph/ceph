@@ -19,3 +19,8 @@ tasks:
       client.0:
         - cephadm/test_iscsi_pids_limit.sh
         - cephadm/test_iscsi_etc_hosts.sh
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(CEPHADM_STRAY_DAEMON\)

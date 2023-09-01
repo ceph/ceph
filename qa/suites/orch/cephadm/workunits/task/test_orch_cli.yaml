@@ -15,3 +15,8 @@ tasks:
 - cephfs_test_runner:
     modules:
       - tasks.cephadm_cases.test_cli
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(CEPHADM_STRAY_DAEMON\)
