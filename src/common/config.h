@@ -203,7 +203,7 @@ public:
   template<typename T, typename Callback, typename...Args>
   auto with_val(const ConfigValues& values, const std::string_view key,
 		Callback&& cb, Args&&... args) const ->
-    std::result_of_t<Callback(const T&, Args...)> {
+    std::invoke_result_t<Callback, const T&, Args...> {
     return std::forward<Callback>(cb)(
       std::get<T>(this->get_val_generic(values, key)),
       std::forward<Args>(args)...);

@@ -335,6 +335,9 @@ else()
   set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
   set(BUILD_SHARED_LIBS FALSE)
   add_subdirectory(fmt)
+  if (WITH_FMT_HEADER_ONLY)
+    add_library(fmt::fmt ALIAS fmt-header-only)
+  endif()
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
@@ -567,7 +570,7 @@ endif()
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
   SKIP_RPATH TRUE)
-if(NOT APPLE AND NOT FREEBSD)
+if(NOT APPLE AND NOT FREEBSD AND NOT WIN32)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
   # prefer the local symbol definitions when binding references to global
@@ -811,7 +814,8 @@ if(WITH_LIBCEPHFS)
       OUTPUT_NAME cephfs
       VERSION 2.0.0
       SOVERSION 2)
-    if(NOT APPLE)
+    if(NOT APPLE AND NOT
+        (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL Clang))
       foreach(name ceph-common client osdc)
         set_property(TARGET cephfs APPEND_STRING PROPERTY
           LINK_FLAGS " -Wl,--exclude-libs,lib${name}.a")

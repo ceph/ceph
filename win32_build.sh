@@ -60,6 +60,25 @@ if [[ -z $OS ]]; then
 fi
 export OS="$OS"
 
+# The main advantages of mingw-llvm:
+# * not affected by the libstdc++/winpthread rw lock bugs
+# * can generate pdb debug symbols, which are compatible with WinDBG
+TOOLCHAIN=${TOOLCHAIN:-"mingw-llvm"}
+
+case "$TOOLCHAIN" in
+    mingw-llvm)
+        echo "Using mingw-llvm."
+        export USE_MINGW_LLVM=1
+        ;;
+    mingw-gcc)
+        echo "Using mingw-gcc"
+        ;;
+    *)
+        echo "Unsupported toolchain: $TOOLCHAIN."
+        echo "Allowed toolchains: mingw-llvm or mingw-gcc."
+esac
+
+
 # We'll have to be explicit here since auto-detecting doesn't work
 # properly when cross compiling.
 ALLOCATOR=${ALLOCATOR:-libc}
@@ -161,6 +180,7 @@ fi
 cmake -D CMAKE_PREFIX_PATH=$depsDirs \
       -D MINGW_LINK_DIRECTORIES="$linkDirs" \
       -D CMAKE_TOOLCHAIN_FILE="$MINGW_CMAKE_FILE" \
+      -D WITH_FMT_HEADER_ONLY=ON \
       -D WITH_LIBCEPHSQLITE=OFF \
       -D WITH_RDMA=OFF -D WITH_OPENLDAP=OFF \
       -D WITH_GSSAPI=OFF -D WITH_XFS=OFF \
@@ -211,11 +231,22 @@ if [[ -z $SKIP_DLL_COPY ]]; then
         $lz4Dir/lib/dll/liblz4-1.dll
         $sslDir/bin/libcrypto-1_1-x64.dll
         $sslDir/bin/libssl-1_1-x64.dll
-        $mingwTargetLibDir/libstdc++-6.dll
-        $mingwTargetLibDir/libgcc_s_seh-1.dll
-        $mingwTargetLibDir/libssp*.dll
-        $mingwLibpthreadDir/libwinpthread-1.dll
-        $boostDir/lib/*.dll)
+        $mingwLibpthreadDir/libwinpthread-1.dll)
+    if [[ $ENABLE_SHARED == "ON" ]]; then
+        required_dlls+=(
+            $boostDir/lib/*.dll
+        )
+    fi
+    if [[ -n $USE_MINGW_LLVM ]]; then
+        required_dlls+=(
+            $mingwTargetLibDir/libc++.dll
+            $mingwTargetLibDir/libunwind.dll)
+    else
+        required_dlls+=(
+            $mingwTargetLibDir/libstdc++-6.dll
+            $mingwTargetLibDir/libssp*.dll
+            $mingwTargetLibDir/libgcc_s_seh-1.dll)
+    fi
     echo "Copying required dlls to $binDir."
     cp ${required_dlls[@]} $binDir
 fi
