@@ -166,145 +166,125 @@ TEST(PerfCountersCache, TestEviction) {
   ASSERT_EQ(R"({
     "key1": [
         {
-            "labels": {
-                "label1": "val1"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key2": [
         {
-            "labels": {
-                "label2": "val2"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key3": [
         {
-            "labels": {
-                "label3": "val3"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key4": [
         {
-            "labels": {
-                "label4": "val4"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ]
@@ -387,145 +367,125 @@ TEST(PerfCountersCache, TestEviction) {
   ASSERT_EQ(R"({
     "key3": [
         {
-            "labels": {
-                "label3": "val3"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key4": [
         {
-            "labels": {
-                "label4": "val4"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key5": [
         {
-            "labels": {
-                "label5": "val5"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key6": [
         {
-            "labels": {
-                "label6": "val6"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ]
@@ -588,73 +548,63 @@ TEST(PerfCountersCache, TestLabeledCounters) {
   ASSERT_EQ(R"({
     "key1": [
         {
-            "labels": {
-                "label1": "val1"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key2": [
         {
-            "labels": {
-                "label2": "val2"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ]
@@ -830,73 +780,63 @@ TEST(PerfCountersCache, TestLabeledTimes) {
   ASSERT_EQ(R"({
     "key1": [
         {
-            "labels": {
-                "label1": "val1"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ],
     "key2": [
         {
-            "labels": {
-                "label2": "val2"
+            "test_counter": {
+                "type": 2,
+                "metric_type": "gauge",
+                "value_type": "integer",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             },
-            "counters": {
-                "test_counter": {
-                    "type": 2,
-                    "metric_type": "gauge",
-                    "value_type": "integer",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time": {
-                    "type": 1,
-                    "metric_type": "gauge",
-                    "value_type": "real",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                },
-                "test_time_avg": {
-                    "type": 5,
-                    "metric_type": "gauge",
-                    "value_type": "real-integer-pair",
-                    "description": "",
-                    "nick": "",
-                    "priority": 0,
-                    "units": "none"
-                }
+            "test_time": {
+                "type": 1,
+                "metric_type": "gauge",
+                "value_type": "real",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
+            },
+            "test_time_avg": {
+                "type": 5,
+                "metric_type": "gauge",
+                "value_type": "real-integer-pair",
+                "description": "",
+                "nick": "",
+                "priority": 0,
+                "units": "none"
             }
         }
     ]
