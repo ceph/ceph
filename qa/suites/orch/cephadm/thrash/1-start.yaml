@@ -5,3 +5,8 @@ tasks:
       mgr:
         debug ms: 1
         debug mgr: 20
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
