@@ -6972,10 +6972,9 @@ void Client::tick()
 void Client::start_tick_thread()
 {
   upkeeper = std::thread([this]() {
-    using time = ceph::coarse_mono_time;
     using sec = std::chrono::seconds;
 
-    auto last_tick = time::min();
+    auto last_tick = clock::zero();
 
     std::unique_lock cl(client_lock);
     while (!tick_thread_stopped) {

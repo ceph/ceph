@@ -42,15 +42,19 @@ if(WIN32)
   # the targeted Windows version. The availability of certain functions and
   # structures will depend on it.
   set(WIN32_WINNT "0x0A00" CACHE STRING "Targeted Windows version.")
-  # In order to avoid known winpthread issues, we're using the boost
-  # shared mutex implementation.
-  # https://github.com/msys2/MINGW-packages/issues/3319
   add_definitions(
     -D_WIN32_WINNT=${WIN32_WINNT}
     -DFMT_USE_TZSET=0
-    -DBOOST_THREAD_PROVIDES_GENERIC_SHARED_MUTEX_ON_WIN
-    -DBOOST_THREAD_V2_SHARED_MUTEX
   )
+  # In order to avoid known winpthread issues, we're using the Boost
+  # shared mutex implementation. This isn't required with llvm/libc++.
+  # https://github.com/msys2/MINGW-packages/issues/3319
+  if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+    add_definitions(
+      -DBOOST_THREAD_PROVIDES_GENERIC_SHARED_MUTEX_ON_WIN
+      -DBOOST_THREAD_V2_SHARED_MUTEX
+    )
+  endif()
   set(Boost_THREADAPI "win32")
 endif()
 

@@ -148,7 +148,7 @@ target_link_libraries(crimson-common
   PUBLIC
     ${crimson_common_public_deps}
   PRIVATE
-    crc32
+    crc32 arch
     ${crimson_common_deps}
     OpenSSL::Crypto)
 

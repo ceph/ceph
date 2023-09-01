@@ -29,6 +29,8 @@ Flag               Description                      Default value
 =================  ===============================  ===============================
 OS                 Host OS distribution, for mingw  ubuntu (also valid: suse)
                    and other OS specific settings.
+TOOLCHAIN          Mingw toolchain: mingw-llvm or   mingw-llvm
+                   mingw-gcc.
 CEPH_DIR           The Ceph source code directory.  The same as the script.
 BUILD_DIR          The directory where the          $CEPH_DIR/build
                    generated artifacts will be

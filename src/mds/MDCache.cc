@@ -6526,7 +6526,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
              << header.change_attr << " offset: " << header.file_offset << " blen: "
 	     << header.block_size << dendl;
     filer.write(in->ino(), &layout, *snapc, header.file_offset, header.block_size,
-                data, ceph::real_time::min(), 0,
+                data, ceph::real_clock::zero(), 0,
                 new C_OnFinisher(new C_IO_MDC_TruncateWriteFinish(this, in, ls,
                                                                   header.block_size),
                                  mds->finisher));
@@ -6547,7 +6547,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 
     dout(10) << "_truncate_inode truncate on inode " << *in << dendl;
     filer.truncate(in->ino(), &layout, *snapc, pi->truncate_size, length,
-                   pi->truncate_seq, ceph::real_time::min(), 0,
+                   pi->truncate_seq, ceph::real_clock::zero(), 0,
                    new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
                                     mds->finisher));
   }
@@ -6603,7 +6603,7 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
    */
   uint64_t length = pi->truncate_from - pi->truncate_size + block_size;
   filer.truncate(in->ino(), &layout, *snapc, pi->truncate_size, length,
-                 pi->truncate_seq, ceph::real_time::min(), 0,
+                 pi->truncate_seq, ceph::real_clock::zero(), 0,
                  new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
                                   mds->finisher));
 }
