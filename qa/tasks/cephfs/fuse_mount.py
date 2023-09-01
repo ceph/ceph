@@ -394,7 +394,7 @@ class FuseMount(CephFSMount):
             self.cleanup()
             return
 
-        # cleanup is set to to fail since clieanup must happen after umount is
+        # cleanup is set to to fail since cleanup must happen after umount is
         # complete; otherwise following call to run.wait hangs.
         self.umount(cleanup=False)
 
