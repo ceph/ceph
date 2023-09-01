@@ -260,6 +260,7 @@ struct OnRecoveryReadComplete :
   ECBackend *backend;
   hobject_t hoid;
 
+  OnRecoveryReadComplete() = delete;
   OnRecoveryReadComplete(RecoveryMessages* rm, ECBackend *backend, const hobject_t &hoid)
     : rm(rm), backend(backend), hoid(hoid) {}
   void finish(ECBackend::read_result_t &res) override {
@@ -280,6 +281,7 @@ struct RecoveryMessages : GenContext<int> {
   ECBackend *ec;
   map<hobject_t,
       ECBackend::read_request_t> recovery_reads;
+  RecoveryMessages* next_recovery_messages = nullptr;
   map<hobject_t, set<int>> want_to_read;
 
   RecoveryMessages(ECBackend* ec) : ec(ec) {}
@@ -291,6 +293,9 @@ struct RecoveryMessages : GenContext<int> {
     const map<pg_shard_t, vector<pair<int, int>>> &need,
     bool attrs)
   {
+    if (!next_recovery_messages) {
+      next_recovery_messages = new RecoveryMessages{ec};
+    }
     list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     to_read.push_back(boost::make_tuple(off, len, 0));
     ceph_assert(!recovery_reads.count(hoid));
@@ -303,7 +308,7 @@ struct RecoveryMessages : GenContext<int> {
 	  need,
 	  attrs,
 	  new OnRecoveryReadComplete(
-	    this,
+	    next_recovery_messages,
 	    ec,
 	    hoid))));
   }
@@ -311,7 +316,7 @@ struct RecoveryMessages : GenContext<int> {
   map<pg_shard_t, vector<PushOp> > pushes;
   map<pg_shard_t, vector<PushReplyOp> > push_replies;
   ObjectStore::Transaction t;
-  RecoveryMessages() {}
+  RecoveryMessages() = delete;
   ~RecoveryMessages() {}
 
   void finish(int priority) override {
@@ -602,7 +607,8 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     m.want_to_read,
     m.recovery_reads,
     OpRequestRef(),
-    false, true, new RecoveryMessages{});
+    false, true, m.next_recovery_messages);
+  m.next_recovery_messages = nullptr;
 }
 
 void ECBackend::continue_recovery_op(
