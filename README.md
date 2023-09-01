@@ -174,24 +174,25 @@ are committed to git.)
 
 ## Running a test cluster
 
-To run a functional test cluster,
+From the `ceph/` directory, run the following commands to launch a test Ceph
+cluster:
 
 	cd build
 	ninja vstart        # builds just enough to run vstart
 	../src/vstart.sh --debug --new -x --localhost --bluestore
 	./bin/ceph -s
 
-Almost all of the usual commands are available in the bin/ directory.
-For example,
+Most Ceph commands are available in the `bin/` directory. For example:
 
 	./bin/rados -p rbd bench 30 write
 	./bin/rbd create foo --size 1000
 
-To shut down the test cluster,
+To shut down the test cluster, run the following command from the `build/`
+directory:
 
 	../src/stop.sh
 
-To start or stop individual daemons, the sysvinit script can be used:
+Use the sysvinit script to start or stop individual daemons: 
 
 	./bin/init-ceph restart osd.0
 	./bin/init-ceph stop
