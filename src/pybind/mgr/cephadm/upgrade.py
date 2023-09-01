@@ -263,6 +263,9 @@ class CephadmUpgrade:
         if not image:
             image = self.mgr.container_image_base
         reg_name, bare_image = image.split('/', 1)
+        if ':' in bare_image:
+            # for our purposes, we don't want to use the tag here
+            bare_image = bare_image.split(':')[0]
         reg = Registry(reg_name)
         (current_major, current_minor, _) = self._get_current_version()
         versions = []
