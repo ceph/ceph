@@ -19,3 +19,8 @@ tasks:
       - src/test/cli-integration/rbd/iscsi_client.t
       client.2:
       - src/test/cli-integration/rbd/rest_api_delete.t
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)

@@ -130,3 +130,8 @@ tasks:
       - ceph health detail
       # run upgrade one more time with no filter parameters to make sure anything left gets upgraded
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)

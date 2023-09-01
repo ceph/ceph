@@ -19,3 +19,8 @@ tasks:
       - ceph config set mon mon_warn_on_insecure_global_id_reclaim_allowed false --force
       - ceph config set global log_to_journald false --force
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
