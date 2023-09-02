@@ -31,9 +31,9 @@ namespace crimson {
 namespace crimson::osd {
 
 PG::interruptible_future<>
-PG::SnapTrimMutex::lock(SnapTrimEvent &st_event) noexcept
+PG::BackgroundProcessLock::lock_with_op(SnapTrimEvent &st_event) noexcept
 {
-  return st_event.enter_stage<interruptor>(wait_pg
+  return st_event.enter_stage<interruptor>(wait
   ).then_interruptible([this] {
     return mutex.lock();
   });
@@ -115,7 +115,7 @@ SnapTrimEvent::start()
       return enter_stage<interruptor>(
         client_pp().get_obc);
     }).then_interruptible([this] {
-      return pg->snaptrim_mutex.lock(*this);
+      return pg->background_process_lock.lock_with_op(*this);
     }).then_interruptible([this] {
       return enter_stage<interruptor>(
         client_pp().process);
@@ -147,7 +147,7 @@ SnapTrimEvent::start()
         if (to_trim.empty()) {
           // the legit ENOENT -> done
           logger().debug("{}: to_trim is empty! Stopping iteration", *this);
-	  pg->snaptrim_mutex.unlock();
+	  pg->background_process_lock.unlock();
           return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::yes);
         }
@@ -171,7 +171,7 @@ SnapTrimEvent::start()
           logger().debug("{}: awaiting completion", *this);
           return subop_blocker.wait_completion();
         }).finally([this] {
-	  pg->snaptrim_mutex.unlock();
+	  pg->background_process_lock.unlock();
 	}).si_then([this] {
           if (!needs_pause) {
             return interruptor::now();

@@ -542,18 +542,19 @@ public:
 
 private:
 
-  struct SnapTrimMutex {
-    struct WaitPG : OrderedConcurrentPhaseT<WaitPG> {
-      static constexpr auto type_name = "SnapTrimEvent::wait_pg";
-    } wait_pg;
+  struct BackgroundProcessLock {
+    struct Wait : OrderedConcurrentPhaseT<Wait> {
+      static constexpr auto type_name = "PG::BackgroundProcessLock::wait";
+    } wait;
     seastar::shared_mutex mutex;
 
-    interruptible_future<> lock(SnapTrimEvent &st_event) noexcept;
+    interruptible_future<> lock_with_op(SnapTrimEvent &st_event) noexcept;
+    interruptible_future<> lock() noexcept;
 
     void unlock() noexcept {
       mutex.unlock();
     }
-  } snaptrim_mutex;
+  } background_process_lock;
 
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
