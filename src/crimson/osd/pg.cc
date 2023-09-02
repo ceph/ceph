@@ -801,6 +801,12 @@ PG::interruptible_future<> PG::repair_object(
   return std::move(fut);
 }
 
+PG::interruptible_future<>
+PG::BackgroundProcessLock::lock() noexcept
+{
+  return interruptor::make_interruptible(mutex.lock());
+}
+
 template <class Ret, class SuccessFunc, class FailureFunc>
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<Ret>>
 PG::do_osd_ops_execute(
