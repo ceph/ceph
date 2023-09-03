@@ -50,8 +50,8 @@ There are two ways to install ``cephadm``:
 distribution-specific installations
 -----------------------------------
 
-Some Linux distributions may already include up-to-date Ceph packages.  In that
-case, you can install cephadm directly. For example:
+Some Linux distributions  may already include up-to-date Ceph packages.  In
+that case, you can install cephadm directly. For example:
 
   In Ubuntu:
 
@@ -121,28 +121,41 @@ curl-based installation
 
      python3.8 ./cephadm <arguments...>
 
-* Although the standalone cephadm is sufficient to get a cluster started, it is
-  convenient to have the ``cephadm`` command installed on the host.  To install
-  the packages that provide the ``cephadm`` command, run the following
-  commands:
+.. _cephadm_update:
 
-  .. prompt:: bash #
-     :substitutions:
+update cephadm
+--------------
 
-     ./cephadm add-repo --release |stable-release|
-     ./cephadm install
+The cephadm binary can be used to bootstrap a cluster and for a variety
+of other management and debugging tasks. The Ceph team strongly recommends
+using an actively supported version of cephadm. Additionally, although
+the standalone cephadm is sufficient to get a cluster started, it is
+convenient to have the ``cephadm`` command installed on the host. Older or LTS
+distros may also have ``cephadm`` packages that are out-of-date and
+running the commands below can help install a more recent version
+from the Ceph project's repositories.
 
-  Confirm that ``cephadm`` is now in your PATH by running ``which``:
+To install the packages provided by the Ceph project that provide the
+``cephadm`` command, run the following commands:
 
-  .. prompt:: bash #
+.. prompt:: bash #
+   :substitutions:
 
-    which cephadm
+   ./cephadm add-repo --release |stable-release|
+   ./cephadm install
 
-  A successful ``which cephadm`` command will return this:
+Confirm that ``cephadm`` is now in your PATH by running ``which`` or
+``command -v``:
 
-  .. code-block:: bash
+.. prompt:: bash #
 
-    /usr/sbin/cephadm
+   which cephadm
+
+A successful ``which cephadm`` command will return this:
+
+.. code-block:: bash
+
+   /usr/sbin/cephadm
 
 Bootstrap a new cluster
 =======================
