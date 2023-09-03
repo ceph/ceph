@@ -331,6 +331,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
 
   bool is_signature_mismatched();
   std::string calc_chunk_signature(const std::string& payload_hash) const;
+  size_t recv_chunk(char* buf, size_t max, bool& eof);
 
 public:
   /* We need the constructor to be public because of the std::make_shared that
