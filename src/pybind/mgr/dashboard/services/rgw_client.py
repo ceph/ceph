@@ -1593,25 +1593,17 @@ class RgwMultisite:
 
         metadata_sync_data = {}
         metadata_sync_info_array = metadata_sync_info.split('\n') if metadata_sync_info else []
-        metadata_sync_data['syncstatus'] = metadata_sync_info_array[1].strip() if len(metadata_sync_info_array) > 1 else None  # noqa E501  #pylint: disable=line-too-long
+        metadata_sync_data['syncstatus'] = metadata_sync_info_array[0].strip() if len(metadata_sync_info_array) > 0 else None  # noqa E501  #pylint: disable=line-too-long
 
         for item in metadata_sync_info_array:
             self.extract_metadata_sync_info(metadata_sync_data, item)
 
-        metadata_sync_data['totalShards'] = metadata_sync_data['incrementalSync'][1] if len(metadata_sync_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
-        metadata_sync_data['usedShards'] = int(metadata_sync_data['incrementalSync'][1]) - int(metadata_sync_data['behindShards'])  # noqa E501  #pylint: disable=line-too-long
+        metadata_sync_data['fullSyncStatus'] = metadata_sync_info_array
         return metadata_sync_data
 
     def extract_metadata_sync_info(self, metadata_sync_data, item):
-        if 'full sync' in item and item.endswith('shards'):
-            metadata_sync_data['fullSync'] = self.get_shards_info(item.strip()).split('/')
-        elif 'incremental sync' in item:
-            metadata_sync_data['incrementalSync'] = self.get_shards_info(item.strip()).split('/')
-        elif 'data is behind' in item or 'data is caught up' in item:
-            metadata_sync_data['dataSyncStatus'] = item.strip()
-
-            if 'data is behind' in item:
-                metadata_sync_data['behindShards'] = self.get_behind_shards(item)
+        if 'oldest incremental change not applied:' in item:
+            metadata_sync_data['timestamp'] = item.split('applied:')[1].split()[0].strip()
 
     def extract_datasync_info(self, data):
         metadata_sync_infoormation = data.split('metadata sync')[1] if 'metadata sync' in data else None  # noqa E501  #pylint: disable=line-too-long
@@ -1629,15 +1621,6 @@ class RgwMultisite:
         replica_zone_data['fullSyncStatus'] = datasync_info_array
         for item in datasync_info_array:
             self.extract_metadata_sync_info(replica_zone_data, item)
-
-        if 'incrementalSync' in replica_zone_data:
-            replica_zone_data['totalShards'] = int(replica_zone_data['incrementalSync'][1]) if len(replica_zone_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
-
-            if 'behindShards' in replica_zone_data:
-                replica_zone_data['usedShards'] = (int(replica_zone_data['incrementalSync'][1]) - int(replica_zone_data['behindShards'])) if len(replica_zone_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
-            else:
-                replica_zone_data['usedShards'] = replica_zone_data['totalShards']
-
         return replica_zone_data
 
     def get_primary_zonedata(self, data):
@@ -1648,21 +1631,3 @@ class RgwMultisite:
             return match.group(1)
 
         return ''
-
-    def get_shards_info(self, data):
-        regex = r'\d+/\d+'
-        match = re.search(regex, data)
-
-        if match:
-            return match.group(0)
-
-        return None
-
-    def get_behind_shards(self, data):
-        regex = r'on\s+(\d+)\s+shards'
-        match = re.search(regex, data, re.IGNORECASE)
-
-        if match:
-            return match.group(1)
-
-        return None
