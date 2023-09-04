@@ -58,7 +58,6 @@ if [[ -z $OS ]]; then
         ;;
     esac
 fi
-export OS="$OS"
 
 # The main advantages of mingw-llvm:
 # * not affected by the libstdc++/winpthread rw lock bugs
@@ -68,7 +67,7 @@ TOOLCHAIN=${TOOLCHAIN:-"mingw-llvm"}
 case "$TOOLCHAIN" in
     mingw-llvm)
         echo "Using mingw-llvm."
-        export USE_MINGW_LLVM=1
+        USE_MINGW_LLVM=1
         ;;
     mingw-gcc)
         echo "Using mingw-gcc"
@@ -93,9 +92,7 @@ if [[ -z $CMAKE_BUILD_TYPE ]]; then
   CMAKE_BUILD_TYPE=Release
 fi
 
-# Some tests can't use shared libraries yet due to unspecified dependencies.
-# We'll do a static build by default for now.
-ENABLE_SHARED=${ENABLE_SHARED:-OFF}
+ENABLE_SHARED=${ENABLE_SHARED:-ON}
 
 binDir="$BUILD_DIR/bin"
 strippedBinDir="$BUILD_DIR/bin_stripped"
@@ -145,8 +142,12 @@ cd $BUILD_DIR
 
 if [[ ! -f ${depsToolsetDir}/completed ]]; then
     echo "Preparing dependencies: $DEPS_DIR. Log: ${BUILD_DIR}/build_deps.log"
-    NUM_WORKERS=$NUM_WORKERS DEPS_DIR=$DEPS_DIR OS="$OS"\
-        "$SCRIPT_DIR/win32_deps_build.sh" | tee "${BUILD_DIR}/build_deps.log"
+    NUM_WORKERS=$NUM_WORKERS \
+        DEPS_DIR=$DEPS_DIR \
+        OS="$OS" \
+        ENABLE_SHARED=$ENABLE_SHARED \
+        USE_MINGW_LLVM=$USE_MINGW_LLVM \
+            "$SCRIPT_DIR/win32_deps_build.sh" | tee "${BUILD_DIR}/build_deps.log"
 fi
 
 # Due to distribution specific mingw settings, the mingw.cmake file
