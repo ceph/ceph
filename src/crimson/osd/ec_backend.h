@@ -6,6 +6,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
 #include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCodePlugin.h"
 #include "include/buffer_fwd.h"
 #include "messages/MOSDECSubOpWrite.h"
 #include "messages/MOSDECSubOpWriteReply.h"
@@ -17,6 +18,9 @@
 
 class ECBackend : public PGBackend
 {
+  static ceph::ErasureCodeInterfaceRef create_ec_impl(
+    const ec_profile_t& ec_profile);
+
 public:
   ECBackend(pg_shard_t whoami,
 	    CollectionRef coll,
