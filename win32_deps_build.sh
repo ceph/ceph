@@ -1,17 +1,10 @@
 #!/usr/bin/env bash
 
-set -e
+set -eu
 
 SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
 
-USE_MINGW_LLVM=${USE_MINGW_LLVM:-}
-ENABLE_SHARED=${ENABLE_SHARED:-OFF}
-
-num_vcpus=$(nproc)
-NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
-
-DEPS_DIR="${DEPS_DIR:-$SCRIPT_DIR/build.deps}"
 depsSrcDir="$DEPS_DIR/src"
 depsToolsetDir="$DEPS_DIR/mingw"
 
@@ -50,11 +43,6 @@ dokanLibDir="${depsToolsetDir}/dokany/lib"
 mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-msvcrt-ubuntu-18.04-x86_64.tar.xz"
 mingwLlvmSha256Sum="bc97745e702fb9e8f2a16f7d09dd5061ceeef16554dd12e542f619ce937e8d7a"
 mingwLlvmDir="${DEPS_DIR}/mingw-llvm"
-
-# Allow for OS specific customizations through the OS flag (normally
-# passed through from win32_build).
-# Valid options are currently "ubuntu", "rhel", and "suse".
-OS=${OS:-"ubuntu"}
 
 function _make() {
   make -j $NUM_WORKERS $@
