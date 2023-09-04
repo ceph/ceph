@@ -442,9 +442,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     int set_attrsReturn = source->set_attrs(attrs);
 
     if (set_attrsReturn < 0) {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache set object operation failed." << dendl;
     } else {
-      ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation succeeded." << dendl;
+      ldpp_dout(dpp, 20) << "D4N Filter: Cache set object operation succeeded." << dendl;
     }   
   }
 
@@ -776,27 +776,56 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
   //Accumulating data from backend store into rgw_get_obj_max_req_size sized chunks and then writing to cache
   if (write_to_cache) {
     const std::lock_guard l(d3n_get_data.d3n_lock);
-
+    rgw::d4n::CacheBlock block;
+    rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
       if (ret == 0) {
-        rgw::d4n::CacheBlock block;
         block.size = bl.length();
+        block.blockId = oid;
+        block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port)); //check if this is the correct way to get the local addr
+        block.size = source->get_obj_size();
+        block.cacheObj.bucketName = source->get_bucket()->get_name();
+        block.cacheObj.objName = source->get_key().get_oid();
         if (filter->get_policy_driver()->cachePolicy->get_block(save_dpp, &block, filter->get_cache_driver()) == 0) {
           filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
         }
+        /* Store block in directory */
+        if (!blockDir->exist_key(oid)) {
+          int ret = blockDir->set_value(&block);
+          if (ret < 0) {
+            ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
+            return ret;
+          } else {
+            ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation succeeded." << dendl;
+          }
+	      }
       }
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
+      block.blockId = oid;
+      block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port)); //check if this is the correct way to get the local addr
+      block.size = source->get_obj_size();
+      block.cacheObj.bucketName = source->get_bucket()->get_name();
+      block.cacheObj.objName = source->get_key().get_oid();
       ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
       if (ret == 0) {
-        rgw::d4n::CacheBlock block;
         block.size = bl.length();
         if (filter->get_policy_driver()->cachePolicy->get_block(save_dpp, &block, filter->get_cache_driver()) == 0) {
           filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
         }
+        /* Store block in directory */
+        if (!blockDir->exist_key(oid)) {
+          int ret = blockDir->set_value(&block);
+          if (ret < 0) {
+            ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
+            return ret;
+          } else {
+            ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation succeeded." << dendl;
+          }
+	      }
       }
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
       uint64_t rem_space = rgw_get_obj_max_req_size - bl_rem.length();
@@ -805,17 +834,29 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 
       bl.splice(0, len_to_copy, &bl_copy);
       bl_rem.claim_append(bl_copy);
-
+      block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port));
+      block.size = source->get_obj_size();
+      block.cacheObj.bucketName = source->get_bucket()->get_name();
+      block.cacheObj.objName = source->get_key().get_oid();
       if (bl_rem.length() == g_conf()->rgw_get_obj_max_req_size) {
         std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
         ofs += bl_rem.length();
 
         ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl_rem, bl_rem.length(), source->get_attrs());
         if (ret == 0) {
-          rgw::d4n::CacheBlock block;
           block.size = bl_rem.length();
           if (filter->get_policy_driver()->cachePolicy->get_block(save_dpp, &block, filter->get_cache_driver()) == 0) {
             filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl_rem.length(), filter->get_cache_driver());
+          }
+          /* Store block in directory */
+          if (!blockDir->exist_key(oid)) {
+            int ret = blockDir->set_value(&block);
+            if (ret < 0) {
+              ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
+              return ret;
+            } else {
+              ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation succeeded." << dendl;
+            }
           }
         }
 
