@@ -503,6 +503,7 @@ if(WITH_CRIMSON)
     "-Wno-pessimizing-move"
     "-Wno-address-of-packed-member")
   add_subdirectory(crimson)
+  add_dependencies(crimson-osd erasure_code)
 endif()
 
 include(CheckTypeSize)
