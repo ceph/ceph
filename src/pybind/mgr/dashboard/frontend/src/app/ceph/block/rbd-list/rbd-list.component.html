@@ -143,14 +143,12 @@
   </div>
 </ng-template>
 
-<ng-template #usedTmpl>
-  <span i18n
-        i18n-ngbTooltip
-        ngbTooltip="Stored data">Used</span>
-</ng-template>
-
-<ng-template #totalUsedTmpl>
-  <span i18n
-        i18n-ngbTooltip
-        ngbTooltip="Total space used by the image">Total Used</span>
+<ng-template #imageUsageTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row"
+                [total]="row.size"
+                [used]="row.disk_usage"
+                [title]="row.name"
+                decimals="2">
+  </cd-usage-bar>
 </ng-template>
