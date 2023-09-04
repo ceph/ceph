@@ -429,6 +429,7 @@ if(WITH_CRIMSON)
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/src")
   add_subdirectory(crimson)
+  add_dependencies(crimson-osd erasure_code)
 endif()
 
 include(CheckTypeSize)
