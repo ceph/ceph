@@ -176,6 +176,23 @@ TEST_F(TestSSEKMS, test_transit_backend){
 }
 
 
+TEST_F(TestSSEKMS, test_transit_create_bucket_key){
+  cct->_conf.set_val("rgw_crypt_sse_s3_vault_key_rotation_period", "1 day");
+
+  const std::string my_key("my_key");
+  const NoDoutPrefix no_dpp(cct, 1);
+
+  // Mocks the expected return Value from Vault Server using custom Argument Action
+  string post_data = R"({"type":"chacha20-poly1305","derived":true,"auto_rotate_period":"86400"})";
+  EXPECT_CALL(*transit_engine, send_request(&no_dpp, StrEq("POST"), StrEq("/keys/"), StrEq("my_key"), StrEq(post_data), _, _))
+		.WillOnce(SetPointedValue(""));
+
+  int res = transit_engine->create_bucket_key(&no_dpp, my_key, null_yield);
+
+  ASSERT_EQ(res, 0);
+}
+
+
 TEST_F(TestSSEKMS, test_transit_makekey){
 
   std::string_view my_key("my_key");
