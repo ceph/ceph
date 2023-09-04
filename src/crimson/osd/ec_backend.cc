@@ -10,21 +10,35 @@ namespace {
   }
 }
 
+ceph::ErasureCodeInterfaceRef ECBackend::create_ec_impl(
+  const ec_profile_t& ec_profile)
+{
+  using crimson::common::local_conf;
+  ceph::ErasureCodeInterfaceRef ec_impl;
+  std::stringstream ss;
+  ceph::ErasureCodePluginRegistry::instance().factory(
+    ec_profile.find("plugin")->second,
+    local_conf()->erasure_code_dir,
+    const_cast<ec_profile_t&>(ec_profile),
+    &ec_impl,
+    &ss);
+  return ec_impl;
+}
+
 ECBackend::ECBackend(pg_shard_t p_shard,
                      ECBackend::CollectionRef coll,
                      crimson::osd::ShardServices& shard_services,
-                     const ec_profile_t&,
+                     const ec_profile_t& ec_profile,
                      uint64_t stripe_width,
                      bool fast_read,
                      bool allows_ecoverwrites,
 		     DoutPrefixProvider &dpp)
   : PGBackend{whoami, coll, shard_services, dpp},
+    ec_impl{create_ec_impl(ec_profile)},
     sinfo{ec_impl->get_data_chunk_count(), stripe_width},
     fast_read{fast_read},
     allows_ecoverwrites{allows_ecoverwrites}
 {
-  // FIXME: ec_impl
-  // todo
 }
 
 ECBackend::ll_read_ierrorator::future<ceph::bufferlist>

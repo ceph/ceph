@@ -62,6 +62,7 @@ target_link_libraries(crimson-osd
   crimson-common
   crimson-os
   crimson
+  erasure_code
   fmt::fmt
   Boost::MPL
   dmclock::dmclock)

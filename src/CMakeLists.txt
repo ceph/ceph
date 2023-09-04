@@ -389,6 +389,7 @@ if(WITH_SEASTAR)
   # target: Seastar exports this directory created at build-time
   file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
   add_subdirectory(crimson)
+  add_dependencies(crimson-osd erasure_code)
 endif()
 
 include(CheckTypeSize)
