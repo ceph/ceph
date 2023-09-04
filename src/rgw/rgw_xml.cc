@@ -436,6 +436,11 @@ void encode_xml(const char *name, const string& val, Formatter *f)
   f->dump_string(name, val);
 }
 
+void encode_xml(const char *name, const string_view & val, Formatter *f)
+{
+  f->dump_string(name, val);
+}
+
 void encode_xml(const char *name, const char *val, Formatter *f)
 {
   f->dump_string(name, val);
