@@ -131,13 +131,6 @@ def respawn_in_path(lib_path, python_paths):
         sys.path.insert(0, p)
 
 
-def launch_subprocess(args, cwd=None, env=None, shell=True,
-                      executable='/bin/bash'):
-    return subprocess.Popen(args, cwd=cwd, env=env, shell=shell,
-                            executable=executable, stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-
-
 # Let's use some sensible defaults
 if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
 
@@ -205,8 +198,8 @@ class LocalRemoteProcess(object):
         self.args = args
         self.subproc = subproc
         self.stdin = subproc.stdin
-        self.stdout = stdout
-        self.stderr = stderr
+        self.stdout = StringIO() if stdout is None else stdout
+        self.stderr = StringIO() if stderr is None else stderr
         self.usr_args = usr_args
         # this variable is meant for instance of this class named fuse_daemon.
         # child process of the command launched with sudo must be killed,
@@ -468,8 +461,9 @@ sudo() {
                 env=None, timeout=None, omit_sudo=True, shell=True, quiet=False):
         args, usr_args = self._perform_checks_and_adjustments(args, omit_sudo)
 
-        subproc = launch_subprocess(args, cwd, env, shell)
-
+        subproc = subprocess.Popen(args=args, cwd=cwd, env=env, shell=shell,
+                                executable='/bin/bash', stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, stdin=subprocess.PIPE)
         if stdin:
             # Hack: writing to stdin is not deadlock-safe, but it "always" works
             # as long as the input buffer is "small"
@@ -482,13 +476,16 @@ sudo() {
             else:
                 subproc.stdin.write(stdin.getvalue())
 
-        proc = LocalRemoteProcess(
-            args, subproc, check_status,
-            stdout, stderr, usr_args
-        )
-
+        proc = LocalRemoteProcess(args, subproc, check_status, stdout, stderr,
+                                  usr_args)
         if wait:
             proc.wait()
+            so = proc.stdout.getvalue() # so = stdout
+            if so != '':
+                log.info(f'stdout: {so}')
+            se = proc.stderr.getvalue() # se = stderr
+            if se != '':
+                log.info(f'stderr: {se}')
 
         return proc
 
