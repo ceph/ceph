@@ -461,6 +461,9 @@ class RGWReadRemoteMDLogShardInfoCR : public RGWCoroutine {
   int shard_id;
   RGWMetadataLogInfo *shard_info;
 
+  int tries{0};
+  int op_ret{0};
+
 public:
   RGWReadRemoteMDLogShardInfoCR(RGWMetaSyncEnv *env, const std::string& period,
                                 int _shard_id, RGWMetadataLogInfo *_shard_info)
@@ -471,37 +474,48 @@ public:
     auto store = env->store;
     RGWRESTConn *conn = store->svc()->zone->get_master_conn();
     reenter(this) {
-      yield {
-	char buf[16];
-	snprintf(buf, sizeof(buf), "%d", shard_id);
-        rgw_http_param_pair pairs[] = { { "type" , "metadata" },
-	                                { "id", buf },
-	                                { "period", period.c_str() },
-					{ "info" , NULL },
-	                                { NULL, NULL } };
+      static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+      for (tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+        ldpp_dout(dpp, 20) << "read remote metadata log shard info. shard_is=" << shard_id << " retries=" << tries << dendl;
 
-        string p = "/admin/log/";
+        yield {
+          char buf[16];
+          snprintf(buf, sizeof(buf), "%d", shard_id);
+          rgw_http_param_pair pairs[] = { { "type" , "metadata" },
+                                          { "id", buf },
+                                          { "period", period.c_str() },
+                                          { "info" , NULL },
+                                          { NULL, NULL } };
 
-        http_op = new RGWRESTReadResource(conn, p, pairs, NULL,
-                                          env->http_manager);
+          string p = "/admin/log/";
 
-        init_new_io(http_op);
+          http_op = new RGWRESTReadResource(conn, p, pairs, NULL,
+                                            env->http_manager);
 
-        int ret = http_op->aio_read(dpp);
-        if (ret < 0) {
-          ldpp_dout(env->dpp, 0) << "ERROR: failed to read from " << p << dendl;
-          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          init_new_io(http_op);
+
+          int ret = http_op->aio_read(dpp);
+          if (ret < 0) {
+            ldpp_dout(env->dpp, 0) << "ERROR: failed to read from " << p << dendl;
+            log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+            http_op->put();
+            return set_cr_error(ret);
+          }
+
+          return io_block(0);
+        }
+        yield {
+          op_ret = http_op->wait(shard_info, null_yield);
           http_op->put();
-          return set_cr_error(ret);
         }
 
-        return io_block(0);
-      }
-      yield {
-        int ret = http_op->wait(shard_info, null_yield);
-        http_op->put();
-        if (ret < 0) {
-          return set_cr_error(ret);
+        if (op_ret < 0) {
+          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+            ldpp_dout(dpp, 20) << "failed to read remote metadata log shard info. retry. shard_id=" << shard_id << dendl;
+            continue;
+          } else {
+            return set_cr_error(op_ret);
+          }
         }
         return set_cr_done();
       }
@@ -519,6 +533,8 @@ RGWCoroutine* create_read_remote_mdlog_shard_info_cr(RGWMetaSyncEnv *env,
 }
 
 class RGWListRemoteMDLogShardCR : public RGWSimpleCoroutine {
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+
   RGWMetaSyncEnv *sync_env;
   RGWRESTReadResource *http_op;
 
@@ -532,7 +548,7 @@ public:
   RGWListRemoteMDLogShardCR(RGWMetaSyncEnv *env, const std::string& period,
                             int _shard_id, const string& _marker, uint32_t _max_entries,
                             rgw_mdlog_shard_data *_result)
-    : RGWSimpleCoroutine(env->store->ctx()), sync_env(env), http_op(NULL),
+    : RGWSimpleCoroutine(env->store->ctx(), NUM_ENPOINT_IOERROR_RETRIES), sync_env(env), http_op(NULL),
       period(period), shard_id(_shard_id), marker(_marker), max_entries(_max_entries), result(_result) {}
 
   int send_request(const DoutPrefixProvider *dpp) override {
@@ -573,7 +589,7 @@ public:
     int ret = http_op->wait(result, null_yield);
     http_op->put();
     if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(sync_env->dpp, 0) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
+      ldpp_dout(sync_env->dpp, 5) << "ERROR: failed to list remote mdlog shard, ret=" << ret << dendl;
       return ret;
     }
     return 0;
@@ -1027,6 +1043,9 @@ class RGWReadRemoteMetadataCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
 
+  int tries{0};
+  int op_ret{0};
+
 public:
   RGWReadRemoteMetadataCR(RGWMetaSyncEnv *_sync_env,
                                                       const string& _section, const string& _key, bufferlist *_pbl,
@@ -1034,7 +1053,7 @@ public:
                                                       http_op(NULL),
                                                       section(_section),
                                                       key(_key),
-						      pbl(_pbl) {
+                                                      pbl(_pbl) {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "read_remote_meta",
                                          section + ":" + key);
   }
@@ -1042,33 +1061,44 @@ public:
   int operate(const DoutPrefixProvider *dpp) override {
     RGWRESTConn *conn = sync_env->conn;
     reenter(this) {
-      yield {
-        string key_encode;
-        url_encode(key, key_encode);
-        rgw_http_param_pair pairs[] = { { "key" , key.c_str()},
-	                                { NULL, NULL } };
+      static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+      for (tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+        ldpp_dout(dpp, 20) << "read remote metadata.  retries=" << tries << dendl;
 
-        string p = string("/admin/metadata/") + section + "/" + key_encode;
+        yield {
+          string key_encode;
+          url_encode(key, key_encode);
+          rgw_http_param_pair pairs[] = { { "key" , key.c_str()},
+                                          { NULL, NULL } };
 
-        http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
+          string p = string("/admin/metadata/") + section + "/" + key_encode;
 
-        init_new_io(http_op);
+          http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
 
-        int ret = http_op->aio_read(dpp);
-        if (ret < 0) {
-          ldpp_dout(dpp, 0) << "ERROR: failed to fetch mdlog data" << dendl;
-          log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          init_new_io(http_op);
+
+          int ret = http_op->aio_read(dpp);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << "ERROR: failed to fetch mdlog data" << dendl;
+            log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+            http_op->put();
+            return set_cr_error(ret);
+          }
+
+          return io_block(0);
+        }
+        yield {
+          op_ret = http_op->wait(pbl, null_yield);
           http_op->put();
-          return set_cr_error(ret);
         }
 
-        return io_block(0);
-      }
-      yield {
-        int ret = http_op->wait(pbl, null_yield);
-        http_op->put();
-        if (ret < 0) {
-          return set_cr_error(ret);
+        if (op_ret < 0) {
+          if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+            ldpp_dout(dpp, 20) << "failed to read remote metadata. retry. section=" << section << " key=" << key << dendl;
+            continue;
+          } else {
+            return set_cr_error(op_ret);
+          }
         }
         return set_cr_done();
       }
@@ -1364,6 +1394,9 @@ class RGWCloneMetaLogCoroutine : public RGWCoroutine {
 
   RGWMetadataLogInfo shard_info;
   rgw_mdlog_shard_data data;
+
+  int tries{0};
+  int op_ret{0};
 
 public:
   RGWCloneMetaLogCoroutine(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
@@ -2392,14 +2425,27 @@ int RGWCloneMetaLogCoroutine::operate(const DoutPrefixProvider *dpp)
         ldpp_dout(dpp, 20) << __func__ << ": shard_id=" << shard_id << ": reading shard status complete" << dendl;
         return state_read_shard_status_complete();
       }
-      yield {
-        ldpp_dout(dpp, 20) << __func__ << ": shard_id=" << shard_id << ": sending rest request" << dendl;
-        return state_send_rest_request(dpp);
+
+      static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+      for (tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+        yield {
+          ldpp_dout(dpp, 20) << __func__ << ": shard_id=" << shard_id << ": sending rest request" << dendl;
+          return state_send_rest_request(dpp);
+        }
+        yield {
+          ldpp_dout(dpp, 20) << __func__ << ": shard_id=" << shard_id << ": receiving rest response" << dendl;
+          return state_receive_rest_response();
+        }
+
+        if (op_ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+          ldout(cct, 20) << __func__ << ": request IO error. retries=" << tries << dendl;
+          continue;
+        } else if (op_ret < 0) {
+          return set_cr_error(op_ret);
+        }
+        break;
       }
-      yield {
-        ldpp_dout(dpp, 20) << __func__ << ": shard_id=" << shard_id << ": receiving rest response" << dendl;
-        return state_receive_rest_response();
-      }
+
       yield {
         ldpp_dout(dpp, 20) << __func__ << ": shard_id=" << shard_id << ": storing mdlog entries" << dendl;
         return state_store_mdlog_entries();
@@ -2497,16 +2543,20 @@ int RGWCloneMetaLogCoroutine::state_send_rest_request(const DoutPrefixProvider *
 
 int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 {
-  int ret = http_op->wait(&data, null_yield);
-  if (ret < 0) {
+  op_ret = http_op->wait(&data, null_yield);
+  if (op_ret < 0 && op_ret != -EIO) {
     error_stream << "http operation failed: " << http_op->to_str() << " status=" << http_op->get_http_status() << std::endl;
-    ldpp_dout(sync_env->dpp, 5) << "failed to wait for op, ret=" << ret << dendl;
+    ldpp_dout(sync_env->dpp, 5) << "failed to wait for op, ret=" << op_ret << dendl;
     http_op->put();
     http_op = NULL;
-    return set_cr_error(ret);
+    return set_cr_error(op_ret);
   }
   http_op->put();
   http_op = NULL;
+
+  if (op_ret == -EIO) {
+    return 0;
+  }
 
   ldpp_dout(sync_env->dpp, 20) << "remote mdlog, shard_id=" << shard_id << " num of shard entries: " << data.entries.size() << dendl;
 
