@@ -33,7 +33,6 @@ private:
 		      epoch_t min_epoch, epoch_t max_epoch,
 		      std::vector<pg_log_entry_t>&& log_entries) final;
   CollectionRef coll;
-  crimson::os::FuturizedStore::Shard* store;
   seastar::future<> request_committed(const osd_reqid_t& reqid,
 				       const eversion_t& version) final {
     return seastar::now();
