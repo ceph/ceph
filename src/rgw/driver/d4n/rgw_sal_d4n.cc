@@ -51,7 +51,6 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
   blockDir = new rgw::d4n::BlockDirectory(io_context);
   cacheBlock = new rgw::d4n::CacheBlock();
   policyDriver = new rgw::d4n::PolicyDriver(io_context, "lfuda");
-  lruPolicyDriver = new rgw::d4n::PolicyDriver(io_context, "lru");
 }
 
  D4NFilterDriver::~D4NFilterDriver()
@@ -61,7 +60,6 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
     delete blockDir; 
     delete cacheBlock;
     delete policyDriver;
-    delete lruPolicyDriver;
 }
 
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
@@ -76,9 +74,6 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   policyDriver->init(); 
   policyDriver->get_cache_policy()->init(cct, dpp);
 
-  lruPolicyDriver->init();
-  lruPolicyDriver->get_cache_policy()->init(cct, dpp);
-  
   return 0;
 }
 
@@ -299,6 +294,9 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 	} else if (it->first == "max_buckets") {
 	  user->set_max_buckets(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
+	} else {
+	  ldpp_dout(dpp, 20) << "D4N Filter: Unexpected attribute; not locally set." << dendl;
+	  attrs.erase(it->first);
 	}
       }
     }
@@ -450,6 +448,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       } else if (it->first == "max_buckets") {
         user->set_max_buckets(std::stoull(it->second.c_str()));
 	attrs.erase(it->first);
+      } else {
+        ldpp_dout(dpp, 20) << "D4N Filter: Unexpected attribute; not locally set." << dendl;
+        attrs.erase(it->first);
       }
     }
     user->set_info(quota_info);
@@ -803,14 +804,17 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     const std::lock_guard l(d4n_get_data_lock);
     rgw::d4n::CacheBlock block;
     rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
-    //block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port));
-    block.cacheObj.bucketName = source->get_bucket()->get_name();
+    block.version = "";
+    block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
     block.cacheObj.objName = source->get_key().get_oid();
+    block.cacheObj.bucketName = source->get_bucket()->get_name();
+    block.cacheObj.creationTime = 0;
+    block.cacheObj.dirty = false;
+    block.cacheObj.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/);
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
-      block.blockID = 0; // TODO: fill out block correctly
-      block.version = "";
+      block.blockID = ofs; // TODO: fill out block correctly
       block.size = bl.length();
       block.blockID = ofs;
       uint64_t freeSpace = filter->get_cache_driver()->get_free_space(dpp);
@@ -836,7 +840,6 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
       block.blockID = ofs;
-      block.version = "";
       block.size = bl.length();
       uint64_t freeSpace = filter->get_cache_driver()->get_free_space(dpp);
       while(freeSpace < block.size) {
