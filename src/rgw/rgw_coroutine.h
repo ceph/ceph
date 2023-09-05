@@ -700,6 +700,10 @@ RGWAioCompletionNotifier *RGWCoroutinesStack::create_completion_notifier(T value
 
 class RGWSimpleCoroutine : public RGWCoroutine {
   bool called_cleanup;
+  const int max_eio_retries;
+
+  int tries{0};
+  int op_ret{0};
 
   int operate(const DoutPrefixProvider *dpp) override;
 
@@ -711,7 +715,8 @@ class RGWSimpleCoroutine : public RGWCoroutine {
   void call_cleanup();
 
 public:
-  RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct), called_cleanup(false) {}
+  RGWSimpleCoroutine(CephContext *_cct) : RGWCoroutine(_cct), called_cleanup(false), max_eio_retries(1) {}
+  RGWSimpleCoroutine(CephContext *_cct, const int _max_eio_retries) : RGWCoroutine(_cct), called_cleanup(false), max_eio_retries(_max_eio_retries) {}
   virtual ~RGWSimpleCoroutine() override;
 
   virtual int init() { return 0; }

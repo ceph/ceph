@@ -52,6 +52,7 @@ protected:
   CephContext *cct;
 
   std::string method;
+  std::string url_orig;
   std::string url;
 
   std::string protocol;
@@ -164,6 +165,10 @@ public:
 
   void set_url(const std::string& _url) {
     url = _url;
+  }
+
+  const std::string& get_url_orig() const {
+    return url_orig;
   }
 
   void set_method(const std::string& _method) {
