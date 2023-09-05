@@ -593,7 +593,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       // Read From Cache
       auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id); 
 
-      source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, part_len, source->driver->get_cache_driver());
+      source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, part_len, "", source->driver->get_cache_driver(), y);
 
       ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -613,7 +613,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
         // Read From Cache
         auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id);  
 
-        source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, source->driver->get_cache_driver());
+        source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, "", source->driver->get_cache_driver(), y);
 
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -824,10 +824,11 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         block.version = oid;
         block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
         block.size = source->get_obj_size();
-        block.cacheObj.bucketName = source->get_bucket()->get_name();
         block.cacheObj.objName = source->get_key().get_oid();
+        block.cacheObj.bucketName = source->get_bucket()->get_name();
+        block.cacheObj.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/);
         if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
-          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
+          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), *save_y);
         }
         /* Store block in directory */
         if (!blockDir->exist_key(oid, *save_y)) {
@@ -846,13 +847,14 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       block.version = oid;
       block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
       block.size = source->get_obj_size();
-      block.cacheObj.bucketName = source->get_bucket()->get_name();
       block.cacheObj.objName = source->get_key().get_oid();
+      block.cacheObj.bucketName = source->get_bucket()->get_name();
+      block.cacheObj.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/);
       ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
       if (ret == 0) {
         block.size = bl.length();
         if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
-          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
+          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), *save_y);
         }
         /* Store block in directory */
         if (!blockDir->exist_key(oid, *save_y)) {
@@ -872,10 +874,11 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 
       bl.splice(0, len_to_copy, &bl_copy);
       bl_rem.claim_append(bl_copy);
+      block.size = source->get_obj_size(); // TODO: fill out block entirely
       block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
-      block.size = source->get_obj_size();
-      block.cacheObj.bucketName = source->get_bucket()->get_name();
       block.cacheObj.objName = source->get_key().get_oid();
+      block.cacheObj.bucketName = source->get_bucket()->get_name();
+      block.cacheObj.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/);
       if (bl_rem.length() == g_conf()->rgw_get_obj_max_req_size) {
         std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
         ofs += bl_rem.length();
@@ -884,7 +887,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         if (ret == 0) {
           block.size = bl_rem.length();
           if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
-            filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl_rem.length(), filter->get_cache_driver());
+            filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl_rem.length(), "", filter->get_cache_driver(), *save_y);
           }
           /* Store block in directory */
           if (!blockDir->exist_key(oid, *save_y)) {
@@ -975,15 +978,14 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y)
 {
-  rgw::d4n::BlockDirectory* tempBlockDir = driver->get_block_dir();
-
-  driver->get_cache_block()->hostsList.push_back(tempBlockDir->cct->_conf->rgw_d4n_host + ":" + 
-		  				   std::to_string(tempBlockDir->cct->_conf->rgw_d4n_port)); 
   driver->get_cache_block()->size = accounted_size;
-  driver->get_cache_block()->cacheObj.bucketName = obj->get_bucket()->get_name();
+  driver->get_cache_block()->hostsList.push_back(driver->get_block_dir()->cct->_conf->rgw_d4n_host + ":" + 
+		  				   std::to_string(driver->get_block_dir()->cct->_conf->rgw_d4n_port)); 
   driver->get_cache_block()->cacheObj.objName = obj->get_key().get_oid();
+  driver->get_cache_block()->cacheObj.bucketName = obj->get_bucket()->get_name();
+  driver->get_cache_block()->cacheObj.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); // TODO: fix
 
-  int setDirReturn = tempBlockDir->set(driver->get_cache_block(), y);
+  int setDirReturn = driver->get_block_dir()->set(driver->get_cache_block(), y);
 
   if (setDirReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation failed." << dendl;
