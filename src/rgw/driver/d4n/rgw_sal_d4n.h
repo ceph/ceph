@@ -21,6 +21,7 @@
 #include "rgw_role.h"
 #include "common/dout.h" 
 #include "rgw_aio_throttle.h"
+#include "rgw_ssd_driver.h"
 
 #include "rgw_redis_driver.h"
 #include "driver/d4n/d4n_directory.h"
