@@ -208,6 +208,7 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
+#if 0
   std::vector<rgw::cache::Entry> entries = cacheNode->list_entries(dpp);
   std::string victimName;
   int minWeight = INT_MAX;
@@ -240,23 +241,16 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
 
   CacheBlock victimBlock;
   return victimBlock;
+#endif
+  return {};
 }
 
 int LFUDAPolicy::exist_key(std::string key, optional_yield y) {
-  response<int> resp;
+  if (entries_map.count(key) != 0) {
+    return true;
+  }
 
-  try { 
-    boost::system::error_code ec;
-    request req;
-    req.push("EXISTS", key);
-  
-    redis_exec(conn, ec, req, resp, y);
-    
-    if (ec)
-      return false;
-  } catch(std::exception &e) {}
-
-  return std::get<0>(resp).value();
+  return false;
 }
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
@@ -277,7 +271,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 
   int age = get_age(y);
 
-  if (cacheNode->key_exists(dpp, block->cacheObj.objName, y)) { /* Local copy */ 
+  if (exist_key(block->cacheObj.objName, y)) { /* Local copy */ 
     localWeight += age;
   } else {
     uint64_t freeSpace = cacheNode->get_free_space(dpp);
