@@ -89,7 +89,7 @@ public:
   void remove(const EntityName& name) {
     keys.erase(name);
   }
-  void set_caps(EntityName& name, std::map<std::string, ceph::buffer::list>& caps) {
+  void set_caps(const EntityName& name, std::map<std::string, ceph::buffer::list>& caps) {
     keys[name].caps = caps;
   }
   void set_key(EntityName& ename, CryptoKey& key) {

@@ -2,5 +2,5 @@
 
 # Running as root because the filesystem root directory will be
 # owned by uid 0, and that's where we're writing.
-sudo python3 -m nose -v $(dirname $0)/../../../src/test/pybind/test_cephfs.py
+sudo python3 -m pytest -v $(dirname $0)/../../../src/test/pybind/test_cephfs.py
 exit 0

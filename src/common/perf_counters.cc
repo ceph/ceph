@@ -14,6 +14,7 @@
  */
 
 #include "common/perf_counters.h"
+#include "common/perf_counters_key.h"
 #include "common/dout.h"
 #include "common/valgrind.h"
 #include "include/common_fwd.h"
@@ -129,16 +130,38 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     Formatter *f,
     bool schema,
     bool histograms,
+    bool dump_labeled,
     const std::string &logger,
     const std::string &counter) const
 {
   f->open_object_section("perfcounter_collection");
   
-  for (perf_counters_set_t::iterator l = m_loggers.begin();
-       l != m_loggers.end(); ++l) {
-    // Optionally filter on logger name, pass through counter filter
-    if (logger.empty() || (*l)->get_name() == logger) {
-      (*l)->dump_formatted_generic(f, schema, histograms, counter);
+  if (dump_labeled) {
+    std::string prev_key_name;
+    for (auto l = m_loggers.begin(); l != m_loggers.end(); ++l) {
+      std::string_view key_name = ceph::perf_counters::key_name((*l)->get_name());
+      if (key_name != prev_key_name) {
+        // close previous set of counters before dumping new one
+        if (!prev_key_name.empty()) {
+          f->close_section(); // array section
+        }
+        prev_key_name = key_name;
+
+        f->open_array_section(key_name);
+        (*l)->dump_formatted_generic(f, schema, histograms, true, "");
+      } else {
+        (*l)->dump_formatted_generic(f, schema, histograms, true, "");
+      }
+    }
+    if (!m_loggers.empty()) {
+      f->close_section(); // final array section
+    }
+  } else {
+    for (auto l = m_loggers.begin(); l != m_loggers.end(); ++l) {
+      // Optionally filter on logger name, pass through counter filter
+      if (logger.empty() || (*l)->get_name() == logger) {
+        (*l)->dump_formatted_generic(f, schema, histograms, false, counter);
+      }
     }
   }
   f->close_section();
@@ -354,9 +377,28 @@ void PerfCounters::reset()
 }
 
 void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
-    bool histograms, const std::string &counter) const
+    bool histograms, bool dump_labeled, const std::string &counter) const
 {
-  f->open_object_section(m_name.c_str());
+  if (dump_labeled) {
+    f->open_object_section(""); // should be enclosed by array
+    f->open_object_section("labels");
+    for (auto label : ceph::perf_counters::key_labels(m_name)) {
+      // don't dump labels with empty label names
+      if (!label.first.empty()) {
+        f->dump_string(label.first, label.second);
+      }
+    }
+    f->close_section(); // labels
+    f->open_object_section("counters");
+  } else {
+    auto labels = ceph::perf_counters::key_labels(m_name);
+    // do not dump counters when counter instance is labeled and dump_labeled is not set
+    if (labels.begin() != labels.end()) {
+      return;
+    }
+
+    f->open_object_section(m_name.c_str());
+  }
   
   for (perf_counter_data_vec_t::const_iterator d = m_data.begin();
        d != m_data.end(); ++d) {
@@ -463,6 +505,9 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
 	}
       }
     }
+  }
+  if (dump_labeled) {
+    f->close_section(); // counters
   }
   f->close_section();
 }

@@ -77,7 +77,7 @@ sudo virt-install \
     --network network=default,model=virtio \
     --controller type=virtio-serial \
     --channel unix,target_type=virtio,name=org.qemu.guest_agent.0 \
-    --noautoconsol
+    --noautoconsole
 
 export SSH_USER="administrator"
 export SSH_KNOWN_HOSTS_FILE="${DIR}/known_hosts"

@@ -299,6 +299,15 @@ int list_mirror_images(librados::IoCtx& io_ctx,
   return 0;
 }
 
+template <typename I>
+const char *pool_or_namespace(I *ictx) {
+  if (!ictx->md_ctx.get_namespace().empty()) {
+    return "namespace";
+  } else {
+    return "pool";
+  }
+}
+
 struct C_ImageGetInfo : public Context {
   mirror_image_info_t *mirror_image_info;
   mirror_image_mode_t *mirror_image_mode;
@@ -434,9 +443,15 @@ int Mirror<I>::image_enable(I *ictx, mirror_image_mode_t mode,
     return r;
   }
 
+  if (mirror_mode == cls::rbd::MIRROR_MODE_DISABLED) {
+    lderr(cct) << "cannot enable mirroring: mirroring is not enabled on a "
+               << pool_or_namespace(ictx) << dendl;
+    return -EINVAL;
+  }
+
   if (mirror_mode != cls::rbd::MIRROR_MODE_IMAGE) {
-    lderr(cct) << "cannot enable mirroring in the current pool mirroring mode"
-               << dendl;
+    lderr(cct) << "cannot enable mirroring: " << pool_or_namespace(ictx)
+               << " is not in image mirror mode" << dendl;
     return -EINVAL;
   }
 
@@ -1639,7 +1654,7 @@ int Mirror<I>::peer_site_remove(librados::IoCtx& io_ctx,
       for (auto snap_id : snap_ids) {
         C_SaferCond cond;
         auto req = mirror::snapshot::UnlinkPeerRequest<I>::create(
-          img_ctx, snap_id, uuid, &cond);
+          img_ctx, snap_id, uuid, true, &cond);
         req->send();
         r = cond.wait();
         if (r == -ENOENT) {

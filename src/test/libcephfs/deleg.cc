@@ -186,9 +186,9 @@ static void simple_deleg_test(struct ceph_mount_info *cmount, struct ceph_mount_
   std::thread breaker1(open_breaker_func, tcmount, filename, O_RDWR, &opened);
 
   wait_for_atomic_bool(recalled);
-  ASSERT_EQ(opened.load(), false);
   ASSERT_EQ(ceph_ll_delegation(cmount, fh, CEPH_DELEGATION_NONE, dummy_deleg_cb, &recalled), 0);
   breaker1.join();
+  ASSERT_EQ(opened.load(), true);
   ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
   ASSERT_EQ(ceph_ll_unlink(cmount, root, filename, perms), 0);
 
@@ -201,9 +201,9 @@ static void simple_deleg_test(struct ceph_mount_info *cmount, struct ceph_mount_
   ASSERT_EQ(ceph_ll_delegation_wait(cmount, fh, CEPH_DELEGATION_WR, dummy_deleg_cb, &recalled), 0);
   std::thread breaker2(open_breaker_func, tcmount, filename, O_RDONLY, &opened);
   wait_for_atomic_bool(recalled);
-  ASSERT_EQ(opened.load(), false);
   ASSERT_EQ(ceph_ll_delegation(cmount, fh, CEPH_DELEGATION_NONE, dummy_deleg_cb, &recalled), 0);
   breaker2.join();
+  ASSERT_EQ(opened.load(), true);
   ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
   ASSERT_EQ(ceph_ll_unlink(cmount, root, filename, perms), 0);
 
@@ -222,9 +222,9 @@ static void simple_deleg_test(struct ceph_mount_info *cmount, struct ceph_mount_
   std::thread breaker4(open_breaker_func, tcmount, filename, O_WRONLY, &opened);
   wait_for_atomic_bool(recalled);
   usleep(1000);
-  ASSERT_EQ(opened.load(), false);
   ASSERT_EQ(ceph_ll_delegation(cmount, fh, CEPH_DELEGATION_NONE, dummy_deleg_cb, &recalled), 0);
   breaker4.join();
+  ASSERT_EQ(opened.load(), true);
   ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
   ASSERT_EQ(ceph_ll_unlink(cmount, root, filename, perms), 0);
 
@@ -328,6 +328,15 @@ TEST(LibCephFS, DelegTimeout) {
   std::thread breaker1(open_breaker_func, nullptr, filename, O_RDWR, &opened);
   breaker1.join();
   ASSERT_EQ(recalled.load(), true);
+  /*
+   * Wait for the delegation to be timedout.
+   *
+   * MDSs will allow multiple clients to do r/w at the same time and the filelock
+   * will be in LOCK_MIX state. So the open() in a second mounter in the
+   * open_breaker_func() thread won't guarantee that after it exiting the delegation
+   * in the mounter in main thread has already timedout.
+   */
+  sleep(3);
   ASSERT_EQ(ceph_ll_getattr(cmount, root, &stx, 0, 0, perms), -CEPHFS_ENOTCONN);
   ceph_release(cmount);
 }
@@ -389,10 +398,10 @@ TEST(LibCephFS, RecalledGetattr) {
     ASSERT_LT(i++, MAX_WAIT);
     usleep(1000);
   } while (!recalled.load());
-  ASSERT_EQ(opened.load(), false);
   ASSERT_EQ(ceph_ll_getattr(cmount2, file, &stx, CEPH_STATX_ALL_STATS, 0, perms), 0);
   ASSERT_EQ(ceph_ll_delegation(cmount2, fh, CEPH_DELEGATION_NONE, dummy_deleg_cb, nullptr), 0);
   breaker1.join();
+  ASSERT_EQ(opened.load(), true);
   ASSERT_EQ(ceph_ll_close(cmount2, fh), 0);
   ceph_unmount(cmount2);
   ceph_release(cmount2);

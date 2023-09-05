@@ -90,7 +90,7 @@ class SsoDB(object):
 
 
 def load_sso_db():
-    mgr.SSO_DB = SsoDB.load()
+    mgr.SSO_DB = SsoDB.load()  # type: ignore
 
 
 SSO_COMMANDS = [

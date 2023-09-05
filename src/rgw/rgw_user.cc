@@ -45,7 +45,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* dri
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      ret = bucket->check_bucket_shards(dpp);
+      ret = bucket->check_bucket_shards(dpp, y);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }

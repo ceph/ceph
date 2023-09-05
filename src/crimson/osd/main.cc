@@ -192,12 +192,13 @@ int main(int argc, const char* argv[])
                                     make_pair(std::ref(hb_back_msgr), "hb_back"s)}) {
             msgr = crimson::net::Messenger::create(entity_name_t::OSD(whoami),
                                                    name,
-                                                   nonce);
+                                                   nonce,
+                                                   true);
           }
           auto store = crimson::os::FuturizedStore::create(
             local_conf().get_val<std::string>("osd_objectstore"),
             local_conf().get_val<std::string>("osd_data"),
-            local_conf().get_config_values()).get();
+            local_conf().get_config_values());
 
           crimson::osd::OSD osd(
             whoami, nonce, std::ref(should_stop.abort_source()),

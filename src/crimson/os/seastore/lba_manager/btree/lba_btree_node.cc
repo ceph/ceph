@@ -20,27 +20,33 @@ namespace crimson::os::seastore::lba_manager::btree {
 std::ostream& operator<<(std::ostream& out, const lba_map_val_t& v)
 {
   return out << "lba_map_val_t("
-             << v.paddr
+             << v.pladdr
              << "~" << v.len
              << ", refcount=" << v.refcount
              << ", checksum=" << v.checksum
              << ")";
 }
 
-std::ostream &LBALeafNode::print_detail(std::ostream &out) const
+std::ostream &LBALeafNode::_print_detail(std::ostream &out) const
 {
-  return out << ", size=" << get_size()
-	     << ", meta=" << get_meta();
+  out << ", size=" << this->get_size()
+      << ", meta=" << this->get_meta()
+      << ", my_tracker=" << (void*)this->my_tracker;
+  if (this->my_tracker) {
+    out << ", my_tracker->parent=" << (void*)this->my_tracker->get_parent().get();
+  }
+  return out << ", root_block=" << (void*)this->root_block.get();
 }
 
 void LBALeafNode::resolve_relative_addrs(paddr_t base)
 {
   LOG_PREFIX(LBALeafNode::resolve_relative_addrs);
   for (auto i: *this) {
-    if (i->get_val().paddr.is_relative()) {
-      auto val = i->get_val();
-      val.paddr = base.add_relative(val.paddr);
-      TRACE("{} -> {}", i->get_val().paddr, val.paddr);
+    auto val = i->get_val();
+    if (val.pladdr.is_paddr() &&
+	val.pladdr.get_paddr().is_relative()) {
+      val.pladdr = base.add_relative(val.pladdr.get_paddr());
+      TRACE("{} -> {}", i->get_val().pladdr, val.pladdr);
       i->set_val(val);
     }
   }

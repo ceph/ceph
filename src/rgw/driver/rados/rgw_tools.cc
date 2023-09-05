@@ -21,7 +21,8 @@ using namespace std;
 int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx, bool create,
-		   bool mostly_omap)
+                   bool mostly_omap,
+                   bool bulk)
 {
   int r = rados->ioctx_create(pool.name.c_str(), ioctx);
   if (r == -ENOENT && create) {
@@ -71,6 +72,18 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
       if (r < 0) {
 	ldpp_dout(dpp, 10) << __func__ << " warning: failed to set recovery_priority on "
 		 << pool.name << dendl;
+      }
+    }
+    if (bulk) {
+      // set bulk
+      bufferlist inbl;
+      int r = rados->mon_command(
+        "{\"prefix\": \"osd pool set\", \"pool\": \"" +
+        pool.name + "\", \"var\": \"bulk\", \"val\": \"true\"}",
+        inbl, NULL, NULL);
+      if (r < 0) {
+        ldpp_dout(dpp, 10) << __func__ << " warning: failed to set 'bulk' on "
+                 << pool.name << dendl;
       }
     }
   } else if (r < 0) {
@@ -323,7 +336,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   string req_id = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = driver->get_atomic_writer(dpp, y, std::move(obj),
+  processor = driver->get_atomic_writer(dpp, y, obj.get(),
 				       owner.get_id(),
 				       nullptr, olh_epoch, req_id);
 

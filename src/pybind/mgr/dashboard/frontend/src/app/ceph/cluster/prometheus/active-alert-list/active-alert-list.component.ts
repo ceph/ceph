@@ -3,6 +3,7 @@ import { Component, Inject, OnInit, TemplateRef, ViewChild } from '@angular/core
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -10,7 +11,6 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
-import { PrometheusListHelper } from '../prometheus-list-helper';
 
 const BASE_URL = 'silences'; // as only silence actions can be used
 

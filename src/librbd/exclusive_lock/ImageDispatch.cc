@@ -8,6 +8,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/asio/ContextWQ.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -22,12 +23,13 @@ namespace librbd {
 namespace exclusive_lock {
 
 using util::create_context_callback;
+using util::create_async_context_callback;
 
 template <typename I>
 ImageDispatch<I>::ImageDispatch(I* image_ctx)
   : m_image_ctx(image_ctx),
     m_lock(ceph::make_shared_mutex(
-      util::unique_lock_name("librbd::exclusve_lock::ImageDispatch::m_lock",
+      util::unique_lock_name("librbd::exclusive_lock::ImageDispatch::m_lock",
                              this))) {
 }
 
@@ -123,7 +125,7 @@ bool ImageDispatch<I>::read(
 template <typename I>
 bool ImageDispatch<I>::write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -141,9 +143,8 @@ bool ImageDispatch<I>::write(
 template <typename I>
 bool ImageDispatch<I>::discard(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
-    uint32_t discard_granularity_bytes, IOContext io_context,
-    const ZTracer::Trace &parent_trace, uint64_t tid,
-    std::atomic<uint32_t>* image_dispatch_flags,
+    uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace,
+    uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
@@ -160,7 +161,7 @@ bool ImageDispatch<I>::discard(
 template <typename I>
 bool ImageDispatch<I>::write_same(
     io::AioCompletion* aio_comp, io::Extents &&image_extents, bufferlist &&bl,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -179,7 +180,7 @@ template <typename I>
 bool ImageDispatch<I>::compare_and_write(
     io::AioCompletion* aio_comp, io::Extents &&image_extents,
     bufferlist &&cmp_bl, bufferlist &&bl, uint64_t *mismatch_offset,
-    IOContext io_context, int op_flags, const ZTracer::Trace &parent_trace,
+    int op_flags, const ZTracer::Trace &parent_trace,
     uint64_t tid, std::atomic<uint32_t>* image_dispatch_flags,
     io::DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
@@ -271,8 +272,9 @@ bool ImageDispatch<I>::needs_exclusive_lock(bool read_op, uint64_t tid,
     locker.unlock();
 
     *dispatch_result = io::DISPATCH_RESULT_RESTART;
-    auto ctx = create_context_callback<
-      ImageDispatch<I>, &ImageDispatch<I>::handle_acquire_lock>(this);
+    auto ctx = create_async_context_callback(
+      *m_image_ctx, create_context_callback<
+        ImageDispatch<I>, &ImageDispatch<I>::handle_acquire_lock>(this));
     m_image_ctx->exclusive_lock->acquire_lock(ctx);
     return true;
   }
@@ -290,7 +292,7 @@ void ImageDispatch<I>::handle_acquire_lock(int r) {
 
   Context* failed_dispatch = nullptr;
   Contexts on_dispatches;
-  if (r == -ESHUTDOWN) {
+  if (r == -ERESTART) {
     ldout(cct, 5) << "IO raced with exclusive lock shutdown" << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to acquire exclusive lock: " << cpp_strerror(r)

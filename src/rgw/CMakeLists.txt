@@ -94,6 +94,7 @@ set(librgw_common_srcs
   rgw_notify_event_type.cc
   rgw_period_history.cc
   rgw_period_puller.cc
+  rgw_pubsub.cc
   rgw_coroutine.cc
   rgw_cr_rest.cc
   rgw_op.cc
@@ -110,6 +111,8 @@ set(librgw_common_srcs
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
+  rgw_rest_pubsub.cc
+  rgw_rest_zero.cc
   rgw_s3select.cc
   rgw_role.cc
   rgw_sal.cc
@@ -165,14 +168,12 @@ set(librgw_common_srcs
   driver/rados/rgw_object_expirer_core.cc
   driver/rados/rgw_otp.cc
   driver/rados/rgw_period.cc
-  driver/rados/rgw_pubsub.cc
   driver/rados/rgw_pubsub_push.cc
   driver/rados/rgw_putobj_processor.cc
   driver/rados/rgw_rados.cc
   driver/rados/rgw_reshard.cc
   driver/rados/rgw_rest_bucket.cc
   driver/rados/rgw_rest_log.cc
-  driver/rados/rgw_rest_pubsub.cc
   driver/rados/rgw_rest_realm.cc
   driver/rados/rgw_rest_user.cc
   driver/rados/rgw_sal_rados.cc
@@ -191,7 +192,8 @@ set(librgw_common_srcs
   driver/rados/rgw_trim_datalog.cc
   driver/rados/rgw_trim_mdlog.cc
   driver/rados/rgw_user.cc
-  driver/rados/rgw_zone.cc)
+  driver/rados/rgw_zone.cc
+  driver/rados/sync_fairness.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
@@ -220,6 +222,11 @@ endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_common_srcs rgw_sal_daos.cc)
 endif()
+if(WITH_RADOSGW_D4N)
+  list(APPEND librgw_common_srcs driver/d4n/d4n_directory.cc)
+  list(APPEND librgw_common_srcs driver/d4n/d4n_datacache.cc)
+  list(APPEND librgw_common_srcs driver/d4n/rgw_sal_d4n.cc)
+endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
 endif()
@@ -231,8 +238,6 @@ endif(WITH_RADOSGW_ARROW_FLIGHT)
 
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
-target_compile_definitions(rgw_common
-  PUBLIC "FMT_HEADER_ONLY")
 
 include(CheckCXXCompilerFlag)
 check_cxx_compiler_flag("-Wimplicit-const-int-float-conversion"
@@ -258,7 +263,6 @@ target_link_libraries(rgw_common
     cls_version_client
     librados
     rt
-    fmt::fmt
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -277,6 +281,14 @@ target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
+
+if(WITH_RADOSGW_D4N)
+  add_dependencies(rgw_common cpp_redis)
+  target_link_libraries(rgw_common PRIVATE cpp_redis)
+  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
+  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
+endif()
+
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
   # used by rgw_kafka.cc
   target_link_libraries(rgw_common
@@ -538,13 +550,13 @@ target_link_libraries(rgw
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
+  OpenSSL::SSL
   PUBLIC
   RapidJSON::RapidJSON
   dmclock::dmclock)
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
   target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
-  target_link_libraries(rgw PRIVATE OpenSSL::SSL)
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
@@ -578,4 +590,5 @@ install(PROGRAMS
   rgw-gap-list
   rgw-gap-list-comparator
   rgw-orphan-list
+  rgw-restore-bucket-index
   DESTINATION bin)

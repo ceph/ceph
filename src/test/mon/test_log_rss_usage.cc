@@ -1,4 +1,5 @@
 #include <sys/types.h>
+#include <cstdint>
 #include <dirent.h>
 #include <errno.h>
 #include <vector>

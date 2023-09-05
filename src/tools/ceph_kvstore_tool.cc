@@ -30,7 +30,7 @@ using namespace std;
 
 void usage(const char *pname)
 {
-  std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
+  std::cout << "Usage: " << pname << " <rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
@@ -43,7 +43,7 @@ void usage(const char *pname)
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << "  rm <prefix> <key>\n"
     << "  rm-prefix <prefix>\n"
-    << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...] \n"
+    << "  store-copy <path> [num-keys-per-tx] [rocksdb|...] \n"
     << "  store-crc <path>\n"
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
@@ -90,8 +90,7 @@ int main(int argc, const char *argv[])
   string path(args[1]);
   string cmd(args[2]);
 
-  if (type != "leveldb" &&
-      type != "rocksdb" &&
+  if (type != "rocksdb" &&
       type != "bluestore-kv")  {
 
     std::cerr << "Unrecognized type: " << args[0] << std::endl;

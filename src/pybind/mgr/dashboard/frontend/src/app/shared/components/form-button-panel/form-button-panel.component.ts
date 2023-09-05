@@ -1,6 +1,6 @@
 import { Location } from '@angular/common';
 import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
-import { FormGroup, NgForm } from '@angular/forms';
+import { UntypedFormGroup, NgForm } from '@angular/forms';
 
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { ModalService } from '~/app/shared/services/modal.service';
@@ -21,9 +21,11 @@ export class FormButtonPanelComponent {
   backActionEvent = new EventEmitter();
 
   @Input()
-  form: FormGroup | NgForm;
+  form: UntypedFormGroup | NgForm;
   @Input()
   showSubmit = true;
+  @Input()
+  showCancel = true;
   @Input()
   wrappingClass = '';
   @Input()

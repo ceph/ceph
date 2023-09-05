@@ -114,21 +114,16 @@ struct FeatureMap {
 WRITE_CLASS_ENCODER(FeatureMap)
 
 /**
- * leveldb store stats
- *
- * If we ever decide to support multiple backends for the monitor store,
- * we should then create an abstract class 'MonitorStoreStats' of sorts
- * and inherit it on LevelDBStoreStats.  I'm sure you'll figure something
- * out.
+ * monitor db store stats
  */
-struct LevelDBStoreStats {
+struct MonitorDBStoreStats {
   uint64_t bytes_total;
   uint64_t bytes_sst;
   uint64_t bytes_log;
   uint64_t bytes_misc;
   utime_t last_update;
 
-  LevelDBStoreStats() :
+  MonitorDBStoreStats() :
     bytes_total(0),
     bytes_sst(0),
     bytes_log(0),
@@ -164,9 +159,9 @@ struct LevelDBStoreStats {
     DECODE_FINISH(p);
   }
 
-  static void generate_test_instances(std::list<LevelDBStoreStats*>& ls) {
-    ls.push_back(new LevelDBStoreStats);
-    ls.push_back(new LevelDBStoreStats);
+  static void generate_test_instances(std::list<MonitorDBStoreStats*>& ls) {
+    ls.push_back(new MonitorDBStoreStats);
+    ls.push_back(new MonitorDBStoreStats);
     ls.back()->bytes_total = 1024*1024;
     ls.back()->bytes_sst = 512*1024;
     ls.back()->bytes_log = 256*1024;
@@ -174,7 +169,7 @@ struct LevelDBStoreStats {
     ls.back()->last_update = utime_t();
   }
 };
-WRITE_CLASS_ENCODER(LevelDBStoreStats)
+WRITE_CLASS_ENCODER(MonitorDBStoreStats)
 
 // data stats
 
@@ -182,7 +177,7 @@ struct DataStats {
   ceph_data_stats_t fs_stats;
   // data dir
   utime_t last_update;
-  LevelDBStoreStats store_stats;
+  MonitorDBStoreStats store_stats;
 
   void dump(ceph::Formatter *f) const {
     ceph_assert(f != NULL);

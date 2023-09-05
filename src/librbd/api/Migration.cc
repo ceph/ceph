@@ -1787,7 +1787,7 @@ int Migration<I>::enable_mirroring(
 // When relinking children we should be careful as it my be interrupted
 // at any moment by some reason and we may end up in an inconsistent
 // state, which we have to be able to fix with "migration abort". Below
-// are all possible states during migration (P1 - sourse parent, P2 -
+// are all possible states during migration (P1 - source parent, P2 -
 // destination parent, C - child):
 //
 //   P1  P2    P1  P2    P1  P2    P1  P2

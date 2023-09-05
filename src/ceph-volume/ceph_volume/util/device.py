@@ -230,7 +230,7 @@ class Device(object):
             self.disk_api = dev
             device_type = dev.get('TYPE', '')
             # always check is this is an lvm member
-            valid_types = ['part', 'disk']
+            valid_types = ['part', 'disk', 'mpath']
             if allow_loop_devices():
                 valid_types.append('loop')
             if device_type in valid_types:
@@ -526,6 +526,15 @@ class Device(object):
         # only filter out data devices as journals could potentially be reused
         osd_ids = [lv.tags.get("ceph.osd_id") is not None for lv in self.lvs
                    if lv.tags.get("ceph.type") in ["data", "block"]]
+        return any(osd_ids)
+
+    @property
+    def journal_used_by_ceph(self):
+        # similar to used_by_ceph() above. This is for 'journal' devices (db/wal/..)
+        # needed by get_lvm_fast_allocs() in devices/lvm/batch.py
+        # see https://tracker.ceph.com/issues/59640
+        osd_ids = [lv.tags.get("ceph.osd_id") is not None for lv in self.lvs
+                   if lv.tags.get("ceph.type") in ["db", "wal"]]
         return any(osd_ids)
 
     @property

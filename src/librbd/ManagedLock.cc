@@ -122,7 +122,7 @@ bool ManagedLock<I>::is_lock_owner(ceph::mutex &lock) const {
     break;
   }
 
-  ldout(m_cct, 20) << "=" << lock_owner << dendl;
+  ldout(m_cct, 20) << lock_owner << dendl;
   return lock_owner;
 }
 
@@ -139,7 +139,7 @@ void ManagedLock<I>::shut_down(Context *on_shut_down) {
     Action active_action = get_active_action();
     ceph_assert(active_action == ACTION_TRY_LOCK ||
                 active_action == ACTION_ACQUIRE_LOCK);
-    complete_active_action(STATE_UNLOCKED, -ESHUTDOWN);
+    complete_active_action(STATE_UNLOCKED, -ERESTART);
   }
 
   execute_action(ACTION_SHUT_DOWN, on_shut_down);
@@ -151,7 +151,7 @@ void ManagedLock<I>::acquire_lock(Context *on_acquired) {
   {
     std::lock_guard locker{m_lock};
     if (is_state_shutdown()) {
-      r = -ESHUTDOWN;
+      r = -ERESTART;
     } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
       execute_action(ACTION_ACQUIRE_LOCK, on_acquired);
@@ -170,7 +170,7 @@ void ManagedLock<I>::try_acquire_lock(Context *on_acquired) {
   {
     std::lock_guard locker{m_lock};
     if (is_state_shutdown()) {
-      r = -ESHUTDOWN;
+      r = -ERESTART;
     } else if (m_state != STATE_LOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
       execute_action(ACTION_TRY_LOCK, on_acquired);
@@ -189,7 +189,7 @@ void ManagedLock<I>::release_lock(Context *on_released) {
   {
     std::lock_guard locker{m_lock};
     if (is_state_shutdown()) {
-      r = -ESHUTDOWN;
+      r = -ERESTART;
     } else if (m_state != STATE_UNLOCKED || !m_actions_contexts.empty()) {
       ldout(m_cct, 10) << dendl;
       execute_action(ACTION_RELEASE_LOCK, on_released);
@@ -241,7 +241,7 @@ void ManagedLock<I>::get_locker(managed_lock::Locker *locker,
   {
     std::lock_guard l{m_lock};
     if (is_state_shutdown()) {
-      r = -ESHUTDOWN;
+      r = -ERESTART;
     } else {
       on_finish = new C_Tracked(m_async_op_tracker, on_finish);
       auto req = managed_lock::GetLockerRequest<I>::create(
@@ -263,7 +263,7 @@ void ManagedLock<I>::break_lock(const managed_lock::Locker &locker,
   {
     std::lock_guard l{m_lock};
     if (is_state_shutdown()) {
-      r = -ESHUTDOWN;
+      r = -ERESTART;
     } else if (is_lock_owner(m_lock)) {
       r = -EBUSY;
     } else {
@@ -481,12 +481,17 @@ void ManagedLock<I>::send_acquire_lock() {
 
   uint64_t watch_handle = m_watcher->get_watch_handle();
   if (watch_handle == 0) {
-    lderr(m_cct) << "watcher not registered - delaying request" << dendl;
-    m_state = STATE_WAITING_FOR_REGISTER;
+    if (m_watcher->is_blocklisted()) {
+      lderr(m_cct) << "watcher not registered - client blocklisted" << dendl;
+      complete_active_action(STATE_UNLOCKED, -EBLOCKLISTED);
+    } else {
+      lderr(m_cct) << "watcher not registered - delaying request" << dendl;
+      m_state = STATE_WAITING_FOR_REGISTER;
 
-    // shut down might race w/ release/re-acquire of the lock
-    if (is_state_shutdown()) {
-      complete_active_action(STATE_UNLOCKED, -ESHUTDOWN);
+      // shut down might race w/ release/re-acquire of the lock
+      if (is_state_shutdown()) {
+        complete_active_action(STATE_UNLOCKED, -ERESTART);
+      }
     }
     return;
   }

@@ -44,6 +44,15 @@ class Workload(object):
                 ValidationError(e, traceback.format_exc(3))
             )
 
+    def assert_not_equal(self, a, b):
+        try:
+            if a == b:
+                raise AssertionError("{0} == {1}".format(a, b))
+        except AssertionError as e:
+            self._errors.append(
+                ValidationError(e, traceback.format_exc(3))
+            )
+
     def assert_true(self, a):
         try:
             if not a:
@@ -81,6 +90,16 @@ class Workload(object):
         """
         self._filesystem.mds_asok(["flush", "journal"])
 
+    def scrub(self):
+        """
+        Called as a final step post recovery before verification. Right now, this
+        doesn't bother if errors are found in scrub - just that the MDS doesn't
+        crash and burn during scrub.
+        """
+        out_json = self._filesystem.run_scrub(["start", "/", "repair,recursive"])
+        self.assert_not_equal(out_json, None)
+        self.assert_equal(out_json["return_code"], 0)
+        self.assert_equal(self._filesystem.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
 
 class SimpleWorkload(Workload):
     """
@@ -165,17 +184,22 @@ class BacktracelessFile(Workload):
         # We might not have got the name or path, but we should still get the size
         self.assert_equal(st['st_size'], self._initial_state['st_size'])
 
+        # remove the entry from lost+found directory
+        self._mount.run_shell(["sudo", "rm", "-f", f'lost+found/{ino_name}'], omit_sudo=False)
+        self.assert_equal(self._mount.ls("lost+found", sudo=True), [])
+
         return self._errors
 
 
 class StripedStashedLayout(Workload):
-    def __init__(self, fs, m):
+    def __init__(self, fs, m, pool=None):
         super(StripedStashedLayout, self).__init__(fs, m)
 
         # Nice small stripes so we can quickly do our writes+validates
         self.sc = 4
         self.ss = 65536
         self.os = 262144
+        self.pool = pool and pool or self._filesystem.get_data_pool_name()
 
         self.interesting_sizes = [
             # Exactly stripe_count objects will exist
@@ -196,8 +220,7 @@ class StripedStashedLayout(Workload):
 
         self._mount.setfattr("./stripey", "ceph.dir.layout",
              "stripe_unit={ss} stripe_count={sc} object_size={os} pool={pool}".format(
-                 ss=self.ss, os=self.os, sc=self.sc,
-                 pool=self._filesystem.get_data_pool_name()
+                 ss=self.ss, os=self.os, sc=self.sc, pool=self.pool
              ))
 
         # Write files, then flush metadata so that its layout gets written into an xattr
@@ -400,11 +423,12 @@ class TestDataScan(CephFSTestCase):
 
         self.fs.journal_tool(["journal", "reset", "--force"], 0)
         self.fs.data_scan(["init"])
-        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()], worker_count=workers)
-        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()], worker_count=workers)
+        self.fs.data_scan(["scan_extents"], worker_count=workers)
+        self.fs.data_scan(["scan_inodes"], worker_count=workers)
+        self.fs.data_scan(["scan_links"])
 
         # Mark the MDS repaired
-        self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
+        self.run_ceph_cmd('mds', 'repaired', '0')
 
         # Start the MDS
         self.fs.mds_restart()
@@ -413,6 +437,10 @@ class TestDataScan(CephFSTestCase):
 
         # Mount a client
         self.mount_a.mount_wait()
+
+        # run scrub as it is recommended post recovery for most
+        # (if not all) recovery mechanisms.
+        workload.scrub()
 
         # See that the files are present and correct
         errors = workload.validate()
@@ -517,8 +545,8 @@ class TestDataScan(CephFSTestCase):
 
         # Run data-scan, observe that it inserts our dentry back into the correct fragment
         # by checking the omap now has the dentry's key again
-        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()])
-        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()])
+        self.fs.data_scan(["scan_extents"])
+        self.fs.data_scan(["scan_inodes"])
         self.fs.data_scan(["scan_links"])
         self.assertIn(victim_key, self._dirfrag_keys(frag_obj_id))
 
@@ -575,7 +603,7 @@ class TestDataScan(CephFSTestCase):
             file_path = "mydir/myfile_{0}".format(i)
             ino = self.mount_a.path_to_ino(file_path)
             obj = "{0:x}.{1:08x}".format(ino, 0)
-            pgid = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+            pgid = json.loads(self.get_ceph_cmd_stdout(
                 "osd", "map", self.fs.get_data_pool_name(), obj,
                 "--format=json-pretty"
             ))['pgid']
@@ -644,6 +672,11 @@ class TestDataScan(CephFSTestCase):
         file1_nlink = self.mount_a.path_to_nlink("testdir1/file1")
         self.assertEqual(file1_nlink, 2)
 
+        out_json = self.fs.run_scrub(["start", "/testdir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
     def test_rebuild_inotable(self):
         """
         The scan_links command repair inotables
@@ -689,6 +722,14 @@ class TestDataScan(CephFSTestCase):
         self.assertGreaterEqual(
             mds1_inotable['1']['data']['inotable']['free'][0]['start'], file_ino)
 
+        self.fs.set_joinable()
+        self.fs.wait_for_daemons()
+
+        out_json = self.fs.run_scrub(["start", "/dir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
     def test_rebuild_snaptable(self):
         """
         The scan_links command repair snaptable
@@ -723,3 +764,33 @@ class TestDataScan(CephFSTestCase):
             new_snaptable['snapserver']['last_snap'], old_snaptable['snapserver']['last_snap'])
         self.assertEqual(
             new_snaptable['snapserver']['snaps'], old_snaptable['snapserver']['snaps'])
+
+        out_json = self.fs.run_scrub(["start", "/dir1", "repair,recursive"])
+        self.assertNotEqual(out_json, None)
+        self.assertEqual(out_json["return_code"], 0)
+        self.assertEqual(self.fs.wait_until_scrub_complete(tag=out_json["scrub_tag"]), True)
+
+    def _prepare_extra_data_pool(self, set_root_layout=True):
+        extra_data_pool_name = self.fs.get_data_pool_name() + '_extra'
+        self.fs.add_data_pool(extra_data_pool_name)
+        if set_root_layout:
+            self.mount_a.setfattr(".", "ceph.dir.layout.pool",
+                                  extra_data_pool_name)
+        return extra_data_pool_name
+
+    def test_extra_data_pool_rebuild_simple(self):
+        self._prepare_extra_data_pool()
+        self._rebuild_metadata(SimpleWorkload(self.fs, self.mount_a))
+
+    def test_extra_data_pool_rebuild_few_files(self):
+        self._prepare_extra_data_pool()
+        self._rebuild_metadata(ManyFilesWorkload(self.fs, self.mount_a, 5), workers=1)
+
+    @for_teuthology
+    def test_extra_data_pool_rebuild_many_files_many_workers(self):
+        self._prepare_extra_data_pool()
+        self._rebuild_metadata(ManyFilesWorkload(self.fs, self.mount_a, 25), workers=7)
+
+    def test_extra_data_pool_stashed_layout(self):
+        pool_name = self._prepare_extra_data_pool(False)
+        self._rebuild_metadata(StripedStashedLayout(self.fs, self.mount_a, pool_name))

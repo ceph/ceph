@@ -32,6 +32,11 @@
 
 #include "include/ceph_assert.h"
 
+#define dout_subsys ceph_subsys_mon
+
+#undef dout_prefix
+#define dout_prefix *_dout << "MonCap "
+
 using std::list;
 using std::map;
 using std::ostream;
@@ -186,6 +191,11 @@ void MonCapGrant::expand_profile(const EntityName& name) const
     StringConstraint constraint(StringConstraint::MATCH_TYPE_REGEX,
                                 string("osd_mclock_max_capacity_iops_(hdd|ssd)"));
     profile_grants.push_back(MonCapGrant("config set", "name", constraint));
+    constraint = StringConstraint(StringConstraint::MATCH_TYPE_REGEX,
+                                  string("^(osd_max_backfills|") +
+                                  string("osd_recovery_max_active(.*)|") +
+                                  string("osd_mclock_scheduler_(.*))"));
+    profile_grants.push_back(MonCapGrant("config rm", "name", constraint));
   }
   if (profile == "mds") {
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_ALL));

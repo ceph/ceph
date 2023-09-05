@@ -1431,9 +1431,25 @@ void ECBackend::filter_read_op(
   }
 
   if (op.in_progress.empty()) {
+    /* This case is odd.  filter_read_op gets called while processing
+     * an OSDMap.  Normal, non-recovery reads only happen from acting
+     * set osds.  For this op to have had a read source go down and
+     * there not be an interval change, it must be part of a pull during
+     * log-based recovery.
+     *
+     * This callback delays calling complete_read_op until later to avoid
+     * dealing with recovery while handling an OSDMap.  We assign a
+     * cost here of 1 because:
+     * 1) This should be very rare, and the operation itself was already
+     *    throttled.
+     * 2) It shouldn't result in IO, rather it should result in restarting
+     *    the pull on the affected objects and pushes from in-memory buffers
+     *    on any now complete unaffected objects.
+     */
     get_parent()->schedule_recovery_work(
       get_parent()->bless_unlocked_gencontext(
-	new FinishReadOp(this, op.tid)));
+        new FinishReadOp(this, op.tid)),
+      1);
   }
 }
 

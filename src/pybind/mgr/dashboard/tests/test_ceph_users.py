@@ -47,4 +47,6 @@ class CephUsersControllerTestCase(ControllerTestCase):
     def test_create_form(self):
         form_dict = create_form.to_dict()
         schema = {'schema': form_dict['control_schema'], 'layout': form_dict['ui_schema']}
-        validate(instance={'user_entity': 'foo', 'capabilities': []}, schema=schema['schema'])
+        validate(instance={'user_entity': 'foo',
+                           'capabilities': [{"entity": "mgr", "cap": "allow *"}]},
+                 schema=schema['schema'])

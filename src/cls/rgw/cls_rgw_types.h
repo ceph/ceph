@@ -9,8 +9,6 @@
 #include "common/ceph_time.h"
 #include "common/Formatter.h"
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "rgw/rgw_basic_types.h"
@@ -38,6 +36,10 @@ struct rgw_zone_set_entry {
       return false;
     }
     return (location_key < e.location_key);
+  }
+
+  bool operator==(const rgw_zone_set_entry& e) const {
+    return zone == e.zone && location_key == e.location_key;
   }
 
   rgw_zone_set_entry() {}

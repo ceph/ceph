@@ -31,6 +31,7 @@
 
 #include "include/rados/rados_types.hpp"
 #include "include/mempool.h"
+#include "common/fmt_common.h"
 
 #include "msg/msg_types.h"
 #include "include/compat.h"
@@ -367,12 +368,14 @@ enum {
   CEPH_OSD_RMW_FLAG_SKIP_PROMOTE      = (1 << 9),
   CEPH_OSD_RMW_FLAG_RWORDERED         = (1 << 10),
   CEPH_OSD_RMW_FLAG_RETURNVEC = (1 << 11),
+  CEPH_OSD_RMW_FLAG_READ_DATA  = (1 << 12),
 };
 
 
 // pg stuff
 
 #define OSD_SUPERBLOCK_GOBJECT ghobject_t(hobject_t(sobject_t(object_t("osd_superblock"), 0)))
+#define OSD_SUPERBLOCK_OMAP_KEY "osd_superblock"
 
 // placement seed (a hash value)
 typedef uint32_t ps_t;
@@ -3228,6 +3231,7 @@ public:
     void encode(ceph::buffer::list& bl) const;
     void decode(ceph::buffer::list::const_iterator& bl);
     void dump(ceph::Formatter *f) const;
+    std::string fmt_print() const;
     static void generate_test_instances(std::list<pg_interval_t*>& o);
   };
 
@@ -3252,6 +3256,7 @@ public:
     virtual void encode(ceph::buffer::list &bl) const = 0;
     virtual void decode(ceph::buffer::list::const_iterator &bl) = 0;
     virtual void dump(ceph::Formatter *f) const = 0;
+    virtual std::string print() const = 0;
     virtual void iterate_mayberw_back_to(
       epoch_t les,
       std::function<void(epoch_t, const std::set<pg_shard_t> &)> &&f) const = 0;
@@ -3297,6 +3302,9 @@ public:
     ceph_assert(past_intervals);
     past_intervals->dump(f);
   }
+
+  std::string fmt_print() const;
+
   static void generate_test_instances(std::list<PastIntervals *> & o);
 
   /**
@@ -3505,6 +3513,8 @@ public:
     bool affected_by_map(
       const OSDMap &osdmap,
       const DoutPrefixProvider *dpp) const;
+
+    std::string fmt_print() const;
 
     // For verifying tests
     PriorSet(
@@ -4072,6 +4082,7 @@ public:
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
+  std::string fmt_print() const;
   static void generate_test_instances(std::list<ObjectCleanRegions*>& o);
 };
 WRITE_CLASS_ENCODER(ObjectCleanRegions)
@@ -4080,7 +4091,6 @@ std::ostream& operator<<(std::ostream& out, const ObjectCleanRegions& ocr);
 
 struct OSDOp {
   ceph_osd_op op;
-  sobject_t soid;
 
   ceph::buffer::list indata, outdata;
   errorcode32_t rval;
@@ -4213,6 +4223,16 @@ struct pg_log_op_return_item_t {
   }
 };
 WRITE_CLASS_ENCODER(pg_log_op_return_item_t)
+namespace fmt {
+template <>
+struct formatter<pg_log_op_return_item_t> {
+  constexpr auto parse(fmt::format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const pg_log_op_return_item_t& litm, FormatContext& ctx) const {
+    return fmt::format_to(ctx.out(), "r={}+{}b", litm.rval, litm.bl.length());
+  }
+};
+} // namespace fmt
 
 /**
  * pg_log_entry_t - single entry/event in pg log
@@ -4296,7 +4316,7 @@ struct pg_log_entry_t {
      invalid_hash(false), invalid_pool(false) {
     snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
   }
-      
+
   bool is_clone() const { return op == CLONE; }
   bool is_modify() const { return op == MODIFY; }
   bool is_promote() const { return op == PROMOTE; }
@@ -4355,6 +4375,7 @@ struct pg_log_entry_t {
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
+  std::string fmt_print() const;
   static void generate_test_instances(std::list<pg_log_entry_t*>& o);
 
 };
@@ -5445,6 +5466,8 @@ public:
   epoch_t purged_snaps_last = 0;
   utime_t last_purged_snaps_scrub;
 
+  epoch_t cluster_osdmap_trim_lower_bound = 0;
+
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
@@ -5460,6 +5483,7 @@ inline std::ostream& operator<<(std::ostream& out, const OSDSuperblock& sb)
              << " e" << sb.current_epoch
              << " [" << sb.oldest_map << "," << sb.newest_map << "]"
 	     << " lci=[" << sb.mounted << "," << sb.clean_thru << "]"
+             << " tlb=" << sb.cluster_osdmap_trim_lower_bound
              << ")";
 }
 
@@ -5495,11 +5519,11 @@ struct SnapSet {
 
   /// get space accounted to clone
   uint64_t get_clone_bytes(snapid_t clone) const;
-    
+
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<SnapSet*>& o);  
+  static void generate_test_instances(std::list<SnapSet*>& o);
 
   SnapContext get_ssc_as_of(snapid_t as_of) const {
     SnapContext out;
@@ -5540,6 +5564,7 @@ struct watch_info_t {
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
+  std::string fmt_print() const;
   static void generate_test_instances(std::list<watch_info_t*>& o);
 };
 WRITE_CLASS_ENCODER_FEATURES(watch_info_t)
@@ -5550,8 +5575,7 @@ static inline bool operator==(const watch_info_t& l, const watch_info_t& r) {
 }
 
 static inline std::ostream& operator<<(std::ostream& out, const watch_info_t& w) {
-  return out << "watch(cookie " << w.cookie << " " << w.timeout_seconds << "s"
-    << " " << w.addr << ")";
+  return out << w.fmt_print();
 }
 
 struct notify_info_t {
@@ -6000,24 +6024,21 @@ struct ObjectRecoveryInfo {
   static void generate_test_instances(std::list<ObjectRecoveryInfo*>& o);
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator &bl, int64_t pool = -1);
-  std::ostream &print(std::ostream &out) const;
+  std::string fmt_print() const;
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER_FEATURES(ObjectRecoveryInfo)
 std::ostream& operator<<(std::ostream& out, const ObjectRecoveryInfo &inf);
 
 struct ObjectRecoveryProgress {
-  uint64_t data_recovered_to;
+  uint64_t data_recovered_to{0};
   std::string omap_recovered_to;
-  bool first;
-  bool data_complete;
-  bool omap_complete;
-  bool error = false;
+  bool first{true};
+  bool data_complete{false};
+  bool omap_complete{false};
+  bool error{false};
 
-  ObjectRecoveryProgress()
-    : data_recovered_to(0),
-      first(true),
-      data_complete(false), omap_complete(false) { }
+  ObjectRecoveryProgress() {}
 
   bool is_complete(const ObjectRecoveryInfo& info) const {
     return (data_recovered_to >= (
@@ -6026,10 +6047,16 @@ struct ObjectRecoveryProgress {
       omap_complete;
   }
 
+  uint64_t estimate_remaining_data_to_recover(const ObjectRecoveryInfo& info) const {
+    // Overestimates in case of clones, but avoids traversing copy_subset
+    return info.size - data_recovered_to;
+  }
+
   static void generate_test_instances(std::list<ObjectRecoveryProgress*>& o);
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
   std::ostream &print(std::ostream &out) const;
+  std::string fmt_print() const;
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(ObjectRecoveryProgress)

@@ -175,7 +175,7 @@ bs::error_code log_remove(const DoutPrefixProvider *dpp,
 	librados::ObjectWriteOperation op;
 	op.remove();
 	auto part_oid = info.part_oid(j);
-	auto subr = rgw_rados_operate(dpp, ioctx, part_oid, &op, null_yield);
+	auto subr = rgw_rados_operate(dpp, ioctx, part_oid, &op, y);
 	if (subr < 0 && subr != -ENOENT) {
 	  if (!ec)
 	    ec = bs::error_code(-subr, bs::system_category());
@@ -203,7 +203,7 @@ bs::error_code log_remove(const DoutPrefixProvider *dpp,
     } else {
       op.remove();
     }
-    r = rgw_rados_operate(dpp, ioctx, oid, &op, null_yield);
+    r = rgw_rados_operate(dpp, ioctx, oid, &op, y);
     if (r < 0 && r != -ENOENT) {
       if (!ec)
 	ec = bs::error_code(-r, bs::system_category());

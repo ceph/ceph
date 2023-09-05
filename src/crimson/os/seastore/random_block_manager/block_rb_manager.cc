@@ -73,22 +73,15 @@ void BlockRBManager::complete_allocation(
 BlockRBManager::open_ertr::future<> BlockRBManager::open()
 {
   assert(device);
-  return device->read_rbm_header(RBM_START_ADDRESS
-  ).safe_then([this](auto s)
-    -> open_ertr::future<> {
-    auto ool_start = get_start_rbm_addr();
-    allocator->init(
-      ool_start,
-      device->get_available_size() -
-      ool_start,
-      device->get_block_size());
-    return open_ertr::now();
-  }).handle_error(
-    open_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-      "Invalid error read_rbm_header in BlockRBManager::open"
-    }
-  );
+  assert(device->get_available_size() > 0);
+  assert(device->get_block_size() > 0);
+  auto ool_start = get_start_rbm_addr();
+  allocator->init(
+    ool_start,
+    device->get_shard_end() -
+    ool_start,
+    device->get_block_size());
+  return open_ertr::now();
 }
 
 BlockRBManager::write_ertr::future<> BlockRBManager::write(
@@ -98,16 +91,18 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   LOG_PREFIX(BlockRBManager::write);
   ceph_assert(device);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-  rbm_abs_addr start = 0;
-  rbm_abs_addr end = device->get_available_size();
+  rbm_abs_addr start = device->get_shard_start();
+  rbm_abs_addr end = device->get_shard_end();
   if (addr < start || addr + bptr.length() > end) {
     ERROR("out of range: start {}, end {}, addr {}, length {}",
       start, end, addr, bptr.length());
     return crimson::ct_error::erange::make();
   }
+  bufferptr bp = bufferptr(ceph::buffer::create_page_aligned(bptr.length()));
+  bp.copy_in(0, bptr.length(), bptr.c_str());
   return device->write(
     addr,
-    bptr);
+    std::move(bp));
 }
 
 BlockRBManager::read_ertr::future<> BlockRBManager::read(
@@ -117,8 +112,8 @@ BlockRBManager::read_ertr::future<> BlockRBManager::read(
   LOG_PREFIX(BlockRBManager::read);
   ceph_assert(device);
   rbm_abs_addr addr = convert_paddr_to_abs_addr(paddr);
-  rbm_abs_addr start = 0;
-  rbm_abs_addr end = device->get_available_size();
+  rbm_abs_addr start = device->get_shard_start();
+  rbm_abs_addr end = device->get_shard_end();
   if (addr < start || addr + bptr.length() > end) {
     ERROR("out of range: start {}, end {}, addr {}, length {}",
       start, end, addr, bptr.length());
@@ -153,7 +148,7 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
   }
   return device->write(
     addr,
-    bptr);
+    std::move(bptr));
 }
 
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
@@ -163,7 +158,18 @@ std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
        << ", feature=" << header.feature
        << ", journal_size=" << header.journal_size
        << ", crc=" << header.crc
-       << ", config=" << header.config;
+       << ", config=" << header.config
+       << ", shard_num=" << header.shard_num;
+  for (auto p : header.shard_infos) {
+    out << p;
+  }
+  return out << ")";
+}
+
+std::ostream &operator<<(std::ostream &out, const rbm_shard_info_t &shard)
+{
+  out << " rbm_shard_info_t(size=" << shard.size
+      << ", start_offset=" << shard.start_offset;
   return out << ")";
 }
 

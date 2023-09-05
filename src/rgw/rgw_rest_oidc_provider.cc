@@ -168,7 +168,7 @@ void RGWGetOIDCProvider::execute(optional_yield y)
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_arn(provider_arn);
   provider->set_tenant(s->user->get_tenant());
-  op_ret = provider->get(s);
+  op_ret = provider->get(s, y);
 
   if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
     op_ret = ERR_INTERNAL_ERROR;
@@ -209,7 +209,7 @@ int RGWListOIDCProviders::verify_permission(optional_yield y)
 void RGWListOIDCProviders::execute(optional_yield y)
 {
   vector<std::unique_ptr<rgw::sal::RGWOIDCProvider>> result;
-  op_ret = driver->get_oidc_providers(s, s->user->get_tenant(), result);
+  op_ret = driver->get_oidc_providers(s, s->user->get_tenant(), result, y);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListOpenIDConnectProvidersResponse");

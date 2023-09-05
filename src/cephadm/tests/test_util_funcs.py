@@ -2,8 +2,10 @@
 #
 from unittest import mock
 
+import functools
 import io
 import os
+import sys
 
 import pytest
 
@@ -92,7 +94,7 @@ class TestCopyTree:
             self._copy_tree([src1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 2
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert (dst / "foo.txt").exists()
 
 
@@ -185,7 +187,7 @@ class TestCopyFiles:
             self._copy_files([file1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 1
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert (dst / "f1.txt").exists()
 
 
@@ -268,7 +270,7 @@ class TestMoveFiles:
             self._move_files([file1], dst, uid=0, gid=0)
             assert len(_chown.mock_calls) >= 1
             for c in _chown.mock_calls:
-                assert c.args[1:] == (0, 0)
+                assert c == mock.call(mock.ANY, 0, 0)
         assert dst.is_file()
         assert not file1.exists()
 
@@ -286,9 +288,9 @@ def test_recursive_chown(tmp_path):
         _chown.return_value = None
         _cephadm.recursive_chown(str(d1), uid=500, gid=500)
     assert len(_chown.mock_calls) == 3
-    assert _chown.mock_calls[0].args == (str(d1), 500, 500)
-    assert _chown.mock_calls[1].args == (str(d2), 500, 500)
-    assert _chown.mock_calls[2].args == (str(f1), 500, 500)
+    assert _chown.mock_calls[0] == mock.call(str(d1), 500, 500)
+    assert _chown.mock_calls[1] == mock.call(str(d2), 500, 500)
+    assert _chown.mock_calls[2] == mock.call(str(f1), 500, 500)
 
 
 class TestFindExecutable:
@@ -545,3 +547,262 @@ def test_get_distro(monkeypatch, content, expected):
 
     monkeypatch.setattr("builtins.open", _fake_open)
     assert _cephadm.get_distro() == expected
+
+
+class FakeContext:
+    """FakeContext is a minimal type for passing as a ctx, when
+    with_cephadm_ctx is not appropriate (it enables too many mocks, etc).
+    """
+
+    timeout = 30
+
+
+def _has_non_zero_exit(clog):
+    assert any("Non-zero exit" in ll for _, _, ll in clog.record_tuples)
+
+
+def _has_values_somewhere(clog, values, non_zero=True):
+    if non_zero:
+        _has_non_zero_exit(clog)
+    for value in values:
+        assert any(value in ll for _, _, ll in clog.record_tuples)
+
+
+@pytest.mark.parametrize(
+    "pyline, expected, call_kwargs, log_check",
+    [
+        pytest.param(
+            "import time; time.sleep(0.1)",
+            ("", "", 0),
+            {},
+            None,
+            id="brief-sleep",
+        ),
+        pytest.param(
+            "import sys; sys.exit(2)",
+            ("", "", 2),
+            {},
+            _has_non_zero_exit,
+            id="exit-non-zero",
+        ),
+        pytest.param(
+            "import sys; sys.exit(0)",
+            ("", "", 0),
+            {"desc": "success"},
+            None,
+            id="success-with-desc",
+        ),
+        pytest.param(
+            "print('foo'); print('bar')",
+            ("foo\nbar\n", "", 0),
+            {"desc": "stdout"},
+            None,
+            id="stdout-print",
+        ),
+        pytest.param(
+            "import sys; sys.stderr.write('la\\nla\\nla\\n')",
+            ("", "la\nla\nla\n", 0),
+            {"desc": "stderr"},
+            None,
+            id="stderr-print",
+        ),
+        pytest.param(
+            "for i in range(501): print(i, flush=True)",
+            lambda r: r[2] == 0 and r[1] == "" and "500" in r[0].splitlines(),
+            {},
+            None,
+            id="stdout-long",
+        ),
+        pytest.param(
+            "for i in range(1000000): print(i, flush=True)",
+            lambda r: r[2] == 0
+            and r[1] == ""
+            and len(r[0].splitlines()) == 1000000,
+            {},
+            None,
+            id="stdout-very-long",
+        ),
+        pytest.param(
+            "import sys; sys.stderr.write('pow\\noof\\nouch\\n'); sys.exit(1)",
+            ("", "pow\noof\nouch\n", 1),
+            {"desc": "stderr"},
+            functools.partial(
+                _has_values_somewhere,
+                values=["pow", "oof", "ouch"],
+                non_zero=True,
+            ),
+            id="stderr-logged-non-zero",
+        ),
+        pytest.param(
+            "import time; time.sleep(4)",
+            ("", "", 124),
+            {"timeout": 1},
+            None,
+            id="long-sleep",
+        ),
+        pytest.param(
+            "import time\nfor i in range(100):\n\tprint(i, flush=True); time.sleep(0.01)",
+            ("", "", 124),
+            {"timeout": 0.5},
+            None,
+            id="slow-print-timeout",
+        ),
+        # Commands that time out collect no logs, return empty std{out,err} strings
+    ],
+)
+def test_call(caplog, monkeypatch, pyline, expected, call_kwargs, log_check):
+    import logging
+
+    caplog.set_level(logging.INFO)
+    monkeypatch.setattr("cephadm.logger", logging.getLogger())
+    ctx = FakeContext()
+    result = _cephadm.call(ctx, [sys.executable, "-c", pyline], **call_kwargs)
+    if callable(expected):
+        assert expected(result)
+    else:
+        assert result == expected
+    if callable(log_check):
+        log_check(caplog)
+
+
+class TestWriteNew:
+    def test_success(self, tmp_path):
+        "Test the simple basic feature of writing a file."
+        dest = tmp_path / "foo.txt"
+        with _cephadm.write_new(dest) as fh:
+            fh.write("something\n")
+            fh.write("something else\n")
+
+        with open(dest, "r") as fh:
+            assert fh.read() == "something\nsomething else\n"
+
+    def test_write_ower_mode(self, tmp_path):
+        "Test that the owner and perms options function."
+        dest = tmp_path / "foo.txt"
+
+        # if this is test run as non-root, we can't really change ownership
+        uid = os.getuid()
+        gid = os.getgid()
+
+        with _cephadm.write_new(dest, owner=(uid, gid), perms=0o600) as fh:
+            fh.write("xomething\n")
+            fh.write("xomething else\n")
+
+        with open(dest, "r") as fh:
+            assert fh.read() == "xomething\nxomething else\n"
+            sr = os.fstat(fh.fileno())
+            assert sr.st_uid == uid
+            assert sr.st_gid == gid
+            assert (sr.st_mode & 0o777) == 0o600
+
+    def test_encoding(self, tmp_path):
+        "Test that the encoding option functions."
+        dest = tmp_path / "foo.txt"
+        msg = "\u2603\u26C5\n"
+        with _cephadm.write_new(dest, encoding='utf-8') as fh:
+            fh.write(msg)
+        with open(dest, "rb") as fh:
+            b1 = fh.read()
+            assert b1.decode('utf-8') == msg
+
+        dest = tmp_path / "foo2.txt"
+        with _cephadm.write_new(dest, encoding='utf-16le') as fh:
+            fh.write(msg)
+        with open(dest, "rb") as fh:
+            b2 = fh.read()
+            assert b2.decode('utf-16le') == msg
+
+        # the binary data should differ due to the different encodings
+        assert b1 != b2
+
+    def test_cleanup(self, tmp_path):
+        "Test that an exception during write leaves no file behind."
+        dest = tmp_path / "foo.txt"
+        with pytest.raises(ValueError):
+            with _cephadm.write_new(dest) as fh:
+                fh.write("hello\n")
+                raise ValueError("foo")
+                fh.write("world\n")
+        assert not dest.exists()
+        assert not dest.with_name(dest.name+".new").exists()
+        assert list(dest.parent.iterdir()) == []
+
+
+class CompareContext1:
+    cfg_data = {
+        "name": "mane",
+        "fsid": "foobar",
+        "image": "fake.io/noway/nohow:gndn",
+        "meta": {
+            "fruit": "banana",
+            "vegetable": "carrot",
+        },
+        "params": {
+            "osd_fsid": "robble",
+            "tcp_ports": [404, 9999],
+        },
+        "config_blobs": {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        },
+    }
+
+    def check(self, ctx):
+        assert ctx.name == 'mane'
+        assert ctx.fsid == 'foobar'
+        assert ctx.image == 'fake.io/noway/nohow:gndn'
+        assert ctx.meta_properties == {"fruit": "banana", "vegetable": "carrot"}
+        assert ctx.config_blobs == {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        }
+        assert ctx.osd_fsid == "robble"
+        assert ctx.tcp_ports == [404, 9999]
+
+
+class CompareContext2:
+    cfg_data = {
+        "name": "cc2",
+        "fsid": "foobar",
+        "meta": {
+            "fruit": "banana",
+            "vegetable": "carrot",
+        },
+        "params": {},
+        "config_blobs": {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        },
+    }
+
+    def check(self, ctx):
+        assert ctx.name == 'cc2'
+        assert ctx.fsid == 'foobar'
+        assert ctx.image == 'quay.ceph.io/ceph-ci/ceph:main'
+        assert ctx.meta_properties == {"fruit": "banana", "vegetable": "carrot"}
+        assert ctx.config_blobs == {
+            "alpha": {"sloop": "John B"},
+            "beta": {"forest": "birch"},
+            "gamma": {"forest": "pine"},
+        }
+        assert ctx.osd_fsid is None
+        assert ctx.tcp_ports is None
+
+
+@pytest.mark.parametrize(
+    "cc",
+    [
+        CompareContext1(),
+        CompareContext2(),
+    ],
+)
+def test_apply_deploy_config_to_ctx(cc, monkeypatch):
+    import logging
+
+    monkeypatch.setattr("cephadm.logger", logging.getLogger())
+    ctx = FakeContext()
+    _cephadm.apply_deploy_config_to_ctx(cc.cfg_data, ctx)
+    cc.check(ctx)

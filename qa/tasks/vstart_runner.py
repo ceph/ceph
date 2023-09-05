@@ -204,6 +204,7 @@ class LocalRemoteProcess(object):
     def __init__(self, args, subproc, check_status, stdout, stderr, usr_args):
         self.args = args
         self.subproc = subproc
+        self.stdin = subproc.stdin
         self.stdout = stdout
         self.stderr = stderr
         self.usr_args = usr_args
@@ -233,6 +234,12 @@ class LocalRemoteProcess(object):
             self.stderr.write(err)
 
     def wait(self):
+        # Null subproc.stdin so communicate() does not try flushing/closing it
+        # again.
+        if self.stdin is not None and self.stdin.closed:
+            self.stdin = None
+            self.subproc.stdin = None
+
         if self.finished:
             # Avoid calling communicate() on a dead process because it'll
             # give you stick about std* already being closed
@@ -285,17 +292,16 @@ class LocalRemoteProcess(object):
         else:
             log.debug(f"kill: already terminated ({self.usr_args})")
 
-    @property
-    def stdin(self):
-        class FakeStdIn(object):
-            def __init__(self, mount_daemon):
-                self.mount_daemon = mount_daemon
 
-            def close(self):
-                self.mount_daemon.kill()
-
-        return FakeStdIn(self)
-
+def find_executable(exe):
+    for path in os.getenv('PATH').split(':'):
+        try:
+            path = os.path.join(path, exe)
+            os.lstat(path)
+            return path
+        except OSError:
+            pass
+    return None
 
 class LocalRemote(RemoteShell):
     """
@@ -304,6 +310,21 @@ class LocalRemote(RemoteShell):
 
     Run this inside your src/ dir!
     """
+
+    rewrite_helper_tools = [
+      {
+        'name': 'adjust-ulimits',
+        'path': None
+      },
+      {
+        'name': 'daemon-helper',
+        'path': None
+      },
+      {
+        'name': 'stdin-killer',
+        'path': None
+      },
+    ]
 
     def __init__(self):
         super().__init__()
@@ -331,6 +352,17 @@ class LocalRemote(RemoteShell):
         except shutil.SameFileError:
             pass
 
+    def _expand_teuthology_tools(self, args):
+        assert isinstance(args, list)
+        for tool in self.rewrite_helper_tools:
+            name, path = tool['name'], tool['path']
+            if path is None:
+                tool['path'] = find_executable(name)
+                path = tool['path']
+                log.info(f"{name} path is {path}")
+            for i, arg in enumerate(args):
+                if arg == name:
+                    args[i] = path
 
     def _omit_cmd_args(self, args, omit_sudo):
         """
@@ -338,8 +370,7 @@ class LocalRemote(RemoteShell):
         using vstart_runner.py. And sudo's omission depends on the value of
         the variable omit_sudo.
         """
-        helper_tools = ('adjust-ulimits', 'ceph-coverage',
-                        'None/archive/coverage')
+        helper_tools = ('ceph-coverage', 'None/archive/coverage')
         for i in helper_tools:
             if i in args:
                 helper_tools_found = True
@@ -355,9 +386,6 @@ class LocalRemote(RemoteShell):
         if helper_tools_found:
             args = args.replace('None/archive/coverage', '')
             prefix += """
-adjust-ulimits() {
-    "$@"
-}
 ceph-coverage() {
     "$@"
 }
@@ -395,6 +423,7 @@ sudo() {
 
     def _perform_checks_and_adjustments(self, args, omit_sudo):
         if isinstance(args, list):
+            self._expand_teuthology_tools(args) # hack only for list
             args = quote(args)
 
         assert isinstance(args, str)
@@ -616,18 +645,6 @@ class LocalCephFSMount():
         path = "{0}/client.{1}.*.asok".format(d, self.client_id)
         return path
 
-    def _run_python(self, pyscript, py_version='python', sudo=False):
-        """
-        Override this to remove the daemon-helper prefix that is used otherwise
-        to make the process killable.
-        """
-        args = []
-        if sudo:
-            args.append('sudo')
-        args += [py_version, '-c', pyscript]
-        return self.client_remote.run(args=args, wait=False,
-                                      stdout=StringIO(), omit_sudo=(not sudo))
-
     def setup_netns(self):
         if opt_use_ns:
             super(type(self), self).setup_netns()
@@ -776,7 +793,6 @@ class LocalCephManager(CephManager):
         self.cephadm = False
         self.rook = False
         self.testdir = None
-        self.run_ceph_w_prefix = self.run_cluster_cmd_prefix = [CEPH_CMD]
         self.CEPH_CMD = [CEPH_CMD]
         self.RADOS_CMD = [RADOS_CMD]
 
@@ -1431,6 +1447,12 @@ def exec_test():
     # in a .yaml, here it's just a hardcoded thing for the developer's pleasure.
     remote.run(args=[CEPH_CMD, "tell", "osd.*", "injectargs", "--osd-mon-report-interval", "5"])
     ceph_cluster.set_ceph_conf("osd", "osd_mon_report_interval", "5")
+
+    # Enable override of recovery options if mClock scheduler is active. This is to allow
+    # current and future tests to modify recovery related limits. This is because by default,
+    # with mclock enabled, a subset of recovery options are not allowed to be modified.
+    remote.run(args=[CEPH_CMD, "tell", "osd.*", "injectargs", "--osd-mclock-override-recovery-settings", "true"])
+    ceph_cluster.set_ceph_conf("osd", "osd_mclock_override_recovery_settings", "true")
 
     # Vstart defaults to two segments, which very easily gets a "behind on trimming" health warning
     # from normal IO latency.  Increase it for running teests.

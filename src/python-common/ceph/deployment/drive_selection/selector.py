@@ -71,7 +71,7 @@ class DriveSelection(object):
         limit = device_filter.limit or 0
 
         if limit > 0 and (len_devices + self.existing_daemons >= limit):
-            logger.info("Refuse to add {} due to limit policy of <{}>".format(
+            logger.debug("Refuse to add {} due to limit policy of <{}>".format(
                 disk_path, limit))
             return True
         return False
@@ -127,6 +127,18 @@ class DriveSelection(object):
                      "Disk is unavailable due to {}".format(disk.path, disk.rejected_reasons))
                 )
                 continue
+
+            if not disk.available and disk.ceph_device and disk.lvs:
+                other_osdspec_affinity = ''
+                for lv in disk.lvs:
+                    if 'osdspec_affinity' in lv.keys():
+                        if lv['osdspec_affinity'] != self.spec.service_id:
+                            other_osdspec_affinity = lv['osdspec_affinity']
+                            break
+                if other_osdspec_affinity:
+                    logger.debug("{} is already used in spec {}, "
+                                 "skipping it.".format(disk.path, other_osdspec_affinity))
+                    continue
 
             if not self._has_mandatory_idents(disk):
                 logger.debug(

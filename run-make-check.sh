@@ -22,10 +22,6 @@ source src/script/run-make.sh
 
 set -e
 
-function in_jenkins() {
-    test -n "$JENKINS_HOME"
-}
-
 function run() {
     # to prevent OSD EMFILE death on tests, make sure ulimit >= 1024
     $DRY_RUN ulimit -n $(ulimit -Hn)
@@ -37,10 +33,14 @@ function run() {
     # increase the aio-max-nr, which is by default 65536. we could reach this
     # limit while running seastar tests and bluestore tests.
     local m=16
-    if [ $(nproc) -gt $m ]; then
-        m=$(nproc)
+    local procs="$(($(get_processors) * 2))"
+    if [ "${procs}" -gt $m ]; then
+        m="${procs}"
     fi
-    $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr=$((65536 * $(nproc)))
+    local aiomax="$((65536 * procs))"
+    if [ "$(/sbin/sysctl -n fs.aio-max-nr )" -lt "${aiomax}" ]; then
+        $DRY_RUN sudo /sbin/sysctl -q -w fs.aio-max-nr="${aiomax}"
+    fi
 
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     if in_jenkins; then
@@ -71,43 +71,13 @@ function main() {
     fi
     # uses run-make.sh to install-deps
     FOR_MAKE_CHECK=1 prepare
-    local cxx_compiler=g++
-    local c_compiler=gcc
-    for i in $(seq 14 -1 10); do
-        if type -t clang-$i > /dev/null; then
-            cxx_compiler="clang++-$i"
-            c_compiler="clang-$i"
-            break
-        fi
-    done
-    # Init defaults after deps are installed.
-    local cmake_opts
-    cmake_opts+=" -DCMAKE_CXX_COMPILER=$cxx_compiler -DCMAKE_C_COMPILER=$c_compiler"
-    cmake_opts+=" -DCMAKE_CXX_FLAGS_DEBUG=-Werror"
-    cmake_opts+=" -DENABLE_GIT_VERSION=OFF"
-    cmake_opts+=" -DWITH_GTEST_PARALLEL=ON"
-    cmake_opts+=" -DWITH_FIO=ON"
-    cmake_opts+=" -DWITH_CEPHFS_SHELL=ON"
-    cmake_opts+=" -DWITH_GRAFANA=ON"
-    cmake_opts+=" -DWITH_SPDK=ON"
-    cmake_opts+=" -DWITH_RBD_MIRROR=ON"
-    if [ $WITH_SEASTAR ]; then
-        cmake_opts+=" -DWITH_SEASTAR=ON"
-    fi
-    if [ $WITH_ZBD ]; then
-        cmake_opts+=" -DWITH_ZBD=ON"
-    fi
-    if [ $WITH_RBD_RWL ]; then
-        cmake_opts+=" -DWITH_RBD_RWL=ON"
-    fi
-    cmake_opts+=" -DWITH_RBD_SSD_CACHE=ON"
-    in_jenkins && echo "CI_DEBUG: Our cmake_opts are: $cmake_opts
-                        CI_DEBUG: Running ./configure"
-    configure "$cmake_opts" "$@"
+    configure "$@"
     in_jenkins && echo "CI_DEBUG: Running 'build tests'"
     build tests
     echo "make check: successful build on $(git rev-parse HEAD)"
     FOR_MAKE_CHECK=1 run
 }
 
-main "$@"
+if [ "$0" = "$BASH_SOURCE" ]; then
+    main "$@"
+fi

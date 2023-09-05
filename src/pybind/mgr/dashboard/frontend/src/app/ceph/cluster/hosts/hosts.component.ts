@@ -26,9 +26,9 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { OrchestratorFeature } from '~/app/shared/models/orchestrator.enum';
 import { OrchestratorStatus } from '~/app/shared/models/orchestrator.interface';
 import { Permissions } from '~/app/shared/models/permissions';
-import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { EmptyPipe } from '~/app/shared/pipes/empty.pipe';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { CdTableServerSideService } from '~/app/shared/services/cd-table-server-side.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -50,12 +50,18 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   table: TableComponent;
   @ViewChild('servicesTpl', { static: true })
   public servicesTpl: TemplateRef<any>;
+  @ViewChild('hostMetricTmpl', { static: true })
+  public hostMetricTmpl: TemplateRef<any>;
+  @ViewChild('hostDimlessTmpl', { static: true })
+  public hostDimlessTmpl: TemplateRef<any>;
   @ViewChild('maintenanceConfirmTpl', { static: true })
   maintenanceConfirmTpl: TemplateRef<any>;
   @ViewChild('orchTmpl', { static: true })
   orchTmpl: TemplateRef<any>;
   @ViewChild('flashTmpl', { static: true })
   flashTmpl: TemplateRef<any>;
+  @ViewChild('hostNameTpl', { static: true })
+  hostNameTpl: TemplateRef<any>;
 
   @Input()
   hiddenColumns: string[] = [];
@@ -87,6 +93,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   bsModalRef: NgbModalRef;
 
   icons = Icons;
+  private tableContext: CdTableFetchDataContext = null;
+  count = 5;
 
   messages = {
     nonOrchHost: $localize`The feature is disabled because the selected host is not managed by Orchestrator.`
@@ -106,7 +114,6 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
 
   constructor(
     private authStorageService: AuthStorageService,
-    private dimlessBinary: DimlessBinaryPipe,
     private emptyPipe: EmptyPipe,
     private hostService: HostService,
     private actionLabels: ActionLabelsI18n,
@@ -193,7 +200,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`Hostname`,
         prop: 'hostname',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTemplate: this.hostNameTpl
       },
       {
         name: $localize`Service Instances`,
@@ -217,7 +225,8 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            maintenance: { class: 'badge-warning' }
+            maintenance: { class: 'badge-warning' },
+            available: { class: 'badge-success' }
           }
         }
       },
@@ -229,39 +238,44 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
       {
         name: $localize`CPUs`,
         prop: 'cpu_count',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`Cores`,
         prop: 'cpu_cores',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`Total Memory`,
         prop: 'memory_total_bytes',
-        pipe: this.dimlessBinary,
+        cellTemplate: this.hostDimlessTmpl,
         flexGrow: 0.4
       },
       {
         name: $localize`Raw Capacity`,
         prop: 'raw_capacity',
-        pipe: this.dimlessBinary,
+        cellTemplate: this.hostDimlessTmpl,
         flexGrow: 0.5
       },
       {
         name: $localize`HDDs`,
         prop: 'hdd_count',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`Flash`,
         prop: 'flash_count',
         headerTemplate: this.flashTmpl,
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       },
       {
         name: $localize`NICs`,
         prop: 'nic_count',
+        cellTemplate: this.hostMetricTmpl,
         flexGrow: 0.3
       }
     ];
@@ -479,6 +493,12 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   }
 
   getHosts(context: CdTableFetchDataContext) {
+    if (context !== null) {
+      this.tableContext = context;
+    }
+    if (this.tableContext == null) {
+      this.tableContext = new CdTableFetchDataContext(() => undefined);
+    }
     if (this.isLoadingHosts) {
       return;
     }
@@ -489,19 +509,40 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         mergeMap((orchStatus) => {
           this.orchStatus = orchStatus;
           const factsAvailable = this.checkHostsFactsAvailable();
-          return this.hostService.list(`${factsAvailable}`);
+          return this.hostService.list(this.tableContext?.toParams(), factsAvailable.toString());
         })
       )
       .subscribe(
-        (hostList) => {
+        (hostList: any[]) => {
           this.hosts = hostList;
+          this.hosts.forEach((host: object) => {
+            if (host['status'] === '') {
+              host['status'] = 'available';
+            }
+          });
           this.transformHostsData();
           this.isLoadingHosts = false;
+          if (this.hosts.length > 0) {
+            this.count = CdTableServerSideService.getCount(hostList[0]);
+          } else {
+            this.count = 0;
+          }
         },
         () => {
           this.isLoadingHosts = false;
           context.error();
         }
       );
+  }
+
+  validValue(value: any) {
+    // Check if value is a number(int or float) and that it isn't null
+    return (
+      Number(value) == value &&
+      value % 1 == 0 &&
+      value !== undefined &&
+      value !== null &&
+      value !== ''
+    );
   }
 }

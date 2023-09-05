@@ -37,8 +37,9 @@ resharding tasks, one at a time.
 Multisite
 =========
 
-Dynamic resharding is not supported in a multisite environment.
-
+Prior to the Reef release, RGW does not support dynamic resharding in a
+multisite environment. For information on dynamic resharding, see
+:ref:`Resharding <feature_resharding>` in the RGW multisite documentation.
 
 Configuration
 =============

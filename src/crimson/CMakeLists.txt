@@ -23,7 +23,8 @@ set(crimson_common_srcs
   common/operation.cc
   common/throttle.cc
   common/tmap_helpers.cc
-  common/tri_mutex.cc)
+  common/tri_mutex.cc
+  crush/CrushLocation.cc)
 
 # the specialized version of ceph-common, where
 #  - the logging is sent to Seastar backend
@@ -63,6 +64,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc
   ${PROJECT_SOURCE_DIR}/src/common/options.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_counters.cc
+  ${PROJECT_SOURCE_DIR}/src/common/perf_counters_key.cc
   ${PROJECT_SOURCE_DIR}/src/common/perf_histogram.cc
   ${PROJECT_SOURCE_DIR}/src/common/page.cc
   ${PROJECT_SOURCE_DIR}/src/common/pick_address.cc
@@ -97,7 +99,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/crush/CrushWrapper.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushCompiler.cc
   ${PROJECT_SOURCE_DIR}/src/crush/CrushTester.cc
-  ${PROJECT_SOURCE_DIR}/src/crush/CrushLocation.cc
   ${PROJECT_SOURCE_DIR}/src/global/global_context.cc
   ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
@@ -147,7 +148,7 @@ target_link_libraries(crimson-common
   PUBLIC
     ${crimson_common_public_deps}
   PRIVATE
-    crc32
+    crc32 arch
     ${crimson_common_deps}
     OpenSSL::Crypto)
 

@@ -276,6 +276,12 @@ class ScrubQueue {
     }
 
     /**
+     * access the 'state' directly, for when a distinction between 'registered'
+     * and 'unregistering' is needed (both have in_queues() == true)
+     */
+    bool is_state_registered() const { return state == qu_state_t::registered; }
+
+    /**
      * a text description of the "scheduling intentions" of this PG:
      * are we already scheduled for a scrub/deep scrub? when?
      */
@@ -389,15 +395,16 @@ class ScrubQueue {
   int get_blocked_pgs_count() const;
 
   /**
-   * Pacing the scrub operation by inserting delays (mostly between chunks)
+   * scrub_sleep_time
    *
-   * Special handling for regular scrubs that continued into "no scrub" times.
-   * Scrubbing will continue, but the delays will be controlled by a separate
-   * (read - with higher value) configuration element
-   * (osd_scrub_extended_sleep).
+   * Returns std::chrono::milliseconds indicating how long to wait between
+   * chunks.
+   *
+   * Implementation Note: Returned value will either osd_scrub_sleep or
+   * osd_scrub_extended_sleep depending on must_scrub_param and time
+   * of day (see configs osd_scrub_begin*)
    */
-  double scrub_sleep_time(bool must_scrub) const;  /// \todo (future) return
-						   /// milliseconds
+  std::chrono::milliseconds scrub_sleep_time(bool must_scrub) const;
 
   /**
    *  called every heartbeat to update the "daily" load average

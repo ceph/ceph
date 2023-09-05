@@ -1,12 +1,26 @@
 <ng-template #usageTooltipTpl>
-  <table>
+  <table *ngIf="!showMultisiteTooltip">
     <tr>
-      <td class="text-left">Used:&nbsp;</td>
+      <td class="text-left me-1">Used:</td>
       <td class="text-right"><strong> {{ isBinary ? (used | dimlessBinary) : (used | dimless) }}</strong></td>
     </tr>
-    <tr *ngIf="calculatePerc">
-      <td class="text-left">Free:&nbsp;</td>
+    <tr *ngIf="calculatePerc && showFreeToolTip">
+      <td class="text-left me-1">Free:</td>
       <td class="'text-right"><strong>{{ isBinary ? (total - used | dimlessBinary) : (total - used | dimless) }}</strong></td>
+    </tr>
+    <tr *ngIf="customLegend">
+      <td class="text-left me-1">{{ customLegend }}:</td>
+      <td class="text-right"><strong>{{ isBinary ? (customLegendValue | dimlessBinary) : (customLegend[1] | dimless) }}</strong></td>
+    </tr>
+  </table>
+  <table *ngIf="showMultisiteTooltip">
+    <tr>
+      <td class="text-left">Total Shards:&nbsp;</td>
+      <td class="text-right"><strong> {{ total }}</strong></td>
+    </tr>
+    <tr *ngIf="calculatePerc">
+      <td class="text-left">Transferred Shards:&nbsp;</td>
+      <td class="'text-right"><strong>{{ used }}</strong></td>
     </tr>
   </table>
 </ng-template>
@@ -20,7 +34,7 @@
        [attr.aria-label]="{ title }"
        i18n-aria-label="The title of this usage bar is { title }"
        [style.width]="usedPercentage + '%'">
-    <span>{{ usedPercentage | number: '1.0-' + decimals }}%</span>
+    <span [style.color]="usedPercentage < 60 ? 'black' : 'white'">{{ usedPercentage | number: '1.0-' + decimals }}%</span>
   </div>
   <div class="progress-bar bg-freespace"
        role="progressbar"

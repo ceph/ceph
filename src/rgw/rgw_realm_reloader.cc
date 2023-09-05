@@ -109,21 +109,24 @@ void RGWRealmReloader::reload()
 
 
   while (!env.driver) {
-    // recreate and initialize a new driver
-    DriverManager::Config cfg;
-    cfg.store_name = "rados";
-    cfg.filter_name = "none";
-    env.driver =
-      DriverManager::get_storage(&dp, cct,
-				   cfg,
-				   cct->_conf->rgw_enable_gc_threads,
-				   cct->_conf->rgw_enable_lc_threads,
-				   cct->_conf->rgw_enable_quota_threads,
-				   cct->_conf->rgw_run_sync_thread,
-				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
-				   cct->_conf->rgw_cache_enabled);
+    // reload the new configuration from ConfigStore
+    int r = env.site->load(&dp, null_yield, env.cfgstore);
+    if (r == 0) {
+      ldpp_dout(&dp, 1) << "Creating new driver" << dendl;
 
-    ldpp_dout(&dp, 1) << "Creating new driver" << dendl;
+      // recreate and initialize a new driver
+      DriverManager::Config cfg;
+      cfg.store_name = "rados";
+      cfg.filter_name = "none";
+      env.driver = DriverManager::get_storage(&dp, cct, cfg,
+          cct->_conf->rgw_enable_gc_threads,
+          cct->_conf->rgw_enable_lc_threads,
+          cct->_conf->rgw_enable_quota_threads,
+          cct->_conf->rgw_run_sync_thread,
+          cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
+          true, null_yield, // run notification thread
+          cct->_conf->rgw_cache_enabled);
+    }
 
     rgw::sal::Driver* store_cleanup = nullptr;
     {
@@ -134,13 +137,13 @@ void RGWRealmReloader::reload()
       // sleep until we get another notification, and retry until we get
       // a working configuration
       if (env.driver == nullptr) {
-        ldpp_dout(&dp, -1) << "Failed to reinitialize RGWRados after a realm "
+        ldpp_dout(&dp, -1) << "Failed to reload realm after a period "
             "configuration update. Waiting for a new update." << dendl;
 
         // sleep until another event is scheduled
 	cond.wait(lock, [this] { return reload_scheduled; });
-        ldout(cct, 1) << "Woke up with a new configuration, retrying "
-            "RGWRados initialization." << dendl;
+        ldpp_dout(&dp, 1) << "Woke up with a new configuration, retrying "
+            "realm reload." << dendl;
       }
 
       if (reload_scheduled) {
@@ -155,8 +158,8 @@ void RGWRealmReloader::reload()
     }
 
     if (store_cleanup) {
-      ldpp_dout(&dp, 4) << "Got another notification, restarting RGWRados "
-          "initialization." << dendl;
+      ldpp_dout(&dp, 4) << "Got another notification, restarting realm "
+          "reload." << dendl;
 
       DriverManager::close_storage(store_cleanup);
     }

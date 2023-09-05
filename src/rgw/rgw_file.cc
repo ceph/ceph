@@ -383,6 +383,7 @@ namespace rgw {
 	/* implies !rgw_fh, so also !LOCKED */
 	return -ENOENT;
       }
+      assert(rgw_fh);
 
       if (bs.num_entries > 1) {
 	unref(bkt_fh); /* return stat_bucket ref */
@@ -449,6 +450,7 @@ namespace rgw {
 
     /* ENOENT when raced with other s3 gateway */
     if (! rc || rc == -ENOENT) {
+      // coverity[var_deref_op:SUPPRESS]
       rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
       fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
 		      RGWFileHandle::FHCache::FLAG_LOCK);
@@ -1864,7 +1866,7 @@ namespace rgw {
         version_id = state->object->get_instance();
       }
     }
-    processor = get_driver()->get_atomic_writer(this, state->yield, state->object->clone(),
+    processor = get_driver()->get_atomic_writer(this, state->yield, state->object.get(),
 					 state->bucket_owner.get_id(),
 					 &state->dest_placement, 0, state->req_id);
 

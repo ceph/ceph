@@ -25,8 +25,6 @@
 
 #include <boost/container/flat_set.hpp>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>

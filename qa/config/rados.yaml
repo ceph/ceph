@@ -8,5 +8,6 @@ overrides:
         osd debug verify cached snaps: true
         bluestore zero block detection: true
         osd mclock override recovery settings: true
+        osd mclock profile: high_recovery_ops
       mon:
         mon scrub interval: 300

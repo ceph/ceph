@@ -84,6 +84,7 @@ set(common_srcs
   page.cc
   perf_counters.cc
   perf_counters_collection.cc
+  perf_counters_key.cc
   perf_histogram.cc
   pick_address.cc
   random_string.cc
@@ -172,6 +173,7 @@ elseif(AIX)
   list(APPEND common_srcs aix_errno.cc)
 elseif(WIN32)
   list(APPEND common_srcs win32/errno.cc)
+  list(APPEND common_srcs win32/wstring.cc)
 endif()
 
 if(WITH_EVENTTRACE)
@@ -227,7 +229,8 @@ elseif(HAVE_ARMV8_CRC)
     crc32c_aarch64.c)
 endif(HAVE_INTEL)
 
-add_library(crc32 STATIC ${crc32_srcs})
+add_library(crc32 OBJECT ${crc32_srcs})
+
 if(HAVE_ARMV8_CRC)
   set_target_properties(crc32 PROPERTIES
     COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")

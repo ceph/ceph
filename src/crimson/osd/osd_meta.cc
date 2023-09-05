@@ -11,7 +11,7 @@
 #include "os/Transaction.h"
 
 using std::string;
-using read_errorator = crimson::os::FuturizedStore::read_errorator;
+using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
 
 void OSDMeta::create(ceph::os::Transaction& t)
 {
@@ -30,8 +30,8 @@ seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
                     osdmap_oid(e), 0, 0,
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).handle_error(
     read_errorator::all_same_way([e] {
-      throw std::runtime_error(fmt::format("read gave enoent on {}",
-                                           osdmap_oid(e)));
+      ceph_abort_msg(fmt::format("{} read gave enoent on {}",
+                                 __func__, osdmap_oid(e)));
     }));
 }
 

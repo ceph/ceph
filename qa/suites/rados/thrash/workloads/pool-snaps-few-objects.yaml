@@ -1,7 +1,10 @@
-override:
+overrides:
   conf:
     osd:
       osd deep scrub update digest min age: 0
+  ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - rados:
     clients: [client.0]

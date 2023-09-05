@@ -13,8 +13,6 @@
  *
  */
 
-#include "include/rados/librados.hpp"
-
 #include "rgw_aio_throttle.h"
 
 namespace rgw {
@@ -29,12 +27,12 @@ bool Throttle::waiter_ready() const
   }
 }
 
-AioResultList BlockingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
+AioResultList BlockingAioThrottle::get(rgw_raw_obj obj,
                                        OpFunc&& f,
                                        uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = obj;
+  p->obj = std::move(obj);
   p->id = id;
   p->cost = cost;
 
@@ -59,6 +57,7 @@ AioResultList BlockingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
     std::move(f)(this, *static_cast<AioResult*>(p.get()));
     lock.lock();
   }
+  // coverity[leaked_storage:SUPPRESS]
   p.release();
   return std::move(completed);
 }
@@ -120,12 +119,12 @@ auto YieldingAioThrottle::async_wait(CompletionToken&& token)
   return init.result.get();
 }
 
-AioResultList YieldingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
+AioResultList YieldingAioThrottle::get(rgw_raw_obj obj,
                                        OpFunc&& f,
                                        uint64_t cost, uint64_t id)
 {
   auto p = std::make_unique<Pending>();
-  p->obj = obj;
+  p->obj = std::move(obj);
   p->id = id;
   p->cost = cost;
 
@@ -148,6 +147,7 @@ AioResultList YieldingAioThrottle::get(const RGWSI_RADOS::Obj& obj,
     pending.push_back(*p);
     std::move(f)(this, *static_cast<AioResult*>(p.get()));
   }
+  // coverity[leaked_storage:SUPPRESS]
   p.release();
   return std::move(completed);
 }

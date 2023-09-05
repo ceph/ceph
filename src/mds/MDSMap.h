@@ -47,8 +47,15 @@ static inline const auto MDS_FEATURE_INCOMPAT_INLINE = CompatSet::Feature(7, "md
 static inline const auto MDS_FEATURE_INCOMPAT_NOANCHOR = CompatSet::Feature(8, "no anchor table");
 static inline const auto MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 = CompatSet::Feature(9, "file layout v2");
 static inline const auto MDS_FEATURE_INCOMPAT_SNAPREALM_V2 = CompatSet::Feature(10, "snaprealm v2");
+static inline const auto MDS_FEATURE_INCOMPAT_MINORLOGSEGMENTS = CompatSet::Feature(11, "minor log segments");
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
+
+/*
+ * Maximum size of xattrs the MDS can handle per inode by default.  This
+ * includes the attribute name and 4+4 bytes for the key/value sizes.
+ */
+#define MDS_MAX_XATTR_SIZE (1<<16) /* 64K */
 
 class health_check_map_t;
 
@@ -195,6 +202,9 @@ public:
 
   uint64_t get_max_filesize() const { return max_file_size; }
   void set_max_filesize(uint64_t m) { max_file_size = m; }
+
+  uint64_t get_max_xattr_size() const { return max_xattr_size; }
+  void set_max_xattr_size(uint64_t m) { max_xattr_size = m; }
 
   void set_min_compat_client(ceph_release_t version);
 
@@ -372,7 +382,7 @@ public:
   }
 
   // features
-  uint64_t get_up_features();
+  uint64_t get_up_features() const;
 
   /**
    * Get MDS ranks which are in but not up.
@@ -620,6 +630,8 @@ protected:
   __u32 session_autoclose = 300;
   uint64_t max_file_size = 1ULL<<40; /* 1TB */
 
+  uint64_t max_xattr_size = MDS_MAX_XATTR_SIZE;
+
   feature_bitset_t required_client_features;
 
   std::vector<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
@@ -657,13 +669,13 @@ protected:
 
   bool inline_data_enabled = false;
 
-  uint64_t cached_up_features = 0;
 private:
   inline static const std::map<int, std::string> flag_display = {
     {CEPH_MDSMAP_NOT_JOINABLE, "joinable"}, //inverse for user display
     {CEPH_MDSMAP_ALLOW_SNAPS, "allow_snaps"},
     {CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS, "allow_multimds_snaps"},
-    {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"}
+    {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"},
+    {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"}
   };
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)

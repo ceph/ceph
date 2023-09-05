@@ -1,5 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 
 import _ from 'lodash';
 import { Observable } from 'rxjs';
@@ -7,9 +8,15 @@ import { Observable } from 'rxjs';
 import { CrudMetadata } from '~/app/shared/models/crud-table-metadata';
 import { DataGatewayService } from '~/app/shared/services/data-gateway.service';
 import { TimerService } from '~/app/shared/services/timer.service';
+import { CephUserService } from '../../api/ceph-user.service';
+import { ConfirmationModalComponent } from '../../components/confirmation-modal/confirmation-modal.component';
 import { CdTableSelection } from '../../models/cd-table-selection';
+import { FinishedTask } from '../../models/finished-task';
 import { Permission, Permissions } from '../../models/permissions';
 import { AuthStorageService } from '../../services/auth-storage.service';
+import { TaskWrapperService } from '../../services/task-wrapper.service';
+import { ModalService } from '../../services/modal.service';
+import { CriticalConfirmationModalComponent } from '../../components/critical-confirmation-modal/critical-confirmation-modal.component';
 
 @Component({
   selector: 'cd-crud-table',
@@ -23,6 +30,8 @@ export class CRUDTableComponent implements OnInit {
   public dateTpl: TemplateRef<any>;
   @ViewChild('durationTpl')
   public durationTpl: TemplateRef<any>;
+  @ViewChild('exportDataModalTpl')
+  public authxEportTpl: TemplateRef<any>;
 
   data$: Observable<any>;
   meta$: Observable<CrudMetadata>;
@@ -30,13 +39,21 @@ export class CRUDTableComponent implements OnInit {
   permissions: Permissions;
   permission: Permission;
   selection = new CdTableSelection();
+  expandedRow: any = null;
+  modalRef: NgbModalRef;
   tabs = {};
+  resource: string;
+  modalState = {};
 
   constructor(
     private authStorageService: AuthStorageService,
     private timerService: TimerService,
     private dataGatewayService: DataGatewayService,
-    private activatedRoute: ActivatedRoute
+    private taskWrapper: TaskWrapperService,
+    private cephUserService: CephUserService,
+    private activatedRoute: ActivatedRoute,
+    private modalService: ModalService,
+    private router: Router
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -53,6 +70,9 @@ export class CRUDTableComponent implements OnInit {
         .list(`ui-${resource}`)
         .subscribe((response: CrudMetadata) => this.processMeta(response));
       this.data$ = this.timerService.get(() => this.dataGatewayService.list(resource));
+    });
+    this.activatedRoute.data.subscribe((data: any) => {
+      this.resource = data.resource;
     });
   }
 
@@ -84,6 +104,74 @@ export class CRUDTableComponent implements OnInit {
     meta.table.columns = meta.table.columns.filter((col: any) => {
       return !col['isHidden'];
     });
+
     this.meta = meta;
+    for (let i = 0; i < this.meta.actions.length; i++) {
+      let action = this.meta.actions[i];
+      if (action.disable) {
+        action.disable = (selection) => !selection.hasSelection;
+      }
+      if (action.click.toString() !== '') {
+        action.click = this[this.meta.actions[i].click.toString()].bind(this);
+      }
+    }
+  }
+
+  delete() {
+    const selectedKey = this.selection.first()[this.meta.columnKey];
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      itemDescription: $localize`${this.meta.columnKey}`,
+      itemNames: [selectedKey],
+      submitAction: () => {
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('crud-component/id', selectedKey),
+            call: this.dataGatewayService.delete(this.resource, selectedKey)
+          })
+          .subscribe({
+            error: () => {
+              this.modalRef.close();
+            },
+            complete: () => {
+              this.modalRef.close();
+            }
+          });
+      }
+    });
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
+  }
+
+  setExpandedRow(event: any) {
+    this.expandedRow = event;
+  }
+
+  edit() {
+    let key = '';
+    if (this.selection.hasSelection) {
+      key = this.selection.first()[this.meta.columnKey];
+    }
+    this.router.navigate(['/cluster/user/edit'], { queryParams: { key: key } });
+  }
+
+  authExport() {
+    let entities: string[] = [];
+    this.selection.selected.forEach((row) => entities.push(row.entity));
+    this.cephUserService.export(entities).subscribe((data: string) => {
+      const modalVariables = {
+        titleText: $localize`Ceph user export data`,
+        buttonText: $localize`Close`,
+        bodyTpl: this.authxEportTpl,
+        showSubmit: true,
+        showCancel: false,
+        onSubmit: () => {
+          this.modalRef.close();
+        }
+      };
+      this.modalState['authExportData'] = data.trim();
+      this.modalRef = this.modalService.show(ConfirmationModalComponent, modalVariables);
+    });
   }
 }

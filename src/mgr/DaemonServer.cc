@@ -121,7 +121,7 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
   msgr = Messenger::create(g_ceph_context, public_msgr_type,
 			   entity_name_t::MGR(gid),
 			   "mgr",
-			   Messenger::get_pid_nonce());
+			   Messenger::get_random_nonce());
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
 
   msgr->set_auth_client(monc);
@@ -179,7 +179,7 @@ entity_addrvec_t DaemonServer::get_myaddrs() const
   return msgr->get_myaddrs();
 }
 
-int DaemonServer::ms_handle_authentication(Connection *con)
+int DaemonServer::ms_handle_fast_authentication(Connection *con)
 {
   auto s = ceph::make_ref<MgrSession>(cct);
   con->set_priv(s);
@@ -214,16 +214,19 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     dout(10) << " session " << s << " " << s->entity_name
              << " has caps " << s->caps << " '" << str << "'" << dendl;
   }
+  return 1;
+}
 
+void DaemonServer::ms_handle_accept(Connection* con)
+{
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    auto s = ceph::ref_cast<MgrSession>(con->get_priv());
     std::lock_guard l(lock);
     s->osd_id = atoi(s->entity_name.get_id().c_str());
     dout(10) << "registering osd." << s->osd_id << " session "
 	     << s << " con " << con << dendl;
     osd_cons[s->osd_id].insert(con);
   }
-
-  return 1;
 }
 
 bool DaemonServer::ms_handle_reset(Connection *con)
@@ -2434,9 +2437,21 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  // Validate that the module is active
+  auto& mod_name = py_command.module_name;
+  if (!py_modules.is_module_active(mod_name)) {
+    ss << "Module '" << mod_name << "' is not enabled/loaded (required by "
+          "command '" << prefix << "'): use `ceph mgr module enable "
+          << mod_name << "` to enable it";
+    dout(4) << ss.str() << dendl;
+    cmdctx->reply(-EOPNOTSUPP, ss);
+    return true;
+  }
+
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
-  finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix]
-                                   (int r_) mutable {
+  Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
+  mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix]
+                                       (int r_) mutable {
     std::stringstream ss;
 
     dout(10) << "dispatching command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;

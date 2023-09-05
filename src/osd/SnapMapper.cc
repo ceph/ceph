@@ -17,6 +17,7 @@
 #include <fmt/printf.h>
 #include <fmt/ranges.h>
 
+#include "global/global_context.h"
 #include "osd/osd_types_fmt.h"
 #include "SnapMapReaderI.h"
 
@@ -78,6 +79,84 @@ const char *SnapMapper::PURGED_SNAP_PREFIX = "PSN_";
 
   */
 
+#ifdef WITH_SEASTAR
+#include "crimson/common/log.h"
+#include "crimson/osd/pg_interval_interrupt_condition.h"
+  template <typename ValuesT = void>
+  using interruptible_future =
+    ::crimson::interruptible::interruptible_future<
+      ::crimson::osd::IOInterruptCondition, ValuesT>;
+  using interruptor =
+    ::crimson::interruptible::interruptor<
+      ::crimson::osd::IOInterruptCondition>;
+
+#define CRIMSON_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).debug(FMT_MSG, ##__VA_ARGS__)
+int OSDriver::get_keys(
+  const std::set<std::string> &keys,
+  std::map<std::string, ceph::buffer::list> *out)
+{
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+  using crimson::os::FuturizedStore;
+  return interruptor::green_get(os->omap_get_values(
+    ch, hoid, keys
+  ).safe_then([out] (FuturizedStore::Shard::omap_values_t&& vals) {
+    // just the difference in comparator (`std::less<>` in omap_values_t`)
+    reinterpret_cast<FuturizedStore::Shard::omap_values_t&>(*out) = std::move(vals);
+    return 0;
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] (auto& e) {
+    assert(e.value() > 0);
+    return -e.value();
+  }))); // this requires seastar::thread
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+}
+
+int OSDriver::get_next(
+  const std::string &key,
+  std::pair<std::string, ceph::buffer::list> *next)
+{
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+  using crimson::os::FuturizedStore;
+  return interruptor::green_get(os->omap_get_values(
+    ch, hoid, key
+  ).safe_then_unpack([&key, next] (bool, FuturizedStore::Shard::omap_values_t&& vals) {
+    CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
+    if (auto nit = std::begin(vals); nit == std::end(vals)) {
+      CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
+      return -ENOENT;
+    } else {
+      CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
+      assert(nit->first > key);
+      *next = *nit;
+      return 0;
+    }
+  }, FuturizedStore::Shard::read_errorator::all_same_way([] {
+    CRIMSON_DEBUG("OSDriver::{}:{}", "get_next", __LINE__);
+    return -EINVAL;
+  }))); // this requires seastar::thread
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+}
+
+int OSDriver::get_next_or_current(
+  const std::string &key,
+  std::pair<std::string, ceph::buffer::list> *next_or_current)
+{
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+  using crimson::os::FuturizedStore;
+  // let's try to get current first
+  return interruptor::green_get(os->omap_get_values(
+    ch, hoid, FuturizedStore::Shard::omap_keys_t{key}
+  ).safe_then([&key, next_or_current] (FuturizedStore::Shard::omap_values_t&& vals) {
+    assert(vals.size() == 1);
+    *next_or_current = std::make_pair(key, std::move(vals[0]));
+    return 0;
+  }, FuturizedStore::Shard::read_errorator::all_same_way(
+    [next_or_current, &key, this] {
+    // no current, try next
+    return get_next(key, next_or_current);
+  }))); // this requires seastar::thread
+  CRIMSON_DEBUG("OSDriver::{}:{}", __func__, __LINE__);
+}
+#else
 int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, ceph::buffer::list> *out)
@@ -87,7 +166,7 @@ int OSDriver::get_keys(
 
 int OSDriver::get_next(
   const std::string &key,
-  pair<std::string, ceph::buffer::list> *next)
+  std::pair<std::string, ceph::buffer::list> *next)
 {
   ObjectMap::ObjectMapIterator iter =
     os->get_omap_iterator(ch, hoid);
@@ -104,6 +183,27 @@ int OSDriver::get_next(
     return -ENOENT;
   }
 }
+
+int OSDriver::get_next_or_current(
+  const std::string &key,
+  std::pair<std::string, ceph::buffer::list> *next_or_current)
+{
+  ObjectMap::ObjectMapIterator iter =
+    os->get_omap_iterator(ch, hoid);
+  if (!iter) {
+    ceph_abort();
+    return -EINVAL;
+  }
+  iter->lower_bound(key);
+  if (iter->valid()) {
+    if (next_or_current)
+      *next_or_current = make_pair(iter->key(), iter->value());
+    return 0;
+  } else {
+    return -ENOENT;
+  }
+}
+#endif // WITH_SEASTAR
 
 string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 {
@@ -565,27 +665,24 @@ void SnapMapper::make_purged_snap_key_value(
 
 int SnapMapper::_lookup_purged_snap(
   CephContext *cct,
-  ObjectStore *store,
-  ObjectStore::CollectionHandle& ch,
-  const ghobject_t& hoid,
+  OSDriver& backend,
   int64_t pool, snapid_t snap,
   snapid_t *begin, snapid_t *end)
 {
   string k = make_purged_snap_key(pool, snap);
-  auto it = store->get_omap_iterator(ch, hoid);
-  it->lower_bound(k);
-  if (!it->valid()) {
+  std::pair<std::string, ceph::buffer::list> kv;
+  if (auto ret = backend.get_next_or_current(k, &kv); ret == -ENOENT) {
     dout(20) << __func__ << " pool " << pool << " snap " << snap
 	     << " key '" << k << "' lower_bound not found" << dendl;
     return -ENOENT;
   }
-  if (it->key().find(PURGED_SNAP_PREFIX) != 0) {
+  if (kv.first.find(PURGED_SNAP_PREFIX) != 0) {
     dout(20) << __func__ << " pool " << pool << " snap " << snap
 	     << " key '" << k << "' lower_bound got mismatched prefix '"
-	     << it->key() << "'" << dendl;
+	     << kv.first << "'" << dendl;
     return -ENOENT;
   }
-  ceph::buffer::list v = it->value();
+  ceph::buffer::list v = kv.second;
   auto p = v.cbegin();
   int64_t gotpool;
   decode(gotpool, p);
@@ -601,10 +698,8 @@ int SnapMapper::_lookup_purged_snap(
 
 void SnapMapper::record_purged_snaps(
   CephContext *cct,
-  ObjectStore *store,
-  ObjectStore::CollectionHandle& ch,
-  ghobject_t hoid,
-  ObjectStore::Transaction *t,
+  OSDriver& backend,
+  OSDriver::OSTransaction&& txn,
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps)
 {
   dout(10) << __func__ << " purged_snaps " << purged_snaps << dendl;
@@ -620,9 +715,9 @@ void SnapMapper::record_purged_snaps(
 	snapid_t end = i.get_end();
 	snapid_t before_begin, before_end;
 	snapid_t after_begin, after_end;
-	int b = _lookup_purged_snap(cct, store, ch, hoid,
+	int b = _lookup_purged_snap(cct, backend,
 				    pool, begin - 1, &before_begin, &before_end);
-	int a = _lookup_purged_snap(cct, store, ch, hoid,
+	int a = _lookup_purged_snap(cct, backend,
 				    pool, end, &after_begin, &after_end);
 	if (!b && !a) {
 	  dout(10) << __func__
@@ -650,13 +745,14 @@ void SnapMapper::record_purged_snaps(
       }
     }
   }
-  t->omap_rmkeys(ch->cid, hoid, rm);
-  t->omap_setkeys(ch->cid, hoid, m);
+  txn.remove_keys(rm);
+  txn.set_keys(m);
   dout(10) << __func__ << " rm " << rm.size() << " keys, set " << m.size()
 	   << " keys" << dendl;
 }
 
 
+#ifndef WITH_SEASTAR
 bool SnapMapper::Scrubber::_parse_p()
 {
   if (!psit->valid()) {
@@ -760,6 +856,7 @@ void SnapMapper::Scrubber::run()
   psit = ObjectMap::ObjectMapIterator();
   mapit = ObjectMap::ObjectMapIterator();
 }
+#endif // !WITH_SEASTAR
 
 
 // -------------------------------------
@@ -784,6 +881,7 @@ bool SnapMapper::is_legacy_mapping(const string &to_test)
     LEGACY_MAPPING_PREFIX;
 }
 
+#ifndef WITH_SEASTAR
 /* Octopus modified the SnapMapper key format from
  *
  *  <LEGACY_MAPPING_PREFIX><snapid>_<shardid>_<hobject_t::to_str()>
@@ -874,3 +972,4 @@ int SnapMapper::convert_legacy(
   }
   return 0;
 }
+#endif // !WITH_SEASTAR

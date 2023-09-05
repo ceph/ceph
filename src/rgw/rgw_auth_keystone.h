@@ -41,9 +41,7 @@ class TokenEngine : public rgw::auth::Engine {
   get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token, bool allow_expired) const;
 
   acl_strategy_t get_acl_strategy(const token_envelope_t& token) const;
-  auth_info_t get_creds_info(const token_envelope_t& token,
-                             const std::vector<std::string>& admin_roles
-                            ) const noexcept;
+  auth_info_t get_creds_info(const token_envelope_t& token) const noexcept;
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string& token,
                         const std::string& service_token,
@@ -148,7 +146,13 @@ class EC2Engine : public rgw::auth::s3::AWSEngine {
                     const std::string_view& access_key_id,
                     const std::string& string_to_sign,
                     const std::string_view& signature) const;
-  std::pair<boost::optional<token_envelope_t>, int>
+
+  struct access_token_result {
+    boost::optional<token_envelope_t> token;
+    boost::optional<std::string> secret_key;
+    int failure_reason = 0;
+  };
+  access_token_result
   get_access_token(const DoutPrefixProvider* dpp,
                    const std::string_view& access_key_id,
                    const std::string& string_to_sign,

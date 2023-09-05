@@ -42,6 +42,7 @@
     object stat                stat an object for its metadata
     object unlink              unlink object from bucket index
     object rewrite             rewrite the specified object
+    object reindex             reindex the object(s) indicated by --bucket and either --object or --objects-file
     objects expire             run expired objects cleanup
     objects expire-stale list  list stale expired objects (caused by reshard)
     objects expire-stale rm    remove stale expired objects
@@ -187,6 +188,9 @@
     script-package add         add a lua package to the scripts allowlist
     script-package rm          remove a lua package from the scripts allowlist
     script-package list        get the lua packages allowlist
+    notification list          list bucket notifications configuration
+    notification get           get a bucket notifications configuration
+    notification rm            remove a bucket notifications configuration
   options:
      --tenant=<tenant>         tenant name
      --user_ns=<namespace>     namespace of user (oidc in case of users authenticated with oidc provider)
@@ -211,6 +215,7 @@
      --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
      --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
      --object=<object>         object name
+     --objects-file=<file>     file containing a list of object names to process
      --object-version=<version>         object version
      --date=<date>             date in the format yyyy-mm-dd
      --start-date=<date>       start date in the format yyyy-mm-dd
@@ -296,7 +301,7 @@
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
-     --infile=<file>           specify a file to read in when setting data
+     --infile=<file>           file to read in when setting data
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --op-mask=<op-mask>       permission of user's operations (e.g., "read, write, delete, *")
@@ -358,6 +363,7 @@
   
   Bucket notifications options:
      --topic                   bucket notifications topic name
+     --notification-id         bucket notifications id
   
   Script options:
      --context                 context in which the script runs. one of: prerequest, postrequest, background, getdata, putdata

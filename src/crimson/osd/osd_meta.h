@@ -24,12 +24,12 @@ namespace crimson::os {
 class OSDMeta {
   template<typename T> using Ref = boost::intrusive_ptr<T>;
 
-  crimson::os::FuturizedStore& store;
+  crimson::os::FuturizedStore::Shard& store;
   Ref<crimson::os::FuturizedCollection> coll;
 
 public:
   OSDMeta(Ref<crimson::os::FuturizedCollection> coll,
-          crimson::os::FuturizedStore& store)
+          crimson::os::FuturizedStore::Shard& store)
     : store{store}, coll{coll}
   {}
 
@@ -45,7 +45,7 @@ public:
   void store_superblock(ceph::os::Transaction& t,
                         const OSDSuperblock& sb);
 
-  using load_superblock_ertr = crimson::os::FuturizedStore::read_errorator;
+  using load_superblock_ertr = crimson::os::FuturizedStore::Shard::read_errorator;
   using load_superblock_ret = load_superblock_ertr::future<OSDSuperblock>;
   load_superblock_ret load_superblock();
 

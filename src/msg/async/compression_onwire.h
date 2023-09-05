@@ -4,6 +4,7 @@
 #ifndef CEPH_COMPRESSION_ONWIRE_H
 #define CEPH_COMPRESSION_ONWIRE_H
 
+#include <cstdint>
 #include <optional>
 
 #include "compressor/Compressor.h"

@@ -145,7 +145,7 @@ seastar::future<> FSDriver::write(
       config.log_size);
   }
 
-  return fs->do_transaction(
+  return sharded_fs->do_transaction(
     mapping.pg.collection,
     std::move(t));
 }
@@ -156,7 +156,7 @@ seastar::future<bufferlist> FSDriver::read(
 {
   auto mapping = map_offset(offset);
   ceph_assert((mapping.offset + size) <= config.object_size);
-  return fs->read(
+  return sharded_fs->read(
     mapping.pg.collection,
     mapping.object,
     mapping.offset,
@@ -179,11 +179,9 @@ seastar::future<bufferlist> FSDriver::read(
 
 seastar::future<> FSDriver::mkfs()
 {
-  return init(    
+  return init(
   ).then([this] {
     assert(fs);
-    return fs->start();
-  }).then([this] {
     uuid_d uuid;
     uuid.generate_random();
     return fs->mkfs(uuid).handle_error(
@@ -197,9 +195,7 @@ seastar::future<> FSDriver::mkfs()
   }).then([this] {
     return fs->stop();
   }).then([this] {
-    return init().then([this] {
-      return fs->start();
-    });
+    return init();
   }).then([this] {
     return fs->mount(
     ).handle_error(
@@ -218,11 +214,11 @@ seastar::future<> FSDriver::mkfs()
       boost::counting_iterator<unsigned>(0),
       boost::counting_iterator<unsigned>(config.num_pgs),
       [this](auto i) {
-	return fs->create_new_collection(get_coll(i)
+	return sharded_fs->create_new_collection(get_coll(i)
 	).then([this, i](auto coll) {
 	  ceph::os::Transaction t;
 	  t.create_collection(get_coll(i), 0);
-	  return fs->do_transaction(coll, std::move(t));
+	  return sharded_fs->do_transaction(coll, std::move(t));
 	});
       });
   }).then([this] {
@@ -241,9 +237,7 @@ seastar::future<> FSDriver::mount()
   return (
     config.mkfs ? mkfs() : seastar::now()
   ).then([this] {
-    return init().then([this] {
-      return fs->start();
-    });
+    return init();
   }).then([this] {
     return fs->mount(
     ).handle_error(
@@ -262,7 +256,7 @@ seastar::future<> FSDriver::mount()
       boost::counting_iterator<unsigned>(0),
       boost::counting_iterator<unsigned>(config.num_pgs),
       [this](auto i) {
-	return fs->open_collection(get_coll(i)
+	return sharded_fs->open_collection(get_coll(i)
 	).then([this, i](auto ref) {
 	  collections[i].collection = ref;
 	  collections[i].log_object = get_log_object(i);
@@ -275,7 +269,7 @@ seastar::future<> FSDriver::mount()
 		config.log_entry_size,
 		config.log_size);
 	    }
-	    return fs->do_transaction(
+	    return sharded_fs->do_transaction(
 	      collections[i].collection,
 	      std::move(t));
 	  } else {
@@ -305,12 +299,12 @@ seastar::future<> FSDriver::close()
 seastar::future<> FSDriver::init()
 {
   fs.reset();
-  return FuturizedStore::create(
+  fs = FuturizedStore::create(
     config.get_fs_type(),
     *config.path,
     crimson::common::local_conf().get_config_values()
-  ).then([this] (auto store_ptr) {
-      fs = std::move(store_ptr);
-      return seastar::now();
+  );
+  return fs->start().then([this] {
+    sharded_fs = &(fs->get_sharded_store());
   });
 }

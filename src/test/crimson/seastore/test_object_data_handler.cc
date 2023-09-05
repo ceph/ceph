@@ -34,6 +34,9 @@ public:
     dirty = true;
     return layout;
   }
+  bool is_alive() const {
+    return true;
+  }
   bool is_dirty() const { return dirty; }
   laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
@@ -135,7 +138,7 @@ struct object_data_handler_test_t:
       }
     }
   }
-  std::list<LBAPinRef> get_mappings(objaddr_t offset, extent_len_t length) {
+  std::list<LBAMappingRef> get_mappings(objaddr_t offset, extent_len_t length) {
     auto t = create_mutate_transaction();
     auto ret = with_trans_intr(*t, [&](auto &t) {
       return tm->get_pins(t, offset, length);

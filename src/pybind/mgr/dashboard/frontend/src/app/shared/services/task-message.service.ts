@@ -1,4 +1,5 @@
 import { Injectable } from '@angular/core';
+import _ from 'lodash';
 
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
@@ -340,8 +341,41 @@ export class TaskMessageService {
     'service/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.service(metadata)
     ),
-    'ceph-users/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
-      this.cephUser(metadata)
+    'crud-component/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/import': this.newTaskMessage(this.commonOperations.import, (metadata) =>
+      this.crudMessage(metadata)
+    ),
+    'crud-component/id': this.newTaskMessage(this.commonOperations.delete, (id) =>
+      this.crudMessageId(id)
+    ),
+    'cephfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.volume(metadata)
+    ),
+    'cephfs/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.volume(metadata)
+    ),
+    'cephfs/subvolume/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.subvolume(metadata)
+    ),
+    'cephfs/subvolume/group/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
+      this.subvolumegroup(metadata)
+    ),
+    'cephfs/subvolume/group/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.subvolumegroup(metadata)
+    ),
+    'cephfs/subvolume/group/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
+      this.subvolumegroup(metadata)
     )
   };
 
@@ -387,8 +421,31 @@ export class TaskMessageService {
     return $localize`Service '${metadata.service_name}'`;
   }
 
-  cephUser(metadata: any) {
-    return $localize`Ceph User '${metadata.user_entity}'`;
+  crudMessage(metadata: any) {
+    let message = metadata.__message;
+    _.forEach(metadata, (value, key) => {
+      if (key != '__message') {
+        let regex = '{' + key + '}';
+        message = message.replace(regex, value);
+      }
+    });
+    return $localize`${message}`;
+  }
+
+  volume(metadata: any) {
+    return $localize`'${metadata.volumeName}'`;
+  }
+
+  subvolume(metadata: any) {
+    return $localize`subvolume '${metadata.subVolumeName}'`;
+  }
+
+  subvolumegroup(metadata: any) {
+    return $localize`subvolume group '${metadata.subvolumegroupName}'`;
+  }
+
+  crudMessageId(id: string) {
+    return $localize`${id}`;
   }
 
   _getTaskTitle(task: Task) {

@@ -193,7 +193,7 @@ public:
 
   write_ertr::future<> write(
     uint64_t offset,
-    bufferptr &bptr,
+    bufferptr &&bptr,
     uint16_t stream = 0) override;
 
   using RBMDevice::read;
@@ -207,9 +207,9 @@ public:
     uint64_t offset,
     uint64_t len) override;
 
-  mount_ret mount() final {
-    return mount_ertr::now();
-  }
+  mount_ret mount() final;
+
+  mkfs_ret mkfs(device_config_t config) final;
 
   write_ertr::future<> writev(
     uint64_t offset,
@@ -218,12 +218,61 @@ public:
 
   stat_device_ret stat_device() final {
     return seastar::file_stat(device_path, seastar::follow_symlink::yes
-    ).then([](auto stat) {
-      return stat_device_ret(
-	  read_ertr::ready_future_marker{},
-	  stat
-      );
+    ).handle_exception([](auto e) -> stat_device_ret {
+      return crimson::ct_error::input_output_error::make();
+    }).then([this](auto stat) {
+      return seastar::open_file_dma(
+	device_path,
+	seastar::open_flags::rw | seastar::open_flags::dsync
+      ).then([this, stat](auto file) mutable {
+	return file.size().then([this, stat, file](auto size) mutable {
+	  stat.size = size;
+	  return identify_namespace(file
+	  ).safe_then([stat] (auto id_namespace_data) mutable {
+	    // LBA format provides LBA size which is power of 2. LBA is the
+	    // minimum size of read and write.
+	    stat.block_size = (1 << id_namespace_data.lbaf0.lbads);
+	    if (stat.block_size < RBM_SUPERBLOCK_SIZE) {
+	      stat.block_size = RBM_SUPERBLOCK_SIZE;
+	    } 
+	    return stat_device_ret(
+	      read_ertr::ready_future_marker{},
+	      stat
+	    );
+	  }).handle_error(crimson::ct_error::input_output_error::handle(
+	    [stat]{
+	    return stat_device_ret(
+	      read_ertr::ready_future_marker{},
+	      stat
+	    );
+	  }), crimson::ct_error::pass_further_all{});
+	}).safe_then([file](auto st) mutable {
+	  return file.close(
+	  ).then([st] {
+	    return stat_device_ret(
+	      read_ertr::ready_future_marker{},
+	      st
+	    );
+	  });
+	});
+      });
     });
+  }
+
+  std::string get_device_path() const final {
+    return device_path;
+  }
+
+  seastar::future<> start() final {
+    return shard_devices.start(device_path);
+  }
+
+  seastar::future<> stop() final {
+    return shard_devices.stop();
+  }
+
+  Device& get_sharded_device() final {
+    return shard_devices.local();
   }
 
   uint64_t get_preffered_write_granularity() const { return write_granularity; }
@@ -267,7 +316,7 @@ public:
    * Caller can construct and execute its own nvme command
    */
   nvme_command_ertr::future<int> pass_admin(
-    nvme_admin_command_t& admin_cmd);
+    nvme_admin_command_t& admin_cmd, seastar::file f);
   nvme_command_ertr::future<int> pass_through_io(
     nvme_io_command_t& io_cmd);
 
@@ -284,9 +333,11 @@ public:
 private:
   // identify_controller/namespace are used to get SSD internal information such
   // as supported features, NPWG and NPWA
-  nvme_command_ertr::future<nvme_identify_controller_data_t> identify_controller();
-  nvme_command_ertr::future<nvme_identify_namespace_data_t> identify_namespace();
-  nvme_command_ertr::future<int> get_nsid();
+  nvme_command_ertr::future<nvme_identify_controller_data_t> 
+    identify_controller(seastar::file f);
+  nvme_command_ertr::future<nvme_identify_namespace_data_t>
+    identify_namespace(seastar::file f);
+  nvme_command_ertr::future<int> get_nsid(seastar::file f);
   open_ertr::future<> open_for_io(
     const std::string& in_path,
     seastar::open_flags mode);
@@ -303,6 +354,7 @@ private:
 
   bool data_protection_enabled = false;
   std::string device_path;
+  seastar::sharded<NVMeBlockDevice> shard_devices;
 };
 
 }

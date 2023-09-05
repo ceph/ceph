@@ -61,6 +61,15 @@ void rgw_data_change::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("gen", gen, obj);
 }
 
+void rgw_data_change::generate_test_instances(std::list<rgw_data_change *>& l) {
+  l.push_back(new rgw_data_change{});
+  l.push_back(new rgw_data_change);
+  l.back()->entity_type = ENTITY_TYPE_BUCKET;
+  l.back()->key = "bucket_name";
+  l.back()->timestamp = ceph::real_clock::zero();
+  l.back()->gen = 0;
+}
+
 void rgw_data_change_log_entry::dump(Formatter *f) const
 {
   encode_json("log_id", log_id, f);
@@ -431,10 +440,14 @@ bs::error_code DataLogBackends::handle_init(entries_t e) noexcept {
     try {
       switch (gen.type) {
       case log_type::omap:
-	emplace(gen_id, new RGWDataChangesOmap(ioctx, datalog, gen_id, shards));
+	emplace(gen_id,
+    boost::intrusive_ptr<RGWDataChangesBE>(new RGWDataChangesOmap(ioctx, datalog, gen_id, shards))
+  );
 	break;
       case log_type::fifo:
-	emplace(gen_id, new RGWDataChangesFIFO(ioctx, datalog, gen_id, shards));
+	emplace(gen_id,
+    boost::intrusive_ptr<RGWDataChangesBE>(new RGWDataChangesFIFO(ioctx, datalog, gen_id, shards))
+  );
 	break;
       default:
 	lderr(datalog.cct)
@@ -640,6 +653,10 @@ int RGWDataChangesLog::add_entry(const DoutPrefixProvider *dpp,
 				 const rgw::bucket_log_layout_generation& gen,
 				 int shard_id, optional_yield y)
 {
+  if (!zone->log_data) {
+    return 0;
+  }
+
   auto& bucket = bucket_info.bucket;
 
   if (!filter_bucket(dpp, bucket, y)) {

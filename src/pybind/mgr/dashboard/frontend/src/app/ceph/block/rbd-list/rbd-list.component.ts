@@ -67,6 +67,12 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   provisionedNotAvailableTooltipTpl: TemplateRef<any>;
   @ViewChild('totalProvisionedNotAvailableTooltipTpl', { static: true })
   totalProvisionedNotAvailableTooltipTpl: TemplateRef<any>;
+  @ViewChild('forcePromoteConfirmation', { static: true })
+  forcePromoteConfirmation: TemplateRef<any>;
+  @ViewChild('usedTmpl', { static: true })
+  usedTmpl: TemplateRef<any>;
+  @ViewChild('totalUsedTmpl', { static: true })
+  totalUsedTmpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -79,6 +85,7 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   count = 0;
   private tableContext: CdTableFetchDataContext = null;
   modalRef: NgbModalRef;
+  errorMessage: string;
 
   builders = {
     'rbd/create': (metadata: object) =>
@@ -211,14 +218,22 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
       icon: Icons.edit,
       click: () => this.actionPrimary(true),
       name: this.actionLabels.PROMOTE,
-      visible: () => this.selection.first() != null && !this.selection.first().primary
+      visible: () => this.selection.first() != null && !this.selection.first().primary,
+      disable: () =>
+        this.selection.first().mirror_mode === 'Disabled'
+          ? 'Mirroring needs to be enabled on the image to perform this action'
+          : ''
     };
     const demoteAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
       click: () => this.actionPrimary(false),
       name: this.actionLabels.DEMOTE,
-      visible: () => this.selection.first() != null && this.selection.first().primary
+      visible: () => this.selection.first() != null && this.selection.first().primary,
+      disable: () =>
+        this.selection.first().mirror_mode === 'Disabled'
+          ? 'Mirroring needs to be enabled on the image to perform this action'
+          : ''
     };
     this.tableActions = [
       addAction,
@@ -261,6 +276,26 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         pipe: this.dimlessBinaryPipe
       },
       {
+        name: $localize`Used`,
+        prop: 'disk_usage',
+        cellClass: 'text-right',
+        flexGrow: 1,
+        pipe: this.dimlessBinaryPipe,
+        sortable: false,
+        headerTemplate: this.usedTmpl,
+        cellTemplate: this.provisionedNotAvailableTooltipTpl
+      },
+      {
+        name: $localize`Total used`,
+        prop: 'total_disk_usage',
+        cellClass: 'text-right',
+        flexGrow: 1,
+        pipe: this.dimlessBinaryPipe,
+        sortable: false,
+        headerTemplate: this.totalUsedTmpl,
+        cellTemplate: this.totalProvisionedNotAvailableTooltipTpl
+      },
+      {
         name: $localize`Objects`,
         prop: 'num_objs',
         flexGrow: 1,
@@ -275,24 +310,6 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         cellClass: 'text-right',
         sortable: false,
         pipe: this.dimlessBinaryPipe
-      },
-      {
-        name: $localize`Provisioned`,
-        prop: 'disk_usage',
-        cellClass: 'text-center',
-        flexGrow: 1,
-        pipe: this.dimlessBinaryPipe,
-        sortable: false,
-        cellTemplate: this.provisionedNotAvailableTooltipTpl
-      },
-      {
-        name: $localize`Total provisioned`,
-        prop: 'total_disk_usage',
-        cellClass: 'text-center',
-        flexGrow: 1,
-        pipe: this.dimlessBinaryPipe,
-        sortable: false,
-        cellTemplate: this.totalProvisionedNotAvailableTooltipTpl
       },
       {
         name: $localize`Parent`,
@@ -571,7 +588,32 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         }),
         call: this.rbdService.update(imageSpec, request)
       })
-      .subscribe();
+      .subscribe(
+        () => {},
+        (error) => {
+          error.preventDefault();
+          if (primary) {
+            this.errorMessage = error.error['detail'].replace(/\[.*?\]\s*/, '');
+            request.force = true;
+            this.modalRef = this.modalService.show(ConfirmationModalComponent, {
+              titleText: $localize`Warning`,
+              buttonText: $localize`Enforce`,
+              warning: true,
+              bodyTpl: this.forcePromoteConfirmation,
+              onSubmit: () => {
+                this.rbdService.update(imageSpec, request).subscribe(
+                  () => {
+                    this.modalRef.close();
+                  },
+                  () => {
+                    this.modalRef.close();
+                  }
+                );
+              }
+            });
+          }
+        }
+      );
   }
 
   hasSnapshots() {

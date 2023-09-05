@@ -41,8 +41,8 @@ void DataScan::usage()
 {
   std::cout << "Usage: \n"
     << "  cephfs-data-scan init [--force-init]\n"
-    << "  cephfs-data-scan scan_extents [--force-pool] [--worker_n N --worker_m M] <data pool name>\n"
-    << "  cephfs-data-scan scan_inodes [--force-pool] [--force-corrupt] [--worker_n N --worker_m M] <data pool name>\n"
+    << "  cephfs-data-scan scan_extents [--force-pool] [--worker_n N --worker_m M] [<data pool name> [<extra data pool name> ...]]\n"
+    << "  cephfs-data-scan scan_inodes [--force-pool] [--force-corrupt] [--worker_n N --worker_m M] [<data pool name>]\n"
     << "  cephfs-data-scan pg_files <path> <pg id> [<pg id>...]\n"
     << "  cephfs-data-scan scan_links\n"
     << "\n"
@@ -53,7 +53,7 @@ void DataScan::usage()
     << "    --worker_n: Worker number, range 0-(worker_m-1)\n"
     << "\n"
     << "  cephfs-data-scan scan_frags [--force-corrupt]\n"
-    << "  cephfs-data-scan cleanup <data pool name>\n"
+    << "  cephfs-data-scan cleanup [<data pool name>]\n"
     << std::endl;
 
   generic_client_usage();
@@ -103,13 +103,13 @@ bool DataScan::parse_kwarg(
     dout(10) << "Applying tag filter: '" << filter_tag << "'" << dendl;
     return true;
   } else if (arg == std::string("--filesystem")) {
-    std::shared_ptr<const Filesystem> fs;
+    Filesystem const* fs;
     *r = fsmap->parse_filesystem(val, &fs);
     if (*r != 0) {
       std::cerr << "Invalid filesystem '" << val << "'" << std::endl;
       return false;
     }
-    fscid = fs->fscid;
+    fscid = fs->get_fscid();
     return true;
   } else if (arg == std::string("--alternate-pool")) {
     metadata_pool_name = val;
@@ -158,6 +158,7 @@ int DataScan::main(const std::vector<const char*> &args)
 
   std::string const &command = args[0];
   std::string data_pool_name;
+  std::set<std::string> extra_data_pool_names;
 
   std::string pg_files_path;
   std::set<pg_t> pg_files_pgs;
@@ -177,10 +178,19 @@ int DataScan::main(const std::vector<const char*> &args)
       continue;
     }
 
+    // Trailing positional arguments
+    if (command == "scan_extents") {
+      if (data_pool_name.empty()) {
+	data_pool_name = *i;
+      } else if (*i != data_pool_name) {
+	extra_data_pool_names.insert(*i);
+      }
+      continue;
+    }
+
     // Trailing positional argument
     if (i + 1 == args.end() &&
         (command == "scan_inodes"
-         || command == "scan_extents"
          || command == "cleanup")) {
       data_pool_name = *i;
       continue;
@@ -213,14 +223,13 @@ int DataScan::main(const std::vector<const char*> &args)
   // one if only one exists
   if (fscid == FS_CLUSTER_ID_NONE) {
     if (fsmap->filesystem_count() == 1) {
-      fscid = fsmap->get_filesystem()->fscid;
+      fscid = fsmap->get_filesystem().get_fscid();
     } else {
       std::cerr << "Specify a filesystem with --filesystem" << std::endl;
       return -EINVAL;
     }
   }
-  auto fs =  fsmap->get_filesystem(fscid);
-  ceph_assert(fs != nullptr);
+  auto& fs = fsmap->get_filesystem(fscid);
 
   // Default to output to metadata pool
   if (driver == NULL) {
@@ -249,32 +258,43 @@ int DataScan::main(const std::vector<const char*> &args)
     return pge.scan_path(pg_files_path);
   }
 
+  bool autodetect_data_pools = false;
+
   // Initialize data_io for those commands that need it
   if (command == "scan_inodes" ||
       command == "scan_extents" ||
       command == "cleanup") {
+    data_pool_id = fs.get_mds_map().get_first_data_pool();
+
+    std::string pool_name;
+    r = rados.pool_reverse_lookup(data_pool_id, &pool_name);
+    if (r < 0) {
+      std::cerr << "Failed to resolve data pool: " << cpp_strerror(r)
+		<< std::endl;
+      return r;
+    }
+
     if (data_pool_name.empty()) {
-      std::cerr << "Data pool not specified" << std::endl;
-      return -EINVAL;
-    }
-
-    data_pool_id = rados.pool_lookup(data_pool_name.c_str());
-    if (data_pool_id < 0) {
-      std::cerr << "Data pool '" << data_pool_name << "' not found!" << std::endl;
-      return -ENOENT;
-    } else {
-      dout(4) << "data pool '" << data_pool_name
-        << "' has ID " << data_pool_id << dendl;
-    }
-
-    if (!fs->mds_map.is_data_pool(data_pool_id)) {
-      std::cerr << "Warning: pool '" << data_pool_name << "' is not a "
-        "CephFS data pool!" << std::endl;
+      autodetect_data_pools = true;
+      data_pool_name = pool_name;
+    } else if (data_pool_name != pool_name) {
+      std::cerr << "Warning: pool '" << data_pool_name << "' is not the "
+        "main CephFS data pool!" << std::endl;
       if (!force_pool) {
         std::cerr << "Use --force-pool to continue" << std::endl;
         return -EINVAL;
       }
+
+      data_pool_id = rados.pool_lookup(data_pool_name.c_str());
+      if (data_pool_id < 0) {
+	std::cerr << "Data pool '" << data_pool_name << "' not found!"
+		  << std::endl;
+	return -ENOENT;
+      }
     }
+
+    dout(4) << "data pool '" << data_pool_name << "' has ID " << data_pool_id
+	    << dendl;
 
     dout(4) << "opening data pool '" << data_pool_name << "'" << dendl;
     r = rados.ioctx_create(data_pool_name.c_str(), data_io);
@@ -283,14 +303,59 @@ int DataScan::main(const std::vector<const char*> &args)
     }
   }
 
+  // Initialize extra data_ios for those commands that need it
+  if (command == "scan_extents") {
+    if (autodetect_data_pools) {
+      ceph_assert(extra_data_pool_names.empty());
+
+      for (auto &pool_id : fs.get_mds_map().get_data_pools()) {
+	if (pool_id == data_pool_id) {
+	  continue;
+	}
+
+	std::string pool_name;
+	r = rados.pool_reverse_lookup(pool_id, &pool_name);
+	if (r < 0) {
+	  std::cerr << "Failed to resolve data pool: " << cpp_strerror(r)
+		    << std::endl;
+	  return r;
+	}
+	extra_data_pool_names.insert(pool_name);
+      }
+    }
+
+    for (auto &data_pool_name: extra_data_pool_names) {
+      int64_t pool_id = rados.pool_lookup(data_pool_name.c_str());
+      if (data_pool_id < 0) {
+	std::cerr << "Data pool '" << data_pool_name << "' not found!" << std::endl;
+	return -ENOENT;
+      } else {
+	dout(4) << "data pool '" << data_pool_name << "' has ID " << pool_id
+		<< dendl;
+      }
+
+      if (!fs.get_mds_map().is_data_pool(pool_id)) {
+	std::cerr << "Warning: pool '" << data_pool_name << "' is not a "
+	  "CephFS data pool!" << std::endl;
+	if (!force_pool) {
+	  std::cerr << "Use --force-pool to continue" << std::endl;
+	  return -EINVAL;
+	}
+      }
+
+      dout(4) << "opening data pool '" << data_pool_name << "'" << dendl;
+      extra_data_ios.push_back({});
+      r = rados.ioctx_create(data_pool_name.c_str(), extra_data_ios.back());
+      if (r != 0) {
+	return r;
+      }
+    }
+  }
+
   // Initialize metadata_io from MDSMap for scan_frags
   if (command == "scan_frags" || command == "scan_links") {
-    const auto fs = fsmap->get_filesystem(fscid);
-    if (fs == nullptr) {
-      std::cerr << "Filesystem id " << fscid << " does not exist" << std::endl;
-      return -ENOENT;
-    }
-    int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
+    auto& fs = fsmap->get_filesystem(fscid);
+    int64_t const metadata_pool_id = fs.get_mds_map().get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
@@ -305,7 +370,7 @@ int DataScan::main(const std::vector<const char*> &args)
       return r;
     }
 
-    data_pools = fs->mds_map.get_data_pools();
+    data_pools = fs.get_mds_map().get_data_pools();
   }
 
   // Finally, dispatch command
@@ -320,7 +385,7 @@ int DataScan::main(const std::vector<const char*> &args)
   } else if (command == "cleanup") {
     return cleanup();
   } else if (command == "init") {
-    return driver->init_roots(fs->mds_map.get_first_data_pool());
+    return driver->init_roots(fs.get_mds_map().get_first_data_pool());
   } else {
     std::cerr << "Unknown command '" << command << "'" << std::endl;
     return -EINVAL;
@@ -501,46 +566,64 @@ int parse_oid(const std::string &oid, uint64_t *inode_no, uint64_t *obj_id)
 
 int DataScan::scan_extents()
 {
-  return forall_objects(data_io, false, [this](
+  std::vector<librados::IoCtx *> data_ios;
+  data_ios.push_back(&data_io);
+  for (auto &extra_data_io : extra_data_ios) {
+    data_ios.push_back(&extra_data_io);
+  }
+
+  for (auto ioctx : data_ios) {
+    int r = forall_objects(*ioctx, false, [this, ioctx](
         std::string const &oid,
         uint64_t obj_name_ino,
         uint64_t obj_name_offset) -> int
-  {
-    // Read size
-    uint64_t size;
-    time_t mtime;
-    int r = data_io.stat(oid, &size, &mtime);
-    dout(10) << "handling object " << obj_name_ino
-	     << "." << obj_name_offset << dendl;
-    if (r != 0) {
-      dout(4) << "Cannot stat '" << oid << "': skipping" << dendl;
-      return r;
-    }
+    {
+      // Read size
+      uint64_t size;
+      time_t mtime;
+      int r = ioctx->stat(oid, &size, &mtime);
+      dout(10) << "handling object " << obj_name_ino
+	       << "." << obj_name_offset << dendl;
+      if (r != 0) {
+	dout(4) << "Cannot stat '" << oid << "': skipping" << dendl;
+	return r;
+      }
+      int64_t obj_pool_id = data_io.get_id() != ioctx->get_id() ?
+	ioctx->get_id() : -1;
 
-    // I need to keep track of
-    //  * The highest object ID seen
-    //  * The size of the highest object ID seen
-    //  * The largest object seen
-    //
-    //  Given those things, I can later infer the object chunking
-    //  size, the offset of the last object (chunk size * highest ID seen)
-    //  and the actual size (offset of last object + size of highest ID seen)
-    //
-    //  This logic doesn't take account of striping.
-    r = ClsCephFSClient::accumulate_inode_metadata(
-        data_io,
-        obj_name_ino,
-        obj_name_offset,
-        size,
-        mtime);
+      // I need to keep track of
+      //  * The highest object ID seen
+      //  * The size of the highest object ID seen
+      //  * The largest object seen
+      //  * The pool of the objects seen (if it is not the main data pool)
+      //
+      //  Given those things, I can later infer the object chunking
+      //  size, the offset of the last object (chunk size * highest ID seen),
+      //  the actual size (offset of last object + size of highest ID seen),
+      //  and the layout pool id.
+      //
+      //  This logic doesn't take account of striping.
+      r = ClsCephFSClient::accumulate_inode_metadata(
+          data_io,
+	  obj_name_ino,
+	  obj_name_offset,
+	  size,
+	  obj_pool_id,
+	  mtime);
+      if (r < 0) {
+	derr << "Failed to accumulate metadata data from '"
+	     << oid << "': " << cpp_strerror(r) << dendl;
+	return r;
+      }
+
+      return r;
+    });
     if (r < 0) {
-      derr << "Failed to accumulate metadata data from '"
-        << oid << "': " << cpp_strerror(r) << dendl;
       return r;
     }
+  }
 
-    return r;
-  });
+  return 0;
 }
 
 int DataScan::probe_filter(librados::IoCtx &ioctx)
@@ -706,7 +789,37 @@ int DataScan::scan_inodes()
     // This is the layout we will use for injection, populated either
     // from loaded_layout or from best guesses
     file_layout_t guessed_layout;
-    guessed_layout.pool_id = data_pool_id;
+    if (accum_res.obj_pool_id == -1) {
+      guessed_layout.pool_id = data_pool_id;
+    } else {
+      guessed_layout.pool_id = accum_res.obj_pool_id;
+
+      librados::IoCtx ioctx;
+      r = librados::Rados(data_io).ioctx_create2(guessed_layout.pool_id, ioctx);
+      if (r != 0) {
+	derr << "Unexpected error opening file data pool id="
+	     << guessed_layout.pool_id << ": " << cpp_strerror(r) << dendl;
+	return r;
+      }
+
+      bufferlist bl;
+      int r = ioctx.getxattr(oid, "layout", bl);
+      if (r < 0) {
+	if (r != -ENODATA) {
+	  derr << "Unexpected error reading layout for " << oid << ": "
+	       << cpp_strerror(r) << dendl;
+	  return r;
+	}
+      } else {
+	try {
+	  auto q = bl.cbegin();
+	  decode(loaded_layout, q);
+	} catch (ceph::buffer::error &e) {
+	  derr << "Unexpected error decoding layout for " << oid << dendl;
+	  return -EINVAL;
+	}
+      }
+    }
 
     // Calculate file_size, guess the layout
     if (accum_res.ceiling_obj_index > 0) {
@@ -737,14 +850,20 @@ int DataScan::scan_inodes()
         // We have a stashed layout that we can't disprove, so apply it
         guessed_layout = loaded_layout;
         dout(20) << "loaded layout from xattr:"
+          << " pi: " << guessed_layout.pool_id
           << " os: " << guessed_layout.object_size
           << " sc: " << guessed_layout.stripe_count
           << " su: " << guessed_layout.stripe_unit
           << dendl;
         // User might have transplanted files from a pool with a different
-        // ID, so whatever the loaded_layout says, we'll force the injected
-        // layout to point to the pool we really read from
-        guessed_layout.pool_id = data_pool_id;
+        // ID, so if the pool from loaded_layout is not found in the list of
+        // the data pools, we'll force the injected layout to point to the
+        // pool we read from.
+        auto& fs = fsmap->get_filesystem(fscid);
+	if (!fs.get_mds_map().is_data_pool(guessed_layout.pool_id)) {
+	  dout(20) << "overwriting layout pool_id " << data_pool_id << dendl;
+	  guessed_layout.pool_id = data_pool_id;
+	}
       }
 
       if (guessed_layout.stripe_count == 1) {
@@ -754,6 +873,19 @@ int DataScan::scan_inodes()
       } else {
         // Striped file: need to examine the last stripe_count objects
         // in the file to determine the size.
+
+	librados::IoCtx ioctx;
+	if (guessed_layout.pool_id == data_io.get_id()) {
+	  ioctx.dup(data_io);
+	} else {
+	  r = librados::Rados(data_io).ioctx_create2(guessed_layout.pool_id,
+						     ioctx);
+	  if (r != 0) {
+	    derr << "Unexpected error opening file data pool id="
+		 << guessed_layout.pool_id << ": " << cpp_strerror(r) << dendl;
+	    return r;
+	  }
+	}
 
         // How many complete (i.e. not last stripe) objects?
         uint64_t complete_objs = 0;
@@ -782,7 +914,7 @@ int DataScan::scan_inodes()
 
           uint64_t osize(0);
           time_t omtime(0);
-          r = data_io.stat(std::string(buf), &osize, &omtime);
+          r = ioctx.stat(std::string(buf), &osize, &omtime);
           if (r == 0) {
             if (osize > 0) {
               // Upper bound within this object
@@ -814,7 +946,8 @@ int DataScan::scan_inodes()
           || loaded_layout.object_size < accum_res.max_obj_size) {
         // No layout loaded, or inconsistent layout, use default
         guessed_layout = file_layout_t::get_default();
-        guessed_layout.pool_id = data_pool_id;
+	guessed_layout.pool_id = accum_res.obj_pool_id != -1 ?
+	  accum_res.obj_pool_id : data_pool_id;
       } else {
         guessed_layout = loaded_layout;
       }
@@ -902,7 +1035,8 @@ bool DataScan::valid_ino(inodeno_t ino) const
     || (MDS_INO_IS_STRAY(ino))
     || (MDS_INO_IS_MDSDIR(ino))
     || ino == CEPH_INO_ROOT
-    || ino == CEPH_INO_CEPH;
+    || ino == CEPH_INO_CEPH
+    || ino == CEPH_INO_LOST_AND_FOUND;
 }
 
 int DataScan::scan_links()
@@ -2046,9 +2180,8 @@ int MetadataDriver::init(
   fs_cluster_id_t fscid)
 {
   if (metadata_pool_name.empty()) {
-    auto fs =  fsmap->get_filesystem(fscid);
-    ceph_assert(fs != nullptr);
-    int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
+    auto& fs =  fsmap->get_filesystem(fscid);
+    int64_t const metadata_pool_id = fs.get_mds_map().get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);

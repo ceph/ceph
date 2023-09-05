@@ -25,3 +25,15 @@
   </cd-table>
 </ng-container>
 <router-outlet name="modal"></router-outlet>
+
+
+<ng-template #runningTpl
+             let-value="value">
+  <span ngbTooltip="Service instances running out of the total number of services requested.">
+    {{ value.running }} / {{ value.size }}
+  </span>
+  <i *ngIf="value.running == 0 || value.size == 0"
+     class="icon-warning-color"
+     [ngClass]="[icons.warning]">
+  </i>
+</ng-template>

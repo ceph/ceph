@@ -5,6 +5,7 @@ from typing import Tuple, Optional, List, Dict, Any
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
+from orchestrator.module import IngressType
 
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
@@ -121,11 +122,12 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 placement: Optional[str] = None,
                                 ingress: Optional[bool] = None,
                                 virtual_ip: Optional[str] = None,
+                                ingress_mode: Optional[IngressType] = None,
                                 port: Optional[int] = None) -> None:
         """Create an NFS Cluster"""
         return self.nfs.create_nfs_cluster(cluster_id=cluster_id, placement=placement,
                                            virtual_ip=virtual_ip, ingress=ingress,
-                                           port=port)
+                                           ingress_mode=ingress_mode, port=port)
 
     @CLICommand('nfs cluster rm', perm='rw')
     @object_format.EmptyResponder()

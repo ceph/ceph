@@ -50,6 +50,7 @@
 #include "common/blkdev.h"
 #include "common/numa.h"
 #include "common/pretty_binary.h"
+#include "common/WorkQueue.h"
 #include "kv/KeyValueHistogram.h"
 
 #ifdef HAVE_LIBZBD
@@ -3641,6 +3642,54 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 }
 
 // Onode
+//
+// Mapping blobs over Onode's logical offsets.
+//
+// Blob is always continous. Blobs may overlap.
+// Non-mapped regions are "0" when read.
+//                 1               2               3
+// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+// <blob.a.blob.a><blob.b.blo>        <blob.c.blob.c.blob.c.blob>
+//       <blob.d.blob.d.b>                      <blob.e.blob.e>
+// blob.a starts at 0x0 length 0xe
+// blob.b starts at 0xf length 0xb
+// blob.c starts at 0x23 length 0x1b
+// blob.d starts at 0x06 length 0x12
+// blob.e starts at 0x2d length 0xf
+//
+// Blobs can have non-encoded parts:
+//                 1               2               3
+// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+// aaaaaa......aaabbbbb...bbbb        ccccccccccccccc..........cc
+//       dddddd........ddd                      .....eeeeeeeeee
+// "." - non-encoded parts of blob (holes)
+//
+// Mapping logical to blob:
+// extent_map maps {Onode's logical offset, length}=>{Blob, in-blob offset}
+// {0x0, 0x6}=>{blob.a, 0x0}
+// {0x6, 0x6}=>{blob.d, 0x0}
+// {0xc, 0x3}=>{blob.a, 0xc}
+// {0xf, 0x5}=>{blob.b, 0x0}
+// {0x14, 0x3}=>{blob.d, 0xe}
+// {0x17, 0x4}=>{blob.b, 0x8}
+// a hole here
+// {0x23, 0xe}=>{blob.c, 0x0}
+// and so on...
+//
+// Compressed blobs do not have non-encoded parts.
+// Same example as above but all blobs are compressed:
+//                 1               2               3
+// 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+// aaaaaaAAAAAAaaabbbbbBBBbbbb        cccccccccccccccCCCCCCCCCCcc
+//       ddddddDDDDDDDDddd                      EEEEEeeeeeeeeee
+// A-E: parts of blobs that are never used.
+// This can happen when a compressed blob is overwritten partially.
+// The target ranges are no longer used, but are left there because they are necessary
+// for successful decompression.
+//
+// In compressed blobs PExtentVector and csum refer to actually occupied disk space.
+// Blob's logical length is larger then occupied disk space.
+// Mapping from extent_map always uses offsets of decompressed data.
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
@@ -6277,7 +6326,8 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
   }
   BlueFSVolumeSelector* vselector = nullptr;
   if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ||
-      cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced") {
+      cct->_conf->bluestore_volume_selection_policy == "use_some_extra_enforced" ||
+      cct->_conf->bluestore_volume_selection_policy == "fit_to_fast") {
 
     string options = cct->_conf->bluestore_rocksdb_options;
     string options_annex = cct->_conf->bluestore_rocksdb_options_annex;
@@ -8466,8 +8516,6 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   return o;
 }
 
-#include "common/WorkQueue.h"
-
 class ShallowFSCKThreadPool : public ThreadPool
 {
 public:
@@ -8483,7 +8531,7 @@ public:
       void* item = wq->_void_dequeue();
       if (item) {
         processing++;
-        TPHandle tp_handle(cct, nullptr, wq->timeout_interval, wq->suicide_interval);
+        TPHandle tp_handle(cct, nullptr, wq->timeout_interval.load(), wq->suicide_interval.load());
         wq->_void_process(item, tp_handle);
         processing--;
       }
@@ -8685,8 +8733,8 @@ public:
         if (batch.entry_count) {
           TPHandle tp_handle(store->cct,
             nullptr,
-            timeout_interval,
-            suicide_interval);
+            timeout_interval.load(),
+            suicide_interval.load());
           ceph_assert(batch.running == 0);
 
           batch.running++; // just to be on-par with the regular call
@@ -10371,6 +10419,7 @@ void BlueStore::collect_metadata(map<string,string> *pm)
       (*pm)["objectstore_numa_node"] = stringify(node);
     }
   }
+  (*pm)["bluestore_min_alloc_size"] = stringify(min_alloc_size);
 }
 
 int BlueStore::get_numa_node(
@@ -11801,7 +11850,7 @@ int BlueStore::_collection_list(
     [&, start_time = mono_clock::now(), func_name = __func__] {
     log_latency_fn(
       func_name,
-      l_bluestore_remove_lat,
+      l_bluestore_clist_lat,
       mono_clock::now() - start_time,
       cct->_conf->bluestore_log_collection_list_age,
       [&](const ceph::timespan& lat) {
@@ -17691,6 +17740,19 @@ void BlueStore::_record_onode(OnodeRef& o, KeyValueDB::Transaction &txn)
 void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
+  size_t used = bluefs && bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW ?
+    bluefs->get_used(BlueFS::BDEV_SLOW) : 0;
+  if (used > 0) {
+      auto db_used = bluefs->get_used(BlueFS::BDEV_DB);
+      auto db_total = bluefs->get_total(BlueFS::BDEV_DB);
+      ostringstream ss;
+      ss << "spilled over " << byte_u_t(used)
+         << " metadata from 'db' device (" << byte_u_t(db_used)
+         << " used of " << byte_u_t(db_total) << ") to slow device";
+      spillover_alert = ss.str();
+  } else if (!spillover_alert.empty()){
+    spillover_alert.clear();
+  }
 
   if (!spurious_read_errors_alert.empty() &&
       cct->_conf->bluestore_warn_on_spurious_read_errors) {
@@ -17749,9 +17811,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 void BlueStore::_collect_allocation_stats(uint64_t need, uint32_t alloc_size,
                                           const PExtentVector& extents)
 {
-  alloc_stats_count++;
-  alloc_stats_fragments += extents.size();
-  alloc_stats_size += need;
+  if (alloc_size != min_alloc_size) {
+    alloc_stats_count++;
+    alloc_stats_fragments += extents.size();
+    alloc_stats_size += need;
+  }
 
   for (auto& e : extents) {
     logger->hinc(l_bluestore_allocate_hist, e.length, need);
@@ -18086,11 +18150,8 @@ void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(std::string_view dirname) con
 void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
   auto max_x = per_level_per_dev_usage.get_max_x();
   auto max_y = per_level_per_dev_usage.get_max_y();
-  sout << "RocksDBBlueFSVolumeSelector: wal_total:" << l_totals[LEVEL_WAL - LEVEL_FIRST]
-    << ", db_total:" << l_totals[LEVEL_DB - LEVEL_FIRST]
-    << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
-    << ", db_avail:" << db_avail4slow << std::endl
-    << "Usage matrix:" << std::endl;
+
+  sout << "RocksDBBlueFSVolumeSelector Usage Matrix:" << std::endl;
   constexpr std::array<const char*, 8> names{ {
     "DEV/LEV",
     "WAL",
@@ -18121,7 +18182,7 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     case LEVEL_SLOW:
       sout << "SLOW"; break;
     case LEVEL_MAX:
-      sout << "TOTALS"; break;
+      sout << "TOTAL"; break;
     }
     for (size_t d = 0; d < max_x; d++) {
       sout.setf(std::ios::left, std::ios::adjustfield);
@@ -18148,7 +18209,7 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     case LEVEL_SLOW:
       sout << "SLOW"; break;
     case LEVEL_MAX:
-      sout << "TOTALS"; break;
+      sout << "TOTAL"; break;
     }
     for (size_t d = 0; d < max_x - 1; d++) {
       sout.setf(std::ios::left, std::ios::adjustfield);
@@ -18158,10 +18219,20 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     sout.setf(std::ios::left, std::ios::adjustfield);
     sout.width(width);
     sout << stringify(byte_u_t(per_level_per_dev_max.at(max_x - 1, l)));
-    if (l < max_y - 1) {
-      sout << std::endl;
-    }
+    sout << std::endl;
   }
+  string sizes[] = {
+    ">> SIZE <<",
+    stringify(byte_u_t(l_totals[LEVEL_WAL - LEVEL_FIRST])),
+    stringify(byte_u_t(l_totals[LEVEL_DB - LEVEL_FIRST])),
+    stringify(byte_u_t(l_totals[LEVEL_SLOW - LEVEL_FIRST])),
+  };
+  for (size_t i = 0; i < (sizeof(sizes) / sizeof(sizes[0])); i++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << sizes[i];
+  }
+  sout << std::endl;
 }
 
 BlueFSVolumeSelector* RocksDBBlueFSVolumeSelector::clone_empty() const {
@@ -19158,8 +19229,6 @@ int BlueStore::read_allocation_from_drive_on_startup()
 // Not meant to be run by customers
 #ifdef CEPH_BLUESTORE_TOOL_RESTORE_ALLOCATION
 
-#include <stdlib.h>
-#include <algorithm>
 //---------------------------------------------------------
 int cmpfunc (const void * a, const void * b)
 {

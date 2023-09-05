@@ -132,3 +132,25 @@
      title="RBD in status 'Removing'"
      class="{{ icons.warning }} warn"></i>
 </ng-template>
+
+<ng-template #forcePromoteConfirmation>
+  <cd-alert-panel type="warning">{{ errorMessage }}</cd-alert-panel>
+  <div class="m-4"
+       i18n>
+    <strong>
+       Do you want to force the operation?
+    </strong>
+  </div>
+</ng-template>
+
+<ng-template #usedTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="Stored data">Used</span>
+</ng-template>
+
+<ng-template #totalUsedTmpl>
+  <span i18n
+        i18n-ngbTooltip
+        ngbTooltip="Total space used by the image">Total Used</span>
+</ng-template>

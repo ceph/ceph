@@ -1018,7 +1018,6 @@ def create_lv(name_prefix,
     # be so this function will set it after creation using the mapping
     # XXX add CEPH_VOLUME_LVM_DEBUG to enable -vvvv on lv operations
     type_path_tag = {
-        'journal': 'ceph.journal_device',
         'data': 'ceph.data_device',
         'block': 'ceph.block_device',
         'wal': 'ceph.wal_device',

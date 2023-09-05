@@ -19,12 +19,14 @@ namespace crimson::os::seastore {
 struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
   using Ref = TCachedExtentRef<ObjectDataBlock>;
 
-  ObjectDataBlock(ceph::bufferptr &&ptr)
+  explicit ObjectDataBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
-  ObjectDataBlock(const ObjectDataBlock &other)
+  explicit ObjectDataBlock(const ObjectDataBlock &other)
     : LogicalCachedExtent(other) {}
+  explicit ObjectDataBlock(extent_len_t length)
+    : LogicalCachedExtent(length) {}
 
-  CachedExtentRef duplicate_for_write() final {
+  CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new ObjectDataBlock(*this));
   };
 
@@ -56,6 +58,7 @@ public:
     TransactionManager &tm;
     Transaction &t;
     Onode &onode;
+    Onode *d_onode = nullptr; // The desination node in case of clone
   };
 
   /// Writes bl to [offset, offset + bl.length())
@@ -101,6 +104,11 @@ public:
   using clear_ret = clear_iertr::future<>;
   clear_ret clear(context_t ctx);
 
+  /// Clone data of an Onode
+  using clone_iertr = base_iertr;
+  using clone_ret = clone_iertr::future<>;
+  clone_ret clone(context_t ctx);
+
 private:
   /// Updates region [_offset, _offset + bl.length) to bl
   write_ret overwrite(
@@ -122,6 +130,13 @@ private:
     context_t ctx,
     object_data_t &object_data,
     extent_len_t size);
+
+  clone_ret clone_extents(
+    context_t ctx,
+    object_data_t &object_data,
+    lba_pin_list_t &pins,
+    laddr_t data_base);
+
 private:
   /**
    * max_object_size

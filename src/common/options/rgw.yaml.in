@@ -797,6 +797,13 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_accepted_reader_roles
+  type: str
+  level: advanced
+  desc: List of roles that can only be used for reads (Keystone).
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_keystone_token_cache_size
   type: int
   level: advanced
@@ -2631,6 +2638,26 @@ options:
   - rgw
   - rgw
   min: 30
+- name: rgw_debug_inject_set_olh_err
+  type: uint
+  level: dev
+  desc: Whether to inject errors between rados olh modification initialization and
+    bucket index instance linking. The value determines the error code. This exists
+    for development and testing purposes to help simulate cases where bucket index
+    entries aren't cleaned up by the request thread after an error scenario.
+  default: 0
+  with_legacy: true
+  services:
+  - rgw
+- name: rgw_debug_inject_olh_cancel_modification_err
+  type: bool
+  level: dev
+  desc: Whether to inject an error to simulate a failure to cancel olh
+    modification. This exists for development and testing purposes.
+  default: false
+  with_legacy: true
+  services:
+  - rgw
 - name: rgw_reshard_batch_size
   type: uint
   level: advanced
@@ -3130,6 +3157,16 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_torrent_max_size
+  type: size
+  level: advanced
+  desc: Objects over this size will not store torrent info.
+  default: 5_G
+  services:
+  - rgw
+  see_also:
+  - rgw_torrent_flag
+  with_legacy: true
 - name: rgw_dynamic_resharding
   type: bool
   level: basic
@@ -3221,7 +3258,7 @@ options:
     is very heavily loaded. Beware that increasing this value may cause some operations
     to take longer in exceptional cases and thus may, rarely, cause clients to time
     out.
-  default: 3
+  default: 10
   tags:
   - error recovery
   services:
@@ -3573,14 +3610,14 @@ options:
   type: str
   level: advanced
   desc: experimental Option to set a filter
-  long_desc: defaults to none. Other valid values are base and trace (both experimental).
+  long_desc: defaults to none. Other valid values are base and d4n (both experimental).
   default: none
   services:
   - rgw
   enum_values:
   - none
   - base
-  - trace
+  - d4n
 - name: dbstore_db_dir
   type: str
   level: advanced
@@ -3748,3 +3785,68 @@ options:
   default: true
   services:
   - rgw
+- name: rgw_d4n_host
+  type: str
+  level: advanced
+  desc: The rgw directory host
+  default: 127.0.0.1
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_d4n_port
+  type: int
+  level: advanced
+  desc: The rgw directory port
+  default: 6379
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_topic_persistency_time_to_live
+  type: uint
+  level: advanced
+  desc: The rgw retention of persistent topics by time (seconds)
+  default: 0
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_topic_persistency_max_retries
+  type: uint
+  level: advanced
+  desc: The maximum number sending a persistent notification would be tried.
+    Note that the value of one would mean no retries,
+    and the value of zero would mean that the notification would be tried indefinitely
+  default: 0
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_topic_persistency_sleep_duration
+  type: uint
+  level: advanced
+  desc: The minimum time (in seconds) between two tries of the same persistent notification.
+    note that the actual time between the tries may be longer
+  default: 0
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_lua_max_memory_per_state
+  type: uint
+  level: advanced
+  desc: Max size of memory used by a single lua state
+  long_desc: This is the maximum size in bytes that a lua state can allocate for its own use.
+    Note that this does not include any memory that can be accessed from lua, but managed by the RGW.
+    If not set, it would use a default of 128K. If set to zero, the amount of memory would 
+    only be limited by the system.
+  default: 128000
+  services:
+  - rgw
+  with_legacy: true

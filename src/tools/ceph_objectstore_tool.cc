@@ -1137,7 +1137,8 @@ int ObjectStoreTool::do_export(
   return 0;
 }
 
-int dump_data(Formatter *formatter, bufferlist &bl)
+int dump_data(Formatter *formatter, bufferlist &bl,
+              const std::string &dump_data_path)
 {
   auto ebliter = bl.cbegin();
   data_section ds;
@@ -1146,7 +1147,23 @@ int dump_data(Formatter *formatter, bufferlist &bl)
   formatter->open_object_section("data_block");
   formatter->dump_unsigned("offset", ds.offset);
   formatter->dump_unsigned("len", ds.len);
-  // XXX: Add option to dump data like od -cx ?
+  if (!dump_data_path.empty()) {
+    int fd = open(dump_data_path.c_str(), O_WRONLY|O_CREAT|O_LARGEFILE, 0666);
+    if (fd == -1) {
+      std::cerr << "open " << dump_data_path << " failed: "
+                << cpp_strerror(errno) << std::endl;
+    } else {
+      int ret = ds.databl.write_fd(fd, ds.offset);
+      if (ret < 0) {
+        std::cerr << "write " << dump_data_path << " failed: "
+                  << cpp_strerror(ret) << std::endl;
+      } else {
+        formatter->dump_string("file", dump_data_path);
+      }
+      close(fd);
+    }
+  }
+
   formatter->close_section();
   formatter->flush(cout);
   return 0;
@@ -1337,7 +1354,8 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
 }
 
 int ObjectStoreTool::dump_object(Formatter *formatter,
-				bufferlist &bl)
+                                 bufferlist &bl,
+                                 const std::string &dump_data_dir)
 {
   auto ebliter = bl.cbegin();
   object_begin ob;
@@ -1373,7 +1391,9 @@ int ObjectStoreTool::dump_object(Formatter *formatter,
     switch(type) {
     case TYPE_DATA:
       if (dry_run) break;
-      ret = dump_data(formatter, ebl);
+      ret = dump_data(formatter, ebl,
+                      dump_data_dir.empty() ?
+                          "" : dump_data_dir + "/" + stringify(ob.hoid.hobj));
       if (ret) return ret;
       break;
     case TYPE_ATTRS:
@@ -1664,7 +1684,8 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
   }
 }
 
-int ObjectStoreTool::dump_export(Formatter *formatter)
+int ObjectStoreTool::dump_export(Formatter *formatter,
+                                 const std::string &dump_data_dir)
 {
   bufferlist ebl;
   pg_info_t info;
@@ -1731,7 +1752,7 @@ int ObjectStoreTool::dump_export(Formatter *formatter)
 	formatter->open_array_section("objects");
 	objects_started = true;
       }
-      ret = dump_object(formatter, ebl);
+      ret = dump_object(formatter, ebl, dump_data_dir);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
@@ -3330,7 +3351,7 @@ int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
   string target_data_path, fsid;
-  string objcmd, arg1, arg2, type, format, argnspace, pool, rmtypestr;
+  string objcmd, arg1, arg2, type, format, argnspace, pool, rmtypestr, dump_data_dir;
   boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
@@ -3383,6 +3404,8 @@ int main(int argc, char **argv)
     ("rmtype", po::value<string>(&rmtypestr), "Specify corrupting object removal 'snapmap' or 'nosnapmap' - TESTING USE ONLY")
     ("slow-omap-threshold", po::value<unsigned>(&slow_threshold),
       "Threshold (in seconds) to consider omap listing slow (for op=list-slow-omap)")
+    ("dump-data-dir", po::value<string>(&dump_data_dir),
+     "Directory to dump object data (for op=dump-export)")
     ;
 
   po::options_description positional("Positional options");
@@ -3578,7 +3601,7 @@ int main(int argc, char **argv)
   }
 
   if (op == "dump-export") {
-    int ret = tool.dump_export(formatter);
+    int ret = tool.dump_export(formatter, dump_data_dir);
     if (ret < 0) {
       cerr << "dump-export: "
 	   << cpp_strerror(ret) << std::endl;
@@ -4523,7 +4546,7 @@ out:
   if (debug) {
     ostringstream ostr;
     Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
-    cct->get_perfcounters_collection()->dump_formatted(f, false);
+    cct->get_perfcounters_collection()->dump_formatted(f, false, false);
     ostr << "ceph-objectstore-tool ";
     f->flush(ostr);
     delete f;

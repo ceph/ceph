@@ -57,6 +57,13 @@ PerfCounters *build_osd_logger(CephContext *cct) {
     "Latency of client operations (excluding queue time and wait for finished)");
 
   osd_plb.add_u64_counter(
+    l_osd_op_delayed_unreadable, "op_delayed_unreadable",
+    "Count of ops delayed due to target object being unreadable");
+  osd_plb.add_u64_counter(
+    l_osd_op_delayed_degraded, "op_delayed_degraded",
+    "Count of ops delayed due to target object being degraded");
+
+  osd_plb.add_u64_counter(
     l_osd_op_r, "op_r", "Client read operations");
   osd_plb.add_u64_counter(
     l_osd_op_r_outb, "op_r_out_bytes", "Client data read", NULL, PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
@@ -116,13 +123,13 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_time_avg(
     l_osd_op_rw_prepare_lat, "op_rw_prepare_latency",
     "Latency of read-modify-write operations (excluding queue time and wait for finished)");
+  osd_plb.add_time_avg(l_osd_op_before_queue_op_lat, "op_before_queue_op_lat",
+    "Latency of IO before calling queue(before really queue into ShardedOpWq)"); // client io before queue op_wq latency
 
   // Now we move on to some more obscure stats, revert to assuming things
   // are low priority unless otherwise specified.
   osd_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
 
-  osd_plb.add_time_avg(l_osd_op_before_queue_op_lat, "op_before_queue_op_lat",
-    "Latency of IO before calling queue(before really queue into ShardedOpWq)"); // client io before queue op_wq latency
   osd_plb.add_time_avg(l_osd_op_before_dequeue_op_lat, "op_before_dequeue_op_lat",
     "Latency of IO before calling dequeue_op(already dequeued and get PG lock)"); // client io before dequeue_op latency
 
@@ -161,6 +168,40 @@ PerfCounters *build_osd_logger(CephContext *cct) {
    l_osd_rbytes, "recovery_bytes",
    "recovery bytes",
    "rbt", PerfCountersBuilder::PRIO_INTERESTING);
+
+  osd_plb.add_time_avg(
+    l_osd_recovery_push_queue_lat,
+    "l_osd_recovery_push_queue_latency",
+    "MOSDPGPush queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_push_reply_queue_lat,
+    "l_osd_recovery_push_reply_queue_latency",
+    "MOSDPGPushReply queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_pull_queue_lat,
+    "l_osd_recovery_pull_queue_latency",
+    "MOSDPGPull queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_backfill_queue_lat,
+    "l_osd_recovery_backfill_queue_latency",
+    "MOSDPGBackfill queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_backfill_remove_queue_lat,
+    "l_osd_recovery_backfill_remove_queue_latency",
+    "MOSDPGBackfillDelete queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_scan_queue_lat,
+    "l_osd_recovery_scan_queue_latency",
+    "MOSDPGScan queue latency");
+
+  osd_plb.add_time_avg(
+    l_osd_recovery_queue_lat,
+    "l_osd_recovery_queue_latency",
+    "PGRecovery queue latency");
+  osd_plb.add_time_avg(
+    l_osd_recovery_context_queue_lat,
+    "l_osd_recovery_context_queue_latency",
+    "PGRecoveryContext queue latency");
 
   osd_plb.add_u64(l_osd_loadavg, "loadavg", "CPU load");
   osd_plb.add_u64(

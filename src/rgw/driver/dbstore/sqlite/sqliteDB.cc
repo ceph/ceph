@@ -395,8 +395,6 @@ static int list_user(const DoutPrefixProvider *dpp, DBOpInfo &op, sqlite3_stmt *
 
   SQL_DECODE_BLOB_PARAM(dpp, stmt, MfaIDs, op.user.uinfo.mfa_ids, sdb);
 
-  op.user.uinfo.assumed_role_arn = (const char*)sqlite3_column_text(stmt, AssumedRoleARN);
-
   SQL_DECODE_BLOB_PARAM(dpp, stmt, UserAttrs, op.user.user_attrs, sdb);
   op.user.user_version.ver = sqlite3_column_int(stmt, UserVersion);
   op.user.user_version.tag = (const char*)sqlite3_column_text(stmt, UserVersionTag);
@@ -1178,9 +1176,6 @@ int SQLInsertUser::Bind(const DoutPrefixProvider *dpp, struct DBOpParams *params
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.mfa_ids, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.uinfo.mfa_ids, sdb);
-
-  SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.assumed_role_arn, sdb);
-  SQL_BIND_TEXT(dpp, stmt, index, params->op.user.uinfo.assumed_role_arn.c_str(), sdb);
 
   SQL_BIND_INDEX(dpp, stmt, index, p_params.op.user.user_attrs, sdb);
   SQL_ENCODE_BLOB_PARAM(dpp, stmt, index, params->op.user.user_attrs, sdb);

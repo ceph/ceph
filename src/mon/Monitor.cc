@@ -280,7 +280,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 Monitor::~Monitor()
 {
   op_tracker.on_shutdown();
-
   delete logger;
   ceph_assert(session_map.sessions.empty());
 }
@@ -938,9 +937,6 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgrmon()->prime_mgr_client();
-
-  // generate list of filestore OSDs
-  osdmon()->get_filestore_osd_list();
 
   state = STATE_PROBING;
 
@@ -3965,8 +3961,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     }
     f->close_section();
 
+    mgrmon()->count_metadata("ceph_version", &mgr);
     if (!mgr.empty()) {
-      mgrmon()->count_metadata("ceph_version", &mgr);
       f->open_object_section("mgr");
       for (auto& p : mgr) {
         f->dump_int(p.first.c_str(), p.second);
@@ -3975,8 +3971,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->close_section();
     }
 
+    osdmon()->count_metadata("ceph_version", &osd);
     if (!osd.empty()) {
-      osdmon()->count_metadata("ceph_version", &osd);
       f->open_object_section("osd");
       for (auto& p : osd) {
         f->dump_int(p.first.c_str(), p.second);
@@ -3985,8 +3981,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       f->close_section();
     }
 
+    mdsmon()->count_metadata("ceph_version", &mds);
     if (!mds.empty()) {
-      mdsmon()->count_metadata("ceph_version", &mds);
       f->open_object_section("mds");
       for (auto& p : mds) {
         f->dump_int(p.first.c_str(), p.second);
@@ -6380,7 +6376,7 @@ int Monitor::handle_auth_request(
       &auth_meta->connection_secret,
       &auth_meta->authorizer_challenge);
     if (isvalid) {
-      ms_handle_authentication(con);
+      ms_handle_fast_authentication(con);
       return 1;
     }
     if (!more && !was_challenge && auth_meta->authorizer_challenge) {
@@ -6501,7 +6497,7 @@ int Monitor::handle_auth_request(
   }
   if (r > 0 &&
       !s->authenticated) {
-    ms_handle_authentication(con);
+    ms_handle_fast_authentication(con);
   }
 
   dout(30) << " r " << r << " reply:\n";
@@ -6539,7 +6535,7 @@ void Monitor::ms_handle_accept(Connection *con)
   }
 }
 
-int Monitor::ms_handle_authentication(Connection *con)
+int Monitor::ms_handle_fast_authentication(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     // mon <-> mon connections need no Session, and setting one up
@@ -6551,6 +6547,11 @@ int Monitor::ms_handle_authentication(Connection *con)
   MonSession *s = static_cast<MonSession*>(priv.get());
   if (!s) {
     // must be msgr2, otherwise dispatch would have set up the session.
+    if (state == STATE_SHUTDOWN) {
+      dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
+      con->mark_down();
+      return -EACCES;
+    }
     s = session_map.new_session(
       entity_name_t(con->get_peer_type(), -1),  // we don't know yet
       con->get_peer_addrs(),
@@ -6684,7 +6685,9 @@ void Monitor::try_engage_stretch_mode()
   dout(20) << __func__ << dendl;
   if (stretch_mode_engaged) return;
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonEnableStretchMode(this));
+    return;
   }
   if (osdmon()->osdmap.stretch_mode_enabled &&
       monmap->stretch_mode_enabled) {
@@ -6767,12 +6770,15 @@ void Monitor::go_recovery_stretch_mode()
   }
   
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonGoRecovery(this));
     return;
   }
 
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoRecovery(this));
+    return;
   }
   osdmon()->trigger_recovery_stretch_mode();
 }
@@ -6808,10 +6814,14 @@ void Monitor::maybe_go_degraded_stretch_mode()
 						   &matched_down_mons);
   if (dead) {
     if (!osdmon()->is_writeable()) {
+      dout(20) << "osdmon is not writeable" << dendl;
       osdmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     if (!monmon()->is_writeable()) {
+      dout(20) << "monmon is not writeable" << dendl;
       monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     trigger_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
   }
@@ -6861,10 +6871,14 @@ void Monitor::trigger_healthy_stretch_mode()
   if (!is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
   if (!monmon()->is_writeable()) {
+    dout(20) << "monmon is not writeable" << dendl;
     monmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
 
   ceph_assert(osdmon()->osdmap.recovering_stretch_mode);

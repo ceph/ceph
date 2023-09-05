@@ -299,6 +299,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     skip_decrypt = s->info.args.exists(RGW_SYS_PARAM_PREFIX "skip-decrypt");
   }
 
+  // multisite sync requests should fetch cloudtiered objects
+  sync_cloudtiered = s->info.args.exists(RGW_SYS_PARAM_PREFIX "sync-cloudtiered");
+
+  dst_zone_trace = s->info.args.get(RGW_SYS_PARAM_PREFIX "if-not-replicated-to");
+  get_torrent = s->info.args.exists("torrent");
+
   return RGWGetObj_ObjStore::get_params(y);
 }
 
@@ -433,6 +439,17 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_STATUS);
       i != attrs.end()) {
     dump_header(s, "x-amz-replication-status", i->second);
+  }
+  if (auto i = attrs.find(RGW_ATTR_OBJ_REPLICATION_TRACE);
+      i != attrs.end()) {
+    try {
+      std::vector<rgw_zone_set_entry> zones;
+      auto p = i->second.cbegin();
+      decode(zones, p);
+      for (const auto& zone : zones) {
+        dump_header(s, "x-rgw-replicated-from", zone.to_str());
+      }
+    } catch (const buffer::error&) {} // omit x-rgw-replicated-from headers
   }
 
   if (! op_ret) {
@@ -576,21 +593,42 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
     return 0;
   }
 
-  int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
-  if (res == 0) {
-    if (block_crypt != nullptr) {
-      auto f = std::make_unique<RGWGetObj_BlockDecrypt>(s, s->cct, cb, std::move(block_crypt));
-      if (manifest_bl != nullptr) {
-        res = f->read_manifest(this, *manifest_bl);
-        if (res == 0) {
-          *filter = std::move(f);
-        }
-      }
+  int res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
+  if (res < 0) {
+    return res;
+  }
+  if (block_crypt == nullptr) {
+    return 0;
+  }
+
+  // in case of a multipart upload, we need to know the part lengths to
+  // correctly decrypt across part boundaries
+  std::vector<size_t> parts_len;
+
+  // for replicated objects, the original part lengths are preserved in an xattr
+  if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
+    try {
+      auto p = i->second.cbegin();
+      using ceph::decode;
+      decode(parts_len, p);
+    } catch (const buffer::error&) {
+      ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
+      return -EIO;
+    }
+  } else {
+    // otherwise, we read the part lengths from the manifest
+    res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
+                                                      parts_len);
+    if (res < 0) {
+      return res;
     }
   }
-  return res;
+
+  *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
+      s, s->cct, cb, std::move(block_crypt),
+      std::move(parts_len), s->yield);
+  return 0;
 }
 int RGWGetObj_ObjStore_S3::verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) 
 {
@@ -1935,7 +1973,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
         s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
       if (fetchOwner == true) {
-        dump_owner(s, s->user->get_id(), s->user->get_display_name());
+        dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
       }
       s->formatter->close_section();
     }
@@ -2014,7 +2052,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
       s->formatter->dump_string("StorageClass", storage_class.c_str());
       if (fetchOwner == true) {
-        dump_owner(s, s->user->get_id(), s->user->get_display_name());
+        dump_owner(s, rgw_user(iter->meta.owner), iter->meta.owner_display_name);
       }
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
@@ -2516,8 +2554,15 @@ static inline void map_qs_metadata(req_state* s, bool crypto_too)
 
 int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
 {
-  if (!s->length)
-    return -ERR_LENGTH_REQUIRED;
+  if (!s->length) {
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    if (!encoding || strcmp(encoding, "chunked") != 0) {
+      ldout(s->cct, 20) << "neither length nor chunked encoding" << dendl;
+      return -ERR_LENGTH_REQUIRED;
+    }
+
+    chunked_upload = true;
+  }
 
   int ret;
 
@@ -2721,24 +2766,42 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
 {
   std::map<std::string, std::string> crypt_http_responses_unused;
 
-  int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
-  res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
-  if (res == 0) {
-    if (block_crypt != nullptr) {
-      auto f = std::unique_ptr<RGWGetObj_BlockDecrypt>(new RGWGetObj_BlockDecrypt(s, s->cct, cb, std::move(block_crypt)));
-      //RGWGetObj_BlockDecrypt* f = new RGWGetObj_BlockDecrypt(s->cct, cb, std::move(block_crypt));
-      if (f != nullptr) {
-        if (manifest_bl != nullptr) {
-          res = f->read_manifest(this, *manifest_bl);
-          if (res == 0) {
-            *filter = std::move(f);
-          }
-        }
-      }
+  int res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
+  if (res < 0) {
+    return res;
+  }
+  if (block_crypt == nullptr) {
+    return 0;
+  }
+
+  // in case of a multipart upload, we need to know the part lengths to
+  // correctly decrypt across part boundaries
+  std::vector<size_t> parts_len;
+
+  // for replicated objects, the original part lengths are preserved in an xattr
+  if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
+    try {
+      auto p = i->second.cbegin();
+      using ceph::decode;
+      decode(parts_len, p);
+    } catch (const buffer::error&) {
+      ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
+      return -EIO;
+    }
+  } else {
+    // otherwise, we read the part lengths from the manifest
+    res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
+                                                      parts_len);
+    if (res < 0) {
+      return res;
     }
   }
-  return res;
+
+  *filter = std::make_unique<RGWGetObj_BlockDecrypt>(
+      s, s->cct, cb, std::move(block_crypt),
+      std::move(parts_len), s->yield);
+  return 0;
 }
 
 int RGWPutObj_ObjStore_S3::get_encrypt_filter(
@@ -2759,7 +2822,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
        * We use crypto mode that configured as if we were decrypting. */
       res = rgw_s3_prepare_decrypt(s, obj->get_attrs(), &block_crypt, crypt_http_responses);
       if (res == 0 && block_crypt != nullptr)
-        filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
+        filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
     /* it is ok, to not have encryption at all */
   }
@@ -2768,7 +2831,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     std::unique_ptr<BlockCrypt> block_crypt;
     res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt, crypt_http_responses);
     if (res == 0 && block_crypt != nullptr) {
-      filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
+      filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
   }
   return res;
@@ -3316,7 +3379,7 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
   int res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt,
                                    crypt_http_responses);
   if (res == 0 && block_crypt != nullptr) {
-    filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt)));
+    filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
   }
   return res;
 }
@@ -3418,18 +3481,15 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   if_match = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_IF_NONE_MATCH");
 
-  src_tenant_name = s->src_tenant_name;
-  src_bucket_name = s->src_bucket_name;
-  dest_tenant_name = s->bucket->get_tenant();
-  dest_bucket_name = s->bucket->get_name();
-  dest_obj_name = s->object->get_name();
-
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
   }
 
-  copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  const char *copy_source_temp = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
+  if (copy_source_temp) {
+    copy_source = copy_source_temp;
+  }
   auto tmp_md_d = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
   if (tmp_md_d) {
     if (strcasecmp(tmp_md_d, "COPY") == 0) {
@@ -3447,9 +3507,9 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
   }
 
   if (source_zone.empty() &&
-      (dest_tenant_name.compare(src_tenant_name) == 0) &&
-      (dest_bucket_name.compare(src_bucket_name) == 0) &&
-      (dest_obj_name.compare(s->src_object->get_name()) == 0) &&
+      (s->bucket->get_tenant() == s->src_tenant_name) &&
+      (s->bucket->get_name() == s->src_bucket_name) &&
+      (s->object->get_name() == s->src_object->get_name()) &&
       s->src_object->get_instance().empty() &&
       (attrs_mod != rgw::sal::ATTRSMOD_REPLACE)) {
     need_to_check_storage_class = true;
@@ -3886,10 +3946,18 @@ void RGWSetRequestPayment_ObjStore_S3::send_response()
 
 int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
 {
+  int ret;
+
+  ret = get_encryption_defaults(s);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << ret << dendl;
+    return ret;
+  }
+
   RGWAccessControlPolicy_S3 s3policy(s->cct);
-  op_ret = create_s3_policy(s, driver, s3policy, s->owner);
-  if (op_ret < 0)
-    return op_ret;
+  ret = create_s3_policy(s, driver, s3policy, s->owner);
+  if (ret < 0)
+    return ret;
 
   policy = s3policy;
 
@@ -5703,10 +5771,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   /* Craft canonical query string. std::moving later so non-const here. */
   auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
 
+  /* Craft canonical method. */
+  auto canonical_method = rgw::auth::s3::get_v4_canonical_method(s);
+
   /* Craft canonical request. */
   auto canonical_req_hash = \
     rgw::auth::s3::get_v4_canon_req_hash(s->cct,
-                                         s->info.method,
+                                         std::move(canonical_method),
                                          std::move(canonical_uri),
                                          std::move(canonical_qs),
                                          std::move(*canonical_headers),
@@ -5920,8 +5991,9 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
       signature = auth_str.substr(pos + 1);
     }
 
-    if (s->info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
-      session_token = s->info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+    auto token = s->info.env->get_optional("HTTP_X_AMZ_SECURITY_TOKEN");
+    if (token) {
+      session_token = *token;
       if (session_token.size() == 0) {
         throw -EPERM;
       }
@@ -6168,7 +6240,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   if (driver->get_user_by_access_key(dpp, access_key_id, y, &user) < 0) {
       ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
-      return result_t::deny(-ERR_INVALID_ACCESS_KEY);
+      return result_t::reject(-ERR_INVALID_ACCESS_KEY);
   }
   //TODO: Uncomment, when we have a migration plan in place.
   /*else {
@@ -6182,7 +6254,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   const auto iter = user->get_info().access_keys.find(access_key_id);
   if (iter == std::end(user->get_info().access_keys)) {
     ldpp_dout(dpp, 0) << "ERROR: access key not encoded in user info" << dendl;
-    return result_t::deny(-EPERM);
+    return result_t::reject(-EPERM);
   }
   const RGWAccessKey& k = iter->second;
 
@@ -6198,7 +6270,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   ldpp_dout(dpp, 15) << "compare=" << compare << dendl;
 
   if (compare != 0) {
-    return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
+    return result_t::reject(-ERR_SIGNATURE_NO_MATCH);
   }
 
   auto apl = apl_factory->create_apl_local(cct, s, user->get_info(),
@@ -6392,14 +6464,15 @@ rgw::auth::s3::STSEngine::authenticate(
 bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   const req_state* s
 ) const noexcept {
-  if (s->op == OP_OPTIONS) {
-    return true;
-  }
-
   AwsVersion version;
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
+  /* If HTTP OPTIONS and no authentication provided using the
+   * anonymous engine is applicable */
+  if (s->op == OP_OPTIONS && version == AwsVersion::UNKNOWN) {
+    return true;
+  }
+
   return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
 }
-

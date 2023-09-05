@@ -12,6 +12,7 @@
 #include "common/ceph_json.h"
 
 #include <iostream>
+#include <cmath>
 
 using namespace std;
 
@@ -2348,7 +2349,9 @@ TEST_F(OSDMapTest, ReadBalanceScore1) {
         float fratio = 1. / (float)replica_count;
         for (int iter = 0 ; iter < 100 ; iter++) {  // run the test 100 times
           // Create random shuffle of OSDs
-          std::random_shuffle (osds.begin(), osds.end());
+          std::random_device seed;
+          std::default_random_engine generator(seed());
+          std::shuffle(osds.begin(), osds.end(), generator);
           for (uint i = 0 ; i < num_osds ; i++) {
             if ((float(i + 1) / float(num_osds)) < fratio) {
               ASSERT_TRUE(osds[i] < num_osds);
@@ -2443,12 +2446,273 @@ TEST_F(OSDMapTest, ReadBalanceScore2) {
 
   }
 
+TEST_F(OSDMapTest, read_balance_small_map) {
+  // Set up a map with 4 OSDs and default pools
+  set_up_map(4);
+
+  const vector<string> test_cases = {"basic", "prim_affinity"};
+  for (const auto & test : test_cases) {
+    if (test == "prim_affinity") {
+      // Make osd.0 off-limits for primaries by giving it prim affinity 0
+      OSDMap::Incremental pending_inc0(osdmap.get_epoch() + 1);
+      pending_inc0.new_primary_affinity[0] = 0;
+      osdmap.apply_incremental(pending_inc0);
+
+      // Ensure osd.0 has no primaries assigned to it
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd, acting_prims_by_osd;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd, &acting_prims_by_osd);
+      ASSERT_TRUE(prim_pgs_by_osd[0].size() == 0);
+      ASSERT_TRUE(acting_prims_by_osd[0].size() == 0);
+    }
+
+    // Make sure capacity is balanced first
+    set<int64_t> only_pools;
+    only_pools.insert(my_rep_pool);
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    osdmap.calc_pg_upmaps(g_ceph_context,
+                          0,
+                          100,
+                          only_pools,
+                          &pending_inc);
+    osdmap.apply_incremental(pending_inc);
+
+    // Get read balance score before balancing
+    OSDMap::read_balance_info_t rb_info;
+    auto rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rb_info);
+    ASSERT_TRUE(rc >= 0);
+    float read_balance_score_before = rb_info.adjusted_score;
+
+    // Calculate desired prim distributions to verify later
+    map<uint64_t,set<pg_t>> prim_pgs_by_osd_2, acting_prims_by_osd_2;
+    osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_2, &acting_prims_by_osd_2);
+    vector<uint64_t> osds_to_check;
+    for (const auto & [osd, pgs] : prim_pgs_by_osd_2) {
+      osds_to_check.push_back(osd);
+    }
+    map<uint64_t,float> desired_prim_dist;
+    rc = osdmap.calc_desired_primary_distribution(g_ceph_context, my_rep_pool,
+                                                  osds_to_check, desired_prim_dist);
+    ASSERT_TRUE(rc >= 0);
+
+    // Balance reads
+    OSDMap::Incremental pending_inc_2(osdmap.get_epoch()+1);
+    int num_changes = osdmap.balance_primaries(g_ceph_context, my_rep_pool, &pending_inc_2, osdmap);
+    osdmap.apply_incremental(pending_inc_2);
+
+    if (test == "prim_affinity") {
+      // Ensure osd.0 still has no primaries assigned to it
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd_3, acting_prims_by_osd_3;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_3, &acting_prims_by_osd_3);
+      ASSERT_TRUE(prim_pgs_by_osd_3[0].size() == 0);
+      ASSERT_TRUE(acting_prims_by_osd_3[0].size() == 0);
+    }
+
+    // Get read balance score after balancing
+    rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rb_info);
+    ASSERT_TRUE(rc >= 0);
+    float read_balance_score_after = rb_info.adjusted_score;
+
+    // Ensure the score hasn't gotten worse
+    ASSERT_TRUE(read_balance_score_after <= read_balance_score_before);
+
+    // Check for improvements
+    if (num_changes > 0) {
+      ASSERT_TRUE(read_balance_score_after < read_balance_score_before);
+
+      // Check num primaries for each OSD is within range
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd_4, acting_prims_by_osd_4;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_4, &acting_prims_by_osd_4);
+      for (const auto & [osd, primaries] : prim_pgs_by_osd_4) {
+        ASSERT_TRUE(primaries.size() >= floor(desired_prim_dist[osd] - 1));
+        ASSERT_TRUE(primaries.size() <= ceil(desired_prim_dist[osd] + 1));
+      }
+    }
+  }
+}
+
+TEST_F(OSDMapTest, read_balance_large_map) {
+  // Set up a map with 60 OSDs and default pools
+  set_up_map(60);
+
+  const vector<string> test_cases = {"basic", "prim_affinity"};
+  for (const auto & test : test_cases) {
+    if (test == "prim_affinity") {
+      // Make osd.0 off-limits for primaries by giving it prim affinity 0
+      OSDMap::Incremental pending_inc0(osdmap.get_epoch() + 1);
+      pending_inc0.new_primary_affinity[0] = 0;
+      osdmap.apply_incremental(pending_inc0);
+
+      // Ensure osd.0 has no primaries assigned to it
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd, acting_prims_by_osd;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd, &acting_prims_by_osd);
+      ASSERT_TRUE(prim_pgs_by_osd[0].size() == 0);
+      ASSERT_TRUE(acting_prims_by_osd[0].size() == 0);
+    }
+
+    // Make sure capacity is balanced first
+    set<int64_t> only_pools;
+    only_pools.insert(my_rep_pool);
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    osdmap.calc_pg_upmaps(g_ceph_context,
+                          0,
+                          100,
+                          only_pools,
+                          &pending_inc);
+    osdmap.apply_incremental(pending_inc);
+  
+    // Get read balance score before balancing
+    OSDMap::read_balance_info_t rb_info;
+    auto rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rb_info);
+    ASSERT_TRUE(rc >= 0);
+    float read_balance_score_before = rb_info.adjusted_score;
+
+    // Calculate desired prim distributions to verify later
+    map<uint64_t,set<pg_t>> prim_pgs_by_osd_2, acting_prims_by_osd_2;
+    osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_2, &acting_prims_by_osd_2);
+    vector<uint64_t> osds_to_check;
+    for (auto [osd, pgs] : prim_pgs_by_osd_2) {
+      osds_to_check.push_back(osd);
+    }
+    map<uint64_t,float> desired_prim_dist;
+    rc = osdmap.calc_desired_primary_distribution(g_ceph_context, my_rep_pool,
+                                                  osds_to_check, desired_prim_dist);
+    ASSERT_TRUE(rc >= 0);
+
+    // Balance reads
+    OSDMap::Incremental pending_inc_2(osdmap.get_epoch()+1);
+    int num_changes = osdmap.balance_primaries(g_ceph_context, my_rep_pool, &pending_inc_2, osdmap);
+    osdmap.apply_incremental(pending_inc_2);
+
+    if (test == "prim_affinity") {
+      // Ensure osd.0 still has no primaries assigned to it
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd_3, acting_prims_by_osd_3;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_3, &acting_prims_by_osd_3);
+      ASSERT_TRUE(prim_pgs_by_osd_3[0].size() == 0);
+      ASSERT_TRUE(acting_prims_by_osd_3[0].size() == 0);
+    }
+  
+    // Get read balance score after balancing
+    rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rb_info);
+    ASSERT_TRUE(rc >= 0);
+    float read_balance_score_after = rb_info.adjusted_score;
+
+    // Ensure the score hasn't gotten worse
+    ASSERT_TRUE(read_balance_score_after <= read_balance_score_before);
+
+    // Check for improvements
+    if (num_changes > 0) {
+      ASSERT_TRUE(read_balance_score_after < read_balance_score_before);
+
+      // Check num primaries for each OSD is within range
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd_4, acting_prims_by_osd_4;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_4, &acting_prims_by_osd_4);
+      for (const auto & [osd, primaries] : prim_pgs_by_osd_4) {
+        ASSERT_TRUE(primaries.size() >= floor(desired_prim_dist[osd] - 1));
+        ASSERT_TRUE(primaries.size() <= ceil(desired_prim_dist[osd] + 1));
+      }
+    }
+  }
+}
+
+TEST_F(OSDMapTest, read_balance_random_map) {
+  // Set up map with random number of OSDs
+  std::srand ( unsigned ( std::time(0) ) );
+  uint num_osds = 3 + (rand() % 10);
+  ASSERT_TRUE(num_osds >= 3);
+  set_up_map(num_osds);
+
+  const vector<string> test_cases = {"basic", "prim_affinity"};
+  for (const auto & test : test_cases) {
+    uint rand_osd = rand() % num_osds;
+    if (test == "prim_affinity") {
+      // Make a random OSD off-limits for primaries by giving it prim affinity 0
+      ASSERT_TRUE(rand_osd < num_osds);
+      OSDMap::Incremental pending_inc0(osdmap.get_epoch() + 1);
+      pending_inc0.new_primary_affinity[rand_osd] = 0;
+      osdmap.apply_incremental(pending_inc0);
+
+      // Ensure the random OSD has no primaries assigned to it
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd, acting_prims_by_osd;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd, &acting_prims_by_osd);
+      ASSERT_TRUE(prim_pgs_by_osd[rand_osd].size() == 0);
+      ASSERT_TRUE(acting_prims_by_osd[rand_osd].size() == 0);
+    }
+
+    // Make sure capacity is balanced first
+    set<int64_t> only_pools;
+    only_pools.insert(my_rep_pool);
+    OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
+    osdmap.calc_pg_upmaps(g_ceph_context,
+                          0,
+                          100,
+                          only_pools,
+                          &pending_inc);
+    osdmap.apply_incremental(pending_inc);
+
+    // Get read balance score before balancing
+    OSDMap::read_balance_info_t rb_info;
+    auto rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rb_info);
+    ASSERT_TRUE(rc >= 0);
+    float read_balance_score_before = rb_info.adjusted_score;
+
+    // Calculate desired prim distributions to verify later
+    map<uint64_t,set<pg_t>> prim_pgs_by_osd_2, acting_prims_by_osd_2;
+    osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_2, &acting_prims_by_osd_2);
+    vector<uint64_t> osds_to_check;
+    for (const auto & [osd, pgs] : prim_pgs_by_osd_2) {
+      osds_to_check.push_back(osd);
+    }
+    map<uint64_t,float> desired_prim_dist;
+    rc = osdmap.calc_desired_primary_distribution(g_ceph_context, my_rep_pool,
+                                                  osds_to_check, desired_prim_dist);
+    ASSERT_TRUE(rc >= 0);
+
+    // Balance reads
+    OSDMap::Incremental pending_inc_2(osdmap.get_epoch()+1);
+    int num_changes = osdmap.balance_primaries(g_ceph_context, my_rep_pool, &pending_inc_2, osdmap);
+    osdmap.apply_incremental(pending_inc_2);
+
+    if (test == "prim_affinity") {
+      // Ensure the random OSD still has no primaries assigned to it
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd_3, acting_prims_by_osd_3;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_3, &acting_prims_by_osd_3);
+      ASSERT_TRUE(prim_pgs_by_osd_3[rand_osd].size() == 0);
+      ASSERT_TRUE(acting_prims_by_osd_3[rand_osd].size() == 0);
+    }
+
+    // Get read balance score after balancing
+    rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rb_info);
+    ASSERT_TRUE(rc >= 0);
+    float read_balance_score_after = rb_info.adjusted_score;
+
+    // Ensure the score hasn't gotten worse
+    ASSERT_TRUE(read_balance_score_after <= read_balance_score_before);
+
+    // Check for improvements
+    if (num_changes > 0) {
+      ASSERT_TRUE(read_balance_score_after < read_balance_score_before);
+
+      // Check num primaries for each OSD is within range
+      map<uint64_t,set<pg_t>> prim_pgs_by_osd_4, acting_prims_by_osd_4;
+      osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd_4, &acting_prims_by_osd_4);
+      for (auto [osd, primaries] : prim_pgs_by_osd_4) {
+        ASSERT_TRUE(primaries.size() >= floor(desired_prim_dist[osd] - 1));
+        ASSERT_TRUE(primaries.size() <= ceil(desired_prim_dist[osd] + 1));
+      }
+      for (auto [osd, primaries] : prim_pgs_by_osd_4) {
+        ASSERT_TRUE(primaries.size() >= floor(desired_prim_dist[osd] - 1));
+        ASSERT_TRUE(primaries.size() <= ceil(desired_prim_dist[osd] + 1));
+      }
+    }
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,
   ::testing::Values(
     std::make_pair<int, int>(0, 1), // chooseleaf firstn 0 host
-    std::make_pair<int, int>(3, 1), // chooseleaf firstn 3 host
+   std::make_pair<int, int>(3, 1), // chooseleaf firstn 3 host
     std::make_pair<int, int>(0, 0), // chooseleaf firstn 0 osd
     std::make_pair<int, int>(3, 0)  // chooseleaf firstn 3 osd
   )

@@ -86,7 +86,7 @@ struct cache_test_t : public seastar_test_suite_t {
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, 1));
+        segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
       epm.reset(new ExtentPlacementManager());
       cache.reset(new Cache(*epm));

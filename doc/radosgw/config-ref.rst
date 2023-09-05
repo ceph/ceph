@@ -79,7 +79,7 @@ workload with a smaller number of buckets but higher number of objects (hundreds
 per bucket you would consider decreasing :confval:`rgw_lc_max_wp_worker` from the default value of 3.
 
 .. note:: When looking to tune either of these specific values please validate the
-       current Cluster performance and Ceph Object Gateway utilization before increasing.
+   current Cluster performance and Ceph Object Gateway utilization before increasing.
 
 Garbage Collection Settings
 ===========================
@@ -97,8 +97,9 @@ To view the queue of objects awaiting garbage collection, execute the following
 
    radosgw-admin gc list
 
-.. note:: specify ``--include-all`` to list all entries, including unexpired
-  
+.. note:: Specify ``--include-all`` to list all entries, including unexpired
+   Garbage Collection objects.
+
 Garbage collection is a background activity that may
 execute continuously or during times of low loads, depending upon how the
 administrator configures the Ceph Object Gateway. By default, the Ceph Object
@@ -121,7 +122,9 @@ configuration parameters.
 
 :Tuning Garbage Collection for Delete Heavy Workloads:
 
-As an initial step towards tuning Ceph Garbage Collection to be more aggressive the following options are suggested to be increased from their default configuration values::
+As an initial step towards tuning Ceph Garbage Collection to be more
+aggressive the following options are suggested to be increased from their
+default configuration values::
 
   rgw_gc_max_concurrent_io = 20
   rgw_gc_max_trim_chunk = 64
@@ -270,7 +273,7 @@ to support future methods of scheduling requests.
 Currently the scheduler defaults to a throttler which throttles the active
 connections to a configured limit. QoS based on mClock is currently in an
 *experimental* phase and not recommended for production yet. Current
-implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
+implementation of *dmclock_client* op queue divides RGW ops on admin, auth
 (swift auth, sts) metadata & data requests.
 
 
@@ -296,3 +299,38 @@ implementation of *dmclock_client* op queue divides RGW Ops on admin, auth
 .. _Barbican: ../barbican
 .. _Encryption: ../encryption
 .. _HTTP Frontends: ../frontends
+
+D4N Settings
+============
+
+D4N is a caching architecture that utilizes Redis to speed up S3 object storage 
+operations by establishing shared databases between different RGW access points.
+
+Currently, the architecture can only function on one Redis instance at a time. 
+The address is configurable and can be changed by accessing the parameters 
+below.
+
+.. confval:: rgw_d4n_host
+.. confval:: rgw_d4n_port
+
+Topic persistency settings
+==========================
+
+Topic persistency will persistently push the notification until it succeeds.
+For more information, see `Bucket Notifications`_.
+
+The default behavior is to push indefinitely and as frequently as possible.
+With these settings you can control how long and how often to retry an
+unsuccessful notification. How long to persistently push can be controlled
+by providing maximum time of retention or maximum amount of retries.
+Frequency of persistent push retries can be controlled with the sleep duration
+parameter.
+
+All of these values have default value 0 (persistent retention is indefinite,
+and retried as frequently as possible).
+
+.. confval:: rgw_topic_persistency_time_to_live
+.. confval:: rgw_topic_persistency_max_retries
+.. confval:: rgw_topic_persistency_sleep_duration
+
+.. _Bucket Notifications: ../notifications

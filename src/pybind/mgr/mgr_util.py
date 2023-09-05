@@ -3,6 +3,7 @@ import os
 if 'UNITTEST' in os.environ:
     import tests
 
+import bcrypt
 import cephfs
 import contextlib
 import datetime
@@ -166,7 +167,7 @@ class CephfsConnectionPool(object):
             logger.debug("CephFS mounting...")
             self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
             logger.debug("Connection to cephfs '{0}' complete".format(self.fs_name))
-            self.mgr._ceph_register_client(self.fs.get_addrs())
+            self.mgr._ceph_register_client(None, self.fs.get_addrs(), False)
 
         def disconnect(self) -> None:
             try:
@@ -175,7 +176,7 @@ class CephfsConnectionPool(object):
                 logger.info("disconnecting from cephfs '{0}'".format(self.fs_name))
                 addrs = self.fs.get_addrs()
                 self.fs.shutdown()
-                self.mgr._ceph_unregister_client(addrs)
+                self.mgr._ceph_unregister_client(None, addrs)
                 self.fs = None
             except Exception as e:
                 logger.debug("disconnect: ({0})".format(e))
@@ -296,16 +297,10 @@ class CephfsConnectionPool(object):
 class CephfsClient(Generic[Module_T]):
     def __init__(self, mgr: Module_T):
         self.mgr = mgr
-        self.stopping = Event()
         self.connection_pool = CephfsConnectionPool(self.mgr)
-
-    def is_stopping(self) -> bool:
-        return self.stopping.is_set()
 
     def shutdown(self) -> None:
         logger.info("shutting down")
-        # first, note that we're shutting down
-        self.stopping.set()
         # second, delete all libcephfs handles from connection pool
         self.connection_pool.del_all_connections()
 
@@ -348,10 +343,6 @@ def open_filesystem(fsc: CephfsClient, fs_name: str) -> Generator["cephfs.LibCep
     :param fs_name: fs name
     :return: yields a fs handle (ceph filesystem handle)
     """
-    if fsc.is_stopping():
-        raise CephfsConnectionException(-errno.ESHUTDOWN,
-                                        "shutdown in progress")
-
     fs_handle = fsc.connection_pool.get_fs_handle(fs_name)
     try:
         yield fs_handle
@@ -873,3 +864,13 @@ def profile_method(skip_attribute: bool = False) -> Callable[[Callable[..., T]],
             return result
         return wrapper
     return outer
+
+
+def password_hash(password: Optional[str], salt_password: Optional[str] = None) -> Optional[str]:
+    if not password:
+        return None
+    if not salt_password:
+        salt = bcrypt.gensalt()
+    else:
+        salt = salt_password.encode('utf8')
+    return bcrypt.hashpw(password.encode('utf8'), salt).decode('utf8')

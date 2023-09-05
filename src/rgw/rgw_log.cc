@@ -171,7 +171,7 @@ public:
     num_entries = 0;
     lock.unlock();
 
-    driver->log_usage(this, old_map);
+    driver->log_usage(this, old_map, null_yield);
   }
 
   CephContext *get_cct() const override { return cct; }
@@ -605,13 +605,9 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
     uri.append(s->info.env->get("REQUEST_URI"));
   }
 
-  if (s->info.env->exists("QUERY_STRING")) {
-    const char* qs = s->info.env->get("QUERY_STRING");
-    if(qs && (*qs != '\0')) {
-      uri.append("?");
-      uri.append(qs);
-    }
-  }
+  /* Formerly, we appended QUERY_STRING to uri, but in RGW, QUERY_STRING is a
+   * substring of REQUEST_URI--appending qs to uri here duplicates qs to the
+   * ops log */
 
   if (s->info.env->exists("HTTP_VERSION")) {
     uri.append(" ");

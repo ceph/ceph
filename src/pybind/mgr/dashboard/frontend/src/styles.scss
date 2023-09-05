@@ -26,6 +26,7 @@ $grid-breakpoints: (
 @import '~bootstrap/scss/bootstrap';
 @import '~fork-awesome/scss/fork-awesome';
 @import 'app/ceph/dashboard/info-card/info-card-popover.scss';
+@import 'app/ceph/rgw/rgw-overview-dashboard/rgw-overview-card-popover.scss';
 @import './src/styles/bootstrap-extends';
 
 @import './src/styles/ceph-custom/basics';
@@ -218,16 +219,23 @@ a.btn-light {
   @extend .badge, .bg-dark;
 }
 
-json-schema-form {
-  .help-block {
-    @extend .invalid-feedback;
-  }
-
+formly-form {
   .ng-touched.ng-invalid {
     @extend .is-invalid;
   }
 
   .ng-touched.ng-valid {
     @extend .is-valid;
+  }
+
+  .form-label {
+    @extend .cd-col-form-label;
+    text-align: start;
+    white-space: nowrap;
+    width: fit-content;
+
+    span[aria-hidden='true'] {
+      color: $danger;
+    }
   }
 }

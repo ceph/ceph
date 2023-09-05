@@ -39,6 +39,14 @@ class MgrCluster(CephCluster):
         return json.loads(
             self.mon_manager.raw_cluster_cmd("mgr", "dump", "--format=json-pretty"))
 
+    def get_registered_clients(self, name, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        for c in mgr_map['active_clients']:
+            if c['name'] == name:
+                return c['addrvec']
+        return None
+
     def get_active_id(self):
         return self.get_mgr_map()["active_name"]
 
@@ -104,7 +112,11 @@ class MgrTestCase(CephTestCase):
             raise SkipTest(
                 "Only have {0} manager daemons, {1} are required".format(
                     len(cls.mgr_cluster.mgr_ids), cls.MGRS_REQUIRED))
-
+        
+        # We expect laggy OSDs in this testing environment so turn off this warning.
+        # See https://tracker.ceph.com/issues/61907
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd('config', 'set', 'mds',
+                                                    'defer_client_eviction_on_laggy_osds', 'false')
         cls.setup_mgrs()
 
     @classmethod

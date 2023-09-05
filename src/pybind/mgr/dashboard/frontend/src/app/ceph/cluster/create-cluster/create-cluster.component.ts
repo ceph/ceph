@@ -20,6 +20,7 @@ import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
 import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeploymentOptions } from '~/app/shared/models/osd-deployment-options';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -52,6 +53,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   deploymentOption: DeploymentOptions;
   selectedOption = {};
   simpleDeployment = true;
+  stepsToSkip: { [steps: string]: boolean } = {};
 
   @Output()
   submitAction = new EventEmitter();
@@ -80,7 +82,11 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.osdService.getDeploymentOptions().subscribe((options) => {
       this.deploymentOption = options;
-      this.selectedOption = { option: options.recommended_option };
+      this.selectedOption = { option: options.recommended_option, encrypted: false };
+    });
+
+    this.stepTitles.forEach((stepTitle) => {
+      this.stepsToSkip[stepTitle] = false;
     });
   }
 
@@ -113,71 +119,76 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
   }
 
   onSubmit() {
-    this.hostService.list('false').subscribe((hosts) => {
-      hosts.forEach((host) => {
-        const index = host['labels'].indexOf('_no_schedule', 0);
-        if (index > -1) {
-          host['labels'].splice(index, 1);
-          this.observables.push(this.hostService.update(host['hostname'], true, host['labels']));
-        }
-      });
-      forkJoin(this.observables)
-        .pipe(
-          finalize(() =>
-            this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
-              this.notificationService.show(
-                NotificationType.success,
-                $localize`Cluster expansion was successful`
-              );
-              this.router.navigate(['/dashboard']);
-            })
-          )
-        )
-        .subscribe({
-          error: (error) => error.preventDefault()
-        });
-    });
-
-    if (this.driveGroup) {
-      const user = this.authStorageService.getUsername();
-      this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
-      this.driveGroups.push(this.driveGroup.spec);
-    }
-
-    if (this.simpleDeployment) {
-      const title = this.deploymentOption?.options[this.selectedOption['option']].title;
-      const trackingId = $localize`${title} deployment`;
-      this.taskWrapper
-        .wrapTaskAroundCall({
-          task: new FinishedTask('osd/' + URLVerbs.CREATE, {
-            tracking_id: trackingId
-          }),
-          call: this.osdService.create([this.selectedOption], trackingId, 'predefined')
-        })
-        .subscribe({
-          error: (error) => error.preventDefault(),
-          complete: () => {
-            this.submitAction.emit();
+    if (!this.stepsToSkip['Add Hosts']) {
+      const hostContext = new CdTableFetchDataContext(() => undefined);
+      this.hostService.list(hostContext.toParams(), 'false').subscribe((hosts) => {
+        hosts.forEach((host) => {
+          const index = host['labels'].indexOf('_no_schedule', 0);
+          if (index > -1) {
+            host['labels'].splice(index, 1);
+            this.observables.push(this.hostService.update(host['hostname'], true, host['labels']));
           }
         });
-    } else {
-      if (this.osdService.osdDevices['totalDevices'] > 0) {
-        this.driveGroup.setFeature('encrypted', this.selectedOption['encrypted']);
-        const trackingId = _.join(_.map(this.driveGroups, 'service_id'), ', ');
+        forkJoin(this.observables)
+          .pipe(
+            finalize(() =>
+              this.clusterService.updateStatus('POST_INSTALLED').subscribe(() => {
+                this.notificationService.show(
+                  NotificationType.success,
+                  $localize`Cluster expansion was successful`
+                );
+                this.router.navigate(['/dashboard']);
+              })
+            )
+          )
+          .subscribe({
+            error: (error) => error.preventDefault()
+          });
+      });
+    }
+
+    if (!this.stepsToSkip['Create OSDs']) {
+      if (this.driveGroup) {
+        const user = this.authStorageService.getUsername();
+        this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
+        this.driveGroups.push(this.driveGroup.spec);
+      }
+
+      if (this.simpleDeployment) {
+        const title = this.deploymentOption?.options[this.selectedOption['option']].title;
+        const trackingId = $localize`${title} deployment`;
         this.taskWrapper
           .wrapTaskAroundCall({
             task: new FinishedTask('osd/' + URLVerbs.CREATE, {
               tracking_id: trackingId
             }),
-            call: this.osdService.create(this.driveGroups, trackingId)
+            call: this.osdService.create([this.selectedOption], trackingId, 'predefined')
           })
           .subscribe({
             error: (error) => error.preventDefault(),
             complete: () => {
               this.submitAction.emit();
-              this.osdService.osdDevices = [];
             }
           });
+      } else {
+        if (this.osdService.osdDevices['totalDevices'] > 0) {
+          this.driveGroup.setFeature('encrypted', this.selectedOption['encrypted']);
+          const trackingId = _.join(_.map(this.driveGroups, 'service_id'), ', ');
+          this.taskWrapper
+            .wrapTaskAroundCall({
+              task: new FinishedTask('osd/' + URLVerbs.CREATE, {
+                tracking_id: trackingId
+              }),
+              call: this.osdService.create(this.driveGroups, trackingId)
+            })
+            .subscribe({
+              error: (error) => error.preventDefault(),
+              complete: () => {
+                this.submitAction.emit();
+                this.osdService.osdDevices = [];
+              }
+            });
+        }
       }
     }
   }
@@ -211,6 +222,12 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
     } else {
       this.router.navigate(['/dashboard']);
     }
+  }
+
+  onSkip() {
+    const stepTitle = this.stepTitles[this.currentStep.stepIndex - 1];
+    this.stepsToSkip[stepTitle] = true;
+    this.onNextStep();
   }
 
   showSubmitButtonLabel() {

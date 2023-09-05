@@ -17,8 +17,10 @@
 #include <string.h>
 #include <string>
 
+#include "include/Context.h"
 #include "auth/Crypto.h"
 #include "client/Client.h"
+#include "client/Inode.h"
 #include "librados/RadosClient.h"
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
@@ -28,6 +30,7 @@
 #include "mon/MonClient.h"
 #include "include/str_list.h"
 #include "include/stringify.h"
+#include "include/object.h"
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/ceph_assert.h"
@@ -685,6 +688,124 @@ extern "C" int ceph_readdirplus_r(struct ceph_mount_info *cmount, struct ceph_di
   if (flags & ~CEPH_REQ_FLAG_MASK)
     return -CEPHFS_EINVAL;
   return cmount->get_client()->readdirplus_r(reinterpret_cast<dir_result_t*>(dirp), de, stx, want, flags, out);
+}
+
+extern "C" int ceph_open_snapdiff(struct ceph_mount_info* cmount,
+                                  const char* root_path,
+                                  const char* rel_path,
+                                  const char* snap1,
+                                  const char* snap2,
+                                  struct ceph_snapdiff_info* out)
+{
+  if (!cmount->is_mounted()) {
+    /* we set errno to signal errors. */
+    errno = ENOTCONN;
+    return -errno;
+  }
+  if (!out || !root_path || !rel_path ||
+      !snap1 || !*snap1 || !snap2 || !*snap2) {
+    errno = EINVAL;
+    return -errno;
+  }
+  out->cmount = cmount;
+  out->dir1 = out->dir_aux = nullptr;
+
+  char full_path1[PATH_MAX];
+  char snapdir[PATH_MAX];
+  cmount->conf_get("client_snapdir", snapdir, sizeof(snapdir) - 1);
+  int n = snprintf(full_path1, PATH_MAX,
+    "%s/%s/%s/%s", root_path, snapdir, snap1, rel_path);
+  if (n < 0 || n == PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return -errno;
+  }
+  char full_path2[PATH_MAX];
+  n = snprintf(full_path2, PATH_MAX,
+    "%s/%s/%s/%s", root_path, snapdir, snap2, rel_path);
+  if (n < 0 || n == PATH_MAX) {
+    errno = ENAMETOOLONG;
+    return -errno;
+  }
+
+  int r = ceph_opendir(cmount, full_path1, &(out->dir1));
+  if (r != 0) {
+    //it's OK to have one of the snap paths absent - attempting another one
+    r = ceph_opendir(cmount, full_path2, &(out->dir1));
+    if (r != 0) {
+      // both snaps are absent, giving up
+      errno = ENOENT;
+      return -errno;
+    }
+    std::swap(snap1, snap2); // will use snap1 to learn snap_other below
+  } else {
+    // trying to open second snapshot to learn snapid and
+    // get the entry loaded into the client cache if any.
+    r = ceph_opendir(cmount, full_path2, &(out->dir_aux));
+    //paranoic, rely on this value below
+    out->dir_aux = r == 0 ? out->dir_aux : nullptr;
+  }
+  if (!out->dir_aux) {
+    // now trying to learn the second snapshot's id by using snapshot's root
+    n = snprintf(full_path2, PATH_MAX,
+        "%s/%s/%s", root_path, snapdir, snap2);
+    ceph_assert(n > 0 && n < PATH_MAX); //we've already checked above
+                                        //that longer string fits.
+                                        // Hence unlikely to assert
+    r = ceph_opendir(cmount, full_path2, &(out->dir_aux));
+    if (r != 0) {
+      goto close_err;
+    }
+  }
+  return 0;
+
+close_err:
+  ceph_close_snapdiff(out);
+  return r;
+}
+
+extern "C" int ceph_readdir_snapdiff(struct ceph_snapdiff_info* snapdiff,
+                                     struct ceph_snapdiff_entry_t* out)
+{
+  if (!snapdiff->cmount->is_mounted()) {
+    /* also sets errno to signal errors. */
+    errno = ENOTCONN;
+    return -errno;
+  }
+  dir_result_t* d1 = reinterpret_cast<dir_result_t*>(snapdiff->dir1);
+  dir_result_t* d2 = reinterpret_cast<dir_result_t*>(snapdiff->dir_aux);
+  if (!d1 || !d2 || !d1->inode || !d2->inode) {
+    errno = EINVAL;
+    return -errno;
+  }
+  snapid_t snapid;
+  int r = snapdiff->cmount->get_client()->readdir_snapdiff(
+    d1,
+    d2->inode->snapid,
+    &(out->dir_entry),
+    &snapid);
+  if (r >= 0) {
+    // converting snapid_t to uint64_t to avoid snapid_t exposure
+    out->snapid = snapid;
+  }
+  return r;
+}
+
+extern "C" int ceph_close_snapdiff(struct ceph_snapdiff_info* snapdiff)
+{
+  if (!snapdiff->cmount || !snapdiff->cmount->is_mounted()) {
+    /* also sets errno to signal errors. */
+    errno = ENOTCONN;
+    return -errno;
+  }
+  if (snapdiff->dir_aux) {
+    ceph_closedir(snapdiff->cmount, snapdiff->dir_aux);
+  }
+  if (snapdiff->dir1) {
+    ceph_closedir(snapdiff->cmount, snapdiff->dir1);
+  }
+  snapdiff->cmount = nullptr;
+  snapdiff->dir1 = snapdiff->dir_aux = nullptr;
+  return 0;
 }
 
 extern "C" int ceph_getdents(struct ceph_mount_info *cmount, struct ceph_dir_result *dirp,
@@ -1896,6 +2017,33 @@ extern "C" int64_t ceph_ll_writev(class ceph_mount_info *cmount,
 				  int iovcnt, int64_t off)
 {
   return (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
+}
+
+class LL_Onfinish : public Context {
+public:
+  LL_Onfinish(struct ceph_ll_io_info *io_info)
+    : io_info(io_info) {}
+  bufferlist bl;
+private:
+  struct ceph_ll_io_info *io_info;
+  void finish(int r) override {
+    if (!io_info->write && r > 0) {
+      copy_bufferlist_to_iovec(io_info->iov, io_info->iovcnt, &bl, r);
+    }
+    io_info->result = r;
+    io_info->callback(io_info);
+  }
+};
+
+extern "C" int64_t ceph_ll_nonblocking_readv_writev(class ceph_mount_info *cmount,
+						    struct ceph_ll_io_info *io_info)
+{
+  LL_Onfinish *onfinish = new LL_Onfinish(io_info);
+
+  return (cmount->get_client()->ll_preadv_pwritev(
+			io_info->fh, io_info->iov, io_info->iovcnt,
+			io_info->off, io_info->write, onfinish, &onfinish->bl,
+			io_info->fsync, io_info->syncdataonly));
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

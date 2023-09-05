@@ -31,9 +31,12 @@ enum {
   l_bluefs_num_files,
   l_bluefs_log_bytes,
   l_bluefs_log_compactions,
+  l_bluefs_log_write_count,
   l_bluefs_logged_bytes,
   l_bluefs_files_written_wal,
   l_bluefs_files_written_sst,
+  l_bluefs_write_count_wal,
+  l_bluefs_write_count_sst,
   l_bluefs_bytes_written_wal,
   l_bluefs_bytes_written_sst,
   l_bluefs_bytes_written_slow,
@@ -61,6 +64,9 @@ enum {
   l_bluefs_read_disk_bytes_slow,
   l_bluefs_read_prefetch_count,
   l_bluefs_read_prefetch_bytes,
+  l_bluefs_write_count,
+  l_bluefs_write_disk_count,
+  l_bluefs_write_bytes,
   l_bluefs_compaction_lat,
   l_bluefs_compaction_lock_lat,
   l_bluefs_alloc_shared_dev_fallbacks,
@@ -447,15 +453,14 @@ private:
 #endif
 
   int64_t _maybe_extend_log();
-  void _extend_log();
+  void _extend_log(uint64_t amount);
   uint64_t _log_advance_seq();
   void _consume_dirty(uint64_t seq);
   void _clear_dirty_set_stable_D(uint64_t seq_stable);
   void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
 
-  void _flush_and_sync_log_core(int64_t available_runway);
-  int _flush_and_sync_log_jump_D(uint64_t jump_to,
-			       int64_t available_runway);
+  void _flush_and_sync_log_core();
+  int _flush_and_sync_log_jump_D(uint64_t jump_to);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
   uint64_t _estimate_transaction_size(bluefs_transaction_t* t);

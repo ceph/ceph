@@ -44,7 +44,7 @@ void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
   name = prefix + buf;
 }
 
-int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl) {
+int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl, optional_yield y) {
   if (!svc.zone->need_to_log_metadata())
     return 0;
 
@@ -54,7 +54,7 @@ int RGWMetadataLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_
   rgw_shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
   mark_modified(shard_id);
   real_time now = real_clock::now();
-  return svc.cls->timelog.add(dpp, oid, now, section, key, bl, null_yield);
+  return svc.cls->timelog.add(dpp, oid, now, section, key, bl, y);
 }
 
 int RGWMetadataLog::get_shard_id(const string& hash_key, int *shard_id)
@@ -98,7 +98,8 @@ int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
 				 int max_entries,
 				 list<cls_log_entry>& entries,
 				 string *last_marker,
-				 bool *truncated) {
+				 bool *truncated,
+				 optional_yield y) {
   LogListCtx *ctx = static_cast<LogListCtx *>(handle);
 
   if (!max_entries) {
@@ -109,7 +110,7 @@ int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
   std::string next_marker;
   int ret = svc.cls->timelog.list(dpp, ctx->cur_oid, ctx->from_time, ctx->end_time,
                                   max_entries, entries, ctx->marker,
-                                  &next_marker, truncated, null_yield);
+                                  &next_marker, truncated, y);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -124,14 +125,14 @@ int RGWMetadataLog::list_entries(const DoutPrefixProvider *dpp, void *handle,
   return 0;
 }
 
-int RGWMetadataLog::get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info)
+int RGWMetadataLog::get_info(const DoutPrefixProvider *dpp, int shard_id, RGWMetadataLogInfo *info, optional_yield y)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
   cls_log_header header;
 
-  int ret = svc.cls->timelog.info(dpp, oid, &header, null_yield);
+  int ret = svc.cls->timelog.info(dpp, oid, &header, y);
   if ((ret < 0) && (ret != -ENOENT))
     return ret;
 
@@ -173,13 +174,13 @@ int RGWMetadataLog::get_info_async(const DoutPrefixProvider *dpp, int shard_id, 
 }
 
 int RGWMetadataLog::trim(const DoutPrefixProvider *dpp, int shard_id, const real_time& from_time, const real_time& end_time,
-                         const string& start_marker, const string& end_marker)
+                         const string& start_marker, const string& end_marker, optional_yield y)
 {
   string oid;
   get_shard_oid(shard_id, oid);
 
   return svc.cls->timelog.trim(dpp, oid, from_time, end_time, start_marker,
-                               end_marker, nullptr, null_yield);
+                               end_marker, nullptr, y);
 }
   
 int RGWMetadataLog::lock_exclusive(const DoutPrefixProvider *dpp, int shard_id, timespan duration, string& zone_id, string& owner_id) {

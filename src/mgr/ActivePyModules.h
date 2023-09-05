@@ -158,7 +158,7 @@ public:
   void clear_all_progress_events();
   void get_progress_events(std::map<std::string,ProgressEvent>* events);
 
-  void register_client(std::string_view name, std::string addrs);
+  void register_client(std::string_view name, std::string addrs, bool replace);
   void unregister_client(std::string_view name, std::string addrs);
 
   void config_notify();
@@ -188,6 +188,10 @@ public:
   void notify_all(const std::string &notify_type,
                   const std::string &notify_id);
   void notify_all(const LogEntry &log_entry);
+
+  auto& get_module_finisher(const std::string &name) {
+    return modules.at(name)->finisher;
+  }
 
   bool is_pending(std::string_view name) const {
     return pending_modules.count(name) > 0;

@@ -446,7 +446,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
                        ObjectWriteOperation *op) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   TestObjectOperationImpl *ops = reinterpret_cast<TestObjectOperationImpl*>(op->impl);
-  return ctx->aio_operate(oid, *ops, c->pc, NULL, 0);
+  return ctx->aio_operate(oid, *ops, c->pc, nullptr, nullptr, 0);
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
@@ -462,7 +462,7 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
     snv[i] = snaps[i];
   SnapContext snapc(seq, snv);
 
-  return ctx->aio_operate(oid, *ops, c->pc, &snapc, flags);
+  return ctx->aio_operate(oid, *ops, c->pc, &snapc, nullptr, flags);
 }
 
 int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,

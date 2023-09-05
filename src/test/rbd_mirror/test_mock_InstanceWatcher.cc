@@ -362,7 +362,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireRelease) {
   expect_acquire_lock(mock_managed_lock, 0);
   ASSERT_EQ(0, instance_watcher2->init());
 
-  // Acquire Image on the the same instance
+  // Acquire Image on the same instance
   EXPECT_CALL(mock_instance_replayer1, acquire_image(instance_watcher1, "gid",
                                                      _))
       .WillOnce(WithArg<2>(CompleteContext(0)));
@@ -378,7 +378,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireRelease) {
   instance_watcher1->notify_image_acquire(instance_id2, "gid", &on_acquire2);
   ASSERT_EQ(0, on_acquire2.wait());
 
-  // Release Image on the the same instance
+  // Release Image on the same instance
   EXPECT_CALL(mock_instance_replayer1, release_image("gid", _))
       .WillOnce(WithArg<1>(CompleteContext(0)));
   C_SaferCond on_release1;

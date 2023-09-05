@@ -49,7 +49,7 @@ ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
 }
 
-ClientRequest::PGPipeline &LogMissingRequest::pp(PG &pg)
+ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
 }
@@ -61,7 +61,18 @@ seastar::future<> LogMissingRequest::with_pg(
 
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    return pg->do_update_log_missing(req);
+    logger().debug("{}: pg present", *this);
+    return this->template enter_stage<interruptor>(client_pp(*pg).await_map
+    ).then_interruptible([this, pg] {
+      return this->template with_blocking_event<
+        PG_OSDMapGate::OSDMapBlocker::BlockingEvent
+      >([this, pg](auto &&trigger) {
+        return pg->osdmap_gate.wait_for_map(
+          std::move(trigger), req->min_epoch);
+      });
+    }).then_interruptible([this, pg](auto) {
+      return pg->do_update_log_missing(req, conn);
+    });
   }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
 }
 

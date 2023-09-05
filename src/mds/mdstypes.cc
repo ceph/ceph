@@ -492,10 +492,15 @@ void feature_bitset_t::dump(Formatter *f) const {
 void feature_bitset_t::print(ostream& out) const
 {
   std::ios_base::fmtflags f(out.flags());
-  out << "0x";
-  for (int i = _vec.size() - 1; i >= 0; --i)
-    out << std::setfill('0') << std::setw(sizeof(block_type) * 2)
-        << std::hex << _vec[i];
+  int size = _vec.size();
+  if (!size) {
+    out << "0x0";
+  } else {
+    out << "0x";
+    for (int i = size - 1; i >= 0; --i)
+      out << std::setfill('0') << std::setw(sizeof(block_type) * 2)
+          << std::hex << _vec[i];
+  }
   out.flags(f);
 }
 
@@ -766,6 +771,10 @@ void mds_table_pending_t::generate_test_instances(std::list<mds_table_pending_t*
   ls.back()->tid = 35434;
 }
 
+void metareqid_t::dump(ceph::Formatter* f) const {
+  f->dump_object("entity", name);
+  f->dump_unsigned("tid", tid);
+}
 
 /*
  * inode_load_vec_t

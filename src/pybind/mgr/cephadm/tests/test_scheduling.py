@@ -288,7 +288,7 @@ def test_explicit_scheduler(host_key, hosts,
 # * where e=[], *=any
 #
 #       + list of known hosts available for scheduling (host_key)
-#       |   + hosts used for explict placement (explicit_key)
+#       |   + hosts used for explicit placement (explicit_key)
 #       |   |   + count
 #       |   |   | + existing daemons
 #       |   |   | |     + section (host, label, pattern)
@@ -614,7 +614,7 @@ class NodeAssignmentTest(NamedTuple):
              'rgw:host1(*:81)', 'rgw:host2(*:81)', 'rgw:host3(*:81)'],
             []
         ),
-        # label + count_per_host + ports (+ xisting)
+        # label + count_per_host + ports (+ existing)
         NodeAssignmentTest(
             'rgw',
             PlacementSpec(count=6, label='foo'),
@@ -1577,12 +1577,40 @@ class RescheduleFromOfflineTest(NamedTuple):
                                  [[]],
                                  [[]],
                              ),
+                             RescheduleFromOfflineTest(
+                                 'ingress',
+                                 PlacementSpec(count=1),
+                                 'host1 host2'.split(),
+                                 [],
+                                 ['host2'],
+                                 [
+                                     DaemonDescription('haproxy', 'b', 'host2'),
+                                     DaemonDescription('keepalived', 'b', 'host2'),
+                                 ],
+                                 [['host1']],
+                                 [[]],
+                             ),
                          ])
 def test_remove_from_offline(service_type, placement, hosts, maintenance_hosts, offline_hosts, daemons, expected_add, expected_remove):
 
-    spec = ServiceSpec(service_type=service_type,
-                       service_id='test',
-                       placement=placement)
+    if service_type == 'ingress':
+        spec = \
+            IngressSpec(
+                service_type='ingress',
+                service_id='nfs-ha.foo',
+                frontend_port=443,
+                monitor_port=8888,
+                virtual_ip='10.0.0.20/8',
+                backend_service='nfs-ha.foo',
+                placement=placement,
+            )
+    else:
+        spec = \
+            ServiceSpec(
+                service_type=service_type,
+                service_id='test',
+                placement=placement,
+            )
 
     host_specs = [HostSpec(h) for h in hosts]
     for h in host_specs:

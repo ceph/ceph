@@ -43,20 +43,19 @@ def test_schema():
                 root_container=VerticalContainer('Create user', key='create_user', fields=[
                     FormField('User entity', key='user_entity', field_type=str),
                     ArrayHorizontalContainer('Capabilities', key='caps', fields=[
-                        FormField('left', field_type=str, key='left',
-                                  html_class='cd-col-form-input'),
+                        FormField('left', field_type=str, key='left'),
                         FormField('right', key='right', field_type=str)
                     ]),
                     ArrayVerticalContainer('ah', key='ah', fields=[
-                        FormField('top', key='top', field_type=str, label_html_class='d-none'),
+                        FormField('top', key='top', field_type=str),
                         FormField('bottom', key='bottom', field_type=str)
                     ]),
                     HorizontalContainer('oh', key='oh', fields=[
-                        FormField('left', key='left', field_type=str, label_html_class='d-none'),
+                        FormField('left', key='left', field_type=str),
                         FormField('right', key='right', field_type=str)
                     ]),
                     VerticalContainer('ov', key='ov', fields=[
-                        FormField('top', key='top', field_type=str, label_html_class='d-none'),
+                        FormField('top', key='top', field_type=str),
                         FormField('bottom', key='bottom', field_type=bool)
                     ]),
                 ]))

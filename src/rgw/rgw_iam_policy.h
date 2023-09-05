@@ -17,8 +17,6 @@
 #include <boost/thread/shared_mutex.hpp>
 #include <boost/variant.hpp>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "common/ceph_time.h"
@@ -406,7 +404,7 @@ struct Condition {
     for (auto itr = it.first; itr != it.second; itr++) {
       bool matched = false;
       for (const auto& d : v) {
-        if (std::forward<F>(f)(itr->second, d)) {
+        if (f(itr->second, d)) {
 	        matched = true;
       }
      }
@@ -421,7 +419,7 @@ struct Condition {
 		      const std::vector<std::string>& v) {
     for (auto itr = it.first; itr != it.second; itr++) {
       for (const auto& d : v) {
-        if (std::forward<F>(f)(itr->second, d)) {
+        if (f(itr->second, d)) {
 	        return true;
       }
      }
@@ -438,13 +436,13 @@ struct Condition {
     }
 
     for (const auto& d : v) {
-      auto xd = std::forward<X>(x)(d);
+      auto xd = x(d);
       if (!xd) {
-	continue;
+        continue;
       }
 
-      if (std::forward<F>(f)(*xc, *xd)) {
-	return true;
+      if (f(*xc, *xd)) {
+        return true;
       }
     }
     return false;

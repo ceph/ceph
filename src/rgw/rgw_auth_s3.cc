@@ -434,9 +434,13 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   /* grab date */
 
   const char *d = info.env->get("HTTP_X_AMZ_DATE");
+
   struct tm t;
-  if (!parse_iso8601(d, &t, NULL, false)) {
-    ldpp_dout(dpp, 10) << "error reading date via http_x_amz_date" << dendl;
+  if (unlikely(d == NULL)) {
+    d = info.env->get("HTTP_DATE");
+  }
+  if (!d || !parse_iso8601(d, &t, NULL, false)) {
+    ldpp_dout(dpp, 10) << "error reading date via http_x_amz_date and http_date" << dendl;
     return -EACCES;
   }
   date = d;
@@ -445,8 +449,9 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
     return -ERR_REQUEST_TIME_SKEWED;
   }
 
-  if (info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
-    sessiontoken = info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+  auto token = info.env->get_optional("HTTP_X_AMZ_SECURITY_TOKEN");
+  if (token) {
+    sessiontoken = *token;
   }
 
   return 0;
@@ -652,6 +657,35 @@ std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op)
   }
 
   return canonical_qs;
+}
+
+std::string get_v4_canonical_method(const req_state* s)
+{
+  /* If this is a OPTIONS request we need to compute the v4 signature for the
+   * intended HTTP method and not the OPTIONS request itself. */
+  if (s->op_type == RGW_OP_OPTIONS_CORS) {
+    const char *cors_method = s->info.env->get("HTTP_ACCESS_CONTROL_REQUEST_METHOD");
+
+    if (cors_method) {
+      /* Validate request method passed in access-control-request-method is valid. */
+      auto cors_flags = get_cors_method_flags(cors_method);
+      if (!cors_flags) {
+          ldpp_dout(s, 1) << "invalid access-control-request-method header = "
+                          << cors_method << dendl;
+          throw -EINVAL;
+      }
+
+      ldpp_dout(s, 10) << "canonical req method = " << cors_method
+                       << ", due to access-control-request-method header" << dendl;
+      return cors_method;
+    } else {
+      ldpp_dout(s, 1) << "invalid http options req missing "
+                      << "access-control-request-method header" << dendl;
+      throw -EINVAL;
+    }
+  }
+
+  return s->info.method;
 }
 
 boost::optional<std::string>

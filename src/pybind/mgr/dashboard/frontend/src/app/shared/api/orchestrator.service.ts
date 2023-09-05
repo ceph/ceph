@@ -43,4 +43,8 @@ export class OrchestratorService {
     }
     return false;
   }
+
+  getName() {
+    return this.http.get(`${this.url}/get_name`);
+  }
 }

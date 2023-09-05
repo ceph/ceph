@@ -2,6 +2,7 @@ add_executable(crimson-osd
   backfill_state.cc
   ec_backend.cc
   heartbeat.cc
+  lsan_suppressions.cc
   main.cc
   main_config_bootstrap_helpers.cc
   osd.cc
@@ -26,6 +27,7 @@ add_executable(crimson-osd
   osd_operations/logmissing_request_reply.cc
   osd_operations/background_recovery.cc
   osd_operations/recovery_subrequest.cc
+  osd_operations/snaptrim_event.cc
   pg_recovery.cc
   recovery_backend.cc
   replicated_recovery_backend.cc
@@ -45,6 +47,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/PGStateUtils.cc
   ${PROJECT_SOURCE_DIR}/src/osd/MissingLoc.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGLog.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/SnapMapper.cc
   ${PROJECT_SOURCE_DIR}/src/osd/recovery_types.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
   watch.cc

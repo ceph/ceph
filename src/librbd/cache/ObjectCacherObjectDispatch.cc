@@ -207,7 +207,7 @@ bool ObjectCacherObjectDispatch<I>::read(
   on_dispatched = util::create_async_context_callback(*m_image_ctx,
                                                       on_dispatched);
 
-  // embed the RBD-internal read flags in the genenric RADOS op_flags and
+  // embed the RBD-internal read flags in the generic RADOS op_flags and
   op_flags = ((op_flags & ~ObjectCacherWriteback::READ_FLAGS_MASK) |
               ((read_flags << ObjectCacherWriteback::READ_FLAGS_SHIFT) &
                ObjectCacherWriteback::READ_FLAGS_MASK));
@@ -333,7 +333,7 @@ bool ObjectCacherObjectDispatch<I>::write(
 
   m_image_ctx->image_lock.lock_shared();
   ObjectCacher::OSDWrite *wr = m_object_cacher->prepare_write(
-    snapc, data, ceph::real_time::min(), op_flags, *journal_tid);
+    snapc, data, ceph::real_clock::zero(), op_flags, *journal_tid);
   m_image_ctx->image_lock.unlock_shared();
 
   ObjectExtent extent(data_object_name(m_image_ctx, object_no),

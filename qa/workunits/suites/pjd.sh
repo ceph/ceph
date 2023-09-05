@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 wget http://download.ceph.com/qa/pjd-fstest-20090130-RC-aclfixes.tgz
 tar zxvf pjd*.tgz

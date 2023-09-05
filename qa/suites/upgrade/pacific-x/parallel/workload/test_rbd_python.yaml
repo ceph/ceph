@@ -1,6 +1,11 @@
 meta:
 - desc: |
    librbd python api tests
+overrides:
+  install:
+    ceph:
+      extra_system_packages:
+      - python3-pytest
 workload:
   full_sequential:
     - print: "**** done start test_rbd_python.yaml"

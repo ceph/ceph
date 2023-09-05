@@ -61,6 +61,7 @@
 #include "include/str_list.h"
 #include "include/str_map.h"
 #include "include/compat.h"
+#include "include/utime_fmt.h"
 
 #define dout_subsys ceph_subsys_mon
 

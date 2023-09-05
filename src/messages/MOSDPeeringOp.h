@@ -25,4 +25,16 @@ public:
   virtual epoch_t get_min_epoch() const = 0;
   virtual PGPeeringEvent *get_event() = 0;
   virtual void inner_print(std::ostream& out) const = 0;
+
+#ifdef WITH_SEASTAR
+  // In crimson, conn is independently maintained outside Message.
+  // Instead of get features from the connection later, set features at
+  // the start of the operation.
+  void set_features(uint64_t _features) {
+    features = _features;
+  }
+
+protected:
+  uint64_t features;
+#endif
 };

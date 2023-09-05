@@ -452,7 +452,7 @@ int RGWOrphanSearch::handle_stat_result(const DoutPrefixProvider *dpp, map<int, 
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(dpp); miter != manifest.obj_end(dpp); ++miter) {
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store->getRados());
       string s = loc.oid;
       obj_oids.insert(obj_fingerprint(s));
     }
@@ -579,9 +579,9 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
         continue;
       }
 
-      std::unique_ptr<rgw::sal::Object> obj = cur_bucket->get_object(entry.key);
+      rgw_obj obj(cur_bucket->get_key(), entry.key);
 
-      RGWRados::Object op_target(store->getRados(), cur_bucket.get(), obj_ctx, obj.get());
+      RGWRados::Object op_target(store->getRados(), cur_bucket->get_info(), obj_ctx, obj);
 
       stat_ops.push_back(RGWRados::Object::Stat(&op_target));
       RGWRados::Object::Stat& op = stat_ops.back();
@@ -1042,7 +1042,7 @@ int RGWRadosList::handle_stat_result(const DoutPrefixProvider *dpp,
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(dpp); miter != manifest.obj_end(dpp); ++miter) {
       const rgw_raw_obj& loc =
-	miter.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
+	miter.get_location().get_raw_obj(store->getRados());
       string s = loc.oid;
       obj_oids.insert(s);
     }
@@ -1248,9 +1248,9 @@ int RGWRadosList::process_bucket(
 	[&](const rgw_obj_key& key) -> int {
 	  int ret;
 
-	  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);
-	  RGWRados::Object op_target(store->getRados(), bucket.get(),
-				     obj_ctx, obj.get());
+	  rgw_obj obj(bucket_info.bucket, key);
+	  RGWRados::Object op_target(store->getRados(), bucket_info,
+				     obj_ctx, obj);
 
 	  stat_ops.push_back(RGWRados::Object::Stat(&op_target));
 	  RGWRados::Object::Stat& op = stat_ops.back();
@@ -1494,7 +1494,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
   // use empty strings for params.{prefix,delim}
 
   do {
-    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated);
+    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
       ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<
@@ -1515,7 +1515,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 
 	do { // while (is_parts_truncated);
 	  ret = upload->list_parts(dpp, store->ctx(), max_parts, parts_marker,
-				   &parts_marker, &is_parts_truncated);
+				   &parts_marker, &is_parts_truncated, null_yield);
 	  if (ret == -ENOENT) {
 	    ldpp_dout(dpp, 5) <<  "RGWRadosList::" << __func__ <<
 	      ": WARNING: list_multipart_parts returned ret=-ENOENT "
@@ -1536,7 +1536,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
 		 obj_it != manifest.obj_end(dpp);
 		 ++obj_it) {
 	      const rgw_raw_obj& loc =
-		obj_it.get_location().get_raw_obj(static_cast<rgw::sal::RadosStore*>(store));
+		obj_it.get_location().get_raw_obj(store->getRados());
 	      std::cout << loc.oid << std::endl;
 	    } // for (auto obj_it
 	  } // for (auto& p

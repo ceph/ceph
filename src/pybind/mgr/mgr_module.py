@@ -1,7 +1,7 @@
 import ceph_module  # noqa
 
 from typing import cast, Tuple, Any, Dict, Generic, Optional, Callable, List, \
-    Mapping, NamedTuple, Sequence, Union, TYPE_CHECKING
+    Mapping, NamedTuple, Sequence, Union, Set, TYPE_CHECKING
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -342,7 +342,7 @@ def _extract_target_func(
     wrapped = getattr(f, "__wrapped__", None)
     if not wrapped:
         return f, {}
-    extra_args = {}
+    extra_args: Dict[str, Any] = {}
     while wrapped is not None:
         extra_args.update(getattr(f, "extra_args", {}))
         f = wrapped
@@ -379,6 +379,10 @@ class CLICommand(object):
         positional = True
         for index, arg in enumerate(full_argspec.args):
             if arg in cls.KNOWN_ARGS:
+                # record that this function takes an inbuf if it is present
+                # in the full_argspec and not already in the arg_spec
+                if arg == 'inbuf' and 'inbuf' not in arg_spec:
+                    arg_spec['inbuf'] = 'str'
                 continue
             if arg == '_end_positional_':
                 positional = False
@@ -435,11 +439,13 @@ class CLICommand(object):
             k, v = key, val
         return kwargs_switch, k.replace('-', '_'), v
 
-    def _collect_args_by_argspec(self, cmd_dict: Dict[str, Any]) -> Dict[str, Any]:
+    def _collect_args_by_argspec(self, cmd_dict: Dict[str, Any]) -> Tuple[Dict[str, Any], Set[str]]:
         kwargs = {}
+        special_args = set()
         kwargs_switch = False
         for index, (name, tp) in enumerate(self.arg_spec.items()):
             if name in CLICommand.KNOWN_ARGS:
+                special_args.add(name)
                 continue
             assert self.first_default >= 0
             raw_v = cmd_dict.get(name)
@@ -449,14 +455,20 @@ class CLICommand(object):
             kwargs_switch, k, v = self._get_arg_value(kwargs_switch,
                                                       name, raw_v)
             kwargs[k] = CephArgtype.cast_to(tp, v)
-        return kwargs
+        return kwargs, special_args
 
     def call(self,
              mgr: Any,
              cmd_dict: Dict[str, Any],
              inbuf: Optional[str] = None) -> HandleCommandResult:
-        kwargs = self._collect_args_by_argspec(cmd_dict)
+        kwargs, specials = self._collect_args_by_argspec(cmd_dict)
         if inbuf:
+            if 'inbuf' not in specials:
+                return HandleCommandResult(
+                    -errno.EINVAL,
+                    '',
+                    'Invalid command: Input file data (-i) not supported',
+                )
             kwargs['inbuf'] = inbuf
         assert self.func
         return self.func(mgr, **kwargs)
@@ -499,6 +511,28 @@ def CLICheckNonemptyFileInput(desc: str) -> Callable[[HandlerFuncType], HandlerF
         check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
         return check
     return CheckFileInput
+
+# If the mgr loses its lock on the database because e.g. the pgs were
+# transiently down, then close it and allow it to be reopened.
+MAX_DBCLEANUP_RETRIES = 3
+def MgrModuleRecoverDB(func: Callable) -> Callable:
+    @functools.wraps(func)
+    def check(self: MgrModule, *args: Any, **kwargs: Any) -> Any:
+        retries = 0
+        while True:
+            try:
+                return func(self, *args, **kwargs)
+            except sqlite3.DatabaseError as e:
+                self.log.error(f"Caught fatal database error: {e}")
+                retries = retries+1
+                if retries > MAX_DBCLEANUP_RETRIES:
+                    raise
+                self.log.debug(f"attempting reopen of database")
+                self.close_db()
+                self.open_db();
+                # allow retry of func(...)
+    check.__signature__ = inspect.signature(func)  # type: ignore[attr-defined]
+    return check
 
 def CLIRequiresDB(func: HandlerFuncType) -> HandlerFuncType:
     @functools.wraps(func)
@@ -1170,7 +1204,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         if version <= 0:
             self.log.info(f"creating main.db for {self.module_name}")
             assert self.SCHEMA is not None
-            cur = db.executescript(self.SCHEMA)
+            db.executescript(self.SCHEMA)
             self.update_schema_version(db, 1)
         else:
             assert self.SCHEMA_VERSIONED is not None
@@ -1206,6 +1240,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         db.row_factory = sqlite3.Row
         self.load_schema(db)
 
+    def close_db(self) -> None:
+        with self._db_lock:
+            if self._db is not None:
+                self._db.close()
+                self._db = None
+
     def open_db(self) -> Optional[sqlite3.Connection]:
         if not self.pool_exists(self.MGR_POOL_NAME):
             if not self.have_enough_osds():
@@ -1214,6 +1254,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         uri = f"file:///{self.MGR_POOL_NAME}:{self.module_name}/main.db?vfs=ceph";
         self.log.debug(f"using uri {uri}")
         db = sqlite3.connect(uri, check_same_thread=False, uri=True)
+        # if libcephsqlite reconnects, update the addrv for blocklist
+        with db:
+            cur = db.execute('SELECT json_extract(ceph_status(), "$.addr");')
+            (addrv,) = cur.fetchone()
+            assert addrv is not None
+            self.log.debug(f"new libcephsqlite addrv = {addrv}")
+            self._ceph_register_client("libcephsqlite", addrv, True)
         self.configure_db(db)
         return db
 
@@ -1329,7 +1376,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         if self._rados:
             addrs = self._rados.get_addrs()
             self._rados.shutdown()
-            self._ceph_unregister_client(addrs)
+            self._ceph_unregister_client(None, addrs)
+            self._rados = None
 
     @API.expose
     def get(self, data_name: str) -> Any:
@@ -2009,7 +2057,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
     @API.expose
     @profile_method()
-    def get_all_perf_counters(self, prio_limit: int = PRIO_USEFUL,
+    def get_unlabeled_perf_counters(self, prio_limit: int = PRIO_USEFUL,
                               services: Sequence[str] = ("mds", "mon", "osd",
                                                          "rbd-mirror", "rgw",
                                                          "tcmu-runner")) -> Dict[str, dict]:
@@ -2135,7 +2183,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         ctx_capsule = self.get_context()
         self._rados = rados.Rados(context=ctx_capsule)
         self._rados.connect()
-        self._ceph_register_client(self._rados.get_addrs())
+        self._ceph_register_client(None, self._rados.get_addrs(), False)
         return self._rados
 
     @staticmethod

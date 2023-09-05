@@ -18,7 +18,7 @@
 
 # rbd-recover-tool is an offline recover tool for rbd image in replicated pool
 # when ceph cluster is stopped.
-# it is a simple disater recovery policy, just for urgent condition
+# it is a simple disaster recovery policy, just for urgent condition
 
 my_dir=$(dirname "$0")
 
@@ -185,7 +185,7 @@ function usage()
   echo "$cmd_name database
 		 	gather pg info, object info, image metadata, 
 		 	and epoch info from all osd nodes,
-		    	this will cosume a long time, just be patient, 
+		    	this will consume a long time, just be patient, 
 			especially when scale up to 1000+ osds"
   echo "$cmd_name list
 		    	list all rbd images of all replicated pools, 
@@ -193,7 +193,7 @@ function usage()
   echo "$cmd_name lookup  <pool_id>/<image_name>[@[<snap_name>]]
 		    	show image metadata: image format, rbd id, size, order, snapseq
 			In addition, for image with snapshots, 
-			this will list all snapshot infomations"
+			this will list all snapshot information"
   echo "$cmd_name recover <pool_id>/<image_name>[@[<snap_name>]] [</path/to/store/image>]
 			all snapshots share one image head, to economize disk space
 			so there is only one snapshot at any time,

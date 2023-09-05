@@ -80,7 +80,7 @@ WebTokenEngine::get_role_name(const string& role_arn) const
 }
 
 std::unique_ptr<rgw::sal::RGWOIDCProvider>
-WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss) const
+WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_arn, const string& iss, optional_yield y) const
 {
   string tenant = get_role_tenant(role_arn);
 
@@ -104,7 +104,7 @@ WebTokenEngine::get_provider(const DoutPrefixProvider *dpp, const string& role_a
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_arn(p_arn);
   provider->set_tenant(tenant);
-  auto ret = provider->get(dpp);
+  auto ret = provider->get(dpp, y);
   if (ret < 0) {
     return nullptr;
   }
@@ -248,7 +248,7 @@ WebTokenEngine::get_from_jwt(const DoutPrefixProvider* dpp, const std::string& t
     }
 
     string role_arn = s->info.args.get("RoleArn");
-    auto provider = get_provider(dpp, role_arn, iss);
+    auto provider = get_provider(dpp, role_arn, iss, y);
     if (! provider) {
       ldpp_dout(dpp, 0) << "Couldn't get oidc provider info using input iss" << iss << dendl;
       throw -EACCES;
@@ -309,8 +309,14 @@ std::string
 WebTokenEngine::get_cert_url(const string& iss, const DoutPrefixProvider *dpp, optional_yield y) const
 {
   string cert_url;
-  string openidc_wellknown_url = iss + "/.well-known/openid-configuration";
+  string openidc_wellknown_url = iss;
   bufferlist openidc_resp;
+
+  if (openidc_wellknown_url.back() == '/') {
+    openidc_wellknown_url.pop_back();
+  }
+  openidc_wellknown_url.append("/.well-known/openid-configuration");
+
   RGWHTTPTransceiver openidc_req(cct, "GET", openidc_wellknown_url, &openidc_resp);
 
   //Headers
@@ -761,7 +767,7 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"AssumeRoleWithWebIdentity", []() -> RGWOp* {return new RGWSTSAssumeRoleWithWebIdentity;}}
 };
 
-bool RGWHandler_REST_STS::action_exists(const req_state* s) 
+bool RGWHandler_REST_STS::action_exists(const req_state* s)
 {
   if (s->info.args.exists("Action")) {
     const std::string action_name = s->info.args.get("Action");

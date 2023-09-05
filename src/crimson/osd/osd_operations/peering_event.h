@@ -51,7 +51,7 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::peering_event;
 
 protected:
-  PGPeeringPipeline &pp(PG &pg);
+  PGPeeringPipeline &peering_pp(PG &pg);
 
   PeeringCtx ctx;
   pg_shard_t from;
@@ -107,7 +107,7 @@ public:
 
 class RemotePeeringEvent : public PeeringEvent<RemotePeeringEvent> {
 protected:
-  crimson::net::ConnectionFRef conn;
+  crimson::net::ConnectionRef conn;
   // must be after conn due to ConnectionPipeline's life-time
   PipelineHandle handle;
 
@@ -153,9 +153,22 @@ public:
   spg_t get_pgid() const {
     return pgid;
   }
-  ConnectionPipeline &get_connection_pipeline();
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return evt.get_epoch_sent(); }
+
+  ConnectionPipeline &get_connection_pipeline();
+  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
+    assert(conn);
+    return conn.get_foreign(
+    ).then([this](auto f_conn) {
+      conn.reset();
+      return f_conn;
+    });
+  }
+  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
+    assert(!conn);
+    conn = make_local_shared_foreign(std::move(_conn));
+  }
 };
 
 class LocalPeeringEvent final : public PeeringEvent<LocalPeeringEvent> {

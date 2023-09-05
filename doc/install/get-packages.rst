@@ -25,17 +25,17 @@ There are three ways to get packages:
 Install packages with cephadm
 =============================
 
-#. Download the cephadm script
+#. Download cephadm
 
 .. prompt:: bash $
    :substitutions:
 
-   curl --silent --remote-name --location https://github.com/ceph/ceph/raw/|stable-release|/src/cephadm/cephadm
+   curl --silent --remote-name --location https://download.ceph.com/rpm-|stable-release|/el9/noarch/cephadm
    chmod +x cephadm
 
 #. Configure the Ceph repository based on the release name::
 
-     ./cephadm add-repo --release nautilus
+     ./cephadm add-repo --release |stable-release|
 
    For Octopus (15.2.0) and later releases, you can also specify a specific
    version::
@@ -47,8 +47,8 @@ Install packages with cephadm
      ./cephadm add-repo --dev my-branch
 
 #. Install the appropriate packages.  You can install them using your
-   package management tool (e.g., APT, Yum) directly, or you can also
-   use the cephadm wrapper.  For example::
+   package management tool (e.g., APT, Yum) directly, or you can
+   use the cephadm wrapper command.  For example::
 
      ./cephadm install ceph-common
    
@@ -251,6 +251,17 @@ openSUSE Tumbleweed
 The newest major release of Ceph is already available through the normal Tumbleweed repositories.
 There's no need to add another package repository manually.
 
+openEuler
+^^^^^^^^^
+
+There are two major versions supported in normal openEuler repositories. They are ceph 12.2.8 in openEuler-20.03-LTS series and ceph 16.2.7 in openEuler-22.03-LTS series. There’s no need to add another package repository manually.
+You can install ceph just by executing the following:
+
+.. prompt:: bash $
+
+    sudo yum -y install ceph
+
+Also you can download packages manually from https://repo.openeuler.org/openEuler-{release}/everything/{arch}/Packages/.
 
 Ceph Development Packages
 -------------------------

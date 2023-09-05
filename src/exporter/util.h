@@ -20,3 +20,5 @@ class BlockTimer {
 bool string_is_digit(std::string s);
 std::string read_file_to_string(std::string path);
 std::string get_hostname(std::string path);
+
+void promethize(std::string &name);

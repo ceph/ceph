@@ -1,7 +1,9 @@
 # -*- coding: utf-8 -*-
+import json
 import logging
 import os
 from collections import defaultdict
+from typing import Any, Dict
 
 import cephfs
 import cherrypy
@@ -12,17 +14,24 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
 from ..services.exception import handle_cephfs_error
-from ..tools import ViewCache
-from . import APIDoc, APIRouter, EndpointDoc, RESTController, UIRouter, allow_empty_body
+from ..tools import ViewCache, str_to_bool
+from . import APIDoc, APIRouter, DeletePermission, Endpoint, EndpointDoc, \
+    RESTController, UIRouter, UpdatePermission, allow_empty_body
 
 GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
     'max_files': (int, '')
 }
+GET_STATFS_SCHEMA = {
+    'bytes': (int, ''),
+    'files': (int, ''),
+    'subdirs': (int, '')
+}
 
 logger = logging.getLogger("controllers.rgw")
 
 
+# pylint: disable=R0904
 @APIRouter('/cephfs', Scope.CEPHFS)
 @APIDoc("Cephfs Management API", "Cephfs")
 class CephFS(RESTController):
@@ -36,6 +45,59 @@ class CephFS(RESTController):
     def list(self):
         fsmap = mgr.get("fs_map")
         return fsmap['filesystems']
+
+    def create(self, name: str, service_spec: Dict[str, Any]):
+        service_spec_str = '1 '
+        if 'labels' in service_spec['placement']:
+            for label in service_spec['placement']['labels']:
+                service_spec_str += f'label:{label},'
+            service_spec_str = service_spec_str[:-1]
+        if 'hosts' in service_spec['placement']:
+            for host in service_spec['placement']['hosts']:
+                service_spec_str += f'{host},'
+            service_spec_str = service_spec_str[:-1]
+
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_create', None,
+                                        {'name': name, 'placement': service_spec_str})
+        if error_code != 0:
+            raise RuntimeError(
+                f'Error creating volume {name} with placement {str(service_spec)}: {err}')
+        return f'Volume {name} created successfully'
+
+    @EndpointDoc("Remove CephFS Volume",
+                 parameters={
+                     'name': (str, 'File System Name'),
+                 })
+    @allow_empty_body
+    @Endpoint('DELETE')
+    @DeletePermission
+    def remove(self, name):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_rm', None,
+                                        {'vol_name': name,
+                                         'yes-i-really-mean-it': "--yes-i-really-mean-it"})
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Error deleting volume {name}: {err}',
+                component='cephfs')
+        return f'Volume {name} removed successfully'
+
+    @EndpointDoc("Rename CephFS Volume",
+                 parameters={
+                     'name': (str, 'Existing FS Name'),
+                     'new_name': (str, 'New FS Name'),
+                 })
+    @allow_empty_body
+    @UpdatePermission
+    @Endpoint('PUT')
+    def rename(self, name: str, new_name: str):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_volume_rename', None,
+                                        {'vol_name': name, 'new_vol_name': new_name,
+                                         'yes_i_really_mean_it': True})
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Error renaming volume {name} to {new_name}: {err}',
+                component='cephfs')
+        return f'Volume {name} renamed successfully to {new_name}'
 
     def get(self, fs_id):
         fs_id = self.fs_id_to_int(fs_id)
@@ -302,7 +364,7 @@ class CephFS(RESTController):
                                      "No cephfs with id {0}".format(fs_id))
 
         # Decorate the metadata with some fields that will be
-        # indepdendent of whether it's a kernel or userspace
+        # independent of whether it's a kernel or userspace
         # client, so that the javascript doesn't have to grok that.
         for client in clients:
             if "ceph_version" in client['client_metadata']:  # pragma: no cover - no complexity
@@ -331,8 +393,9 @@ class CephFS(RESTController):
             raise cherrypy.HTTPError(404,
                                      "Client {0} does not exist in cephfs {1}".format(client_id,
                                                                                       fs_id))
+        filters = [f'id={client_id}']
         CephService.send_command('mds', 'client evict',
-                                 srv_spec='{0}:0'.format(fs_id), id=client_id)
+                                 srv_spec='{0}:0'.format(fs_id), filters=filters)
 
     @staticmethod
     def _cephfs_instance(fs_id):
@@ -460,6 +523,47 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         return cfs.get_quotas(path)
 
+    @RESTController.Resource('POST', path='/write_to_file')
+    @allow_empty_body
+    def write_to_file(self, fs_id, path, buf) -> None:
+        """
+        Write some data to the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the file to write.
+        :param buf: The str to write to the buf.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.write_to_file(path, buf)
+
+    @RESTController.Resource('DELETE', path='/unlink')
+    def unlink(self, fs_id, path) -> None:
+        """
+        Removes a file, link, or symbolic link.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the file or link to unlink.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.unlink(path)
+
+    @RESTController.Resource('GET', path='/statfs')
+    @EndpointDoc("Get Cephfs statfs of the specified path",
+                 parameters={
+                     'fs_id': (str, 'File System Identifier'),
+                     'path': (str, 'File System Path'),
+                 },
+                 responses={200: GET_STATFS_SCHEMA})
+    def statfs(self, fs_id, path) -> dict:
+        """
+        Get the statfs of the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory/file.
+        :return: Returns a dictionary containing 'bytes',
+        'files' and 'subdirs'.
+        :rtype: dict
+        """
+        cfs = self._cephfs_instance(fs_id)
+        return cfs.statfs(path)
+
     @RESTController.Resource('POST', path='/snapshot')
     @allow_empty_body
     def snapshot(self, fs_id, path, name=None):
@@ -502,7 +606,11 @@ class CephFSClients(object):
 
     @ViewCache()
     def get(self):
-        return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
+        try:
+            ret = CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
+        except RuntimeError:
+            ret = []
+        return ret
 
 
 @UIRouter('/cephfs', Scope.CEPHFS)
@@ -559,3 +667,135 @@ class CephFsUi(CephFS):
         except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths
+
+
+@APIRouter('/cephfs/subvolume', Scope.CEPHFS)
+@APIDoc('CephFS Subvolume Management API', 'CephFSSubvolume')
+class CephFSSubvolume(RESTController):
+
+    def get(self, vol_name: str):
+        error_code, out, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolume_ls', None, {'vol_name': vol_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to list subvolumes for volume {vol_name}: {err}'
+            )
+        subvolumes = json.loads(out)
+        for subvolume in subvolumes:
+            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
+                                              'vol_name': vol_name, 'sub_name': subvolume['name']})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to get info for subvolume {subvolume["name"]}: {err}'
+                )
+            subvolume['info'] = json.loads(out)
+        return subvolumes
+
+    @RESTController.Resource('GET')
+    def info(self, vol_name: str, subvol_name: str):
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
+            'vol_name': vol_name, 'sub_name': subvol_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get info for subvolume {subvol_name}: {err}'
+            )
+        return json.loads(out)
+
+    def create(self, vol_name: str, subvol_name: str, **kwargs):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_create', None, {
+            'vol_name': vol_name, 'sub_name': subvol_name, **kwargs})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create subvolume {subvol_name}: {err}'
+            )
+
+        return f'Subvolume {subvol_name} created successfully'
+
+    def set(self, vol_name: str, subvol_name: str, size: str):
+        if size:
+            error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_resize', None, {
+                'vol_name': vol_name, 'sub_name': subvol_name, 'new_size': size})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to update subvolume {subvol_name}: {err}'
+                )
+
+        return f'Subvolume {subvol_name} updated successfully'
+
+    def delete(self, vol_name: str, subvol_name: str, retain_snapshots: bool = False):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name}
+        retain_snapshots = str_to_bool(retain_snapshots)
+        if retain_snapshots:
+            params['retain_snapshots'] = 'True'
+        error_code, _, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolume_rm', None, params)
+        if error_code != 0:
+            raise DashboardException(
+                msg=f'Failed to remove subvolume {subvol_name}: {err}',
+                component='cephfs')
+        return f'Subvolume {subvol_name} removed successfully'
+
+
+@APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
+@APIDoc("Cephfs Subvolume Group Management API", "CephfsSubvolumeGroup")
+class CephFSSubvolumeGroups(RESTController):
+
+    def get(self, vol_name):
+        if not vol_name:
+            raise DashboardException(
+                f'Error listing subvolume groups for {vol_name}')
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_ls',
+                                          None, {'vol_name': vol_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Error listing subvolume groups for {vol_name}')
+        subvolume_groups = json.loads(out)
+        for group in subvolume_groups:
+            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info',
+                                              None, {'vol_name': vol_name,
+                                                     'group_name': group['name']})
+            if error_code != 0:
+                raise DashboardException(
+                    f'Failed to get info for subvolume group {group["name"]}: {err}'
+                )
+            group['info'] = json.loads(out)
+        return subvolume_groups
+
+    @RESTController.Resource('GET')
+    def info(self, vol_name: str, group_name: str):
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info', None, {
+            'vol_name': vol_name, 'group_name': group_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get info for subvolume group {group_name}: {err}'
+            )
+        return json.loads(out)
+
+    def create(self, vol_name: str, group_name: str, **kwargs):
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_create', None, {
+            'vol_name': vol_name, 'group_name': group_name, **kwargs})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create subvolume group {group_name}: {err}'
+            )
+
+    def set(self, vol_name: str, group_name: str, size: str):
+        if not size:
+            return f'Failed to update subvolume group {group_name}, size was not provided'
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_resize', None, {
+            'vol_name': vol_name, 'group_name': group_name, 'new_size': size})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to update subvolume group {group_name}: {err}'
+            )
+        return f'Subvolume group {group_name} updated successfully'
+
+    def delete(self, vol_name: str, group_name: str):
+        error_code, _, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolumegroup_rm', None, {
+                'vol_name': vol_name, 'group_name': group_name})
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to delete subvolume group {group_name}: {err}'
+            )
+        return f'Subvolume group {group_name} removed successfully'

@@ -523,9 +523,12 @@ void PrimaryLogPG::on_global_recover(
 }
 
 void PrimaryLogPG::schedule_recovery_work(
-  GenContext<ThreadPool::TPHandle&> *c)
+  GenContext<ThreadPool::TPHandle&> *c,
+  uint64_t cost)
 {
-  osd->queue_recovery_context(this, c);
+  osd->queue_recovery_context(
+    this, c, cost,
+    recovery_state.get_recovery_op_priority());
 }
 
 void PrimaryLogPG::replica_clear_repop_obc(
@@ -627,6 +630,7 @@ void PrimaryLogPG::wait_for_unreadable_object(
   maybe_kick_recovery(soid);
   waiting_for_unreadable_object[soid].push_back(op);
   op->mark_delayed("waiting for missing object");
+  osd->logger->inc(l_osd_op_delayed_unreadable);
 }
 
 bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
@@ -686,6 +690,7 @@ void PrimaryLogPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef 
   maybe_kick_recovery(soid);
   waiting_for_degraded_object[soid].push_back(op);
   op->mark_delayed("waiting for degraded object");
+  osd->logger->inc(l_osd_op_delayed_degraded);
 }
 
 void PrimaryLogPG::block_write_on_full_cache(
@@ -1662,7 +1667,11 @@ bool PrimaryLogPG::get_rw_locks(bool write_ordered, OpContext *ctx)
    * to get the second.
    */
   if (write_ordered && ctx->op->may_read()) {
-    ctx->lock_type = RWState::RWEXCL;
+    if (ctx->op->may_read_data()) {
+      ctx->lock_type = RWState::RWEXCL;
+    } else {
+      ctx->lock_type = RWState::RWWRITE;
+    }
   } else if (write_ordered) {
     ctx->lock_type = RWState::RWWRITE;
   } else {
@@ -4526,7 +4535,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
 	get_osdmap_epoch(),
 	m->query_epoch,
 	spg_t(info.pgid.pgid, get_primary().shard));
-      reply->set_priority(get_recovery_op_priority());
+      reply->set_priority(recovery_state.get_recovery_op_priority());
       osd->send_message_osd_cluster(reply, m->get_connection());
       queue_peering_event(
 	PGPeeringEventRef(
@@ -8761,15 +8770,14 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
   ceph_assert(conn);
 
   auto session = conn->get_priv();
-  if (!session)
-    return;
 
   for (list<pair<watch_info_t,bool> >::iterator i = ctx->watch_connects.begin();
        i != ctx->watch_connects.end();
        ++i) {
     pair<uint64_t, entity_name_t> watcher(i->first.cookie, entity);
     dout(15) << "do_osd_op_effects applying watch connect on session "
-	     << session.get() << " watcher " << watcher << dendl;
+	     << (session ? session.get() : nullptr) << " watcher " << watcher
+	     << dendl;
     WatchRef watch;
     if (ctx->obc->watchers.count(watcher)) {
       dout(15) << "do_osd_op_effects found existing watch watcher " << watcher
@@ -8793,7 +8801,6 @@ void PrimaryLogPG::do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn)
        p != ctx->notifies.end();
        ++p) {
     dout(10) << "do_osd_op_effects, notify " << *p << dendl;
-    ConnectionRef conn(ctx->op->get_req()->get_connection());
     NotifyRef notif(
       Notify::makeNotifyRef(
 	conn,
@@ -13494,7 +13501,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 	++skipped;
       } else {
 	int r = recover_missing(
-	  soid, need, get_recovery_op_priority(), h);
+	  soid, need, recovery_state.get_recovery_op_priority(), h);
 	switch (r) {
 	case PULL_YES:
 	  ++started;
@@ -13517,7 +13524,7 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
       recovery_state.set_last_requested(v);
   }
 
-  pgbackend->run_recovery_op(h, get_recovery_op_priority());
+  pgbackend->run_recovery_op(h, recovery_state.get_recovery_op_priority());
   return started;
 }
 
@@ -13587,7 +13594,7 @@ int PrimaryLogPG::prep_object_replica_pushes(
       } else {
 	int r = recover_missing(
 	    head, recovery_state.get_pg_log().get_missing().get_items().find(head)->second.need,
-	    get_recovery_op_priority(), h);
+	    recovery_state.get_recovery_op_priority(), h);
 	if (r != PULL_NONE)
 	  return 1;
 	return 0;
@@ -13737,7 +13744,7 @@ uint64_t PrimaryLogPG::recover_replicas(uint64_t max, ThreadPool::TPHandle &hand
     }
   }
 
-  pgbackend->run_recovery_op(h, get_recovery_op_priority());
+  pgbackend->run_recovery_op(h, recovery_state.get_recovery_op_priority());
   return started;
 }
 
@@ -13884,6 +13891,12 @@ uint64_t PrimaryLogPG::recover_backfill(
 	  MOSDPGScan::OP_SCAN_GET_DIGEST, pg_whoami, e, get_last_peering_reset(),
 	  spg_t(info.pgid.pgid, bt.shard),
 	  pbi.end, hobject_t());
+
+	if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+	  /* This guard preserves legacy WeightedPriorityQueue behavior for
+	   * now, but should be removed after Reef */
+	  m->set_priority(recovery_state.get_recovery_op_priority());
+	}
 	osd->send_message_osd_cluster(bt.osd, m, get_osdmap_epoch());
 	ceph_assert(waiting_on_backfill.find(bt) == waiting_on_backfill.end());
 	waiting_on_backfill.insert(bt);
@@ -14051,6 +14064,11 @@ uint64_t PrimaryLogPG::recover_backfill(
       m = reqs[peer] = new MOSDPGBackfillRemove(
 	spg_t(info.pgid.pgid, peer.shard),
 	get_osdmap_epoch());
+      if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+	/* This guard preserves legacy WeightedPriorityQueue behavior for
+	   * now, but should be removed after Reef */
+	m->set_priority(recovery_state.get_recovery_op_priority());
+      }
     }
     m->ls.push_back(make_pair(oid, v));
 
@@ -14062,7 +14080,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 				  get_osdmap_epoch());
   }
 
-  pgbackend->run_recovery_op(h, get_recovery_op_priority());
+  pgbackend->run_recovery_op(h, recovery_state.get_recovery_op_priority());
 
   hobject_t backfill_pos =
     std::min(backfill_info.begin, earliest_peer_backfill());
@@ -14135,6 +14153,13 @@ uint64_t PrimaryLogPG::recover_backfill(
       }
       m->last_backfill = pinfo.last_backfill;
       m->stats = pinfo.stats;
+
+      if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+	/* This guard preserves legacy WeightedPriorityQueue behavior for
+	 * now, but should be removed after Reef */
+	m->set_priority(recovery_state.get_recovery_op_priority());
+      }
+
       osd->send_message_osd_cluster(bt.osd, m, get_osdmap_epoch());
       dout(10) << " peer " << bt
 	       << " num_objects now " << pinfo.stats.stats.sum.num_objects
@@ -15697,9 +15722,8 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 	ldout(pg->cct, 10) << "waiting for it to clear"
 			   << dendl;
 	return transit< WaitRWLock >();
-      } else {
-        return transit< NotTrimming >();
       }
+      return transit< NotTrimming >();
     }
 
     in_flight.insert(object);

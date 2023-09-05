@@ -30,7 +30,7 @@ seastar::future<> RecoverySubRequest::with_pg(
   track_event<StartEvent>();
   IRef opref = this;
   return interruptor::with_interruption([this, pgref] {
-    return pgref->get_recovery_backend()->handle_recovery_op(m);
+    return pgref->get_recovery_backend()->handle_recovery_op(m, conn);
   }, [](std::exception_ptr) {
     return seastar::now();
   }, pgref).finally([this, opref, pgref] {

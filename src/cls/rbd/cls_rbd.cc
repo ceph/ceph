@@ -1134,7 +1134,7 @@ int get_protection_status(cls_method_context_t hctx, bufferlist *in,
 }
 
 /**
- * set the proctection status of a snapshot
+ * set the protection status of a snapshot
  *
  * Input:
  * @param snapid (uint64_t) which snapshot to set the status of
@@ -3002,7 +3002,7 @@ static int dir_remove_image_helper(cls_method_context_t hctx,
  * Rename an image in the directory, updating both indexes
  * atomically. This can't be done from the client calling
  * dir_add_image and dir_remove_image in one transaction because the
- * results of the first method are not visibale to later steps.
+ * results of the first method are not visible to later steps.
  *
  * Input:
  * @param src original name of the image
@@ -5720,24 +5720,6 @@ int image_snapshot_unlink_peer(cls_method_context_t hctx,
     return -ENOENT;
   }
 
-  if (mirror_ns->mirror_peer_uuids.size() == 1) {
-    // if this is the last peer to unlink and we have at least one additional
-    // newer mirror snapshot, return a special error to inform the caller it
-    // should remove the snapshot instead.
-    auto search_lambda = [snap_id](const cls_rbd_snap& snap_meta) {
-      if (snap_meta.id > snap_id &&
-          std::holds_alternative<cls::rbd::MirrorSnapshotNamespace>(
-                   snap_meta.snapshot_namespace)) {
-        return -EEXIST;
-      }
-      return 0;
-    };
-    r = image::snapshot::iterate(hctx, search_lambda);
-    if (r == -EEXIST) {
-      return -ERESTART;
-    }
-  }
-
   mirror_ns->mirror_peer_uuids.erase(mirror_peer_uuid);
 
   r = image::snapshot::write(hctx, snap_key, std::move(snap));
@@ -6800,7 +6782,7 @@ int mirror_image_snapshot_unlink_peer(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param snap_id: snapshot id
- * @param complete: true if shapshot fully copied/complete
+ * @param complete: true if snapshot fully copied/complete
  * @param last_copied_object_number: last copied object number
  *
  * Output:

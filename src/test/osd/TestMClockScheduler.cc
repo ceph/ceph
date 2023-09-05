@@ -60,11 +60,11 @@ public:
     MockDmclockItem()
       : MockDmclockItem(op_scheduler_class::background_best_effort) {}
 
-    op_type_t get_op_type() const final {
-      return op_type_t::client_op; // not used
-    }
-
     ostream &print(ostream &rhs) const final { return rhs; }
+
+    std::string print() const final {
+      return std::string();
+    }
 
     std::optional<OpRequestRef> maybe_get_op() const final {
       return std::nullopt;
@@ -86,6 +86,18 @@ OpSchedulerItem create_item(
     std::make_unique<mClockSchedulerTest::MockDmclockItem>(
       std::forward<Args>(args)...),
     12, 12,
+    utime_t(), owner, e);
+}
+
+template <typename... Args>
+OpSchedulerItem create_high_prio_item(
+  unsigned priority, epoch_t e, uint64_t owner, Args&&... args)
+{
+  // Create high priority item for testing high prio queue
+  return OpSchedulerItem(
+    std::make_unique<mClockSchedulerTest::MockDmclockItem>(
+      std::forward<Args>(args)...),
+    12, priority,
     utime_t(), owner, e);
 }
 
@@ -173,5 +185,76 @@ TEST_F(mClockSchedulerTest, TestMultiClientOrderedEnqueueDequeue) {
     ASSERT_EQ(niter->second, r.get_map_epoch());
     niter->second++;
   }
+  ASSERT_TRUE(q.empty());
+}
+
+TEST_F(mClockSchedulerTest, TestHighPriorityQueueEnqueueDequeue) {
+  ASSERT_TRUE(q.empty());
+  for (unsigned i = 200; i < 205; ++i) {
+    q.enqueue(create_high_prio_item(i, i, client1, op_scheduler_class::client));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  ASSERT_FALSE(q.empty());
+  // Higher priority ops should be dequeued first
+  auto r = get_item(q.dequeue());
+  ASSERT_EQ(204u, r.get_map_epoch());
+
+  r = get_item(q.dequeue());
+  ASSERT_EQ(203u, r.get_map_epoch());
+
+  r = get_item(q.dequeue());
+  ASSERT_EQ(202u, r.get_map_epoch());
+
+  r = get_item(q.dequeue());
+  ASSERT_EQ(201u, r.get_map_epoch());
+
+  r = get_item(q.dequeue());
+  ASSERT_EQ(200u, r.get_map_epoch());
+
+  ASSERT_TRUE(q.empty());
+}
+
+TEST_F(mClockSchedulerTest, TestAllQueuesEnqueueDequeue) {
+  ASSERT_TRUE(q.empty());
+
+  // Insert ops into the mClock queue
+  for (unsigned i = 100; i < 102; ++i) {
+    q.enqueue(create_item(i, client1, op_scheduler_class::client));
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
+  }
+
+  // Insert Immediate ops
+  for (unsigned i = 103; i < 105; ++i) {
+    q.enqueue(create_item(i, client1, op_scheduler_class::immediate));
+    std::this_thread::sleep_for(std::chrono::microseconds(1));
+  }
+
+  // Insert ops into the high queue
+  for (unsigned i = 200; i < 202; ++i) {
+    q.enqueue(create_high_prio_item(i, i, client1, op_scheduler_class::client));
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+
+  ASSERT_FALSE(q.empty());
+  auto r = get_item(q.dequeue());
+  // Ops classified as Immediate should be dequeued first
+  ASSERT_EQ(103u, r.get_map_epoch());
+  r = get_item(q.dequeue());
+  ASSERT_EQ(104u, r.get_map_epoch());
+
+  // High priority queue should be dequeued second
+  // higher priority operation first
+  r = get_item(q.dequeue());
+  ASSERT_EQ(201u, r.get_map_epoch());
+  r = get_item(q.dequeue());
+  ASSERT_EQ(200u, r.get_map_epoch());
+
+  // mClock queue will be dequeued last
+  r = get_item(q.dequeue());
+  ASSERT_EQ(100u, r.get_map_epoch());
+  r = get_item(q.dequeue());
+  ASSERT_EQ(101u, r.get_map_epoch());
+
   ASSERT_TRUE(q.empty());
 }

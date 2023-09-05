@@ -548,6 +548,9 @@ void ActivePyModules::start_one(PyModuleRef py_module)
 
       dout(4) << "Starting thread for " << name << dendl;
       active_module->thread.create(active_module->get_thread_name());
+      dout(4) << "Starting active module " << name <<" finisher thread "
+        << active_module->get_fin_thread_name() << dendl;
+      active_module->finisher.start();
     }
   }));
 }
@@ -555,6 +558,13 @@ void ActivePyModules::start_one(PyModuleRef py_module)
 void ActivePyModules::shutdown()
 {
   std::lock_guard locker(lock);
+
+  // Stop per active module finisher thread
+  for (auto& [name, module] : modules) {
+      dout(4) << "Stopping active module " << name << " finisher thread" << dendl;
+      module->finisher.wait_for_empty();
+      module->finisher.stop();
+  }
 
   // Signal modules to drop out of serve() and/or tear down resources
   for (auto& [name, module] : modules) {
@@ -594,8 +604,9 @@ void ActivePyModules::notify_all(const std::string &notify_type,
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "queuing notify (" << notify_type << ") to " << name << dendl;
+    Finisher& mod_finisher = py_module_registry.get_active_module_finisher(name);
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module, notify_type, notify_id]
+    mod_finisher.queue(new LambdaContext([module=module, notify_type, notify_id]
       (int r){
         module->notify(notify_type, notify_id);
     }));
@@ -618,8 +629,9 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
     // log_entry: we take a copy because caller's instance is
     // probably ephemeral.
     dout(15) << "queuing notify (clog) to " << name << dendl;
+    Finisher& mod_finisher = py_module_registry.get_active_module_finisher(name);
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module, log_entry](int r){
+    mod_finisher.queue(new LambdaContext([module=module, log_entry](int r){
       module->notify_clog(log_entry);
     }));
   }
@@ -1312,8 +1324,9 @@ void ActivePyModules::config_notify()
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
     dout(15) << "notify (config) " << name << dendl;
+    Finisher& mod_finisher = py_module_registry.get_active_module_finisher(name);
     // workaround for https://bugs.llvm.org/show_bug.cgi?id=35984
-    finisher.queue(new LambdaContext([module=module](int r){
+    mod_finisher.queue(new LambdaContext([module=module](int r){
       module->config_notify();
     }));
   }
@@ -1498,21 +1511,17 @@ void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
   cl->do_log(prio, message);
 }
 
-void ActivePyModules::register_client(std::string_view name, std::string addrs)
+void ActivePyModules::register_client(std::string_view name, std::string addrs, bool replace)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 
-  dout(7) << "registering msgr client handle " << addrv << dendl;
-  py_module_registry.register_client(name, std::move(addrv));
+  dout(7) << "registering msgr client handle " << addrv << " (replace=" << replace << ")" << dendl;
+  py_module_registry.register_client(name, std::move(addrv), replace);
 }
 
 void ActivePyModules::unregister_client(std::string_view name, std::string addrs)
 {
-  std::lock_guard l(lock);
-
   entity_addrvec_t addrv;
   addrv.parse(addrs.data());
 

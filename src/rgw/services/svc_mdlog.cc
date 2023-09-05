@@ -529,10 +529,10 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   return &insert.first->second;
 }
 
-int RGWSI_MDLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl)
+int RGWSI_MDLog::add_entry(const DoutPrefixProvider *dpp, const string& hash_key, const string& section, const string& key, bufferlist& bl, optional_yield y)
 {
   ceph_assert(current_log); // must have called init()
-  return current_log->add_entry(dpp, hash_key, section, key, bl);
+  return current_log->add_entry(dpp, hash_key, section, key, bl, y);
 }
 
 int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)

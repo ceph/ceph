@@ -68,6 +68,7 @@ enum {
   l_mdss_req_readdir_latency,
   l_mdss_req_rename_latency,
   l_mdss_req_renamesnap_latency,
+  l_mdss_req_snapdiff_latency,
   l_mdss_req_rmdir_latency,
   l_mdss_req_rmsnap_latency,
   l_mdss_req_rmxattr_latency,
@@ -158,6 +159,7 @@ public:
 
   // -- requests --
   void handle_client_request(const cref_t<MClientRequest> &m);
+  void handle_client_reply(const cref_t<MClientReply> &m);
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
 			 LogEvent *le, MDSLogContextBase *fin);
@@ -191,7 +193,8 @@ public:
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
 			      bool no_want_auth=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
-				    bool okexist=false, bool want_layout=false);
+				    bool okexist=false, bool authexist=false,
+				    bool want_layout=false);
   std::pair<CDentry*, CDentry*>
 	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
 
@@ -236,6 +239,9 @@ public:
 
   bool is_unlink_pending(CDentry *dn);
   void wait_for_pending_unlink(CDentry *dn, MDRequestRef& mdr);
+
+  bool is_reintegrate_pending(CDentry *dn);
+  void wait_for_pending_reintegrate(CDentry *dn, MDRequestRef& mdr);
 
   // open
   void handle_client_open(MDRequestRef& mdr);
@@ -294,6 +300,7 @@ public:
   void _rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
   void handle_client_renamesnap(MDRequestRef& mdr);
   void _renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+  void handle_client_readdir_snapdiff(MDRequestRef& mdr);
 
   // helpers
   bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, std::set<mds_rank_t> &witnesse,
@@ -327,6 +334,16 @@ public:
   bool terminating_sessions = false;
 
   std::set<client_t> client_reclaim_gather;
+
+  std::set<client_t> get_laggy_clients() const {
+    return laggy_clients;
+  }
+  void clear_laggy_clients() {
+    laggy_clients.clear();
+  }
+
+  const bufferlist& get_snap_trace(Session *session, SnapRealm *realm) const;
+  const bufferlist& get_snap_trace(client_t client, SnapRealm *realm) const;
 
 private:
   friend class MDSContinuation;
@@ -472,6 +489,37 @@ private:
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder& gather);
 
+  void _finalize_readdir(MDRequestRef& mdr,
+                         CInode *diri,
+                         CDir* dir,
+                         bool start,
+                         bool end,
+                         __u16 flags,
+                         __u32 numfiles,
+                         bufferlist& dirbl,
+                         bufferlist& dnbl);
+  void _readdir_diff(
+    utime_t now,
+    MDRequestRef& mdr,
+    CInode* diri,
+    CDir* dir,
+    SnapRealm* realm,
+    unsigned max_entries,
+    int bytes_left,
+    const std::string& offset_str,
+    uint32_t offset_hash,
+    unsigned req_flags,
+    bufferlist& dirbl);
+  bool build_snap_diff(
+    MDRequestRef& mdr,
+    CDir* dir,
+    int bytes_left,
+    dentry_key_t* skip_key,
+    snapid_t snapid_before,
+    snapid_t snapid,
+    const bufferlist& dnbl,
+    std::function<bool(CDentry*, CInode*, bool)> add_result_cb);
+
   MDSRank *mds;
   MDCache *mdcache;
   MDLog *mdlog;
@@ -504,6 +552,8 @@ private:
   uint64_t dir_max_entries = 0;
   int64_t bal_fragment_size_max = 0;
 
+  double inject_rename_corrupt_dentry_first = 0.0;
+
   DecayCounter recall_throttle;
   time last_recall_state;
 
@@ -517,6 +567,9 @@ private:
 
   size_t alternate_name_max = g_conf().get_val<Option::size_t>("mds_alternate_name_max");
   size_t fscrypt_last_block_max_size = g_conf().get_val<Option::size_t>("mds_fscrypt_last_block_max_size");
+
+  // record laggy clients due to laggy OSDs
+  std::set<client_t> laggy_clients;
 };
 
 static inline constexpr auto operator|(Server::RecallFlags a, Server::RecallFlags b) {

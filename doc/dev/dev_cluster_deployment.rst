@@ -1,3 +1,5 @@
+.. _dev_deploying_a_development_cluster:
+
 =================================
  Deploying a development cluster
 =================================
@@ -36,10 +38,6 @@ Options
 .. option:: -e
 
     Create an erasure pool.
-
-.. option:: -f, --filestore
-
-    Use filestore as the osd objectstore backend.
 
 .. option:: --hitset <pool> <hit_set_type>
 

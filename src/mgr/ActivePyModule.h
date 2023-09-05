@@ -20,6 +20,7 @@
 #include "common/cmdparse.h"
 #include "common/LogEntry.h"
 #include "common/Thread.h"
+#include "common/Finisher.h"
 #include "mon/health_check.h"
 #include "mgr/Gil.h"
 
@@ -45,12 +46,19 @@ private:
 
   std::string m_command_perms;
   const MgrSession* m_session = nullptr;
+  std::string fin_thread_name;
+public:
+  Finisher finisher; // per active module finisher to execute commands
 
 public:
   ActivePyModule(const PyModuleRef &py_module_,
       LogChannelRef clog_)
-    : PyModuleRunner(py_module_, clog_)
-  {}
+    : PyModuleRunner(py_module_, clog_),
+      fin_thread_name(std::string("m-fin-" + py_module->get_name()).substr(0,15)),
+      finisher(g_ceph_context, thread_name, fin_thread_name)
+
+  {
+  }
 
   int load(ActivePyModules *py_modules);
   void notify(const std::string &notify_type, const std::string &notify_id);
@@ -92,6 +100,11 @@ public:
   std::string get_uri() const
   {
     return uri;
+  }
+
+  std::string get_fin_thread_name() const
+  {
+    return fin_thread_name;
   }
 
   bool is_authorized(const std::map<std::string, std::string>& arguments) const;

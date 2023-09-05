@@ -22,11 +22,9 @@ add_subdirectory(librados_test_stub)
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
 endif()
-if(WITH_RBD AND NOT WIN32)
-  # librbd tests require libcls*, which in turn require libos and libosd, which
-  # haven't been ported to Windows yet.
+if(WITH_RBD)
   add_subdirectory(librbd)
-endif(WITH_RBD AND NOT WIN32)
+endif()
 if (WITH_CEPHFS)
   add_subdirectory(mds)
 endif()
@@ -73,6 +71,7 @@ if(NOT WIN32)
   add_subdirectory(osd)
   add_subdirectory(osdc)
   add_subdirectory(immutable_object_cache)
+  add_subdirectory(exporter)
 endif(NOT WIN32)
 
 if(WITH_RADOSGW)
@@ -281,8 +280,16 @@ target_link_libraries(ceph_test_librgw_file
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_dependencies(ceph_test_librgw_file
+  ceph_test_librgw_file_cd
+  ceph_test_librgw_file_gp
+  ceph_test_librgw_file_nfsns
+  ceph_test_librgw_file_aw
+  ceph_test_librgw_file_marker)
 
 # ceph_test_librgw_file_cd (just the rgw_file create-delete bucket ops)
 add_executable(ceph_test_librgw_file_cd
@@ -294,6 +301,7 @@ target_link_libraries(ceph_test_librgw_file_cd
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_cd DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -307,6 +315,7 @@ target_link_libraries(ceph_test_librgw_file_gp
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_gp DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -325,6 +334,7 @@ target_link_libraries(ceph_test_librgw_file_nfsns
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   ${LUA_LIBRARIES}
+  ${ALLOC_LIBS}
   )
   target_link_libraries(ceph_test_librgw_file_nfsns spawn)
 install(TARGETS ceph_test_librgw_file_nfsns DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -339,6 +349,7 @@ target_link_libraries(ceph_test_librgw_file_aw
   ceph-common
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
+  ${ALLOC_LIBS}
   )
 install(TARGETS ceph_test_librgw_file_aw DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -357,6 +368,7 @@ target_link_libraries(ceph_test_librgw_file_marker
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   ${LUA_LIBRARIES}
+  ${ALLOC_LIBS}
   )
   target_link_libraries(ceph_test_librgw_file_marker spawn)
 install(TARGETS ceph_test_librgw_file_marker DESTINATION ${CMAKE_INSTALL_BINDIR})
@@ -375,6 +387,7 @@ target_link_libraries(ceph_test_librgw_file_xattr
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
   ${LUA_LIBRARIES}
+  ${ALLOC_LIBS}
   )
 target_link_libraries(ceph_test_librgw_file_xattr spawn)
 

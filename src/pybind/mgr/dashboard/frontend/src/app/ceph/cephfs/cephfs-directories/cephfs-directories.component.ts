@@ -208,6 +208,11 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
           name: $localize`Created`,
           flexGrow: 1,
           pipe: this.cdDatePipe
+        },
+        {
+          prop: 'created',
+          name: $localize`Capacity`,
+          flexGrow: 1
         }
       ],
       selection: new CdTableSelection(),
@@ -237,7 +242,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
 
   private disableCreateSnapshot(): string | boolean {
     const folders = this.selectedDir.path.split('/').slice(1);
-    // With deph of 4 or more we have the subvolume files/folders for which we cannot create
+    // With depth of 4 or more we have the subvolume files/folders for which we cannot create
     // a snapshot. Somehow, you can create a snapshot of the subvolume but not its files.
     if (folders.length >= 4 && folders[0] === 'volumes') {
       return $localize`Cannot create snapshots for files/folders in the subvolume ${folders[2]}`;
@@ -640,7 +645,7 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     }
     const node = this.getNode(parent);
     if (!node) {
-      // Node will not be found for new sub sub directories - this is the intended behaviour
+      // Node will not be found for new sub directories - this is the intended behaviour
       return;
     }
     const children = this.getChildren(parent);

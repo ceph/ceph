@@ -15,6 +15,16 @@
 // naming the mutex for the purposes of the lockdep debug variant.
 
 #if defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
+#include <seastar/core/condition-variable.hh>
+
+#include "crimson/common/log.h"
+#include "include/ceph_assert.h"
+
+#ifndef NDEBUG
+#define FUT_DEBUG(FMT_MSG, ...) crimson::get_logger(ceph_subsys_).trace(FMT_MSG, ##__VA_ARGS__)
+#else
+#define FUT_DEBUG(FMT_MSG, ...)
+#endif
 
 namespace ceph {
   // an empty class satisfying the mutex concept
@@ -33,11 +43,30 @@ namespace ceph {
     void unlock_shared() {}
   };
 
+  // this implementation assumes running within a seastar::thread
+  struct green_condition_variable : private seastar::condition_variable {
+    template <class LockT>
+    void wait(LockT&&) {
+      FUT_DEBUG("green_condition_variable::{}: before blocking", __func__);
+      seastar::condition_variable::wait().get();
+      FUT_DEBUG("green_condition_variable::{}: after blocking", __func__);
+    }
+
+    void notify_one() noexcept {
+      FUT_DEBUG("green_condition_variable::{}", __func__);
+      signal();
+    }
+
+    void notify_all() noexcept {
+      FUT_DEBUG("green_condition_variable::{}", __func__);
+      broadcast();
+    }
+  };
+
   using mutex = dummy_mutex;
   using recursive_mutex = dummy_mutex;
   using shared_mutex = dummy_shared_mutex;
-  // in seastar, we should use a difference interface for enforcing the
-  // semantics of condition_variable
+  using condition_variable = green_condition_variable;
 
   template <typename ...Args>
   dummy_mutex make_mutex(Args&& ...args) {
@@ -122,7 +151,7 @@ namespace ceph {
 // The winpthreads shared mutex implementation is broken.
 // We'll use boost::shared_mutex instead.
 // https://github.com/msys2/MINGW-packages/issues/3319
-#if __MINGW32__
+#if defined(__MINGW32__) && !defined(__clang__)
 #include <boost/thread/shared_mutex.hpp>
 #else
 #include <shared_mutex>
@@ -134,7 +163,7 @@ namespace ceph {
   typedef std::recursive_mutex recursive_mutex;
   typedef std::condition_variable condition_variable;
 
-#if __MINGW32__
+#if defined(__MINGW32__) && !defined(__clang__)
   typedef boost::shared_mutex shared_mutex;
 #else
   typedef std::shared_mutex shared_mutex;

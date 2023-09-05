@@ -335,6 +335,13 @@ public:
         // to throwing an exception by the handler.
         std::invoke(std::forward<ErrorVisitorT>(errfunc),
                     ErrorT::error_t::from_exception_ptr(std::move(ep)));
+      } else if constexpr (seastar::Future<decltype(result)>) {
+        // result is seastar::future but return_t is e.g. int. If so,
+        // the else clause cannot be used as seastar::future lacks
+        // errorator_type member.
+        result = seastar::make_ready_future<return_t>(
+          std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                      ErrorT::error_t::from_exception_ptr(std::move(ep))));
       } else {
         result = FuturatorT::type::errorator_type::template make_ready_future<return_t>(
           std::invoke(std::forward<ErrorVisitorT>(errfunc),
@@ -592,7 +599,9 @@ private:
       static_assert((... && std::is_invocable_v<ErrorVisitorT,
                                                 AllowedErrors>),
                     "provided Error Visitor is not exhaustive");
-
+      static_assert(std::is_void_v<ValueT> ? std::is_invocable_v<ValueFuncT>
+		                           : std::is_invocable_v<ValueFuncT, ValueT>,
+                    "Value Func is not invocable with future's value");
       using value_func_result_t =
         typename std::conditional_t<std::is_void_v<ValueT>,
 				    std::invoke_result<ValueFuncT>,

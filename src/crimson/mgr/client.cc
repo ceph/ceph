@@ -65,13 +65,18 @@ Client::ms_dispatch(crimson::net::ConnectionRef conn, MessageRef m)
   return (dispatched ? std::make_optional(seastar::now()) : std::nullopt);
 }
 
-void Client::ms_handle_connect(crimson::net::ConnectionRef c)
+void Client::ms_handle_connect(
+    crimson::net::ConnectionRef c,
+    seastar::shard_id prv_shard)
 {
+  ceph_assert_always(prv_shard == seastar::this_shard_id());
   gate.dispatch_in_background(__func__, *this, [this, c] {
     if (conn == c) {
       // ask for the mgrconfigure message
       auto m = crimson::make_message<MMgrOpen>();
       m->daemon_name = local_conf()->name.get_id();
+      local_conf().get_config_bl(0, &m->config_bl, &last_config_bl_version);
+      local_conf().get_defaults_bl(&m->config_defaults_bl);
       return conn->send(std::move(m));
     } else {
       return seastar::now();

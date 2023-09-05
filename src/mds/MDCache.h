@@ -129,6 +129,7 @@ static const int MDS_TRAVERSE_RDLOCK_PATH	= (1 << 7);
 static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
 static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
 static const int MDS_TRAVERSE_CHECK_LOCKCACHE	= (1 << 10);
+static const int MDS_TRAVERSE_WANT_INODE	= (1 << 11);
 
 
 // flags for predirty_journal_parents()
@@ -200,6 +201,19 @@ class MDCache {
 
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
+
+  void insert_taken_inos(inodeno_t ino) {
+    replay_taken_inos.insert(ino);
+  }
+  void clear_taken_inos(inodeno_t ino) {
+    replay_taken_inos.erase(ino);
+  }
+  bool test_and_clear_taken_inos(inodeno_t ino) {
+    return replay_taken_inos.erase(ino) != 0;
+  }
+  bool is_taken_inos_empty(void) {
+    return replay_taken_inos.empty();
+  }
 
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
@@ -514,6 +528,7 @@ class MDCache {
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
   bool dump_inode(Formatter *f, uint64_t number);
+  void dump_dir(Formatter *f, CDir *dir, bool dentry_dump=false);
 
   void rejoin_start(MDSContext *rejoin_done_);
   void rejoin_gather_finish();
@@ -810,8 +825,13 @@ class MDCache {
    * dentry is encountered.
    * MDS_TRAVERSE_WANT_DENTRY: Caller wants tail dentry. Add a null dentry if
    * tail dentry does not exist. return 0 even tail dentry is null.
+   * MDS_TRAVERSE_WANT_INODE: Caller only wants target inode if it exists, or
+   * wants tail dentry if target inode does not exist and MDS_TRAVERSE_WANT_DENTRY
+   * is also set.
    * MDS_TRAVERSE_WANT_AUTH: Always forward request to auth MDS of target inode
    * or auth MDS of tail dentry (MDS_TRAVERSE_WANT_DENTRY is set).
+   * MDS_TRAVERSE_XLOCK_DENTRY: Caller wants to xlock tail dentry if MDS_TRAVERSE_WANT_INODE
+   * is not set or (MDS_TRAVERSE_WANT_INODE is set but target inode does not exist)
    *
    * @param pdnvec Data return parameter -- on success, contains a
    * vector of dentries. On failure, is either empty or contains the
@@ -828,6 +848,9 @@ class MDCache {
   int path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 		    const filepath& path, int flags,
 		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr);
+
+  int maybe_request_forward_to_auth(MDRequestRef& mdr, MDSContextFactory& cf,
+				    MDSCacheObject *p);
 
   CInode *cache_traverse(const filepath& path);
 
@@ -953,7 +976,7 @@ class MDCache {
    */
   void enqueue_scrub(std::string_view path, std::string_view tag,
                      bool force, bool recursive, bool repair,
-		     Formatter *f, Context *fin);
+                     bool scrub_mdsdir, Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);
   void repair_dirfrag_stats(CDir *dir);
   void rdlock_dirfrags_stats(CInode *diri, MDSInternalContext *fin);
@@ -1236,6 +1259,8 @@ class MDCache {
   StrayManager stray_manager;
 
  private:
+  std::set<inodeno_t> replay_taken_inos; // the inos have been taken when replaying
+
   // -- fragmenting --
   struct ufragment {
     ufragment() {}
@@ -1263,6 +1288,23 @@ class MDCache {
     utime_t last_cum_auth_pins_change;
     int last_cum_auth_pins = 0;
     int num_remote_waiters = 0;	// number of remote authpin waiters
+  };
+
+  enum KILL_SHUTDOWN_AT {
+    SHUTDOWN_NULL,
+    SHUTDOWN_START,
+    SHUTDOWN_POSTTRIM,
+    SHUTDOWN_POSTONEEXPORT,
+    SHUTDOWN_POSTALLEXPORTS,
+    SHUTDOWN_SESSIONTERMINATE,
+    SHUTDOWN_SUBTREEMAP,
+    SHUTDOWN_TRIMALL,
+    SHUTDOWN_STRAYPUT,
+    SHUTDOWN_LOGCAP,
+    SHUTDOWN_EMPTYSUBTREES,
+    SHUTDOWN_MYINREMOVAL,
+    SHUTDOWN_GLOBALSNAPREALMREMOVAL,
+    SHUTDOWN_UNUSED
   };
 
   typedef std::map<dirfrag_t,fragment_info_t>::iterator fragment_info_iterator;
@@ -1361,9 +1403,11 @@ class MDCache {
   std::thread upkeeper;
   ceph::mutex upkeep_mutex = ceph::make_mutex("MDCache::upkeep_mutex");
   ceph::condition_variable upkeep_cvar;
-  time upkeep_last_trim = time::min();
-  time upkeep_last_release = time::min();
+  time upkeep_last_trim = clock::zero();
+  time upkeep_last_release = clock::zero();
   std::atomic<bool> upkeep_trim_shutdown{false};
+
+  uint64_t kill_shutdown_at = 0;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

@@ -17,69 +17,13 @@ logger = logging.getLogger(__name__)
 def prepare_dmcrypt(key, device, device_type, tags):
     """
     Helper for devices that are encrypted. The operations needed for
-    block, db, wal, or data/journal devices are all the same
+    block, db, wal devices are all the same
     """
     if not device:
         return ''
     tag_name = 'ceph.%s_uuid' % device_type
     uuid = tags[tag_name]
-    # format data device
-    encryption_utils.luks_format(
-        key,
-        device
-    )
-    encryption_utils.luks_open(
-        key,
-        device,
-        uuid
-    )
-
-    return '/dev/mapper/%s' % uuid
-
-
-def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
-    """
-    :param device: The name of the logical volume to work with
-    :param journal: similar to device but can also be a regular/plain disk
-    :param secrets: A dict with the secrets needed to create the osd (e.g. cephx)
-    :param id_: The OSD id
-    :param fsid: The OSD fsid, also known as the OSD UUID
-    """
-    cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
-
-    # encryption-only operations
-    if secrets.get('dmcrypt_key'):
-        # format and open ('decrypt' devices) and re-assign the device and journal
-        # variables so that the rest of the process can use the mapper paths
-        key = secrets['dmcrypt_key']
-        device = prepare_dmcrypt(key, device, 'data', tags)
-        journal = prepare_dmcrypt(key, journal, 'journal', tags)
-
-    # vdo detection
-    is_vdo = api.is_vdo(device)
-    # create the directory
-    prepare_utils.create_osd_path(osd_id)
-    # format the device
-    prepare_utils.format_device(device)
-    # mount the data device
-    prepare_utils.mount_osd(device, osd_id, is_vdo=is_vdo)
-    # symlink the journal
-    prepare_utils.link_journal(journal, osd_id)
-    # get the latest monmap
-    prepare_utils.get_monmap(osd_id)
-    # prepare the osd filesystem
-    prepare_utils.osd_mkfs_filestore(osd_id, fsid, cephx_secret)
-    # write the OSD keyring if it doesn't exist already
-    prepare_utils.write_keyring(osd_id, cephx_secret)
-    if secrets.get('dmcrypt_key'):
-        # if the device is going to get activated right away, this can be done
-        # here, otherwise it will be recreated
-        encryption_utils.write_lockbox_keyring(
-            osd_id,
-            fsid,
-            tags['ceph.cephx_lockbox_secret']
-        )
-
+    return encryption_utils.prepare_dmcrypt(key, device, uuid)
 
 def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
     """
@@ -201,7 +145,7 @@ class Prepare(object):
         a device or partition will result in error.
 
         :param arg: The value of ``--data`` when parsing args
-        :param device_type: Usually, either ``data`` or ``block`` (filestore vs. bluestore)
+        :param device_type: Usually ``block``
         :param osd_uuid: The OSD uuid
         """
         device = self.args.data
@@ -298,60 +242,7 @@ class Prepare(object):
             'ceph.crush_device_class': crush_device_class,
             'ceph.osdspec_affinity': prepare_utils.get_osdspec_affinity()
         }
-        if self.args.filestore:
-            if not self.args.journal:
-                logger.info(('no journal was specifed, creating journal lv '
-                             'on {}').format(self.args.data))
-                self.args.journal = self.args.data
-                self.args.journal_size = disk.Size(g=5)
-                # need to adjust data size/slots for colocated journal
-                if self.args.data_size:
-                    self.args.data_size -= self.args.journal_size
-                if self.args.data_slots == 1:
-                    self.args.data_slots = 0
-                else:
-                    raise RuntimeError('Can\'t handle multiple filestore OSDs '
-                                       'with colocated journals yet. Please '
-                                       'create journal LVs manually')
-            tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
-            tags['ceph.encrypted'] = encrypted
-
-            journal_device, journal_uuid, tags = self.setup_device(
-                'journal',
-                self.args.journal,
-                tags,
-                self.args.journal_size,
-                self.args.journal_slots)
-
-            try:
-                vg_name, lv_name = self.args.data.split('/')
-                data_lv = api.get_single_lv(filters={'lv_name': lv_name,
-                                                    'vg_name': vg_name})
-            except ValueError:
-                data_lv = None
-
-            if not data_lv:
-                data_lv = self.prepare_data_device('data', osd_fsid)
-
-            tags['ceph.data_device'] = data_lv.lv_path
-            tags['ceph.data_uuid'] = data_lv.lv_uuid
-            tags['ceph.vdo'] = api.is_vdo(data_lv.lv_path)
-            tags['ceph.type'] = 'data'
-            data_lv.set_tags(tags)
-            if not journal_device.startswith('/'):
-                # we got a journal lv, set rest of the tags
-                api.get_single_lv(filters={'lv_name': lv_name,
-                                           'vg_name': vg_name}).set_tags(tags)
-
-            prepare_filestore(
-                data_lv.lv_path,
-                journal_device,
-                secrets,
-                tags,
-                self.osd_id,
-                osd_fsid,
-            )
-        elif self.args.bluestore:
+        if self.args.bluestore:
             try:
                 vg_name, lv_name = self.args.data.split('/')
                 block_lv = api.get_single_lv(filters={'lv_name': lv_name,
@@ -427,15 +318,10 @@ class Prepare(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
-        exclude_group_options(parser, argv=self.argv, groups=['filestore', 'bluestore'])
+        exclude_group_options(parser, argv=self.argv, groups=['bluestore'])
         self.args = parser.parse_args(self.argv)
-        # the unfortunate mix of one superset for both filestore and bluestore
-        # makes this validation cumbersome
-        if self.args.filestore:
-            if not self.args.journal:
-                raise SystemExit('--journal is required when using --filestore')
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if not self.args.bluestore and not self.args.filestore:
+        if not self.args.bluestore:
             self.args.bluestore = True
         self.safe_prepare()

@@ -232,9 +232,14 @@ function cherry_pick_phase {
     if [ "$merged" = "true" ] ; then
         true
     else
-        error "${original_pr_url} is not merged yet"
-        info "Cowardly refusing to perform automated cherry-pick"
-        false
+        if [ "$FORCE" ] ; then
+            warning "${original_pr_url} is not merged yet"
+            info "--force was given, so continuing anyway"
+        else
+            error "${original_pr_url} is not merged yet"
+            info "Cowardly refusing to perform automated cherry-pick"
+            false
+        fi
     fi
     number_of_commits=$(echo "${remote_api_output}" | jq '.commits')
     if [ "$number_of_commits" -eq "$number_of_commits" ] 2>/dev/null ; then
@@ -1087,6 +1092,7 @@ function try_known_milestones {
         octopus) mn="13" ;;
         pacific) mn="14" ;;
         quincy) mn="15" ;;
+        reef) mn="16" ;;
     esac
     echo "$mn"
 }

@@ -101,10 +101,9 @@ def ensure_associated_lvs(lvs, lv_tags={}):
     # leaving many journals with osd.1 - usually, only a single LV will be
     # returned
 
-    journal_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'journal'}))
     db_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'db'}))
     wal_lvs = api.get_lvs(tags=merge_dict(lv_tags, {'ceph.type': 'wal'}))
-    backing_devices = [(journal_lvs, 'journal'), (db_lvs, 'db'),
+    backing_devices = [(db_lvs, 'db'),
                        (wal_lvs, 'wal')]
 
     verified_devices = []
@@ -168,7 +167,6 @@ class Zap(object):
         """
         lv = api.get_single_lv(filters={'lv_name': device.lv_name, 'vg_name':
                                         device.vg_name})
-        pv = api.get_single_pv(filters={'lv_uuid': lv.lv_uuid})
         self.unmount_lv(lv)
 
         wipefs(device.path)
@@ -182,8 +180,10 @@ class Zap(object):
             elif len(lvs) <= 1:
                 mlogger.info('Only 1 LV left in VG, will proceed to destroy '
                              'volume group %s', device.vg_name)
+                pvs = api.get_pvs(filters={'lv_uuid': lv.lv_uuid})
                 api.remove_vg(device.vg_name)
-                api.remove_pv(pv.pv_name)
+                for pv in pvs:
+                    api.remove_pv(pv.pv_name)
             else:
                 mlogger.info('More than 1 LV left in VG, will proceed to '
                              'destroy LV only')
@@ -302,9 +302,8 @@ class Zap(object):
         self.zap(devices)
 
     def dmcrypt_close(self, dmcrypt_uuid):
-        dmcrypt_path = "/dev/mapper/{}".format(dmcrypt_uuid)
-        mlogger.info("Closing encrypted path %s", dmcrypt_path)
-        encryption.dmcrypt_close(dmcrypt_path)
+        mlogger.info("Closing encrypted volume %s", dmcrypt_uuid)
+        encryption.dmcrypt_close(mapping=dmcrypt_uuid, skip_path_check=True)
 
     def main(self):
         sub_command_help = dedent("""

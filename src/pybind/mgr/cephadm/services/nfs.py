@@ -1,4 +1,5 @@
 import errno
+import ipaddress
 import logging
 import os
 import subprocess
@@ -92,10 +93,18 @@ class NFSService(CephService):
         # create the RGW keyring
         rgw_user = f'{rados_user}-rgw'
         rgw_keyring = self.create_rgw_keyring(daemon_spec)
+        if spec.virtual_ip:
+            bind_addr = spec.virtual_ip
+        else:
+            bind_addr = daemon_spec.ip if daemon_spec.ip else ''
+        if not bind_addr:
+            logger.warning(f'Bind address in {daemon_type}.{daemon_id}\'s ganesha conf is defaulting to empty')
+        else:
+            logger.debug("using haproxy bind address: %r", bind_addr)
 
         # generate the ganesha config
         def get_ganesha_conf() -> str:
-            context = {
+            context: Dict[str, Any] = {
                 "user": rados_user,
                 "nodeid": nodeid,
                 "pool": POOL_NAME,
@@ -104,8 +113,12 @@ class NFSService(CephService):
                 "url": f'rados://{POOL_NAME}/{spec.service_id}/{spec.rados_config_name()}',
                 # fall back to default NFS port if not present in daemon_spec
                 "port": daemon_spec.ports[0] if daemon_spec.ports else 2049,
-                "bind_addr": daemon_spec.ip if daemon_spec.ip else '',
+                "bind_addr": bind_addr,
+                "haproxy_hosts": [],
             }
+            if spec.enable_haproxy_protocol:
+                context["haproxy_hosts"] = self._haproxy_hosts()
+                logger.debug("selected haproxy_hosts: %r", context["haproxy_hosts"])
             return self.mgr.template.render('services/nfs/ganesha.conf.j2', context)
 
         # generate the cephadm config json
@@ -288,3 +301,31 @@ class NFSService(CephService):
             stderr=subprocess.PIPE,
             timeout=10
         )
+
+    def _haproxy_hosts(self) -> List[str]:
+        # NB: Ideally, we would limit the list to IPs on hosts running
+        # haproxy/ingress only, but due to the nature of cephadm today
+        # we'd "only know the set of haproxy hosts after they've been
+        # deployed" (quoth @adk7398). As it is today we limit the list
+        # of hosts we know are managed by cephadm. That ought to be
+        # good enough to prevent acceping haproxy protocol messages
+        # from "rouge" systems that are not under our control. At
+        # least until we learn otherwise.
+        cluster_ips: List[str] = []
+        for host in self.mgr.inventory.keys():
+            default_addr = self.mgr.inventory.get_addr(host)
+            cluster_ips.append(default_addr)
+            nets = self.mgr.cache.networks.get(host)
+            if not nets:
+                continue
+            for subnet, iface in nets.items():
+                ip_subnet = ipaddress.ip_network(subnet)
+                if ipaddress.ip_address(default_addr) in ip_subnet:
+                    continue  # already present
+                if ip_subnet.is_loopback or ip_subnet.is_link_local:
+                    continue  # ignore special subnets
+                addrs: List[str] = sum((addr_list for addr_list in iface.values()), [])
+                if addrs:
+                    # one address per interface/subnet is enough
+                    cluster_ips.append(addrs[0])
+        return cluster_ips

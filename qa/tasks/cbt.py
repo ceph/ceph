@@ -1,6 +1,7 @@
 import logging
 import os
 import yaml
+from tasks.cbt_performance import CBTperformance
 
 from teuthology import misc
 from teuthology.orchestra import run
@@ -41,6 +42,7 @@ class CBT(Task):
             iterations=self.config.get('cluster', {}).get('iterations', 1),
             tmp_dir='/tmp/cbt',
             pool_profiles=self.config.get('cluster', {}).get('pool_profiles'),
+            pid_dir=self.config.get('cluster', {}).get('pid_dir', '/var/run/ceph'),
             )
 
         benchmark_config = self.config.get('benchmarks')
@@ -62,11 +64,13 @@ class CBT(Task):
                    (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
             benchmark_config['cosbench']['auth'] = "username=cosbench:operator;password=intel2012;url=http://%s:80/auth/v1.0;retry=9" %(ips[0])
         client_endpoints_config = self.config.get('client_endpoints', None)
+        monitoring_profiles = self.config.get('monitoring_profiles', None)
 
         return dict(
             cluster=cluster_config,
             benchmarks=benchmark_config,
             client_endpoints = client_endpoints_config,
+            monitoring_profiles = monitoring_profiles,
             )
 
     def install_dependencies(self):
@@ -74,10 +78,22 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'collectl']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-devel', 'pdsh', 'pdsh-rcmd-ssh','perf']
+            self.log.info('Installing collectl')
+            collectl_location = "https://sourceforge.net/projects/collectl/files/collectl/collectl-4.3.1/collectl-4.3.1.src.tar.gz/download"
+            self.first_mon.run(
+                args=[
+                    'sudo', 'mkdir', 'collectl', run.Raw('&&'),
+                    'cd', 'collectl', run.Raw('&&'),
+                    'sudo', 'wget', collectl_location, '-O', 'collectl.tar.gz', run.Raw('&&'),
+                    'sudo', 'tar', '-xvf', 'collectl.tar.gz' , run.Raw('&&'),
+                    'cd', 'collectl-4.3.1', run.Raw('&&'),
+                    'sudo', './INSTALL'
+                ]
+            )
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-dev', 'collectl']
+            cbt_depends = ['python3-yaml', 'python3-lxml', 'librbd-dev', 'collectl', 'linux-tools-generic']
         self.first_mon.run(args=install_cmd + cbt_depends)
 
         benchmark_type = next(iter(self.cbt_config.get('benchmarks').keys()))
@@ -215,6 +231,16 @@ class CBT(Task):
     def begin(self):
         super(CBT, self).begin()
         testdir = misc.get_testdir(self.ctx)
+        # disable perf_event_paranoid to allow perf to run
+        self.first_mon.run(
+            args=[
+                'sudo',
+                '/sbin/sysctl',
+                '-q',
+                '-w',
+                'kernel.perf_event_paranoid=0',
+            ],
+        )
         self.first_mon.run(
             args=[
                 '{tdir}/cbt/cbt.py'.format(tdir=testdir),
@@ -288,6 +314,8 @@ class CBT(Task):
                     '{tdir}/xml'.format(tdir=testdir),
                 ]
             )
-
+        # Collect cbt performance data
+        cbt_performance = CBTperformance()
+        cbt_performance.collect(self.ctx, self.config)
 
 task = CBT

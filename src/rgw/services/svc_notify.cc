@@ -32,6 +32,7 @@ class RGWWatcher : public DoutPrefixProvider , public librados::WatchCtx2 {
   RGWSI_RADOS::Obj obj;
   uint64_t watch_handle;
   int register_ret{0};
+  bool unregister_done{false};
   librados::AioCompletion *register_completion{nullptr};
 
   class C_ReinitWatch : public Context {
@@ -85,20 +86,23 @@ public:
   }
 
   void reinit() {
-    int ret = unregister_watch();
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
-      return;
+    if(!unregister_done) {
+      int ret = unregister_watch();
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: unregister_watch() returned ret=" << ret << dendl;
+      }
     }
-    ret = register_watch();
+    int ret = register_watch();
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: register_watch() returned ret=" << ret << dendl;
+      svc->schedule_context(new C_ReinitWatch(this));
       return;
     }
   }
 
   int unregister_watch() {
     int r = svc->unwatch(obj, watch_handle);
+    unregister_done = true;
     if (r < 0) {
       return r;
     }
@@ -135,6 +139,7 @@ public:
       return r;
     }
     svc->add_watcher(index);
+    unregister_done = false;
     return 0;
   }
 
@@ -144,6 +149,7 @@ public:
       return r;
     }
     svc->add_watcher(index);
+    unregister_done = false;
     return 0;
   }
 };
@@ -272,6 +278,10 @@ int RGWSI_Notify::do_start(optional_yield y, const DoutPrefixProvider *dpp)
     return r;
   }
 
+  inject_notify_timeout_probability =
+    cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
+  max_notify_retries = cct->_conf.get_val<uint64_t>("rgw_max_notify_retries");
+
   control_pool = zone_svc->get_zone_params().control_pool;
 
   int ret = init_watch(dpp, y);
@@ -390,19 +400,69 @@ int RGWSI_Notify::distribute(const DoutPrefixProvider *dpp, const string& key,
   return 0;
 }
 
+namespace librados {
+
+static std::ostream& operator<<(std::ostream& out, const notify_timeout_t& t)
+{
+  return out << t.notifier_id << ':' << t.cookie;
+}
+
+} // namespace librados
+
+using timeout_vector = std::vector<librados::notify_timeout_t>;
+
+static timeout_vector decode_timeouts(const bufferlist& bl)
+{
+  using ceph::decode;
+  auto p = bl.begin();
+
+  // decode and discard the acks
+  uint32_t num_acks;
+  decode(num_acks, p);
+  for (auto i = 0u; i < num_acks; ++i) {
+    std::pair<uint64_t, uint64_t> id;
+    decode(id, p);
+    // discard the payload
+    uint32_t blen;
+    decode(blen, p);
+    p += blen;
+  }
+
+  // decode and return the timeouts
+  uint32_t num_timeouts;
+  decode(num_timeouts, p);
+
+  timeout_vector timeouts;
+  for (auto i = 0u; i < num_timeouts; ++i) {
+    std::pair<uint64_t, uint64_t> id;
+    decode(id, p);
+    timeouts.push_back({id.first, id.second});
+  }
+  return timeouts;
+}
+
 int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp,
                                 RGWSI_RADOS::Obj& notify_obj,
 				const RGWCacheNotifyInfo& cni,
                                 optional_yield y)
 {
-  bufferlist bl;
+  bufferlist bl, rbl;
   encode(cni, bl);
 
   // First, try to send, without being fancy about it.
-  auto r = notify_obj.notify(dpp, bl, 0, nullptr, y);
+  auto r = notify_obj.notify(dpp, bl, 0, &rbl, y);
 
   if (r < 0) {
+    timeout_vector timeouts;
+    try {
+      timeouts = decode_timeouts(rbl);
+    } catch (const buffer::error& e) {
+      ldpp_dout(dpp, 0) << "robust_notify failed to decode notify response: "
+          << e.what() << dendl;
+    }
+
     ldpp_dout(dpp, 1) << __PRETTY_FUNCTION__ << ":" << __LINE__
+		      << " Watchers " << timeouts << " did not respond."
 		      << " Notify failed on object " << cni.obj << ": "
 		      << cpp_strerror(-r) << dendl;
   }
@@ -421,10 +481,19 @@ int RGWSI_Notify::robust_notify(const DoutPrefixProvider *dpp,
       ldpp_dout(dpp, 1) << __PRETTY_FUNCTION__ << ":" << __LINE__
 			<< " Invalidating obj=" << info.obj << " tries="
 			<< tries << dendl;
-      r = notify_obj.notify(dpp, bl, 0, nullptr, y);
+      r = notify_obj.notify(dpp, retrybl, 0, &rbl, y);
       if (r < 0) {
+        timeout_vector timeouts;
+        try {
+          timeouts = decode_timeouts(rbl);
+        } catch (const buffer::error& e) {
+          ldpp_dout(dpp, 0) << "robust_notify failed to decode notify response: "
+              << e.what() << dendl;
+        }
+
 	ldpp_dout(dpp, 1) << __PRETTY_FUNCTION__ << ":" << __LINE__
-			  << " invalidation attempt " << tries << " failed: "
+			  << " Watchers " << timeouts << " did not respond."
+			  << " Invalidation attempt " << tries << " failed: "
 			  << cpp_strerror(-r) << dendl;
       }
     }

@@ -322,6 +322,12 @@ private:
       return generic_iter->status();
     }
   };
+protected:
+  Iterator make_iterator(const std::string &prefix, WholeSpaceIterator w_iter) {
+    return std::make_shared<PrefixIteratorImpl>(
+      prefix,
+      w_iter);
+  }
 public:
   typedef uint32_t IteratorOpts;
   static const uint32_t ITERATOR_NOCACHE = 1;
@@ -333,8 +339,7 @@ public:
 
   virtual WholeSpaceIterator get_wholespace_iterator(IteratorOpts opts = 0) = 0;
   virtual Iterator get_iterator(const std::string &prefix, IteratorOpts opts = 0, IteratorBounds bounds = IteratorBounds()) {
-    return std::make_shared<PrefixIteratorImpl>(
-      prefix,
+    return make_iterator(prefix,
       get_wholespace_iterator(opts));
   }
 

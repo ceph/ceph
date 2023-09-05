@@ -11,6 +11,7 @@
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operations/snaptrim_event.h"
 #include "crimson/osd/pg_activation_blocker.h"
 #include "crimson/osd/pg_map.h"
 
@@ -291,6 +292,13 @@ struct EventBackendRegistry<osd::BackfillRecovery> {
 
 template <>
 struct EventBackendRegistry<osd::PGAdvanceMap> {
+  static std::tuple<> get_backends() {
+    return {};
+  }
+};
+
+template <>
+struct EventBackendRegistry<osd::SnapTrimObjSubEvent> {
   static std::tuple<> get_backends() {
     return {};
   }

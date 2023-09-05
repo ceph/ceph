@@ -295,6 +295,10 @@ if(WITH_CEPHFS_JAVA)
   add_subdirectory(java)
 endif()
 
+if(WITH_RADOSGW_D4N)
+  add_subdirectory(cpp_redis)
+endif()
+
 if (WITH_BLKIN)
   add_subdirectory(blkin/blkin-lib)
 endif(WITH_BLKIN)
@@ -321,7 +325,7 @@ if(NOT TARGET RapidJSON::RapidJSON)
 endif()
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
-set(WITH_FMT_VERSION "7.0.0" CACHE
+set(WITH_FMT_VERSION "8.1.1" CACHE
   STRING "build with fmt version")
 find_package(fmt ${WITH_FMT_VERSION} QUIET)
 if(fmt_FOUND)
@@ -331,10 +335,11 @@ else()
   set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
   set(BUILD_SHARED_LIBS FALSE)
   add_subdirectory(fmt)
+  if (WITH_FMT_HEADER_ONLY)
+    add_library(fmt::fmt ALIAS fmt-header-only)
+  endif()
   set(BUILD_SHARED_LIBS ${old_BUILD_SHARED_LIBS})
   unset(old_BUILD_SHARED_LIBS)
-  target_compile_definitions(fmt PUBLIC
-    $<$<BOOL:${WIN32}>:FMT_USE_TZSET=0>)
   include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 endif()
 
@@ -565,7 +570,7 @@ endif()
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
   SKIP_RPATH TRUE)
-if(NOT APPLE AND NOT FREEBSD)
+if(NOT APPLE AND NOT FREEBSD AND NOT WIN32)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
   # prefer the local symbol definitions when binding references to global
@@ -809,7 +814,8 @@ if(WITH_LIBCEPHFS)
       OUTPUT_NAME cephfs
       VERSION 2.0.0
       SOVERSION 2)
-    if(NOT APPLE)
+    if(NOT APPLE AND NOT
+        (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL Clang))
       foreach(name ceph-common client osdc)
         set_property(TARGET cephfs APPEND_STRING PROPERTY
           LINK_FLAGS " -Wl,--exclude-libs,lib${name}.a")

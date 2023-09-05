@@ -406,6 +406,7 @@ void PoolReplayer<I>::init(const std::string& site_name) {
 
 template <typename I>
 void PoolReplayer<I>::shut_down() {
+  dout(20) << dendl;
   {
     std::lock_guard l{m_lock};
     m_stopping = true;
@@ -453,6 +454,10 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
 			        const std::string &description,
 			        RadosRef *rados_ref,
                                 bool strip_cluster_overrides) {
+  dout(10) << "cluster_name=" << cluster_name << ", client_name=" << client_name
+	   << ", mon_host=" << mon_host << ", strip_cluster_overrides="
+	   << strip_cluster_overrides << dendl;
+
   // NOTE: manually bootstrap a CephContext here instead of via
   // the librados API to avoid mixing global singletons between
   // the librados shared library and the daemon
@@ -705,7 +710,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
     for (auto &name : mirroring_namespaces) {
       auto it = m_namespace_replayers.find(name);
       if (it == m_namespace_replayers.end()) {
-        // acuire leader for this namespace replayer failed
+        // acquire leader for this namespace replayer failed
         continue;
       }
       it->second->handle_instances_added(instance_ids);
@@ -723,6 +728,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
 template <typename I>
 int PoolReplayer<I>::list_mirroring_namespaces(
     std::set<std::string> *namespaces) {
+  dout(20) << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   std::vector<std::string> names;
@@ -756,6 +762,7 @@ int PoolReplayer<I>::list_mirroring_namespaces(
 template <typename I>
 void PoolReplayer<I>::reopen_logs()
 {
+  dout(20) << dendl;
   std::lock_guard locker{m_lock};
 
   if (m_local_rados) {
@@ -769,6 +776,7 @@ void PoolReplayer<I>::reopen_logs()
 template <typename I>
 void PoolReplayer<I>::namespace_replayer_acquire_leader(const std::string &name,
                                                         Context *on_finish) {
+  dout(20) << dendl;
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   auto it = m_namespace_replayers.find(name);

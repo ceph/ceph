@@ -65,7 +65,6 @@ overrides:
         debug bdev: "0/0"
         debug kstore: "0/0"
         debug rocksdb: "0/0"
-        debug leveldb: "0/0"
         debug memdb: "0/0"
         debug fuse: "0/0"
         debug mgr: "0/0"

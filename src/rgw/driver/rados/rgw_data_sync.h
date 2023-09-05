@@ -23,6 +23,7 @@
 #include "rgw_sync_policy.h"
 
 #include "rgw_bucket_sync.h"
+#include "sync_fairness.h"
 
 // represents an obligation to sync an entry up a given time
 struct rgw_data_sync_obligation {
@@ -310,6 +311,7 @@ struct RGWDataSyncEnv {
   RGWSyncTraceManager *sync_tracer{nullptr};
   RGWSyncModuleInstanceRef sync_module{nullptr};
   PerfCounters* counters{nullptr};
+  rgw::sync_fairness::BidManager* bid_manager{nullptr};
 
   RGWDataSyncEnv() {}
 
@@ -823,8 +825,8 @@ public:
 				    uint64_t gen);
   // specific source obj sync status, can be used by sync modules
   static std::string obj_status_oid(const rgw_bucket_sync_pipe& sync_pipe,
-				    const rgw_zone_id& source_zone, const rgw::sal::Object* obj); /* specific source obj sync status,
-										       can be used by sync modules */
+				    const rgw_zone_id& source_zone,
+				    const rgw_obj& obj);
 
   // implements DoutPrefixProvider
   CephContext *get_cct() const override;

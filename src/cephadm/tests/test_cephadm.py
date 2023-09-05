@@ -58,8 +58,8 @@ class TestCephAdm(object):
 
         for side_effect, expected_exception in (
             (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-            (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
-            (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
+            (os_error(errno.EAFNOSUPPORT), OSError),
+            (os_error(errno.EADDRNOTAVAIL), OSError),
             (None, None),
         ):
             _socket = mock.Mock()
@@ -77,20 +77,68 @@ class TestCephAdm(object):
     def test_port_in_use(self, _logger, _attempt_bind):
         empty_ctx = None
 
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         _attempt_bind.side_effect = _cephadm.PortOccupiedError('msg')
-        assert _cephadm.port_in_use(empty_ctx, 9100) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+
+    @mock.patch('cephadm.socket.socket.bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_special_cases(self, _logger, _bind):
+        # port_in_use has special handling for
+        # EAFNOSUPPORT and EADDRNOTAVAIL errno OSErrors.
+        # If we get those specific errors when attempting
+        # to bind to the ip:port we should not say the
+        # port is in use
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        _bind.side_effect = os_error(errno.EADDRNOTAVAIL)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        _bind.side_effect = os_error(errno.EAFNOSUPPORT)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        # this time, have it raise the actual port taken error
+        # so it should report the port is in use
+        _bind.side_effect = os_error(errno.EADDRINUSE)
+        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == True
+
+    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_with_specific_ips(self, _logger, _attempt_bind):
+        empty_ctx = None
+
+        def _fake_attempt_bind(ctx, s: socket.socket, addr: str, port: int) -> None:
+            occupied_error = _cephadm.PortOccupiedError('msg')
+            if addr.startswith('200'):
+                raise occupied_error
+            if addr.startswith('100'):
+                if port == 4567:
+                    raise occupied_error
+
+        _attempt_bind.side_effect = _fake_attempt_bind
+
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
+        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -126,8 +174,8 @@ class TestCephAdm(object):
         ):
             for side_effect, expected_exception in (
                 (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-                (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
-                (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
+                (os_error(errno.EADDRNOTAVAIL), OSError),
+                (os_error(errno.EAFNOSUPPORT), OSError),
                 (None, None),
             ):
                 mock_socket_obj = mock.Mock()
@@ -151,6 +199,18 @@ class TestCephAdm(object):
     def test__get_parser_image(self):
         args = _cephadm._parse_args(['--image', 'foo', 'version'])
         assert args.image == 'foo'
+
+    def test_check_required_global_args(self):
+        ctx = _cephadm.CephadmContext()
+        mock_fn = mock.Mock()
+        mock_fn.return_value = 0
+        require_image = _cephadm.require_image(mock_fn)
+
+        with pytest.raises(_cephadm.Error, match='This command requires the global --image option to be set'):
+            require_image(ctx)
+
+        ctx.image = 'sample-image'
+        require_image(ctx)
 
     @mock.patch('cephadm.logger')
     def test_parse_mem_usage(self, _logger):
@@ -246,7 +306,7 @@ class TestCephAdm(object):
             _cephadm.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
 
     @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.get_custom_config_files')
+    @mock.patch('cephadm.fetch_custom_config_files')
     @mock.patch('cephadm.get_container')
     def test_get_deployment_container(self, _get_container, _get_config, _logger):
         """
@@ -260,12 +320,12 @@ class TestCephAdm(object):
             '--something',
         ]
         ctx.data_dir = 'data'
-        _get_config.return_value = {'custom_config_files': [
+        _get_config.return_value = [
             {
                 'mount_path': '/etc/testing.str',
                 'content': 'this\nis\na\nstring',
             }
-        ]}
+        ]
         _get_container.return_value = _cephadm.CephContainer.for_daemon(
             ctx,
             fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
@@ -292,7 +352,62 @@ class TestCephAdm(object):
         assert c.volume_mounts[os.path.join('data', '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'custom_config_files', 'grafana.host1', 'testing.str')] == '/etc/testing.str'
 
     @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.get_custom_config_files')
+    @mock.patch('cephadm.FileLock')
+    @mock.patch('cephadm.deploy_daemon')
+    @mock.patch('cephadm.fetch_configs')
+    @mock.patch('cephadm.make_var_run')
+    @mock.patch('cephadm.migrate_sysctl_dir')
+    @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
+    @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
+    @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (0, 0))
+    @mock.patch('cephadm.get_deployment_container')
+    @mock.patch('cephadm.read_configuration_source', lambda c: {})
+    @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
+    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _fetch_configs, _deploy_daemon, _file_lock, _logger):
+        """
+        test that crush location for mon is set if it is included in config_json
+        """
+
+        ctx = _cephadm.CephadmContext()
+        ctx.name = 'mon.test'
+        ctx.fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
+        ctx.reconfig = False
+        ctx.container_engine = mock_docker()
+        ctx.allow_ptrace = True
+        ctx.config_json = '-'
+        ctx.osd_fsid = '0'
+        ctx.tcp_ports = '3300 6789'
+        _fetch_configs.return_value = {
+            'crush_location': 'database=a'
+        }
+
+        _get_deployment_container.return_value = _cephadm.CephContainer.for_daemon(
+            ctx,
+            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+            daemon_type='mon',
+            daemon_id='test',
+            entrypoint='',
+            args=[],
+            container_args=[],
+            volume_mounts={},
+            bind_mounts=[],
+            envs=[],
+            privileged=False,
+            ptrace=False,
+            host_network=True,
+        )
+
+        def _crush_location_checker(ctx, fsid, daemon_type, daemon_id, container, uid, gid, **kwargs):
+            print(container.args)
+            raise Exception(' '.join(container.args))
+
+        _deploy_daemon.side_effect = _crush_location_checker
+
+        with pytest.raises(Exception, match='--set-crush-location database=a'):
+            _cephadm.command_deploy_from(ctx)
+
+    @mock.patch('cephadm.logger')
+    @mock.patch('cephadm.fetch_custom_config_files')
     def test_write_custom_conf_files(self, _get_config, _logger, cephadm_fs):
         """
         test _write_custom_conf_files writes the conf files correctly
@@ -301,7 +416,7 @@ class TestCephAdm(object):
         ctx = _cephadm.CephadmContext()
         ctx.config_json = '-'
         ctx.data_dir = _cephadm.DATA_DIR
-        _get_config.return_value = {'custom_config_files': [
+        _get_config.return_value = [
             {
                 'mount_path': '/etc/testing.str',
                 'content': 'this\nis\na\nstring',
@@ -313,7 +428,7 @@ class TestCephAdm(object):
             {
                 'mount_path': '/etc/no-content.conf',
             },
-        ]}
+        ]
         _cephadm._write_custom_conf_files(ctx, 'mon', 'host1', 'fsid', 0, 0)
         with open(os.path.join(_cephadm.DATA_DIR, 'fsid', 'custom_config_files', 'mon.host1', 'testing.str'), 'r') as f:
             assert 'this\nis\na\nstring' == f.read()
@@ -965,90 +1080,6 @@ ff792c06d8544b983.scope not found.: OCI runtime error"""
             )
 
 
-class TestCustomContainer(unittest.TestCase):
-    cc: _cephadm.CustomContainer
-
-    def setUp(self):
-        self.cc = _cephadm.CustomContainer(
-            'e863154d-33c7-4350-bca5-921e0467e55b',
-            'container',
-            config_json={
-                'entrypoint': 'bash',
-                'gid': 1000,
-                'args': [
-                    '--no-healthcheck',
-                    '-p 6800:6800'
-                ],
-                'envs': ['SECRET=password'],
-                'ports': [8080, 8443],
-                'volume_mounts': {
-                    '/CONFIG_DIR': '/foo/conf',
-                    'bar/config': '/bar:ro'
-                },
-                'bind_mounts': [
-                    [
-                        'type=bind',
-                        'source=/CONFIG_DIR',
-                        'destination=/foo/conf',
-                        ''
-                    ],
-                    [
-                        'type=bind',
-                        'source=bar/config',
-                        'destination=/bar:ro',
-                        'ro=true'
-                    ]
-                ]
-            },
-            image='docker.io/library/hello-world:latest'
-        )
-
-    def test_entrypoint(self):
-        self.assertEqual(self.cc.entrypoint, 'bash')
-
-    def test_uid_gid(self):
-        self.assertEqual(self.cc.uid, 65534)
-        self.assertEqual(self.cc.gid, 1000)
-
-    def test_ports(self):
-        self.assertEqual(self.cc.ports, [8080, 8443])
-
-    def test_get_container_args(self):
-        result = self.cc.get_container_args()
-        self.assertEqual(result, [
-            '--no-healthcheck',
-            '-p 6800:6800'
-        ])
-
-    def test_get_container_envs(self):
-        result = self.cc.get_container_envs()
-        self.assertEqual(result, ['SECRET=password'])
-
-    def test_get_container_mounts(self):
-        result = self.cc.get_container_mounts('/xyz')
-        self.assertDictEqual(result, {
-            '/CONFIG_DIR': '/foo/conf',
-            '/xyz/bar/config': '/bar:ro'
-        })
-
-    def test_get_container_binds(self):
-        result = self.cc.get_container_binds('/xyz')
-        self.assertEqual(result, [
-            [
-                'type=bind',
-                'source=/CONFIG_DIR',
-                'destination=/foo/conf',
-                ''
-            ],
-            [
-                'type=bind',
-                'source=/xyz/bar/config',
-                'destination=/bar:ro',
-                'ro=true'
-            ]
-        ])
-
-
 class TestMaintenance:
     systemd_target = "ceph.00000000-0000-0000-0000-000000c0ffee.target"
     fsid = '0ea8cdd0-1bbf-11ec-a9c7-5254002763fa'
@@ -1387,7 +1418,7 @@ class TestBootstrap(object):
             (
                 '192.168.1.1',
                 {'192.168.1.0/24': {'eth0': ['192.168.1.1']}},
-                r'must use square backets',
+                r'must use square brackets',
             ),
             (
                 '[192.168.1.1]',
@@ -1706,11 +1737,11 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
 # iscsi tcmu-runner container
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id-tcmu 2> /dev/null
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
-/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
+/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
 # iscsi.daemon_id
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id 2> /dev/null
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id 2> /dev/null
-/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -e CEPH_USE_RANDOM_NONCE=1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
 """
 
     def test_get_container(self):

@@ -4,6 +4,8 @@
 #include "Replayer.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
+#include "common/perf_counters_key.h"
 #include "common/Timer.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
@@ -538,7 +540,7 @@ void Replayer<I>::handle_close_local_image(int r) {
 
   std::unique_lock locker{m_lock};
   if (r < 0) {
-    derr << "error closing local iamge: " << cpp_strerror(r) << dendl;
+    derr << "error closing local image: " << cpp_strerror(r) << dendl;
     handle_replay_error(r, "failed to close local image");
   }
 
@@ -1159,9 +1161,11 @@ void Replayer<I>::handle_process_entry_safe(
 
   auto latency = ceph_clock_now() - replay_start_time;
   if (g_journal_perf_counters) {
-    g_journal_perf_counters->inc(l_rbd_mirror_replay);
-    g_journal_perf_counters->inc(l_rbd_mirror_replay_bytes, replay_bytes);
-    g_journal_perf_counters->tinc(l_rbd_mirror_replay_latency, latency);
+    g_journal_perf_counters->inc(l_rbd_mirror_journal_entries);
+    g_journal_perf_counters->inc(l_rbd_mirror_journal_replay_bytes,
+                                 replay_bytes);
+    g_journal_perf_counters->tinc(l_rbd_mirror_journal_replay_latency,
+                                  latency);
   }
 
   auto ctx = new LambdaContext(
@@ -1170,9 +1174,9 @@ void Replayer<I>::handle_process_entry_safe(
       schedule_flush_local_replay_task();
 
       if (m_perf_counters) {
-        m_perf_counters->inc(l_rbd_mirror_replay);
-        m_perf_counters->inc(l_rbd_mirror_replay_bytes, replay_bytes);
-        m_perf_counters->tinc(l_rbd_mirror_replay_latency, latency);
+        m_perf_counters->inc(l_rbd_mirror_journal_entries);
+        m_perf_counters->inc(l_rbd_mirror_journal_replay_bytes, replay_bytes);
+        m_perf_counters->tinc(l_rbd_mirror_journal_replay_latency, latency);
       }
 
       m_event_replay_tracker.finish_op();
@@ -1270,13 +1274,23 @@ void Replayer<I>::register_perf_counters() {
 
   auto cct = static_cast<CephContext *>(m_state_builder->local_image_ctx->cct);
   auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_image_perf_stats_prio");
-  PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_image_" + m_image_spec,
-                          l_rbd_mirror_journal_first, l_rbd_mirror_journal_last);
-  plb.add_u64_counter(l_rbd_mirror_replay, "replay", "Replays", "r", prio);
-  plb.add_u64_counter(l_rbd_mirror_replay_bytes, "replay_bytes",
-                      "Replayed data", "rb", prio, unit_t(UNIT_BYTES));
-  plb.add_time_avg(l_rbd_mirror_replay_latency, "replay_latency",
-                   "Replay latency", "rl", prio);
+
+  auto local_image_ctx = m_state_builder->local_image_ctx;
+  std::string labels = ceph::perf_counters::key_create(
+      "rbd_mirror_journal_image",
+      {{"pool", local_image_ctx->md_ctx.get_pool_name()},
+       {"namespace", local_image_ctx->md_ctx.get_namespace()},
+       {"image", local_image_ctx->name}});
+
+  PerfCountersBuilder plb(g_ceph_context, labels, l_rbd_mirror_journal_first,
+                          l_rbd_mirror_journal_last);
+  plb.add_u64_counter(l_rbd_mirror_journal_entries, "entries",
+                      "Number of entries replayed", nullptr, prio);
+  plb.add_u64_counter(l_rbd_mirror_journal_replay_bytes, "replay_bytes",
+                      "Total bytes replayed", nullptr, prio,
+                      unit_t(UNIT_BYTES));
+  plb.add_time_avg(l_rbd_mirror_journal_replay_latency, "replay_latency",
+                   "Replay latency", nullptr, prio);
   m_perf_counters = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(m_perf_counters);
 }

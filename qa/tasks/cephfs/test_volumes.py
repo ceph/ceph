@@ -35,10 +35,10 @@ class TestVolumesHelper(CephFSTestCase):
     DEFAULT_NUMBER_OF_FILES = 1024
 
     def _fs_cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
+        return self.get_ceph_cmd_stdout("fs", *args)
 
     def _raw_cmd(self, *args):
-        return self.mgr_cluster.mon_manager.raw_cluster_cmd(*args)
+        return self.get_ceph_cmd_stdout(args)
 
     def __check_clone_state(self, state, clone, clone_group=None, timo=120):
         check = 0
@@ -442,9 +442,21 @@ class TestVolumes(TestVolumesHelper):
 
         if not (volname in ([volume['name'] for volume in volumels])):
             raise RuntimeError("Error creating volume '{0}'".format(volname))
-        else:
-            # clean up
-            self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
+
+        # check that the pools were created with the correct config
+        pool_details = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json"))
+        pool_flags = {}
+        for pool in pool_details:
+            pool_flags[pool["pool_id"]] = pool["flags_names"].split(",")
+
+        volume_details = json.loads(self._fs_cmd("get", volname, "--format=json"))
+        for data_pool_id in volume_details['mdsmap']['data_pools']:
+            self.assertIn("bulk", pool_flags[data_pool_id])
+        meta_pool_id = volume_details['mdsmap']['metadata_pool']
+        self.assertNotIn("bulk", pool_flags[meta_pool_id])
+
+        # clean up
+        self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
 
     def test_volume_ls(self):
         """
@@ -648,6 +660,24 @@ class TestVolumes(TestVolumesHelper):
                           f"'{md}' key not present in metadata of volume")
         self.assertEqual(vol_info["used_size"], 0,
                          "Size should be zero when volumes directory is empty")
+
+    def test_volume_info_pending_subvol_deletions(self):
+        """
+        Tests the pending_subvolume_deletions in 'fs volume info' command
+        """
+        subvolname = self._generate_random_subvolume_name()
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--mode=777")
+        # create 3K zero byte files
+        self._do_subvolume_io(subvolname, number_of_files=3000, file_size=0)
+        # Delete the subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+        # get volume metadata
+        vol_info = json.loads(self._get_volume_info(self.volname))
+        self.assertNotEqual(vol_info['pending_subvolume_deletions'], 0,
+                            "pending_subvolume_deletions should be 1")
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_volume_info_without_subvolumegroup(self):
         """
@@ -1024,7 +1054,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
 
         # Create auth_id
         authid = "client.guest1"
-        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+        user = json.loads(self.get_ceph_cmd_stdout(
             "auth", "get-or-create", authid,
             "mds", "allow rw path=/volumes",
             "mgr", "allow rw",
@@ -1110,7 +1140,7 @@ class TestSubvolumeGroups(TestVolumesHelper):
 
         # Create auth_id
         authid = "client.guest1"
-        user = json.loads(self.fs.mon_manager.raw_cluster_cmd(
+        user = json.loads(self.get_ceph_cmd_stdout(
             "auth", "get-or-create", authid,
             "mds", f"allow rw path={mount_path}",
             "mgr", "allow rw",
@@ -1244,10 +1274,12 @@ class TestSubvolumeGroups(TestVolumesHelper):
         try:
             # write two files of 1MB file to exceed the quota
             self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir1', number_of_files=2)
-            # For quota to be enforced
-            time.sleep(20)
+            # For quota to be enforced. Just wait for 100 seconds because the worst case in kclient the
+            # dirty caps will be held for 60 seconds, and also the MDS may defer updating the dir rstat
+            # for 5 seconds, which is per tick, maybe longer if need to wait for mdlog to flush.
+            time.sleep(100)
             # create 400 files of 1MB to exceed quota
-            self._do_subvolume_io(subvolname, subvolume_group=group, number_of_files=400)
+            self._do_subvolume_io(subvolname, subvolume_group=group, create_dir='dir2', number_of_files=400)
         except CommandFailedError:
             # remove with snapshot retention
             self._fs_cmd("subvolume", "rm", self.volname, subvolname, "--group_name", group, "--retain-snapshots")
@@ -2739,7 +2771,7 @@ class TestSubvolumes(TestVolumesHelper):
         group = self._generate_random_group_name()
 
         # Create auth_id
-        self.fs.mon_manager.raw_cluster_cmd(
+        self.run_ceph_cmd(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
@@ -2768,7 +2800,7 @@ class TestSubvolumes(TestVolumesHelper):
             self.fail("expected the 'fs subvolume authorize' command to fail")
 
         # clean up
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2783,7 +2815,7 @@ class TestSubvolumes(TestVolumesHelper):
         group = self._generate_random_group_name()
 
         # Create auth_id
-        self.fs.mon_manager.raw_cluster_cmd(
+        self.run_ceph_cmd(
             "auth", "get-or-create", "client.guest1",
             "mds", "allow *",
             "osd", "allow rw",
@@ -2811,7 +2843,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, auth_id,
                      "--group_name", group)
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2845,7 +2877,7 @@ class TestSubvolumes(TestVolumesHelper):
                                   "--group_name", group).rstrip()
 
         # Update caps for guestclient_1 out of band
-        out = self.fs.mon_manager.raw_cluster_cmd(
+        out = self.get_ceph_cmd_stdout(
             "auth", "caps", "client.guest1",
             "mds", "allow rw path=/volumes/{0}, allow rw path={1}".format(group, subvol_path),
             "osd", "allow rw pool=cephfs_data",
@@ -2858,7 +2890,7 @@ class TestSubvolumes(TestVolumesHelper):
 
         # Validate the caps of guestclient_1 after deauthorize. It should not have deleted
         # guestclient_1. The mgr and mds caps should be present which was updated out of band.
-        out = json.loads(self.fs.mon_manager.raw_cluster_cmd("auth", "get", "client.guest1", "--format=json-pretty"))
+        out = json.loads(self.get_ceph_cmd_stdout("auth", "get", "client.guest1", "--format=json-pretty"))
 
         self.assertEqual("client.guest1", out[0]["entity"])
         self.assertEqual("allow rw path=/volumes/{0}".format(group), out[0]["caps"]["mds"])
@@ -2866,7 +2898,7 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertNotIn("osd", out[0]["caps"])
 
         # clean up
-        out = self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        out = self.get_ceph_cmd_stdout("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2918,7 +2950,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
@@ -2974,7 +3006,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, "guest1", "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -3049,7 +3081,7 @@ class TestSubvolumes(TestVolumesHelper):
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, auth_id, "--group_name", group)
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume2, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -3121,7 +3153,7 @@ class TestSubvolumes(TestVolumesHelper):
         # clean up
         self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume1, auth_id, "--group_name", group)
         guest_mount.umount_wait()
-        self.fs.mon_manager.raw_cluster_cmd("auth", "rm", "client.guest1")
+        self.run_ceph_cmd("auth", "rm", "client.guest1")
         self._fs_cmd("subvolume", "rm", self.volname, subvolume1, "--group_name", group)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume2, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -5503,9 +5535,9 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
 
         # try to get metadata after removing snapshot.
         # Expecting error ENOENT with error message of snapshot does not exist
-        cmd_ret = self.mgr_cluster.mon_manager.run_cluster_cmd(
-                args=["fs", "subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group],
-                check_status=False, stdout=StringIO(), stderr=StringIO())
+        cmd_ret = self.run_ceph_cmd(
+            args=["fs", "subvolume", "snapshot", "metadata", "get", self.volname, subvolname, snapshot, key, group], check_status=False, stdout=StringIO(),
+            stderr=StringIO())
         self.assertEqual(cmd_ret.returncode, errno.ENOENT, "Expecting ENOENT error")
         self.assertIn(f"snapshot '{snapshot}' does not exist", cmd_ret.stderr.getvalue(),
                 f"Expecting message: snapshot '{snapshot}' does not exist ")
@@ -7017,8 +7049,8 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         new_pool = "new_pool"
         self.fs.add_data_pool(new_pool)
 
-        self.fs.mon_manager.raw_cluster_cmd("osd", "pool", "set-quota", new_pool,
-                                            "max_bytes", "{0}".format(pool_capacity // 4))
+        self.run_ceph_cmd("osd", "pool", "set-quota", new_pool,
+                          "max_bytes", f"{pool_capacity // 4}")
 
         # schedule a clone
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1, "--pool_layout", new_pool)
@@ -7792,7 +7824,7 @@ class TestMisc(TestVolumesHelper):
         self._fs_cmd("subvolume", "authorize", self.volname, subvol1, authid1)
 
         # Validate that the mds path added is of subvol1 and not of subvol2
-        out = json.loads(self.fs.mon_manager.raw_cluster_cmd("auth", "get", "client.alice", "--format=json-pretty"))
+        out = json.loads(self.get_ceph_cmd_stdout("auth", "get", "client.alice", "--format=json-pretty"))
         self.assertEqual("client.alice", out[0]["entity"])
         self.assertEqual("allow rw path={0}".format(createpath1[1:]), out[0]["caps"]["mds"])
 
@@ -7888,3 +7920,29 @@ class TestMisc(TestVolumesHelper):
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+class TestPerModuleFinsherThread(TestVolumesHelper):
+    """
+    Per module finisher thread tests related to mgr/volume cmds.
+    This is used in conjuction with check_counter with min val being 4
+    as four subvolume cmds are run
+    """
+    def test_volumes_module_finisher_thread(self):
+        subvol1, subvol2, subvol3 = self._generate_random_subvolume_name(3)
+        group = self._generate_random_group_name()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolumes in group
+        self._fs_cmd("subvolume", "create", self.volname, subvol1, "--group_name", group)
+        self._fs_cmd("subvolume", "create", self.volname, subvol2, "--group_name", group)
+        self._fs_cmd("subvolume", "create", self.volname, subvol3, "--group_name", group)
+
+        self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol3, group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()

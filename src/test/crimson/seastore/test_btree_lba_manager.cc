@@ -122,7 +122,7 @@ struct btree_test_base :
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(
-        segment_manager::get_ephemeral_device_config(0, 1));
+        segment_manager::get_ephemeral_device_config(0, 1, 0));
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(*this, *this);
@@ -198,17 +198,9 @@ struct lba_btree_test : btree_test_base {
       auto mut_croot = cache->duplicate_for_write(
 	t, croot
       )->cast<RootBlock>();
-      mut_croot->root.lba_root = LBABtree::mkfs(get_op_context(t));
+      mut_croot->root.lba_root =
+	LBABtree::mkfs(mut_croot, get_op_context(t));
     });
-  }
-
-  void update_if_dirty(Transaction &t, LBABtree &btree, RootBlockRef croot) {
-    if (btree.is_root_dirty()) {
-      auto mut_croot = cache->duplicate_for_write(
-	t, croot
-      )->cast<RootBlock>();
-      mut_croot->root.lba_root = btree.get_root_undirty();
-    }
   }
 
   template <typename F>
@@ -221,16 +213,13 @@ struct lba_btree_test : btree_test_base {
       [this, tref=std::move(tref), f=std::forward<F>(f)](auto &t) mutable {
 	return cache->get_root(
 	  t
-	).si_then([this, f=std::move(f), &t](RootBlockRef croot) {
+	).si_then([f=std::move(f), &t](RootBlockRef croot) {
 	  return seastar::do_with(
-	    LBABtree(croot->root.lba_root),
-	    [this, croot, f=std::move(f), &t](auto &btree) mutable {
+	    LBABtree(croot),
+	    [f=std::move(f), &t](auto &btree) mutable {
 	      return std::invoke(
 		std::move(f), btree, t
-	      ).si_then([this, croot, &t, &btree] {
-		update_if_dirty(t, btree, croot);
-		return seastar::now();
-	      });
+	      );
 	    });
 	}).si_then([this, tref=std::move(tref)]() mutable {
 	  return submit_transaction(std::move(tref));
@@ -249,7 +238,7 @@ struct lba_btree_test : btree_test_base {
 	  t
 	).si_then([f=std::move(f), &t](RootBlockRef croot) mutable {
 	  return seastar::do_with(
-	    LBABtree(croot->root.lba_root),
+	    LBABtree(croot),
 	    [f=std::move(f), &t](auto &btree) mutable {
 	      return std::invoke(
 		std::move(f), btree, t
@@ -260,16 +249,32 @@ struct lba_btree_test : btree_test_base {
   }
 
   static auto get_map_val(extent_len_t len) {
-    return lba_map_val_t{0, P_ADDR_NULL, len, 0};
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0};
+  }
+
+  device_off_t next_off = 0;
+  paddr_t get_paddr() {
+    next_off += block_size;
+    return make_fake_paddr(next_off);
   }
 
   void insert(laddr_t addr, extent_len_t len) {
     ceph_assert(check.count(addr) == 0);
     check.emplace(addr, get_map_val(len));
     lba_btree_update([=, this](auto &btree, auto &t) {
+      auto extent = cache->alloc_new_extent<TestBlock>(
+	  t,
+	  TestBlock::SIZE,
+	  placement_hint_t::HOT,
+	  0,
+	  get_paddr());
       return btree.insert(
-	get_op_context(t), addr, get_map_val(len)
-      ).si_then([](auto){});
+	get_op_context(t), addr, get_map_val(len), extent.get()
+      ).si_then([addr, extent](auto p){
+	auto& [iter, inserted] = p;
+	assert(inserted);
+	extent->set_laddr(addr);
+      });
     });
   }
 
@@ -339,23 +344,7 @@ struct btree_lba_manager_test : btree_test_base {
 
   btree_lba_manager_test() = default;
 
-  void complete_commit(Transaction &t) final {
-    std::vector<CachedExtentRef> lba_to_clear;
-    lba_to_clear.reserve(t.get_retired_set().size());
-    for (auto &e: t.get_retired_set()) {
-      if (e->is_logical() || is_lba_node(e->get_type()))
-	lba_to_clear.push_back(e);
-    }
-    std::vector<CachedExtentRef> lba_to_link;
-    lba_to_link.reserve(t.get_fresh_block_stats().num);
-    t.for_each_fresh_block([&](auto &e) {
-      if (e->is_valid() &&
-	  (is_lba_node(e->get_type()) || e->is_logical()))
-	  lba_to_link.push_back(e);
-    });
-
-    lba_manager->complete_transaction(t, lba_to_clear, lba_to_link);
-  }
+  void complete_commit(Transaction &t) final {}
 
   LBAManager::mkfs_ret test_structure_setup(Transaction &t) final {
     lba_manager.reset(new BtreeLBAManager(*cache));
@@ -432,12 +421,18 @@ struct btree_lba_manager_test : btree_test_base {
   auto alloc_mapping(
     test_transaction_t &t,
     laddr_t hint,
-    size_t len,
-    paddr_t paddr) {
+    size_t len) {
     auto ret = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
-	return lba_manager->alloc_extent(t, hint, len, paddr);
+	auto extent = cache->alloc_new_extent<TestBlock>(
+	    t,
+	    TestBlock::SIZE,
+	    placement_hint_t::HOT,
+	    0,
+	    get_paddr());
+	return lba_manager->alloc_extent(
+	  t, hint, len, extent->get_paddr(), *extent);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
@@ -468,14 +463,22 @@ struct btree_lba_manager_test : btree_test_base {
     ceph_assert(target->second.refcount > 0);
     target->second.refcount--;
 
-    auto refcnt = with_trans_intr(
+    (void) with_trans_intr(
       *t.t,
       [=, this](auto &t) {
 	return lba_manager->decref_extent(
 	  t,
-	  target->first);
-      }).unsafe_get0().refcount;
-    EXPECT_EQ(refcnt, target->second.refcount);
+	  target->first,
+	  true
+	).si_then([this, &t, target](auto result) {
+	  EXPECT_EQ(result.refcount, target->second.refcount);
+	  if (result.refcount == 0) {
+	    return cache->retire_extent_addr(
+	      t, result.addr.get_paddr(), result.length);
+	  }
+	  return Cache::retire_extent_iertr::now();
+	});
+      }).unsafe_get0();
     if (target->second.refcount == 0) {
       t.mappings.erase(target);
     }
@@ -526,6 +529,11 @@ struct btree_lba_manager_test : btree_test_base {
   }
 
   void check_mappings(test_transaction_t &t) {
+    (void)with_trans_intr(
+      *t.t,
+      [=, this](auto &t) {
+	return lba_manager->check_child_trackers(t);
+      }).unsafe_get0();
     for (auto &&i: t.mappings) {
       auto laddr = i.first;
       auto len = i.second.len;
@@ -579,7 +587,7 @@ TEST_F(btree_lba_manager_test, basic)
       auto t = create_transaction();
       check_mappings(t);  // check in progress transaction sees mapping
       check_mappings();   // check concurrent does not
-      auto ret = alloc_mapping(t, laddr, block_size, get_paddr());
+      auto ret = alloc_mapping(t, laddr, block_size);
       submit_test_transaction(std::move(t));
     }
     check_mappings();     // check new transaction post commit sees it
@@ -593,7 +601,7 @@ TEST_F(btree_lba_manager_test, force_split)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size, get_paddr());
+	auto ret = alloc_mapping(t, 0, block_size);
 	if ((i % 10 == 0) && (j == 3)) {
 	  check_mappings(t);
 	  check_mappings();
@@ -613,7 +621,7 @@ TEST_F(btree_lba_manager_test, force_split_merge)
       auto t = create_transaction();
       logger().debug("opened transaction");
       for (unsigned j = 0; j < 5; ++j) {
-	auto ret = alloc_mapping(t, 0, block_size, get_paddr());
+	auto ret = alloc_mapping(t, 0, block_size);
 	// just to speed things up a bit
 	if ((i % 100 == 0) && (j == 3)) {
 	  check_mappings(t);
@@ -670,7 +678,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 400; ++i) {
-	alloc_mapping(t, 0, block_size, get_paddr());
+	alloc_mapping(t, 0, block_size);
       }
       check_mappings(t);
       submit_test_transaction(std::move(t));
@@ -693,7 +701,7 @@ TEST_F(btree_lba_manager_test, single_transaction_split_merge)
     {
       auto t = create_transaction();
       for (unsigned i = 0; i < 600; ++i) {
-	alloc_mapping(t, 0, block_size, get_paddr());
+	alloc_mapping(t, 0, block_size);
       }
       auto addresses = get_mapped_addresses(t);
       for (unsigned i = 0; i != addresses.size(); ++i) {
@@ -721,7 +729,7 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
       }
     };
     iterate([&](auto &t, auto idx) {
-      alloc_mapping(t, idx * block_size, block_size, get_paddr());
+      alloc_mapping(t, idx * block_size, block_size);
     });
     check_mappings();
     iterate([&](auto &t, auto idx) {
@@ -732,7 +740,7 @@ TEST_F(btree_lba_manager_test, split_merge_multi)
     check_mappings();
     iterate([&](auto &t, auto idx) {
       if ((idx % 32) > 0) {
-	alloc_mapping(t, idx * block_size, block_size, get_paddr());
+	alloc_mapping(t, idx * block_size, block_size);
       }
     });
     check_mappings();

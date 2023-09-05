@@ -155,7 +155,7 @@
               class="tc_submenuitem tc_submenuitem_users"
               *ngIf="permissions.configOpt.read">
             <a i18n
-               routerLink="/ceph-users">Users</a>
+               routerLink="/ceph-users">Ceph Users</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_log"
@@ -167,12 +167,18 @@
               class="tc_submenuitem tc_submenuitem_monitoring"
               *ngIf="permissions.prometheus.read">
             <a routerLink="/monitoring">
-              <ng-container i18n>Monitoring</ng-container>
+              <ng-container i18n>Alerts</ng-container>
               <small *ngIf="prometheusAlertService.activeCriticalAlerts > 0"
                      class="badge badge-danger ms-1">{{ prometheusAlertService.activeCriticalAlerts }}</small>
               <small *ngIf="prometheusAlertService.activeWarningAlerts > 0"
                      class="badge badge-warning ms-1">{{ prometheusAlertService.activeWarningAlerts }}</small>
             </a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_upgrade"
+              *ngIf="permissions.configOpt.read">
+            <a i18n
+               routerLink="/upgrade">Upgrade</a>
           </li>
         </ul>
       </li>
@@ -264,9 +270,14 @@
             id="gateway-nav"
             [ngbCollapse]="displayedSubMenu !== 'rgw'">
           <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_overview">
+            <a i18n
+               routerLink="/rgw/overview">Overview</a>
+          </li>
+          <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_daemons">
             <a i18n
-               routerLink="/rgw/daemon">Daemons</a>
+               routerLink="/rgw/daemon">Gateways</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_users">
@@ -277,6 +288,11 @@
               class="tc_submenuitem tc_submenuitem_rgw_buckets">
             <a i18n
                routerLink="/rgw/bucket">Buckets</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_buckets">
+            <a i18n
+               routerLink="/rgw/multisite">Multisite</a>
           </li>
         </ul>
       </li>

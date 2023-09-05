@@ -9,6 +9,7 @@ from ceph.deployment.service_spec import NFSServiceSpec, PlacementSpec, IngressS
 from object_format import ErrorResponse
 
 import orchestrator
+from orchestrator.module import IngressType
 
 from .exception import NFSInvalidOperation, ClusterNotFound
 from .utils import (
@@ -60,8 +61,9 @@ class NFSCluster:
     def _call_orch_apply_nfs(
             self,
             cluster_id: str,
-            placement: Optional[str],
+            placement: Optional[str] = None,
             virtual_ip: Optional[str] = None,
+            ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
     ) -> None:
         if not port:
@@ -69,18 +71,44 @@ class NFSCluster:
         if virtual_ip:
             # nfs + ingress
             # run NFS on non-standard port
+            if not ingress_mode:
+                ingress_mode = IngressType.default
+            ingress_mode = ingress_mode.canonicalize()
+            pspec = PlacementSpec.from_string(placement)
+            if ingress_mode == IngressType.keepalive_only:
+                # enforce count=1 for nfs over keepalive only
+                pspec.count = 1
+
+            ganesha_port = 10000 + port  # semi-arbitrary, fix me someday
+            frontend_port: Optional[int] = port
+            virtual_ip_for_ganesha: Optional[str] = None
+            keepalive_only: bool = False
+            enable_haproxy_protocol: bool = False
+            if ingress_mode == IngressType.haproxy_protocol:
+                enable_haproxy_protocol = True
+            elif ingress_mode == IngressType.keepalive_only:
+                keepalive_only = True
+                virtual_ip_for_ganesha = virtual_ip.split('/')[0]
+                ganesha_port = port
+                frontend_port = None
+
             spec = NFSServiceSpec(service_type='nfs', service_id=cluster_id,
-                                  placement=PlacementSpec.from_string(placement),
+                                  placement=pspec,
                                   # use non-default port so we don't conflict with ingress
-                                  port=10000 + port)   # semi-arbitrary, fix me someday
+                                  port=ganesha_port,
+                                  virtual_ip=virtual_ip_for_ganesha,
+                                  enable_haproxy_protocol=enable_haproxy_protocol)
             completion = self.mgr.apply_nfs(spec)
             orchestrator.raise_if_exception(completion)
             ispec = IngressSpec(service_type='ingress',
                                 service_id='nfs.' + cluster_id,
                                 backend_service='nfs.' + cluster_id,
-                                frontend_port=port,
+                                placement=pspec,
+                                frontend_port=frontend_port,
                                 monitor_port=7000 + port,   # semi-arbitrary, fix me someday
-                                virtual_ip=virtual_ip)
+                                virtual_ip=virtual_ip,
+                                keepalive_only=keepalive_only,
+                                enable_haproxy_protocol=enable_haproxy_protocol)
             completion = self.mgr.apply_ingress(ispec)
             orchestrator.raise_if_exception(completion)
         else:
@@ -109,6 +137,7 @@ class NFSCluster:
             placement: Optional[str],
             virtual_ip: Optional[str],
             ingress: Optional[bool] = None,
+            ingress_mode: Optional[IngressType] = None,
             port: Optional[int] = None,
     ) -> None:
         try:
@@ -121,6 +150,8 @@ class NFSCluster:
                 raise NFSInvalidOperation('virtual_ip can only be provided with ingress enabled')
             if not virtual_ip and ingress:
                 raise NFSInvalidOperation('ingress currently requires a virtual_ip')
+            if ingress_mode and not ingress:
+                raise NFSInvalidOperation('--ingress-mode must be passed along with --ingress')
             invalid_str = re.search('[^A-Za-z0-9-_.]', cluster_id)
             if invalid_str:
                 raise NFSInvalidOperation(f"cluster id {cluster_id} is invalid. "
@@ -131,7 +162,7 @@ class NFSCluster:
             self.create_empty_rados_obj(cluster_id)
 
             if cluster_id not in available_clusters(self.mgr):
-                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, port)
+                self._call_orch_apply_nfs(cluster_id, placement, virtual_ip, ingress_mode, port)
                 return
             raise NonFatalError(f"{cluster_id} cluster already exists")
         except Exception as e:

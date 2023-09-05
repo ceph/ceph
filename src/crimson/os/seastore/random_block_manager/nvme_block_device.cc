@@ -20,139 +20,35 @@ namespace {
   }
 }
 
-namespace crimson::os::seastore::random_block_device {
-#include "crimson/os/seastore/logging.h"
-SET_SUBSYS(seastore_device);
-
-RBMDevice::mkfs_ret RBMDevice::mkfs(device_config_t config) {
-  LOG_PREFIX(RBMDevice::mkfs);
-  return stat_device(
-  ).handle_error(
-    mkfs_ertr::pass_further{},
-    crimson::ct_error::assert_all{
-    "Invalid error stat_device in RBMDevice::mkfs"}
-  ).safe_then([this, FNAME, config=std::move(config)](auto st) {
-    super.block_size = st.block_size;
-    super.size = st.size;
-
-    super.feature |= RBM_BITMAP_BLOCK_CRC;
-    super.config = std::move(config);
-    DEBUG("super {} ", super);
-    // write super block
-    return write_rbm_header(
-    ).safe_then([] {
-      return mkfs_ertr::now();
-    }).handle_error(
-      mkfs_ertr::pass_further{},
-      crimson::ct_error::assert_all{
-      "Invalid error write_rbm_header in RBMDevice::mkfs"
-    });
-  });
-}
-
-write_ertr::future<> RBMDevice::write_rbm_header()
-{
-  bufferlist meta_b_header;
-  super.crc = 0;
-  encode(super, meta_b_header);
-  // If NVMeDevice supports data protection, CRC for checksum is not required
-  // NVMeDevice is expected to generate and store checksum internally.
-  // CPU overhead for CRC might be saved.
-  if (is_data_protection_enabled()) {
-    super.crc = -1;
-  } else {
-    super.crc = meta_b_header.crc32c(-1);
-  }
-
-  bufferlist bl;
-  encode(super, bl);
-  auto iter = bl.begin();
-  auto bp = bufferptr(ceph::buffer::create_page_aligned(super.block_size));
-  assert(bl.length() < super.block_size);
-  iter.copy(bl.length(), bp.c_str());
-
-  return write(RBM_START_ADDRESS, bp);
-}
-
-read_ertr::future<rbm_metadata_header_t> RBMDevice::read_rbm_header(
-  rbm_abs_addr addr)
-{
-  LOG_PREFIX(RBMDevice::read_rbm_header);
-  bufferptr bptr =
-    bufferptr(ceph::buffer::create_page_aligned(RBM_SUPERBLOCK_SIZE));
-  bptr.zero();
-  return read(
-    addr,
-    bptr
-  ).safe_then([length=bptr.length(), this, bptr, FNAME]()
-    -> read_ertr::future<rbm_metadata_header_t> {
-    bufferlist bl;
-    bl.append(bptr);
-    auto p = bl.cbegin();
-    rbm_metadata_header_t super_block;
-    try {
-      decode(super_block, p);
-    }
-    catch (ceph::buffer::error& e) {
-      DEBUG("read_rbm_header: unable to decode rbm super block {}",
-	    e.what());
-      return crimson::ct_error::enoent::make();
-    }
-    checksum_t crc = super_block.crc;
-    bufferlist meta_b_header;
-    super_block.crc = 0;
-    encode(super_block, meta_b_header);
-    assert(ceph::encoded_sizeof<rbm_metadata_header_t>(super_block) <
-	super_block.block_size);
-
-    // Do CRC verification only if data protection is not supported.
-    if (is_data_protection_enabled() == false) {
-      if (meta_b_header.crc32c(-1) != crc) {
-	DEBUG("bad crc on super block, expected {} != actual {} ",
-	      meta_b_header.crc32c(-1), crc);
-	return crimson::ct_error::input_output_error::make();
-      }
-    } else {
-      ceph_assert_always(crc == (checksum_t)-1);
-    }
-    super_block.crc = crc;
-    super = super_block;
-    DEBUG("got {} ", super);
-    return read_ertr::future<rbm_metadata_header_t>(
-      read_ertr::ready_future_marker{},
-      super_block
-    );
-  });
-}
-
-}
-
 namespace crimson::os::seastore::random_block_device::nvme {
+
+NVMeBlockDevice::mkfs_ret NVMeBlockDevice::mkfs(device_config_t config) {
+  using crimson::common::get_conf;
+  return shard_devices.local().do_primary_mkfs(config,
+    seastar::smp::count,
+    get_conf<Option::size_t>("seastore_cbjournal_size") 
+  );
+}
 
 open_ertr::future<> NVMeBlockDevice::open(
   const std::string &in_path,
   seastar::open_flags mode) {
   return seastar::do_with(in_path, [this, mode](auto& in_path) {
     return seastar::file_stat(in_path).then([this, mode, in_path](auto stat) {
-      super.size = stat.size;
-      super.block_size = stat.block_size;
       return seastar::open_file_dma(in_path, mode).then([=, this](auto file) {
-        device = file;
+        device = std::move(file);
         logger().debug("open");
         // Get SSD's features from identify_controller and namespace command.
         // Do identify_controller first, and then identify_namespace.
-        return identify_controller().safe_then([this, in_path, mode](
+        return identify_controller(device).safe_then([this, in_path, mode](
           auto id_controller_data) {
           support_multistream = id_controller_data.oacs.support_directives;
           if (support_multistream) {
             stream_id_count = WRITE_LIFE_MAX;
           }
           awupf = id_controller_data.awupf + 1;
-          return identify_namespace().safe_then([this, in_path, mode] (
+          return identify_namespace(device).safe_then([this, in_path, mode] (
             auto id_namespace_data) {
-            // LBA format provides LBA size which is power of 2. LBA is the
-            // minimum size of read and write.
-            super.block_size = (1 << id_namespace_data.lbaf0.lbads);
             atomic_write_unit = awupf * super.block_size;
             data_protection_type = id_namespace_data.dps.protection_type;
             data_protection_enabled = (data_protection_type > 0);
@@ -179,7 +75,8 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
   return seastar::do_for_each(io_device, [=, this](auto &target_device) {
     return seastar::open_file_dma(in_path, mode).then([this](
       auto file) {
-      io_device[stream_index_to_open] = file;
+      assert(io_device.size() > stream_index_to_open);
+      io_device[stream_index_to_open] = std::move(file);
       return io_device[stream_index_to_open].fcntl(
         F_SET_FILE_RW_HINT,
         (uintptr_t)&stream_index_to_open).then([this](auto ret) {
@@ -190,9 +87,21 @@ open_ertr::future<> NVMeBlockDevice::open_for_io(
   });
 }
 
+NVMeBlockDevice::mount_ret NVMeBlockDevice::mount()
+{
+  logger().debug(" mount ");
+  return shard_devices.invoke_on_all([](auto &local_device) {
+    return local_device.do_shard_mount(
+    ).handle_error(
+      crimson::ct_error::assert_all{
+        "Invalid error in RBMDevice::do_mount"
+    });
+  });
+}
+
 write_ertr::future<> NVMeBlockDevice::write(
   uint64_t offset,
-  bufferptr &bptr,
+  bufferptr &&bptr,
   uint16_t stream) {
   logger().debug(
       "block: write offset {} len {}",
@@ -205,17 +114,21 @@ write_ertr::future<> NVMeBlockDevice::write(
   if (stream >= stream_id_count) {
     supported_stream = WRITE_LIFE_NOT_SET;
   }
-  return io_device[supported_stream].dma_write(
-    offset, bptr.c_str(), length).handle_exception(
-    [](auto e) -> write_ertr::future<size_t> {
-    logger().error("write: dma_write got error{}", e);
-    return crimson::ct_error::input_output_error::make();
-  }).then([length](auto result) -> write_ertr::future<> {
-    if (result != length) {
-      logger().error("write: dma_write got error with not proper length");
+  return seastar::do_with(
+    std::move(bptr),
+    [this, offset, length, supported_stream] (auto& bptr) {
+    return io_device[supported_stream].dma_write(
+      offset, bptr.c_str(), length).handle_exception(
+      [](auto e) -> write_ertr::future<size_t> {
+      logger().error("write: dma_write got error{}", e);
       return crimson::ct_error::input_output_error::make();
-    }
-    return write_ertr::now();
+    }).then([length](auto result) -> write_ertr::future<> {
+      if (result != length) {
+	logger().error("write: dma_write got error with not proper length");
+	return crimson::ct_error::input_output_error::make();
+      }
+      return write_ertr::now();
+    });
   });
 }
 
@@ -291,6 +204,7 @@ write_ertr::future<> NVMeBlockDevice::writev(
 
 Device::close_ertr::future<> NVMeBlockDevice::close() {
   logger().debug(" close ");
+  stream_index_to_open = WRITE_LIFE_NOT_SET;
   return device.close().then([this]() {
     return seastar::do_for_each(io_device, [](auto target_device) {
       return target_device.close();
@@ -299,17 +213,17 @@ Device::close_ertr::future<> NVMeBlockDevice::close() {
 }
 
 nvme_command_ertr::future<nvme_identify_controller_data_t>
-NVMeBlockDevice::identify_controller() {
+NVMeBlockDevice::identify_controller(seastar::file f) {
   return seastar::do_with(
     nvme_admin_command_t(),
     nvme_identify_controller_data_t(),
-    [this](auto &admin_command, auto &data) {
+    [this, f](auto &admin_command, auto &data) {
     admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
     admin_command.common.addr = (uint64_t)&data;
     admin_command.common.data_len = sizeof(data);
     admin_command.identify.cns = nvme_identify_command_t::CNS_CONTROLLER;
 
-    return pass_admin(admin_command).safe_then([&data](auto status) {
+    return pass_admin(admin_command, f).safe_then([&data](auto status) {
       return seastar::make_ready_future<nvme_identify_controller_data_t>(
         std::move(data));
       });
@@ -321,19 +235,19 @@ discard_ertr::future<> NVMeBlockDevice::discard(uint64_t offset, uint64_t len) {
 }
 
 nvme_command_ertr::future<nvme_identify_namespace_data_t>
-NVMeBlockDevice::identify_namespace() {
-  return get_nsid().safe_then([this](auto nsid) {
+NVMeBlockDevice::identify_namespace(seastar::file f) {
+  return get_nsid(f).safe_then([this, f](auto nsid) {
     return seastar::do_with(
       nvme_admin_command_t(),
       nvme_identify_namespace_data_t(),
-      [this, nsid](auto &admin_command, auto &data) {
+      [this, nsid, f](auto &admin_command, auto &data) {
       admin_command.common.opcode = nvme_admin_command_t::OPCODE_IDENTIFY;
       admin_command.common.addr = (uint64_t)&data;
       admin_command.common.data_len = sizeof(data);
       admin_command.common.nsid = nsid;
       admin_command.identify.cns = nvme_identify_command_t::CNS_NAMESPACE;
 
-      return pass_admin(admin_command).safe_then([&data](auto status){
+      return pass_admin(admin_command, f).safe_then([&data](auto status){
         return seastar::make_ready_future<nvme_identify_namespace_data_t>(
           std::move(data));
       });
@@ -341,13 +255,17 @@ NVMeBlockDevice::identify_namespace() {
   });
 }
 
-nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid() {
-  return device.ioctl(NVME_IOCTL_ID, nullptr);
+nvme_command_ertr::future<int> NVMeBlockDevice::get_nsid(seastar::file f) {
+  return f.ioctl(NVME_IOCTL_ID, nullptr).handle_exception(
+    [](auto e)->nvme_command_ertr::future<int> {
+      logger().error("pass_admin: ioctl failed");
+      return crimson::ct_error::input_output_error::make();
+    });
 }
 
 nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
-  nvme_admin_command_t& admin_cmd) {
-  return device.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd).handle_exception(
+  nvme_admin_command_t& admin_cmd, seastar::file f) {
+  return f.ioctl(NVME_IOCTL_ADMIN_CMD, &admin_cmd).handle_exception(
     [](auto e)->nvme_command_ertr::future<int> {
       logger().error("pass_admin: ioctl failed");
       return crimson::ct_error::input_output_error::make();
@@ -357,88 +275,6 @@ nvme_command_ertr::future<int> NVMeBlockDevice::pass_admin(
 nvme_command_ertr::future<int> NVMeBlockDevice::pass_through_io(
   nvme_io_command_t& io_cmd) {
   return device.ioctl(NVME_IOCTL_IO_CMD, &io_cmd);
-}
-
-}
-
-namespace crimson::os::seastore::random_block_device {
-
-EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
-  return EphemeralRBMDeviceRef(
-    new EphemeralRBMDevice(journal_size + data_size + 
-	random_block_device::RBMDevice::get_journal_start(),
-	EphemeralRBMDevice::TEST_BLOCK_SIZE));
-}
-
-open_ertr::future<> EphemeralRBMDevice::open(
-  const std::string &in_path,
-   seastar::open_flags mode) {
-  if (buf) {
-    return open_ertr::now();
-  }
-
-  logger().debug(
-    "Initializing test memory device {}",
-    size);
-
-  void* addr = ::mmap(
-    nullptr,
-    size,
-    PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS,
-    -1,
-    0);
-
-  buf = (char*)addr;
-
-  ::memset(buf, 0, size);
-  return open_ertr::now();
-}
-
-write_ertr::future<> EphemeralRBMDevice::write(
-  uint64_t offset,
-  bufferptr &bptr,
-  uint16_t stream) {
-  ceph_assert(buf);
-  logger().debug(
-    "EphemeralRBMDevice: write offset {} len {}",
-    offset,
-    bptr.length());
-
-  ::memcpy(buf + offset, bptr.c_str(), bptr.length());
-
-  return write_ertr::now();
-}
-
-read_ertr::future<> EphemeralRBMDevice::read(
-  uint64_t offset,
-  bufferptr &bptr) {
-  ceph_assert(buf);
-  logger().debug(
-    "EphemeralRBMDevice: read offset {} len {}",
-    offset,
-    bptr.length());
-
-  bptr.copy_in(0, bptr.length(), buf + offset);
-  return read_ertr::now();
-}
-
-Device::close_ertr::future<> EphemeralRBMDevice::close() {
-  logger().debug(" close ");
-  return close_ertr::now();
-}
-
-write_ertr::future<> EphemeralRBMDevice::writev(
-  uint64_t offset,
-  ceph::bufferlist bl,
-  uint16_t stream) {
-  ceph_assert(buf);
-  logger().debug(
-    "EphemeralRBMDevice: write offset {} len {}",
-    offset,
-    bl.length());
-
-  bl.begin().copy(bl.length(), buf + offset);
-  return write_ertr::now();
 }
 
 }

@@ -5,6 +5,9 @@ set -e
 SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
 
+USE_MINGW_LLVM=${USE_MINGW_LLVM:-}
+ENABLE_SHARED=${ENABLE_SHARED:-OFF}
+
 num_vcpus=$(nproc)
 NUM_WORKERS=${NUM_WORKERS:-$num_vcpus}
 
@@ -20,8 +23,9 @@ sslDir="${depsToolsetDir}/openssl"
 sslSrcDir="${depsSrcDir}/openssl"
 
 # For now, we'll keep the version number within the file path when not using git.
-boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.79.0/source/boost_1_79_0.tar.gz"
-boostSrcDir="${depsSrcDir}/boost_1_79_0"
+boostUrl="https://boostorg.jfrog.io/artifactory/main/release/1.82.0/source/boost_1_82_0.tar.gz"
+boostSha256Sum="66a469b6e608a51f8347236f4912e27dc5c60c60d7d53ae9bfe4683316c6f04c"
+boostSrcDir="${depsSrcDir}/boost_1_82_0"
 boostDir="${depsToolsetDir}/boost"
 zlibDir="${depsToolsetDir}/zlib"
 zlibSrcDir="${depsSrcDir}/zlib"
@@ -42,6 +46,10 @@ dokanUrl="https://github.com/dokan-dev/dokany"
 dokanTag="v2.0.5.1000"
 dokanSrcDir="${depsSrcDir}/dokany"
 dokanLibDir="${depsToolsetDir}/dokany/lib"
+
+mingwLlvmUrl="https://github.com/mstorsjo/llvm-mingw/releases/download/20230320/llvm-mingw-20230320-msvcrt-ubuntu-18.04-x86_64.tar.xz"
+mingwLlvmSha256Sum="bc97745e702fb9e8f2a16f7d09dd5061ceeef16554dd12e542f619ce937e8d7a"
+mingwLlvmDir="${DEPS_DIR}/mingw-llvm"
 
 # Allow for OS specific customizations through the OS flag (normally
 # passed through from win32_build).
@@ -74,7 +82,6 @@ case "$OS" in
             libtool \
             ninja-build \
             zip \
-            python3-Cython \
             python3-PyYAML \
             gcc \
             diffutils \
@@ -86,20 +93,36 @@ case "$OS" in
     ubuntu)
         sudo apt-get update
         sudo env DEBIAN_FRONTEND=noninteractive apt-get -y install \
-            mingw-w64 cmake pkg-config \
-            python3-dev python3-pip python3-yaml \
-                autoconf libtool ninja-build wget zip
-        sudo python3 -m pip install cython
+            mingw-w64 g++ cmake pkg-config \
+            python3-dev python3-yaml \
+                autoconf libtool ninja-build wget zip \
+                git
         ;;
     suse)
         for PKG in mingw64-cross-gcc-c++ mingw64-libgcc_s_seh1 mingw64-libstdc++6 \
                 cmake pkgconf python3-devel autoconf libtool ninja zip \
-                python3-Cython python3-PyYAML \
+                python3-PyYAML \
                 gcc patch wget git; do
             rpm -q $PKG >/dev/null || zypper -n install $PKG
         done
         ;;
 esac
+
+if [[ -n $USE_MINGW_LLVM && ! -d $mingwLlvmDir ]]; then
+    echo "Fetching mingw-llvm"
+    cd $DEPS_DIR
+    wget -q -O mingw-llvm.tar.xz $mingwLlvmUrl
+    checksum=`sha256sum mingw-llvm.tar.xz | cut -d ' ' -f 1`
+    if [[ "$mingwLlvmSha256Sum" != "$checksum" ]]; then
+        echo "Invalid mingw-llvm checksum: $checksum" >&2
+        exit 1
+    fi
+    tar xJf mingw-llvm.tar.xz
+    rm mingw-llvm.tar.xz
+    # Remove the version from the mingw-llvm dirname, making it easier to locate
+    # and avoiding MAX_PATH issues with WSL.
+    mv `basename $mingwLlvmUrl | sed 's/\.tar\..*//g'` $mingwLlvmDir
+fi
 
 MINGW_CMAKE_FILE="$DEPS_DIR/mingw.cmake"
 source "$SCRIPT_DIR/mingw_conf.sh"
@@ -149,20 +172,33 @@ echo "Building boost."
 cd $depsSrcDir
 if [[ ! -d $boostSrcDir ]]; then
     echo "Downloading boost."
-    wget -qO- $boostUrl | tar xz
+    wget -q -O boost.tar.gz $boostUrl
+    checksum=`sha256sum boost.tar.gz | cut -d ' ' -f 1`
+    if [[ "$boostSha256Sum" != "$checksum" ]]; then
+        echo "Invalid boost checksum: $checksum" >&2
+        exit 1
+    fi
+    tar xzf boost.tar.gz
+    rm boost.tar.gz
 fi
 
 cd $boostSrcDir
-echo "using gcc : mingw32 : ${MINGW_CXX} ;" > user-config.jam
+
+if [[ -n $USE_MINGW_LLVM ]]; then
+    b2toolset="clang"
+    echo "using clang :  : ${MINGW_CXX} ;" > user-config.jam
+else
+    b2toolset="gcc-mingw32"
+    echo "using gcc : mingw32 : ${MINGW_CXX} ;" > user-config.jam
+fi
 
 # Workaround for https://github.com/boostorg/thread/issues/156
 # Older versions of mingw provided a different pthread lib.
 sed -i 's/lib$(libname)GC2.a/lib$(libname).a/g' ./libs/thread/build/Jamfile.v2
-sed -i 's/mthreads/pthreads/g' ./tools/build/src/tools/gcc.py
-sed -i 's/mthreads/pthreads/g' ./tools/build/src/tools/gcc.jam
-
-sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.py
-sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.jam
+if [[ -z $USE_MINGW_LLVM ]]; then
+    sed -i 's/mthreads/pthreads/g' ./tools/build/src/tools/gcc.jam
+    sed -i 's/pthreads/mthreads/g' ./tools/build/src/tools/gcc.jam
+fi
 
 export PTW32_INCLUDE=${PTW32Include}
 export PTW32_LIB=${PTW32Lib}
@@ -199,16 +235,54 @@ patch -N boost/thread/pthread/thread_data.hpp <<EOL
  #endif
 EOL
 
+# https://github.com/boostorg/stacktrace/pull/140
+# https://github.com/boostorg/stacktrace/issues/133
+patch -N boost/stacktrace/detail/frame_msvc.ipp <<'EOL'
+--- boost/stacktrace/detail/frame_msvc.ipp      2023-08-18 12:29:37.127229733 +0000
++++ boost/stacktrace/detail/frame_msvc.ipp.new  2023-08-18 12:28:23.713294554 +0000
+@@ -28,9 +28,13 @@
+
+
+ #ifdef __CRT_UUID_DECL // for __MINGW32__
++#if !defined(__MINGW32__) || \
++    (!defined(__clang__) && __GNUC__ < 12) || \
++    (defined(__clang__) && __clang_major__ < 16)
+     __CRT_UUID_DECL(IDebugClient,0x27fe5639,0x8407,0x4f47,0x83,0x64,0xee,0x11,0x8f,0xb0,0x8a,0xc8)
+     __CRT_UUID_DECL(IDebugControl,0x5182e668,0x105e,0x416e,0xad,0x92,0x24,0xef,0x80,0x04,0x24,0xba)
+     __CRT_UUID_DECL(IDebugSymbols,0x8c31e98c,0x983a,0x48a5,0x90,0x16,0x6f,0xe5,0xd6,0x67,0xa9,0x50)
++#endif
+ #elif defined(DEFINE_GUID) && !defined(BOOST_MSVC)
+     DEFINE_GUID(IID_IDebugClient,0x27fe5639,0x8407,0x4f47,0x83,0x64,0xee,0x11,0x8f,0xb0,0x8a,0xc8);
+     DEFINE_GUID(IID_IDebugControl,0x5182e668,0x105e,0x416e,0xad,0x92,0x24,0xef,0x80,0x04,0x24,0xba);
+EOL
+
 ./bootstrap.sh
 
-./b2 install --user-config=user-config.jam toolset=gcc-mingw32 \
+if [[ $ENABLE_SHARED == "ON" ]]; then
+    b2_link="shared"
+else
+    b2_link="static"
+fi
+
+./b2 install --user-config=user-config.jam toolset=$b2toolset \
     target-os=windows release \
-    link=static,shared \
+    link=$b2_link \
     threadapi=win32 --prefix=$boostDir \
     address-model=64 architecture=x86 \
     binary-format=pe abi=ms -j $NUM_WORKERS \
     -sZLIB_INCLUDE=$zlibDir/include -sZLIB_LIBRARY_PATH=$zlibDir/lib \
     --without-python --without-mpi --without-log --without-wave
+
+if [[ -n $USE_MINGW_LLVM && $ENABLE_SHARED == "ON" ]]; then
+    # b2 doesn't generate import libs when using mingw-llvm. We'll tell cmake
+    # to use the dlls instead of import libs, which mingw is capable of.
+    #
+    # TODO: consider dropping this if we get to fix Boost's clang-linux.jam
+    # file. Worth mentioning that Boost might drop the import libs altogether:
+    # https://github.com/bfgroup/b2/issues/278
+    find $boostDir/lib/cmake -name "*.cmake" \
+        -exec sed -i 's/IMPORTED_LOCATION_RELEASE/IMPORTED_IMPLIB_RELEASE/g' {} \;
+fi
 
 echo "Building libbacktrace."
 cd $depsSrcDir

@@ -48,6 +48,10 @@ using stmt_execution = std::unique_ptr<sqlite3_stmt, stmt_execution_deleter>;
 stmt_ptr prepare_statement(const DoutPrefixProvider* dpp,
                            sqlite3* db, std::string_view sql);
 
+// bind a NULL input for the given parameter name
+void bind_null(const DoutPrefixProvider* dpp, const stmt_binding& stmt,
+               const char* name);
+
 // bind an input string for the given parameter name
 void bind_text(const DoutPrefixProvider* dpp, const stmt_binding& stmt,
                const char* name, std::string_view value);

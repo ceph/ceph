@@ -369,6 +369,8 @@ int main(int argc, char **argv)
     args.push_back(log_file.c_str());
     static char ll[10];
     snprintf(ll, sizeof(ll), "%d", log_level);
+    args.push_back("--debug-bdev");
+    args.push_back(ll);
     args.push_back("--debug-bluestore");
     args.push_back(ll);
     args.push_back("--debug-bluefs");
@@ -878,17 +880,17 @@ int main(int argc, char **argv)
 	return {"", false};
       }
       std::error_code ec;
-      fs::path target_path = fs::weakly_canonical(fs::path{dev_target}, ec);
+      fs::path target = fs::weakly_canonical(fs::path{dev_target}, ec);
       if (ec) {
 	cerr << "failed to retrieve absolute path for " << dev_target
 	     << ": " << ec.message()
 	     << std::endl;
 	exit(EXIT_FAILURE);
       }
-      return {target_path.native(),
-              (fs::exists(target_path) &&
-	       fs::is_regular_file(target_path) &&
-	       fs::file_size(target_path) > 0)};
+      return {target.native(),
+              fs::exists(target) &&
+               (fs::is_block_file(target) ||
+	         (fs::is_regular_file(target) && fs::file_size(target) > 0))};
     }();
     // Attach either DB or WAL volume, create if needed
     // check if we need additional size specification

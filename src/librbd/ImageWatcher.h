@@ -241,8 +241,8 @@ private:
   void cancel_quiesce_requests();
 
   void notify_quiesce(const watch_notify::AsyncRequestId &async_request_id,
-                      size_t attempts, ProgressContext &prog_ctx,
-                      Context *on_finish);
+                      size_t attempt, size_t total_attempts,
+                      ProgressContext &prog_ctx, Context *on_finish);
 
   bool handle_operation_request(
     const watch_notify::AsyncRequestId& async_request_id,

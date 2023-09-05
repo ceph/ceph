@@ -191,7 +191,7 @@ TEST_F(TestClsQueue, DequeueMarker)
     ASSERT_EQ(marker.from_str(entry.marker.c_str()), 0);
     if (marker.offset > 0 && marker.offset % 2 == 0) {
       after_deleted_marker = marker;
-      cls_queue_remove_entries(op, marker.to_str()); 
+      cls_queue_remove_entries(op, marker.to_str());
     }
   }
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
@@ -243,7 +243,7 @@ TEST_F(TestClsQueue, DequeueEmpty)
   std::vector<cls_queue_entry> entries;
   const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
   ASSERT_EQ(0, ret);
-  cls_queue_remove_entries(op, end_marker); 
+  cls_queue_remove_entries(op, end_marker);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 }
 
@@ -289,7 +289,7 @@ TEST_F(TestClsQueue, DeleteAll)
   std::vector<cls_queue_entry> entries;
   auto ret = cls_queue_list_entries(ioctx, queue_name, marker, total_elements, entries, &truncated, end_marker);
   ASSERT_EQ(0, ret);
-  cls_queue_remove_entries(op, end_marker); 
+  cls_queue_remove_entries(op, end_marker);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   // list again to make sure that queue is empty
   ret = cls_queue_list_entries(ioctx, queue_name, marker, 10, entries, &truncated, end_marker);
@@ -328,7 +328,7 @@ TEST_F(TestClsQueue, EnqueueDequeue)
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
-            cls_queue_remove_entries(op, end_marker); 
+            cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
        });
@@ -387,7 +387,7 @@ TEST_F(TestClsQueue, QueueFullDequeue)
             auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
-            cls_queue_remove_entries(op, end_marker); 
+            cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
        });
@@ -431,7 +431,7 @@ TEST_F(TestClsQueue, MultiProducer)
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
-            cls_queue_remove_entries(op, end_marker); 
+            cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
        });
@@ -478,7 +478,7 @@ TEST_F(TestClsQueue, MultiConsumer)
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
             consume_count += entries.size();
-            cls_queue_remove_entries(op, end_marker); 
+            cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
     });
@@ -521,7 +521,7 @@ TEST_F(TestClsQueue, NoLockMultiConsumer)
           while (!done || truncated) {
             const auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, end_marker);
             ASSERT_EQ(0, ret);
-            cls_queue_remove_entries(op, end_marker); 
+            cls_queue_remove_entries(op, end_marker);
             ASSERT_EQ(0, ioctx.operate(queue_name, &op));
           }
     });
@@ -587,7 +587,7 @@ TEST_F(TestClsQueue, WrapAround)
       total_bl.pop_front();
     }
     marker = end_marker;
-    cls_queue_remove_entries(op, end_marker); 
+    cls_queue_remove_entries(op, end_marker);
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
    
     // fill half+1 of the queue

@@ -1082,17 +1082,21 @@ int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
   DBOpParams params = {};
   rgw::sal::Attrs *attrs;
   map<string, bufferlist>::iterator iter;
+  RGWObjState* state;
 
-  ret = get_object_impl(dpp, params);
+  store->InitializeParams(dpp, &params);
+  InitializeParamsfromObject(dpp, &params);
+  ret = get_state(dpp, &state, true);
 
-  if (ret) {
-    ldpp_dout(dpp, 0) <<"get_object_impl failed err:(" <<ret<<")" << dendl;
+  if (ret && !state->exists) {
+    ldpp_dout(dpp, 0) <<"get_state failed err:(" <<ret<<")" << dendl;
     goto out;
   }
 
   /* For now lets keep it simple..rmattrs & setattrs ..
    * XXX: Check rgw_rados::set_attrs
    */
+  params.op.obj.state = *state;
   attrs = &params.op.obj.state.attrset;
   if (rmattrs) {
     for (iter = rmattrs->begin(); iter != rmattrs->end(); ++iter) {
@@ -1104,7 +1108,10 @@ int DB::Object::set_attrs(const DoutPrefixProvider *dpp,
   }
 
   params.op.query_str = "attrs";
-  params.op.obj.state.mtime = real_clock::now();
+  /* As per https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingMetadata.html, 
+   * the only way for users to modify object metadata is to make a copy of the object and
+   * set the metadata.
+   * Hence do not update mtime for any other attr changes */
 
   ret = store->ProcessOp(dpp, "UpdateObject", &params);
 
@@ -1427,7 +1434,7 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   if (r < 0)
     return r;
 
-  if (!astate->exists) {
+  if (!astate || !astate->exists) {
     return -ENOENT;
   }
 
@@ -1451,17 +1458,15 @@ int DB::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl, const DoutP
   bool reading_from_head = (ofs < head_data_size);
 
   if (reading_from_head) {
-    if (astate) { // && astate->prefetch_data)?
-      if (!ofs && astate->data.length() >= len) {
-        bl = astate->data;
-        return bl.length();
-      }
+    if (!ofs && astate->data.length() >= len) {
+      bl = astate->data;
+      return bl.length();
+    }
 
-      if (ofs < astate->data.length()) {
-        unsigned copy_len = std::min((uint64_t)head_data_size - ofs, len);
-        astate->data.begin(ofs).copy(copy_len, bl);
-        return bl.length();
-      }
+    if (ofs < astate->data.length()) {
+      unsigned copy_len = std::min((uint64_t)head_data_size - ofs, len);
+      astate->data.begin(ofs).copy(copy_len, bl);
+      return bl.length();
     }
   }
 

@@ -76,7 +76,8 @@ class BackrefLeafNode
       paddr_t, paddr_le_t,
       backref_map_val_t, backref_map_val_le_t,
       BACKREF_NODE_SIZE,
-      BackrefLeafNode> {
+      BackrefLeafNode,
+      false> {
 public:
   template <typename... T>
   BackrefLeafNode(T&&... t) :
@@ -91,7 +92,8 @@ public:
   const_iterator insert(
     const_iterator iter,
     paddr_t key,
-    backref_map_val_t val) final {
+    backref_map_val_t val,
+    LogicalCachedExtent*) final {
     journal_insert(
       iter,
       key,
@@ -102,7 +104,8 @@ public:
 
   void update(
     const_iterator iter,
-    backref_map_val_t val) final {
+    backref_map_val_t val,
+    LogicalCachedExtent*) final {
     return journal_update(
       iter,
       val,
@@ -130,4 +133,5 @@ using BackrefLeafNodeRef = BackrefLeafNode::Ref;
 template <> struct fmt::formatter<crimson::os::seastore::backref::backref_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefInternalNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::backref::BackrefLeafNode> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<crimson::os::seastore::backref::backref_node_meta_t> : fmt::ostream_formatter {};
 #endif

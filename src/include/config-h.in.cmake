@@ -148,6 +148,9 @@
 /* define if kernel rbd enabled */
 #cmakedefine WITH_KRBD
 
+/* define if rbd ubbd enabled */
+#cmakedefine WITH_RBD_UBBD
+
 /* define if key-value-store is enabled */
 #cmakedefine WITH_KVS
 
@@ -156,6 +159,9 @@
 
 /* define if radosgw has openssl support */
 #cmakedefine WITH_CURL_OPENSSL
+
+/*define if D4N filter enabled */
+#cmakedefine WITH_RADOSGW_D4N 
 
 /* define if HAVE_THREAD_SAFE_RES_QUERY */
 #cmakedefine HAVE_THREAD_SAFE_RES_QUERY

@@ -148,8 +148,6 @@ public:
   }
 
   int get_nodeid() const final { return whoami; }
-
-  std::atomic<epoch_t> max_oldest_map;
 private:
   OSDMapRef osdmap;
 
@@ -509,7 +507,10 @@ public:
   void send_pg_created();
 
   AsyncReserver<spg_t, Finisher> snap_reserver;
-  void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
+  void queue_recovery_context(PG *pg,
+                              GenContext<ThreadPool::TPHandle&> *c,
+                              uint64_t cost,
+			      int priority);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority);
 
@@ -558,10 +559,6 @@ public:
   /// Signals that there are more chunks to handle
   void queue_scrub_next_chunk(PG* pg, Scrub::scrub_prio_t with_priority);
 
-  /// Signals that we have finished comparing the maps for this chunk
-  /// Note: required, as in Crimson this operation is 'futurized'.
-  void queue_scrub_maps_compared(PG* pg, Scrub::scrub_prio_t with_priority);
-
   void queue_for_rep_scrub(PG* pg,
 			   Scrub::scrub_prio_t with_high_priority,
 			   unsigned int qu_priority,
@@ -584,7 +581,14 @@ public:
 private:
   // -- pg recovery and associated throttling --
   ceph::mutex recovery_lock = ceph::make_mutex("OSDService::recovery_lock");
-  std::list<std::pair<epoch_t, PGRef> > awaiting_throttle;
+
+  struct pg_awaiting_throttle_t {
+    const epoch_t epoch_queued;
+    PGRef pg;
+    const uint64_t cost_per_object;
+    const int priority;
+  };
+  std::list<pg_awaiting_throttle_t> awaiting_throttle;
 
   /// queue a scrub-related message for a PG
   template <class MSG_TYPE>
@@ -597,6 +601,7 @@ private:
   /// provided by the executing scrub (i.e. taken from PgScrubber::m_flags)
   template <class MSG_TYPE>
   void queue_scrub_event_msg(PG* pg, Scrub::scrub_prio_t with_priority);
+  int64_t get_scrub_cost();
 
   utime_t defer_recovery_until;
   uint64_t recovery_ops_active;
@@ -607,8 +612,7 @@ private:
 #endif
   bool _recover_now(uint64_t *available_pushes);
   void _maybe_queue_recovery();
-  void _queue_for_recovery(
-    std::pair<epoch_t, PGRef> p, uint64_t reserved_pushes);
+  void _queue_for_recovery(pg_awaiting_throttle_t p, uint64_t reserved_pushes);
 public:
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
@@ -639,26 +643,38 @@ public:
     std::lock_guard l(recovery_lock);
     awaiting_throttle.remove_if(
       [pg](decltype(awaiting_throttle)::const_reference awaiting ) {
-	return awaiting.second.get() == pg;
+        return awaiting.pg.get() == pg;
       });
   }
 
   unsigned get_target_pg_log_entries() const;
 
   // delayed pg activation
-  void queue_for_recovery(PG *pg) {
+  void queue_for_recovery(
+    PG *pg, uint64_t cost_per_object,
+    int priority) {
     std::lock_guard l(recovery_lock);
 
     if (pg->is_forced_recovery_or_backfill()) {
-      awaiting_throttle.push_front(std::make_pair(pg->get_osdmap()->get_epoch(), pg));
+      awaiting_throttle.emplace_front(
+        pg_awaiting_throttle_t{
+          pg->get_osdmap()->get_epoch(), pg, cost_per_object, priority});
     } else {
-      awaiting_throttle.push_back(std::make_pair(pg->get_osdmap()->get_epoch(), pg));
+      awaiting_throttle.emplace_back(
+        pg_awaiting_throttle_t{
+          pg->get_osdmap()->get_epoch(), pg, cost_per_object, priority});
     }
     _maybe_queue_recovery();
   }
-  void queue_recovery_after_sleep(PG *pg, epoch_t queued, uint64_t reserved_pushes) {
+  void queue_recovery_after_sleep(
+    PG *pg, epoch_t queued, uint64_t reserved_pushes,
+    int priority) {
     std::lock_guard l(recovery_lock);
-    _queue_for_recovery(std::make_pair(queued, pg), reserved_pushes);
+    // Send cost as 1 in pg_awaiting_throttle_t below. The cost is ignored
+    // as this path is only applicable for WeightedPriorityQueue scheduler.
+    _queue_for_recovery(
+      pg_awaiting_throttle_t{queued, pg, 1, priority},
+      reserved_pushes);
   }
 
   void queue_check_readable(spg_t spgid,
@@ -1152,26 +1168,6 @@ public:
 	0)));
   }
 
-  static ghobject_t make_pg_log_oid(spg_t pg) {
-    std::stringstream ss;
-    ss << "pglog_" << pg;
-    std::string s;
-    getline(ss, s);
-    return ghobject_t(hobject_t(sobject_t(object_t(s.c_str()), 0)));
-  }
-
-  static ghobject_t make_pg_biginfo_oid(spg_t pg) {
-    std::stringstream ss;
-    ss << "pginfo_" << pg;
-    std::string s;
-    getline(ss, s);
-    return ghobject_t(hobject_t(sobject_t(object_t(s.c_str()), 0)));
-  }
-  static ghobject_t make_infos_oid() {
-    hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
-    return ghobject_t(oid);
-  }
-
   static ghobject_t make_final_pool_info_oid(int64_t pool) {
     return ghobject_t(
       hobject_t(
@@ -1219,8 +1215,9 @@ private:
   // -- superblock --
   OSDSuperblock superblock;
 
-  void write_superblock();
-  void write_superblock(ObjectStore::Transaction& t);
+  static void write_superblock(CephContext* cct,
+                               OSDSuperblock& sb,
+                               ObjectStore::Transaction& t);
   int read_superblock();
 
   void clear_temp_objects();
@@ -1509,7 +1506,7 @@ public:
     bool ms_handle_refused(Connection *con) override {
       return osd->ms_handle_refused(con);
     }
-    int ms_handle_authentication(Connection *con) override {
+    int ms_handle_fast_authentication(Connection *con) override {
       return true;
     }
   } heartbeat_dispatcher;
@@ -1548,6 +1545,7 @@ protected:
   friend class ceph::osd::scheduler::PGOpItem;
   friend class ceph::osd::scheduler::PGPeeringItem;
   friend class ceph::osd::scheduler::PGRecovery;
+  friend class ceph::osd::scheduler::PGRecoveryContext;
   friend class ceph::osd::scheduler::PGRecoveryMsg;
   friend class ceph::osd::scheduler::PGDelete;
 
@@ -1687,7 +1685,7 @@ protected:
 
   void handle_osd_map(class MOSDMap *m);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
-  void trim_maps(epoch_t oldest, int nreceived, bool skip_maps);
+  void trim_maps(epoch_t oldest, bool skip_maps);
   void note_down_osd(int osd);
   void note_up_osd(int osd);
   friend struct C_OnMapCommit;
@@ -1864,6 +1862,7 @@ protected:
 
   // -- pg recovery --
   void do_recovery(PG *pg, epoch_t epoch_queued, uint64_t pushes_reserved,
+		   int priority,
 		   ThreadPool::TPHandle &handle);
 
 
@@ -1930,7 +1929,7 @@ private:
   void ms_handle_connect(Connection *con) override;
   void ms_handle_fast_connect(Connection *con) override;
   void ms_handle_fast_accept(Connection *con) override;
-  int ms_handle_authentication(Connection *con) override;
+  int ms_handle_fast_authentication(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
@@ -1995,6 +1994,7 @@ private:
   void maybe_override_sleep_options_for_qos();
   bool maybe_override_options_for_qos(
     const std::set<std::string> *changed = nullptr);
+  void maybe_override_cost_for_qos();
   int run_osd_bench_test(int64_t count,
                          int64_t bsize,
                          int64_t osize,

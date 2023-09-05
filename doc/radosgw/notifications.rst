@@ -63,6 +63,8 @@ added when the notification is committed to persistent storage.
 
 .. note:: If the notification fails with an error, cannot be delivered, or
    times out, it is retried until it is successfully acknowledged.
+   You can control its retry with time_to_live/max_retries to have a time/retry limit and
+   control the retry frequency with retry_sleep_duration
 
 .. tip:: To minimize the latency added by asynchronous notification, we 
    recommended placing the "log" pool on fast media.
@@ -137,9 +139,6 @@ updating, use the name of an existing topic and different endpoint values).
 .. tip:: Any notification already associated with the topic must be re-created
    in order for the topic to update.
 
-.. note:: For rabbitmq, ``push-endpoint`` (with a hyphen in the middle) must be
-   changed to ``push_endpoint`` (with an underscore in the middle).
-
 ::
 
    POST
@@ -156,6 +155,10 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.8.key=push-endpoint&Attributes.entry.8.value=<endpoint>]
    [&Attributes.entry.9.key=persistent&Attributes.entry.9.value=true|false]
    [&Attributes.entry.10.key=cloudevents&Attributes.entry.10.value=true|false]
+   [&Attributes.entry.11.key=mechanism&Attributes.entry.11.value=<mechanism>]
+   [&Attributes.entry.12.key=time_to_live&Attributes.entry.12.value=<seconds to live>]
+   [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
+   [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
 
 Request parameters:
 
@@ -164,6 +167,18 @@ Request parameters:
   notifications that are triggered by the topic.
 - persistent: This indicates whether notifications to this endpoint are
   persistent (=asynchronous) or not persistent. (This is "false" by default.)
+- time_to_live: This will limit the time (in seconds) to retain the notifications.
+  default value is taken from `rgw_topic_persistency_time_to_live`.
+  providing a value overrides the global value.
+  zero value means infinite time to live.
+- max_retries: This will limit the max retries before expiring notifications.
+  default value is taken from `rgw_topic_persistency_max_retries`.
+  providing a value overrides the global value.
+  zero value means infinite retries.
+- retry_sleep_duration: This will control the frequency of retrying the notifications.
+  default value is taken from `rgw_topic_persistency_sleep_duration`.
+  providing a value overrides the global value.
+  zero value mean there is no delay between retries.
 
 - HTTP endpoint
 
@@ -190,8 +205,7 @@ Request parameters:
    specified CA will be used to authenticate the broker. The default CA will
    not be used.  
  - amqp-exchange: The exchanges must exist and must be able to route messages
-   based on topics. This parameter is mandatory.  Different topics that point
-   to the same endpoint must use the same exchange.
+   based on topics. This parameter is mandatory.
  - amqp-ack-level: No end2end acking is required. Messages may persist in the
    broker before being delivered to their final destinations. Three ack methods
    exist:
@@ -211,10 +225,16 @@ Request parameters:
  - ``ca-location``: If this is provided and a secure connection is used, the
    specified CA will be used instead of the default CA to authenticate the
    broker. 
- - user/password: This must be provided only over HTTPS. Topic creation
-   requests will otherwise be rejected.
- - user/password: This must be provided along with ``use-ssl``. Connections to
-   the broker will otherwise fail.
+ - user/password: This should be provided over HTTPS. If not, the config parameter `rgw_allow_notification_secrets_in_cleartext` must be `true` in order to create topics.
+ - user/password: This should be provided together with ``use-ssl``. If not, the broker credentials will be sent over insecure transport.
+ - mechanism: may be provided together with user/password (default: ``PLAIN``). The supported SASL mechanisms are:
+
+  - PLAIN
+  - SCRAM-SHA-256
+  - SCRAM-SHA-512
+  - GSSAPI
+  - OAUTHBEARER
+
  - port: This defaults to 9092.
  - kafka-ack-level: No end2end acking is required. Messages may persist in the
    broker before being delivered to their final destinations. Two ack methods
@@ -314,6 +334,9 @@ The response has the following format:
      information. In this case, the request must be made over HTTPS. The "topic
      get" request will otherwise be rejected.
    - Persistent: This is "true" if the topic is persistent.
+   - TimeToLive: This will limit the time (in seconds) to retain the notifications.
+   - MaxRetries: This will limit the max retries before expiring notifications.
+   - RetrySleepDuration: This will control the frequency of retrying the notifications.
 - TopicArn: topic `ARN
   <https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html>`_.
 - OpaqueData: The opaque data set on the topic.

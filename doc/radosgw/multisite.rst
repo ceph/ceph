@@ -46,6 +46,24 @@ configurations for the Ceph Object Gateway:
   a global object namespace. This global object namespace ensures unique
   object IDs across zonegroups and zones.
 
+  Each bucket is owned by the zonegroup where it was created (except where
+  overridden by the :ref:`LocationConstraint<s3_bucket_placement>` on
+  bucket creation), and its object data will only replicate to other zones in
+  that zonegroup. Any request for data in that bucket that are sent to other
+  zonegroups will redirect to the zonegroup where the bucket resides.
+
+  It can be useful to create multiple zonegroups when you want to share a
+  namespace of users and buckets across many zones, but isolate the object data
+  to a subset of those zones. It might be that you have several connected sites
+  that share storage, but only require a single backup for purposes of disaster
+  recovery. In such a case, it could make sense to create several zonegroups
+  with only two zones each to avoid replicating all objects to all zones.
+
+  In other cases, it might make more sense to isolate things in separate
+  realms, with each realm having a single zonegroup. Zonegroups provide
+  flexibility by making it possible to control the isolation of data and
+  metadata separately.
+
 - **Multiple Realms:** Beginning with the Kraken release, the Ceph Object
   Gateway supports "realms", which are containers for zonegroups. Realms make
   it possible to set policies that apply to multiple zonegroups. Realms have a
@@ -55,14 +73,31 @@ configurations for the Ceph Object Gateway:
   realm can have a configuration that is distinct from the configuration of
   other realms).
 
+
 Diagram - Replication of Object Data Between Zones
 --------------------------------------------------
 
 The replication of object data between zones within a zonegroup looks
 something like this:
 
-.. image:: ../images/zone-sync2.png
+.. image:: ../images/zone-sync.svg
    :align: center
+
+At the top of this diagram, we see two applications (also known as "clients").
+The application on the right is both writing and reading data from the Ceph
+Cluster, by means of the RADOS Gateway (RGW). The application on the left is
+only *reading* data from the Ceph Cluster, by means of an instance of RADOS
+Gateway (RGW). In both cases (read-and-write and read-only), the transmssion of
+data is handled RESTfully.
+
+In the middle of this diagram, we see two zones, each of which contains an
+instance of RADOS Gateway (RGW). These instances of RGW are handling the
+movement of data from the applications to the zonegroup. The arrow from the
+master zone (US-EAST) to the secondary zone (US-WEST) represents an act of data
+synchronization.
+
+At the bottom of this diagram, we see the data distributed into the Ceph
+Storage Cluster.
 
 For additional details on setting up a cluster, see `Ceph Object Gateway for
 Production <https://access.redhat.com/documentation/en-us/red_hat_ceph_storage/3/html/ceph_object_gateway_for_production/index/>`__.
@@ -143,7 +178,11 @@ realm enforces a globally unique namespace within itself.
 
       radosgw-admin realm create --rgw-realm=movies --default
 
-   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zonegroups and zones.
+   .. note:: If you intend the cluster to have a single realm, specify the ``--default`` flag.  
+
+      If ``--default`` is specified, ``radosgw-admin`` uses this realm by default. 
+      
+      If ``--default`` is not specified, you must specify either the ``--rgw-realm`` flag or the ``--realm-id`` flag to identify the realm when adding zonegroups and zones.
 
 #. After the realm has been created, ``radosgw-admin`` echoes back the realm
    configuration. For example:
@@ -162,8 +201,8 @@ realm enforces a globally unique namespace within itself.
 Create a Master Zonegroup
 --------------------------
 
-A realm must have at least one zonegroup which serves as the master zone
-group for the realm.
+A realm must have at least one zonegroup which serves as the master zonegroup
+for the realm.
 
 #. To create a new master zonegroup for the multi-site configuration, open a
    command-line interface on a host in the master zonegroup and zone. Then
@@ -179,10 +218,14 @@ group for the realm.
 
       radosgw-admin zonegroup create --rgw-zonegroup=us --endpoints=http://rgw1:80 --rgw-realm=movies --master --default
 
-   .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
+   .. note:: If the realm will have only a single zonegroup, specify the ``--default`` flag. 
 
-#. After creating the master zonegroup, ``radosgw-admin`` echoes back the zone
-   group configuration. For example:
+      If ``--default`` is specified, ``radosgw-admin`` uses this zonegroup by default when adding new zones. 
+      
+      If ``--default`` is not specified, you must use either the ``--rgw-zonegroup`` flag or the ``--zonegroup-id`` flag to identify the zonegroup when adding or modifying zones.
+
+#. After creating the master zonegroup, ``radosgw-admin`` echoes back the
+   zonegroup configuration. For example:
 
    ::
    
@@ -241,8 +284,8 @@ For example:
 Delete Default Zonegroup and Zone
 ----------------------------------
 
-#. Delete the ``default`` zone if it exists. Remove it from the default zone
-   group first.
+#. Delete the ``default`` zone if it exists. Remove it from the default
+   zonegroup first.
 
    .. prompt:: bash #
 
@@ -346,8 +389,11 @@ Zones that are within a zonegroup replicate all data in order to ensure that
 every zone has the same data. When creating a secondary zone, run the following
 operations on a host identified to serve the secondary zone.
 
-.. note:: To add a tertiary zone, follow the same procedures used for adding a
-   secondary zone. Be sure to specify a different zone name.
+.. note:: To add a second secondary zone (that is, a second non-master zone
+   within a zonegroup that already contains a secondary zone), follow :ref:`the
+   same procedures that are used for adding a secondary
+   zone<radosgw-multisite-secondary-zone-creating>`. Be sure to specify a
+   different zone name than the name of the first secondary zone.
 
 .. important:: Metadata operations (for example, user creation) must be
    run on a host within the master zone. Bucket operations can be received
@@ -377,6 +423,8 @@ default realm:
 .. prompt:: bash #
 
    radosgw-admin realm default --rgw-realm={realm-name}
+
+.. _radosgw-multisite-secondary-zone-creating:
 
 Creating a Secondary Zone
 -------------------------
@@ -722,7 +770,13 @@ to a multi-site system, follow these steps:
       radosgw-admin zonegroup rename --rgw-zonegroup default --zonegroup-new-name=<name>
       radosgw-admin zone rename --rgw-zone default --zone-new-name us-east-1 --rgw-zonegroup=<name>
 
-3. Configure the master zonegroup. Replace ``<name>`` with the realm name or
+3. Rename the default zonegroup's ``api_name``. Replace ``<name>`` with the zonegroup name:
+
+   .. prompt:: bash #
+
+      radosgw-admin zonegroup modify --api-name=<name> --rgw-zonegroup=<name>
+
+4. Configure the master zonegroup. Replace ``<name>`` with the realm name or
    zonegroup name. Replace ``<fqdn>`` with the fully qualified domain name(s)
    in the zonegroup:
 
@@ -730,7 +784,7 @@ to a multi-site system, follow these steps:
 
       radosgw-admin zonegroup modify --rgw-realm=<name> --rgw-zonegroup=<name> --endpoints http://<fqdn>:80 --master --default
 
-4. Configure the master zone. Replace ``<name>`` with the realm name, zone
+5. Configure the master zone. Replace ``<name>`` with the realm name, zone
    name, or zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
    name(s) in the zonegroup:
 
@@ -741,7 +795,7 @@ to a multi-site system, follow these steps:
                                 --access-key=<access-key> --secret=<secret-key> \
                                 --master --default
 
-5. Create a system user. Replace ``<user-id>`` with the username.  Replace
+6. Create a system user. Replace ``<user-id>`` with the username.  Replace
    ``<display-name>`` with a display name. The display name is allowed to
    contain spaces:
 
@@ -752,13 +806,13 @@ to a multi-site system, follow these steps:
       --access-key=<access-key> \ 
       --secret=<secret-key> --system
 
-6. Commit the updated configuration:
+7. Commit the updated configuration:
 
    .. prompt:: bash #
 
       radosgw-admin period update --commit
 
-7. Restart the Ceph Object Gateway:
+8. Restart the Ceph Object Gateway:
 
    .. prompt:: bash #
 
@@ -1101,7 +1155,7 @@ To view the configuration of a zonegroup, run this command:
 
 .. prompt:: bash #
    
-   dosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
+   radosgw-admin zonegroup get [--rgw-zonegroup=<zonegroup>]
 
 The zonegroup configuration looks like this:
 
@@ -1165,10 +1219,10 @@ specifying the required settings. Here is a list of the required settings:
 3. ``is_master``: Determines whether the zonegroup is the master zonegroup.
    Required. **note:** You can only have one master zonegroup.
 
-4. ``endpoints``: A list of all the endpoints in the zonegroup. For
-   example, you may use multiple domain names to refer to the same zone
-   group. Remember to escape the forward slashes (``\/``). You may also
-   specify a port (``fqdn:port``) for each endpoint. Optional.
+4. ``endpoints``: A list of all the endpoints in the zonegroup. For example,
+   you may use multiple domain names to refer to the same zonegroup. Remember
+   to escape the forward slashes (``\/``). You may also specify a port
+   (``fqdn:port``) for each endpoint. Optional.
 
 5. ``hostnames``: A list of all the hostnames in the zonegroup. For example,
    you may use multiple domain names to refer to the same zonegroup. Optional.
@@ -1315,11 +1369,13 @@ Zones
 -----
 
 A zone defines a logical group that consists of one or more Ceph Object Gateway
-instances. Ceph Object Gateway supports zones.
+instances. All RGWs in a given zone serve S3 objects that are backed by RADOS objects that are stored in the same set of pools in the same cluster. Ceph Object Gateway supports zones.
 
 The procedure for configuring zones differs from typical configuration
 procedures, because not all of the settings end up in a Ceph configuration
-file. Zones can be listed. You can "get" a zone configuration and "set" a zone
+file. 
+
+Zones can be listed. You can "get" a zone configuration and "set" a zone
 configuration.
 
 Creating a Zone
@@ -1538,27 +1594,53 @@ Zone Features
 
 Some multisite features require support from all zones before they can be enabled. Each zone lists its ``supported_features``, and each zonegroup lists its ``enabled_features``. Before a feature can be enabled in the zonegroup, it must be supported by all of its zones.
 
-On creation of new zones and zonegroups, all known features are supported/enabled. After upgrading an existing multisite configuration, however, new features must be enabled manually.
+On creation of new zones and zonegroups, all known features are supported and some features (see table below) are enabled by default. After upgrading an existing multisite configuration, however, new features must be enabled manually.
 
 Supported Features
 ------------------
 
-+---------------------------+---------+
-| Feature                   | Release |
-+===========================+=========+
-| :ref:`feature_resharding` | Quincy  |
-+---------------------------+---------+
++-----------------------------------+---------+----------+
+| Feature                           | Release | Default  |
++===================================+=========+==========+
+| :ref:`feature_resharding`         | Reef    | Enabled  |
++-----------------------------------+---------+----------+
+| :ref:`feature_compress_encrypted` | Reef    | Disabled |
++-----------------------------------+---------+----------+
 
 .. _feature_resharding:
 
 resharding
 ~~~~~~~~~~
 
-Allows buckets to be resharded in a multisite configuration without interrupting the replication of their objects. When ``rgw_dynamic_resharding`` is enabled, it runs on each zone independently, and zones may choose different shard counts for the same bucket. When buckets are resharded manually with ``radosgw-admin bucket reshard``, only that zone's bucket is modified. A zone feature should only be marked as supported after all of its radosgws and osds have upgraded.
+This feature allows buckets to be resharded in a multisite configuration
+without interrupting the replication of their objects. When
+``rgw_dynamic_resharding`` is enabled, it runs on each zone independently, and
+zones may choose different shard counts for the same bucket. When buckets are
+resharded manually with ``radosgw-admin bucket reshard``, only that zone's
+bucket is modified. A zone feature should only be marked as supported after all
+of its RGWs and OSDs have upgraded.
 
+.. note:: Dynamic resharding is not supported in multisite deployments prior to
+   the Reef release.
+
+
+.. _feature_compress_encrypted:
+
+compress-encrypted
+~~~~~~~~~~~~~~~~~~
+
+This feature enables support for combining `Server-Side Encryption`_ and
+`Compression`_ on the same object. Object data gets compressed before encryption.
+Prior to Reef, multisite would not replicate such objects correctly, so all zones
+must upgrade to Reef or later before enabling.
+
+.. warning:: The compression ratio may leak information about the encrypted data,
+   and allow attackers to distinguish whether two same-sized objects might contain
+   the same data. Due to these security considerations, this feature is disabled
+   by default.
 
 Commands
------------------
+--------
 
 Add support for a zone feature
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1604,3 +1686,5 @@ On any cluster in the realm:
 
 .. _`Pools`: ../pools
 .. _`Sync Policy Config`: ../multisite-sync-policy
+.. _`Server-Side Encryption`: ../encryption
+.. _`Compression`: ../compression

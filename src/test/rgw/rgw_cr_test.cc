@@ -6,11 +6,11 @@
 #include <sstream>
 #include <string>
 
-#undef FMT_HEADER_ONLY
-#define FMT_HEADER_ONLY 1
 #include <fmt/format.h>
 
 #include "include/rados/librados.hpp"
+
+#include "rgw_tools.h"
 
 #include "common/common_init.h"
 #include "common/config.h"
@@ -329,7 +329,7 @@ int main(int argc, const char **argv)
 			      false,
 			      false,
 			      false,
-			      true,
+			      true, null_yield, 
 			      false));
   if (!store) {
     std::cerr << "couldn't init storage provider" << std::endl;

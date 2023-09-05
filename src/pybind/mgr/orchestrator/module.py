@@ -1,7 +1,7 @@
 import enum
 import errno
 import json
-from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping
+from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping, Tuple
 import re
 import datetime
 import math
@@ -21,7 +21,7 @@ from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spe
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.utils import datetime_now
 
-from mgr_util import to_pretty_timedelta, format_dimless, format_bytes
+from mgr_util import to_pretty_timedelta, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
 from object_format import Format
 
@@ -30,7 +30,8 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
     ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, \
-    GenericSpec, DaemonDescriptionStatus, SNMPGatewaySpec, MDSSpec, TunedProfileSpec
+    GenericSpec, DaemonDescriptionStatus, SNMPGatewaySpec, MDSSpec, TunedProfileSpec, \
+    NvmeofServiceSpec
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -44,6 +45,10 @@ def nice_bytes(v: Optional[int]) -> str:
     if not v:
         return '-'
     return format_bytes(v, 5)
+
+
+class ArgumentError(Exception):
+    pass
 
 
 class HostDetails:
@@ -146,6 +151,7 @@ class ServiceType(enum.Enum):
     rgw = 'rgw'
     nfs = 'nfs'
     iscsi = 'iscsi'
+    nvmeof = 'nvmeof'
     snmp_gateway = 'snmp-gateway'
     elasticsearch = 'elasticsearch'
     jaeger_agent = 'jaeger-agent'
@@ -168,6 +174,18 @@ class DaemonAction(enum.Enum):
     restart = 'restart'
     reconfig = 'reconfig'
     rotate_key = 'rotate-key'
+
+
+class IngressType(enum.Enum):
+    default = 'default'
+    keepalive_only = 'keepalive-only'
+    haproxy_standard = 'haproxy-standard'
+    haproxy_protocol = 'haproxy-protocol'
+
+    def canonicalize(self) -> "IngressType":
+        if self == self.default:
+            return IngressType(self.haproxy_standard)
+        return IngressType(self)
 
 
 def to_format(what: Any, format: Format, many: bool, cls: Any) -> Any:
@@ -460,9 +478,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host drain')
-    def _drain_host(self, hostname: str, force: bool = False) -> HandleCommandResult:
+    def _drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False) -> HandleCommandResult:
         """drain all daemons from a host"""
-        completion = self.drain_host(hostname, force)
+        completion = self.drain_host(hostname, force, keep_conf_keyring)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -566,11 +584,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host maintenance enter')
-    def _host_maintenance_enter(self, hostname: str, force: bool = False) -> HandleCommandResult:
+    def _host_maintenance_enter(self, hostname: str, force: bool = False, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
         """
         Prepare a host for maintenance by shutting down and disabling all Ceph daemons (cephadm only)
         """
-        completion = self.enter_host_maintenance(hostname, force=force)
+        completion = self.enter_host_maintenance(hostname, force=force, yes_i_really_mean_it=yes_i_really_mean_it)
         raise_if_exception(completion)
 
         return HandleCommandResult(stdout=completion.result_str())
@@ -665,7 +683,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                                 d.lsm_data.get('transport', ''),
                                 d.lsm_data.get('rpm', ''),
                                 d.device_id,
-                                format_dimless(d.sys_api.get('size', 0), 5),
+                                format_bytes(d.sys_api.get('size', 0), 5),
                                 d.lsm_data.get('health', ''),
                                 display_map[led_ident],
                                 display_map[led_fail],
@@ -681,7 +699,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                                 d.path,
                                 d.human_readable_type,
                                 d.device_id,
-                                format_dimless(d.sys_api.get('size', 0), 5),
+                                format_bytes(d.sys_api.get('size', 0), 5),
                                 display_map[d.available],
                                 nice_delta(now, d.created, ' ago'),
                                 ', '.join(d.rejected_reasons)
@@ -869,6 +887,62 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             return HandleCommandResult(stdout=table.get_string())
 
+    def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
+
+        _username = username
+        _password = password
+        if inbuf:
+            try:
+                credentials = json.loads(inbuf)
+                _username = credentials['username'].strip()
+                _password = credentials['password'].strip()
+            except (KeyError, json.JSONDecodeError):
+                raise ArgumentError("""
+                json provided for credentials did not include all necessary fields. Please setup json file as:
+
+                {
+                   "username": "USERNAME",
+                   "password": "PASSWORD"
+                }
+                """)
+
+        if not _username or not _password:
+            raise ArgumentError("Invalid arguments. Please provide arguments <username> <password> or -i <credentials_json_file>")
+
+        return _username, _password
+
+    @_cli_write_command('orch prometheus set-credentials')
+    def _set_prometheus_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
+        try:
+            username, password = self._get_credentials(username, password, inbuf)
+            completion = self.set_prometheus_access_info(username, password)
+            result = raise_if_exception(completion)
+            return HandleCommandResult(stdout=json.dumps(result))
+        except ArgumentError as e:
+            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
+
+    @_cli_write_command('orch alertmanager set-credentials')
+    def _set_alertmanager_access_info(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> HandleCommandResult:
+        try:
+            username, password = self._get_credentials(username, password, inbuf)
+            completion = self.set_alertmanager_access_info(username, password)
+            result = raise_if_exception(completion)
+            return HandleCommandResult(stdout=json.dumps(result))
+        except ArgumentError as e:
+            return HandleCommandResult(-errno.EINVAL, "", (str(e)))
+
+    @_cli_write_command('orch prometheus get-credentials')
+    def _get_prometheus_access_info(self) -> HandleCommandResult:
+        completion = self.get_prometheus_access_info()
+        access_info = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(access_info))
+
+    @_cli_write_command('orch alertmanager get-credentials')
+    def _get_alertmanager_access_info(self) -> HandleCommandResult:
+        completion = self.get_alertmanager_access_info()
+        access_info = raise_if_exception(completion)
+        return HandleCommandResult(stdout=json.dumps(access_info))
+
     @_cli_write_command('orch apply osd')
     def _apply_osd(self,
                    all_available_devices: bool = False,
@@ -876,6 +950,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                    unmanaged: Optional[bool] = None,
                    dry_run: bool = False,
                    no_overwrite: bool = False,
+                   method: Optional[OSDMethod] = None,
                    inbuf: Optional[str] = None  # deprecated. Was deprecated before Quincy
                    ) -> HandleCommandResult:
         """
@@ -918,7 +993,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                     placement=PlacementSpec(host_pattern='*'),
                     data_devices=DeviceSelection(all=True),
                     unmanaged=unmanaged,
-                    preview_only=dry_run
+                    preview_only=dry_run,
+                    method=method
                 )
             ]
             return self._apply_misc(dg_specs, dry_run, format, no_overwrite)
@@ -986,9 +1062,11 @@ Usage:
                       osd_id: List[str],
                       replace: bool = False,
                       force: bool = False,
-                      zap: bool = False) -> HandleCommandResult:
+                      zap: bool = False,
+                      no_destroy: bool = False) -> HandleCommandResult:
         """Remove OSD daemons"""
-        completion = self.remove_osds(osd_id, replace=replace, force=force, zap=zap)
+        completion = self.remove_osds(osd_id, replace=replace, force=force,
+                                      zap=zap, no_destroy=no_destroy)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -1123,6 +1201,22 @@ Usage:
             api_user=api_user,
             api_password=api_password,
             trusted_ip_list=trusted_ip_list,
+            placement=PlacementSpec.from_string(placement),
+        )
+        return self._daemon_add_misc(spec)
+
+    @_cli_write_command('orch daemon add nvmeof')
+    def _nvmeof_add(self,
+                    pool: str,
+                    placement: Optional[str] = None,
+                    inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Start nvmeof daemon(s)"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = NvmeofServiceSpec(
+            service_id='nvmeof',
+            pool=pool,
             placement=PlacementSpec.from_string(placement),
         )
         return self._daemon_add_misc(spec)
@@ -1275,6 +1369,7 @@ Usage:
                    realm: Optional[str] = None,
                    zonegroup: Optional[str] = None,
                    zone: Optional[str] = None,
+                   networks: Optional[List[str]] = None,
                    port: Optional[int] = None,
                    ssl: bool = False,
                    dry_run: bool = False,
@@ -1298,6 +1393,7 @@ Usage:
             rgw_realm=realm,
             rgw_zonegroup=zonegroup,
             rgw_zone=zone,
+            networks=networks,
             rgw_frontend_port=port,
             ssl=ssl,
             placement=PlacementSpec.from_string(placement),
@@ -1357,6 +1453,31 @@ Usage:
             api_user=api_user,
             api_password=api_password,
             trusted_ip_list=trusted_ip_list,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            preview_only=dry_run
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply nvmeof')
+    def _apply_nvmeof(self,
+                      pool: str,
+                      placement: Optional[str] = None,
+                      unmanaged: bool = False,
+                      dry_run: bool = False,
+                      format: Format = Format.plain,
+                      no_overwrite: bool = False,
+                      inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Scale an nvmeof service"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = NvmeofServiceSpec(
+            service_id=pool,
+            pool=pool,
             placement=PlacementSpec.from_string(placement),
             unmanaged=unmanaged,
             preview_only=dry_run
@@ -1430,6 +1551,22 @@ Usage:
                            unmanaged=unmanaged)
         specs: List[ServiceSpec] = spec.get_tracing_specs()
         return self._apply_misc(specs, dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch set-unmanaged')
+    def _set_unmanaged(self, service_name: str) -> HandleCommandResult:
+        """Set 'unmanaged: true' for the given service name"""
+        completion = self.set_unmanaged(service_name, True)
+        raise_if_exception(completion)
+        out = completion.result_str()
+        return HandleCommandResult(stdout=out)
+
+    @_cli_write_command('orch set-managed')
+    def _set_managed(self, service_name: str) -> HandleCommandResult:
+        """Set 'unmanaged: false' for the given service name"""
+        completion = self.set_unmanaged(service_name, False)
+        raise_if_exception(completion)
+        out = completion.result_str()
+        return HandleCommandResult(stdout=out)
 
     @_cli_write_command('orch set backend')
     def _set_backend(self, module_name: Optional[str] = None) -> HandleCommandResult:

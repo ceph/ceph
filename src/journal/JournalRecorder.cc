@@ -189,9 +189,9 @@ void JournalRecorder::flush(Context *on_safe) {
 ceph::ref_t<ObjectRecorder> JournalRecorder::get_object(uint8_t splay_offset) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
-  const auto& object_recoder = m_object_ptrs.at(splay_offset);
-  ceph_assert(object_recoder);
-  return object_recoder;
+  const auto& object_recorder = m_object_ptrs.at(splay_offset);
+  ceph_assert(object_recorder);
+  return object_recorder;
 }
 
 void JournalRecorder::close_and_advance_object_set(uint64_t object_set) {

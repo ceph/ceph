@@ -19,7 +19,7 @@ public:
   RegistryKey(CephContext *cct_, HKEY hRootKey, LPCTSTR strKey, bool create_value);
   ~RegistryKey();
 
-  static remove(CephContext *cct_, HKEY hRootKey, LPCTSTR strKey);
+  static int remove(CephContext *cct_, HKEY hRootKey, LPCTSTR strKey);
 
   int flush();
 

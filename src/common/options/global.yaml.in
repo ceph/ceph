@@ -2058,7 +2058,6 @@ options:
   services:
   - mon
   enum_values:
-  - leveldb
   - rocksdb
   flags:
   - create
@@ -2509,14 +2508,17 @@ options:
   type: uint
   level: advanced
   desc: number of PGs for placement purposes (0 to match pg_num)
-  fmt_desc: The default number of placement groups for placement for a pool.
+  fmt_desc: |
+    The default number of placement groups for placement for a pool.
     The default value is the same as ``pgp_num`` with ``mkpool``.
-    PG and PGP should be equal (for now).
+    PG and PGP should be equal (for now). Note: should not be set unless
+    autoscaling is disabled.
   default: 0
   services:
   - mon
   see_also:
   - osd_pool_default_pg_num
+  - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
 - name: osd_pool_default_type
@@ -3358,56 +3360,6 @@ options:
   level: advanced
   default: 2
   with_legacy: true
-- name: leveldb_log_to_ceph_log
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_write_buffer_size
-  type: size
-  level: advanced
-  default: 8_M
-  with_legacy: true
-- name: leveldb_cache_size
-  type: size
-  level: advanced
-  default: 128_M
-  with_legacy: true
-- name: leveldb_block_size
-  type: size
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_bloom_size
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_max_open_files
-  type: int
-  level: advanced
-  default: 0
-  with_legacy: true
-- name: leveldb_compression
-  type: bool
-  level: advanced
-  default: true
-  with_legacy: true
-- name: leveldb_paranoid
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
-- name: leveldb_log
-  type: str
-  level: advanced
-  default: /dev/null
-  with_legacy: true
-- name: leveldb_compact_on_mount
-  type: bool
-  level: advanced
-  default: false
-  with_legacy: true
 - name: rocksdb_log_to_ceph_log
   type: bool
   level: advanced
@@ -3641,6 +3593,12 @@ options:
   level: advanced
   desc: Cost for scrub operations in work queue
   default: 50_M
+  with_legacy: true
+- name: osd_scrub_event_cost
+  type: size
+  level: advanced
+  desc: Cost for each scrub operation, used when osd_op_queue=mclock_scheduler
+  default: 4_K
   with_legacy: true
 # set requested scrub priority higher than scrub priority to make the
 # requested scrubs jump the queue of scheduled scrubs
@@ -4955,7 +4913,7 @@ options:
   type: str
   level: advanced
   desc: Full set of rocksdb settings to override
-  default: compression=kNoCompression,max_write_buffer_number=128,min_write_buffer_number_to_merge=16,compaction_style=kCompactionStyleLevel,write_buffer_size=8388608,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0,ttl=21600
+  default: compression=kNoCompression,max_write_buffer_number=64,min_write_buffer_number_to_merge=6,compaction_style=kCompactionStyleLevel,write_buffer_size=16777216,max_background_jobs=4,level0_file_num_compaction_trigger=8,max_bytes_for_level_base=1073741824,max_bytes_for_level_multiplier=8,compaction_readahead_size=2MB,max_total_wal_size=1073741824,writable_file_max_buffer_size=0
   with_legacy: true
 - name: bluestore_rocksdb_options_annex
   type: str
@@ -5001,7 +4959,7 @@ options:
     The optimal value depends on multiple factors, and modification is invadvisable.
     This setting is used only when OSD is doing ``--mkfs``.
     Next runs of OSD retrieve sharding from disk.
-  default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L P
+  default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
 - name: bluestore_qfsck_on_mount
   type: bool
   level: dev

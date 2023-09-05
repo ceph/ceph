@@ -127,62 +127,67 @@ The Ceph Dashboard offers the following monitoring and management capabilities:
 Overview of the Dashboard Landing Page
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Displays overall cluster status, performance, and capacity metrics. Shows instant
-feedback for changes in the cluster and provides easy access to subpages of the
-dashboard.
+The landing page of Ceph Dashboard serves as the home page and features metrics
+such as the overall cluster status, performance, and capacity. It provides real-time
+updates on any changes in the cluster and allows quick access to other sections of the dashboard.
+
+.. image:: dashboard-landing-page.png
+
+
+.. note::
+  You can change the landing page to the previous version from:
+  ``Cluster >> Manager Modules >> Dashboard >> Edit``.
+  Editing the ``FEATURE_TOGGLE_DASHBOARD`` option will change the landing page, from one view to another.
+
+  Note that the previous version of the landing page will be disabled in future releases.
+
+.. _dashboard-landing-page-details:
+
+Details
+"""""""
+Provides an overview of the cluster configuration, displaying various critical aspects of the cluster.
+
+.. image:: details-card.png
 
 .. _dashboard-landing-page-status:
 
 Status
 """"""
+Provides a visual indication of cluster health, and displays cluster alerts grouped by severity.
 
-* **Cluster Status**: Displays overall cluster health. In case of any error it
-  displays a short description of the error and provides a link to the logs.
-* **Hosts**: Displays the total number of hosts associated to the cluster and
-  links to a subpage that lists and describes each.
-* **Monitors**: Displays mons and their quorum status and
-  open sessions.  Links to a subpage that lists and describes each.
-* **OSDs**: Displays object storage daemons (ceph-osds) and
-  the numbers of OSDs running (up), in service
-  (in), and out of the cluster (out). Provides links to
-  subpages providing a list of all OSDs and related management actions.
-* **Managers**: Displays active and standby Ceph Manager
-  daemons (ceph-mgr).
-* **Object Gateway**: Displays active object gateways (RGWs) and
-  provides links to subpages that list all object gateway daemons.
-* **Metadata Servers**: Displays active and standby CephFS metadata
-  service daemons (ceph-mds).
-* **iSCSI Gateways**: Display iSCSI gateways available,
-  active (up), and inactive (down). Provides a link to a subpage
-  showing a list of all iSCSI Gateways.
+.. image:: status-card-open.png
 
 .. _dashboard-landing-page-capacity:
 
 Capacity
 """"""""
+* **Used**: Displays the used capacity out of the total physical capacity provided by storage nodes (OSDs)
+* **Warning**: Displays the `nearfull` threshold of the OSDs
+* **Danger**: Displays the `full` threshold of the OSDs
 
-* **Raw Capacity**: Displays the capacity used out of the total
-  physical capacity provided by storage nodes (OSDs).
-* **Objects**: Displays the number and status of RADOS objects
-  including the percentages of healthy, misplaced, degraded, and unfound
-  objects.
-* **PG Status**: Displays the total number of placement groups and
-  their status, including the percentage clean, working,
-  warning, and unknown.
-* **Pools**: Displays pools and links to a subpage listing details.
-* **PGs per OSD**: Displays the number of placement groups assigned to
-  object storage daemons.
+.. image:: capacity-card.png
+
+.. _dashboard-landing-page-inventory:
+
+Inventory
+"""""""""
+An inventory for all assets within the cluster.
+Provides direct access to subpages of the dashboard from each item of this card.
+
+.. image:: inventory-card.png
 
 .. _dashboard-landing-page-performance:
 
-Performance
-"""""""""""
+Cluster Utilization
+"""""""""""""""""""
+* **Used Capacity**: Total capacity used of the cluster. The maximum value of the chart is the maximum capacity of the cluster.
+* **IOPS (Input/Output Operations Per Second)**: Number of read and write operations.
+* **Latency**: Amount of time that it takes to process a read or a write request.
+* **Client Throughput**: Amount of data that clients read or write to the cluster.
+* **Recovery Throughput**: Amount of recovery data that clients read or write to the cluster.
 
-* **Client READ/Write**: Displays an overview of
-  client input and output operations.
-* **Client Throughput**: Displays the data transfer rates to and from Ceph clients.
-* **Recovery throughput**: Displays rate of cluster healing and balancing operations.
-* **Scrubbing**: Displays light and deep scrub status.
+
+.. image:: cluster-utilization-card.png
 
 Supported Browsers
 ^^^^^^^^^^^^^^^^^^

@@ -49,6 +49,8 @@ class KernelMount(CephFSMount):
 
         self.setup_netns()
 
+        if not self.cephfs_mntpt:
+            self.cephfs_mntpt = '/'
         if not self.cephfs_name:
             self.cephfs_name = 'cephfs'
 

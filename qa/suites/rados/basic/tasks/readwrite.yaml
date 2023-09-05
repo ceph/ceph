@@ -6,6 +6,8 @@ overrides:
         mon osd initial require min compat client: luminous
       osd:
         osd_discard_disconnected_ops: false
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - rados:
     clients: [client.0]

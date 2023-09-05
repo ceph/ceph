@@ -4,7 +4,7 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import { Observable, Subscriber } from 'rxjs';
 
-import { PrometheusListHelper } from '~/app/ceph/cluster/prometheus/prometheus-list-helper';
+import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
 import { SilenceFormComponent } from '~/app/ceph/cluster/prometheus/silence-form/silence-form.component';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';

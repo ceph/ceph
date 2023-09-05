@@ -314,6 +314,7 @@ public:
 					       &cb);
     auto c = p->_cur;
     p.release();
+    // coverity[leaked_storage:SUPPRESS]
     return c;
   }
   static void complete(Ptr&& p, int r) {

@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <seastar/core/smp.hh>
+
 #include "Fwd.h"
 #include "crimson/common/log.h"
 
@@ -23,11 +25,12 @@ public:
   bool empty() const {
     return dispatchers.empty();
   }
-  seastar::future<> ms_dispatch(crimson::net::ConnectionRef, MessageRef);
-  void ms_handle_accept(crimson::net::ConnectionRef conn);
-  void ms_handle_connect(crimson::net::ConnectionRef conn);
-  void ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace);
-  void ms_handle_remote_reset(crimson::net::ConnectionRef conn);
+  seastar::future<> ms_dispatch(ConnectionRef, MessageRef);
+  void ms_handle_shard_change(ConnectionRef, seastar::shard_id, bool);
+  void ms_handle_accept(ConnectionRef conn, seastar::shard_id, bool is_replace);
+  void ms_handle_connect(ConnectionRef conn, seastar::shard_id);
+  void ms_handle_reset(ConnectionRef conn, bool is_replace);
+  void ms_handle_remote_reset(ConnectionRef conn);
 
  private:
   dispatchers_t dispatchers;

@@ -87,7 +87,8 @@ Optionals are represented as a presence byte, followed by the item if it exists.
 		T  element[present? 1 : 0]; // Only if present is non-zero.
 	}
 
-Optionals are used to encode ``boost::optional``.
+Optionals are used to encode ``boost::optional`` and, since introducing
+C++17 to Ceph, ``std::optional``.
 
 Pair
 ----

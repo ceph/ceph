@@ -45,21 +45,21 @@ mClockScheduler::mClockScheduler(ConfigProxy &conf) :
 void mClockScheduler::ClientRegistry::update_from_config(const ConfigProxy &conf)
 {
   default_external_client_info.update(
-    conf.get_val<uint64_t>("osd_mclock_scheduler_client_res"),
+    conf.get_val<double>("osd_mclock_scheduler_client_res"),
     conf.get_val<uint64_t>("osd_mclock_scheduler_client_wgt"),
-    conf.get_val<uint64_t>("osd_mclock_scheduler_client_lim"));
+    conf.get_val<double>("osd_mclock_scheduler_client_lim"));
 
   internal_client_infos[
     static_cast<size_t>(scheduler_class_t::background_recovery)].update(
-    conf.get_val<uint64_t>("osd_mclock_scheduler_background_recovery_res"),
+    conf.get_val<double>("osd_mclock_scheduler_background_recovery_res"),
     conf.get_val<uint64_t>("osd_mclock_scheduler_background_recovery_wgt"),
-    conf.get_val<uint64_t>("osd_mclock_scheduler_background_recovery_lim"));
+    conf.get_val<double>("osd_mclock_scheduler_background_recovery_lim"));
 
   internal_client_infos[
     static_cast<size_t>(scheduler_class_t::background_best_effort)].update(
-    conf.get_val<uint64_t>("osd_mclock_scheduler_background_best_effort_res"),
+    conf.get_val<double>("osd_mclock_scheduler_background_best_effort_res"),
     conf.get_val<uint64_t>("osd_mclock_scheduler_background_best_effort_wgt"),
-    conf.get_val<uint64_t>("osd_mclock_scheduler_background_best_effort_lim"));
+    conf.get_val<double>("osd_mclock_scheduler_background_best_effort_lim"));
 }
 
 const dmc::ClientInfo *mClockScheduler::ClientRegistry::get_external_client(

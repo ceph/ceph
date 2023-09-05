@@ -50,7 +50,6 @@ void* process(void *arg)
   params.op.user.uinfo.user_id.id = user1;
   params.op.user.uinfo.suspended = 123;
   params.op.user.uinfo.max_buckets = 456;
-  params.op.user.uinfo.assumed_role_arn = "role";
   params.op.user.uinfo.placement_tags.push_back("tags1");
   params.op.user.uinfo.placement_tags.push_back("tags2");
 
@@ -73,7 +72,6 @@ void* process(void *arg)
 
   cout << "tenant: " << params2.op.user.uinfo.user_id.tenant << "\n";
   cout << "suspended: " << (int)params2.op.user.uinfo.suspended << "\n";
-  cout << "assumed_role_arn: " << params2.op.user.uinfo.assumed_role_arn << "\n";
 
   list<string>::iterator it = params2.op.user.uinfo.placement_tags.begin();
 

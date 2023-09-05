@@ -25,6 +25,7 @@
 #include "msg/msg_types.h"
 
 #include "crimson/common/errorator.h"
+#include "crimson/common/local_shared_foreign_ptr.h"
 
 class AuthConnectionMeta;
 
@@ -34,8 +35,9 @@ using msgr_tag_t = uint8_t;
 using stop_t = seastar::stop_iteration;
 
 class Connection;
-using ConnectionRef = seastar::shared_ptr<Connection>;
-using ConnectionFRef = seastar::foreign_ptr<ConnectionRef>;
+using ConnectionLRef = seastar::shared_ptr<Connection>;
+using ConnectionFRef = seastar::foreign_ptr<ConnectionLRef>;
+using ConnectionRef = ::crimson::local_shared_foreign_ptr<ConnectionLRef>;
 
 class Dispatcher;
 class ChainedDispatchers;
@@ -44,5 +46,7 @@ using dispatchers_t = boost::container::small_vector<Dispatcher*, NUM_DISPATCHER
 
 class Messenger;
 using MessengerRef = seastar::shared_ptr<Messenger>;
+
+using MessageFRef = seastar::foreign_ptr<MessageURef>;
 
 } // namespace crimson::net

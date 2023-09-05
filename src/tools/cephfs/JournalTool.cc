@@ -62,7 +62,7 @@ void JournalTool::usage()
     << "    <output>: [summary|list|binary|json] [--path <path>]\n"
     << "\n"
     << "General options:\n"
-    << "  --rank=filesystem:mds-rank|all Journal rank (mandatory)\n"
+    << "  --rank=filesystem:{mds-rank|all} journal rank or \"all\" ranks (mandatory)\n"
     << "  --journal=<mdlog|purge_queue>  Journal type (purge_queue means\n"
     << "                                 this journal is used to queue for purge operation,\n"
     << "                                 default is mdlog, and only mdlog support event mode)\n"
@@ -138,9 +138,8 @@ int JournalTool::main(std::vector<const char*> &argv)
     return r;
   }
  
-  auto fs = fsmap->get_filesystem(role_selector.get_ns());
-  ceph_assert(fs != nullptr);
-  int64_t const pool_id = fs->mds_map.get_metadata_pool();
+  auto& fs = fsmap->get_filesystem(role_selector.get_ns());
+  int64_t const pool_id = fs.get_mds_map().get_metadata_pool();
   dout(4) << "JournalTool: resolving pool " << pool_id << dendl;
   std::string pool_name;
   r = rados.pool_reverse_lookup(pool_id, &pool_name);
@@ -1201,9 +1200,9 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
   int r = 0;
 
   // InoTable is a per-MDS structure, so iterate over assigned ranks
-  auto fs = fsmap->get_filesystem(role_selector.get_ns());
+  auto& fs = fsmap->get_filesystem(role_selector.get_ns());
   std::set<mds_rank_t> in_ranks;
-  fs->mds_map.get_mds_set(in_ranks);
+  fs.get_mds_map().get_mds_set(in_ranks);
 
   for (std::set<mds_rank_t>::iterator rank_i = in_ranks.begin();
       rank_i != in_ranks.end(); ++rank_i)

@@ -377,18 +377,19 @@ def run_tests(ctx, config):
             args += ['REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt']
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
-        # civetweb > 1.8 && beast parsers are strict on rfc2616
-        attrs = ["not fails_on_rgw", "not lifecycle_expiration", "not test_of_sts", "not webidentity_test"]
+        attrs = ["not fails_on_rgw", "not lifecycle_expiration"]
+        if not client_config.get('sts_tests', False):
+            attrs += ["not test_of_sts"]
+        if not client_config.get('webidentity_tests', False):
+            attrs += ["not webidentity_test"]
         if client_config.get('calling-format') != 'ordinary':
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
        
-        if 'extra_attrs' in client_config:
-            attrs = client_config.get('extra_attrs') 
+        attrs += client_config.get('extra_attrs', [])
         args += ['tox', '--', '-v', '-m', ' and '.join(attrs)]
-        if 'extra_args' in client_config:
-            args.append(client_config['extra_args'])
+        args += client_config.get('extra_args', [])
 
         toxvenv_sh(ctx, remote, args, label="s3 tests against rgw")
     yield

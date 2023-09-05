@@ -654,6 +654,7 @@ function run_osd() {
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
     ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" --osd-mclock-profile=high_recovery_ops"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
@@ -864,6 +865,7 @@ function activate_osd() {
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
     ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+    ceph_args+=" --osd-mclock-profile=high_recovery_ops"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
@@ -1744,6 +1746,29 @@ function test_wait_for_peered() {
 
 
 #######################################################################
+
+##
+# Wait until the cluster's health condition disappeared.
+# $TIMEOUT default
+#
+# @param string to grep for in health detail
+# @return 0 if the cluster health doesn't matches request,
+# 1 otherwise if after $TIMEOUT seconds health condition remains.
+#
+function wait_for_health_gone() {
+    local grepstr=$1
+    local -a delays=($(get_timeout_delays $TIMEOUT .1))
+    local -i loop=0
+
+    while ceph health detail | grep "$grepstr" ; do
+	if (( $loop >= ${#delays[*]} )) ; then
+            ceph health detail
+            return 1
+        fi
+        sleep ${delays[$loop]}
+        loop+=1
+    done
+}
 
 ##
 # Wait until the cluster has health condition passed as arg

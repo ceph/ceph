@@ -157,7 +157,7 @@ static int cls_timeindex_trim_repeat(const DoutPrefixProvider *dpp,
                                 const utime_t& from_time,
                                 const utime_t& to_time,
                                 const string& from_marker,
-                                const string& to_marker)
+                                const string& to_marker, optional_yield y)
 {
   bool done = false;
   do {
@@ -178,7 +178,7 @@ int RGWObjExpStore::objexp_hint_trim(const DoutPrefixProvider *dpp,
                                const ceph::real_time& start_time,
                                const ceph::real_time& end_time,
                                const string& from_marker,
-                               const string& to_marker)
+                               const string& to_marker, optional_yield y)
 {
   auto obj = rados_svc->obj(rgw_raw_obj(driver->svc()->zone->get_zone_params().log_pool, oid));
   int r = obj.open(dpp);
@@ -188,7 +188,7 @@ int RGWObjExpStore::objexp_hint_trim(const DoutPrefixProvider *dpp,
   }
   auto& ref = obj.get_ref();
   int ret = cls_timeindex_trim_repeat(dpp, ref, oid, utime_t(start_time), utime_t(end_time),
-          from_marker, to_marker);
+          from_marker, to_marker, y);
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
   }
@@ -264,7 +264,7 @@ void RGWObjectExpirer::trim_chunk(const DoutPrefixProvider *dpp,
                                   const utime_t& from,
                                   const utime_t& to,
                                   const string& from_marker,
-                                  const string& to_marker)
+                                  const string& to_marker, optional_yield y)
 {
   ldpp_dout(dpp, 20) << "trying to trim removal hints to=" << to
                           << ", to_marker=" << to_marker << dendl;
@@ -273,7 +273,7 @@ void RGWObjectExpirer::trim_chunk(const DoutPrefixProvider *dpp,
   real_time rt_to = to.to_real_time();
 
   int ret = exp_store.objexp_hint_trim(dpp, shard, rt_from, rt_to,
-                                       from_marker, to_marker);
+                                       from_marker, to_marker, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR during trim: " << ret << dendl;
   }
@@ -284,7 +284,7 @@ void RGWObjectExpirer::trim_chunk(const DoutPrefixProvider *dpp,
 bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp, 
                                             const string& shard,
                                             const utime_t& last_run,
-                                            const utime_t& round_start)
+                                            const utime_t& round_start, optional_yield y)
 {
   string marker;
   string out_marker;
@@ -327,7 +327,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
     garbage_chunk(dpp, entries, need_trim);
 
     if (need_trim) {
-      trim_chunk(dpp, shard, last_run, round_start, marker, out_marker);
+      trim_chunk(dpp, shard, last_run, round_start, marker, out_marker, y);
     }
 
     utime_t now = ceph_clock_now();
@@ -346,7 +346,7 @@ bool RGWObjectExpirer::process_single_shard(const DoutPrefixProvider *dpp,
 /* Returns true if all shards have been processed successfully. */
 bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp, 
                                           const utime_t& last_run,
-                                          const utime_t& round_start)
+                                          const utime_t& round_start, optional_yield y)
 {
   CephContext * const cct = driver->ctx();
   int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
@@ -358,7 +358,7 @@ bool RGWObjectExpirer::inspect_all_shards(const DoutPrefixProvider *dpp,
 
     ldpp_dout(dpp, 20) << "processing shard = " << shard << dendl;
 
-    if (! process_single_shard(dpp, shard, last_run, round_start)) {
+    if (! process_single_shard(dpp, shard, last_run, round_start, y)) {
       all_done = false;
     }
   }
@@ -393,7 +393,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     ldpp_dout(this, 2) << "object expiration: start" << dendl;
-    if (oe->inspect_all_shards(this, last_run, start)) {
+    if (oe->inspect_all_shards(this, last_run, start, null_yield)) {
       /* All shards have been processed properly. Next time we can start
        * from this moment. */
       last_run = start;

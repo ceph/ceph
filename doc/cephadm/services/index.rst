@@ -541,13 +541,60 @@ a spec like
 
 which would cause each mon daemon to be deployed with `--cpus=2`.
 
+There are two ways to express arguments in the ``extra_container_args`` list.
+To start, an item in the list can be a string. When passing an argument
+as a string and the string contains spaces, Cephadm will automatically split it
+into multiple arguments. For example, ``--cpus 2`` would become ``["--cpus",
+"2"]`` when processed. Example:
+
+.. code-block:: yaml
+
+    service_type: mon
+    service_name: mon
+    placement:
+      hosts:
+        - host1
+        - host2
+        - host3
+    extra_container_args:
+      - "--cpus 2"
+
+As an alternative, an item in the list can be an object (mapping) containing
+the required key "argument" and an optional key "split". The value associated
+with the ``argument`` key must be a single string. The value associated with
+the ``split`` key is a boolean value. The ``split`` key explicitly controls if
+spaces in the argument value cause the value to be split into multiple
+arguments. If ``split`` is true then Cephadm will automatically split the value
+into multiple arguments.  If ``split`` is false then spaces in the value will
+be retained in the argument.  The default, when ``split`` is not provided, is
+false. Examples:
+
+.. code-block:: yaml
+
+    service_type: mon
+    service_name: mon
+    placement:
+      hosts:
+        - tiebreaker
+    extra_container_args:
+      # No spaces, always treated as a single argument
+      - argument: "--timout=3000"
+      # Splitting explicitly disabled, one single argument
+      - argument: "--annotation=com.example.name=my favorite mon"
+        split: false
+      # Splitting explicitly enabled, will become two arguments
+      - argument: "--cpuset-cpus 1-3,7-11"
+        split: true
+      # Splitting implicitly disabled, one single argument
+      - argument: "--annotation=com.example.note=a simple example"
+
 Mounting Files with Extra Container Arguments
 ---------------------------------------------
 
 A common use case for extra container arguments is to mount additional
-files within the container. However, some intuitive formats for doing
-so can cause deployment to fail (see https://tracker.ceph.com/issues/57338).
-The recommended syntax for mounting a file with extra container arguments is:
+files within the container. Older versions of Ceph did not support spaces
+in arguments and therefore the examples below apply to the widest range
+of Ceph versions.
 
 .. code-block:: yaml
 
@@ -586,6 +633,55 @@ the node-exporter service , one could apply a service spec like
     host_pattern: '*'
   extra_entrypoint_args:
     - "--collector.textfile.directory=/var/lib/node_exporter/textfile_collector2"
+
+There are two ways to express arguments in the ``extra_entrypoint_args`` list.
+To start, an item in the list can be a string. When passing an argument as a
+string and the string contains spaces, cephadm will automatically split it into
+multiple arguments. For example, ``--debug_ms 10`` would become
+``["--debug_ms", "10"]`` when processed. Example:
+
+.. code-block:: yaml
+
+    service_type: mon
+    service_name: mon
+    placement:
+      hosts:
+        - host1
+        - host2
+        - host3
+    extra_entrypoint_args:
+      - "--debug_ms 2"
+
+As an alternative, an item in the list can be an object (mapping) containing
+the required key "argument" and an optional key "split". The value associated
+with the ``argument`` key must be a single string. The value associated with
+the ``split`` key is a boolean value. The ``split`` key explicitly controls if
+spaces in the argument value cause the value to be split into multiple
+arguments. If ``split`` is true then cephadm will automatically split the value
+into multiple arguments.  If ``split`` is false then spaces in the value will
+be retained in the argument.  The default, when ``split`` is not provided, is
+false. Examples:
+
+.. code-block:: yaml
+
+    # An theoretical data migration service
+    service_type: pretend
+    service_name: imagine1
+    placement:
+      hosts:
+        - host1
+    extra_entrypoint_args:
+      # No spaces, always treated as a single argument
+      - argument: "--timout=30m"
+      # Splitting explicitly disabled, one single argument
+      - argument: "--import=/mnt/usb/My Documents"
+        split: false
+      # Splitting explicitly enabled, will become two arguments
+      - argument: "--tag documents"
+        split: true
+      # Splitting implicitly disabled, one single argument
+      - argument: "--title=Imported Documents"
+
 
 Custom Config Files
 ===================
@@ -686,12 +782,35 @@ To disable the automatic management of dameons, set ``unmanaged=True`` in the
 
    ceph orch apply -i mgr.yaml
 
+Cephadm also supports setting the unmanaged parameter to true or false
+using the ``ceph orch set-unmanaged`` and ``ceph orch set-managed`` commands.
+The commands take the service name (as reported in ``ceph orch ls``) as
+the only argument. For example,
+
+.. prompt:: bash #
+
+   ceph orch set-unmanaged mon
+
+would set ``unmanaged: true`` for the mon service and
+
+.. prompt:: bash #
+
+   ceph orch set-managed mon
+
+would set ``unmanaged: false`` for the mon service
 
 .. note::
 
   After you apply this change in the Service Specification, cephadm will no
   longer deploy any new daemons (even if the placement specification matches
   additional hosts).
+
+.. note::
+
+  The "osd" service used to track OSDs that are not tied to any specific
+  service spec is special and will always be marked unmanaged. Attempting
+  to modify it with ``ceph orch set-unmanaged`` or ``ceph orch set-managed``
+  will result in a message ``No service of name osd found. Check "ceph orch ls" for all known services``
 
 Deploying a daemon on a host manually
 -------------------------------------

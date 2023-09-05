@@ -70,8 +70,6 @@ class VolumeClient(CephfsClient["Module"]):
     def shutdown(self):
         # Overrides CephfsClient.shutdown()
         log.info("shutting down")
-        # first, note that we're shutting down
-        self.stopping.set()
         # stop clones
         self.cloner.shutdown()
         # stop purge threads
@@ -96,14 +94,9 @@ class VolumeClient(CephfsClient["Module"]):
     ### volume operations -- create, rm, ls
 
     def create_fs_volume(self, volname, placement):
-        if self.is_stopping():
-            return -errno.ESHUTDOWN, "", "shutdown in progress"
         return create_volume(self.mgr, volname, placement)
 
     def delete_fs_volume(self, volname, confirm):
-        if self.is_stopping():
-            return -errno.ESHUTDOWN, "", "shutdown in progress"
-
         if confirm != "--yes-i-really-mean-it":
             return -errno.EPERM, "", "WARNING: this will *PERMANENTLY DESTROY* all data " \
                 "stored in the filesystem '{0}'. If you are *ABSOLUTELY CERTAIN* " \
@@ -130,15 +123,10 @@ class VolumeClient(CephfsClient["Module"]):
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
-        if self.stopping.is_set():
-            return -errno.ESHUTDOWN, "", "shutdown in progress"
         volumes = list_volumes(self.mgr)
         return 0, json.dumps(volumes, indent=4, sort_keys=True), ""
 
     def rename_fs_volume(self, volname, newvolname, sure):
-        if self.is_stopping():
-            return -errno.ESHUTDOWN, "", "shutdown in progress"
-
         if not sure:
             return (
                 -errno.EPERM, "",
@@ -164,7 +152,7 @@ class VolumeClient(CephfsClient["Module"]):
                                          cephfs.AT_SYMLINK_NOFOLLOW)
 
                     usedbytes = st['size']
-                    vol_info_dict = get_pending_subvol_deletions_count(path)
+                    vol_info_dict = get_pending_subvol_deletions_count(fs_handle, path)
                     if human_readable:
                         vol_info_dict['used_size'] = mgr_util.format_bytes(int(usedbytes), 5)
                     else:

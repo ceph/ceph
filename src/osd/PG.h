@@ -269,6 +269,7 @@ public:
 	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
+    on_scrub_schedule_input_change();
   }
 
   static void set_last_deep_scrub_stamp(
@@ -283,6 +284,7 @@ public:
 	set_last_deep_scrub_stamp(t, history, stats);
 	return true;
       });
+    on_scrub_schedule_input_change();
   }
 
   static void add_objects_scrubbed_count(
@@ -501,11 +503,6 @@ public:
 			"ReplicaPushesUpd");
   }
 
-  void scrub_send_maps_compared(epoch_t queued, ThreadPool::TPHandle& handle)
-  {
-    forward_scrub_event(&ScrubPgIF::send_maps_compared, queued, "MapsCompared");
-  }
-
   void scrub_send_get_next_chunk(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::send_get_next_chunk, queued, "NextChunk");
@@ -538,11 +535,18 @@ public:
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
-  void on_info_history_change() override;
-
-  void on_primary_status_change(bool was_primary, bool now_primary) override;
-
-  void reschedule_scrub() override;
+  /**
+   * on_scrub_schedule_input_change
+   *
+   * To be called when inputs to scrub scheduling may have changed.
+   * - OSD config params related to scrub such as  osd_scrub_min_interval,
+   *   osd_scrub_max_interval
+   * - Pool params related to scrub such as osd_scrub_min_interval,
+   *   osd_scrub_max_interval
+   * - pg stat scrub timestamps
+   * - etc
+   */
+  void on_scrub_schedule_input_change();
 
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) override;
 
@@ -593,7 +597,7 @@ public:
   void clear_publish_stats() override;
   void clear_primary_state() override;
 
-  epoch_t oldest_stored_osdmap() override;
+  epoch_t cluster_osdmap_trim_lower_bound() override;
   OstreamTemp get_clog_error() override;
   OstreamTemp get_clog_info() override;
   OstreamTemp get_clog_debug() override;
@@ -678,7 +682,14 @@ public:
     std::vector<int>& newup, int up_primary,
     std::vector<int>& newacting, int acting_primary,
     PeeringCtx &rctx);
-  void handle_activate_map(PeeringCtx &rctx);
+
+  /**
+   *  \note: handle_activate_map() is not guaranteed to be called for
+   *  each epoch in sequence. Thus we supply it with the full range of
+   *  epochs that were skipped.
+   */
+  void handle_activate_map(PeeringCtx &rctx, epoch_t range_starts_at);
+
   void handle_initialize(PeeringCtx &rxcx);
   void handle_query_state(ceph::Formatter *f);
 

@@ -57,7 +57,7 @@ struct fmt::formatter<chunk_info_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const chunk_info_t& ci, FormatContext& ctx)
+  auto format(const chunk_info_t& ci, FormatContext& ctx) const
   {
     return fmt::format_to(ctx.out(), "(len: {} oid: {} offset: {} flags: {})",
 			  ci.length, ci.oid, ci.offset,
@@ -169,7 +169,7 @@ struct fmt::formatter<pg_info_t> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
   template <typename FormatContext>
-  auto format(const pg_info_t& pgi, FormatContext& ctx)
+  auto format(const pg_info_t& pgi, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(), "{}({}", pgi.pgid, (pgi.dne() ? " DNE" : ""));
     if (pgi.is_empty()) {
@@ -211,7 +211,7 @@ struct fmt::formatter<SnapSet> {
   }
 
   template <typename FormatContext>
-  auto format(const SnapSet& snps, FormatContext& ctx)
+  auto format(const SnapSet& snps, FormatContext& ctx) const
   {
     if (verbose) {
       // similar to SnapSet::dump()
@@ -265,7 +265,7 @@ struct fmt::formatter<ScrubMap::object> {
 
   ///\todo: consider passing the 'D" flag to control snapset dump
   template <typename FormatContext>
-  auto format(const ScrubMap::object& so, FormatContext& ctx)
+  auto format(const ScrubMap::object& so, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(),
 		   "so{{ sz:{} dd:{} od:{} ",
@@ -308,7 +308,7 @@ struct fmt::formatter<ScrubMap> {
   }
 
   template <typename FormatContext>
-  auto format(const ScrubMap& smap, FormatContext& ctx)
+  auto format(const ScrubMap& smap, FormatContext& ctx) const
   {
     fmt::format_to(ctx.out(),
 		   "smap{{ valid:{} incr-since:{} #:{}",
@@ -329,10 +329,5 @@ struct fmt::formatter<ScrubMap> {
 };
 
 #if FMT_VERSION >= 90000
-template <> struct fmt::formatter<ObjectRecoveryInfo> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<ObjectRecoveryProgress> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<PastIntervals> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<pg_log_op_return_item_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<watch_info_t> : fmt::ostream_formatter {};
 template <bool TrackChanges> struct fmt::formatter<pg_missing_set<TrackChanges>> : fmt::ostream_formatter {};
 #endif

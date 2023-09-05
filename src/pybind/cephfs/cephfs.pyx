@@ -57,6 +57,8 @@ CEPH_SETATTR_SIZE  = 0x20
 CEPH_SETATTR_CTIME = 0x40
 CEPH_SETATTR_BTIME = 0x200
 
+CEPH_NOSNAP = -2
+
 # errno definitions
 cdef enum:
     CEPHFS_EBLOCKLISTED = 108
@@ -219,7 +221,7 @@ cdef make_ex(ret, msg):
 
 
 class DirEntry(namedtuple('DirEntry',
-               ['d_ino', 'd_off', 'd_reclen', 'd_type', 'd_name'])):
+               ['d_ino', 'd_off', 'd_reclen', 'd_type', 'd_name', 'd_snapid'])):
     DT_DIR = 0x4
     DT_REG = 0x8
     DT_LNK = 0xA
@@ -277,13 +279,15 @@ cdef class DirResult(object):
                             d_off=0,
                             d_reclen=dirent.d_reclen,
                             d_type=dirent.d_type,
-                            d_name=dirent.d_name)
+                            d_name=dirent.d_name,
+                            d_snapid=CEPH_NOSNAP)
         ELSE:
             return DirEntry(d_ino=dirent.d_ino,
                             d_off=dirent.d_off,
                             d_reclen=dirent.d_reclen,
                             d_type=dirent.d_type,
-                            d_name=dirent.d_name)
+                            d_name=dirent.d_name,
+                            d_snapid=CEPH_NOSNAP)
 
     def close(self):
         if self.handle:
@@ -320,6 +324,56 @@ cdef class DirResult(object):
         cdef int64_t _offset = offset
         with nogil:
             ceph_seekdir(self.lib.cluster, self.handle, _offset)
+
+cdef class SnapDiffHandle(object):
+    cdef LibCephFS lib
+    cdef ceph_snapdiff_info handle
+    cdef int opened
+
+    def __cinit__(self, _lib):
+        self.opened = 0
+        self.lib = _lib
+
+    def __dealloc__(self):
+        self.close()
+
+    def readdir(self):
+        self.lib.require_state("mounted")
+
+        cdef:
+            ceph_snapdiff_entry_t difent
+        with nogil:
+            ret = ceph_readdir_snapdiff(&self.handle, &difent)
+        if ret < 0:
+            raise make_ex(ret, "ceph_readdir_snapdiff failed, ret {}"
+                .format(ret))
+        if ret == 0:
+            return None
+
+        IF UNAME_SYSNAME == "FreeBSD" or UNAME_SYSNAME == "Darwin":
+            return DirEntry(d_ino=difent.dir_entry.d_ino,
+                            d_off=0,
+                            d_reclen=difent.dir_entry.d_reclen,
+                            d_type=difent.dir_entry.d_type,
+                            d_name=difent.dir_entry.d_name,
+                            d_snapid=difent.snapid)
+        ELSE:
+            return DirEntry(d_ino=difent.dir_entry.d_ino,
+                            d_off=difent.dir_entry.d_off,
+                            d_reclen=difent.dir_entry.d_reclen,
+                            d_type=difent.dir_entry.d_type,
+                            d_name=difent.dir_entry.d_name,
+                            d_snapid=difent.snapid)
+
+    def close(self):
+        if (not self.opened):
+            return
+        self.lib.require_state("mounted")
+        with nogil:
+            ret = ceph_close_snapdiff(&self.handle)
+        if ret < 0:
+            raise make_ex(ret, "closesnapdiff failed")
+        self.opened = 0
 
 
 def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
@@ -974,6 +1028,34 @@ cdef class LibCephFS(object):
 
         return handle.close()
 
+    def opensnapdiff(self, root_path, rel_path, snap1name, snap2name) -> SnapDiffHandle:
+        """
+        Open the given directory.
+
+        :param path: the path name of the directory to open.  Must be either an absolute path
+                     or a path relative to the current working directory.
+        :returns: the open directory stream handle
+        """
+        self.require_state("mounted")
+
+        h = SnapDiffHandle(self)
+        root = cstr(root_path, 'root')
+        relp = cstr(rel_path, 'relp')
+        snap1 = cstr(snap1name, 'snap1')
+        snap2 = cstr(snap2name, 'snap2')
+        cdef:
+            char* _root = root
+            char* _relp = relp
+            char* _snap1 = snap1
+            char* _snap2 = snap2
+        with nogil:
+            ret = ceph_open_snapdiff(self.cluster, _root, _relp, _snap1, _snap2, &h.handle);
+        if ret < 0:
+            raise make_ex(ret, "open_snapdiff failed for {} vs. {}"
+                .format(snap1.decode('utf-8'), snap2.decode('utf-8')))
+        h.opened = 1
+        return h
+
     def rewinddir(self, DirResult handle):
         """
         Rewind the directory stream to the beginning of the directory.
@@ -1087,7 +1169,8 @@ cdef class LibCephFS(object):
         cdef:
             char* _path = path
             char* _name = name
-        ret = ceph_rmsnap(self.cluster, _path, _name)
+        with nogil:
+            ret = ceph_rmsnap(self.cluster, _path, _name)
         if ret < 0:
             raise make_ex(ret, "rmsnap error")
         return 0
@@ -1106,7 +1189,8 @@ cdef class LibCephFS(object):
         cdef:
             char* _path = path
             snap_info info
-        ret = ceph_get_snap_info(self.cluster, _path, &info)
+        with nogil:
+            ret = ceph_get_snap_info(self.cluster, _path, &info)
         if ret < 0:
             raise make_ex(ret, "snap_info error")
         md = {}
@@ -1271,7 +1355,8 @@ cdef class LibCephFS(object):
         self.require_state("mounted")
         path = cstr(path, 'path')
         cdef char* _path = path
-        ret = ceph_rmdir(self.cluster, _path)
+        with nogil:
+            ret = ceph_rmdir(self.cluster, _path)
         if ret < 0:
             raise make_ex(ret, "error in rmdir {}".format(path.decode('utf-8')))
 

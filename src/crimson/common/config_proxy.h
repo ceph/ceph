@@ -96,8 +96,17 @@ public:
     return values.get();
   }
 
-  // required by sharded<>
+  void get_config_bl(uint64_t have_version,
+		     ceph::buffer::list *bl,
+		     uint64_t *got_version) {
+    get_config().get_config_bl(get_config_values(), have_version,
+                               bl, got_version);
+  }
+  void get_defaults_bl(ceph::buffer::list *bl) {
+    get_config().get_defaults_bl(get_config_values(), bl);
+  }
   seastar::future<> start();
+  // required by sharded<>
   seastar::future<> stop() {
     return seastar::make_ready_future<>();
   }

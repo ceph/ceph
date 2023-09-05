@@ -16,24 +16,13 @@ logger = logging.getLogger(__name__)
 def prepare_dmcrypt(key, device, device_type, fsid):
     """
     Helper for devices that are encrypted. The operations needed for
-    block, db, wal, or data/journal devices are all the same
+    block, db, wal, devices are all the same
     """
     if not device:
         return ''
     kname = disk.lsblk(device)['KNAME']
     mapping = 'ceph-{}-{}-{}-dmcrypt'.format(fsid, kname, device_type)
-    # format data device
-    encryption_utils.luks_format(
-        key,
-        device
-    )
-    encryption_utils.luks_open(
-        key,
-        device,
-        mapping
-    )
-
-    return '/dev/mapper/{}'.format(mapping)
+    return encryption_utils.prepare_dmcrypt(key, device, mapping)
 
 def prepare_bluestore(block, wal, db, secrets, osd_id, fsid, tmpfs):
     """
@@ -122,7 +111,9 @@ class Prepare(object):
 
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
-            osd_fsid, json.dumps(secrets))
+            osd_fsid,
+            json.dumps(secrets),
+            osd_id=self.args.osd_id)
 
         prepare_bluestore(
             self.args.data,

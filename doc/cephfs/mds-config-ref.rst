@@ -17,8 +17,6 @@
 .. confval:: mds_early_reply
 .. confval:: mds_default_dir_hash
 .. confval:: mds_log_skip_corrupt_events
-.. confval:: mds_log_max_events
-.. confval:: mds_log_max_segments
 .. confval:: mds_bal_sample_interval
 .. confval:: mds_bal_replicate_threshold
 .. confval:: mds_bal_unreplicate_threshold
@@ -57,6 +55,8 @@
 .. confval:: mds_kill_import_at
 .. confval:: mds_kill_link_at
 .. confval:: mds_kill_rename_at
+.. confval:: mds_inject_skip_replaying_inotable
+.. confval:: mds_kill_skip_replaying_inotable
 .. confval:: mds_wipe_sessions
 .. confval:: mds_wipe_ino_prealloc
 .. confval:: mds_skip_ino

@@ -57,7 +57,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   string idp_url = url_remove_prefix(provider_url);
 
   /* check to see the name is not used */
-  ret = read_url(dpp, idp_url, tenant);
+  ret = read_url(dpp, idp_url, tenant, y);
   if (exclusive && ret == 0) {
     ldpp_dout(dpp, 0) << "ERROR: url " << provider_url << " already in use"
                     << id << dendl;
@@ -94,7 +94,7 @@ int RGWOIDCProvider::create(const DoutPrefixProvider *dpp, bool exclusive, optio
   return 0;
 }
 
-int RGWOIDCProvider::get(const DoutPrefixProvider *dpp)
+int RGWOIDCProvider::get(const DoutPrefixProvider *dpp, optional_yield y)
 {
   string url, tenant;
   auto ret = get_tenant_url_from_arn(tenant, url);
@@ -109,7 +109,7 @@ int RGWOIDCProvider::get(const DoutPrefixProvider *dpp)
     return -EINVAL;
   }
 
-  ret = read_url(dpp, url, tenant);
+  ret = read_url(dpp, url, tenant, y);
   if (ret < 0) {
     return ret;
   }

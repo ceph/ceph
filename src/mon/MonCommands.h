@@ -209,7 +209,7 @@ COMMAND("auth rm "
 /*
  * Monitor commands (Monitor.cc)
  */
-COMMAND_WITH_FLAG("compact", "cause compaction of monitor's leveldb/rocksdb storage",
+COMMAND_WITH_FLAG("compact", "cause compaction of monitor's RocksDB storage",
 	     "mon", "rw",
              FLAG(TELL))
 COMMAND("fsid", "show cluster FSID/UUID", "mon", "r")
@@ -377,7 +377,8 @@ COMMAND("fs set "
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer"
         "|standby_count_wanted|session_timeout|session_autoclose"
-        "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask "
+        "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask"
+	"|refuse_client_session|max_xattr_size "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=yes_i_really_really_mean_it,type=CephBool,req=false",

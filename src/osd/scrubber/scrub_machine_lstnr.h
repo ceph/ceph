@@ -45,33 +45,42 @@ struct preemption_t {
   virtual bool disable_and_test() = 0;
 };
 
-/// an aux used when blocking on a busy object.
-/// Issues a log warning if still blocked after 'waittime'.
-struct blocked_range_t {
-  blocked_range_t(OSDService* osds,
-		  ceph::timespan waittime,
-		  ScrubMachineListener& scrubber,
-		  spg_t pg_id);
-  ~blocked_range_t();
-
-  OSDService* m_osds;
-  ScrubMachineListener& m_scrubber;
-
-  /// used to identify ourselves to the PG, when no longer blocked
-  spg_t m_pgid;
-  Context* m_callbk;
-
-  // once timed-out, we flag the OSD's scrub-queue as having
-  // a problem. 'm_warning_issued' signals the need to clear
-  // that OSD-wide flag.
-  bool m_warning_issued{false};
-};
-
-using BlockedRangeWarning = std::unique_ptr<blocked_range_t>;
-
 }  // namespace Scrub
 
 struct ScrubMachineListener {
+  virtual CephContext *get_cct() const = 0;
+  virtual LogChannelRef &get_clog() const = 0;
+  virtual int get_whoami() const = 0;
+  virtual spg_t get_spgid() const = 0;
+
+  using scrubber_callback_t = std::function<void(void)>;
+  using scrubber_callback_cancel_token_t = Context*;
+
+  /**
+   * schedule_callback_after
+   *
+   * cb will be invoked after least duration time has elapsed.
+   * Interface implementation is responsible for maintaining and locking
+   * a PG reference.  cb will be silently discarded if the interval has changed
+   * between the call to schedule_callback_after and when the pg is locked.
+   *
+   * Returns an associated token to be used in cancel_callback below.
+   */
+  virtual scrubber_callback_cancel_token_t schedule_callback_after(
+    ceph::timespan duration, scrubber_callback_t &&cb) = 0;
+
+  /**
+   * cancel_callback
+   *
+   * Attempts to cancel the callback to whcih the passed token is associated.
+   * cancel_callback is best effort, the callback may still fire.
+   * cancel_callback guarrantees that exactly one of the two things will happen:
+   * - the callback is destroyed and will not be invoked
+   * - the callback will be invoked
+   */
+  virtual void cancel_callback(scrubber_callback_cancel_token_t) = 0;
+
+  virtual ceph::timespan get_range_blocked_grace() = 0;
 
   struct MsgAndEpoch {
     MessageRef m_msg;
@@ -87,8 +96,6 @@ struct ScrubMachineListener {
   [[nodiscard]] virtual bool is_primary() const = 0;
 
   virtual void select_range_n_notify() = 0;
-
-  virtual Scrub::BlockedRangeWarning acquire_blocked_alarm() = 0;
 
   /// walk the log to find the latest update that affects our chunk
   virtual eversion_t search_log_for_updates() const = 0;
@@ -111,11 +118,11 @@ struct ScrubMachineListener {
   /// services (thus can be called from FSM reactions)
   virtual void clear_pgscrub_state() = 0;
 
-  /*
-   * Send an 'InternalSchedScrub' FSM event either immediately, or - if
-   * 'm_need_sleep' is asserted - after a configuration-dependent timeout.
-   */
-  virtual void add_delayed_scheduling() = 0;
+  /// Get time to sleep before next scrub
+  virtual std::chrono::milliseconds get_scrub_sleep_time() const = 0;
+
+  /// Queues InternalSchedScrub for later
+  virtual void queue_for_scrub_resched(Scrub::scrub_prio_t prio) = 0;
 
   /**
    * Ask all replicas for their scrub maps for the current chunk.
@@ -172,6 +179,8 @@ struct ScrubMachineListener {
 
   virtual void unreserve_replicas() = 0;
 
+  virtual void on_replica_reservation_timeout() = 0;
+
   virtual void set_scrub_begin_time() = 0;
 
   virtual void set_scrub_duration() = 0;
@@ -190,6 +199,12 @@ struct ScrubMachineListener {
    */
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
+
+  /// Release remote scrub reservation
+  virtual void dec_scrubs_remote() = 0;
+
+  /// Advance replica token
+  virtual void advance_token() = 0;
 
   /**
    * Our scrubbing is blocked, waiting for an excessive length of time for

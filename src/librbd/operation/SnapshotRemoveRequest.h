@@ -43,7 +43,7 @@ public:
    *    v (skip if disabled/in-use)
    * REMOVE_OBJECT_MAP
    *    |
-   *    v (skip if not mirror snpashot)
+   *    v (skip if not mirror snapshot)
    * REMOVE_IMAGE_STATE
    *    |
    *    v (skip if in-use)

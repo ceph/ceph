@@ -13,7 +13,7 @@ namespace {
 namespace crimson::net {
 
 seastar::future<>
-ChainedDispatchers::ms_dispatch(crimson::net::ConnectionRef conn,
+ChainedDispatchers::ms_dispatch(ConnectionRef conn,
                                 MessageRef m) {
   try {
     for (auto& dispatcher : dispatchers) {
@@ -39,10 +39,29 @@ ChainedDispatchers::ms_dispatch(crimson::net::ConnectionRef conn,
 }
 
 void
-ChainedDispatchers::ms_handle_accept(crimson::net::ConnectionRef conn) {
+ChainedDispatchers::ms_handle_shard_change(
+    ConnectionRef conn,
+    seastar::shard_id new_shard,
+    bool ac) {
   try {
     for (auto& dispatcher : dispatchers) {
-      dispatcher->ms_handle_accept(conn);
+      dispatcher->ms_handle_shard_change(conn, new_shard, ac);
+    }
+  } catch (...) {
+    logger().error("{} got unexpected exception in ms_handle_shard_change() {}",
+                   *conn, std::current_exception());
+    ceph_abort();
+  }
+}
+
+void
+ChainedDispatchers::ms_handle_accept(
+    ConnectionRef conn,
+    seastar::shard_id prv_shard,
+    bool is_replace) {
+  try {
+    for (auto& dispatcher : dispatchers) {
+      dispatcher->ms_handle_accept(conn, prv_shard, is_replace);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_accept() {}",
@@ -52,10 +71,12 @@ ChainedDispatchers::ms_handle_accept(crimson::net::ConnectionRef conn) {
 }
 
 void
-ChainedDispatchers::ms_handle_connect(crimson::net::ConnectionRef conn) {
+ChainedDispatchers::ms_handle_connect(
+    ConnectionRef conn,
+    seastar::shard_id prv_shard) {
   try {
     for(auto& dispatcher : dispatchers) {
-      dispatcher->ms_handle_connect(conn);
+      dispatcher->ms_handle_connect(conn, prv_shard);
     }
   } catch (...) {
     logger().error("{} got unexpected exception in ms_handle_connect() {}",
@@ -65,7 +86,7 @@ ChainedDispatchers::ms_handle_connect(crimson::net::ConnectionRef conn) {
 }
 
 void
-ChainedDispatchers::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace) {
+ChainedDispatchers::ms_handle_reset(ConnectionRef conn, bool is_replace) {
   try {
     for (auto& dispatcher : dispatchers) {
       dispatcher->ms_handle_reset(conn, is_replace);
@@ -78,7 +99,7 @@ ChainedDispatchers::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_re
 }
 
 void
-ChainedDispatchers::ms_handle_remote_reset(crimson::net::ConnectionRef conn) {
+ChainedDispatchers::ms_handle_remote_reset(ConnectionRef conn) {
   try {
     for (auto& dispatcher : dispatchers) {
       dispatcher->ms_handle_remote_reset(conn);
