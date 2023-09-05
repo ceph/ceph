@@ -47,6 +47,8 @@ class TestCephAdm(object):
 
     @mock.patch('cephadm.logger')
     def test_attempt_bind(self, _logger):
+        from cephadmlib.net_utils import PortOccupiedError, attempt_bind
+
         ctx = None
         address = None
         port = 0
@@ -57,7 +59,7 @@ class TestCephAdm(object):
             return _os_error
 
         for side_effect, expected_exception in (
-            (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
+            (os_error(errno.EADDRINUSE), PortOccupiedError),
             (os_error(errno.EAFNOSUPPORT), OSError),
             (os_error(errno.EADDRNOTAVAIL), OSError),
             (None, None),
@@ -65,36 +67,39 @@ class TestCephAdm(object):
             _socket = mock.Mock()
             _socket.bind.side_effect = side_effect
             try:
-                _cephadm.attempt_bind(ctx, _socket, address, port)
+                attempt_bind(ctx, _socket, address, port)
             except Exception as e:
                 assert isinstance(e, expected_exception)
             else:
                 if expected_exception is not None:
                     assert False
 
-    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadmlib.net_utils.attempt_bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use(self, _logger, _attempt_bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
+
         empty_ctx = None
 
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
-        _attempt_bind.side_effect = _cephadm.PortOccupiedError('msg')
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
+        _attempt_bind.side_effect = PortOccupiedError('msg')
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
     @mock.patch('cephadm.socket.socket.bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use_special_cases(self, _logger, _bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
         # port_in_use has special handling for
         # EAFNOSUPPORT and EADDRNOTAVAIL errno OSErrors.
         # If we get those specific errors when attempting
@@ -107,26 +112,28 @@ class TestCephAdm(object):
             return _os_error
 
         _bind.side_effect = os_error(errno.EADDRNOTAVAIL)
-        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
         assert in_use == False
 
         _bind.side_effect = os_error(errno.EAFNOSUPPORT)
-        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
         assert in_use == False
 
         # this time, have it raise the actual port taken error
         # so it should report the port is in use
         _bind.side_effect = os_error(errno.EADDRINUSE)
-        in_use = _cephadm.port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
         assert in_use == True
 
-    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadmlib.net_utils.attempt_bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use_with_specific_ips(self, _logger, _attempt_bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
+
         empty_ctx = None
 
         def _fake_attempt_bind(ctx, s: socket.socket, addr: str, port: int) -> None:
-            occupied_error = _cephadm.PortOccupiedError('msg')
+            occupied_error = PortOccupiedError('msg')
             if addr.startswith('200'):
                 raise occupied_error
             if addr.startswith('100'):
@@ -135,10 +142,10 @@ class TestCephAdm(object):
 
         _attempt_bind.side_effect = _fake_attempt_bind
 
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
-        assert _cephadm.port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -160,6 +167,8 @@ class TestCephAdm(object):
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
     def test_check_ip_port_failure(self, _logger, _socket):
+        from cephadmlib.net_utils import PortOccupiedError
+
         ctx = _cephadm.CephadmContext()
         ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
 
@@ -173,7 +182,7 @@ class TestCephAdm(object):
             ('::', socket.AF_INET6),
         ):
             for side_effect, expected_exception in (
-                (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
+                (os_error(errno.EADDRINUSE), PortOccupiedError),
                 (os_error(errno.EADDRNOTAVAIL), OSError),
                 (os_error(errno.EAFNOSUPPORT), OSError),
                 (None, None),
@@ -228,11 +237,15 @@ class TestCephAdm(object):
         ("1.6.2-stable2", (1,6,2)),
     ])
     def test_parse_podman_version(self, test_input, expected):
-        assert _cephadm._parse_podman_version(test_input) == expected
+        from cephadmlib.container_engines import _parse_podman_version
+
+        assert _parse_podman_version(test_input) == expected
 
     def test_parse_podman_version_invalid(self):
+        from cephadmlib.container_engines import _parse_podman_version
+
         with pytest.raises(ValueError) as res:
-            _cephadm._parse_podman_version('inval.id')
+            _parse_podman_version('inval.id')
         assert 'inval' in str(res.value)
 
     @mock.patch('cephadm.logger')
@@ -1039,7 +1052,7 @@ class TestCephAdm(object):
             infer_config(ctx)
             assert ctx.config == result
 
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.call_wrappers.call')
     def test_extract_uid_gid_fail(self, _call):
         err = """Error: container_linux.go:370: starting container process caused: process_linux.go:459: container init caused: process_linux.go:422: setting cgroup config for procHooks process caused: Unit libpod-056038e1126191fba41d8a037275136f2d7aeec9710b9ee
 ff792c06d8544b983.scope not found.: OCI runtime error"""
@@ -2012,7 +2025,7 @@ class TestValidateRepo:
             with pytest.raises(_cephadm.Error, match=err_text):
                 pkg.validate()
         else:
-            with mock.patch('cephadm.urlopen', return_value=None):
+            with mock.patch('cephadmlib.packagers.urlopen', return_value=None):
                 pkg.validate()
 
     @pytest.mark.parametrize('values',
@@ -2076,7 +2089,7 @@ class TestValidateRepo:
         ctx.repo_url = 'http://localhost'
         pkg = _cephadm.create_packager(ctx, stable=release, version=version)
 
-        with mock.patch('cephadm.urlopen') as _urlopen:
+        with mock.patch('cephadmlib.packagers.urlopen') as _urlopen:
             _urlopen.side_effect = HTTPError(ctx.repo_url, 404, "not found", None, fp=None)
             if err_text:
                 with pytest.raises(_cephadm.Error, match=err_text):
@@ -2088,10 +2101,14 @@ class TestValidateRepo:
 class TestPull:
 
     @mock.patch('time.sleep')
-    @mock.patch('cephadm.call', return_value=('', '', 0))
     @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
     @mock.patch('cephadm.logger')
-    def test_error(self, _logger, _get_image_info_from_inspect, _call, _sleep):
+    def test_error(self, _logger, _get_image_info_from_inspect, _sleep, monkeypatch):
+        # manually create a mock and use pytest's monkeypatch fixture to set
+        # multiple targets to the *same* mock
+        _call = mock.MagicMock()
+        monkeypatch.setattr('cephadm.call', _call)
+        monkeypatch.setattr('cephadmlib.call_wrappers.call', _call)
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False

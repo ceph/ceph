@@ -63,18 +63,27 @@ def _build(dest, src, versioning_vars=None):
         if os.path.isfile("requirements.txt"):
             _install_deps(tempdir)
         log.info("Copying contents")
-        # TODO: currently the only file relevant to a compiled cephadm is the
-        # cephadm.py file. Once cephadm is broken up into multiple py files
-        # (and possibly other libs from python-common, etc) we'll want some
-        # sort organized structure to track what gets copied into the
-        # dir to be zipped. For now we just have a simple call to copy
-        # (and rename) the one file we care about.
+        # cephadmlib is cephadm's private library of modules
+        shutil.copytree(
+            "cephadmlib", tempdir / "cephadmlib", ignore=_ignore_cephadmlib
+        )
+        # cephadm.py is cephadm's main script for the "binary"
+        # this must be renamed to __main__.py for the zipapp
         shutil.copy("cephadm.py", tempdir / "__main__.py")
         if versioning_vars:
             generate_version_file(versioning_vars, tempdir / "_version.py")
         _compile(dest, tempdir)
     finally:
         shutil.rmtree(tempdir)
+
+
+def _ignore_cephadmlib(source_dir, names):
+    # shutil.copytree callback: return the list of names *to ignore*
+    return [
+        name
+        for name in names
+        if name.endswith(("~", ".old", ".swp", ".pyc", ".pyo", "__pycache__"))
+    ]
 
 
 def _compile(dest, tempdir):

@@ -34,6 +34,9 @@ def _check_file(path, content):
         assert fcontent == content
 
 
+# FIXME(refactor): call is handled by with_cephadm_ctx but not call_throws
+# this leaves the test somewhat inconsistent and slightly confusing but we
+# are not going to change this while we break cephadm up into multiple files.
 @mock.patch('cephadm.call_throws')
 def test_agent_deploy_daemon_unit(_call_throws, cephadm_fs):
     _call_throws.return_value = ('', '', 0)
