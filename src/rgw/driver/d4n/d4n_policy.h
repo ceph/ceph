@@ -18,8 +18,8 @@ class CachePolicy {
       uint64_t offset;
       uint64_t len;
       std::string version;
-      Entry(std::string& key, uint64_t offset, uint64_t len, std:: string version) : key(key), offset(offset), 
-                                                                                       len(len), version(version) {}
+      Entry(std::string& key, uint64_t offset, uint64_t len, std::string version) : key(key), offset(offset), 
+                                                                                     len(len), version(version) {}
     };
     
     //The disposer object function
@@ -28,10 +28,6 @@ class CachePolicy {
         delete e;
       }
     };
-    typedef boost::intrusive::list<Entry> List;
-
-    //cpp_redis::client client;
-    //Address addr;
 
   public:
     CephContext* cct;
@@ -53,25 +49,41 @@ class CachePolicy {
 
 class LFUDAPolicy : public CachePolicy {
   private:
+    struct LFUDAEntry : public Entry {
+      int localWeight;
+      LFUDAEntry(std::string& key, uint64_t offset, uint64_t len, std::string version, int localWeight) : Entry(key, offset, len, version), 
+													  localWeight(localWeight) {}
+    };
+
+    struct LFUDA_Entry_delete_disposer : public Entry_delete_disposer {
+      void operator()(LFUDAEntry *e) {
+        delete e;
+      }
+    };
+    typedef boost::intrusive::list<LFUDAEntry> List;
+
+    std::unordered_map<std::string, LFUDAEntry*> entries_map;
+
     net::io_context& io;
     std::shared_ptr<connection> conn;
+    List entries_lfuda_list;
+    BlockDirectory* dir;
+
+    int set_age(int age, optional_yield y);
+    int get_age(optional_yield y);
+    int set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y);
+    int get_min_avg_weight(optional_yield y);
+    CacheBlock find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y);
 
   public:
     LFUDAPolicy(net::io_context& io_context) : CachePolicy(), io(io_context) {
       conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
+      dir = new BlockDirectory{io};
     }
     ~LFUDAPolicy() {
       //delete dir;
       shutdown();
     } 
-
-    int set_age(int age, optional_yield y);
-    int get_age(optional_yield y);
-    int set_global_weight(std::string key, int weight, optional_yield y);
-    int get_global_weight(std::string key, optional_yield y);
-    int set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y);
-    int get_min_avg_weight(optional_yield y);
-    CacheBlock find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y);
 
     virtual int init(CephContext *cct, const DoutPrefixProvider* dpp) {
       this->cct = cct;
@@ -85,6 +97,7 @@ class LFUDAPolicy : public CachePolicy {
 	return -EDESTADDRREQ;
       }
 
+      dir->init(cct, dpp);
       conn->async_run(cfg, {}, net::consign(net::detached, conn));
 
       return 0;
@@ -99,9 +112,11 @@ class LFUDAPolicy : public CachePolicy {
 
 class LRUPolicy : public CachePolicy {
   private:
-    List entries_lru_list;
+    typedef boost::intrusive::list<Entry> List;
+
     std::unordered_map<std::string, Entry*> entries_map;
     std::mutex lru_lock;
+    List entries_lru_list;
 
   public:
     LRUPolicy() = default;
