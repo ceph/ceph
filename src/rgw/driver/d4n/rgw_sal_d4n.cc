@@ -13,8 +13,6 @@
  *
  */
 
-#include "rgw_redis_driver.h"
-#include "rgw_ssd_driver.h"
 #include "rgw_sal_d4n.h"
 
 #define dout_subsys ceph_subsys_rgw
