@@ -14,14 +14,15 @@
 #include "msg/Messenger.h"
 #include "aio_utils.h"
 #include "Mirror.h"
+#include "common/ceph_time.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_cephfs_mirror
 #undef dout_prefix
 #define dout_prefix *_dout << "cephfs::mirror::Mirror " << __func__
-
 namespace cephfs {
 namespace mirror {
+using clock = ceph::coarse_mono_clock;
 
 namespace {
 
@@ -39,6 +40,7 @@ public:
 
 class ThreadPoolSingleton : public ThreadPool {
 public:
+
   ContextWQ *work_queue = nullptr;
 
   explicit ThreadPoolSingleton(CephContext *cct)
@@ -195,8 +197,8 @@ Mirror::Mirror(CephContext *cct, const std::vector<const char*> &args,
     m_monc(monc),
     m_msgr(msgr),
     m_listener(this),
-    m_last_blocklist_check(ceph_clock_now()),
-    m_last_failure_check(ceph_clock_now()),
+    m_last_blocklist_check(clock::now()),
+    m_last_failure_check(clock::now()),
     m_local(new librados::Rados()) {
   auto thread_pool = &(cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
                          "cephfs::mirror::thread_pool", false, cct));
@@ -494,14 +496,14 @@ void Mirror::peer_removed(const Filesystem &filesystem, const Peer &peer) {
 void Mirror::update_fs_mirrors() {
   dout(20) << dendl;
 
-  auto now = ceph_clock_now();
+  auto now = clock::now();
   double blocklist_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
     ("cephfs_mirror_restart_mirror_on_blocklist_interval").count();
-  bool check_blocklist = blocklist_interval > 0 && ((now - m_last_blocklist_check) >= blocklist_interval);
+  bool check_blocklist = blocklist_interval > 0 && ((now - m_last_blocklist_check).count() >= blocklist_interval);
 
   double failed_interval = g_ceph_context->_conf.get_val<std::chrono::seconds>
     ("cephfs_mirror_restart_mirror_on_failure_interval").count();
-  bool check_failure = failed_interval > 0 && ((now - m_last_failure_check) >= failed_interval);
+  bool check_failure = failed_interval > 0 && ((now - m_last_failure_check).count() >= failed_interval);
 
   {
     std::scoped_lock locker(m_lock);
