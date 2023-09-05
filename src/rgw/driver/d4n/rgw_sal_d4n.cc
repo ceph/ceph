@@ -585,7 +585,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       // Read From Cache
       auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id); 
 
-      source->driver->get_policy_driver()->cachePolicy->update(dpp, oid_in_cache, adjusted_start_ofs, part_len, source->driver->get_cache_driver());
+      source->driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, adjusted_start_ofs, part_len, source->driver->get_cache_driver());
 
       ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -606,7 +606,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
         // Read From Cache
         auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id);  
 
-        source->driver->get_policy_driver()->cachePolicy->update(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, source->driver->get_cache_driver());
+        source->driver->get_policy_driver()->get_cache_policy()->update(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, source->driver->get_cache_driver());
 
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -808,14 +808,17 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     const std::lock_guard l(d4n_get_data_lock);
     rgw::d4n::CacheBlock block;
     rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
-    block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port));
-    block.cacheObj.bucketName = source->get_bucket()->get_name();
+    block.version = "";
+    block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
     block.cacheObj.objName = source->get_key().get_oid();
+    block.cacheObj.bucketName = source->get_bucket()->get_name();
+    block.cacheObj.creationTime = 0;
+    block.cacheObj.dirty = false;
+    block.cacheObj.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/);
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
-      block.blockID = 0; // TODO: fill out block correctly
-      block.version = "";
+      block.blockID = ofs; // TODO: fill out block correctly
       block.size = bl.length();
       block.blockId = ofs;
       uint64_t freeSpace = filter->get_cache_driver()->get_free_space(dpp);
@@ -839,7 +842,6 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
       block.blockID = ofs;
-      block.version = "";
       block.size = bl.length();
       uint64_t freeSpace = filter->get_cache_driver()->get_free_space(dpp);
       while(freeSpace < block.size) {
