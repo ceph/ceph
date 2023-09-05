@@ -45,7 +45,6 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::CacheBlock* cacheBlock;
     rgw::d4n::PolicyDriver* policyDriver;
-    rgw::d4n::PolicyDriver* lruPolicyDriver;
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
@@ -66,8 +65,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver; }
     rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
-    rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
-    rgw::d4n::PolicyDriver* get_policy_driver() { return lruPolicyDriver; }
+    rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver; }
 };
 
 class D4NFilterUser : public FilterUser {
