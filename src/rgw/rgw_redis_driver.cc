@@ -241,24 +241,20 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, opti
 {
   std::string entry = partition_info.location + key;
 
-  if (key_exists(dpp, key, y)) {
-    try {
-      boost::system::error_code ec;
-      response<int> resp;
-      request req;
-      req.push("DEL", entry);
+  try {
+    boost::system::error_code ec;
+    response<int> resp;
+    request req;
+    req.push("DEL", entry);
 
-      redis_exec(conn, ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
-      if (ec)
-	return -1;
-
-      return std::get<0>(resp).value() - 1; 
-    } catch(std::exception &e) {
+    if (ec)
       return -1;
-    }
-  } else {
-    return 0; /* No delete was necessary */
+
+    return std::get<0>(resp).value() - 1; 
+  } catch(std::exception &e) {
+    return -1;
   }
 }
 
@@ -307,6 +303,8 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
+  response<int> value;
+  response<int> resp;
 
   try {
     boost::system::error_code ec;
@@ -327,14 +325,15 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
       request req;
       req.push("HDEL", entry, "data");
 
-      redis_exec(conn, ec, req, resp, y);
+      redis_exec(conn, ec, req, value, y);
 
-      if (!std::get<0>(resp).value() || ec) {
+      if (!std::get<0>(value).value() || ec) {
 	return -1;
       }
     } catch(std::exception &e) {
       return -1;
     }
+  }
 
   return 0;
 }
@@ -449,7 +448,6 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
 {
   std::string entry = partition_info.location + key;
   response<std::string> value;
-
   response<int> resp;
 
   /* Ensure field was set */
@@ -538,6 +536,10 @@ rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optiona
 
   return aio->get(r_obj, redis_read_op(y, conn, ofs, len, entry), cost, id);
 }
+
+int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
+  return -1; // TODO: implement
+} 
 
 void RedisDriver::shutdown()
 {
