@@ -13,8 +13,6 @@
  *
  */
 
-#include "rgw_redis_driver.h"
-#include "rgw_ssd_driver.h"
 #include "rgw_sal_d4n.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -38,32 +36,6 @@ static inline Object* nextObject(Object* t)
   return dynamic_cast<FilterObject*>(t)->get_next();
 }
 
-D4NFilterDriver::D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
-{
-  rgw::cache::Partition partition_info;
-  partition_info.location = g_conf()->rgw_d3n_l1_datacache_persistent_path;
-  partition_info.name = "d4n";
-  partition_info.type = "read-cache";
-  partition_info.size = g_conf()->rgw_d3n_l1_datacache_size;
-
-  cacheDriver = new rgw::cache::SSDDriver(partition_info);
-  objDir = new rgw::d4n::ObjectDirectory();
-  blockDir = new rgw::d4n::BlockDirectory();
-  cacheBlock = new rgw::d4n::CacheBlock();
-  policyDriver = new rgw::d4n::PolicyDriver("lfuda");
-  lruPolicyDriver = new rgw::d4n::PolicyDriver("lru");
-}
-
- D4NFilterDriver::~D4NFilterDriver()
- {
-    delete cacheDriver;
-    delete objDir; 
-    delete blockDir; 
-    delete cacheBlock;
-    delete policyDriver;
-    delete lruPolicyDriver;
-}
-
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   FilterDriver::initialize(cct, dpp);
@@ -77,7 +49,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   policyDriver->get_cache_policy()->init(cct, dpp);
 
   lruPolicyDriver->init();
-  lruPolicyDriver->cachePolicy->init(cct);
+  lruPolicyDriver->get_cache_policy()->init(cct, dpp);
   
   return 0;
 }
@@ -589,11 +561,11 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
     " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-    if (source->driver->get_policy_driver()->cachePolicy->exist_key(oid_in_cache)) { 
+    if (source->driver->get_policy_driver()->get_cache_policy()->exist_key(oid_in_cache, y)) { 
       // Read From Cache
       auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id); 
 
-      source->driver->get_policy_driver()->cachePolicy->insert(dpp, oid_in_cache, adjusted_start_ofs, part_len, source->driver->get_cache_driver());
+      source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, part_len, source->driver->get_cache_driver());
 
       ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -609,11 +581,11 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
        ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
       " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
-      if ((part_len != obj_max_req_size) && source->driver->get_policy_driver()->cachePolicy->exist_key(oid_in_cache)) {
+      if ((part_len != obj_max_req_size) && source->driver->get_policy_driver()->get_cache_policy()->exist_key(oid_in_cache, y)) {
         // Read From Cache
         auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid, read_ofs, len_to_read, cost, id); 
 
-        source->driver->get_policy_driver()->cachePolicy->insert(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, source->driver->get_cache_driver());
+        source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, source->driver->get_cache_driver());
 
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -820,8 +792,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       if (ret == 0) {
         rgw::d4n::CacheBlock block;
         block.size = bl.length();
-        if (filter->get_policy_driver()->cachePolicy->get_block(save_dpp, &block, filter->get_cache_driver()) == 0) {
-          filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
+        if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
+          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
         }
       }
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
@@ -831,8 +803,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       if (ret == 0) {
         rgw::d4n::CacheBlock block;
         block.size = bl.length();
-        if (filter->get_policy_driver()->cachePolicy->get_block(save_dpp, &block, filter->get_cache_driver()) == 0) {
-          filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
+        if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
+          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
         }
       }
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
@@ -851,8 +823,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         if (ret == 0) {
           rgw::d4n::CacheBlock block;
           block.size = bl_rem.length();
-          if (filter->get_policy_driver()->cachePolicy->get_block(save_dpp, &block, filter->get_cache_driver()) == 0) {
-            filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl_rem.length(), filter->get_cache_driver());
+          if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
+            filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl_rem.length(), filter->get_cache_driver());
           }
         }
 

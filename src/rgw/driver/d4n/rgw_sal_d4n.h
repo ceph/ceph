@@ -21,6 +21,7 @@
 #include "rgw_role.h"
 #include "common/dout.h" 
 #include "rgw_aio_throttle.h"
+#include "rgw_ssd_driver.h"
 
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
@@ -47,24 +48,26 @@ class D4NFilterDriver : public FilterDriver {
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next)
     {
       rgw::cache::Partition partition_info;
-      partition_info.location = "RedisCache"; // figure out how to fill rest of partition information -Sam
+      partition_info.location = g_conf()->rgw_d3n_l1_datacache_persistent_path;
+      partition_info.name = "d4n";
+      partition_info.type = "read-cache";
+      partition_info.size = g_conf()->rgw_d3n_l1_datacache_size;
 
-      cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
+      cacheDriver = new rgw::cache::SSDDriver(partition_info); // default cache backend? -Sam
       objDir = new rgw::d4n::ObjectDirectory(io_context);
       blockDir = new rgw::d4n::BlockDirectory(io_context);
       cacheBlock = new rgw::d4n::CacheBlock();
       policyDriver = new rgw::d4n::PolicyDriver(io_context, "lfuda");
+      lruPolicyDriver = new rgw::d4n::PolicyDriver(io_context, "lru");
     }
-    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
     virtual ~D4NFilterDriver() {
       delete cacheDriver;
       delete objDir; 
       delete blockDir; 
       delete cacheBlock;
       delete policyDriver;
+      delete lruPolicyDriver;
     }
-
-    virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual std::unique_ptr<User> get_user(const rgw_user& u) override;
