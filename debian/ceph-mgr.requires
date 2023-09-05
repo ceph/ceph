@@ -1,3 +1,4 @@
+bcrypt
 pyOpenSSL
 cephfs
 ceph-argparse
