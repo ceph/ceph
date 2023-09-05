@@ -1,5 +1,4 @@
-#ifndef CEPH_D4NPOLICY_H
-#define CEPH_D4NPOLICY_H
+#pragma once
 
 #include <string>
 #include <iostream>
@@ -101,5 +100,3 @@ class PolicyDriver {
 };
 
 } } // namespace rgw::d4n
-
-#endif
