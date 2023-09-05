@@ -19,7 +19,7 @@ class _ExcludeErrorsFilter(logging.Filter):
 
 _common_formatters = {
     'cephadm': {
-        'format': '%(asctime)s %(thread)x %(levelname)s %(message)s'
+        'format': '%(asctime)s %(thread)x %(levelname)s %(message)s',
     },
 }
 
@@ -51,7 +51,7 @@ _logging_config = {
             'level': 'DEBUG',
             'handlers': ['console', 'log_file'],
         }
-    }
+    },
 }
 
 
@@ -62,8 +62,8 @@ _interactive_logging_config = {
     'version': 1,
     'filters': {
         'exclude_errors': {
-            '()': _ExcludeErrorsFilter
-        }
+            '()': _ExcludeErrorsFilter,
+        },
     },
     'disable_existing_loggers': True,
     'formatters': _common_formatters,
@@ -72,12 +72,12 @@ _interactive_logging_config = {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
             'filters': ['exclude_errors'],
-            'stream': sys.stdout
+            'stream': sys.stdout,
         },
         'console_stderr': {
             'level': 'WARNING',
             'class': 'logging.StreamHandler',
-            'stream': sys.stderr
+            'stream': sys.stderr,
         },
         'log_file': _log_file_handler,
     },
@@ -86,7 +86,7 @@ _interactive_logging_config = {
             'level': 'DEBUG',
             'handlers': ['console_stdout', 'console_stderr', 'log_file'],
         }
-    }
+    },
 }
 
 
