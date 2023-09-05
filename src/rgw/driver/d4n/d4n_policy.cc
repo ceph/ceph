@@ -408,7 +408,7 @@ void LFUDAPolicy::shutdown()
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 
-int LRUPolicy::exist_key(std::string key)
+int LRUPolicy::exist_key(std::string key, optional_yield y)
 {
   if (entries_map.count(key) != 0) {
       return true;
@@ -416,16 +416,16 @@ int LRUPolicy::exist_key(std::string key)
     return false;
 }
 
-int LRUPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode)
+int LRUPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y)
 {
   uint64_t freeSpace = cacheNode->get_free_space(dpp);
   while(freeSpace < block->size) {
-    freeSpace = eviction(dpp, cacheNode);
+    freeSpace = eviction(dpp, cacheNode, y);
   }
   return 0;
 }
 
-uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode)
+uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y)
 {
   auto p = entries_lru_list.front();
   entries_map.erase(entries_map.find(p.key));

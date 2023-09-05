@@ -96,9 +96,9 @@ class LRUPolicy : public CachePolicy {
     List entries_lru_list;
     std::unordered_map<std::string, Entry*> entries_map;
   public:
-    virtual int exist_key(std::string key) override;
-    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode) override;
-    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode) override;
+    virtual int exist_key(std::string key, optional_yield y) override;
+    virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
+    virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode) override;
     bool erase(const DoutPrefixProvider* dpp, const std::string& key);
 };
