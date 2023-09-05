@@ -21,9 +21,7 @@ configuration files and keys that ``ceph-deploy`` generates for your cluster. ::
 The ``ceph-deploy`` utility will output files to the current directory. Ensure you
 are in this directory when executing ``ceph-deploy``.
 
-.. important:: Do not call ``ceph-deploy`` with ``sudo`` or run it as ``root``
-   if you are logged in as a different user, because it will not issue ``sudo``
-   commands needed on the remote host.
+.. important:: Do not prefix the ceph-deploy command with sudo or run it after switching to the root user, especially if you started your session as a different user. This is because ceph-deploy needs to issue certain sudo commands on remote hosts, and manually elevating its permissions could prevent it from doing so correctly.
 
 
 Starting over
