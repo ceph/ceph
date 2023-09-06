@@ -3097,7 +3097,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
   snapid_t follows = m->get_snap_follows();
   auto op = m->get_op();
   auto dirty = m->get_dirty();
-  dout(7) << "handle_client_caps "
+  dout(7) << "handle_client_caps"
 	  << " on " << m->get_ino()
 	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(op)
