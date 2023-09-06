@@ -5,7 +5,7 @@ import { TableComponent } from '../table/table.component';
 import { TableKeyValueComponent } from '../table-key-value/table-key-value.component';
 import { TablePaginationComponent } from '../table-pagination/table-pagination.component';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
-import { FormHelper } from '~/testing/unit-test-helper';
+import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { CdFormGroup } from '../../forms/cd-form-group';
 import { FormControl } from '@angular/forms';
 
@@ -38,16 +38,14 @@ describe('CheckedTableFormComponent', () => {
     }
   ];
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [
-        CheckedTableFormComponent,
-        TableComponent,
-        TableKeyValueComponent,
-        TablePaginationComponent
-      ],
-      imports: [NgxDatatableModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [
+      CheckedTableFormComponent,
+      TableComponent,
+      TableKeyValueComponent,
+      TablePaginationComponent
+    ],
+    imports: [NgxDatatableModule]
   });
 
   beforeEach(() => {
