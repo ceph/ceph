@@ -110,8 +110,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                default=0,
                desc='Trim usage log entries older than this amount of days, must be set to a positive value'),
         Option(name='usage_trim_interval',
-               default=43200,
-               desc='Interval in seconds between trimming usage log entries, defaults to 12 hours'),
+               default=720,
+               desc='Interval in minutes between trimming usage log entries, defaults to 12 hours'),
     ]
 
     # These are "native" Ceph options that this module cares about.
@@ -399,7 +399,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     self.log.exception("Failed to trim usage log:")
 
             usage_trim_interval = cast(int, self.get_module_option('usage_trim_interval'))
-            self.event.wait(usage_trim_interval)
+            usage_trim_interval_secs = (usage_trim_interval * 60)
+            self.event.wait(usage_trim_interval_secs)
 
     def shutdown(self) -> None:
         """
