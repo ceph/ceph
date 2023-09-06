@@ -290,6 +290,8 @@ struct ceph_mon_subscribe_ack {
 #define CEPH_MDSMAP_ALLOW_STANDBY_REPLAY         (1<<5)  /* cluster alllowed to enable MULTIMDS */
 #define CEPH_MDSMAP_REFUSE_CLIENT_SESSION        (1<<6)  /* cluster allowed to refuse client session
                                                             request */
+#define CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS (1<<7) /* fs is forbidden to use standby
+                                                            for another fs */
 #define CEPH_MDSMAP_DEFAULTS (CEPH_MDSMAP_ALLOW_SNAPS | \
 			      CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS)
 

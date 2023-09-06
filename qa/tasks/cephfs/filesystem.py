@@ -630,6 +630,9 @@ class Filesystem(MDSCluster):
     def set_refuse_client_session(self, yes):
         self.set_var("refuse_client_session", yes)
 
+    def set_refuse_standby_for_another_fs(self, yes):
+        self.set_var("refuse_standby_for_another_fs", yes)
+
     def compat(self, *args):
         a = map(lambda x: str(x).lower(), args)
         self.run_ceph_cmd("fs", "compat", self.name, *a)

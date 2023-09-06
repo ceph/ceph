@@ -118,10 +118,16 @@ enforces this affinity.
 When failing over MDS daemons, a cluster's monitors will prefer standby daemons with
 ``mds_join_fs`` equal to the file system ``name`` with the failed ``rank``.  If no
 standby exists with ``mds_join_fs`` equal to the file system ``name``, it will
-choose an unqualified standby (no setting for ``mds_join_fs``) for the replacement,
-or any other available standby, as a last resort. Note, this does not change the
-behavior that ``standby-replay`` daemons are always selected before
-other standbys.
+choose an unqualified standby (no setting for ``mds_join_fs``) for the replacement.
+As a last resort, a standby for another filesystem will be chosen, although this
+behavior can be disabled:
+
+::
+
+    ceph fs set <fs name> refuse_standby_for_another_fs true
+
+Note, configuring MDS file system affinity does not change the behavior that
+``standby-replay`` daemons are always selected before other standbys.
 
 Even further, the monitors will regularly examine the CephFS file systems even when
 stable to check if a standby with stronger affinity is available to replace an

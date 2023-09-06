@@ -723,6 +723,38 @@ public:
             ss << "client(s) already allowed to establish new session(s)";
           }
       }
+    } else if (var == "refuse_standby_for_another_fs") {
+      bool refuse_standby_for_another_fs = false;
+      int r = parse_bool(val, &refuse_standby_for_another_fs, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      if (refuse_standby_for_another_fs) {
+        if (!(fs->mds_map.test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS))) {
+          fsmap.modify_filesystem(
+            fs->fscid,
+            [](std::shared_ptr<Filesystem> fs)
+          {
+            fs->mds_map.set_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
+          });
+          ss << "set to refuse standby for another fs";
+        } else {
+          ss << "to refuse standby for another fs is already set";
+        }
+      } else {
+          if (fs->mds_map.test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS)) {
+            fsmap.modify_filesystem(
+              fs->fscid,
+              [](std::shared_ptr<Filesystem> fs)
+            {
+              fs->mds_map.clear_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
+            });
+            ss << "allowed to use standby for another fs";
+          } else {
+            ss << "to use standby for another fs is already allowed";
+          }
+      }
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;
