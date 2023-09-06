@@ -994,6 +994,7 @@ PG::do_osd_ops(
     seastar::make_lw_shared<OpsExecuter>(
       Ref<PG>{this}, obc, op_info, *m, conn, snapc),
     m->ops,
+    // success_func
     [this, m, obc, may_write = op_info.may_write(),
      may_read = op_info.may_read(), rvec = op_info.allows_returnvec()] {
       // TODO: should stop at the first op which returns a negative retval,
@@ -1032,6 +1033,7 @@ PG::do_osd_ops(
       return do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>(
         std::move(reply));
     },
+    // failure_func
     [m, &op_info, obc, this] (const std::error_code& e) {
     return seastar::do_with(eversion_t(), [m, &op_info, obc, e, this](auto &version) {
       auto fut = seastar::now();
