@@ -872,33 +872,36 @@ PG::do_osd_ops_execute(
     });
   }).safe_then_unpack_interruptible(
     [success_func=std::move(success_func), rollbacker, this, failure_func_ptr]
-    (auto submitted_fut, auto all_completed_fut) mutable {
+    (auto submitted_fut, auto _all_completed_fut) mutable {
+
+    auto all_completed_fut = _all_completed_fut.safe_then_interruptible_tuple(
+      std::move(success_func),
+      crimson::ct_error::object_corrupted::handle(
+      [rollbacker, this] (const std::error_code& e) mutable {
+      // this is a path for EIO. it's special because we want to fix the obejct
+      // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
+      // restart the execution.
+      return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+      [obc=rollbacker.get_obc(), this] {
+        return repair_object(obc->obs.oi.soid,
+                             obc->obs.oi.version
+        ).then_interruptible([] {
+          return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
+        });
+      });
+    }), OpsExecuter::osd_op_errorator::all_same_way(
+        [rollbacker, failure_func_ptr]
+        (const std::error_code& e) mutable {
+          return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+          [e, failure_func_ptr] {
+            return (*failure_func_ptr)(e);
+          });
+    }));
+
     return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
-        std::move(submitted_fut),
-        all_completed_fut.safe_then_interruptible_tuple(
-          std::move(success_func),
-          crimson::ct_error::object_corrupted::handle(
-            [rollbacker, this] (const std::error_code& e) mutable {
-            // this is a path for EIO. it's special because we want to fix the obejct
-            // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
-            // restart the execution.
-            return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-              [obc=rollbacker.get_obc(), this] {
-              return repair_object(obc->obs.oi.soid,
-                                   obc->obs.oi.version).then_interruptible([] {
-                return do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
-              });
-            });
-          }), OpsExecuter::osd_op_errorator::all_same_way(
-            [rollbacker, failure_func_ptr]
-            (const std::error_code& e) mutable {
-            return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-              [e, failure_func_ptr] {
-              return (*failure_func_ptr)(e);
-            });
-          })
-        )
-      );
+      std::move(submitted_fut),
+      std::move(all_completed_fut)
+    );
   }, OpsExecuter::osd_op_errorator::all_same_way(
     [rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
