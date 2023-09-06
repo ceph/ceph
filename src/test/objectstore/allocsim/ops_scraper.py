@@ -120,14 +120,14 @@ def parse_osd_op(description_literal: str, initiated_at: datetime.datetime):
 
 class ProcessInfo:
     def __init__(self, process_time: int, command_time: int, processed_info: str, ops_count: int,
-                 new_ops: int, oldest_operation: Optional[OpDescription], 
+                 new_ops: int, oldest_operation_at: Optional[datetime.date],
                  capture_period_start: int, capture_period_end: int):
         self.process_time = process_time
         self.command_time = command_time
         self.processed_info = processed_info
         self.ops_count = ops_count
         self.new_ops = new_ops
-        self.oldest_operation = oldest_operation
+        self.oldest_operation_at = oldest_operation_at
         self.capture_period_start = capture_period_start
         self.capture_period_end = capture_period_end
 
@@ -150,29 +150,31 @@ def process_osd(osd_id) -> ProcessInfo:
     operations_str = 'initiated_at | who | op_type | offset/extent | name | pgid\n'
     operations_str += '-------------------------------------------------------\n'
     new_ops = 0 
-    oldest_operation = None
+    oldest_operation_at = None
     capture_period_start = _to_timestamp(Env.store()[osd_id]['last_op'])
     for op in historic['ops']:
+        if not oldest_operation_at:
+            #we twice parse initated_at, but code is simpler that way
+            initiated_at = datetime.datetime.fromisoformat(op['initiated_at'])
+            oldest_operation_at = initiated_at
+        description = op['description']
+        logger.debug(f'{description}')
+        if not description.startswith('osd_op('):
+            continue
         initiated_at = datetime.datetime.fromisoformat(op['initiated_at'])
         if initiated_at < Env.store()[osd_id]['last_op']:
             continue
-
+        new_ops += 1
         Env.store()[osd_id]['last_op'] = initiated_at
-        description = op['description']
-        logger.debug(f'{description}')
-        if description.startswith('osd_op('):
-            new_ops += 1
-            description_data = description[7:-1]
-            op = parse_osd_op(description_data, initiated_at)
-            if not oldest_operation:
-                oldest_operation = op
-            operations_str += f'{str(op)}\n'
+        description_data = description[7:-1]
+        op_data = parse_osd_op(description_data, initiated_at)
+        operations_str += f'{str(op_data)}\n'
     capture_period_end = time.time()
     processing_time = time.time() - osd_processing_start
     logger.info(f'osd.{osd_id} new_ops {new_ops}')
 
     return ProcessInfo(processing_time, command_time, operations_str, len(historic['ops']), 
-                       new_ops, oldest_operation, capture_period_start, capture_period_end)
+                       new_ops, oldest_operation_at, capture_period_start, capture_period_end)
 
 def _set_osd_history_size(name: str, history_size: int):
     run_ceph_command(['config', 'set', f'osd.{name}', 'osd_op_history_size', 
@@ -253,7 +255,7 @@ def main():
             if not process_info.new_ops:
                 new_ops_period = 1
             else:
-                oldest_initiated_at = process_info.oldest_operation.initiated_at
+                oldest_initiated_at = process_info.oldest_operation_at
                 new_ops_period = process_info.capture_period_end - _to_timestamp(oldest_initiated_at)
             capture_period = process_info.capture_period_end - process_info.capture_period_start
 
