@@ -199,7 +199,7 @@ const routes: Routes = [
         secondary_button_title:
           'Import multi-site configuration (import realm token from a secondary cluster)'
       },
-      breadcrumbs: 'Multisite'
+      breadcrumbs: 'Multi-Site'
     },
     children: [{ path: '', component: RgwMultisiteDetailsComponent }]
   }
