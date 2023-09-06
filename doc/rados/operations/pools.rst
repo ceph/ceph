@@ -913,6 +913,10 @@ Ceph will list pools and highlight the ``replicated size`` attribute.  By
 default, Ceph creates two replicas of an object (a total of three copies, for a
 size of ``3``).
 
+Managing pools that are flagged with ``--bulk``
+===============================================
+See :ref:`managing_bulk_flagged_pools`.
+
 
 .. _pgcalc: https://old.ceph.com/pgcalc/
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
