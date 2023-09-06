@@ -105,7 +105,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS: List[Option] = [
         Option(name='usage_trim_realms',
                default='',
-               desc='Comma separated list with realms to usage trim'),
+               desc='Comma separated list of realms or asterisk for all realms'),
         Option(name='usage_trim_older_than_days',
                default=0,
                desc='Trim usage log entries older than this amount of days, must be set to a positive value'),
@@ -371,24 +371,33 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def serve(self) -> None:
         self.run = True
-
         self.log.info('Starting usage trim loop')
         while self.run:
             usage_trim_older_than_days = cast(int, self.get_module_option('usage_trim_older_than_days'))
+
             if usage_trim_older_than_days <= 0:
                 self.log.debug('Skipping usage trim because usage_trim_older_than_days is not > 0')
                 self.event.wait(60)
                 continue
+
+            am = RGWAM(self.env)
+
             startDate = '1970-01-01'
             endDate = (datetime.today() - timedelta(days=usage_trim_older_than_days)).strftime('%Y-%m-%d')
+
             usage_trim_realms = cast(str, self.get_module_option('usage_trim_realms'))
-            realms = usage_trim_realms.split(',')
+            if usage_trim_realms == '*':
+                realms = am.realm_op().list()
+            else:
+                realms = usage_trim_realms.split(',')
+
             for realm in realms:
                 self.log.info(f'Running usage trim for realm {realm} with startDate={startDate} and endDate={endDate}')
                 try:
-                    RGWAM(self.env).usage_op().trim(realm=realm, startDate=startDate, endDate=endDate)
+                    am.usage_op().trim(realm=realm, startDate=startDate, endDate=endDate)
                 except Exception:
-                    self.log.exception("Failed to usage trim:")
+                    self.log.exception("Failed to trim usage log:")
+
             usage_trim_interval = cast(int, self.get_module_option('usage_trim_interval'))
             self.event.wait(usage_trim_interval)
 

@@ -145,7 +145,7 @@ Automatic usage log trimming
 
 Enable automatic usage log trimming for one or more RGW realms by
 setting the config option ``usage_trim_realms`` to a comma separated
-list of realms.
+list of realms or to an asterisk (``*``) for all realms.
 
 Set the ``usage_trim_older_than_days`` config option to the amount of
 days usage logs older than this should be trimmed. Optionally you can
