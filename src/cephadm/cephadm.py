@@ -5664,6 +5664,16 @@ def command_bootstrap(ctx):
                  '-i', '/var/lib/ceph/user.conf'],
                 {tmp.name: '/var/lib/ceph/user.conf:z'})
 
+    if getattr(ctx, 'log_dest', None):
+        ldkey = 'mgr/cephadm/cephadm_log_destination'
+        cp = read_config(ctx.config)
+        if cp.has_option('mgr', ldkey):
+            logger.info('The cephadm log destination is set by the config file, ignoring cli option')
+        else:
+            value = ','.join(sorted(getattr(ctx, 'log_dest')))
+            logger.info('Setting cephadm log destination to match logging for cephadm boostrap: %s', value)
+            cli(['config', 'set', 'mgr', ldkey, value, '--force'])
+
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart() -> None:
         # first get latest mgrmap epoch from the mon.  try newer 'mgr
