@@ -731,24 +731,24 @@ public:
       }
 
       if (refuse_standby_for_another_fs) {
-        if (!(fs->mds_map.test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS))) {
+        if (!(fsp->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS))) {
           fsmap.modify_filesystem(
-            fs->fscid,
-            [](std::shared_ptr<Filesystem> fs)
+            fsp->get_fscid(),
+            [](auto&& fs)
           {
-            fs->mds_map.set_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
+            fs.get_mds_map().set_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
           });
           ss << "set to refuse standby for another fs";
         } else {
           ss << "to refuse standby for another fs is already set";
         }
       } else {
-          if (fs->mds_map.test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS)) {
+          if (fsp->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS)) {
             fsmap.modify_filesystem(
-              fs->fscid,
-              [](std::shared_ptr<Filesystem> fs)
+              fsp->get_fscid(),
+              [](auto&& fs)
             {
-              fs->mds_map.clear_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
+              fs.get_mds_map().clear_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
             });
             ss << "allowed to use standby for another fs";
           } else {
