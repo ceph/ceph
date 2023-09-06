@@ -13,24 +13,23 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwMultisiteZonegroupFormComponent', () => {
   let component: RgwMultisiteZonegroupFormComponent;
   let fixture: ComponentFixture<RgwMultisiteZonegroupFormComponent>;
   let rgwZonegroupService: RgwZonegroupService;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        ToastrModule.forRoot()
-      ],
-      providers: [NgbActiveModal],
-      declarations: [RgwMultisiteZonegroupFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [NgbActiveModal],
+    declarations: [RgwMultisiteZonegroupFormComponent]
   });
 
   beforeEach(() => {

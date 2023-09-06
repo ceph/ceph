@@ -7,23 +7,22 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwMultisiteMigrateComponent', () => {
   let component: RgwMultisiteMigrateComponent;
   let fixture: ComponentFixture<RgwMultisiteMigrateComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        ToastrModule.forRoot()
-      ],
-      declarations: [RgwMultisiteMigrateComponent],
-      providers: [NgbActiveModal]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      ToastrModule.forRoot()
+    ],
+    declarations: [RgwMultisiteMigrateComponent],
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {
