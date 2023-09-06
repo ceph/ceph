@@ -210,6 +210,11 @@ process. We recommend constraining each pool so that it belongs to only one
 root (that is, one OSD class) to silence the warning and ensure a successful
 scaling process.
 
+.. _managing_bulk_flagged_pools:
+
+Managing pools that are flagged with ``bulk``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 If a pool is flagged ``bulk``, then the autoscaler starts the pool with a full
 complement of PGs and then scales down the number of PGs only if the usage
 ratio across the pool is uneven.  However, if a pool is not flagged ``bulk``,
