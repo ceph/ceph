@@ -902,13 +902,20 @@ PG::do_osd_ops_execute(
   }, OpsExecuter::osd_op_errorator::all_same_way(
     [rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
-    return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
-        seastar::now(),
-        e.value() == ENOENT ? (*failure_func_ptr)(e) :
-        rollbacker.rollback_obc_if_modified(e).then_interruptible(
-          [e, failure_func_ptr] {
+
+    auto submitted_fut = seastar::now();
+
+    auto all_completed_fut = e.value() == ENOENT ?
+      (*failure_func_ptr)(e) :
+      rollbacker.rollback_obc_if_modified(e).then_interruptible(
+      [e, failure_func_ptr] {
           return (*failure_func_ptr)(e);
-        }));
+      });
+
+    return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
+      std::move(submitted_fut),
+      std::move(all_completed_fut)
+    );
   }));
 }
 seastar::future<> PG::submit_error_log(
