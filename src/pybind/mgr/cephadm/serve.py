@@ -1577,6 +1577,11 @@ class CephadmServe:
             timeout -= 5
         final_args += ['--timeout', str(timeout)]
 
+        if self.mgr.cephadm_log_destination:
+            values = self.mgr.cephadm_log_destination.split(',')
+            for value in values:
+                final_args.append(f'--log-dest={value}')
+
         # subcommand
         if isinstance(command, list):
             final_args.extend([str(v) for v in command])
