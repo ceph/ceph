@@ -108,9 +108,10 @@ as follows:
   Rewrite all objects in the specified bucket.
 
 :command:`bucket radoslist`
-  List the RADOS objects that contain the data for all objects is
-  the designated bucket, if --bucket=<bucket> is specified, or
-  otherwise all buckets.
+  List the RADOS objects that contain the data for all objects in
+  the designated bucket, if --bucket=<bucket> is specified. 
+  Otherwise, list the RADOS objects that contain data for all 
+  buckets.
 
 :command:`bucket reshard`
   Reshard a bucket's index.
