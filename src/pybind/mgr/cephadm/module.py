@@ -472,6 +472,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Default timeout applied to cephadm commands run directly on '
             'the host (in seconds)'
         ),
+        Option(
+            'cephadm_log_destination',
+            type='str',
+            default='',
+            desc="Destination for cephadm command's persistent logging",
+            enum_allowed=['file', 'syslog', 'file,syslog'],
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -554,6 +561,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.cgroups_split = True
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
+            self.cephadm_log_destination = ''
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
