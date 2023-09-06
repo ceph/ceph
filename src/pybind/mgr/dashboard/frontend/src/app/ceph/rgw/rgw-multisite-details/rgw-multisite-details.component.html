@@ -4,10 +4,10 @@
       <cd-alert-panel   *ngIf="!rgwModuleStatus"
                         type="info"
                         spacingClass="mb-3"
-                        i18n>You need to enable the rgw module to access the import/export feature.
+                        i18n>In order to access the import/export feature, the rgw module must be enabled
         <a class="text-decoration-underline"
            (click)="enableRgwModule()">
-           Enable RGW Module</a>
+           Enable the Object Gateway Module</a>
       </cd-alert-panel>
       <cd-table-actions class="btn-group mb-4 me-2"
                         [permission]="permission"

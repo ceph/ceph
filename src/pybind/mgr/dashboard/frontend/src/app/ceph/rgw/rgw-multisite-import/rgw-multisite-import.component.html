@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title"
-                class="modal-title">Import Multi-site Token</ng-container>
+                class="modal-title">Import Multi-Site Token</ng-container>
 
   <ng-container class="modal-content">
     <form name="importTokenForm"
@@ -8,7 +8,13 @@
           [formGroup]="importTokenForm">
     <div class="modal-body">
       <cd-alert-panel type="info"
-                      spacingClass="mb-3">Please create a rgw service using the secondary zone(created after submitting this form) to start the replication between zones.
+                      spacingClass="mb-3">
+        <ul>
+          <li>This feature allows you to configure a connection between your primary and secondary Ceph clusters for data replication. By importing a token, you establish a link between the clusters, enabling data synchronization.</li>
+          <li>To obtain the token, generate it from your secondary Ceph cluster. This token includes encoded information about the secondary cluster's endpoint, access key, and secret key.</li>
+          <li>The secondary zone represents the destination cluster where your data will be replicated.</li>
+          <li>Please create an RGW service using the secondary zone (created after submitting this form) to start the replication between zones.</li>
+        </ul>
       </cd-alert-panel>
       <div class="form-group row">
         <label class="cd-col-form-label required"
