@@ -6664,7 +6664,7 @@ void PeeringState::ToDelete::exit()
 PeeringState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
   : my_base(ctx),
     NamedState(context< PeeringMachine >().state_history,
-	       "Started/ToDelete/WaitDeleteReseved")
+	       "Started/ToDelete/WaitDeleteReserved")
 {
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
