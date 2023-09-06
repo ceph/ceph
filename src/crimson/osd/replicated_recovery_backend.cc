@@ -34,7 +34,7 @@ ReplicatedRecoveryBackend::recover_object(
   return maybe_pull_missing_obj(soid, need).then_interruptible([this, soid, need] {
     logger().debug("recover_object: loading obc: {}", soid);
     return pg.obc_loader.with_obc<RWState::RWREAD>(soid,
-      [this, soid, need](auto obc) {
+      [this, soid, need](auto, auto obc) {
       logger().debug("recover_object: loaded obc: {}", obc->obs.oi.soid);
       auto& recovery_waiter = get_recovering(soid);
       recovery_waiter.obc = obc;
@@ -689,7 +689,7 @@ ReplicatedRecoveryBackend::_handle_pull_response(
   if (pull_info.recovery_progress.first) {
     prepare_waiter = pg.obc_loader.with_obc<RWState::RWNONE>(
       pull_info.recovery_info.soid,
-      [&pull_info, &recovery_waiter, &push_op](auto obc) {
+      [&pull_info, &recovery_waiter, &push_op](auto, auto obc) {
         pull_info.obc = obc;
         recovery_waiter.obc = obc;
         obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR), push_op.soid);

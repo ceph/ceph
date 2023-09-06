@@ -787,7 +787,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
     [this, &os, &txn, &delta_stats, &osd_op_params]
-    (auto resolved_obc) {
+    (auto, auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object
       logger().debug("PGBackend::rollback: loaded head_obc: {}"
