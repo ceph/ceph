@@ -274,7 +274,8 @@ def main():
             outfile.flush()
 
             sleep_time -= process_info.process_time + process_info.command_time
-            osd.ready_time = time.time() + (osd.freq - process_info.process_time + process_info.command_time)
+            now = time.time()
+            osd.ready_time = now + (osd.freq - process_info.process_time - process_info.command_time)
             sleep_time = max(0, sleep_time)
             logger.info(f'osd.{osd.name} parsing dump_historic_ops with {process_info.ops_count} ops took {process_info.process_time}')
             logger.info(f'osd.{osd.name} command dump_historic_ops with {process_info.ops_count} ops took {process_info.command_time}')
