@@ -177,7 +177,7 @@ def process_osd(osd_id) -> ProcessInfo:
                        new_ops, oldest_operation_at, capture_period_start, capture_period_end)
 
 def _set_osd_history_size(name: str, history_size: int):
-    run_ceph_command(['config', 'set', f'osd.{name}', 'osd_op_history_size', 
+    run_ceph_command(['tell', f'osd.{name}', 'config', 'set', 'osd_op_history_size',
                       str(int(history_size))], no_out=True)
 
 class OsdParameters:
