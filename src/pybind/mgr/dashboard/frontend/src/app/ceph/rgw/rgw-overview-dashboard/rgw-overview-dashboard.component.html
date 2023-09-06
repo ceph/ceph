@@ -24,7 +24,7 @@
       <li class="list-group-item">
         <cd-card-row [data]="rgwZonegroupCount"
                      link="/rgw/multisite"
-                     title="Zonegroup"
+                     title="Zone Group"
                      summaryType="simplified"
                      *ngIf="rgwZonegroupCount != null"></cd-card-row>
       </li>
@@ -109,14 +109,14 @@
   </div>
 
   <div class="row pt-4 pb-4">
-    <cd-card cardTitle="Multisite Sync Status"
+    <cd-card cardTitle="Multi-Site Sync Status"
              i18n-title>
       <ng-template #notConfigured>
         <span class="pe-5 ps-5">
           <cd-alert-panel type="info"
                           i18n>
-            Multisite needs to be configured in order to see the multisite sync status.
-            Please consult the <cd-doc section="multisite"></cd-doc> on how to configure and enable the multisite functionality.
+            Multi-site needs to be configured in order to see the multi-site sync status.
+            Please consult the <cd-doc section="multisite"></cd-doc> on how to configure and enable the multi-site functionality.
           </cd-alert-panel>
         </span>
       </ng-template>

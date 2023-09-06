@@ -50,9 +50,9 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
 
   messages = {
     noDefaultRealm: $localize`Please create a default realm first to enable this feature`,
-    noMasterZone: $localize`Please create a master zone for each zonegroups to enable this feature`,
+    noMasterZone: $localize`Please create a master zone for each zone group to enable this feature`,
     noRealmExists: $localize`No realm exists`,
-    disableExport: $localize`Please create master zonegroup and master zone for each of the realms`
+    disableExport: $localize`Please create master zone group and master zone for each of the realms`
   };
 
   @BlockUI()
@@ -209,7 +209,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     const createZonegroupAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
-      name: this.actionLabels.CREATE + ' Zonegroup',
+      name: this.actionLabels.CREATE + ' Zone Group',
       click: () => this.openModal('zonegroup'),
       disable: () => this.getDisable()
     };
