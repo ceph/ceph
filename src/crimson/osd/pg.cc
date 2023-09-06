@@ -1041,7 +1041,19 @@ PG::do_osd_ops(
       ceph_tid_t rep_tid = shard_services.get_tid();
       auto last_complete = peering_state.get_info().last_complete;
       if (op_info.may_write()) {
-        fut = submit_error_log(m, op_info, obc, e, rep_tid, version);
+        // submit_error_log contains the logic where we send the
+        // LogMissingRequest messages to the replicas.
+        // failure_func is part of a concurrent (non-exclusive)
+        // pipeline stage (WaitRepop) so successive ops can reorder.
+        // Disable concurrent error log submissions so
+        // as to maintain correct message order.
+        // See: https://tracker.ceph.com/issues/61651
+        fut = error_log_lock.lock(
+        ).then([m, &op_info, obc, e, rep_tid, &version, this] {
+          return submit_error_log(m, op_info, obc, e, rep_tid, version);
+        }).finally([this] {
+          return error_log_lock.unlock();
+        });
       }
       return fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete,  this] {
         auto log_reply = [m, e, this] {

@@ -555,6 +555,8 @@ private:
     }
   } snaptrim_mutex;
 
+  seastar::shared_mutex error_log_lock;
+
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
   using do_osd_ops_iertr =
