@@ -17,6 +17,9 @@
 SCRIPT_DIR="$(dirname "$BASH_SOURCE")"
 SCRIPT_DIR="$(realpath "$SCRIPT_DIR")"
 
+MINGW_CMAKE_FILE=${MINGW_CMAKE_FILE:-}
+MINGW_POSIX_FLAGS=${MINGW_POSIX_FLAGS:-}
+
 if [[ -n $USE_MINGW_LLVM ]]; then
     MINGW_LLVM_DIR=${MINGW_LLVM_DIR:-"$SCRIPT_DIR/build.deps/mingw-llvm"}
 fi

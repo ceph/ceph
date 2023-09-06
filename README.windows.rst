@@ -54,7 +54,7 @@ EMBEDDED_DBG_SYM   By default, the generated
                    symbols. If this flag is set,
                    the debug symbols will remain
                    embedded in the executables.
-ENABLE_SHARED      Dynamically link Ceph libs.      False
+ENABLE_SHARED      Dynamically link Ceph libs.      ON
 =================  ===============================  ===============================
 
 The following command will build the binaries and add them to a zip archive
