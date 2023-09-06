@@ -7,9 +7,9 @@ Cephadm Operations
 Watching cephadm log messages
 =============================
 
-Cephadm writes logs to the ``cephadm`` cluster log channel. You can
-monitor Ceph's activity in real time by reading the logs as they fill
-up. Run the following command to see the logs in real time:
+The cephadm orchestrator module writes logs to the ``cephadm`` cluster log
+channel. You can monitor Ceph's activity in real time by reading the logs as
+they fill up. Run the following command to see the logs in real time:
 
 .. prompt:: bash #
 
