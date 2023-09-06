@@ -675,7 +675,8 @@ private:
     {CEPH_MDSMAP_ALLOW_SNAPS, "allow_snaps"},
     {CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS, "allow_multimds_snaps"},
     {CEPH_MDSMAP_ALLOW_STANDBY_REPLAY, "allow_standby_replay"},
-    {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"}
+    {CEPH_MDSMAP_REFUSE_CLIENT_SESSION, "refuse_client_session"},
+    {CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS, "refuse_standby_for_another_fs"}
   };
 };
 WRITE_CLASS_ENCODER_FEATURES(MDSMap::mds_info_t)

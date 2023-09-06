@@ -248,3 +248,8 @@ Relevant tracker: https://tracker.ceph.com/issues/57090
   key/value set for a filesystem extended attributes.  It effectively replaces
   the old per-MDS `max_xattr_pairs_size` setting, which is now dropped.
   Relevant tracker: https://tracker.ceph.com/issues/55725
+
+* Introduced a new file system flag `refuse_standby_for_another_fs` that can be
+set using the `fs set` command. This flag prevents using a standby for another
+file system (join_fs = X) when standby for the current filesystem is not available.
+Relevant tracker: https://tracker.ceph.com/issues/61599
