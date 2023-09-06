@@ -1,16 +1,15 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TablePaginationComponent } from './table-pagination.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('TablePaginationComponent', () => {
   let component: TablePaginationComponent;
   let fixture: ComponentFixture<TablePaginationComponent>;
   let element: HTMLElement;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [TablePaginationComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [TablePaginationComponent]
   });
 
   beforeEach(() => {

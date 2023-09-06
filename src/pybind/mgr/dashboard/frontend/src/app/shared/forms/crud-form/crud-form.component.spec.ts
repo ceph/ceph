@@ -24,10 +24,8 @@ describe('CrudFormComponent', () => {
     ]
   });
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [CrudFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [CrudFormComponent]
   });
 
   beforeEach(() => {
