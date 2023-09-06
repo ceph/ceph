@@ -73,6 +73,8 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   usedTmpl: TemplateRef<any>;
   @ViewChild('totalUsedTmpl', { static: true })
   totalUsedTmpl: TemplateRef<any>;
+  @ViewChild('imageUsageTpl', { static: true })
+  imageUsageTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -276,24 +278,10 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: $localize`Used`,
-        prop: 'disk_usage',
-        cellClass: 'text-right',
-        flexGrow: 1,
-        pipe: this.dimlessBinaryPipe,
-        sortable: false,
-        headerTemplate: this.usedTmpl,
-        cellTemplate: this.provisionedNotAvailableTooltipTpl
-      },
-      {
-        name: $localize`Total used`,
-        prop: 'total_disk_usage',
-        cellClass: 'text-right',
-        flexGrow: 1,
-        pipe: this.dimlessBinaryPipe,
-        sortable: false,
-        headerTemplate: this.totalUsedTmpl,
-        cellTemplate: this.totalProvisionedNotAvailableTooltipTpl
+        name: $localize`Usage`,
+        prop: 'usage',
+        cellTemplate: this.imageUsageTpl,
+        flexGrow: 1.5
       },
       {
         name: $localize`Objects`,
