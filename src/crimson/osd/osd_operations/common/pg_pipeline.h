@@ -19,7 +19,7 @@ protected:
   } wait_for_active;
   struct RecoverMissing : OrderedExclusivePhaseT<RecoverMissing> {
     static constexpr auto type_name = "CommonPGPipeline::recover_missing";
-  } recover_missing;
+  } recover_missing, recover_missing2;
   struct GetOBC : OrderedExclusivePhaseT<GetOBC> {
     static constexpr auto type_name = "CommonPGPipeline::get_obc";
   } get_obc;

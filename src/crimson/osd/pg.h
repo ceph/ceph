@@ -504,7 +504,7 @@ public:
 
 public:
   using with_obc_func_t =
-    std::function<load_obc_iertr::future<> (ObjectContextRef)>;
+    std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
   load_obc_iertr::future<> with_locked_obc(
     const hobject_t &hobj,
