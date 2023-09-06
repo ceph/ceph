@@ -51,6 +51,7 @@ namespace {
   uint32_t owner_uid = 867;
   uint32_t owner_gid = 5309;
   uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
+  bool null_vid = false;
 
   string bucket_name{"v4recov"};
   string object_path{"node0/clientids"};
@@ -137,7 +138,7 @@ TEST(LibRGW, MOUNT) {
 
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
 }
 
@@ -150,7 +151,7 @@ TEST(LibRGW, CREATE_BUCKET) {
     st.st_mode = 755;
 
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
-			&bucket_fh, RGW_MKDIR_FLAG_NONE);
+			&bucket_fh, RGW_MKDIR_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -175,10 +176,10 @@ TEST(LibRGW, CREATE_PATH) {
     obj_rec dir{seg, nullptr, parent_fh, nullptr};
     if (do_create) {
       ret = rgw_mkdir(fs, dir.parent_fh, dir.name.c_str(), &st, create_mask,
-		      &dir.fh, RGW_MKDIR_FLAG_NONE);
+		      &dir.fh, RGW_MKDIR_FLAG_NONE, null_vid);
     } else {
       ret = rgw_lookup(fs, dir.parent_fh, dir.name.c_str(), &dir.fh,
-		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_NONE, null_vid);
     }
     ASSERT_EQ(ret, 0);
     dir.sync();
@@ -227,7 +228,7 @@ TEST(LibRGW, SETXATTR1) {
   rgw_xattr xattr = { xattr_k, xattr_v };
   rgw_xattrlist xattrlist = { &xattr, 1 };
 
-  int ret = rgw_setxattrs(fs, dir.fh, &xattrlist, RGW_SETXATTR_FLAG_NONE);
+  int ret = rgw_setxattrs(fs, dir.fh, &xattrlist, RGW_SETXATTR_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
 }
 
@@ -277,7 +278,7 @@ TEST(LibRGW, GETXATTR1) {
   std::map<std::string, std::string> out_attrmap;
 
   int ret = rgw_getxattrs(fs, dir.fh, &xattrlist, getattr_cb, &out_attrmap,
-			  RGW_GETXATTR_FLAG_NONE);
+			  RGW_GETXATTR_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
   /* check exposed attrs */
   ASSERT_TRUE(out_attrmap.find("user.rgw.etag") != out_attrmap.end());
@@ -298,7 +299,7 @@ TEST(LibRGW, LSXATTR1) {
   std::map<std::string, std::string> out_attrmap;
 
   int ret = rgw_lsxattrs(fs, dir.fh, &filter_prefix, getattr_cb,
-			 &out_attrmap, RGW_LSXATTR_FLAG_NONE);
+			 &out_attrmap, RGW_LSXATTR_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
 
   /* check exposed attrs */
@@ -320,7 +321,7 @@ TEST(LibRGW, RMXATTR1) {
   rgw_xattr xattr = { xattr_k, xattr_v };
   rgw_xattrlist xattrlist = { &xattr, 1 };
 
-  int ret = rgw_rmxattrs(fs, dir.fh, &xattrlist, RGW_RMXATTR_FLAG_NONE);
+  int ret = rgw_rmxattrs(fs, dir.fh, &xattrlist, RGW_RMXATTR_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
 }
 
@@ -337,7 +338,7 @@ TEST(LibRGW, LSXATTR2) {
   std::map<std::string, std::string> out_attrmap;
 
   int ret = rgw_lsxattrs(fs, dir.fh, &filter_prefix, getattr_cb,
-			 &out_attrmap, RGW_LSXATTR_FLAG_NONE);
+			 &out_attrmap, RGW_LSXATTR_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
   /* check exposed attrs */
   ASSERT_TRUE(out_attrmap.find("user.rgw.etag") != out_attrmap.end());

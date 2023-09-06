@@ -129,7 +129,7 @@ class RGWPSCreateTopicOp : public RGWOp {
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(optional_yield) override;
+  void execute(optional_yield, bool null_vid) override;
 
   const char* name() const override { return "pubsub_topic_create"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_CREATE; }
@@ -159,7 +159,7 @@ class RGWPSCreateTopicOp : public RGWOp {
   }
 };
 
-void RGWPSCreateTopicOp::execute(optional_yield y) {
+void RGWPSCreateTopicOp::execute(optional_yield y, bool null_vid) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -189,7 +189,7 @@ public:
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(optional_yield) override;
+  void execute(optional_yield, bool null_vid) override;
 
   const char* name() const override { return "pubsub_topics_list"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPICS_LIST; }
@@ -219,7 +219,7 @@ public:
   }
 };
 
-void RGWPSListTopicsOp::execute(optional_yield y) {
+void RGWPSListTopicsOp::execute(optional_yield y, bool null_vid) {
   const RGWPubSub ps(driver, s->owner.get_id().tenant);
   op_ret = ps.get_topics(this, result, y);
   // if there are no topics it is not considered an error
@@ -263,7 +263,7 @@ class RGWPSGetTopicOp : public RGWOp {
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "pubsub_topic_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_GET; }
@@ -293,7 +293,7 @@ class RGWPSGetTopicOp : public RGWOp {
   }
 };
 
-void RGWPSGetTopicOp::execute(optional_yield y) {
+void RGWPSGetTopicOp::execute(optional_yield y, bool null_vid) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -339,7 +339,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "pubsub_topic_get"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_GET; }
@@ -369,7 +369,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
   }
 };
 
-void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
+void RGWPSGetTopicAttributesOp::execute(optional_yield y, bool null_vid) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -427,7 +427,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
   void pre_exec() override {
     rgw_bucket_object_pre_exec(s);
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "pubsub_topic_delete"; }
   RGWOpType get_type() override { return RGW_OP_PUBSUB_TOPIC_DELETE; }
@@ -454,7 +454,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
   }
 };
 
-void RGWPSDeleteTopicOp::execute(optional_yield y) {
+void RGWPSDeleteTopicOp::execute(optional_yield y, bool null_vid) {
   op_ret = get_params();
   if (op_ret < 0) {
     return;
@@ -631,10 +631,10 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 
 
-  void execute(optional_yield) override;
+  void execute(optional_yield, bool null_vid) override;
 };
 
-void RGWPSCreateNotifOp::execute(optional_yield y) {
+void RGWPSCreateNotifOp::execute(optional_yield y, bool null_vid) {
   op_ret = verify_params();
   if (op_ret < 0) {
     return;
@@ -773,10 +773,10 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_DELETE; }
   uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 };
 
-void RGWPSDeleteNotifOp::execute(optional_yield y) {
+void RGWPSDeleteNotifOp::execute(optional_yield y, bool null_vid) {
   std::string notif_name;
   op_ret = get_params(notif_name);
   if (op_ret < 0) {
@@ -855,7 +855,7 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUBSUB_NOTIF_LIST; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void send_response() override {
     if (op_ret) {
       set_req_state_err(s, op_ret);
@@ -871,7 +871,7 @@ public:
   }
 };
 
-void RGWPSListNotifsOp::execute(optional_yield y) {
+void RGWPSListNotifsOp::execute(optional_yield y, bool null_vid) {
   std::string notif_name;
   op_ret = get_params(notif_name);
   if (op_ret < 0) {

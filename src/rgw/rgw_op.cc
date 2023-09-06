@@ -1083,7 +1083,7 @@ void RGWGetObjTags::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjTags::execute(optional_yield y)
+void RGWGetObjTags::execute(optional_yield y, bool null_vid)
 {
   rgw::sal::Attrs attrs;
 
@@ -1119,7 +1119,7 @@ int RGWPutObjTags::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWPutObjTags::execute(optional_yield y)
+void RGWPutObjTags::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -1159,7 +1159,7 @@ int RGWDeleteObjTags::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWDeleteObjTags::execute(optional_yield y)
+void RGWDeleteObjTags::execute(optional_yield y, bool null_vid)
 {
   if (rgw::sal::Object::empty(s->object.get()))
     return;
@@ -1185,7 +1185,7 @@ void RGWGetBucketTags::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketTags::execute(optional_yield y)
+void RGWGetBucketTags::execute(optional_yield y, bool null_vid)
 {
   auto iter = s->bucket_attrs.find(RGW_ATTR_TAGS);
   if (iter != s->bucket_attrs.end()) {
@@ -1205,7 +1205,7 @@ int RGWPutBucketTags::verify_permission(optional_yield y) {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
 
-void RGWPutBucketTags::execute(optional_yield y)
+void RGWPutBucketTags::execute(optional_yield y, bool null_vid)
 {
 
   op_ret = get_params(this, y);
@@ -1239,7 +1239,7 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
 }
 
-void RGWDeleteBucketTags::execute(optional_yield y)
+void RGWDeleteBucketTags::execute(optional_yield y, bool null_vid)
 {
   bufferlist in_data;
   op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
@@ -1279,7 +1279,7 @@ void RGWGetBucketReplication::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketReplication::execute(optional_yield y)
+void RGWGetBucketReplication::execute(optional_yield y, bool null_vid)
 {
   send_response_data();
 }
@@ -1291,7 +1291,7 @@ int RGWPutBucketReplication::verify_permission(optional_yield y) {
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
 }
 
-void RGWPutBucketReplication::execute(optional_yield y) {
+void RGWPutBucketReplication::execute(optional_yield y, bool null_vid) {
 
   op_ret = get_params(y);
   if (op_ret < 0) 
@@ -1336,7 +1336,7 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
 }
 
-void RGWDeleteBucketReplication::execute(optional_yield y)
+void RGWDeleteBucketReplication::execute(optional_yield y, bool null_vid)
 {
   bufferlist in_data;
   op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
@@ -1720,7 +1720,8 @@ static int iterate_user_manifest_parts(const DoutPrefixProvider *dpp,
                                                  void *param,
                                                  bool swift_slo),
                                        void * const cb_param,
-				       optional_yield y)
+				       optional_yield y,
+                                       bool null_vid)
 {
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false, handled_end = false;
@@ -1738,7 +1739,7 @@ static int iterate_user_manifest_parts(const DoutPrefixProvider *dpp,
   etag_sum.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   do {
     static constexpr auto MAX_LIST_OBJS = 100u;
-    int r = bucket->list(dpp, params, MAX_LIST_OBJS, results, y);
+    int r = bucket->list(dpp, params, MAX_LIST_OBJS, results, y, null_vid);
     if (r < 0) {
       return r;
     }
@@ -1901,7 +1902,7 @@ static int get_obj_user_manifest_iterate_cb(rgw::sal::Bucket* bucket,
     bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, swift_slo);
 }
 
-int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
+int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y, bool null_vid)
 {
   const std::string_view prefix_view(prefix);
   ldpp_dout(this, 2) << "RGWGetObj::handle_user_manifest() prefix="
@@ -1954,7 +1955,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, &s->obj_size, &lo_etag,
-	nullptr /* cb */, nullptr /* cb arg */, y);
+	nullptr /* cb */, nullptr /* cb arg */, y, null_vid);
   if (r < 0) {
     return r;
   }
@@ -1968,7 +1969,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         &total_len, nullptr, nullptr,
-	nullptr, nullptr, y);
+	nullptr, nullptr, y, null_vid);
   if (r < 0) {
     return r;
   }
@@ -1982,7 +1983,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, nullptr, nullptr,
-	get_obj_user_manifest_iterate_cb, (void *)this, y);
+	get_obj_user_manifest_iterate_cb, (void *)this, y, null_vid);
   if (r < 0) {
     return r;
   }
@@ -2188,7 +2189,7 @@ static inline void rgw_cond_decode_objtags(
   }
 }
 
-void RGWGetObj::execute(optional_yield y)
+void RGWGetObj::execute(optional_yield y, bool null_vid)
 {
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
@@ -2340,7 +2341,7 @@ void RGWGetObj::execute(optional_yield y)
 
   attr_iter = attrs.find(RGW_ATTR_USER_MANIFEST);
   if (attr_iter != attrs.end() && !skip_manifest) {
-    op_ret = handle_user_manifest(attr_iter->second.c_str(), y);
+    op_ret = handle_user_manifest(attr_iter->second.c_str(), y, null_vid);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to handle user manifest ret="
 		       << op_ret << dendl;
@@ -2425,7 +2426,7 @@ void RGWGetObj::execute(optional_yield y)
   return;
 
 done_err:
-  send_response_data_error(y);
+  send_response_data_error(y, null_vid);
 }
 
 int RGWGetObj::init_common()
@@ -2481,7 +2482,7 @@ int RGWGetUsage::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWListBuckets::execute(optional_yield y)
+void RGWListBuckets::execute(optional_yield y, bool null_vid)
 {
   bool done;
   bool started = false;
@@ -2575,7 +2576,7 @@ send_end:
   send_response_end();
 }
 
-void RGWGetUsage::execute(optional_yield y)
+void RGWGetUsage::execute(optional_yield y, bool null_vid)
 {
   uint64_t start_epoch = 0;
   uint64_t end_epoch = (uint64_t)-1;
@@ -2648,7 +2649,7 @@ int RGWStatAccount::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWStatAccount::execute(optional_yield y)
+void RGWStatAccount::execute(optional_yield y, bool null_vid)
 {
   string marker;
   rgw::sal::BucketList buckets;
@@ -2718,7 +2719,7 @@ void RGWGetBucketVersioning::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketVersioning::execute(optional_yield y)
+void RGWGetBucketVersioning::execute(optional_yield y, bool null_vid)
 {
   if (! s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -2744,7 +2745,7 @@ void RGWSetBucketVersioning::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetBucketVersioning::execute(optional_yield y)
+void RGWSetBucketVersioning::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -2842,7 +2843,7 @@ void RGWGetBucketWebsite::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetBucketWebsite::execute(optional_yield y)
+void RGWGetBucketWebsite::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket->get_info().has_website) {
     op_ret = -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
@@ -2863,7 +2864,7 @@ void RGWSetBucketWebsite::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetBucketWebsite::execute(optional_yield y)
+void RGWSetBucketWebsite::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
 
@@ -2909,7 +2910,7 @@ void RGWDeleteBucketWebsite::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteBucketWebsite::execute(optional_yield y)
+void RGWDeleteBucketWebsite::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -2956,7 +2957,7 @@ void RGWStatBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWStatBucket::execute(optional_yield y)
+void RGWStatBucket::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -3015,7 +3016,7 @@ void RGWListBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWListBucket::execute(optional_yield y)
+void RGWListBucket::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -3044,7 +3045,7 @@ void RGWListBucket::execute(optional_yield y)
 
   rgw::sal::Bucket::ListResults results;
 
-  op_ret = s->bucket->list(this, params, max, results, y);
+  op_ret = s->bucket->list(this, params, max, results, y, null_vid);
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;
@@ -3291,7 +3292,7 @@ static void filter_out_website(std::map<std::string, ceph::bufferlist>& add_attr
 }
 
 
-void RGWCreateBucket::execute(optional_yield y)
+void RGWCreateBucket::execute(optional_yield y, bool null_vid)
 {
   buffer::list aclbl;
   buffer::list corsbl;
@@ -3503,7 +3504,7 @@ void RGWDeleteBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteBucket::execute(optional_yield y)
+void RGWDeleteBucket::execute(optional_yield y, bool null_vid)
 {
   if (s->bucket_name.empty()) {
     op_ret = -EINVAL;
@@ -3540,7 +3541,7 @@ void RGWDeleteBucket::execute(optional_yield y)
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
 
-  op_ret = s->bucket->check_empty(this, y);
+  op_ret = s->bucket->check_empty(this, y, null_vid);
   if (op_ret < 0) {
     return;
   }
@@ -3561,7 +3562,7 @@ void RGWDeleteBucket::execute(optional_yield y)
       // do nothing; it will already have been logged
   }
 
-  op_ret = s->bucket->remove_bucket(this, false, false, nullptr, y);
+  op_ret = s->bucket->remove_bucket(this, false, false, nullptr, y, null_vid);
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
       // in either case, we've already called ctl.bucket->unlink_bucket()
@@ -3979,7 +3980,7 @@ int RGWPutObj::get_lua_filter(std::unique_ptr<rgw::sal::DataProcessor>* filter, 
   return 0;
 }
 
-void RGWPutObj::execute(optional_yield y)
+void RGWPutObj::execute(optional_yield y, bool null_vid)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -4400,7 +4401,7 @@ void RGWPostObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPostObj::execute(optional_yield y)
+void RGWPostObj::execute(optional_yield y, bool null_vid)
 {
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
@@ -4764,7 +4765,7 @@ int RGWPutMetadataAccount::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWPutMetadataAccount::execute(optional_yield y)
+void RGWPutMetadataAccount::execute(optional_yield y, bool null_vid)
 {
   /* Params have been extracted earlier. See init_processing(). */
   op_ret = s->user->load_user(this, y);
@@ -4804,7 +4805,7 @@ void RGWPutMetadataBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutMetadataBucket::execute(optional_yield y)
+void RGWPutMetadataBucket::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -4894,7 +4895,7 @@ void RGWPutMetadataObject::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutMetadataObject::execute(optional_yield y)
+void RGWPutMetadataObject::execute(optional_yield y, bool null_vid)
 {
   rgw_obj target_obj;
   rgw::sal::Attrs attrs, rmattrs;
@@ -4940,7 +4941,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
   op_ret = s->object->set_obj_attrs(this, &attrs, &rmattrs, s->yield);
 }
 
-int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
+int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y, bool null_vid)
 {
   RGWSLOInfo slo_info;
   auto bliter = bl.cbegin();
@@ -4986,7 +4987,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
   path.obj_key = s->object->get_key();
   items.push_back(path);
 
-  int ret = deleter->delete_chunk(items, y);
+  int ret = deleter->delete_chunk(items, y, null_vid);
   if (ret < 0) {
     return ret;
   }
@@ -5098,7 +5099,7 @@ void RGWDeleteObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteObj::execute(optional_yield y)
+void RGWDeleteObj::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -5156,7 +5157,7 @@ void RGWDeleteObj::execute(optional_yield y)
         const auto slo_attr = astate->attrset.find(RGW_ATTR_SLO_MANIFEST);
 
         if (slo_attr != astate->attrset.end()) {
-          op_ret = handle_slo_manifest(slo_attr->second, y);
+          op_ret = handle_slo_manifest(slo_attr->second, y, null_vid);
           if (op_ret < 0) {
             ldpp_dout(this, 0) << "ERROR: failed to handle slo manifest ret=" << op_ret << dendl;
           }
@@ -5185,7 +5186,7 @@ void RGWDeleteObj::execute(optional_yield y)
     s->object->set_atomic();
     
     bool ver_restored = false;
-    op_ret = s->object->swift_versioning_restore(ver_restored, this, y);
+    op_ret = s->object->swift_versioning_restore(ver_restored, this, y, null_vid);
     if (op_ret < 0) {
       return;
     }
@@ -5566,7 +5567,7 @@ void RGWCopyObj::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWCopyObj::execute(optional_yield y)
+void RGWCopyObj::execute(optional_yield y, bool null_vid)
 {
   if (init_common() < 0)
     return;
@@ -5722,7 +5723,7 @@ void RGWGetACLs::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetACLs::execute(optional_yield y)
+void RGWGetACLs::execute(optional_yield y, bool null_vid)
 {
   stringstream ss;
   RGWAccessControlPolicy* const acl = \
@@ -5818,7 +5819,7 @@ void RGWDeleteLC::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutACLs::execute(optional_yield y)
+void RGWPutACLs::execute(optional_yield y, bool null_vid)
 {
   bufferlist bl;
 
@@ -5952,7 +5953,7 @@ void RGWPutACLs::execute(optional_yield y)
   }
 }
 
-void RGWPutLC::execute(optional_yield y)
+void RGWPutLC::execute(optional_yield y, bool null_vid)
 {
   bufferlist bl;
   
@@ -6048,7 +6049,7 @@ void RGWPutLC::execute(optional_yield y)
   return;
 }
 
-void RGWDeleteLC::execute(optional_yield y)
+void RGWDeleteLC::execute(optional_yield y, bool null_vid)
 {
   bufferlist data;
   op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
@@ -6073,7 +6074,7 @@ int RGWGetCORS::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketCORS);
 }
 
-void RGWGetCORS::execute(optional_yield y)
+void RGWGetCORS::execute(optional_yield y, bool null_vid)
 {
   op_ret = read_bucket_cors();
   if (op_ret < 0)
@@ -6095,7 +6096,7 @@ int RGWPutCORS::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
-void RGWPutCORS::execute(optional_yield y)
+void RGWPutCORS::execute(optional_yield y, bool null_vid)
 {
   rgw_raw_obj obj;
 
@@ -6126,7 +6127,7 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
-void RGWDeleteCORS::execute(optional_yield y)
+void RGWDeleteCORS::execute(optional_yield y, bool null_vid)
 {
   bufferlist data;
   op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
@@ -6179,7 +6180,7 @@ int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
   return 0;
 }
 
-void RGWOptionsCORS::execute(optional_yield y)
+void RGWOptionsCORS::execute(optional_yield y, bool null_vid)
 {
   op_ret = read_bucket_cors();
   if (op_ret < 0)
@@ -6225,7 +6226,7 @@ void RGWGetRequestPayment::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetRequestPayment::execute(optional_yield y)
+void RGWGetRequestPayment::execute(optional_yield y, bool null_vid)
 {
   requester_pays = s->bucket->get_info().requester_pays;
 }
@@ -6244,7 +6245,7 @@ void RGWSetRequestPayment::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetRequestPayment::execute(optional_yield y)
+void RGWSetRequestPayment::execute(optional_yield y, bool null_vid)
 {
 
   op_ret = get_params(y);
@@ -6339,7 +6340,7 @@ void RGWInitMultipart::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWInitMultipart::execute(optional_yield y)
+void RGWInitMultipart::execute(optional_yield y, bool null_vid)
 {
   multipart_trace = tracing::rgw::tracer.start_trace(tracing::rgw::MULTIPART, s->trace_enabled);
   bufferlist aclbl, tracebl;
@@ -6458,7 +6459,7 @@ void RGWCompleteMultipart::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWCompleteMultipart::execute(optional_yield y)
+void RGWCompleteMultipart::execute(optional_yield y, bool null_vid)
 {
   RGWMultiCompleteUpload *parts;
   RGWMultiXMLParser parser;
@@ -6719,7 +6720,7 @@ void RGWAbortMultipart::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWAbortMultipart::execute(optional_yield y)
+void RGWAbortMultipart::execute(optional_yield y, bool null_vid)
 {
   op_ret = -EINVAL;
   string upload_id;
@@ -6761,7 +6762,7 @@ void RGWListMultipart::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWListMultipart::execute(optional_yield y)
+void RGWListMultipart::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -6807,7 +6808,7 @@ void RGWListBucketMultiparts::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWListBucketMultiparts::execute(optional_yield y)
+void RGWListBucketMultiparts::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -6828,7 +6829,7 @@ void RGWListBucketMultiparts::execute(optional_yield y)
 
   op_ret = s->bucket->list_multiparts(this, prefix, marker_meta,
 				      delimiter, max_uploads, uploads,
-				      &common_prefixes, &is_truncated, y);
+				      &common_prefixes, &is_truncated, y, null_vid);
   if (op_ret < 0) {
     return;
   }
@@ -6839,7 +6840,7 @@ void RGWListBucketMultiparts::execute(optional_yield y)
   }
 }
 
-void RGWGetHealthCheck::execute(optional_yield y)
+void RGWGetHealthCheck::execute(optional_yield y, bool null_vid)
 {
   if (!g_conf()->rgw_healthcheck_disabling_path.empty() &&
       (::access(g_conf()->rgw_healthcheck_disabling_path.c_str(), F_OK) == 0)) {
@@ -7122,7 +7123,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   }
 }
 
-void RGWDeleteMultiObj::execute(optional_yield y)
+void RGWDeleteMultiObj::execute(optional_yield y, bool null_vid)
 {
   RGWMultiDelDelete *multi_delete;
   vector<rgw_obj_key>::iterator iter;
@@ -7250,7 +7251,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
 				  &bacl, policy, s->iam_user_policies, s->session_policies, rgw::IAM::s3DeleteBucket);
 }
 
-bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yield y)
+bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yield y, bool null_vid)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   ACLOwner bowner;
@@ -7288,7 +7289,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
       goto delop_fail;
     }
   } else {
-    ret = bucket->remove_bucket(dpp, false, true, &s->info, s->yield);
+    ret = bucket->remove_bucket(dpp, false, true, &s->info, s->yield, null_vid);
     if (ret < 0) {
       goto delop_fail;
     }
@@ -7337,12 +7338,12 @@ delop_fail:
     return false;
 }
 
-bool RGWBulkDelete::Deleter::delete_chunk(const std::list<acct_path_t>& paths, optional_yield y)
+bool RGWBulkDelete::Deleter::delete_chunk(const std::list<acct_path_t>& paths, optional_yield y, bool null_vid)
 {
   ldpp_dout(dpp, 20) << "in delete_chunk" << dendl;
   for (auto path : paths) {
     ldpp_dout(dpp, 20) << "bulk deleting path: " << path << dendl;
-    delete_single(path, y);
+    delete_single(path, y, null_vid);
   }
 
   return true;
@@ -7358,7 +7359,7 @@ void RGWBulkDelete::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWBulkDelete::execute(optional_yield y)
+void RGWBulkDelete::execute(optional_yield y, bool null_vid)
 {
   deleter = std::unique_ptr<Deleter>(new Deleter(this, driver, s));
 
@@ -7371,7 +7372,7 @@ void RGWBulkDelete::execute(optional_yield y)
       return;
     }
 
-    ret = deleter->delete_chunk(items, y);
+    ret = deleter->delete_chunk(items, y, null_vid);
   } while (!op_ret && is_truncated);
 
   return;
@@ -7784,7 +7785,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   return op_ret;
 }
 
-void RGWBulkUploadOp::execute(optional_yield y)
+void RGWBulkUploadOp::execute(optional_yield y, bool null_vid)
 {
   ceph::bufferlist buffer(64 * 1024);
 
@@ -7932,7 +7933,7 @@ void RGWGetAttrs::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetAttrs::execute(optional_yield y)
+void RGWGetAttrs::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -7988,7 +7989,7 @@ void RGWRMAttrs::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWRMAttrs::execute(optional_yield y)
+void RGWRMAttrs::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0)
@@ -8025,7 +8026,7 @@ void RGWSetAttrs::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWSetAttrs::execute(optional_yield y)
+void RGWSetAttrs::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0)
@@ -8045,7 +8046,7 @@ void RGWGetObjLayout::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjLayout::execute(optional_yield y)
+void RGWGetObjLayout::execute(optional_yield y, bool null_vid)
 {
 }
 
@@ -8064,7 +8065,7 @@ void RGWConfigBucketMetaSearch::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWConfigBucketMetaSearch::execute(optional_yield y)
+void RGWConfigBucketMetaSearch::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -8111,7 +8112,7 @@ void RGWDelBucketMetaSearch::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDelBucketMetaSearch::execute(optional_yield y)
+void RGWDelBucketMetaSearch::execute(optional_yield y, bool null_vid)
 {
   s->bucket->get_info().mdsearch_config.clear();
 
@@ -8173,11 +8174,11 @@ int RGWHandler::do_read_permissions(RGWOp *op, bool only_bucket, optional_yield 
   return ret;
 }
 
-int RGWOp::error_handler(int err_no, string *error_content, optional_yield y) {
-  return dialect_handler->error_handler(err_no, error_content, y);
+int RGWOp::error_handler(int err_no, string *error_content, optional_yield y, bool null_vid) {
+  return dialect_handler->error_handler(err_no, error_content, y, null_vid);
 }
 
-int RGWHandler::error_handler(int err_no, string *error_content, optional_yield) {
+int RGWHandler::error_handler(int err_no, string *error_content, optional_yield, bool null_vid) {
   // This is the do-nothing error handler
   return err_no;
 }
@@ -8233,7 +8234,7 @@ int RGWPutBucketPolicy::get_params(optional_yield y)
   return op_ret;
 }
 
-void RGWPutBucketPolicy::execute(optional_yield y)
+void RGWPutBucketPolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -8294,7 +8295,7 @@ int RGWGetBucketPolicy::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWGetBucketPolicy::execute(optional_yield y)
+void RGWGetBucketPolicy::execute(optional_yield y, bool null_vid)
 {
   rgw::sal::Attrs attrs(s->bucket_attrs);
   auto aiter = attrs.find(RGW_ATTR_IAM_POLICY);
@@ -8339,7 +8340,7 @@ int RGWDeleteBucketPolicy::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWDeleteBucketPolicy::execute(optional_yield y)
+void RGWDeleteBucketPolicy::execute(optional_yield y, bool null_vid)
 {
   bufferlist data;
   op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
@@ -8370,7 +8371,7 @@ int RGWPutBucketObjectLock::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketObjectLockConfiguration);
 }
 
-void RGWPutBucketObjectLock::execute(optional_yield y)
+void RGWPutBucketObjectLock::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     s->err.message = "object lock configuration can't be set if bucket object lock not enabled";
@@ -8436,7 +8437,7 @@ int RGWGetBucketObjectLock::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketObjectLockConfiguration);
 }
 
-void RGWGetBucketObjectLock::execute(optional_yield y)
+void RGWGetBucketObjectLock::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     op_ret = -ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION;
@@ -8468,7 +8469,7 @@ void RGWPutObjRetention::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutObjRetention::execute(optional_yield y)
+void RGWPutObjRetention::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     s->err.message = "object retention can't be set if bucket object lock not configured";
@@ -8564,7 +8565,7 @@ void RGWGetObjRetention::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjRetention::execute(optional_yield y)
+void RGWGetObjRetention::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     s->err.message = "bucket object lock not configured";
@@ -8613,7 +8614,7 @@ void RGWPutObjLegalHold::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWPutObjLegalHold::execute(optional_yield y) {
+void RGWPutObjLegalHold::execute(optional_yield y, bool null_vid) {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     s->err.message = "object legal hold can't be set if bucket object lock not enabled";
     ldpp_dout(this, 4) << "ERROR: " << s->err.message << dendl;
@@ -8668,7 +8669,7 @@ void RGWGetObjLegalHold::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWGetObjLegalHold::execute(optional_yield y)
+void RGWGetObjLegalHold::execute(optional_yield y, bool null_vid)
 {
   if (!s->bucket->get_info().obj_lock_enabled()) {
     s->err.message = "bucket object lock not configured";
@@ -8700,7 +8701,7 @@ void RGWGetObjLegalHold::execute(optional_yield y)
   return;
 }
 
-void RGWGetClusterStat::execute(optional_yield y)
+void RGWGetClusterStat::execute(optional_yield y, bool null_vid)
 {
   op_ret = driver->cluster_stat(stats_op);
 }
@@ -8718,7 +8719,7 @@ int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWGetBucketPolicyStatus::execute(optional_yield y)
+void RGWGetBucketPolicyStatus::execute(optional_yield y, bool null_vid)
 {
   isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl->is_public(this);
 }
@@ -8743,7 +8744,7 @@ int RGWPutBucketPublicAccessBlock::get_params(optional_yield y)
   return op_ret;
 }
 
-void RGWPutBucketPublicAccessBlock::execute(optional_yield y)
+void RGWPutBucketPublicAccessBlock::execute(optional_yield y, bool null_vid)
 {
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
@@ -8799,7 +8800,7 @@ int RGWGetBucketPublicAccessBlock::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWGetBucketPublicAccessBlock::execute(optional_yield y)
+void RGWGetBucketPublicAccessBlock::execute(optional_yield y, bool null_vid)
 {
   auto attrs = s->bucket_attrs;
   if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
@@ -8843,7 +8844,7 @@ int RGWDeleteBucketPublicAccessBlock::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y)
+void RGWDeleteBucketPublicAccessBlock::execute(optional_yield y, bool null_vid)
 {
   bufferlist data;
   op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);
@@ -8875,7 +8876,7 @@ int RGWPutBucketEncryption::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWPutBucketEncryption::execute(optional_yield y)
+void RGWPutBucketEncryption::execute(optional_yield y, bool null_vid)
 {
   RGWXMLDecoder::XMLParser parser;
   if (!parser.init()) {
@@ -8924,7 +8925,7 @@ int RGWGetBucketEncryption::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWGetBucketEncryption::execute(optional_yield y)
+void RGWGetBucketEncryption::execute(optional_yield y, bool null_vid)
 {
   const auto& attrs = s->bucket_attrs;
   if (auto aiter = attrs.find(RGW_ATTR_BUCKET_ENCRYPTION_POLICY);
@@ -8953,7 +8954,7 @@ int RGWDeleteBucketEncryption::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWDeleteBucketEncryption::execute(optional_yield y)
+void RGWDeleteBucketEncryption::execute(optional_yield y, bool null_vid)
 {
   bufferlist data;
   op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, data, nullptr, s->info, y);

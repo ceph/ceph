@@ -23,7 +23,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   int get_params(optional_yield y) override;
-  int send_response_data_error(optional_yield y) override;
+  int send_response_data_error(optional_yield y, bool null_vid) override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
 
   void set_custom_http_response(const int http_ret) {
@@ -84,7 +84,7 @@ public:
   }
   ~RGWStatAccount_ObjStore_SWIFT() override {}
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void send_response() override;
 };
 
@@ -243,7 +243,7 @@ public:
   RGWInfo_ObjStore_SWIFT() {}
   ~RGWInfo_ObjStore_SWIFT() override {}
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void send_response() override;
   static void list_swift_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
   static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
@@ -369,7 +369,7 @@ public:
 
   int error_handler(const int err_no,
                     std::string* const error_content,
-		    optional_yield y);
+		    optional_yield y, bool null_vid);
   int retarget_bucket(RGWOp* op, RGWOp** new_op);
   int retarget_object(RGWOp* op, RGWOp** new_op);
 };
@@ -435,8 +435,8 @@ public:
   using RGWHandler_REST_SWIFT::RGWHandler_REST_SWIFT;
   ~RGWHandler_REST_Bucket_SWIFT() override = default;
 
-  int error_handler(int err_no, std::string *error_content, optional_yield y) override {
-    return website_handler->error_handler(err_no, error_content, y);
+  int error_handler(int err_no, std::string *error_content, optional_yield y, bool null_vid) override {
+    return website_handler->error_handler(err_no, error_content, y, null_vid);
   }
 
   int retarget(RGWOp* op, RGWOp** new_op, optional_yield) override {
@@ -474,8 +474,8 @@ public:
   ~RGWHandler_REST_Obj_SWIFT() override = default;
 
   int error_handler(int err_no, std::string *error_content,
-		    optional_yield y) override {
-    return website_handler->error_handler(err_no, error_content, y);
+		    optional_yield y, bool null_vid) override {
+    return website_handler->error_handler(err_no, error_content, y, null_vid);
   }
 
   int retarget(RGWOp* op, RGWOp** new_op, optional_yield) override {

@@ -48,6 +48,7 @@ namespace {
 
   uint32_t owner_uid = 867;
   uint32_t owner_gid = 5309;
+  bool null_vid = false;
 
   uint32_t create_mask = RGW_SETATTR_UID | RGW_SETATTR_GID | RGW_SETATTR_MODE;
 
@@ -218,7 +219,7 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET) {
   st.st_mode = 755;
 
   (void) rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		    nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+		    nullptr, 0, RGW_LOOKUP_FLAG_NONE, null_vid);
   if (! bucket_fh) {
     if (do_create) {
       struct stat st;
@@ -228,7 +229,7 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET) {
       st.st_mode = 755;
 
       ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
-		      &bucket_fh, RGW_MKDIR_FLAG_NONE);
+		      &bucket_fh, RGW_MKDIR_FLAG_NONE, null_vid);
       ASSERT_EQ(ret, 0);
     }
   }
@@ -236,11 +237,11 @@ TEST(LibRGW, MARKER1_SETUP_BUCKET) {
   ASSERT_NE(bucket_fh, nullptr);
 
   (void) rgw_lookup(fs, bucket_fh, marker_dir.c_str(), &marker_fh,
-		    nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+		    nullptr, 0, RGW_LOOKUP_FLAG_NONE, null_vid);
   if (! marker_fh) {
     if (do_create) {
       ret = rgw_mkdir(fs, bucket_fh, marker_dir.c_str(), &st, create_mask,
-		      &marker_fh, RGW_MKDIR_FLAG_NONE);
+		      &marker_fh, RGW_MKDIR_FLAG_NONE, null_vid);
       ASSERT_EQ(ret, 0);
     }
   }
@@ -262,7 +263,7 @@ TEST(LibRGW, MARKER1_SETUP_OBJECTS)
       obj_rec obj{object_name, nullptr, marker_fh, nullptr};
       // lookup object--all operations are by handle
       ret = rgw_lookup(fs, marker_fh, obj.name.c_str(), &obj.fh,
-		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE, null_vid);
       ASSERT_EQ(ret, 0);
       obj.rgw_fh = get_rgwfh(obj.fh);
       // open object--open transaction
@@ -334,7 +335,7 @@ TEST(LibRGW, MARKER1_READDIR)
     do {
       ASSERT_TRUE(dvec.count <= max_iterations);
       int ret = rgw_readdir(fs, marker_fh, &offset, r2_cb, &dvec, &eof,
-			    RGW_READDIR_FLAG_DOTDOT);
+			    RGW_READDIR_FLAG_DOTDOT, null_vid);
       ASSERT_EQ(ret, 0);
       ASSERT_GE(dvec.obj_names.size(), 0);
       ASSERT_EQ(offset, get<1>(dvec.obj_names.back())); // cookie check
@@ -366,7 +367,7 @@ TEST(LibRGW, MARKER2_READDIR)
       int ret = rgw_readdir2(fs, marker_fh,
 			     (marker.length() > 0) ? marker.c_str() : nullptr,
 			     r2_cb, &dvec, &eof,
-			     RGW_READDIR_FLAG_NONE);
+			     RGW_READDIR_FLAG_NONE, null_vid);
       ASSERT_EQ(ret, 0);
       ASSERT_GE(dvec.obj_names.size(), 0);
       marker = get<0>(dvec.obj_names.back());
@@ -387,7 +388,7 @@ TEST(LibRGW, MARKER1_OBJ_CLEANUP)
 	  std::cout << "unlinking: " << bucket_name << ":" << obj.name
 		    << std::endl;
 	}
-	rc = rgw_unlink(fs, marker_fh, obj.name.c_str(), RGW_UNLINK_FLAG_NONE);
+	rc = rgw_unlink(fs, marker_fh, obj.name.c_str(), RGW_UNLINK_FLAG_NONE, null_vid);
       }
       rc = rgw_fh_rele(fs, obj.fh, 0 /* flags */);
       ASSERT_EQ(rc, 0);

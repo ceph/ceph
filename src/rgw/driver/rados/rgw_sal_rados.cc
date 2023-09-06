@@ -405,7 +405,8 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 			       bool delete_children,
 			       bool forward_to_master,
 			       req_info* req_info,
-			       optional_yield y)
+			       optional_yield y,
+                               bool null_vid)
 {
   int ret;
 
@@ -424,7 +425,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
   do {
     results.objs.clear();
 
-    ret = list(dpp, params, 1000, results, y);
+    ret = list(dpp, params, 1000, results, y, null_vid);
     if (ret < 0) {
       return ret;
     }
@@ -445,7 +446,7 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
     }
   } while(results.is_truncated);
 
-  ret = abort_multiparts(dpp, store->ctx(), y);
+  ret = abort_multiparts(dpp, store->ctx(), y, null_vid);
   if (ret < 0) {
     return ret;
   }
@@ -503,7 +504,8 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
 					 keep_index_consistent,
 					 optional_yield y, const
-					 DoutPrefixProvider *dpp)
+					 DoutPrefixProvider *dpp,
+                                         bool null_vid)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -522,7 +524,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   if (ret < 0)
     return ret;
 
-  ret = abort_multiparts(dpp, cct, y);
+  ret = abort_multiparts(dpp, cct, y, null_vid);
   if (ret < 0) {
     return ret;
   }
@@ -539,7 +541,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   results.is_truncated = true;
 
   while (results.is_truncated) {
-    ret = list(dpp, params, listing_max_entries, results, y);
+    ret = list(dpp, params, listing_max_entries, results, y, null_vid);
     if (ret < 0)
       return ret;
 
@@ -592,7 +594,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
         } // for all shadow objs
 
         ret = store->getRados()->delete_obj_aio(dpp, head_obj, get_info(), astate,
-                                                handles, keep_index_consistent, y);
+                                                handles, keep_index_consistent, y, null_vid);
         if (ret < 0) {
           ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
           return ret;
@@ -627,7 +629,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   // this function can only be run if caller wanted children to be
   // deleted, so we can ignore the check for children as any that
   // remain are detritus from a prior bug
-  ret = remove_bucket(dpp, true, false, nullptr, y);
+  ret = remove_bucket(dpp, true, false, nullptr, y, null_vid);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << this << dendl;
     return ret;
@@ -780,9 +782,9 @@ bool RadosBucket::is_owner(User* user)
   return (info.owner.compare(user->get_id()) == 0);
 }
 
-int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y, bool null_vid)
 {
-  return store->getRados()->check_bucket_empty(dpp, info, y);
+  return store->getRados()->check_bucket_empty(dpp, info, y, null_vid);
 }
 
 int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
@@ -890,7 +892,7 @@ std::unique_ptr<Object> RadosBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<RadosObject>(this->store, k, this);
 }
 
-int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y)
+int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y, bool null_vid)
 {
   RGWRados::Bucket target(store->getRados(), get_info());
   if (params.shard_id >= 0) {
@@ -910,7 +912,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
-  int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
+  int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y, null_vid);
   if (ret >= 0) {
     results.next_marker = list_op.get_next_marker();
     params.marker = results.next_marker;
@@ -935,7 +937,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				 const int& max_uploads,
 				 vector<std::unique_ptr<MultipartUpload>>& uploads,
 				 map<string, bool> *common_prefixes,
-				 bool *is_truncated, optional_yield y)
+				 bool *is_truncated, optional_yield y, bool null_vid)
 {
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
@@ -947,7 +949,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   params.ns = RGW_OBJ_NS_MULTIPART;
   params.access_list_filter = &mp_filter;
 
-  int ret = list(dpp, params, max_uploads, results, y);
+  int ret = list(dpp, params, max_uploads, results, y, null_vid);
 
   if (ret < 0)
     return ret;
@@ -971,7 +973,7 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 }
 
 int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
-				  CephContext* cct, optional_yield y)
+				  CephContext* cct, optional_yield y, bool null_vid)
 {
   constexpr int max = 1000;
   int ret, num_deleted = 0;
@@ -984,7 +986,7 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
   do {
     ret = list_multiparts(dpp, empty_prefix, marker, empty_delim,
-			  max, uploads, nullptr, &is_truncated, y);
+			  max, uploads, nullptr, &is_truncated, y, null_vid);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << __func__ <<
 	" ERROR : calling list_bucket_multiparts; ret=" << ret <<
@@ -2371,7 +2373,7 @@ int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 }
 
 int RadosObject::swift_versioning_restore(bool& restored,
-					  const DoutPrefixProvider* dpp, optional_yield y)
+					  const DoutPrefixProvider* dpp, optional_yield y, bool null_vid)
 {
   rgw_obj obj = get_obj();
   return store->getRados()->swift_versioning_restore(*rados_ctx,
@@ -2379,7 +2381,7 @@ int RadosObject::swift_versioning_restore(bool& restored,
 						     bucket->get_info(),
 						     obj,
 						     restored,
-						     dpp, y);
+						     dpp, y, null_vid);
 }
 
 int RadosObject::swift_versioning_copy(const DoutPrefixProvider* dpp, optional_yield y)

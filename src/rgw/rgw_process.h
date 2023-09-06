@@ -94,7 +94,7 @@ public:
   const RGWProcessEnv& get_env() const { return env; }
 
   virtual void run() = 0;
-  virtual void handle_request(const DoutPrefixProvider *dpp, RGWRequest *req) = 0;
+  virtual void handle_request(const DoutPrefixProvider *dpp, RGWRequest *req, bool null_vid) = 0;
 
   void pause() {
     m_tp.pause();
@@ -131,7 +131,7 @@ public:
     : RGWProcess(cct, env, num_threads, std::move(uri_prefix), _conf) {}
   void run() override;
   void checkpoint();
-  void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override;
+  void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req, bool null_vid) override;
   void gen_request(const std::string& method, const std::string& resource,
 		  int content_length, std::atomic<bool>* fail_flag);
 

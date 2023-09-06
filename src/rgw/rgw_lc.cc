@@ -215,9 +215,10 @@ void *RGWLC::LCWorker::entry() {
   do {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
     utime_t start = ceph_clock_now();
+    bool null_vid = false;
     if (should_work(start)) {
       ldpp_dout(dpp, 2) << "life cycle: start" << dendl;
-      int r = lc->process(this, all_buckets, false /* once */);
+      int r = lc->process(this, all_buckets, null_vid, false /* once */);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "ERROR: do life cycle process() returned error r="
 			  << r << dendl;
@@ -383,12 +384,12 @@ public:
     list_params.prefix = prefix;
   }
 
-  int init(const DoutPrefixProvider *dpp) {
-    return fetch(dpp);
+  int init(const DoutPrefixProvider *dpp, bool null_vid) {
+    return fetch(dpp, null_vid);
   }
 
-  int fetch(const DoutPrefixProvider *dpp) {
-    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield);
+  int fetch(const DoutPrefixProvider *dpp, bool null_vid) {
+    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield, null_vid);
     if (ret < 0) {
       return ret;
     }
@@ -402,7 +403,7 @@ public:
     std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
   }
 
-  bool get_obj(const DoutPrefixProvider *dpp, rgw_bucket_dir_entry **obj,
+  bool get_obj(const DoutPrefixProvider *dpp, rgw_bucket_dir_entry **obj, bool null_vid,
 	       std::function<void(void)> fetch_barrier
 	       = []() { /* nada */}) {
     if (obj_iter == list_results.objs.end()) {
@@ -412,7 +413,7 @@ public:
       } else {
 	fetch_barrier();
         list_params.marker = pre_obj.key;
-        int ret = fetch(dpp);
+        int ret = fetch(dpp, null_vid);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret
 				 << dendl;
@@ -813,7 +814,7 @@ static inline bool worker_should_stop(time_t stop_at, bool once)
 
 int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 				       const multimap<string, lc_op>& prefix_map,
-				       LCWorker* worker, time_t stop_at, bool once)
+				       LCWorker* worker, time_t stop_at, bool once, bool null_vid)
 {
   MultipartMetaFilter mp_filter;
   int ret;
@@ -876,7 +877,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
     do {
       auto offset = 0;
       results.objs.clear();
-      ret = target->list(this, params, 1000, results, null_yield);
+      ret = target->list(this, params, 1000, results, null_yield, null_vid);
       if (ret < 0) {
           if (ret == (-ENOENT))
             return 0;
@@ -1508,7 +1509,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 }
 
 int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
-			     time_t stop_at, bool once)
+			     time_t stop_at, bool once, bool null_vid)
 {
   RGWLifecycleConfiguration  config(cct);
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -1633,7 +1634,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       continue;
     }
 
-    ret = ol.init(this);
+    ret = ol.init(this, null_vid);
     if (ret < 0) {
       if (ret == (-ENOENT))
         return 0;
@@ -1645,7 +1646,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     LCOpRule orule(oenv);
     orule.build(); // why can't ctor do it?
     rgw_bucket_dir_entry* o{nullptr};
-    for (auto offset = 0; ol.get_obj(this, &o /* , fetch_barrier */); ++offset, ol.next()) {
+    for (auto offset = 0; ol.get_obj(this, &o /* , fetch_barrier */, null_vid); ++offset, ol.next()) {
       orule.update();
       std::tuple<LCOpRule, rgw_bucket_dir_entry> t1 = {orule, *o};
       worker->workpool->enqueue(WorkItem{t1});
@@ -1661,7 +1662,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     worker->workpool->drain();
   }
 
-  ret = handle_multipart_expiration(bucket.get(), prefix_map, worker, stop_at, once);
+  ret = handle_multipart_expiration(bucket.get(), prefix_map, worker, stop_at, once, null_vid);
   return ret;
 }
 
@@ -1829,7 +1830,7 @@ static std::string get_bucket_lc_key(const rgw_bucket& bucket){
 
 int RGWLC::process(LCWorker* worker,
 		   const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
-		   bool once = false)
+		   bool null_vid, bool once = false)
 {
   int ret = 0;
   int max_secs = cct->_conf->rgw_lc_lock_max_time;
@@ -1841,7 +1842,7 @@ int RGWLC::process(LCWorker* worker,
      * for this bucket) */
     auto bucket_lc_key = get_bucket_lc_key(optional_bucket->get_key());
     auto index = get_lc_index(driver->ctx(), bucket_lc_key);
-    ret = process_bucket(index, max_secs, worker, bucket_lc_key, once);
+    ret = process_bucket(index, max_secs, worker, bucket_lc_key, once, null_vid);
     return ret;
   } else {
     /* generate an index-shard sequence unrelated to any other
@@ -1849,7 +1850,7 @@ int RGWLC::process(LCWorker* worker,
     std::string all_buckets{""};
     vector<int> shard_seq = random_sequence(max_objs);
     for (auto index : shard_seq) {
-      ret = process(index, max_secs, worker, once);
+      ret = process(index, max_secs, worker, once, null_vid);
       if (ret < 0)
 	return ret;
     }
@@ -1890,7 +1891,7 @@ time_t RGWLC::thread_stop_at()
 
 int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 			  const std::string& bucket_entry_marker,
-			  bool once = false)
+			  bool null_vid, bool once = false)
 {
   ldpp_dout(this, 5) << "RGWLC::process_bucket(): ENTER: "
 	  << "index: " << index << " worker ix: " << worker->ix
@@ -1961,7 +1962,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     << dendl;
 
   lock.unlock();
-  ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once);
+  ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once, null_vid);
   bucket_lc_post(index, max_lock_secs, *entry, ret, worker);
 
   return ret;
@@ -2037,7 +2038,7 @@ exit:
 } /* advance head */
 
 int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
-		   bool once = false)
+		   bool null_vid, bool once = false)
 {
   int ret{0};
   const auto& lc_shard = obj_names[index];
@@ -2230,7 +2231,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     /* drop lock so other instances can make progress while this
      * bucket is being processed */
     lock->unlock();
-    ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once);
+    ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once, null_vid);
 
     /* postamble */
     //bucket_lc_post(index, max_lock_secs, entry, ret, worker);

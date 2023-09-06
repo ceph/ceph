@@ -66,9 +66,9 @@ namespace rgw {
     } /* enqueue_req */
 
     /* "regular" requests */
-    void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req) override; // async handler, deletes req
-    int process_request(RGWLibRequest* req);
-    int process_request(RGWLibRequest* req, RGWLibIO* io);
+    void handle_request(const DoutPrefixProvider *dpp, RGWRequest* req, bool null_vid) override; // async handler, deletes req
+    int process_request(RGWLibRequest* req, bool null_vid);
+    int process_request(RGWLibRequest* req, RGWLibIO* io, bool null_vid);
     void set_access_key(RGWAccessKey& key) { access_key = key; }
 
     /* requests w/continue semantics */
@@ -96,8 +96,8 @@ namespace rgw {
       static_cast<RGWLibProcess*>(pprocess)->enqueue_req(req); // async
     }
 
-    inline int execute_req(RGWLibRequest* req) {
-      return static_cast<RGWLibProcess*>(pprocess)->process_request(req); // !async
+    inline int execute_req(RGWLibRequest* req, bool null_vid) {
+      return static_cast<RGWLibProcess*>(pprocess)->process_request(req, null_vid); // !async
     }
 
     inline int start_req(RGWLibContinuedReq* req) {

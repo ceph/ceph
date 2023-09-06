@@ -187,7 +187,7 @@ int RGWCreateRole::get_params()
   return 0;
 }
 
-void RGWCreateRole::execute(optional_yield y)
+void RGWCreateRole::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -313,7 +313,7 @@ int RGWDeleteRole::get_params()
   return 0;
 }
 
-void RGWDeleteRole::execute(optional_yield y)
+void RGWDeleteRole::execute(optional_yield y, bool null_vid)
 {
   bool is_master = true;
   int master_op_ret = 0;
@@ -410,7 +410,7 @@ int RGWGetRole::get_params()
   return 0;
 }
 
-void RGWGetRole::execute(optional_yield y)
+void RGWGetRole::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -459,7 +459,7 @@ int RGWModifyRoleTrustPolicy::get_params()
   return 0;
 }
 
-void RGWModifyRoleTrustPolicy::execute(optional_yield y)
+void RGWModifyRoleTrustPolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -532,7 +532,7 @@ int RGWListRoles::get_params()
   return 0;
 }
 
-void RGWListRoles::execute(optional_yield y)
+void RGWListRoles::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -583,7 +583,7 @@ int RGWPutRolePolicy::get_params()
   return 0;
 }
 
-void RGWPutRolePolicy::execute(optional_yield y)
+void RGWPutRolePolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -644,7 +644,7 @@ int RGWGetRolePolicy::get_params()
   return 0;
 }
 
-void RGWGetRolePolicy::execute(optional_yield y)
+void RGWGetRolePolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -682,7 +682,7 @@ int RGWListRolePolicies::get_params()
   return 0;
 }
 
-void RGWListRolePolicies::execute(optional_yield y)
+void RGWListRolePolicies::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -716,7 +716,7 @@ int RGWDeleteRolePolicy::get_params()
   return 0;
 }
 
-void RGWDeleteRolePolicy::execute(optional_yield y)
+void RGWDeleteRolePolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -785,7 +785,7 @@ int RGWTagRole::get_params()
   return 0;
 }
 
-void RGWTagRole::execute(optional_yield y)
+void RGWTagRole::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -852,7 +852,7 @@ int RGWListRoleTags::get_params()
   return 0;
 }
 
-void RGWListRoleTags::execute(optional_yield y)
+void RGWListRoleTags::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -899,7 +899,7 @@ int RGWUntagRole::get_params()
   return 0;
 }
 
-void RGWUntagRole::execute(optional_yield y)
+void RGWUntagRole::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -969,7 +969,7 @@ int RGWUpdateRole::get_params()
   return 0;
 }
 
-void RGWUpdateRole::execute(optional_yield y)
+void RGWUpdateRole::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {

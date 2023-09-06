@@ -33,4 +33,5 @@ extern int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver,
 					const std::string& marker,
 					std::string *err_msg,
 					const DoutPrefixProvider *dpp,
-					optional_yield y);
+					optional_yield y,
+                                        bool null_vid);

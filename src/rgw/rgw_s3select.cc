@@ -281,8 +281,9 @@ RGWSelectObj_ObjStore_S3::RGWSelectObj_ObjStore_S3():
     return get_obj_size();
   };
   fp_range_req = [&](int64_t start, int64_t len, void* buff, optional_yield* y) {
+    bool null_vid = false;
     ldout(s->cct, 10) << "S3select: range-request start: " << start << " length: " << len << dendl;
-    auto status = range_request(start, len, buff, *y);
+    auto status = range_request(start, len, buff, *y, null_vid);
     return status;
   };
 #ifdef _ARROW_EXIST
@@ -680,7 +681,7 @@ size_t RGWSelectObj_ObjStore_S3::get_obj_size()
   return s->obj_size;
 }
 
-int RGWSelectObj_ObjStore_S3::range_request(int64_t ofs, int64_t len, void* buff, optional_yield y)
+int RGWSelectObj_ObjStore_S3::range_request(int64_t ofs, int64_t len, void* buff, optional_yield y, bool null_vid)
 {
   //purpose: implementation for arrow::ReadAt, this may take several async calls.
   //send_response_date(call_back) accumulate buffer, upon completion control is back to ReadAt.
@@ -691,7 +692,7 @@ int RGWSelectObj_ObjStore_S3::range_request(int64_t ofs, int64_t len, void* buff
   requested_buffer.clear();
   m_request_range = len;
   ldout(s->cct, 10) << "S3select: calling execute(async):" << " request-offset :" << ofs << " request-length :" << len << " buffer size : " << requested_buffer.size() << dendl;
-  RGWGetObj::execute(y);
+  RGWGetObj::execute(y, null_vid);
   if (buff) {
     memcpy(buff, requested_buffer.data(), len);
   }
@@ -699,7 +700,7 @@ int RGWSelectObj_ObjStore_S3::range_request(int64_t ofs, int64_t len, void* buff
   return len;
 }
 
-void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
+void RGWSelectObj_ObjStore_S3::execute(optional_yield y, bool null_vid)
 {
   int status = 0;
   char parquet_magic[4];
@@ -711,7 +712,7 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
 #endif
   if (m_parquet_type) {
     //parquet processing
-    range_request(0, 4, parquet_magic, y);
+    range_request(0, 4, parquet_magic, y, null_vid);
     if (memcmp(parquet_magic, parquet_magic1, 4) && memcmp(parquet_magic, parquet_magicE, 4)) {
       ldout(s->cct, 10) << s->object->get_name() << " does not contain parquet magic" << dendl;
       op_ret = -ERR_INVALID_REQUEST;
@@ -735,13 +736,13 @@ void RGWSelectObj_ObjStore_S3::execute(optional_yield y)
 	  // fetch more than requested(m_scan_offset), that additional bytes are scanned for end of row, 
 	  // thus the additional length will be processed, and no broken row for Trino.
 	  // assumption: row is smaller than m_scan_offset. (a different approach is to request for additional range)
-	    range_request(m_start_scan_sz, m_requested_range + m_scan_offset, nullptr, y);
+	    range_request(m_start_scan_sz, m_requested_range + m_scan_offset, nullptr, y, null_vid);
 	  } else {
-	    range_request(m_start_scan_sz, m_requested_range, nullptr, y);
+	    range_request(m_start_scan_sz, m_requested_range, nullptr, y, null_vid);
 	  }
 
 	} else {
-	  RGWGetObj::execute(y);
+	  RGWGetObj::execute(y, null_vid);
 	}
   }//if (m_parquet_type)
 }

@@ -112,7 +112,7 @@ public:
   virtual int read_permissions(RGWOp* op, optional_yield y) = 0;
   virtual int authorize(const DoutPrefixProvider* dpp, optional_yield y) = 0;
   virtual int postauth_init(optional_yield y) = 0;
-  virtual int error_handler(int err_no, std::string* error_content, optional_yield y);
+  virtual int error_handler(int err_no, std::string* error_content, optional_yield y, bool null_vid);
   virtual void dump(const std::string& code, const std::string& message) const {}
 
   virtual bool supports_quota() {
@@ -260,7 +260,7 @@ public:
   virtual int verify_permission(optional_yield y) = 0;
   virtual int verify_op_mask();
   virtual void pre_exec() {}
-  virtual void execute(optional_yield y) = 0;
+  virtual void execute(optional_yield y, bool null_vid) = 0;
   virtual void send_response() {}
   virtual void complete() {
     send_response();
@@ -270,7 +270,7 @@ public:
 
   virtual uint32_t op_mask() { return 0; }
 
-  virtual int error_handler(int err_no, std::string *error_content, optional_yield y);
+  virtual int error_handler(int err_no, std::string *error_content, optional_yield y, bool null_vid);
 
   // implements DoutPrefixProvider
   std::ostream& gen_prefix(std::ostream& out) const override;
@@ -412,7 +412,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   int parse_range();
   int read_user_manifest_part(
     rgw::sal::Bucket* bucket,
@@ -422,13 +422,13 @@ public:
     const off_t start_ofs,
     const off_t end_ofs,
     bool swift_slo);
-  int handle_user_manifest(const char *prefix, optional_yield y);
+  int handle_user_manifest(const char *prefix, optional_yield y, bool null_vid);
   int handle_slo_manifest(bufferlist& bl, optional_yield y);
 
   int get_data_cb(bufferlist& bl, off_t ofs, off_t len);
 
   virtual int get_params(optional_yield y) = 0;
-  virtual int send_response_data_error(optional_yield y) = 0;
+  virtual int send_response_data_error(optional_yield y, bool null_vid) = 0;
   virtual int send_response_data(bufferlist& bl, off_t ofs, off_t len) = 0;
 
   const char* name() const override { return "get_obj"; }
@@ -468,7 +468,7 @@ class RGWGetObjTags : public RGWOp {
   bool has_tags{false};
  public:
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void pre_exec() override;
 
   virtual void send_response_data(bufferlist& bl) = 0;
@@ -483,7 +483,7 @@ class RGWPutObjTags : public RGWOp {
   bufferlist tags_bl;
  public:
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
@@ -497,7 +497,7 @@ class RGWDeleteObjTags: public RGWOp {
  public:
   void pre_exec() override;
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "delete_obj_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -510,7 +510,7 @@ protected:
   bool has_tags{false};
 public:
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void pre_exec() override;
 
   virtual void send_response_data(bufferlist& bl) = 0;
@@ -525,7 +525,7 @@ protected:
   bufferlist in_data;
 public:
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual void send_response() override = 0;
   virtual int get_params(const DoutPrefixProvider *dpp, optional_yield y) = 0;
@@ -538,7 +538,7 @@ class RGWDeleteBucketTags : public RGWOp {
 public:
   void pre_exec() override;
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "delete_bucket_tags"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -550,7 +550,7 @@ struct rgw_sync_policy_group;
 class RGWGetBucketReplication : public RGWOp {
 public:
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void pre_exec() override;
 
   virtual void send_response_data() = 0;
@@ -565,7 +565,7 @@ protected:
   std::vector<rgw_sync_policy_group> sync_policy_groups;
 public:
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
@@ -580,7 +580,7 @@ protected:
 public:
   void pre_exec() override;
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "delete_bucket_replication"; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_DELETE; }
@@ -634,8 +634,8 @@ public:
                            std::map<std::string, bufferlist>& battrs,
                            ACLOwner& bucket_owner /* out */,
 			   optional_yield y);
-    bool delete_single(const acct_path_t& path, optional_yield y);
-    bool delete_chunk(const std::list<acct_path_t>& paths, optional_yield y);
+    bool delete_single(const acct_path_t& path, optional_yield y, bool null_vid);
+    bool delete_chunk(const std::list<acct_path_t>& paths, optional_yield y, bool null_vid);
   };
   /* End of Deleter subclass */
 
@@ -651,7 +651,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_data(std::list<acct_path_t>& items,
                        bool * is_truncated) = 0;
@@ -726,7 +726,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "bulk_upload"; }
 
@@ -832,7 +832,7 @@ public:
   }
 
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   virtual void handle_listing_chunk(rgw::sal::BucketList&& buckets) {
@@ -873,7 +873,7 @@ public:
   }
 
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override {}
@@ -893,7 +893,7 @@ public:
   RGWStatAccount() = default;
 
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "stat_account"; }
@@ -929,7 +929,7 @@ public:
 		    allow_unordered(false), shard_id(-1) {}
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
     RGWOp::init(driver, s, h);
@@ -946,7 +946,7 @@ class RGWGetBucketLogging : public RGWOp {
 public:
   RGWGetBucketLogging() {}
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield) override { }
+  void execute(optional_yield, bool null_vid) override { }
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_logging"; }
@@ -959,7 +959,7 @@ public:
   RGWGetBucketLocation() {}
   ~RGWGetBucketLocation() override {}
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield) override { }
+  void execute(optional_yield, bool null_vid) override { }
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_location"; }
@@ -977,7 +977,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_versioning"; }
@@ -1003,7 +1003,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) { return 0; }
 
@@ -1019,7 +1019,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_bucket_website"; }
@@ -1036,7 +1036,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) { return 0; }
 
@@ -1052,7 +1052,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket_website"; }
@@ -1067,7 +1067,7 @@ protected:
 public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "stat_bucket"; }
@@ -1103,7 +1103,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
     RGWOp::init(driver, s, h);
     policy.set_ctx(s->cct);
@@ -1126,7 +1126,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket"; }
@@ -1270,7 +1270,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   /* this is for cases when copying data from other object */
   virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
@@ -1343,7 +1343,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_encrypt_filter(std::unique_ptr<rgw::sal::DataProcessor> *filter,
                                  rgw::sal::DataProcessor *cb) {
@@ -1382,7 +1382,7 @@ public:
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override { }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -1421,7 +1421,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -1447,7 +1447,7 @@ public:
   }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -1480,8 +1480,8 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
-  int handle_slo_manifest(bufferlist& bl, optional_yield y);
+  void execute(optional_yield y, bool null_vid) override;
+  int handle_slo_manifest(bufferlist& bl, optional_yield y, bool null_vid);
 
   virtual int get_params(optional_yield y) { return 0; }
   void send_response() override = 0;
@@ -1575,7 +1575,7 @@ public:
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void progress_cb(off_t ofs);
 
   virtual int check_storage_class(const rgw_placement_rule& src_placement) {
@@ -1601,7 +1601,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_acls"; }
@@ -1620,7 +1620,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_policy_from_state(rgw::sal::Driver* driver, req_state *s, std::stringstream& ss) { return 0; }
   virtual int get_params(optional_yield y) = 0;
@@ -1639,7 +1639,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield) override = 0;
+  void execute(optional_yield, bool null_vid) override = 0;
 
   void send_response() override = 0;
   const char* name() const override { return "get_lifecycle"; }
@@ -1670,7 +1670,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
 //  virtual int get_policy_from_state(RGWRados* driver, req_state *s, std::stringstream& ss) { return 0; }
   virtual int get_params(optional_yield y) = 0;
@@ -1685,7 +1685,7 @@ public:
   RGWDeleteLC() = default;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_lifecycle"; }
@@ -1700,7 +1700,7 @@ public:
   RGWGetCORS() {}
 
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_cors"; }
@@ -1718,7 +1718,7 @@ public:
   ~RGWPutCORS() override {}
 
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -1734,7 +1734,7 @@ public:
   RGWDeleteCORS() {}
 
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_cors"; }
@@ -1754,7 +1754,7 @@ public:
 
   int verify_permission(optional_yield y) override {return 0;}
   int validate_cors_request(RGWCORSConfiguration *cc);
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void get_response_params(std::string& allowed_hdrs, std::string& exp_hdrs, unsigned *max_age);
   void send_response() override = 0;
   const char* name() const override { return "options_cors"; }
@@ -1772,7 +1772,7 @@ public:
 
   int get_params(optional_yield y);
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   const char* name() const override { return "put_bucket_encryption"; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_ENCRYPTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1786,7 +1786,7 @@ public:
 
   int get_params(optional_yield y);
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   const char* name() const override { return "get_bucket_encryption"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_ENCRYPTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -1800,7 +1800,7 @@ public:
 
   int get_params(optional_yield y);
   int verify_permission(optional_yield y) override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   const char* name() const override { return "delete_bucket_encryption"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_ENCRYPTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
@@ -1815,7 +1815,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "get_request_payment"; }
@@ -1832,7 +1832,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) { return 0; }
 
@@ -1858,7 +1858,7 @@ public:
   }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -1883,7 +1883,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   bool check_previously_completed(const RGWMultiCompleteUpload* parts);
   void complete() override;
 
@@ -1902,7 +1902,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "abort_multipart"; }
@@ -1933,7 +1933,7 @@ public:
   }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -1972,7 +1972,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -1991,7 +1991,7 @@ public:
     return 0;
   }
 
-  void execute(optional_yield) override {
+  void execute(optional_yield, bool null_vid) override {
     op_ret = 0;
   }
 
@@ -2016,7 +2016,7 @@ public:
     return 0;
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "get_health_check"; }
 
@@ -2074,7 +2074,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   virtual void send_status() = 0;
@@ -2307,7 +2307,7 @@ public:
 
   int verify_permission(optional_yield y);
   void pre_exec();
-  void execute(optional_yield y);
+  void execute(optional_yield y, bool null_vid);
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
@@ -2330,7 +2330,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
@@ -2355,7 +2355,7 @@ public:
 
   int verify_permission(optional_yield y);
   void pre_exec();
-  void execute(optional_yield y);
+  void execute(optional_yield y, bool null_vid);
 
   virtual int get_params() = 0;
   virtual void send_response() = 0;
@@ -2376,7 +2376,7 @@ public:
     return check_caps(s->user->get_info().caps);
   }
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "get_obj_layout"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_OBJ_LAYOUT; }
@@ -2394,7 +2394,7 @@ public:
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   int get_params(optional_yield y);
   const char* name() const override { return "put_bucket_policy"; }
   RGWOpType get_type() override {
@@ -2411,7 +2411,7 @@ public:
   uint32_t op_mask() override {
     return RGW_OP_TYPE_READ;
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   const char* name() const override { return "get_bucket_policy"; }
   RGWOpType get_type() override {
     return RGW_OP_GET_BUCKET_POLICY;
@@ -2426,7 +2426,7 @@ public:
   uint32_t op_mask() override {
     return RGW_OP_TYPE_WRITE;
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   int get_params(optional_yield y);
   const char* name() const override { return "delete_bucket_policy"; }
   RGWOpType get_type() override {
@@ -2444,7 +2444,7 @@ public:
   ~RGWPutBucketObjectLock() {}
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_bucket_object_lock"; }
@@ -2456,7 +2456,7 @@ class RGWGetBucketObjectLock : public RGWOp {
 public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OBJ_LOCK; }
@@ -2473,7 +2473,7 @@ public:
   RGWPutObjRetention():bypass_perm(true), bypass_governance_mode(false) {}
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_obj_retention"; }
@@ -2487,7 +2487,7 @@ protected:
 public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_obj_retention"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_RETENTION; }
@@ -2501,7 +2501,7 @@ protected:
 public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "put_obj_legal_hold"; }
@@ -2515,7 +2515,7 @@ protected:
 public:
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   virtual void send_response() override = 0;
   const char* name() const override {return "get_obj_legal_hold"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_LEGAL_HOLD; }
@@ -2531,7 +2531,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   virtual int get_params(optional_yield y) = 0;
   const char* name() const override { return "config_bucket_meta_search"; }
@@ -2545,7 +2545,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield) override {}
+  void execute(optional_yield, bool null_vid) override {}
 
   const char* name() const override { return "get_bucket_meta_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_META_SEARCH; }
@@ -2558,7 +2558,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "delete_bucket_meta_search"; }
   virtual RGWOpType delete_type() { return RGW_OP_DEL_BUCKET_META_SEARCH; }
@@ -2577,7 +2577,7 @@ public:
   int verify_permission(optional_yield) override {return 0;}
   virtual void send_response() override = 0;
   virtual int get_params(optional_yield y) = 0;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   const char* name() const override { return "get_cluster_stat"; }
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
@@ -2590,7 +2590,7 @@ public:
   const char* name() const override { return "get_bucket_policy_status"; }
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_POLICY_STATUS; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2604,7 +2604,7 @@ public:
   virtual RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   int get_params(optional_yield y);
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2617,7 +2617,7 @@ public:
   virtual RGWOpType get_type() override { return RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
   int get_params(optional_yield y);
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };
 
@@ -2630,7 +2630,7 @@ public:
   virtual RGWOpType get_type() override { return RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK; }
   virtual uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
   int get_params(optional_yield y);
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void send_response() override;
   dmc::client_id dmclock_client() override { return dmc::client_id::metadata; }
 };

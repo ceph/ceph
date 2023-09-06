@@ -116,7 +116,7 @@ int RGWCreateOIDCProvider::get_params()
   return 0;
 }
 
-void RGWCreateOIDCProvider::execute(optional_yield y)
+void RGWCreateOIDCProvider::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -143,7 +143,7 @@ void RGWCreateOIDCProvider::execute(optional_yield y)
 
 }
 
-void RGWDeleteOIDCProvider::execute(optional_yield y)
+void RGWDeleteOIDCProvider::execute(optional_yield y, bool null_vid)
 {
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_arn(provider_arn);
@@ -163,7 +163,7 @@ void RGWDeleteOIDCProvider::execute(optional_yield y)
   }
 }
 
-void RGWGetOIDCProvider::execute(optional_yield y)
+void RGWGetOIDCProvider::execute(optional_yield y, bool null_vid)
 {
   std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
   provider->set_arn(provider_arn);
@@ -206,7 +206,7 @@ int RGWListOIDCProviders::verify_permission(optional_yield y)
   return 0;
 }
 
-void RGWListOIDCProviders::execute(optional_yield y)
+void RGWListOIDCProviders::execute(optional_yield y, bool null_vid)
 {
   vector<std::unique_ptr<rgw::sal::RGWOIDCProvider>> result;
   op_ret = driver->get_oidc_providers(s, s->user->get_tenant(), result, y);

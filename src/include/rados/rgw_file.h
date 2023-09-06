@@ -104,7 +104,7 @@ void rgwfile_version(int *major, int *minor, int *extra);
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char *path,
 	      struct rgw_file_handle **fh,
-	      struct stat *st, uint32_t mask, uint32_t flags);
+	      struct stat *st, uint32_t mask, uint32_t flags, bool null_vid);
 
 /*
   lookup object by handle (NFS style)
@@ -159,7 +159,7 @@ int rgw_umount(struct rgw_fs *rgw_fs, uint32_t flags);
 int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
 	       struct rgw_statvfs *vfs_st,
-	       uint32_t flags);
+	       uint32_t flags, bool null_vid);
 
 
 /* XXX (get|set)attr mask bits */
@@ -179,7 +179,7 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	       const char *name, struct stat *st, uint32_t mask,
 	       struct rgw_file_handle **fh, uint32_t posix_flags,
-	       uint32_t flags);
+	       uint32_t flags, bool null_vid);
 
 /*
   create a symbolic link
@@ -188,7 +188,7 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
                const char *name, const char *link_path, struct stat *st, 
                uint32_t mask, struct rgw_file_handle **fh, uint32_t posix_flags,
-               uint32_t flags);
+               uint32_t flags, bool null_vid);
 
 /*
   create a new directory
@@ -198,7 +198,7 @@ int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh,
 	      const char *name, struct stat *st, uint32_t mask,
-	      struct rgw_file_handle **fh, uint32_t flags);
+	      struct rgw_file_handle **fh, uint32_t flags, bool null_vid);
 
 /*
   rename object
@@ -208,7 +208,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *olddir, const char* old_name,
 	       struct rgw_file_handle *newdir, const char* new_name,
-	       uint32_t flags);
+	       uint32_t flags, bool null_vid);
 
 /*
   remove file or directory
@@ -217,7 +217,7 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 
 int rgw_unlink(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh, const char* path,
-	       uint32_t flags);
+	       uint32_t flags, bool null_vid);
 
 /*
     read  directory content
@@ -232,13 +232,13 @@ typedef int (*rgw_readdir_cb)(const char *name, void *arg, uint64_t offset,
 int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
-		uint32_t flags);
+		uint32_t flags, bool null_vid);
 
 /* enumeration continuing from name */
 int rgw_readdir2(struct rgw_fs *rgw_fs,
 		 struct rgw_file_handle *parent_fh, const char *name,
 		 rgw_readdir_cb rcb, void *cb_arg, bool *eof,
-		 uint32_t flags);
+		 uint32_t flags, bool null_vid);
 
 /* project offset of dirent name */
 #define RGW_DIRENT_OFFSET_FLAG_NONE 0x0000
@@ -264,7 +264,7 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 
 int rgw_setattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st,
-		uint32_t mask, uint32_t flags);
+		uint32_t mask, uint32_t flags, bool null_vid);
 
 /*
    truncate file
@@ -304,7 +304,7 @@ int rgw_close(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_read(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, size_t *bytes_read, void *buffer,
-	     uint32_t flags);
+	     uint32_t flags, bool null_vid);
 
 /*
    read symbolic link
@@ -314,7 +314,7 @@ int rgw_read(struct rgw_fs *rgw_fs,
 int rgw_readlink(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, size_t *bytes_read, void *buffer,
-	     uint32_t flags);
+	     uint32_t flags, bool null_vid);
 
 /*
    write data to file
@@ -359,7 +359,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags);
 
 int rgw_writev(struct rgw_fs *rgw_fs,
-	       struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags);
+	       struct rgw_file_handle *fh, rgw_uio *uio, uint32_t flags, bool null_vid);
 
 /*
    sync written data
@@ -406,24 +406,24 @@ typedef int (*rgw_getxattr_cb)(rgw_xattrlist *attrs, void *arg,
 
 int rgw_getxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		  rgw_xattrlist *attrs, rgw_getxattr_cb cb, void *cb_arg,
-		  uint32_t flags);
+		  uint32_t flags, bool null_vid);
 
 #define RGW_LSXATTR_FLAG_NONE       0x0000
 #define RGW_LSXATTR_FLAG_STOP       0x0001
 
 int rgw_lsxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		 rgw_xattrstr *filter_prefix /* unimplemented for now */,
-		 rgw_getxattr_cb cb, void *cb_arg, uint32_t flags);
+		 rgw_getxattr_cb cb, void *cb_arg, uint32_t flags, bool null_vid);
 
 #define RGW_SETXATTR_FLAG_NONE      0x0000
 
 int rgw_setxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		 rgw_xattrlist *attrs, uint32_t flags);
+		 rgw_xattrlist *attrs, uint32_t flags, bool null_vid);
 
 #define RGW_RMXATTR_FLAG_NONE       0x0000
 
 int rgw_rmxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		 rgw_xattrlist *attrs, uint32_t flags);
+		 rgw_xattrlist *attrs, uint32_t flags, bool null_vid);
 
 #ifdef __cplusplus
 }

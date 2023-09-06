@@ -409,16 +409,17 @@ public:
 
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
   virtual int list(const DoutPrefixProvider* dpp, ListParams&, int,
-		   ListResults&, optional_yield y) override;
+		   ListResults&, optional_yield y, bool null_vid) override;
   virtual Attrs& get_attrs(void) override { return next->get_attrs(); }
   virtual int set_attrs(Attrs a) override { return next->set_attrs(a); }
   virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children,
 			    bool forward_to_master, req_info* req_info,
-			    optional_yield y) override;
+			    optional_yield y, bool null_vid) override;
   virtual int remove_bucket_bypass_gc(int concurrent_max, bool
 				      keep_index_consistent,
 				      optional_yield y, const
-				      DoutPrefixProvider *dpp) override;
+				      DoutPrefixProvider *dpp,
+                                      bool null_vid) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return next->get_acl(); }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;
@@ -445,7 +446,7 @@ public:
   virtual bool is_owner(User* user) override;
   virtual User* get_owner(void) override { return user; }
   virtual ACLOwner get_acl_owner(void) override { return next->get_acl_owner(); }
-  virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
+  virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y, bool null_vid) override;
   virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota,
 			  uint64_t obj_size, optional_yield y,
 			  bool check_size_only = false) override;
@@ -505,9 +506,9 @@ public:
 			      const int& max_uploads,
 			      std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 			      std::map<std::string, bool> *common_prefixes,
-			      bool *is_truncated, optional_yield y) override;
+			      bool *is_truncated, optional_yield y, bool null_vid) override;
   virtual int abort_multiparts(const DoutPrefixProvider* dpp,
-			       CephContext* cct, optional_yield y) override;
+			       CephContext* cct, optional_yield y, bool null_vid) override;
 
   int read_topics(rgw_pubsub_bucket_topics& notifications, RGWObjVersionTracker* objv_tracker, 
       optional_yield y, const DoutPrefixProvider *dpp) override { 
@@ -668,7 +669,7 @@ public:
   virtual void clear_instance() override { return next->clear_instance(); }
 
   virtual int swift_versioning_restore(bool& restored,   /* out */
-				       const DoutPrefixProvider* dpp, optional_yield y) override;
+				       const DoutPrefixProvider* dpp, optional_yield y, bool null_vid) override;
   virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
 				    optional_yield y) override;
 

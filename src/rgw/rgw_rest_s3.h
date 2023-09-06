@@ -50,7 +50,7 @@ public:
 
   int verify_requester(const rgw::auth::StrategyRegistry& auth_registry, optional_yield y) override;
   int get_params(optional_yield y) override;
-  int send_response_data_error(optional_yield y) override;
+  int send_response_data_error(optional_yield y, bool null_vid) override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   void set_custom_http_response(int http_ret) { custom_http_ret = http_ret; }
   int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
@@ -366,7 +366,7 @@ protected:
 public:
   RGWGetLC_ObjStore_S3() {}
   ~RGWGetLC_ObjStore_S3() override {}
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
  void send_response() override;
 };

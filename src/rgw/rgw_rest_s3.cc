@@ -282,9 +282,9 @@ int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_of
   }
 }
 
-int RGWGetObj_ObjStore_S3Website::send_response_data_error(optional_yield y)
+int RGWGetObj_ObjStore_S3Website::send_response_data_error(optional_yield y, bool null_vid)
 {
-  return RGWGetObj_ObjStore_S3::send_response_data_error(y);
+  return RGWGetObj_ObjStore_S3::send_response_data_error(y, null_vid);
 }
 
 int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
@@ -308,7 +308,7 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
   return RGWGetObj_ObjStore::get_params(y);
 }
 
-int RGWGetObj_ObjStore_S3::send_response_data_error(optional_yield y)
+int RGWGetObj_ObjStore_S3::send_response_data_error(optional_yield y, bool null_vid)
 {
   bufferlist bl;
   return send_response_data(bl, 0 , 0);
@@ -3632,7 +3632,7 @@ void RGWPutACLs_ObjStore_S3::send_response()
   dump_start(s);
 }
 
-void RGWGetLC_ObjStore_S3::execute(optional_yield y)
+void RGWGetLC_ObjStore_S3::execute(optional_yield y, bool null_vid)
 {
   config.set_ctx(s->cct);
 
@@ -5383,7 +5383,7 @@ RGWOp* RGWHandler_REST_S3Website::op_head()
   return get_obj_op(false);
 }
 
-int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string& errordoc_key, optional_yield y) {
+int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const string& errordoc_key, optional_yield y, bool null_vid) {
   int ret = 0;
   s->formatter->reset(); /* Try to throw it all away */
 
@@ -5451,14 +5451,15 @@ int RGWHandler_REST_S3Website::serve_errordoc(const DoutPrefixProvider *dpp, int
    *   x-amz-error-message: The specified key does not exist.
    *   x-amz-error-detail-Key: foo
    */
-  getop->execute(y);
+  getop->execute(y, null_vid);
   getop->complete();
   return 0;
 }
 
 int RGWHandler_REST_S3Website::error_handler(int err_no,
 					     string* error_content,
-					     optional_yield y) {
+					     optional_yield y,
+                                             bool null_vid) {
   int new_err_no = -1;
   rgw_http_errors::const_iterator r = rgw_http_s3_errors.find(err_no > 0 ? err_no : -err_no);
   int http_error_code = -1;
@@ -5499,7 +5500,7 @@ int RGWHandler_REST_S3Website::error_handler(int err_no,
        On success, it will return zero, and no further content should be sent to the socket
        On failure, we need the double-error handler
      */
-    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(s, http_error_code, s->bucket->get_info().website_conf.error_doc, y);
+    new_err_no = RGWHandler_REST_S3Website::serve_errordoc(s, http_error_code, s->bucket->get_info().website_conf.error_doc, y, null_vid);
     if (new_err_no != -1) {
       err_no = new_err_no;
     }

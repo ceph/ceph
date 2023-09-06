@@ -1745,7 +1745,8 @@ int RGWRados::Bucket::List::list_objects_ordered(
   std::vector<rgw_bucket_dir_entry> *result,
   std::map<std::string, bool> *common_prefixes,
   bool *is_truncated,
-  optional_yield y)
+  optional_yield y,
+  bool null_vid)
 {
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
@@ -1830,6 +1831,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
 					   &cls_filtered,
 					   &cur_marker,
                                            y,
+                                           null_vid,
 					   params.force_check_filter);
     if (r < 0) {
       return r;
@@ -2076,7 +2078,8 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 						   std::vector<rgw_bucket_dir_entry>* result,
 						   std::map<std::string, bool>* common_prefixes,
 						   bool* is_truncated,
-                                                   optional_yield y)
+                                                   optional_yield y,
+                                                   bool null_vid)
 {
   RGWRados *store = target->get_store();
   int shard_id = target->get_shard_id();
@@ -2130,7 +2133,8 @@ int RGWRados::Bucket::List::list_objects_unordered(const DoutPrefixProvider *dpp
 					     ent_list,
 					     &truncated,
 					     &cur_marker,
-                                             y);
+                                             y,
+                                             null_vid);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	" cls_bucket_list_unordered returned " << r << " for " <<
@@ -2771,7 +2775,8 @@ int RGWRados::on_last_entry_in_listing(const DoutPrefixProvider *dpp,
                                        RGWBucketInfo& bucket_info,
                                        const std::string& obj_prefix,
                                        const std::string& obj_delim,
-                                       std::function<int(const rgw_bucket_dir_entry&)> handler, optional_yield y)
+                                       std::function<int(const rgw_bucket_dir_entry&)> handler, optional_yield y,
+                                       bool null_vid)
 {
   RGWRados::Bucket target(this, bucket_info);
   RGWRados::Bucket::List list_op(&target);
@@ -2794,7 +2799,7 @@ int RGWRados::on_last_entry_in_listing(const DoutPrefixProvider *dpp,
     std::vector<rgw_bucket_dir_entry> entries(MAX_LIST_OBJS);
 
     int ret = list_op.list_objects(dpp, MAX_LIST_OBJS, &entries, nullptr,
-                                   &is_truncated, y);
+                                   &is_truncated, y, null_vid);
     if (ret < 0) {
       return ret;
     } else if (!entries.empty()) {
@@ -2914,7 +2919,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                                        RGWBucketInfo& bucket_info,
                                        rgw_obj& obj,
                                        bool& restored,
-                                       const DoutPrefixProvider *dpp, optional_yield y)
+                                       const DoutPrefixProvider *dpp, optional_yield y, bool null_vid)
 {
   if (! swift_versioning_enabled(bucket_info)) {
     return 0;
@@ -3016,7 +3021,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
                                                          % obj_name);
 
   return on_last_entry_in_listing(dpp, archive_binfo, prefix, std::string(),
-                                  handler, y);
+                                  handler, y, null_vid);
 }
 
 int RGWRados::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
@@ -4781,7 +4786,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   return 0;
 }
 
-int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
+int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y, bool null_vid)
 {
   constexpr uint NUM_ENTRIES = 1000u;
 
@@ -4804,7 +4809,8 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 				      ent_list,
 				      &is_truncated,
 				      &marker,
-                                      y);
+                                      y,
+                                      null_vid);
     if (r < 0) {
       return r;
     }
@@ -4827,7 +4833,7 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
  * bucket: the name of the bucket to delete
  * Returns 0 on success, -ERR# otherwise.
  */
-int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty)
+int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool null_vid, bool check_empty)
 {
   const rgw_bucket& bucket = bucket_info.bucket;
   RGWSI_RADOS::Pool index_pool;
@@ -4837,7 +4843,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     return r;
   
   if (check_empty) {
-    r = check_bucket_empty(dpp, bucket_info, y);
+    r = check_bucket_empty(dpp, bucket_info, y, null_vid);
     if (r < 0) {
       return r;
     }
@@ -5200,7 +5206,8 @@ int RGWRados::bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
                                                 rgw::sal::RadosStore* driver,
                                                 RGWBucketInfo& bucket_info,
                                                 const std::string& marker,
-                                                RGWFormatterFlusher& flusher)
+                                                RGWFormatterFlusher& flusher,
+                                                bool null_vid)
 {
   RGWRados::Bucket target(this, bucket_info);
   RGWRados::Bucket::List list_op(&target);
@@ -5223,7 +5230,7 @@ int RGWRados::bucket_resync_encrypted_multipart(const DoutPrefixProvider* dpp,
 
   do {
     int ret = list_op.list_objects(dpp, MAX_LIST_OBJS, &entries, nullptr,
-                                   &is_truncated, y);
+                                   &is_truncated, y, null_vid);
     if (ret < 0) {
       return ret;
     }
@@ -5350,6 +5357,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   const rgw_obj& src_obj = target->get_obj();
   const string& instance = src_obj.key.instance;
   rgw_obj obj = target->get_obj();
+  bool null_vid = false;
 
   if (instance == "null") {
     obj.key.instance.clear();
@@ -5511,7 +5519,7 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime, params.remove_objs, y);
+    r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime, params.remove_objs, y, null_vid);
 
     int ret = target->complete_atomic_modification(dpp, y);
     if (ret < 0) {
@@ -5578,7 +5586,7 @@ int RGWRados::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& o
 }
 
 int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
-			       const DoutPrefixProvider *dpp, optional_yield y)
+			       const DoutPrefixProvider *dpp, optional_yield y, bool null_vid)
 {
   std::string oid, key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
@@ -5593,7 +5601,7 @@ int RGWRados::delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
   RGWRados::Bucket bop(this, bucket_info);
   RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
-  return index_op.complete_del(dpp, -1 /* pool */, 0, mtime, nullptr, y);
+  return index_op.complete_del(dpp, -1 /* pool */, 0, mtime, nullptr, y, null_vid);
 }
 
 static void generate_fake_tag(const DoutPrefixProvider *dpp, RGWRados* store, map<string, bufferlist>& attrset, RGWObjManifest& manifest, bufferlist& manifest_bl, bufferlist& tag_bl)
@@ -6528,7 +6536,7 @@ int RGWRados::Bucket::UpdateIndex::complete_del(const DoutPrefixProvider *dpp,
                                                 int64_t poolid, uint64_t epoch,
                                                 real_time& removed_mtime,
                                                 list<rgw_obj_index_key> *remove_objs,
-						optional_yield y)
+						optional_yield y, bool nul_vid)
 {
   if (blind) {
     return 0;
@@ -8770,12 +8778,12 @@ int RGWRados::list_lc_progress(string& marker, uint32_t max_entries,
   return lc->list_lc_progress(marker, max_entries, progress_map, index);
 }
 
-int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket)
+int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket, bool null_vid)
 {
   RGWLC lc;
   lc.initialize(cct, this->driver);
   RGWLC::LCWorker worker(&lc, cct, &lc, 0);
-  auto ret = lc.process(&worker, optional_bucket, true /* once */);
+  auto ret = lc.process(&worker, optional_bucket, null_vid, true /* once */);
   lc.stop_processor(); // sets down_flag, but returns immediately
   return ret;
 }
@@ -8951,6 +8959,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 				      bool* cls_filtered,
 				      rgw_obj_index_key* last_entry,
                                       optional_yield y,
+                                      bool null_vid,
 				      RGWBucketListNameFilter force_check_filter)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
@@ -9153,7 +9162,7 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 	" calling check_disk_state bucket=" << bucket_info.bucket <<
 	" entry=" << dirent.key << dendl_bitx;
       r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent,
-			   updates[tracker.oid_name], y);
+			   updates[tracker.oid_name], y, null_vid);
       if (r < 0 && r != -ENOENT) {
 	ldpp_dout(dpp, 0) << __func__ <<
 	  ": check_disk_state for \"" << dirent.key <<
@@ -9295,6 +9304,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
+                                        bool null_vid,
 					RGWBucketListNameFilter force_check_filter) {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
 
@@ -9409,7 +9419,7 @@ int RGWRados::cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
 	ldout_bitx(bitx, dpp, 20) << "INFO: " << __func__ <<
 	  ": calling check_disk_state bucket=" << bucket_info.bucket <<
 	  " entry=" << dirent.key << dendl_bitx;
-	r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent, updates[oid], y);
+	r = check_disk_state(dpp, sub_ctx, bucket_info, dirent, dirent, updates[oid], y, null_vid);
 	if (r < 0 && r != -ENOENT) {
 	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
 	    ": error in check_disk_state, r=" << r << dendl;
@@ -9645,7 +9655,8 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
                                rgw_bucket_dir_entry& list_state,
                                rgw_bucket_dir_entry& object,
                                bufferlist& suggested_updates,
-                               optional_yield y)
+                               optional_yield y,
+                               bool null_vid)
 {
   const bool bitx = cct->_conf->rgw_bucket_index_transaction_instrumentation;
   ldout_bitx(bitx, dpp, 10) << "ENTERING " << __func__ << ": bucket=" <<
@@ -9742,7 +9753,7 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
 
       if (loc.key.ns == RGW_OBJ_NS_MULTIPART) {
 	ldout_bitx(bitx, dpp, 10) << "INFO: " << __func__ << " removing manifest part from index loc=" << loc << dendl_bitx;
-	r = delete_obj_index(loc, astate->mtime, dpp, y);
+	r = delete_obj_index(loc, astate->mtime, dpp, y, null_vid);
 	if (r < 0) {
 	  ldout_bitx(bitx, dpp, 0) <<
 	    "WARNING: " << __func__ << ": delete_obj_index returned r=" << r << dendl_bitx;
@@ -9995,7 +10006,7 @@ int RGWRados::delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_ob
 int RGWRados::delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj,
                              RGWBucketInfo& bucket_info, RGWObjState *astate,
                              list<librados::AioCompletion *>& handles, bool keep_index_consistent,
-                             optional_yield y)
+                             optional_yield y, bool null_vid)
 {
   rgw_rados_ref ref;
   int ret = get_obj_head_ref(dpp, bucket_info, obj, &ref);
@@ -10030,7 +10041,7 @@ int RGWRados::delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj,
   handles.push_back(c);
 
   if (keep_index_consistent) {
-    ret = delete_obj_index(obj, astate->mtime, dpp, y);
+    ret = delete_obj_index(obj, astate->mtime, dpp, y, null_vid);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR: failed to delete obj index with ret=" << ret << dendl;
       return ret;

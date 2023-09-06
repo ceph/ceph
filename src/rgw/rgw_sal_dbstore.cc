@@ -232,7 +232,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
+  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y, bool null_vid)
   {
     int ret;
 
@@ -252,7 +252,7 @@ namespace rgw::sal {
 
       results.objs.clear();
 
-      ret = list(dpp, params, 2, results, null_yield);
+      ret = list(dpp, params, 2, results, null_yield, null_vid);
 
       if (ret < 0) {
         ldpp_dout(dpp, 20) << __func__ << ": Bucket list objects returned " <<
@@ -276,7 +276,8 @@ namespace rgw::sal {
   int DBBucket::remove_bucket_bypass_gc(int concurrent_max, bool
 					keep_index_consistent,
 					optional_yield y, const
-					DoutPrefixProvider *dpp) {
+					DoutPrefixProvider *dpp,
+                                        bool null_vid) {
     return 0;
   }
 
@@ -345,7 +346,7 @@ namespace rgw::sal {
     return (info.owner.compare(user->get_id()) == 0);
   }
 
-  int DBBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::check_empty(const DoutPrefixProvider *dpp, optional_yield y, bool null_vid)
   {
     /* XXX: Check if bucket contains any objects */
     return 0;
@@ -453,7 +454,7 @@ namespace rgw::sal {
     return std::make_unique<DBObject>(this->store, k, this);
   }
 
-  int DBBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max, ListResults& results, optional_yield y)
+  int DBBucket::list(const DoutPrefixProvider *dpp, ListParams& params, int max, ListResults& results, optional_yield y, bool null_vid)
   {
     int ret = 0;
 
@@ -499,12 +500,12 @@ namespace rgw::sal {
 				const int& max_uploads,
 				vector<std::unique_ptr<MultipartUpload>>& uploads,
 				map<string, bool> *common_prefixes,
-				bool *is_truncated, optional_yield y) {
+				bool *is_truncated, optional_yield y, bool null_vid) {
     return 0;
   }
 
   int DBBucket::abort_multiparts(const DoutPrefixProvider* dpp,
-				 CephContext* cct, optional_yield y) {
+				 CephContext* cct, optional_yield y, bool null_vid) {
     return 0;
   }
 
@@ -875,7 +876,7 @@ namespace rgw::sal {
   }
 
   int DBObject::swift_versioning_restore(bool& restored,
-      const DoutPrefixProvider* dpp, optional_yield y)
+      const DoutPrefixProvider* dpp, optional_yield y, bool null_vid)
   {
     return 0;
   }

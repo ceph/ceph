@@ -48,6 +48,7 @@ namespace {
   bool do_large = false;
   bool do_verify = false;
   bool do_hexdump = false;
+  bool null_vid = false;
 
   string bucket_name = "sorrydave";
   string object_name = "jocaml";
@@ -193,20 +194,20 @@ TEST(LibRGW, CREATE_BUCKET) {
     st.st_mode = 755;
 
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
-			&fh, RGW_MKDIR_FLAG_NONE);
+			&fh, RGW_MKDIR_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
 
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
   int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
-		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_CREATE, null_vid);
   ASSERT_EQ(ret, 0);
 }
 
@@ -304,7 +305,7 @@ TEST (LibRGW, LARGE2) {
       for (int ix = 0; ix < iovcnt; ++ix) {
 	struct iovec *iov2 = &iovs2[ix];
 	ret = rgw_read(fs, object_fh, offset2, iov2->iov_len, &nread,
-		       iov2->iov_base, RGW_READ_FLAG_NONE);
+		       iov2->iov_base, RGW_READ_FLAG_NONE, null_vid);
 	iov2->iov_len = nread;
 	offset2 += iov2->iov_len;
 	ASSERT_EQ(ret, 0);
@@ -330,7 +331,7 @@ TEST(LibRGW, STAT_OBJECT) {
 TEST(LibRGW, DELETE_OBJECT) {
   if (do_delete) {
     int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
-			 RGW_UNLINK_FLAG_NONE);
+			 RGW_UNLINK_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -338,7 +339,7 @@ TEST(LibRGW, DELETE_OBJECT) {
 TEST(LibRGW, DELETE_BUCKET) {
   if (do_delete) {
     int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
-			 RGW_UNLINK_FLAG_NONE);
+			 RGW_UNLINK_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }

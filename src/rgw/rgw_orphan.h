@@ -197,11 +197,11 @@ public:
 
   int build_all_oids_index(const DoutPrefixProvider *dpp);
   int build_buckets_instance_index(const DoutPrefixProvider *dpp);
-  int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const std::string& bucket_instance_id, std::map<int, std::list<std::string> >& oids);
-  int build_linked_oids_index(const DoutPrefixProvider *dpp);
+  int build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const std::string& bucket_instance_id, std::map<int, std::list<std::string> >& oids, bool null_vid);
+  int build_linked_oids_index(const DoutPrefixProvider *dpp, bool null_vid);
   int compare_oid_indexes(const DoutPrefixProvider *dpp);
 
-  int run(const DoutPrefixProvider *dpp);
+  int run(const DoutPrefixProvider *dpp, bool null_vid);
   int finish();
 };
 
@@ -282,17 +282,19 @@ public:
   int process_bucket(const DoutPrefixProvider *dpp,
                      const std::string& bucket_instance_id,
 		     const std::string& prefix,
-		     const std::set<rgw_obj_key>& entries_filter);
+		     const std::set<rgw_obj_key>& entries_filter, bool null_vid);
 
   int do_incomplete_multipart(const DoutPrefixProvider *dpp,
-			      rgw::sal::Bucket* bucket);
+			      rgw::sal::Bucket* bucket, bool null_vid);
 
   int build_linked_oids_index();
 
   int run(const DoutPrefixProvider *dpp,
 	  const std::string& bucket_id,
+          bool null_vid,
 	  const bool silent_indexless = false);
   int run(const DoutPrefixProvider *dpp,
+          bool null_vid,
 	  const bool yes_i_really_mean_it = false);
 
   // if there's a non-empty field separator, that means we'll display

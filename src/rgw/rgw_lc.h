@@ -576,21 +576,21 @@ public:
 
   int process(LCWorker* worker,
 	      const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
-	      bool once);
+	      bool null_vid, bool once);
   int advance_head(const std::string& lc_shard,
 		   rgw::sal::Lifecycle::LCHead& head,
 		   rgw::sal::Lifecycle::LCEntry& entry,
 		   time_t start_date);
-  int process(int index, int max_lock_secs, LCWorker* worker, bool once);
+  int process(int index, int max_lock_secs, LCWorker* worker, bool null_vid, bool once);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
-		     const std::string& bucket_entry_marker, bool once);
+		     const std::string& bucket_entry_marker, bool null_vid, bool once);
   bool expired_session(time_t started);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
 		       std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>&,
 		       int& index);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
-			bool once);
+			bool once, bool null_vid);
   int bucket_lc_post(int index, int max_lock_sec,
 		     rgw::sal::Lifecycle::LCEntry& entry, int& result, LCWorker* worker);
   bool going_down();
@@ -612,7 +612,7 @@ public:
 
   int handle_multipart_expiration(rgw::sal::Bucket* target,
 				  const std::multimap<std::string, lc_op>& prefix_map,
-				  LCWorker* worker, time_t stop_at, bool once);
+				  LCWorker* worker, time_t stop_at, bool once, bool null_vid);
 };
 
 namespace rgw::lc {

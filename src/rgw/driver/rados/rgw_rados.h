@@ -977,7 +977,7 @@ public:
                        int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
                        std::list<rgw_obj_index_key> *remove_objs,
-		       optional_yield y);
+		       optional_yield y, bool null_vid);
       int cancel(const DoutPrefixProvider *dpp,
                  std::list<rgw_obj_index_key> *remove_objs,
 		 optional_yield y);
@@ -1001,13 +1001,15 @@ public:
 			       std::vector<rgw_bucket_dir_entry> *result,
 			       std::map<std::string, bool> *common_prefixes,
 			       bool *is_truncated,
-                               optional_yield y);
+                               optional_yield y,
+                               bool null_vid);
       int list_objects_unordered(const DoutPrefixProvider *dpp,
                                  int64_t max,
 				 std::vector<rgw_bucket_dir_entry> *result,
 				 std::map<std::string, bool> *common_prefixes,
 				 bool *is_truncated,
-                                 optional_yield y);
+                                 optional_yield y,
+                                 bool null_vid);
 
     public:
 
@@ -1037,13 +1039,14 @@ public:
 		       std::vector<rgw_bucket_dir_entry> *result,
 		       std::map<std::string, bool> *common_prefixes,
 		       bool *is_truncated,
-                       optional_yield y) {
+                       optional_yield y,
+                       bool null_vid) {
 	if (params.allow_unordered) {
 	  return list_objects_unordered(dpp, max, result, common_prefixes,
-					is_truncated, y);
+					is_truncated, y, null_vid);
 	} else {
 	  return list_objects_ordered(dpp, max, result, common_prefixes,
-				      is_truncated, y);
+				      is_truncated, y, null_vid);
 	}
       }
       rgw_obj_key& get_next_marker() {
@@ -1056,7 +1059,8 @@ public:
                                RGWBucketInfo& bucket_info,
                                const std::string& obj_prefix,
                                const std::string& obj_delim,
-                               std::function<int(const rgw_bucket_dir_entry&)> handler, optional_yield y);
+                               std::function<int(const rgw_bucket_dir_entry&)> handler, optional_yield y,
+                               bool null_vid);
 
   bool swift_versioning_enabled(const RGWBucketInfo& bucket_info) const;
 
@@ -1071,7 +1075,7 @@ public:
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in/out */
                                bool& restored,                  /* out */
-                               const DoutPrefixProvider *dpp, optional_yield y);  /* in */
+                               const DoutPrefixProvider *dpp, optional_yield y, bool null_vid);  /* in */
   int copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
                               RGWObjState *astate,
                               std::map<std::string, bufferlist>& src_attrs,
@@ -1214,14 +1218,14 @@ public:
                      const DoutPrefixProvider *dpp,
                      optional_yield y);
 
-  int check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y);
+  int check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y, bool null_vid);
 
   /**
    * Delete a bucket.
    * bucket: the name of the bucket to delete
    * Returns 0 on success, -ERR# otherwise.
    */
-  int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty = true);
+  int delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool null_vid, bool check_empty = true);
 
   void wakeup_meta_sync_shards(std::set<int>& shard_ids);
 
@@ -1248,7 +1252,7 @@ public:
 
   /** Remove an object from the bucket index */
   int delete_obj_index(const rgw_obj& obj, ceph::real_time mtime,
-		       const DoutPrefixProvider *dpp, optional_yield y);
+		       const DoutPrefixProvider *dpp, optional_yield y, bool null_vid);
 
   /**
    * Set an attr on an object.
@@ -1440,6 +1444,7 @@ public:
 			      bool* cls_filtered,
 			      rgw_obj_index_key *last_entry,
                               optional_yield y,
+                              bool null_vid,
 			      RGWBucketListNameFilter force_check_filter = {});
   int cls_bucket_list_unordered(const DoutPrefixProvider *dpp,
                                 RGWBucketInfo& bucket_info,
@@ -1453,6 +1458,7 @@ public:
 				bool *is_truncated,
 				rgw_obj_index_key *last_entry,
                                 optional_yield y,
+                                bool null_vid,
 				RGWBucketListNameFilter force_check_filter = {});
   int cls_bucket_head(const DoutPrefixProvider *dpp,
 		      const RGWBucketInfo& bucket_info,
@@ -1508,7 +1514,7 @@ public:
   bool process_expire_objects(const DoutPrefixProvider *dpp, optional_yield y);
   int defer_gc(const DoutPrefixProvider *dpp, RGWObjectCtx* ctx, RGWBucketInfo& bucket_info, const rgw_obj& obj, optional_yield y);
 
-  int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket);
+  int process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucket, bool null_vid);
   int list_lc_progress(std::string& marker, uint32_t max_entries,
 		       std::vector<std::unique_ptr<rgw::sal::Lifecycle::LCEntry>>& progress_map,
 		       int& index);
@@ -1526,7 +1532,8 @@ public:
                                         rgw::sal::RadosStore* driver,
                                         RGWBucketInfo& bucket_info,
                                         const std::string& marker,
-                                        RGWFormatterFlusher& flusher);
+                                        RGWFormatterFlusher& flusher,
+                                        bool null_vid);
 
   int bucket_set_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry);
   int remove_objs_from_index(const DoutPrefixProvider *dpp,
@@ -1557,7 +1564,7 @@ public:
   int delete_raw_obj_aio(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, std::list<librados::AioCompletion *>& handles);
   int delete_obj_aio(const DoutPrefixProvider *dpp, const rgw_obj& obj, RGWBucketInfo& info, RGWObjState *astate,
                      std::list<librados::AioCompletion *>& handles, bool keep_index_consistent,
-                     optional_yield y);
+                     optional_yield y, bool null_vid);
 
  private:
   /**
@@ -1580,7 +1587,8 @@ public:
                        rgw_bucket_dir_entry& list_state,
                        rgw_bucket_dir_entry& object,
                        bufferlist& suggested_updates,
-                       optional_yield y);
+                       optional_yield y,
+                       bool null_vid);
 
   /**
    * Init pool iteration

@@ -43,12 +43,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "list_user"; }
 };
 
-void RGWOp_User_List::execute(optional_yield y)
+void RGWOp_User_List::execute(optional_yield y, bool null_vid)
 {
   RGWUserAdminOpState op_state(driver);
 
@@ -71,12 +71,12 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "get_user_info"; }
 };
 
-void RGWOp_User_Info::execute(optional_yield y)
+void RGWOp_User_Info::execute(optional_yield y, bool null_vid)
 {
   RGWUserAdminOpState op_state(driver);
 
@@ -118,12 +118,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "create_user"; }
 };
 
-void RGWOp_User_Create::execute(optional_yield y)
+void RGWOp_User_Create::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string display_name;
@@ -265,12 +265,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "modify_user"; }
 };
 
-void RGWOp_User_Modify::execute(optional_yield y)
+void RGWOp_User_Modify::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string display_name;
@@ -411,12 +411,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "remove_user"; }
 };
 
-void RGWOp_User_Remove::execute(optional_yield y)
+void RGWOp_User_Remove::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   bool purge_data;
@@ -452,12 +452,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "create_subuser"; }
 };
 
-void RGWOp_Subuser_Create::execute(optional_yield y)
+void RGWOp_Subuser_Create::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string subuser;
@@ -527,12 +527,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "modify_subuser"; }
 };
 
-void RGWOp_Subuser_Modify::execute(optional_yield y)
+void RGWOp_Subuser_Modify::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string subuser;
@@ -594,12 +594,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "remove_subuser"; }
 };
 
-void RGWOp_Subuser_Remove::execute(optional_yield y)
+void RGWOp_Subuser_Remove::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string subuser;
@@ -637,12 +637,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "create_access_key"; }
 };
 
-void RGWOp_Key_Create::execute(optional_yield y)
+void RGWOp_Key_Create::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string subuser;
@@ -693,12 +693,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "remove_access_key"; }
 };
 
-void RGWOp_Key_Remove::execute(optional_yield y)
+void RGWOp_Key_Remove::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string subuser;
@@ -740,12 +740,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "add_user_caps"; }
 };
 
-void RGWOp_Caps_Add::execute(optional_yield y)
+void RGWOp_Caps_Add::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string caps;
@@ -778,12 +778,12 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "remove_user_caps"; }
 };
 
-void RGWOp_Caps_Remove::execute(optional_yield y)
+void RGWOp_Caps_Remove::execute(optional_yield y, bool null_vid)
 {
   std::string uid_str;
   std::string caps;
@@ -836,13 +836,13 @@ public:
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "get_quota_info"; }
 };
 
 
-void RGWOp_Quota_Info::execute(optional_yield y)
+void RGWOp_Quota_Info::execute(optional_yield y, bool null_vid)
 {
   RGWUserAdminOpState op_state(driver);
 
@@ -908,7 +908,7 @@ public:
     return caps.check_cap("users", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "set_quota_info"; }
 };
@@ -961,7 +961,7 @@ public:
  *
  */
 
-void RGWOp_Quota_Set::execute(optional_yield y)
+void RGWOp_Quota_Set::execute(optional_yield y, bool null_vid)
 {
   RGWUserAdminOpState op_state(driver);
 

@@ -50,6 +50,7 @@ namespace {
   bool do_delete = false;
   bool do_stat = false; // stat objects (not buckets)
   bool do_hexdump = false;
+  bool null_vid = false;
 
   bool object_open = false;
 
@@ -201,14 +202,14 @@ TEST(LibRGW, CREATE_BUCKET) {
     st.st_mode = 755;
 
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
-			&fh, RGW_MKDIR_FLAG_NONE);
+			&fh, RGW_MKDIR_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
 
 TEST(LibRGW, LOOKUP_BUCKET) {
   int ret = rgw_lookup(fs, fs->root_fh, bucket_name.c_str(), &bucket_fh,
-		       nullptr, 0, RGW_LOOKUP_FLAG_NONE);
+		       nullptr, 0, RGW_LOOKUP_FLAG_NONE, null_vid);
   ASSERT_EQ(ret, 0);
 }
 
@@ -232,7 +233,7 @@ TEST(LibRGW, LIST_OBJECTS) {
     bool eof = false;
     uint64_t offset = 0;
     int ret = rgw_readdir(fs, bucket_fh, &offset, r2_cb, &fids,
-			  &eof, RGW_READDIR_FLAG_NONE);
+			  &eof, RGW_READDIR_FLAG_NONE, null_vid);
     for (auto& fid : fids) {
       std::cout << "fname: " << get<0>(fid) << " fid: " << get<1>(fid)
 		<< std::endl;
@@ -244,7 +245,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 TEST(LibRGW, LOOKUP_OBJECT) {
   if (do_get || do_stat || do_put || do_bulk || do_readv || do_writev) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
-			 nullptr, 0, RGW_LOOKUP_FLAG_CREATE);
+			 nullptr, 0, RGW_LOOKUP_FLAG_CREATE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -277,7 +278,7 @@ TEST(LibRGW, GET_OBJECT) {
     memset(sbuf, 0, 512);
     size_t nread;
     int ret = rgw_read(fs, object_fh, 0 /* off */, 512 /* len */, &nread, sbuf,
-		       RGW_READ_FLAG_NONE);
+		       RGW_READ_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
     buffer::list bl;
     bl.push_back(buffer::create_static(nread, sbuf));
@@ -348,7 +349,7 @@ TEST(LibRGW, WRITEV)
     uio->uio_cnt = iovcnt;
     uio->uio_offset = iovcnt * page_size;
 
-    int ret = rgw_writev(fs, object_fh, uio, RGW_WRITE_FLAG_NONE);
+    int ret = rgw_writev(fs, object_fh, uio, RGW_WRITE_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -391,7 +392,7 @@ TEST(LibRGW, READV_AFTER_WRITEV)
 TEST(LibRGW, DELETE_OBJECT) {
   if (do_delete) {
     int ret = rgw_unlink(fs, bucket_fh, object_name.c_str(),
-			 RGW_UNLINK_FLAG_NONE);
+			 RGW_UNLINK_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -399,7 +400,7 @@ TEST(LibRGW, DELETE_OBJECT) {
 TEST(LibRGW, DELETE_BUCKET) {
   if (do_delete) {
     int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
-			 RGW_UNLINK_FLAG_NONE);
+			 RGW_UNLINK_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }

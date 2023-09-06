@@ -488,7 +488,7 @@ done:
   return ret;
 }
 
-int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const string& bucket_instance_id, map<int, list<string> >& oids)
+int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp, const string& bucket_instance_id, map<int, list<string> >& oids, bool null_vid)
 {
   RGWObjectCtx obj_ctx(store);
   rgw_bucket orphan_bucket;
@@ -556,7 +556,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
     vector<rgw_bucket_dir_entry> result;
 
     ret = list_op.list_objects(dpp, max_list_bucket_entries,
-                               &result, nullptr, &truncated, null_yield);
+                               &result, nullptr, &truncated, null_yield, null_vid);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -622,7 +622,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int RGWOrphanSearch::build_linked_oids_index(const DoutPrefixProvider *dpp)
+int RGWOrphanSearch::build_linked_oids_index(const DoutPrefixProvider *dpp, bool null_vid)
 {
   map<int, list<string> > oids;
   map<int, string>::iterator iter = buckets_instance_index.find(search_stage.shard);
@@ -651,7 +651,7 @@ int RGWOrphanSearch::build_linked_oids_index(const DoutPrefixProvider *dpp)
 
       for (map<string, bufferlist>::iterator eiter = entries.begin(); eiter != entries.end(); ++eiter) {
         ldpp_dout(dpp, 20) << " indexed entry: " << eiter->first << dendl;
-        ret = build_linked_oids_for_bucket(dpp, eiter->first, oids);
+        ret = build_linked_oids_for_bucket(dpp, eiter->first, oids, null_vid);
         if (ret < 0) {
           ldpp_dout(dpp, -1) << __func__ << ": ERROR: build_linked_oids_for_bucket() indexed entry=" << eiter->first
                               << " returned ret=" << ret << dendl;
@@ -804,7 +804,7 @@ int RGWOrphanSearch::compare_oid_indexes(const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int RGWOrphanSearch::run(const DoutPrefixProvider *dpp)
+int RGWOrphanSearch::run(const DoutPrefixProvider *dpp, bool null_vid)
 {
   int r;
 
@@ -854,7 +854,7 @@ int RGWOrphanSearch::run(const DoutPrefixProvider *dpp)
 
     case ORPHAN_SEARCH_STAGE_ITERATE_BI:
       ldpp_dout(dpp, 0) << __func__ << "(): building index of all linked objects" << dendl;
-      r = build_linked_oids_index(dpp);
+      r = build_linked_oids_index(dpp, null_vid);
       if (r < 0) {
         ldpp_dout(dpp, -1) << __func__ << ": ERROR: build_all_objs_index returned ret=" << r << dendl;
         return r;
@@ -1162,7 +1162,8 @@ int RGWRadosList::process_bucket(
   const DoutPrefixProvider *dpp,
   const std::string& bucket_instance_id,
   const std::string& prefix,
-  const std::set<rgw_obj_key>& entries_filter)
+  const std::set<rgw_obj_key>& entries_filter,
+  bool null_vid)
 {
   ldpp_dout(dpp, 10) << "RGWRadosList::" << __func__ <<
     " bucket_instance_id=" << bucket_instance_id <<
@@ -1208,7 +1209,7 @@ int RGWRadosList::process_bucket(
     std::vector<rgw_bucket_dir_entry> result;
     constexpr int64_t LIST_OBJS_MAX_ENTRIES = 100;
     ret = list_op.list_objects(dpp, LIST_OBJS_MAX_ENTRIES, &result,
-			       NULL, &truncated, null_yield);
+			       NULL, &truncated, null_yield, null_vid);
     if (ret == -ENOENT) {
       // race with bucket delete?
       ret = 0;
@@ -1319,6 +1320,7 @@ int RGWRadosList::process_bucket(
 
 
 int RGWRadosList::run(const DoutPrefixProvider *dpp,
+                      bool null_vid,
 		      const bool yes_i_really_mean_it)
 {
   int ret;
@@ -1374,6 +1376,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
 
 int RGWRadosList::run(const DoutPrefixProvider *dpp,
 		      const std::string& start_bucket_name,
+                      bool null_vid,
 		      const bool silent_indexless)
 {
   int ret;
@@ -1413,10 +1416,10 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
     static const std::string empty_prefix;
 
     auto do_process_bucket =
-      [dpp, &bucket_id, this]
+      [dpp, &bucket_id, this, null_vid]
       (const std::string& prefix,
        const std::set<rgw_obj_key>& entries_filter) -> int {
-	int ret = process_bucket(dpp, bucket_id, prefix, entries_filter);
+	int ret = process_bucket(dpp, bucket_id, prefix, entries_filter, null_vid);
 	if (ret == -ENOENT) {
 	  // bucket deletion race?
 	  return 0;
@@ -1470,7 +1473,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  ret = do_incomplete_multipart(dpp, bucket.get());
+  ret = do_incomplete_multipart(dpp, bucket.get(), null_vid);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "RGWRadosList::" << __func__ <<
       ": ERROR: do_incomplete_multipart returned ret=" << ret << dendl;
@@ -1482,7 +1485,7 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
 
 
 int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
-					  rgw::sal::Bucket* bucket)
+					  rgw::sal::Bucket* bucket, bool null_vid)
 {
   constexpr int max_uploads = 1000;
   constexpr int max_parts = 1000;
@@ -1494,7 +1497,7 @@ int RGWRadosList::do_incomplete_multipart(const DoutPrefixProvider *dpp,
   // use empty strings for params.{prefix,delim}
 
   do {
-    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield);
+    ret = bucket->list_multiparts(dpp, string(), marker, string(), max_uploads, uploads, nullptr, &is_truncated, null_yield, null_vid);
     if (ret == -ENOENT) {
       // could bucket have been removed while this is running?
       ldpp_dout(dpp, 5) << "RGWRadosList::" << __func__ <<

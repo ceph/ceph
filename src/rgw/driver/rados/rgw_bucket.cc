@@ -244,14 +244,14 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
 }
 
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
-                     optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
+                     optional_yield y, const DoutPrefixProvider *dpp, bool null_vid, std::string *err_msg)
 {
   /* User passed in by rgw_admin is the new user; get the current user and set it in
    * the bucket */
   std::unique_ptr<rgw::sal::User> old_user = driver->get_user(bucket->get_info().owner);
   bucket->set_owner(old_user.get());
 
-  return rgw_chown_bucket_and_objects(driver, bucket.get(), user.get(), marker, err_msg, dpp, y);
+  return rgw_chown_bucket_and_objects(driver, bucket.get(), user.get(), marker, err_msg, dpp, y, null_vid);
 }
 
 int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg)
@@ -322,6 +322,7 @@ static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats
 int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
 					 RGWFormatterFlusher& flusher,
 					 const DoutPrefixProvider *dpp, optional_yield y,
+                                         bool null_vid,
 					 std::string *err_msg)
 {
   const bool fix_index = op_state.will_fix_index();
@@ -337,7 +338,7 @@ int RGWBucket::check_bad_index_multipart(RGWBucketAdminOpState& op_state,
   bool is_truncated;
   do {
     rgw::sal::Bucket::ListResults results;
-    int r = bucket->list(dpp, params, listing_max_entries, results, y);
+    int r = bucket->list(dpp, params, listing_max_entries, results, y, null_vid);
     if (r < 0) {
       set_err_msg(err_msg, "failed to list objects in bucket=" + bucket->get_name() +
               " err=" +  cpp_strerror(-r));
@@ -419,6 +420,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
                                   RGWBucketAdminOpState& op_state,
                                   RGWFormatterFlusher& flusher,
                                   optional_yield y,
+                                  bool null_vid,
                                   std::string *err_msg)
 {
 
@@ -443,7 +445,7 @@ int RGWBucket::check_object_index(const DoutPrefixProvider *dpp,
     params.marker = results.next_marker;
     params.force_check_filter = rgw_bucket_object_check_filter;
 
-    int r = bucket->list(dpp, params, listing_max_entries, results, y);
+    int r = bucket->list(dpp, params, listing_max_entries, results, y, null_vid);
 
     if (r == -ENOENT) {
       break;
@@ -784,7 +786,7 @@ int RGWBucketAdminOp::chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_
 }
 
 int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp)
+                  RGWFormatterFlusher& flusher, optional_yield y, const DoutPrefixProvider *dpp, bool null_vid)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> existing_stats;
@@ -800,11 +802,11 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
-  ret = bucket.check_bad_index_multipart(op_state, flusher, dpp, y);
+  ret = bucket.check_bad_index_multipart(op_state, flusher, dpp, y, null_vid);
   if (ret < 0)
     return ret;
 
-  ret = bucket.check_object_index(dpp, op_state, flusher, y);
+  ret = bucket.check_object_index(dpp, op_state, flusher, y, null_vid);
   if (ret < 0)
     return ret;
 
@@ -819,7 +821,7 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpStat
 }
 
 int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-				    optional_yield y, const DoutPrefixProvider *dpp, 
+				    optional_yield y, const DoutPrefixProvider *dpp, bool null_vid, 
                                     bool bypass_gc, bool keep_index_consistent)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -831,10 +833,10 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpSt
     return ret;
 
   if (bypass_gc)
-    ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
+    ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp, null_vid);
   else
     ret = bucket->remove_bucket(dpp, op_state.will_delete_children(),
-				false, nullptr, y);
+				false, nullptr, y, null_vid);
 
   return ret;
 }
@@ -1471,7 +1473,7 @@ static bool has_object_expired(const DoutPrefixProvider *dpp,
 static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
 				 rgw::sal::Driver* driver,
 				 rgw::sal::Bucket* bucket,
-				 RGWFormatterFlusher& flusher, bool dry_run, optional_yield y)
+				 RGWFormatterFlusher& flusher, bool dry_run, optional_yield y, bool null_vid)
 {
   if (bucket->get_key().bucket_id == bucket->get_key().marker) {
     ldpp_dout(dpp, -1) << "Not a resharded bucket skipping" << dendl;
@@ -1492,7 +1494,7 @@ static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
   params.allow_unordered = true;
 
   do {
-    int ret = bucket->list(dpp, params, listing_max_entries, results, y);
+    int ret = bucket->list(dpp, params, listing_max_entries, results, y, null_vid);
     if (ret < 0) {
       ldpp_dout(dpp, -1) << "ERROR failed to list objects in the bucket" << dendl;
       return ret;
@@ -1522,7 +1524,7 @@ static int fix_bucket_obj_expiry(const DoutPrefixProvider *dpp,
 int RGWBucketAdminOp::fix_obj_expiry(rgw::sal::Driver* driver,
 				     RGWBucketAdminOpState& op_state,
 				     RGWFormatterFlusher& flusher,
-                                     const DoutPrefixProvider *dpp, optional_yield y, bool dry_run)
+                                     const DoutPrefixProvider *dpp, optional_yield y, bool null_vid, bool dry_run)
 {
   RGWBucket admin_bucket;
   int ret = admin_bucket.init(driver, op_state, y, dpp);
@@ -1536,7 +1538,7 @@ int RGWBucketAdminOp::fix_obj_expiry(rgw::sal::Driver* driver,
     return ret;
   }
 
-  return fix_bucket_obj_expiry(dpp, driver, bucket.get(), flusher, dry_run, y);
+  return fix_bucket_obj_expiry(dpp, driver, bucket.get(), flusher, dry_run, y, null_vid);
 }
 
 void RGWBucketCompleteInfo::dump(Formatter *f) const {

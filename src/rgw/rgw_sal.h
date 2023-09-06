@@ -640,18 +640,19 @@ class Bucket {
     /** Get an @a Object belonging to this bucket */
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) = 0;
     /** List the contents of this bucket */
-    virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) = 0;
+    virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y, bool null_vid) = 0;
     /** Get the cached attributes associated with this bucket */
     virtual Attrs& get_attrs(void) = 0;
     /** Set the cached attributes on this bucket */
     virtual int set_attrs(Attrs a) = 0;
     /** Remove this bucket from the backing store */
-    virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
+    virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y, bool null_vid) = 0;
     /** Remove this bucket, bypassing garbage collection.  May be removed */
     virtual int remove_bucket_bypass_gc(int concurrent_max, bool
 					keep_index_consistent,
 					optional_yield y, const
-					DoutPrefixProvider *dpp) = 0;
+					DoutPrefixProvider *dpp,
+                                        bool null_vid) = 0;
     /** Get then ACL for this bucket */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this bucket */
@@ -692,7 +693,7 @@ class Bucket {
     /** Get the owner of this bucket in the form of an ACLOwner object */
     virtual ACLOwner get_acl_owner(void) = 0;
     /** Check in the backing store if this bucket is empty */
-    virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y, bool null_vid) = 0;
     /** Chec k if the given size fits within the quota */
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     /** Set the attributes in attrs, leaving any other existing attrs set, and
@@ -773,10 +774,10 @@ class Bucket {
 				const int& max_uploads,
 				std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				std::map<std::string, bool> *common_prefixes,
-				bool *is_truncated, optional_yield y) = 0;
+				bool *is_truncated, optional_yield y, bool null_vid) = 0;
     /** Abort multipart uploads in a bucket */
     virtual int abort_multiparts(const DoutPrefixProvider* dpp,
-				 CephContext* cct, optional_yield y) = 0;
+				 CephContext* cct, optional_yield y, bool null_vid) = 0;
 
     /** Read the bucket notification config into @a notifications with and (optionally) @a objv_tracker */
     virtual int read_topics(rgw_pubsub_bucket_topics& notifications, 
@@ -1078,7 +1079,7 @@ class Object {
 
     /** Restore the previous swift version of this object */
     virtual int swift_versioning_restore(bool& restored,   /* out */
-					 const DoutPrefixProvider* dpp, optional_yield y) = 0;
+					 const DoutPrefixProvider* dpp, optional_yield y, bool null_vid) = 0;
     /** Copy the current version of a swift object to the configured destination bucket*/
     virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;

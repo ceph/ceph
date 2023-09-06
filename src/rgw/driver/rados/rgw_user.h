@@ -576,9 +576,9 @@ private:
   int execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 		  optional_yield y);
   int execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state,
-                    std::string *err_msg, optional_yield y);
+                    std::string *err_msg, optional_yield y, bool null_vid);
   int execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
-  int execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y);
+  int execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y, bool null_vid);
 
 public:
   RGWUser();
@@ -600,9 +600,9 @@ public:
   /* API Contracted Methods */
   int add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
 
-  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
+  int remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, bool null_vid, std::string *err_msg = NULL);
 
-  int rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg = NULL);
+  int rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, bool null_vid, std::string *err_msg = NULL);
 
   /* remove an already populated RGWUser */
   int remove(std::string *err_msg = NULL);

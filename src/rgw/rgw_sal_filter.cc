@@ -654,26 +654,27 @@ std::unique_ptr<Object> FilterBucket::get_object(const rgw_obj_key& k)
 }
 
 int FilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max,
-		       ListResults& results, optional_yield y)
+		       ListResults& results, optional_yield y, bool null_vid)
 {
-  return next->list(dpp, params, max, results, y);
+  return next->list(dpp, params, max, results, y, null_vid);
 }
 
 int FilterBucket::remove_bucket(const DoutPrefixProvider* dpp,
 				bool delete_children,
 				bool forward_to_master,
 				req_info* req_info,
-				optional_yield y)
+				optional_yield y, bool null_vid)
 {
-  return next->remove_bucket(dpp, delete_children, forward_to_master, req_info, y);
+  return next->remove_bucket(dpp, delete_children, forward_to_master, req_info, y, null_vid);
 }
 
 int FilterBucket::remove_bucket_bypass_gc(int concurrent_max,
 					  bool keep_index_consistent,
 					  optional_yield y,
-					  const DoutPrefixProvider *dpp)
+					  const DoutPrefixProvider *dpp,
+                                          bool null_vid)
 {
-  return next->remove_bucket_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
+  return next->remove_bucket_bypass_gc(concurrent_max, keep_index_consistent, y, dpp, null_vid);
 }
 
 int FilterBucket::set_acl(const DoutPrefixProvider* dpp,
@@ -737,9 +738,9 @@ bool FilterBucket::is_owner(User* user)
   return next->is_owner(nextUser(user));
 }
 
-int FilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
+int FilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y, bool null_vid)
 {
-  return next->check_empty(dpp, y);
+  return next->check_empty(dpp, y, null_vid);
 }
 
 int FilterBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota,
@@ -822,13 +823,13 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
 				  const int& max_uploads,
 				  std::vector<std::unique_ptr<MultipartUpload>>& uploads,
 				  std::map<std::string, bool> *common_prefixes,
-				  bool *is_truncated, optional_yield y)
+				  bool *is_truncated, optional_yield y, bool null_vid)
 {
   std::vector<std::unique_ptr<MultipartUpload>> nup;
   int ret;
 
   ret = next->list_multiparts(dpp, prefix, marker, delim, max_uploads, nup,
-			      common_prefixes, is_truncated, y);
+			      common_prefixes, is_truncated, y, null_vid);
   if (ret < 0)
     return ret;
 
@@ -839,9 +840,9 @@ int FilterBucket::list_multiparts(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y)
+int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y, bool null_vid)
 {
-  return next->abort_multiparts(dpp, cct, y);
+  return next->abort_multiparts(dpp, cct, y, null_vid);
 }
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
@@ -984,9 +985,9 @@ void FilterObject::set_bucket(Bucket* b)
 };
 
 int FilterObject::swift_versioning_restore(bool& restored,
-					   const DoutPrefixProvider* dpp, optional_yield y)
+					   const DoutPrefixProvider* dpp, optional_yield y, bool null_vid)
 {
-  return next->swift_versioning_restore(restored, dpp, y);
+  return next->swift_versioning_restore(restored, dpp, y, null_vid);
 }
 
 int FilterObject::swift_versioning_copy(const DoutPrefixProvider* dpp,

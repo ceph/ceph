@@ -554,9 +554,9 @@ static void dump_container_metadata(req_state *s,
   dump_last_modified(s, s->bucket_mtime);
 }
 
-void RGWStatAccount_ObjStore_SWIFT::execute(optional_yield y)
+void RGWStatAccount_ObjStore_SWIFT::execute(optional_yield y, bool null_vid)
 {
-  RGWStatAccount_ObjStore::execute(y);
+  RGWStatAccount_ObjStore::execute(y, null_vid);
   op_ret = s->user->read_attrs(s, s->yield);
   attrs = s->user->get_attrs();
 }
@@ -1488,10 +1488,10 @@ int RGWGetObj_ObjStore_SWIFT::get_params(optional_yield y)
   return RGWGetObj_ObjStore::get_params(y);
 }
 
-int RGWGetObj_ObjStore_SWIFT::send_response_data_error(optional_yield y)
+int RGWGetObj_ObjStore_SWIFT::send_response_data_error(optional_yield y, bool null_vid)
 {
   std::string error_content;
-  op_ret = error_handler(op_ret, &error_content, y);
+  op_ret = error_handler(op_ret, &error_content, y, null_vid);
   if (! op_ret) {
     /* The error handler has taken care of the error. */
     return 0;
@@ -1832,7 +1832,7 @@ const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT:
     {"tempauth", {false, RGWInfo_ObjStore_SWIFT::list_tempauth_data}},
 };
 
-void RGWInfo_ObjStore_SWIFT::execute(optional_yield y)
+void RGWInfo_ObjStore_SWIFT::execute(optional_yield y, bool null_vid)
 {
   bool is_admin_info_enabled = false;
 
@@ -2372,7 +2372,7 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
     }
 
     int error_handler(const int err_no,
-                      std::string* const error_content, optional_yield y) override {
+                      std::string* const error_content, optional_yield y, bool null_vid) override {
       /* Enforce that any error generated while getting the error page will
        * not be send to a client. This allows us to recover from the double
        * fault situation by sending the original message. */
@@ -2396,7 +2396,7 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
 
 int RGWSwiftWebsiteHandler::error_handler(const int err_no,
                                           std::string* const error_content,
-					  optional_yield y)
+					  optional_yield y, bool null_vid)
 {
   if (!s->bucket.get()) {
     /* No bucket, default no-op handler */
@@ -2457,7 +2457,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
       return 0;
     }
 
-    void execute(optional_yield) override {
+    void execute(optional_yield, bool null_vid) override {
       op_ret = -ERR_PERMANENT_REDIRECT;
       return;
     }

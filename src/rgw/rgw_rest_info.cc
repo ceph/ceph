@@ -15,12 +15,12 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("info", RGW_CAP_READ);
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "get_info"; }
 };
 
-void RGWOp_Info_Get::execute(optional_yield y) {
+void RGWOp_Info_Get::execute(optional_yield y, bool null_vid) {
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 

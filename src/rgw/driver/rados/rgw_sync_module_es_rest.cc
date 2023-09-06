@@ -148,7 +148,7 @@ public:
   }
   virtual int get_params() = 0;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 
   const char* name() const override { return "metadata_search"; }
   virtual RGWOpType get_type() override { return RGW_OP_METADATA_SEARCH; }
@@ -160,7 +160,7 @@ void RGWMetadataSearchOp::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWMetadataSearchOp::execute(optional_yield y)
+void RGWMetadataSearchOp::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0)

@@ -41,7 +41,7 @@
 
 using namespace std;
 
-void RGWOp_MDLog_List::execute(optional_yield y) {
+void RGWOp_MDLog_List::execute(optional_yield y, bool null_vid) {
   string   period = s->info.args.get("period");
   string   shard = s->info.args.get("id");
   string   max_entries_str = s->info.args.get("max-entries");
@@ -121,7 +121,7 @@ void RGWOp_MDLog_List::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Info::execute(optional_yield y) {
+void RGWOp_MDLog_Info::execute(optional_yield y, bool null_vid) {
   num_objects = s->cct->_conf->rgw_md_log_max_shards;
   period = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->read_oldest_log_period(y, s);
   op_ret = period.get_error();
@@ -142,7 +142,7 @@ void RGWOp_MDLog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_ShardInfo::execute(optional_yield y) {
+void RGWOp_MDLog_ShardInfo::execute(optional_yield y, bool null_vid) {
   string period = s->info.args.get("period");
   string shard = s->info.args.get("id");
   string err;
@@ -178,7 +178,7 @@ void RGWOp_MDLog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_MDLog_Delete::execute(optional_yield y) {
+void RGWOp_MDLog_Delete::execute(optional_yield y, bool null_vid) {
   string   marker = s->info.args.get("marker"),
            period = s->info.args.get("period"),
            shard = s->info.args.get("id"),
@@ -235,7 +235,7 @@ void RGWOp_MDLog_Delete::execute(optional_yield y) {
   op_ret = meta_log.trim(this, shard_id, {}, {}, {}, marker, y);
 }
 
-void RGWOp_MDLog_Lock::execute(optional_yield y) {
+void RGWOp_MDLog_Lock::execute(optional_yield y, bool null_vid) {
   string period, shard_id_str, duration_str, locker_id, zone_id;
   unsigned shard_id;
 
@@ -284,7 +284,7 @@ void RGWOp_MDLog_Lock::execute(optional_yield y) {
     op_ret = -ERR_LOCKED;
 }
 
-void RGWOp_MDLog_Unlock::execute(optional_yield y) {
+void RGWOp_MDLog_Unlock::execute(optional_yield y, bool null_vid) {
   string period, shard_id_str, locker_id, zone_id;
   unsigned shard_id;
 
@@ -321,7 +321,7 @@ void RGWOp_MDLog_Unlock::execute(optional_yield y) {
   op_ret = meta_log.unlock(s, shard_id, zone_id, locker_id);
 }
 
-void RGWOp_MDLog_Notify::execute(optional_yield y) {
+void RGWOp_MDLog_Notify::execute(optional_yield y, bool null_vid) {
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
   int r = 0;
@@ -363,7 +363,7 @@ void RGWOp_MDLog_Notify::execute(optional_yield y) {
   op_ret = 0;
 }
 
-void RGWOp_BILog_List::execute(optional_yield y) {
+void RGWOp_BILog_List::execute(optional_yield y, bool null_vid) {
   bool gen_specified = false;
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
@@ -517,7 +517,7 @@ void RGWOp_BILog_List::send_response_end() {
   flusher.flush();
 }
 
-void RGWOp_BILog_Info::execute(optional_yield y) {
+void RGWOp_BILog_Info::execute(optional_yield y, bool null_vid) {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
          bucket_instance = s->info.args.get("bucket-instance");
@@ -593,7 +593,7 @@ void RGWOp_BILog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_BILog_Delete::execute(optional_yield y) {
+void RGWOp_BILog_Delete::execute(optional_yield y, bool null_vid) {
   bool gen_specified = false;
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
@@ -651,7 +651,7 @@ void RGWOp_BILog_Delete::execute(optional_yield y) {
   return;
 }
 
-void RGWOp_DATALog_List::execute(optional_yield y) {
+void RGWOp_DATALog_List::execute(optional_yield y, bool null_vid) {
   string   shard = s->info.args.get("id");
 
   string   max_entries_str = s->info.args.get("max-entries"),
@@ -721,7 +721,7 @@ void RGWOp_DATALog_List::send_response() {
 }
 
 
-void RGWOp_DATALog_Info::execute(optional_yield y) {
+void RGWOp_DATALog_Info::execute(optional_yield y, bool null_vid) {
   num_objects = s->cct->_conf->rgw_data_log_num_shards;
   op_ret = 0;
 }
@@ -737,7 +737,7 @@ void RGWOp_DATALog_Info::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_ShardInfo::execute(optional_yield y) {
+void RGWOp_DATALog_ShardInfo::execute(optional_yield y, bool null_vid) {
   string shard = s->info.args.get("id");
   string err;
 
@@ -761,7 +761,7 @@ void RGWOp_DATALog_ShardInfo::send_response() {
   flusher.flush();
 }
 
-void RGWOp_DATALog_Notify::execute(optional_yield y) {
+void RGWOp_DATALog_Notify::execute(optional_yield y, bool null_vid) {
   string  source_zone = s->info.args.get("source-zone");
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
@@ -810,7 +810,7 @@ void RGWOp_DATALog_Notify::execute(optional_yield y) {
   op_ret = 0;
 }
 
-void RGWOp_DATALog_Notify2::execute(optional_yield y) {
+void RGWOp_DATALog_Notify2::execute(optional_yield y, bool null_vid) {
   string  source_zone = s->info.args.get("source-zone");
 #define LARGE_ENOUGH_BUF (128 * 1024)
 
@@ -859,7 +859,7 @@ void RGWOp_DATALog_Notify2::execute(optional_yield y) {
   op_ret = 0;
 }
 
-void RGWOp_DATALog_Delete::execute(optional_yield y) {
+void RGWOp_DATALog_Delete::execute(optional_yield y, bool null_vid) {
   string   marker = s->info.args.get("marker"),
            shard = s->info.args.get("id"),
            err;
@@ -912,12 +912,12 @@ public:
   int verify_permission(optional_yield) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void send_response() override;
   const char* name() const override { return "get_metadata_log_status"; }
 };
 
-void RGWOp_MDLog_Status::execute(optional_yield y)
+void RGWOp_MDLog_Status::execute(optional_yield y, bool null_vid)
 {
   auto sync = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_meta_sync_manager();
   if (sync == nullptr) {
@@ -951,12 +951,12 @@ public:
   int verify_permission(optional_yield y) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void send_response() override;
   const char* name() const override { return "get_bucket_index_log_status"; }
 };
 
-void RGWOp_BILog_Status::execute(optional_yield y)
+void RGWOp_BILog_Status::execute(optional_yield y, bool null_vid)
 {
   const auto options = s->info.args.get("options");
   bool merge = (options == "merge");
@@ -1150,12 +1150,12 @@ public:
   int verify_permission(optional_yield y) override {
     return check_caps(s->user->get_caps());
   }
-  void execute(optional_yield y) override ;
+  void execute(optional_yield y, bool null_vid) override ;
   void send_response() override;
   const char* name() const override { return "get_data_changes_log_status"; }
 };
 
-void RGWOp_DATALog_Status::execute(optional_yield y)
+void RGWOp_DATALog_Status::execute(optional_yield y, bool null_vid)
 {
   const auto source_zone = s->info.args.get("source-zone");
   auto sync = driver->get_data_sync_manager(source_zone);

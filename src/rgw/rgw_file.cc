@@ -97,13 +97,13 @@ namespace rgw {
 
   LookupFHResult RGWLibFS::stat_bucket(RGWFileHandle* parent, const char *path,
 				       RGWLibFS::BucketStats& bs,
-				       uint32_t flags)
+				       uint32_t flags, bool null_vid)
   {
     LookupFHResult fhr{nullptr, 0};
     std::string bucket_name{path};
     RGWStatBucketRequest req(cct, user->clone(), bucket_name, bs);
 
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     if ((rc == 0) &&
 	(req.get_ret() == 0) &&
 	(req.matched())) {
@@ -123,7 +123,7 @@ namespace rgw {
 	if (ux_key && ux_attrs) {
 	  DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
 	  if (get<0>(dar) || get<1>(dar)) {
-	    update_fh(rgw_fh);
+	    update_fh(rgw_fh, null_vid);
           }
 	}
 	if (! (flags & RGWFileHandle::FLAG_LOCKED)) {
@@ -172,6 +172,7 @@ namespace rgw {
 
   LookupFHResult RGWLibFS::stat_leaf(RGWFileHandle* parent,
 				     const char *path,
+                                     bool null_vid,
 				     enum rgw_fh_type type,
 				     uint32_t flags)
   {
@@ -199,7 +200,7 @@ namespace rgw {
 	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_CREATE);
@@ -217,7 +218,7 @@ namespace rgw {
 		ux_key && ux_attrs) {
               DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
               if (get<0>(dar) || get<1>(dar)) {
-                update_fh(rgw_fh);
+                update_fh(rgw_fh, null_vid);
               }
 	    }
 	  }
@@ -236,7 +237,7 @@ namespace rgw {
 	RGWStatObjRequest req(cct, user->clone(),
 			      parent->bucket_name(), obj_path,
 			      RGWStatObjRequest::FLAG_NONE);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  fhr = lookup_fh(parent, path, RGWFileHandle::FLAG_DIRECTORY);
@@ -254,7 +255,7 @@ namespace rgw {
 		ux_key && ux_attrs) {
               DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
               if (get<0>(dar) || get<1>(dar)) {
-                update_fh(rgw_fh);
+                update_fh(rgw_fh, null_vid);
               }
 	    }
 	  }
@@ -267,7 +268,7 @@ namespace rgw {
 	std::string object_name{path};
 	RGWStatLeafRequest req(cct, user->clone(),
 			       parent, object_name);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
 	if ((rc == 0) &&
 	    (req.get_ret() == 0)) {
 	  if (req.matched) {
@@ -310,7 +311,7 @@ namespace rgw {
   } /* RGWLibFS::stat_leaf */
 
   int RGWLibFS::read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
-		     size_t* bytes_read, void* buffer, uint32_t flags)
+		     size_t* bytes_read, void* buffer, uint32_t flags, bool null_vid)
   {
     if (! rgw_fh->is_file())
       return -EINVAL;
@@ -320,7 +321,7 @@ namespace rgw {
 
     RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     if ((rc == 0) &&
         ((rc = req.get_ret()) == 0)) {
       lock_guard guard(rgw_fh->mtx);
@@ -332,7 +333,7 @@ namespace rgw {
   }
 
   int RGWLibFS::readlink(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
-                     size_t* bytes_read, void* buffer, uint32_t flags)
+                     size_t* bytes_read, void* buffer, uint32_t flags, bool null_vid)
   {
     if (! rgw_fh->is_link())
       return -EINVAL;
@@ -342,7 +343,7 @@ namespace rgw {
 
     RGWReadRequest req(get_context(), user->clone(), rgw_fh, offset, length, buffer);
 
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     if ((rc == 0) &&
         ((rc = req.get_ret()) == 0)) {
       lock_guard(rgw_fh->mtx);
@@ -353,7 +354,7 @@ namespace rgw {
     return rc;
   }
 
-  int RGWLibFS::unlink(RGWFileHandle* rgw_fh, const char* name, uint32_t flags)
+  int RGWLibFS::unlink(RGWFileHandle* rgw_fh, const char* name, bool null_vid, uint32_t flags)
   {
     int rc = 0;
     BucketStats bs;
@@ -377,7 +378,7 @@ namespace rgw {
       LookupFHResult fhr;
       fhr = stat_bucket(parent, name, bs, (rgw_fh) ?
 			RGWFileHandle::FLAG_LOCKED :
-			RGWFileHandle::FLAG_NONE);
+			RGWFileHandle::FLAG_NONE, null_vid);
       bkt_fh = get<0>(fhr);
       if (unlikely(! bkt_fh)) {
 	/* implies !rgw_fh, so also !LOCKED */
@@ -399,14 +400,14 @@ namespace rgw {
 	/* delete object w/key "<bucket>/" (uxattrs), if any */
 	string oname{"/"};
 	RGWDeleteObjRequest req(cct, user->clone(), bkt_fh->bucket_name(), oname);
-	rc = g_rgwlib->get_fe()->execute_req(&req);
+	rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
 	/* don't care if ENOENT */
 	unref(bkt_fh);
       }
 
       string bname{name};
       RGWDeleteBucketRequest req(cct, user->clone(), bname);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
       if (! rc) {
 	rc = req.get_ret();
       }
@@ -421,7 +422,7 @@ namespace rgw {
 	struct rgw_file_handle *fh;
 	rc = rgw_lookup(get_fs(), parent->get_fh(), name, &fh,
 			nullptr /* st */, 0 /* mask */,
-			RGW_LOOKUP_FLAG_NONE);
+			RGW_LOOKUP_FLAG_NONE, null_vid);
 	if (!! rc)
 	  return rc;
 
@@ -434,7 +435,7 @@ namespace rgw {
       if (rgw_fh->is_dir()) {
 	/* for the duration of our cache timer, trust positive
 	 * child cache */
-	if (rgw_fh->has_children()) {
+	if (rgw_fh->has_children(null_vid)) {
 	  rgw_fh->mtx.unlock();
 	  unref(rgw_fh);
 	  return(-ENOTEMPTY);
@@ -442,7 +443,7 @@ namespace rgw {
 	oname += "/";
       }
       RGWDeleteObjRequest req(cct, user->clone(), parent->bucket_name(), oname);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
       if (! rc) {
 	rc = req.get_ret();
       }
@@ -469,7 +470,7 @@ namespace rgw {
   } /* RGWLibFS::unlink */
 
   int RGWLibFS::rename(RGWFileHandle* src_fh, RGWFileHandle* dst_fh,
-		       const char *_src_name, const char *_dst_name)
+		       const char *_src_name, const char *_dst_name, bool null_vid)
 
   {
     /* XXX initial implementation: try-copy, and delete if copy
@@ -520,7 +521,7 @@ namespace rgw {
       case 0:
       {
 	RGWCopyObjRequest req(cct, user->clone(), src_fh, dst_fh, src_name, dst_name);
-	int rc = g_rgwlib->get_fe()->execute_req(&req);
+	int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
 	  ldout(get_context(), 1)
@@ -586,14 +587,14 @@ namespace rgw {
   } /* RGWLibFS::rename */
 
   MkObjResult RGWLibFS::mkdir(RGWFileHandle* parent, const char *name,
-			      struct stat *st, uint32_t mask, uint32_t flags)
+			      struct stat *st, uint32_t mask, uint32_t flags, bool null_vid)
   {
     int rc, rc2;
     rgw_file_handle *lfh;
 
     rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh,
 		    nullptr /* st */, 0 /* mask */,
-		    RGW_LOOKUP_FLAG_NONE);
+		    RGW_LOOKUP_FLAG_NONE, null_vid);
     if (! rc) {
       /* conflict! */
       rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
@@ -646,7 +647,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
       rc2 = req.get_ret();
     } else {
       /* create an object representing the directory */
@@ -672,7 +673,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
       rc2 = req.get_ret();
     }
 
@@ -699,7 +700,7 @@ namespace rgw {
   } /* RGWLibFS::mkdir */
 
   MkObjResult RGWLibFS::create(RGWFileHandle* parent, const char *name,
-			      struct stat *st, uint32_t mask, uint32_t flags)
+			      struct stat *st, uint32_t mask, uint32_t flags, bool null_vid)
   {
     int rc, rc2;
 
@@ -708,7 +709,7 @@ namespace rgw {
     rgw_file_handle *lfh;
     rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh,
 		    nullptr /* st */, 0 /* mask */,
-		    RGW_LOOKUP_FLAG_NONE);
+		    RGW_LOOKUP_FLAG_NONE, null_vid);
     if (! rc) {
       /* conflict! */
       rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
@@ -728,7 +729,7 @@ namespace rgw {
     RGWPutObjRequest req(cct, user->clone(), parent->bucket_name(), obj_name, bl);
     MkObjResult mkr{nullptr, -EINVAL};
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
 
     if ((rc == 0) &&
@@ -770,7 +771,7 @@ namespace rgw {
   } /* RGWLibFS::create */
 
   MkObjResult RGWLibFS::symlink(RGWFileHandle* parent, const char *name,
-            const char* link_path, struct stat *st, uint32_t mask, uint32_t flags)
+            const char* link_path, struct stat *st, uint32_t mask, uint32_t flags, bool null_vid)
   {
     int rc, rc2;
 
@@ -779,7 +780,7 @@ namespace rgw {
     rgw_file_handle *lfh;
     rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh,
 		    nullptr /* st */, 0 /* mask */,
-                    RGW_LOOKUP_FLAG_NONE);
+                    RGW_LOOKUP_FLAG_NONE, null_vid);
     if (! rc) {
       /* conflict! */
       rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
@@ -843,7 +844,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
     if (! ((rc == 0) &&
         (rc2 == 0))) {
@@ -884,7 +885,7 @@ namespace rgw {
   } /* RGWLibFS::getattr */
 
   int RGWLibFS::setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
-			uint32_t flags)
+			uint32_t flags, bool null_vid)
   {
     int rc, rc2;
     buffer::list ux_key, ux_attrs;
@@ -922,7 +923,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_ETAG, std::move(etag));
     req.emplace_attr(RGW_ATTR_ACL, std::move(acls));
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
 
     if (rc == -ENOENT) {
@@ -936,7 +937,7 @@ namespace rgw {
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
       req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
       rc2 = req.get_ret();
     }
 
@@ -971,7 +972,7 @@ namespace rgw {
 
   int RGWLibFS::getxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist *attrs,
 			  rgw_getxattr_cb cb, void *cb_arg,
-			  uint32_t flags)
+			  uint32_t flags, bool null_vid)
   {
     /* cannot store on fs_root, should not on buckets? */
     if ((rgw_fh->is_bucket()) ||
@@ -1008,7 +1009,7 @@ namespace rgw {
       }
     }
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
     rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
 
@@ -1054,7 +1055,7 @@ namespace rgw {
 
   int RGWLibFS::lsxattrs(
     RGWFileHandle* rgw_fh, rgw_xattrstr *filter_prefix, rgw_getxattr_cb cb,
-    void *cb_arg, uint32_t flags)
+    void *cb_arg, uint32_t flags, bool null_vid)
   {
     /* cannot store on fs_root, should not on buckets? */
     if ((rgw_fh->is_bucket()) ||
@@ -1067,7 +1068,7 @@ namespace rgw {
 
     RGWGetAttrsRequest req(cct, user->clone(), rgw_fh->bucket_name(), obj_name);
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
     rc3 = ((rc == 0) && (rc2 == 0)) ? 0 : -EIO;
 
@@ -1103,7 +1104,7 @@ namespace rgw {
   } /* RGWLibFS::lsxattrs */
 
   int RGWLibFS::setxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist *attrs,
-			  uint32_t flags)
+			  uint32_t flags, bool null_vid)
   {
     /* cannot store on fs_root, should not on buckets? */
     if ((rgw_fh->is_bucket()) ||
@@ -1137,7 +1138,7 @@ namespace rgw {
       return -EINVAL;
     }
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
 
     return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
@@ -1145,7 +1146,7 @@ namespace rgw {
   } /* RGWLibFS::setxattrs */
 
   int RGWLibFS::rmxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs,
-			 uint32_t flags)
+			 uint32_t flags, bool null_vid)
   {
     /* cannot store on fs_root, should not on buckets? */
     if ((rgw_fh->is_bucket()) ||
@@ -1173,7 +1174,7 @@ namespace rgw {
       return -EINVAL;
     }
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
 
     return (((rc == 0) && (rc2 == 0)) ? 0 : -EIO);
@@ -1181,7 +1182,7 @@ namespace rgw {
   } /* RGWLibFS::rmxattrs */
 
   /* called with rgw_fh->mtx held */
-  void RGWLibFS::update_fh(RGWFileHandle *rgw_fh)
+  void RGWLibFS::update_fh(RGWFileHandle *rgw_fh, bool null_vid)
   {
     int rc, rc2;
     string obj_name{rgw_fh->relative_object_name()};
@@ -1204,7 +1205,7 @@ namespace rgw {
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
 
-    rc = g_rgwlib->get_fe()->execute_req(&req);
+    rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     rc2 = req.get_ret();
 
     if ((rc != 0) || (rc2 != 0)) {
@@ -1520,7 +1521,7 @@ namespace rgw {
     return true;
   } /* RGWFileHandle::reclaim */
 
-  bool RGWFileHandle::has_children() const
+  bool RGWFileHandle::has_children(bool null_vid) const
   {
     if (unlikely(! is_dir()))
       return false;
@@ -1528,7 +1529,7 @@ namespace rgw {
     RGWRMdirCheck req(fs->get_context(),
 		      g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 		      this);
-    int rc = g_rgwlib->get_fe()->execute_req(&req);
+    int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
     if (! rc) {
       return req.valid && req.has_children;
     }
@@ -1551,7 +1552,7 @@ namespace rgw {
 
   int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg,
 			     readdir_offset offset,
-			     bool *eof, uint32_t flags)
+			     bool *eof, uint32_t flags, bool null_vid)
   {
     using event = RGWLibFS::event;
     using boost::get;
@@ -1584,7 +1585,7 @@ namespace rgw {
     if (is_root()) {
       RGWListBucketsRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 				this, rcb, cb_arg, offset);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
@@ -1597,7 +1598,7 @@ namespace rgw {
     } else {
       RGWReaddirRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			    this, rcb, cb_arg, offset);
-      rc = g_rgwlib->get_fe()->execute_req(&req);
+      rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
       if (! rc) {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
@@ -2146,7 +2147,7 @@ int rgw_umount(struct rgw_fs *rgw_fs, uint32_t flags)
 */
 int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *parent_fh,
-	       struct rgw_statvfs *vfs_st, uint32_t flags)
+	       struct rgw_statvfs *vfs_st, uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   struct rados_cluster_stat_t stats;
@@ -2154,7 +2155,7 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
   RGWGetClusterStatReq req(fs->get_context(),
 			   g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 			   stats);
-  int rc = g_rgwlib->get_fe()->execute_req(&req);
+  int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
   if (rc < 0) {
     lderr(fs->get_context()) << "ERROR: getting total cluster usage"
                              << cpp_strerror(-rc) << dendl;
@@ -2183,7 +2184,7 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	       const char *name, struct stat *st, uint32_t mask,
 	       struct rgw_file_handle **fh, uint32_t posix_flags,
-	       uint32_t flags)
+	       uint32_t flags, bool null_vid)
 {
   using std::get;
 
@@ -2197,7 +2198,7 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
     return -EINVAL;
   }
 
-  MkObjResult fhr = fs->create(parent, name, st, mask, flags);
+  MkObjResult fhr = fs->create(parent, name, st, mask, flags, null_vid);
   RGWFileHandle *nfh = get<0>(fhr); // nullptr if !success
 
   if (nfh)
@@ -2212,7 +2213,7 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
         const char *name, const char *link_path, struct stat *st, uint32_t mask,
         struct rgw_file_handle **fh, uint32_t posix_flags,
-        uint32_t flags)
+        uint32_t flags, bool null_vid)
 {
   using std::get;
 
@@ -2226,7 +2227,7 @@ int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
     return -EINVAL;
   }
 
-  MkObjResult fhr = fs->symlink(parent, name, link_path, st, mask, flags);
+  MkObjResult fhr = fs->symlink(parent, name, link_path, st, mask, flags, null_vid);
   RGWFileHandle *nfh = get<0>(fhr); // nullptr if !success
 
   if (nfh)
@@ -2241,7 +2242,7 @@ int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh,
 	      const char *name, struct stat *st, uint32_t mask,
-	      struct rgw_file_handle **fh, uint32_t flags)
+	      struct rgw_file_handle **fh, uint32_t flags, bool null_vid)
 {
   using std::get;
 
@@ -2253,7 +2254,7 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
     return -EINVAL;
   }
 
-  MkObjResult fhr = fs->mkdir(parent, name, st, mask, flags);
+  MkObjResult fhr = fs->mkdir(parent, name, st, mask, flags, null_vid);
   RGWFileHandle *nfh = get<0>(fhr); // nullptr if !success
 
   if (nfh)
@@ -2268,26 +2269,26 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *src, const char* src_name,
 	       struct rgw_file_handle *dst, const char* dst_name,
-	       uint32_t flags)
+	       uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
 
   RGWFileHandle* src_fh = get_rgwfh(src);
   RGWFileHandle* dst_fh = get_rgwfh(dst);
 
-  return fs->rename(src_fh, dst_fh, src_name, dst_name);
+  return fs->rename(src_fh, dst_fh, src_name, dst_name, null_vid);
 }
 
 /*
   remove file or directory
 */
 int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
-	       const char *name, uint32_t flags)
+	       const char *name, uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* parent = get_rgwfh(parent_fh);
 
-  return fs->unlink(parent, name);
+  return fs->unlink(parent, name, null_vid);
 }
 
 /*
@@ -2296,7 +2297,7 @@ int rgw_unlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 int rgw_lookup(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh, const char* path,
 	      struct rgw_file_handle **fh,
-	      struct stat *st, uint32_t mask, uint32_t flags)
+	      struct stat *st, uint32_t mask, uint32_t flags, bool null_vid)
 {
   //CephContext* cct = static_cast<CephContext*>(rgw_fs->rgw);
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
@@ -2318,7 +2319,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
       rgw_fh = parent;
     } else {
       RGWLibFS::BucketStats bstat;
-      fhr = fs->stat_bucket(parent, path, bstat, RGWFileHandle::FLAG_NONE);
+      fhr = fs->stat_bucket(parent, path, bstat, RGWFileHandle::FLAG_NONE, null_vid);
       rgw_fh = get<0>(fhr);
       if (! rgw_fh)
 	return -ENOENT;
@@ -2353,7 +2354,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	    goto done;
 	  }
 	}
-	fhr = fs->stat_leaf(parent, path, fh_type, sl_flags);
+	fhr = fs->stat_leaf(parent, path, null_vid, fh_type, sl_flags);
       }
       if (! get<0>(fhr)) {
 	if (! (flags & RGW_LOOKUP_FLAG_CREATE))
@@ -2426,12 +2427,12 @@ int rgw_getattr(struct rgw_fs *rgw_fs,
 */
 int rgw_setattr(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *fh, struct stat *st,
-		uint32_t mask, uint32_t flags)
+		uint32_t mask, uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return fs->setattr(rgw_fh, st, mask, flags);
+  return fs->setattr(rgw_fh, st, mask, flags, null_vid);
 }
 
 /*
@@ -2484,7 +2485,7 @@ int rgw_close(struct rgw_fs *rgw_fs,
 int rgw_readdir(struct rgw_fs *rgw_fs,
 		struct rgw_file_handle *parent_fh, uint64_t *offset,
 		rgw_readdir_cb rcb, void *cb_arg, bool *eof,
-		uint32_t flags)
+		uint32_t flags, bool null_vid)
 {
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
@@ -2504,7 +2505,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     rcb("..", cb_arg, 2, nullptr, 0, RGW_LOOKUP_FLAG_DIR);
   }
 
-  int rc = parent->readdir(rcb, cb_arg, offset, eof, flags);
+  int rc = parent->readdir(rcb, cb_arg, offset, eof, flags, null_vid);
   return rc;
 } /* rgw_readdir */
 
@@ -2512,7 +2513,7 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
 int rgw_readdir2(struct rgw_fs *rgw_fs,
 		 struct rgw_file_handle *parent_fh, const char *name,
 		 rgw_readdir_cb rcb, void *cb_arg, bool *eof,
-		 uint32_t flags)
+		 uint32_t flags, bool null_vid)
 {
   RGWFileHandle* parent = get_rgwfh(parent_fh);
   if (! parent) {
@@ -2532,7 +2533,7 @@ int rgw_readdir2(struct rgw_fs *rgw_fs,
     rcb("..", cb_arg, 2, nullptr, 0, RGW_LOOKUP_FLAG_DIR);
   }
 
-  int rc = parent->readdir(rcb, cb_arg, name, eof, flags);
+  int rc = parent->readdir(rcb, cb_arg, name, eof, flags, null_vid);
   return rc;
 } /* rgw_readdir2 */
 
@@ -2558,12 +2559,12 @@ int rgw_dirent_offset(struct rgw_fs *rgw_fs,
 int rgw_read(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, size_t *bytes_read, void *buffer,
-	     uint32_t flags)
+	     uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return fs->read(rgw_fh, offset, length, bytes_read, buffer, flags);
+  return fs->read(rgw_fh, offset, length, bytes_read, buffer, flags, null_vid);
 }
 
 /*
@@ -2572,12 +2573,12 @@ int rgw_read(struct rgw_fs *rgw_fs,
 int rgw_readlink(struct rgw_fs *rgw_fs,
 	     struct rgw_file_handle *fh, uint64_t offset,
 	     size_t length, size_t *bytes_read, void *buffer,
-	     uint32_t flags)
+	     uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return fs->readlink(rgw_fh, offset, length, bytes_read, buffer, flags);
+  return fs->readlink(rgw_fh, offset, length, bytes_read, buffer, flags, null_vid);
 }
 
 /*
@@ -2695,7 +2696,7 @@ int rgw_readv(struct rgw_fs *rgw_fs,
    write data to file (vector)
 */
 int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-	      rgw_uio *uio, uint32_t flags)
+	      rgw_uio *uio, uint32_t flags, bool null_vid)
 {
 
   // not supported - rest of function is ignored
@@ -2720,7 +2721,7 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
   RGWPutObjRequest req(cct, g_rgwlib->get_driver()->get_user(fs->get_user()->user_id),
 		       rgw_fh->bucket_name(), oname, bl);
 
-  int rc = g_rgwlib->get_fe()->execute_req(&req);
+  int rc = g_rgwlib->get_fe()->execute_req(&req, null_vid);
 
   /* XXX update size (in request) */
 
@@ -2750,40 +2751,40 @@ int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 
 int rgw_getxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		  rgw_xattrlist *attrs, rgw_getxattr_cb cb, void *cb_arg,
-		  uint32_t flags)
+		  uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return fs->getxattrs(rgw_fh, attrs, cb, cb_arg, flags);
+  return fs->getxattrs(rgw_fh, attrs, cb, cb_arg, flags, null_vid);
 }
 
 int rgw_lsxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 		 rgw_xattrstr *filter_prefix /* ignored */,
-		 rgw_getxattr_cb cb, void *cb_arg, uint32_t flags)
+		 rgw_getxattr_cb cb, void *cb_arg, uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return fs->lsxattrs(rgw_fh, filter_prefix, cb, cb_arg, flags);
+  return fs->lsxattrs(rgw_fh, filter_prefix, cb, cb_arg, flags, null_vid);
 }
 
 int rgw_setxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		  rgw_xattrlist *attrs, uint32_t flags)
+		  rgw_xattrlist *attrs, uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return fs->setxattrs(rgw_fh, attrs, flags);
+  return fs->setxattrs(rgw_fh, attrs, flags, null_vid);
 }
 
 int rgw_rmxattrs(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
-		 rgw_xattrlist *attrs, uint32_t flags)
+		 rgw_xattrlist *attrs, uint32_t flags, bool null_vid)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  return fs->rmxattrs(rgw_fh, attrs, flags);
+  return fs->rmxattrs(rgw_fh, attrs, flags, null_vid);
 }
 
 } /* extern "C" */

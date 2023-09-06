@@ -35,13 +35,13 @@ protected:
   RGWOp *op_copy() override { return NULL; }
   RGWOp *op_options() override { return NULL; }
 
-  int serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const std::string &errordoc_key, optional_yield y);
+  int serve_errordoc(const DoutPrefixProvider *dpp, int http_ret, const std::string &errordoc_key, optional_yield y, bool null_vid);
 public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_S3Website() override = default;
 
   int init(rgw::sal::Driver* driver, req_state *s, rgw::io::BasicClient* cio) override;
-  int error_handler(int err_no, std::string *error_content, optional_yield y) override;
+  int error_handler(int err_no, std::string *error_content, optional_yield y, bool null_vid) override;
 };
 
 class RGWHandler_REST_Service_S3Website : public RGWHandler_REST_S3Website {
@@ -81,7 +81,7 @@ public:
   RGWGetObj_ObjStore_S3Website() : is_errordoc_request(false) {}
   explicit RGWGetObj_ObjStore_S3Website(bool is_errordoc_request) : is_errordoc_request(false) { this->is_errordoc_request = is_errordoc_request; }
   ~RGWGetObj_ObjStore_S3Website() override {}
-  int send_response_data_error(optional_yield y) override;
+  int send_response_data_error(optional_yield y, bool null_vid) override;
   int send_response_data(bufferlist& bl, off_t ofs, off_t len) override;
   // We override RGWGetObj_ObjStore::get_params here, to allow ignoring all
   // conditional params for error pages.

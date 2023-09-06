@@ -1699,7 +1699,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj_key& k
 }
 
 int do_check_object_locator(const string& tenant_name, const string& bucket_name,
-                            bool fix, bool remove_bad, Formatter *f)
+                            bool fix, bool remove_bad, Formatter *f, bool null_vid)
 {
   if (remove_bad && !fix) {
     cerr << "ERROR: can't have remove_bad specified without fix" << std::endl;
@@ -1738,7 +1738,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   f->open_array_section("check_objects");
   do {
-    ret = bucket->list(dpp(), params, max_entries - count, results, null_yield);
+    ret = bucket->list(dpp(), params, max_entries - count, results, null_yield, null_vid);
     if (ret < 0) {
       cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3488,6 +3488,8 @@ int main(int argc, const char **argv)
   std::optional<std::string> str_script_ctx;
   std::optional<std::string> script_package;
   int allow_compilation = false;
+
+  bool null_vid = false;
 
   std::optional<string> opt_group_id;
   std::optional<string> opt_status;
@@ -7019,7 +7021,7 @@ int main(int argc, const char **argv)
       do {
         const int remaining = max_entries - count;
 	ret = bucket->list(dpp(), params, std::min(remaining, paginate_size), results,
-			   null_yield);
+			   null_yield, null_vid);
         if (ret < 0) {
           cerr << "ERROR: driver->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -7055,7 +7057,7 @@ int main(int argc, const char **argv)
       // there are indexless buckets
       ret = lister.run(dpp(), yes_i_really_mean_it);
     } else {
-      ret = lister.run(dpp(), bucket_name);
+      ret = lister.run(dpp(), bucket_name, null_vid);
     }
 
     if (ret < 0) {
@@ -7216,7 +7218,7 @@ int main(int argc, const char **argv)
 
     ret = rados_driver->getRados()->bucket_resync_encrypted_multipart(
         dpp(), null_yield, rados_driver, bucket->get_info(),
-        marker, stream_flusher);
+        marker, stream_flusher, null_vid);
     if (ret < 0) {
       return -ret;
     }
@@ -8364,9 +8366,9 @@ next:
         cerr << "ERROR: need to specify bucket name" << std::endl;
         return EINVAL;
       }
-      do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get());
+      do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter.get(), null_vid);
     } else {
-      RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp());
+      RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp(), null_vid);
     }
   }
 
@@ -8519,7 +8521,7 @@ next:
     }
 
     int ret =
-      static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_lc(bucket);
+      static_cast<rgw::sal::RadosStore*>(driver)->getRados()->process_lc(bucket, null_vid);
     if (ret < 0) {
       cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -8568,7 +8570,7 @@ next:
       cerr << "could not init search, ret=" << ret << std::endl;
       return -ret;
     }
-    ret = search.run(dpp());
+    ret = search.run(dpp(), null_vid);
     if (ret < 0) {
       return -ret;
     }

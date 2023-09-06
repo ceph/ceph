@@ -1510,7 +1510,7 @@ static void rename_swift_keys(const rgw_user& user,
   }
 }
 
-int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
+int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y, bool null_vid)
 {
   int ret;
   bool populated = op_state.is_populated();
@@ -1587,7 +1587,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       }
 
       ret = rgw_chown_bucket_and_objects(driver, bucket.get(), new_user.get(),
-					 std::string(), nullptr, dpp, y);
+					 std::string(), nullptr, dpp, y, null_vid);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to run bucket chown" + cpp_strerror(-ret));
         return ret;
@@ -1730,7 +1730,7 @@ int RGWUser::add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, o
   return 0;
 }
 
-int RGWUser::rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
+int RGWUser::rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutPrefixProvider *dpp, bool null_vid, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
@@ -1741,7 +1741,7 @@ int RGWUser::rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutP
     return ret;
   }
 
-  ret = execute_rename(dpp, op_state, &subprocess_msg, y);
+  ret = execute_rename(dpp, op_state, &subprocess_msg, y, null_vid);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to rename user, " + subprocess_msg);
     return ret;
@@ -1750,7 +1750,7 @@ int RGWUser::rename(RGWUserAdminOpState& op_state, optional_yield y, const DoutP
   return 0;
 }
 
-int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
+int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y, bool null_vid)
 {
   int ret;
 
@@ -1780,7 +1780,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     }
 
     for (auto it = m.begin(); it != m.end(); ++it) {
-      ret = it->second->remove_bucket(dpp, true, false, nullptr, y);
+      ret = it->second->remove_bucket(dpp, true, false, nullptr, y, null_vid);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -1803,7 +1803,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   return 0;
 }
 
-int RGWUser::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
+int RGWUser::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, optional_yield y, bool null_vid, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
@@ -1814,7 +1814,7 @@ int RGWUser::remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state
     return ret;
   }
 
-  ret = execute_remove(dpp, op_state, &subprocess_msg, y);
+  ret = execute_remove(dpp, op_state, &subprocess_msg, y, null_vid);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user, " + subprocess_msg);
     return ret;

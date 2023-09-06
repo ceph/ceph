@@ -108,7 +108,7 @@ int RGWPutUserPolicy::get_params()
   return 0;
 }
 
-void RGWPutUserPolicy::execute(optional_yield y)
+void RGWPutUserPolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -206,7 +206,7 @@ int RGWGetUserPolicy::get_params()
   return 0;
 }
 
-void RGWGetUserPolicy::execute(optional_yield y)
+void RGWGetUserPolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -275,7 +275,7 @@ int RGWListUserPolicies::get_params()
   return 0;
 }
 
-void RGWListUserPolicies::execute(optional_yield y)
+void RGWListUserPolicies::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {
@@ -342,7 +342,7 @@ int RGWDeleteUserPolicy::get_params()
   return 0;
 }
 
-void RGWDeleteUserPolicy::execute(optional_yield y)
+void RGWDeleteUserPolicy::execute(optional_yield y, bool null_vid)
 {
   op_ret = get_params();
   if (op_ret < 0) {

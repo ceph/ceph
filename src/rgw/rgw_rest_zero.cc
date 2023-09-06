@@ -53,10 +53,10 @@ class ZeroDeleteOp : public ZeroOp {
  public:
   explicit ZeroDeleteOp(ZeroResource* resource) : ZeroOp(resource) {}
   const char* name() const override { return "zero_delete"; }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 };
 
-void ZeroDeleteOp::execute(optional_yield y)
+void ZeroDeleteOp::execute(optional_yield y, bool null_vid)
 {
   auto lock = std::scoped_lock(resource->mutex);
   resource->size = 0;
@@ -68,11 +68,11 @@ class ZeroGetOp : public ZeroOp {
  public:
   explicit ZeroGetOp(ZeroResource* resource) : ZeroOp(resource) {}
   const char* name() const override { return "zero_get"; }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   void send_response() override;
 };
 
-void ZeroGetOp::execute(optional_yield y)
+void ZeroGetOp::execute(optional_yield y, bool null_vid)
 {
   response_content_type = "application/octet-stream";
 
@@ -110,10 +110,10 @@ class ZeroHeadOp : public ZeroOp {
  public:
   explicit ZeroHeadOp(ZeroResource* resource) : ZeroOp(resource) {}
   const char* name() const override { return "zero_head"; }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 };
 
-void ZeroHeadOp::execute(optional_yield y)
+void ZeroHeadOp::execute(optional_yield y, bool null_vid)
 {
   response_content_type = "application/octet-stream";
 
@@ -127,10 +127,10 @@ class ZeroPutOp : public ZeroOp {
  public:
   explicit ZeroPutOp(ZeroResource* resource) : ZeroOp(resource) {}
   const char* name() const override { return "zero_put"; }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
 };
 
-void ZeroPutOp::execute(optional_yield y)
+void ZeroPutOp::execute(optional_yield y, bool null_vid)
 {
   if (!s->length) {
     ldpp_dout(this, 0) << "missing content length" << dendl;

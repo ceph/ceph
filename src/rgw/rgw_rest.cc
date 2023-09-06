@@ -658,7 +658,7 @@ static void build_redirect_url(req_state *s, const string& redirect_base, string
 }
 
 void abort_early(req_state *s, RGWOp* op, int err_no,
-		 RGWHandler* handler, optional_yield y)
+		 RGWHandler* handler, optional_yield y, bool null_vid)
 {
   string error_content("");
   if (!s->formatter) {
@@ -669,13 +669,13 @@ void abort_early(req_state *s, RGWOp* op, int err_no,
   // op->error_handler is responsible for calling it's handler error_handler
   if (op != NULL) {
     int new_err_no;
-    new_err_no = op->error_handler(err_no, &error_content, y);
+    new_err_no = op->error_handler(err_no, &error_content, y, null_vid);
     ldpp_dout(s, 1) << "op->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;
   } else if (handler != NULL) {
     int new_err_no;
-    new_err_no = handler->error_handler(err_no, &error_content, y);
+    new_err_no = handler->error_handler(err_no, &error_content, y, null_vid);
     ldpp_dout(s, 1) << "handler->ERRORHANDLER: err_no=" << err_no
 		      << " new_err_no=" << new_err_no << dendl;
     err_no = new_err_no;

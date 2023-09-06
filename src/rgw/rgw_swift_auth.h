@@ -314,7 +314,7 @@ public:
   ~RGW_SWIFT_Auth_Get() override {}
 
   int verify_permission(optional_yield) override { return 0; }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_vid) override;
   const char* name() const override { return "swift_auth_get"; }
   dmc::client_id dmclock_client() override { return dmc::client_id::auth; }
 };

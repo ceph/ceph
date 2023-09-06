@@ -41,6 +41,7 @@ namespace {
   bool do_create = false;
   bool do_delete = false;
   bool do_multi = false;
+  bool null_vid = false;
   int multi_cnt = 10;
 
   string bucket_name = "sorrydave";
@@ -74,7 +75,7 @@ TEST(LibRGW, CREATE_BUCKET) {
     st.st_mode = 755;
 
     int ret = rgw_mkdir(fs, fs->root_fh, bucket_name.c_str(), &st, create_mask,
-			&fh, RGW_MKDIR_FLAG_NONE);
+			&fh, RGW_MKDIR_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -82,7 +83,7 @@ TEST(LibRGW, CREATE_BUCKET) {
 TEST(LibRGW, DELETE_BUCKET) {
   if (do_delete) {
     int ret = rgw_unlink(fs, fs->root_fh, bucket_name.c_str(),
-			 RGW_UNLINK_FLAG_NONE);
+			 RGW_UNLINK_FLAG_NONE, null_vid);
     ASSERT_EQ(ret, 0);
   }
 }
@@ -101,7 +102,7 @@ TEST(LibRGW, CREATE_BUCKET_MULTI) {
       string bn = bucket_name;
       bn += to_string(ix);
       ret = rgw_mkdir(fs, fs->root_fh, bn.c_str(), &st, create_mask, &fh,
-		      RGW_MKDIR_FLAG_NONE);
+		      RGW_MKDIR_FLAG_NONE, null_vid);
       ASSERT_EQ(ret, 0);
       std::cout << "created: " << bn << std::endl;
     }
@@ -114,7 +115,7 @@ TEST(LibRGW, DELETE_BUCKET_MULTI) {
       string bn = bucket_name;
       bn += to_string(ix);
       int ret = rgw_unlink(fs, fs->root_fh, bn.c_str(),
-			   RGW_UNLINK_FLAG_NONE);
+			   RGW_UNLINK_FLAG_NONE, null_vid);
       ASSERT_EQ(ret, 0);
     }
   }
