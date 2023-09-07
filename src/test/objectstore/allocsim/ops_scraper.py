@@ -10,6 +10,7 @@ import time
 import logging
 
 FORMAT = '%(name)8s::%(levelname)8s:: %(message)s'
+HISTORY_HOLD = 2
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger('osd-op-scrapper')
 
@@ -180,6 +181,10 @@ def _set_osd_history_size(name: str, history_size: int):
     run_ceph_command(['tell', f'osd.{name}', 'config', 'set', 'osd_op_history_size',
                       str(int(history_size))], no_out=True)
 
+def _set_osd_history_duration(name: str, duration: int):
+    run_ceph_command(['tell', f'osd.{name}', 'config', 'set', 'osd_op_history_duration',
+                      str(duration)], no_out=True)
+
 class OsdParameters:
     def __init__(self, name: str, ready_time: int, freq: int, history_size: int) -> None:
         self.name = name 
@@ -239,6 +244,7 @@ def main():
     osds_info = []
     for osd in osds:
         _set_osd_history_size(osd, max_history_size)
+        _set_osd_history_duration(osd, HISTORY_HOLD) #fixed 2s duration to hold ops
         osds_info.append(OsdParameters(osd, 0, freq, history_size))
 
     logger.debug(f'start freq {freq}')
