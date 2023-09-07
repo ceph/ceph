@@ -61,7 +61,7 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
       return 0;
     }
 
-    int exist_key(std::string key, optional_yield y);
+    int exist_key(CacheObj* object, optional_yield y);
     void shutdown();
 
     int set(CacheObj* object, optional_yield y);
@@ -97,7 +97,7 @@ class BlockDirectory: public Directory {
       return 0;
     }
 	
-    int exist_key(std::string key, optional_yield y);
+    int exist_key(CacheBlock* block, optional_yield y);
     void shutdown();
 
     int set(CacheBlock* block, optional_yield y);
