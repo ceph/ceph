@@ -10712,6 +10712,17 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
 	dout(7) << *dnl->get_inode() << " is frozen, non-empty reply, stopping" << dendl;
 	break;
       }
+    } else if (dnl->is_referent() && dnl->get_ref_inode()->is_frozen_inode()) {
+      if (tailitem && dis->is_path_locked()) {
+	dout(7) << "handle_discover allowing discovery of frozen tail referent inode" << *dnl->get_ref_inode() << dendl;
+      } else if (reply->is_empty()) {
+	dout(7) << *dnl->get_ref_inode() << " referent inode is frozen, empty reply, waiting" << dendl;
+	dnl->get_ref_inode()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+	return;
+      } else {
+	dout(7) << *dnl->get_ref_inode() << " referent inode is frozen, non-empty reply, stopping" << dendl;
+	break;
+      }
     }
 
     // add dentry
@@ -10720,6 +10731,15 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
     encode_replica_dentry(dn, from, reply->trace);
     dout(7) << "handle_discover added dentry " << *dn << dendl;
     
+    // add referent inode
+    if (dnl->is_referent()) {
+      CInode *ref_inode = dnl->get_ref_inode();
+      ceph_assert(ref_inode->is_auth());
+
+      encode_replica_inode(ref_inode, from, reply->trace, mds->mdsmap->get_up_features());
+      dout(7) << "handle_discover added referent inode " << *ref_inode << dendl;
+    }
+
     if (!dnl->is_primary()) break;  // stop on null or remote link.
     
     // add inode
@@ -11063,7 +11083,9 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     else if (in->is_mdsdir())
       in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
     dout(10) << __func__ << " added " << *in << dendl;
-    if (dn) {
+    if (dn && dn->get_linkage()->is_remote()){
+      dn->dir->set_referent_inode(dn, in);
+    } else if (dn) {
       ceph_assert(dn->get_linkage()->is_null());
       dn->dir->link_primary_inode(dn, in);
     }
@@ -11072,9 +11094,13 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     in->_decode_base(p);
     in->_decode_locks_state_for_replica(p, false);
     dout(10) << __func__ << " had " << *in << dendl;
+    if (dn && dn->get_linkage()->is_remote()) {
+      dn->dir->set_referent_inode(dn, in);
+      dout(10) << __func__ << " setting referent inode " << *in << dendl;
+    }
   }
 
-  if (dn) {
+  if (dn && !dn->get_linkage()->is_referent()) {
     if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
       dout(10) << __func__ << " different linkage in dentry " << *dn << dendl;
   }

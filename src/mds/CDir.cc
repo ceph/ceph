@@ -581,6 +581,13 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
   ceph_assert(get_num_any() == items.size());
 }
 
+void CDir::set_referent_inode(CDentry *dn, CInode *ref_in)
+{
+  // remote ino and dtype is already set, just set the referent inode and parent
+  dn->get_linkage()->ref_inode = ref_in;
+  link_inode_work(dn, ref_in);
+}
+
 void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsigned char d_type)
 {
   dout(12) << __func__ << " " << *dn << " remote " << rino << " referent inode " << *ref_in << dendl;
