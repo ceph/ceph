@@ -667,75 +667,6 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 } // rgw_bucket_list
 
-
-static int check_index(cls_method_context_t hctx,
-		       rgw_bucket_dir_header *existing_header,
-		       rgw_bucket_dir_header *calc_header)
-{
-  int rc = read_bucket_header(hctx, existing_header);
-  if (rc < 0) {
-    CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
-    return rc;
-  }
-
-  calc_header->tag_timeout = existing_header->tag_timeout;
-  calc_header->ver = existing_header->ver;
-  calc_header->syncstopped = existing_header->syncstopped;
-
-  map<string, bufferlist> keys;
-  string start_obj;
-  string filter_prefix;
-
-#define CHECK_CHUNK_SIZE 1000
-  bool done = false;
-  bool more;
-
-  do {
-    rc = get_obj_vals(hctx, start_obj, filter_prefix, CHECK_CHUNK_SIZE, &keys, &more);
-    if (rc < 0)
-      return rc;
-
-    for (auto kiter = keys.begin(); kiter != keys.end(); ++kiter) {
-      if (!bi_is_plain_entry(kiter->first)) {
-        done = true;
-        break;
-      }
-
-      rgw_bucket_dir_entry entry;
-      auto eiter = kiter->second.cbegin();
-      try {
-        decode(entry, eiter);
-      } catch (ceph::buffer::error& err) {
-        CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s", kiter->first.c_str());
-        return -EIO;
-      }
-      rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
-      stats.num_entries++;
-      stats.total_size += entry.meta.accounted_size;
-      stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
-      stats.actual_size += entry.meta.size;
-
-      start_obj = kiter->first;
-    }
-  } while (keys.size() == CHECK_CHUNK_SIZE && !done);
-
-  return 0;
-}
-
-int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(10, "entered %s", __func__);
-  rgw_cls_check_index_ret ret;
-
-  int rc = check_index(hctx, &ret.existing_header, &ret.calculated_header);
-  if (rc < 0)
-    return rc;
-
-  encode(ret, *out);
-
-  return 0;
-}
-
 static int write_bucket_header(cls_method_context_t hctx, rgw_bucket_dir_header *header)
 {
   header->ver++;
@@ -743,19 +674,6 @@ static int write_bucket_header(cls_method_context_t hctx, rgw_bucket_dir_header 
   bufferlist header_bl;
   encode(*header, header_bl);
   return cls_cxx_map_write_header(hctx, &header_bl);
-}
-
-
-int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(10, "entered %s()\n", __func__);
-  rgw_bucket_dir_header existing_header;
-  rgw_bucket_dir_header calc_header;
-  int rc = check_index(hctx, &existing_header, &calc_header);
-  if (rc < 0)
-    return rc;
-
-  return write_bucket_header(hctx, &calc_header);
 }
 
 int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -2932,6 +2850,115 @@ static int list_olh_entries(cls_method_context_t hctx,
 
   return count;
 }
+
+static int check_index(cls_method_context_t hctx,
+		       rgw_bucket_dir_header *existing_header,
+		       rgw_bucket_dir_header *calc_header)
+{
+  int rc = read_bucket_header(hctx, existing_header);
+  if (rc < 0) {
+    CLS_LOG(1, "ERROR: check_index(): failed to read header\n");
+    return rc;
+  }
+
+  calc_header->tag_timeout = existing_header->tag_timeout;
+  calc_header->ver = existing_header->ver;
+  calc_header->syncstopped = existing_header->syncstopped;
+
+  std::list<rgw_cls_bi_entry> entries;
+  string start_obj;
+  string filter_prefix;
+
+#define CHECK_CHUNK_SIZE 1000
+  bool more;
+
+  do {
+    rc = list_plain_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    if (rc < 0) {
+      return rc;
+    }
+
+    for (const auto & bientry : entries) {
+      rgw_bucket_dir_entry entry;
+      auto diter = bientry.data.cbegin();
+      try {
+        decode(entry, diter);
+      } catch (ceph::buffer::error& err) {
+        CLS_LOG(1, "ERROR:check_index(): failed to decode entry, key=%s", bientry.idx.c_str());
+        return -EIO;
+      }
+
+      if (entry.exists && entry.key.instance.empty()) {
+        rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
+        stats.num_entries++;
+        stats.total_size += entry.meta.accounted_size;
+        stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        stats.actual_size += entry.meta.size;
+      }
+      start_obj = bientry.idx;
+    }
+    entries.clear();
+  } while (more);
+
+  start_obj = "";
+  do {
+    rc = list_instance_entries(hctx, filter_prefix, start_obj, CHECK_CHUNK_SIZE, &entries, &more);
+    if (rc < 0) {
+      return rc;
+    }
+
+    for (const auto & bientry : entries) {
+      rgw_bucket_dir_entry entry;
+      auto diter = bientry.data.cbegin();
+      try {
+        decode(entry, diter);
+      } catch (ceph::buffer::error& err) {
+        CLS_LOG(1, "ERROR:check_index(): failed to decode entry, key=%s", bientry.idx.c_str());
+        return -EIO;
+      }
+
+      if (entry.exists) {
+        rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
+        stats.num_entries++;
+        stats.total_size += entry.meta.accounted_size;
+        stats.total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+        stats.actual_size += entry.meta.size;
+      }
+      start_obj = bientry.idx;
+    }
+    entries.clear();
+  } while (more);
+
+  return 0;
+}
+
+int rgw_bucket_rebuild_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+  rgw_bucket_dir_header existing_header;
+  rgw_bucket_dir_header calc_header;
+  int rc = check_index(hctx, &existing_header, &calc_header);
+  if (rc < 0)
+    return rc;
+
+  return write_bucket_header(hctx, &calc_header);
+}
+
+
+int rgw_bucket_check_index(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(10, "entered %s", __func__);
+  rgw_cls_check_index_ret ret;
+
+  int rc = check_index(hctx, &ret.existing_header, &ret.calculated_header);
+  if (rc < 0)
+    return rc;
+
+  encode(ret, *out);
+
+  return 0;
+}
+
 
 /* Lists all the entries that appear in a bucket index listing.
  *
