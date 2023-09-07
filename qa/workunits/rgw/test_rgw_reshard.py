@@ -4,7 +4,7 @@ import time
 import logging as log
 import json
 import os
-from common import exec_cmd, boto_connect, create_user
+from common import exec_cmd, boto_connect, create_user, put_objects, create_unlinked_objects
 
 """
 Rgw manual and dynamic resharding  testing against a running instance
@@ -82,7 +82,7 @@ def main():
     bucket1 = connection.create_bucket(Bucket=BUCKET_NAME1)
     bucket2 = connection.create_bucket(Bucket=BUCKET_NAME2)
     ver_bucket = connection.create_bucket(Bucket=VER_BUCKET_NAME)
-    connection.BucketVersioning('ver_bucket')
+    connection.BucketVersioning(VER_BUCKET_NAME).enable()
 
     bucket_stats1 = get_bucket_stats(BUCKET_NAME1)
     bucket_stats2 = get_bucket_stats(BUCKET_NAME2)
@@ -198,6 +198,28 @@ def main():
     cmd = exec_cmd('radosgw-admin bi list --bucket %s' % BUCKET_NAME1)
     json_op = json.loads(cmd)
     assert len(json_op) == 0
+
+    # TESTCASE 'check that bucket stats are correct after reshard with unlinked entries'
+    log.debug('TEST: check that bucket stats are correct after reshard with unlinked entries\n')
+    ver_bucket.object_versions.all().delete()
+    ok_keys = ['a', 'b', 'c']
+    unlinked_keys = ['x', 'y', 'z']
+    put_objects(ver_bucket, ok_keys)
+    create_unlinked_objects(connection, ver_bucket, unlinked_keys)
+    cmd = exec_cmd(f'radosgw-admin bucket reshard --bucket {VER_BUCKET_NAME} --num-shards 17 --yes-i-really-mean-it')
+    out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {VER_BUCKET_NAME} --fix --min-age-hours 0 --rgw-olh-pending-timeout-sec 0 --dump-keys')
+    json_out = json.loads(out)
+    assert len(json_out) == len(unlinked_keys)
+    ver_bucket.object_versions.all().delete()
+    out = exec_cmd(f'radosgw-admin bucket stats --bucket {VER_BUCKET_NAME}')
+    json_out = json.loads(out)
+    log.debug(json_out['usage'])
+    assert json_out['usage']['rgw.main']['size'] == 0
+    assert json_out['usage']['rgw.main']['num_objects'] == 0
+    assert json_out['usage']['rgw.main']['size_actual'] == 0
+    assert json_out['usage']['rgw.main']['size_kb'] == 0
+    assert json_out['usage']['rgw.main']['size_kb_actual'] == 0
+    assert json_out['usage']['rgw.main']['size_kb_utilized'] == 0
 
     # Clean up
     log.debug("Deleting bucket %s", BUCKET_NAME1)
