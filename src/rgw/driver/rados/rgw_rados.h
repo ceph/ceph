@@ -131,6 +131,7 @@ struct RGWOLHPendingInfo {
   }
 
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWOLHPendingInfo*>& o);
 };
 WRITE_CLASS_ENCODER(RGWOLHPendingInfo)
 

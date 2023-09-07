@@ -72,7 +72,8 @@ struct rgw_zone_set {
     /* no DECODE_START, DECODE_END for backward compatibility */
     ceph::decode(entries, bl);
   }
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_zone_set*>& o);
   void insert(const std::string& zone, std::optional<std::string> location_key);
   bool exists(const std::string& zone, std::optional<std::string> location_key) const;
 };
