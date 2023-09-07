@@ -820,8 +820,9 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
       if (ret == 0) {
-        block.size = bl.length();
         block.version = oid;
+        block.size = bl.length(); // TODO: fill out block entirely
+        block.size = source->get_obj_size(); // which is correct? -Sam
         block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
         block.size = source->get_obj_size();
         block.cacheObj.objName = source->get_key().get_oid();
@@ -831,7 +832,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), *save_y);
         }
         /* Store block in directory */
-        if (!blockDir->exist_key(oid, *save_y)) {
+        if (!blockDir->exist_key(&block, *save_y)) {
           int ret = blockDir->set(&block, *save_y);
           if (ret < 0) {
             ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
@@ -845,6 +846,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
       block.version = oid;
+      block.size = source->get_obj_size(); // TODO: fill out block entirely
       block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
       block.size = source->get_obj_size();
       block.cacheObj.objName = source->get_key().get_oid();
@@ -857,7 +859,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), *save_y);
         }
         /* Store block in directory */
-        if (!blockDir->exist_key(oid, *save_y)) {
+        if (!blockDir->exist_key(&block, *save_y)) {
           int ret = blockDir->set(&block, *save_y);
           if (ret < 0) {
             ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
@@ -890,7 +892,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
             filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl_rem.length(), "", filter->get_cache_driver(), *save_y);
           }
           /* Store block in directory */
-          if (!blockDir->exist_key(oid, *save_y)) {
+          if (!blockDir->exist_key(&block, *save_y)) {
             int ret = blockDir->set(&block, *save_y);
             if (ret < 0) {
               ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;

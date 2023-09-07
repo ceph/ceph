@@ -47,14 +47,9 @@ std::string ObjectDirectory::build_index(CacheObj* object) {
   return object->bucketName + "_" + object->objName;
 }
 
-int ObjectDirectory::exist_key(std::string key) {
-  int result = 0;
-  std::vector<std::string> keys;
-  keys.push_back(key);
-  
-  if (!client.is_connected()) {
-    return result;
-  }
+int ObjectDirectory::exist_key(CacheObj* object, optional_yield y) {
+  std::string key = build_index(object);
+  response<int> resp;
 
   try {
     boost::system::error_code ec;
@@ -116,17 +111,7 @@ int ObjectDirectory::set(CacheObj* object, optional_yield y) {
 int ObjectDirectory::get(CacheObj* object, optional_yield y) {
   std::string key = build_index(object);
 
-  if (!client.is_connected()) {
-    find_client(&client);
-  }
-
-  if (exist_key(key)) {
-    std::string key;
-    std::string objName;
-    std::string bucketName;
-    std::string creationTime;
-    std::string dirty;
-    std::string hosts;
+  if (exist_key(object, y)) {
     std::vector<std::string> fields;
 
     fields.push_back("objName");
@@ -173,13 +158,10 @@ int ObjectDirectory::get(CacheObj* object, optional_yield y) {
 
 int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) {
   std::string key = build_index(object);
-  keys.push_back(key);
-  
-  if (!client.is_connected()) {
-    find_client(&client);
-  }
-  
-  if (exist_key(key)) {
+  auto copyObj = CacheObj{ .objName = copyName, .bucketName = copyBucketName };
+  std::string copyKey = build_index(&copyObj);
+
+  if (exist_key(object, y)) {
     try {
       response<int> resp;
      
@@ -245,7 +227,8 @@ std::string BlockDirectory::build_index(CacheBlock* block) {
   return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + block->version;
 }
 
-int BlockDirectory::exist_key(std::string key, optional_yield y) {
+int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) {
+  std::string key = build_index(block);
   response<int> resp;
 
   try {
@@ -317,7 +300,7 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
 int BlockDirectory::get(CacheBlock* block, optional_yield y) {
   std::string key = build_index(block);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     std::vector<std::string> fields;
 
     fields.push_back("version");
@@ -386,7 +369,7 @@ int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string co
   auto copyBlock = CacheBlock{ .cacheObj = { .objName = copyName, .bucketName = copyBucketName } };
   std::string copyKey = build_index(&copyBlock);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     try {
       response<int> resp;
      
@@ -427,7 +410,7 @@ int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string co
 int BlockDirectory::del(CacheBlock* block, optional_yield y) {
   std::string key = build_index(block);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     try {
       boost::system::error_code ec;
       request req;
@@ -451,7 +434,7 @@ int BlockDirectory::del(CacheBlock* block, optional_yield y) {
 int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value, optional_yield y) {
   std::string key = build_index(block);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     try {
       /* Ensure field exists */
       {
