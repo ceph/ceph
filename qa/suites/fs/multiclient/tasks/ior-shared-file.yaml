@@ -2,16 +2,24 @@
 tasks:
 - pexec:
     clients:
+      - set -x
       - cd $TESTDIR
-      - wget http://download.ceph.com/qa/ior.tbz2
-      - tar xvfj ior.tbz2
-      - cd ior
+      # partially or incorrectly installed mpich will create a mess and the
+      # configure script or the build process (which is initiated using "make"
+      # command) for the ior project will fail
+      - sudo apt purge -y mpich
+      - sudo apt install -y mpich
+      - wget http://download.ceph.com/qa/ior-3.3.0.tar.bz2
+      - tar xvfj ior-3.3.0.tar.bz2
+      - cd ior-3.3.0
       - ./configure
       - make
       - make install DESTDIR=$TESTDIR/binary/
       - cd $TESTDIR/
-      - rm ior.tbz2
-      - rm -r ior
+      - sudo apt install -y tree
+      - tree binary/
+      - rm ior-3.3.0.tar.bz2
+      - rm -r ior-3.3.0
       - ln -s $TESTDIR/mnt.* $TESTDIR/gmnt
 - ssh_keys:
 - mpi:
