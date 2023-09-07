@@ -494,9 +494,9 @@ public:
     return std::move(get_omap_vals_by_keys(keys, kv, ec));
   }
 
-  ReadOp& list_watchers(std::vector<struct ObjWatcher>* watchers,
+  ReadOp& list_watchers(std::vector<ObjWatcher>* watchers,
 			boost::system::error_code* ec = nullptr) &;
-  ReadOp&& list_watchers(std::vector<struct ObjWatcher>* watchers,
+  ReadOp&& list_watchers(std::vector<ObjWatcher>* watchers,
 			 boost::system::error_code* ec = nullptr) && {
     return std::move(list_watchers(watchers, ec));
   }
@@ -1663,6 +1663,9 @@ public:
       }, consigned);
   }
 
+  tl::expected<ceph::timespan, boost::system::error_code>
+  check_watch(uint64_t cookie);
+
   using NotifySig = void(boost::system::error_code, ceph::buffer::list);
   using NotifyComp = boost::asio::any_completion_handler<NotifySig>;
   template<boost::asio::completion_token_for<NotifySig> CompletionToken>
@@ -1832,8 +1835,6 @@ private:
   void watch_(Object o, IOContext ioc,
 	      std::optional<std::chrono::seconds> timeout,
 	      WatchCB cb, WatchComp c);
-  tl::expected<ceph::timespan, boost::system::error_code>
-  watch_check_(uint64_t cookie);
   void notify_ack_(Object o, IOContext _ioc,
 		   uint64_t notify_id,
 		   uint64_t cookie,
