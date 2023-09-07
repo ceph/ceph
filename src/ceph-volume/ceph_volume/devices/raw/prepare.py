@@ -111,7 +111,9 @@ class Prepare(object):
 
         # reuse a given ID if it exists, otherwise create a new ID
         self.osd_id = prepare_utils.create_id(
-            osd_fsid, json.dumps(secrets))
+            osd_fsid,
+            json.dumps(secrets),
+            osd_id=self.args.osd_id)
 
         prepare_bluestore(
             self.args.data,
