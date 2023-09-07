@@ -12,6 +12,39 @@
   a large buildup of session metadata resulting in the MDS going read-only due to
   the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`
   config controls the maximum size that a (encoded) session metadata can grow.
+* RGW: New tools have been added to radosgw-admin for identifying and
+  correcting issues with versioned bucket indexes. Historical bugs with the
+  versioned bucket index transaction workflow made it possible for the index
+  to accumulate extraneous "book-keeping" olh entries and plain placeholder
+  entries. In some specific scenarios where clients made concurrent requests
+  referencing the same object key, it was likely that a lot of extra index
+  entries would accumulate. When a significant number of these entries are
+  present in a single bucket index shard, they can cause high bucket listing
+  latencies and lifecycle processing failures. To check whether a versioned
+  bucket has unnecessary olh entries, users can now run ``radosgw-admin
+  bucket check olh``. If the ``--fix`` flag is used, the extra entries will
+  be safely removed. A distinct issue from the one described thus far, it is
+  also possible that some versioned buckets are maintaining extra unlinked
+  objects that are not listable from the S3/ Swift APIs. These extra objects
+  are typically a result of PUT requests that exited abnormally, in the middle
+  of a bucket index transaction - so the client would not have received a
+  successful response. Bugs in prior releases made these unlinked objects easy
+  to reproduce with any PUT request that was made on a bucket that was actively
+  resharding. Besides the extra space that these hidden, unlinked objects
+  consume, there can be another side effect in certain scenarios, caused by
+  the nature of the failure mode that produced them, where a client of a bucket
+  that was a victim of this bug may find the object associated with the key to
+  be in an inconsistent state. To check whether a versioned bucket has unlinked
+  entries, users can now run ``radosgw-admin bucket check unlinked``. If the
+  ``--fix`` flag is used, the unlinked objects will be safely removed. Finally,
+  a third issue made it possible for versioned bucket index stats to be
+  accounted inaccurately. The tooling for recalculating versioned bucket stats
+  also had a bug, and was not previously capable of fixing these inaccuracies.
+  This release resolves those issues and users can now expect that the existing
+  ``radosgw-admin bucket check`` command will produce correct results. We
+  recommend that users with versioned buckets, especially those that existed
+  on prior releases, use these new tools to check whether their buckets are
+  affected and to clean them up accordingly.
 
 >=18.0.0
 
