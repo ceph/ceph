@@ -2291,11 +2291,10 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params(optional_yield y)
                      << max_num
                      << " rules, request website routing rules num: "
                      << routing_rules_num << dendl;
-    op_ret = -ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR;
     s->err.message = std::to_string(routing_rules_num) +" routing rules provided, the number of routing rules in a website configuration is limited to "
                      + std::to_string(max_num)
                      + ".";
-    return -ERR_INVALID_REQUEST;
+    return -ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR;
   }
 
   return 0;
@@ -3756,10 +3755,9 @@ int RGWPutCORS_ObjStore_S3::get_params(optional_yield y)
                      << max_num
                      << " rules, request cors rules num: "
                      << cors_rules_num << dendl;
-    op_ret = -ERR_INVALID_CORS_RULES_ERROR;
     s->err.message = "The number of CORS rules should not exceed allowed limit of "
                      + std::to_string(max_num) + " rules.";
-    return -ERR_INVALID_REQUEST;
+    return -ERR_INVALID_CORS_RULES_ERROR;
   }
 
   // forward bucket cors requests to meta master zone
