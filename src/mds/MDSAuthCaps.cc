@@ -362,6 +362,88 @@ bool MDSAuthCaps::parse(string_view str, ostream *err)
   }
 }
 
+bool MDSAuthCaps::merge(MDSAuthCaps newcap)
+{
+  ceph_assert(newcap.grants.size() == 1);
+  auto ng = newcap.grants[0];
+
+  for (auto& g : grants) {
+    if (g.match.fs_name == ng.match.fs_name && g.match.path == ng.match.path) {
+      if (g.spec.get_caps() == ng.spec.get_caps()) {
+	// no update required. maintaining idempotency.
+	return false;
+       } else {
+	// cap for given fs name is present, let's update it.
+	g.spec.set_caps(ng.spec.get_caps());
+	return true;
+      }
+    }
+  }
+
+  // cap for given fs name and/or path is absent, let's add a new cap for it.
+  grants.push_back(MDSCapGrant(
+    MDSCapSpec(ng.spec.get_caps()),
+    MDSCapMatch(ng.match.fs_name, ng.match.path, ng.match.root_squash),
+    {}));
+
+  return true;
+}
+
+string MDSCapMatch::to_string()
+{
+  string str = "";
+
+  if (!fs_name.empty())   { str += " fsname=" + fs_name; }
+  if (!path.empty())   { str += " path=" + path; }
+  if (root_squash)   { str += " root_squash"; }
+  if (uid != MDS_AUTH_UID_ANY) { str += " uid=" + std::to_string(uid); }
+  if (!gids.empty()) {
+    str += " gids=";
+    for (size_t i = 0; i < gids.size(); ++i) {
+      str += std::to_string(gids[i]);
+      if (i < gids.size() - 1) {
+	str += ",";
+      }
+    }
+  }
+
+  return str;
+}
+
+string MDSCapSpec::to_string()
+{
+  string str = "";
+
+  if (allow_all()) {
+    str += "*";
+  } else {
+    if (allow_read()) { str +="r"; }
+    if (allow_write()) { str +="w"; }
+    if (allow_full()) { str +="f"; }
+    if (allow_set_vxattr()) { str +="p"; }
+    if (allow_snapshot()) { str +="s"; }
+  }
+
+  return str;
+}
+
+string MDSCapGrant::to_string()
+{
+  return "allow " + spec.to_string() + match.to_string();
+}
+
+string MDSAuthCaps::to_string()
+{
+  string str = "";
+
+  for (size_t i = 0; i < grants.size(); ++i) {
+    str += grants[i].to_string();
+    if (i < grants.size() - 1)
+      str += ", ";
+  }
+
+  return str;
+}
 
 bool MDSAuthCaps::allow_all() const
 {
