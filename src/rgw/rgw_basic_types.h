@@ -74,6 +74,15 @@ struct rgw_zone_id {
     ceph::decode(id, bl);
   }
 
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("id", id);
+  }
+
+  static void generate_test_instances(std::list<rgw_zone_id*>& o) {
+    o.push_back(new rgw_zone_id);
+    o.push_back(new rgw_zone_id("id"));
+  }
+
   void clear() {
     id.clear();
   }

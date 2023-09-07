@@ -2023,6 +2023,15 @@ void RGWUserCaps::dump(Formatter *f) const
   dump(f, "caps");
 }
 
+void RGWUserCaps::generate_test_instances(list<RGWUserCaps*>& o)
+{
+  o.push_back(new RGWUserCaps);
+  RGWUserCaps *caps = new RGWUserCaps;
+  caps->add_cap("read");
+  caps->add_cap("write");
+  o.push_back(caps);
+}
+
 void RGWUserCaps::dump(Formatter *f, const char *name) const
 {
   f->open_array_section(name);
@@ -2148,6 +2157,16 @@ void rgw_raw_obj::decode_from_rgw_obj(bufferlist::const_iterator& bl)
 
   get_obj_bucket_and_oid_loc(old_obj, oid, loc);
   pool = old_obj.get_explicit_data_pool();
+}
+
+void rgw_raw_obj::generate_test_instances(std::list<rgw_raw_obj*>& o)
+{
+  rgw_raw_obj *r = new rgw_raw_obj;
+  r->oid = "foo";
+  r->loc = "bar";
+  r->pool.name = "baz";
+  r->pool.ns = "ns";
+  o.push_back(r);
 }
 
 static struct rgw_name_to_flag op_type_mapping[] = { {"*",  RGW_OP_TYPE_ALL},

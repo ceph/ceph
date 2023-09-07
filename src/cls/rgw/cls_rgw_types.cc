@@ -56,6 +56,20 @@ void rgw_zone_set_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entry", s, obj);
   from_str(s);
 }
+void rgw_zone_set::dump(Formatter *f) const
+{
+  encode_json("entries", entries, f);
+}
+
+void rgw_zone_set::generate_test_instances(list<rgw_zone_set*>& o)
+{
+  o.push_back(new rgw_zone_set);
+  o.push_back(new rgw_zone_set);
+  std::optional<string> loc_key = "loc_key";
+  o.back()->insert("zone1", loc_key);
+  o.back()->insert("zone2", loc_key);
+  o.back()->insert("zone3", loc_key);
+}
 
 void rgw_zone_set::insert(const string& zone, std::optional<string> location_key)
 {

@@ -51,6 +51,14 @@ struct RGWUID
     decode(s, bl);
     user_id.from_str(s);
   }
+  void dump(Formatter *f) const {
+    f->dump_string("user_id", user_id.to_str());
+  }
+  static void generate_test_instances(std::list<RGWUID*>& o) {
+    o.push_back(new RGWUID);
+    o.push_back(new RGWUID);
+    o.back()->user_id.from_str("test:tester");
+  }
 };
 WRITE_CLASS_ENCODER(RGWUID)
 

@@ -154,6 +154,7 @@ struct RGWObjManifestRule {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWObjManifestRule*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
@@ -180,6 +181,7 @@ struct RGWObjTier {
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const;
+    static void generate_test_instances(std::list<RGWObjTier*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjTier)
 
