@@ -47,16 +47,10 @@ std::string ObjectDirectory::build_index(CacheObj* object) {
   return object->bucketName + "_" + object->objName;
 }
 
-int ObjectDirectory::exist_key(std::string key, optional_yield y) {
-  int result = 0;
-  std::vector<std::string> keys;
-  keys.push_back(key);
-#if 0
-  if (!client.is_connected()) {
-    return result;
-  }
-#endif
+int ObjectDirectory::exist_key(CacheObj* object, optional_yield y) {
+  std::string key = build_index(object);
   response<int> resp;
+
   try {
     boost::system::error_code ec;
     request req;
@@ -94,7 +88,7 @@ int ObjectDirectory::set(CacheObj* object, optional_yield y) {
   redisValues.push_back("dirty");
   redisValues.push_back(std::to_string(object->dirty));
   redisValues.push_back("objHosts");
-  redisValues.push_back(endpoint); // Set in filter -Sam
+  redisValues.push_back(endpoint); 
 
   try {
     boost::system::error_code ec;
@@ -116,18 +110,8 @@ int ObjectDirectory::set(CacheObj* object, optional_yield y) {
 
 int ObjectDirectory::get(CacheObj* object, optional_yield y) {
   std::string key = build_index(object);
-#if 0
-  if (!client.is_connected()) {
-    find_client(&client);
-  }
-#endif
-  if (exist_key(key, y)) {
-    std::string key;
-    std::string objName;
-    std::string bucketName;
-    std::string creationTime;
-    std::string dirty;
-    std::string hosts;
+
+  if (exist_key(object, y)) {
     std::vector<std::string> fields;
 
     fields.push_back("objName");
@@ -174,15 +158,10 @@ int ObjectDirectory::get(CacheObj* object, optional_yield y) {
 
 int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) {
   std::string key = build_index(object);
-  std::vector<std::string> keys;
-  keys.push_back(key);
-  std::string copyKey;
-#if 0 
-  if (!client.is_connected()) {
-    find_client(&client);
-  }
-#endif
-  if (exist_key(key, y)) {
+  auto copyObj = CacheObj{ .objName = copyName, .bucketName = copyBucketName };
+  std::string copyKey = build_index(&copyObj);
+
+  if (exist_key(object, y)) {
     try {
       response<int> resp;
      
@@ -223,7 +202,7 @@ int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string co
 int ObjectDirectory::del(CacheObj* object, optional_yield y) {
   std::string key = build_index(object);
 
-  if (exist_key(key, y)) {
+  if (exist_key(object, y)) {
     try {
       boost::system::error_code ec;
       request req;
@@ -248,7 +227,8 @@ std::string BlockDirectory::build_index(CacheBlock* block) {
   return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID);
 }
 
-int BlockDirectory::exist_key(std::string key, optional_yield y) {
+int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) {
+  std::string key = build_index(block);
   response<int> resp;
 
   try {
@@ -274,8 +254,8 @@ void BlockDirectory::shutdown()
 int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   std::string key = build_index(block);
     
-  /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
-  std::string endpoint = cct->_conf->rgw_d4n_host + ":" + std::to_string(cct->_conf->rgw_d4n_port);
+  /* Every set will be treated as new */
+  std::string endpoint;
   std::list<std::string> redisValues;
     
   /* Creating a redisValues of the entry's properties */
@@ -288,6 +268,15 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   redisValues.push_back("globalWeight");
   redisValues.push_back(std::to_string(block->globalWeight));
   redisValues.push_back("blockHosts");
+  
+  for (auto const& host : block->hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
+  }
+
+  endpoint.pop_back();
   redisValues.push_back(endpoint); // Set in filter -Sam
 
   redisValues.push_back("objName");
@@ -299,6 +288,16 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   redisValues.push_back("dirty");
   redisValues.push_back(std::to_string(block->cacheObj.dirty));
   redisValues.push_back("objHosts");
+  
+  endpoint.clear();
+  for (auto const& host : block->cacheObj.hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
+  }
+
+  endpoint.pop_back();
   redisValues.push_back(endpoint); // Set in filter -Sam
 
   try {
@@ -322,7 +321,7 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
 int BlockDirectory::get(CacheBlock* block, optional_yield y) {
   std::string key = build_index(block);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     std::vector<std::string> fields;
 
     fields.push_back("blockID");
@@ -395,7 +394,7 @@ int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string co
   auto copyBlock = CacheBlock{ .cacheObj = { .objName = copyName, .bucketName = copyBucketName }, .blockID = 0 };
   std::string copyKey = build_index(&copyBlock);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     try {
       response<int> resp;
      
@@ -436,7 +435,7 @@ int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string co
 int BlockDirectory::del(CacheBlock* block, optional_yield y) {
   std::string key = build_index(block);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     try {
       boost::system::error_code ec;
       request req;
@@ -460,7 +459,7 @@ int BlockDirectory::del(CacheBlock* block, optional_yield y) {
 int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value, optional_yield y) {
   std::string key = build_index(block);
 
-  if (exist_key(key, y)) {
+  if (exist_key(block, y)) {
     try {
       /* Ensure field exists */
       {
@@ -475,7 +474,7 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	  return -1;
       }
 
-      if (field == "blockHosts" || field == "objHosts") {
+      if (field == "blockHosts") { // Need one for object hosts? -Sam
 	/* Append rather than overwrite */
 	boost::system::error_code ec;
 	request req;
@@ -505,6 +504,73 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	}
 
 	return std::get<0>(resp).value(); /* Zero fields added since it is an update of an existing field */ 
+      }
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    return -2;
+  }
+}
+
+int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optional_yield y) {
+  std::string key = build_index(block);
+
+  if (exist_key(block, y)) {
+    try {
+      /* Ensure field exists */
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HEXISTS", key, "blockHosts");
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value() || (bool)ec)
+	  return -1;
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HGET", key, "blockHosts");
+	response<std::string> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value().size() || (bool)ec)
+	  return -1;
+
+	if (std::get<0>(resp).value().find("_") == std::string::npos) /* Last host, delete entirely */
+          return del(block, y);
+
+        std::string result = std::get<0>(resp).value();
+        auto it = result.find(delValue);
+        if (it != std::string::npos) 
+          result.erase(result.begin() + it, result.begin() + it + delValue.size());
+        else
+          return -1;
+
+        if (result[0] == '_')
+          result.erase(0, 1);
+
+	delValue = result;
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push_range("HSET", key, std::map<std::string, std::string>{{"blockHosts", delValue}});
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if ((bool)ec) {
+	  return -1;
+	}
+
+	return std::get<0>(resp).value();
       }
     } catch(std::exception &e) {
       return -1;

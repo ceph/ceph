@@ -66,7 +66,7 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
 
       return 0;
     }
-    int exist_key(std::string key, optional_yield y);
+    int exist_key(CacheObj* object, optional_yield y);
     void shutdown();
 
     int set(CacheObj* object, optional_yield y);
@@ -96,7 +96,7 @@ class BlockDirectory: public Directory {
       cfg.addr.host = cct->_conf->rgw_d4n_host;
       cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
 
-      if (!cfg.addr.host.length() || !cfg.addr.port.length()) { // add logs to other methods -Sam
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
 	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Block directory endpoint was not configured correctly" << dendl;
 	return -EDESTADDRREQ;
       }
@@ -105,8 +105,7 @@ class BlockDirectory: public Directory {
 
       return 0;
     }
-	
-    int exist_key(std::string key, optional_yield y);
+    int exist_key(CacheBlock* block, optional_yield y);
     void shutdown();
 
     int set(CacheBlock* block, optional_yield y);
@@ -114,6 +113,7 @@ class BlockDirectory: public Directory {
     int copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y);
     int del(CacheBlock* block, optional_yield y);
     int update_field(CacheBlock* block, std::string field, std::string value, optional_yield y);
+    int remove_host(CacheBlock* block, std::string value, optional_yield y);
 
   private:
     std::shared_ptr<connection> conn;
