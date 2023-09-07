@@ -1418,10 +1418,14 @@ void RADOS::notify_ack_(Object o,
 		       nullptr, ioc->extra_op_flags, std::move(c));
 }
 
-tl::expected<ceph::timespan, bs::error_code> RADOS::watch_check_(uint64_t cookie)
+tl::expected<ceph::timespan, bs::error_code> RADOS::check_watch(uint64_t cookie)
 {
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-  return impl->objecter->linger_check(linger_op);
+  auto linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  if (impl->objecter->is_valid_watch(linger_op)) {
+    return impl->objecter->linger_check(linger_op);
+  } else {
+    return tl::unexpected(bs::error_code(ENOTCONN, bs::generic_category()));
+  }
 }
 
 void RADOS::unwatch_(uint64_t cookie, IOContext _ioc,
