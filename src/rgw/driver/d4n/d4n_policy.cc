@@ -98,42 +98,6 @@ int LFUDAPolicy::get_age(optional_yield y) {
   }
 }
 
-int LFUDAPolicy::set_global_weight(std::string key, int weight, optional_yield y) {
-  try {
-    boost::system::error_code ec;
-    response<int> resp;
-    request req;
-    req.push("HSET", key, "globalWeight", std::to_string(weight));
-
-    redis_exec(conn, ec, req, resp, y);
-
-    if (ec)
-      return {};
-
-    return std::get<0>(resp).value(); /* Returns number of fields set */
-  } catch(std::exception &e) {
-    return -1;
-  }
-}
-
-int LFUDAPolicy::get_global_weight(std::string key, optional_yield y) {
-  try { 
-    boost::system::error_code ec;
-    response<std::string> resp;
-    request req;
-    req.push("HGET", key, "globalWeight");
-      
-    redis_exec(conn, ec, req, resp, y);
-
-    if (ec)
-      return -1;
-
-    return std::stoi(std::get<0>(resp).value());
-  } catch(std::exception &e) {
-    return -1;
-  }
-}
-
 int LFUDAPolicy::set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y) {
   try {
     boost::system::error_code ec;
@@ -208,41 +172,25 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
-#if 0
-  std::vector<rgw::cache::Entry> entries = cacheNode->list_entries(dpp);
-  std::string victimName;
-  int minWeight = INT_MAX;
-
-  for (auto it = entries.begin(); it != entries.end(); ++it) {
-    std::string localWeightStr = cacheNode->get_attr(dpp, it->key, "localWeight", y); // should represent block -Sam
-
-    if (!std::stoi(localWeightStr)) { // maybe do this in some sort of initialization procedure instead of here? -Sam
-      /* Local weight hasn't been set */
-      int ret = cacheNode->set_attr(dpp, it->key, "localWeight", std::to_string(get_age(y)), y); 
-
-      if (ret < 0)
-	return {};
-    } else if (std::stoi(localWeightStr) < minWeight) {
-      minWeight = std::stoi(localWeightStr);
-      victimName = it->key;
-    }
-  }
+  auto it = std::min_element(std::begin(entries_map), std::end(entries_map),
+			      [](const auto& l, const auto& r) { return l.second->localWeight < r.second->localWeight; });
 
   /* Get victim cache block */
-  CacheBlock victimBlock;
-  victimBlock.cacheObj.objName = victimName;
-  BlockDirectory blockDir(io);
-  blockDir.init(cct, dpp);
+  CacheBlock victim;
+  victim.cacheObj.objName = it->second->key;
 
-  int ret = blockDir.get(&victimBlock, y);
-
-  if (ret < 0)
+  if (dir->get(&victim, y) < 0) {
     return {};
+  }
 
-  CacheBlock victimBlock;
-  return victimBlock;
-#endif
-  return {};
+  return victim;
+}
+
+void LFUDAPolicy::shutdown() {
+  dir->shutdown();
+  
+  // call cancel() on the connection's executor
+  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 
 int LFUDAPolicy::exist_key(std::string key, optional_yield y) {
@@ -254,64 +202,48 @@ int LFUDAPolicy::exist_key(std::string key, optional_yield y) {
 }
 
 int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
-  std::string key = "rgw-object:" + block->cacheObj.objName + ":directory";
-  std::string localWeightStr = cacheNode->get_attr(dpp, block->cacheObj.objName, "localWeight", y); // change to block name eventually -Sam
-  int localWeight = -1;
   response<std::string> resp;
-
-  if (localWeightStr.empty()) { // figure out where to set local weight -Sam
-    int ret = cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(get_age(y)), y); 
-    localWeight = get_age(y);
-
-    if (ret < 0)
-      return -1;
-  } else {
-    localWeight = std::stoi(localWeightStr);
-  }
-
   int age = get_age(y);
 
-  if (exist_key(block->cacheObj.objName, y)) { /* Local copy */ 
-    localWeight += age;
+  if (exist_key(block->cacheObj.objName, y)) { /* Local copy */
+    auto it = entries_map.find(block->cacheObj.objName); // change to block name eventually -Sam
+    it->second->localWeight += age;
+    return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
   } else {
     uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
     while (freeSpace < block->size) /* Not enough space in local cache */
       freeSpace += eviction(dpp, cacheNode, y);
 
-    if (exist_key(key, y)) { /* Remote copy */
-      try {
-	boost::system::error_code ec;
-	request req;
-	req.push("HGET", key, "blockHosts");
+    int exists = dir->exist_key(block, y);
+    if (exists > 0) { /* Remote copy */
+      if (dir->get(block, y) < 0) {
+	return -1;
+      } else {
+	// should not hold local cache IP if in this else statement -Sam
+	if (!block->hostsList.empty()) { 
+	  block->globalWeight += age;
 	  
-	redis_exec(conn, ec, req, resp, y);
-
-	if (ec)
-	  return -1;
-      } catch(std::exception &e) {
-	return -1;
+	  if (dir->update_field(block, "globalWeight", std::to_string(block->globalWeight), y) < 0) {
+	    return -1;
+	  } else {
+	    return 0;
+	  }
+	} else {
+          return -1;
+        }
       }
-    } else {
-      return -2; 
-    }
-
-    // should not hold local cache IP if in this else statement -Sam
-    if (std::get<0>(resp).value().length() > 0) { /* Remote copy */
-      int globalWeight = get_global_weight(key, y);
-      globalWeight += age;
-      
-      if (set_global_weight(key, globalWeight, y))
-	return -1;
-    } else { /* No remote copy */
+    } else if (!exists) { /* No remote copy */
       // do I need to add the block to the local cache here? -Sam
-      // update hosts list for block as well? check read workflow -Sam
-      localWeight += age;
-      return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(localWeight), y);
+      // update hosts list for block as well?
+      // insert entry here? -Sam
+      // localWeight += age;
+      //return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
+      return 0;
+    } else {
+      return -1;
     }
-  } 
-
-  return 0;
+  }
 }
 
 uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
@@ -319,87 +251,93 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 
   if (victim.cacheObj.objName.empty()) {
     ldpp_dout(dpp, 10) << "RGW D4N Policy: Could not find victim block" << dendl;
+    return -1; // return is unsigned so errors don't return -Sam
+  }
+
+  auto it = entries_map.find(victim.cacheObj.objName); // change to block name eventually -Sam
+  if (it == entries_map.end()) {
     return -1;
   }
 
-  std::string key = "rgw-object:" + victim.cacheObj.objName + ":directory";
-  int globalWeight = get_global_weight(key, y);
-  int localWeight = std::stoi(cacheNode->get_attr(dpp, victim.cacheObj.objName, "localWeight", y)); // change to block name eventually -Sam
+  int localWeight = it->second->localWeight; 
   int avgWeight = get_min_avg_weight(y);
-  response<std::string> resp;
-
-  if (exist_key(key, y)) {
-    try {
-      boost::system::error_code ec;
-      request req;
-      req.push("HGET", key, "blockHosts");
-	
-      redis_exec(conn, ec, req, resp, y);
-
-      if (ec)
-	return -1;
-    } catch(std::exception &e) {
-      return -1;
-    }
-  } else {
-    return -2; 
-  }
-
-  if (std::get<0>(resp).value().empty()) { /* Last copy */
-    if (globalWeight > 0) {
-      localWeight += globalWeight;
-      int ret = cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight), y);
-
-      if (!ret)
-        ret = set_global_weight(key, 0, y);
-      else
-        return -1;
-
-      if (ret)
-	return -1;
-    }
-
-    if (avgWeight < 0)
-      return -1;
-
-    if (localWeight > avgWeight) {
-      // push block to remote cache
-    }
-  }
-
-  globalWeight += localWeight;
-
-  if (set_global_weight(key, globalWeight, y))
-    return -2;
-
-  ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
-  int ret = cacheNode->del(dpp, victim.cacheObj.objName, y);
-
-  if (!ret) {
-    uint64_t num_entries = 100; //cacheNode->get_num_entries(dpp) TODO - correct this
-    ret = set_min_avg_weight(avgWeight - (localWeight/num_entries), ""/*local cache location*/, y); // Where else must this be set? -Sam
-
-    if (!ret) {
-      int age = get_age(y);
-      age = std::max(localWeight, age);
-      ret = set_age(age, y);
-      
-      if (ret)
-	return -1;
-    } else {
-      return -1;
-    }
-  } else {
+  if (avgWeight < 0) {
     return -1;
+  }
+
+  if (dir->get(&victim, y) < 0) {
+    return -1;
+  } else {
+    if (victim.hostsList.size() == 1 && victim.hostsList[0] == "" /* local cache address */) { /* Last copy */
+      if (victim.globalWeight) {
+	localWeight += victim.globalWeight;
+	if (cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight), y) < 0) {
+	  return -1;
+	}
+
+	victim.globalWeight = 0;
+	if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) {
+	  return -1;
+	}
+      }
+
+      if (localWeight > avgWeight) {
+	// push victim block to remote cache
+      }
+    }
+
+    victim.globalWeight += localWeight;
+    if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) { // just have one update? -Sam
+      return -1;
+    }
+
+    ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
+
+    if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0) {
+      return -1;
+    } else {
+      uint64_t num_entries = entries_map.size();
+
+      if (set_min_avg_weight(avgWeight - (localWeight/num_entries), ""/*local cache location*/, y) < 0) { // Where else must this be set? -Sam 
+	return -1;
+      } else {
+	int age = get_age(y);
+	age = std::max(localWeight, age);
+	if (set_age(age, y) < 0) {
+	  return -1;
+        }
+      }
+    }
   }
 
   return victim.size;
 }
 
-void LFUDAPolicy::shutdown()
+void LFUDAPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y)
 {
-  // call cancel() on the connection's executor
-  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
+  erase(dpp, key);
+
+  int age = get_age(y);
+  if (age < 0) {
+    assert(set_age(0, y) > 0);
+    age = 0;
+  }
+  
+  LFUDAEntry *e = new LFUDAEntry(key, offset, len, age);
+  entries_lfuda_list.push_back(*e);
+  entries_map.emplace(key, e);
+}
+
+bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key)
+{
+  auto p = entries_map.find(key);
+  if (p == entries_map.end()) {
+    return false;
+  }
+
+  entries_map.erase(p);
+  entries_lfuda_list.erase_and_dispose(entries_lfuda_list.iterator_to(*(p->second)), LFUDA_Entry_delete_disposer());
+  return true;
 }
 
 int LRUPolicy::exist_key(std::string key, optional_yield y)
@@ -428,7 +366,7 @@ uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDri
   return cacheNode->get_free_space(dpp);
 }
 
-void LRUPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode)
+void LRUPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y)
 {
   erase(dpp, key);
 
@@ -456,6 +394,7 @@ int PolicyDriver::init() {
     cachePolicy = new LRUPolicy();
     return 0;
   }
+
   return -1;
 }
 
