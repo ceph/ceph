@@ -201,12 +201,9 @@ protected:
 
   boost::container::flat_set<hobject_t> temp_contents;
 
-  void add_temp_obj(const hobject_t &oid) {
-    temp_contents.insert(oid);
-  }
-  void clear_temp_obj(const hobject_t &oid) {
-    temp_contents.erase(oid);
-  }
+  void add_temp_obj(const hobject_t &oid);
+  void clear_temp_obj(const hobject_t &oid);
+
   void clean_up(ceph::os::Transaction& t, std::string_view why);
   virtual seastar::future<> on_stop() = 0;
 private:
