@@ -403,7 +403,7 @@ TEST_F(RedisDriverFixture, DeleteAttrsYield)
     bufferlist delVal;
     delAttrs.insert({"attr", delVal});
 
-    ASSERT_EQ(0, cacheDriver->delete_attrs(env->dpp, "testName", delAttrs, optional_yield{io, yield}));
+    ASSERT_GE(cacheDriver->delete_attrs(env->dpp, "testName", delAttrs, optional_yield{io, yield}), 0);
     cacheDriver->shutdown();
 
     {
@@ -429,7 +429,7 @@ TEST_F(RedisDriverFixture, SetAttrYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
-    ASSERT_EQ(0, cacheDriver->set_attr(env->dpp, "testName", "newAttr", "newVal", optional_yield{io, yield}));
+    ASSERT_GE(cacheDriver->set_attr(env->dpp, "testName", "newAttr", "newVal", optional_yield{io, yield}), 0);
     cacheDriver->shutdown();
 
     boost::system::error_code ec;

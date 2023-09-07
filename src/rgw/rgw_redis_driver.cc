@@ -438,7 +438,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
     if (ec)
       return -1;
 
-    return std::get<0>(resp).value() - del_attrs.size();  /* Returns number of fields deleted */
+    return std::get<0>(resp).value(); 
   } catch(std::exception &e) {
     return -1;
   }
@@ -505,7 +505,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
     return -1;
   }
 
-  return std::get<0>(resp).value() - 1; /* Returns number of fields set */
+  return std::get<0>(resp).value();
 }
 
 static Aio::OpFunc redis_read_op(optional_yield y, std::shared_ptr<connection> conn,
