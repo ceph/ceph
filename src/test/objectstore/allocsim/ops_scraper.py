@@ -11,6 +11,7 @@ import logging
 
 FORMAT = '%(name)8s::%(levelname)8s:: %(message)s'
 HISTORY_HOLD = 2
+HISTORY_SAFE_RATE = 1.5
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger('osd-op-scrapper')
 
@@ -192,7 +193,6 @@ class OsdParameters:
         self.freq = freq
         self.history_size = history_size
         self.sum_ops = 0
-        self.periods = 0
 
 def main():
     parser = argparse.ArgumentParser(
@@ -231,19 +231,18 @@ def main():
 
     pref_freq = int(Env.args().freq)
     freq = int(Env.args().freq)
-
+    freq = 1.5
     sleep_time = 0
-    update_period = 10
     sum_time_elapsed = 0
     min_history_size = int(Env.args().min_history_size)
     max_history_size = int(Env.args().max_history_size)
-    history_size = max_history_size
+    history_size = min_history_size
     # -------------|-------------------|
     history_overlap = 1.10
     osds = Env.args().osds.split(',')
     osds_info = []
     for osd in osds:
-        _set_osd_history_size(osd, max_history_size)
+        _set_osd_history_size(osd, history_size)
         _set_osd_history_duration(osd, HISTORY_HOLD) #fixed 2s duration to hold ops
         osds_info.append(OsdParameters(osd, 0, freq, history_size))
 
@@ -257,6 +256,14 @@ def main():
             if osd.ready_time >= time.time():
                 continue
             process_info = process_osd(osd.name)
+
+            #basically, we need to have so much history, that it will never be full
+            #full history means that we lost something, its that easy
+            if osd.history_size < process_info.ops_count * HISTORY_SAFE_RATE:
+                want_history_size = min(int(process_info.ops_count * HISTORY_SAFE_RATE), max_history_size)
+                logger.info(f'changing osd.{osd.name} history size from {osd.history_size} to {want_history_size}')
+                _set_osd_history_size(osd.name, want_history_size)
+                osd.history_size = want_history_size
 
             if not process_info.new_ops:
                 new_ops_period = 1
@@ -285,25 +292,6 @@ def main():
             sleep_time = max(0, sleep_time)
             logger.info(f'osd.{osd.name} parsing dump_historic_ops with {process_info.ops_count} ops took {process_info.process_time}')
             logger.info(f'osd.{osd.name} command dump_historic_ops with {process_info.ops_count} ops took {process_info.command_time}')
-
-            osd.periods += 1
-            if (osd.periods % update_period) == 0:
-                ops_per_period = (osd.sum_ops / osd.periods)
-                new_history_size = int(ops_per_period * history_overlap)
-                if new_history_size >= min_history_size and new_history_size <= max_history_size:
-                    _set_osd_history_size(osd.name, new_history_size)
-                    logger.info(f'changing osd.{osd.name} history size from {osd.history_size} to {new_history_size}')
-                    osd.history_size = new_history_size
-                elif new_history_size < min_history_size:
-                    _set_osd_history_size(osd.name, min_history_size)
-                    logger.info(f'changing osd.{osd.name} history size from {osd.history_size} to {min_history_size}')
-                    logger.info(f'changing osd.{osd.name} freq from {freq} to {pref_freq}')
-                    freq = pref_freq
-                    osd.history_size = min_history_size
-                elif new_history_size >= max_history_size:
-                    new_freq = (new_history_size * freq) / osd.history_size
-                    logger.info(f'increasing freq from {freq} to {new_freq}. new_history_size: {new_history_size} osd.history_size: {osd.history_size}')
-                    freq = new_freq
 
     close(outfile)
 
