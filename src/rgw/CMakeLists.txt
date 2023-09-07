@@ -284,11 +284,6 @@ target_include_directories(rgw_common
   PUBLIC "${LUA_INCLUDE_DIR}")
 
 if(WITH_RADOSGW_D4N)
-  add_dependencies(rgw_common cpp_redis) # remove later -Sam
-  target_link_libraries(rgw_common PRIVATE cpp_redis)
-  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
-  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
-
   target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/boost_redis/include")
 endif()
 
