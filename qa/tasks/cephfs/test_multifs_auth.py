@@ -96,9 +96,9 @@ class TestMDSCaps(TestMultiFS):
         self.captesters[1].run_mds_cap_tests(PERM)
 
     def test_rw_with_fsname_and_path_in_cap(self):
-        PERM, CEPHFS_MNTPT = 'rw', 'dir1'
-        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        PERM, CEPHFS_MNTPT = 'rw', '/dir1'
+        self.mount_a.run_shell(f'mkdir .{CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir .{CEPHFS_MNTPT}')
         self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
                            MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
@@ -110,9 +110,9 @@ class TestMDSCaps(TestMultiFS):
         self.captesters[1].run_mds_cap_tests(PERM, CEPHFS_MNTPT)
 
     def test_r_with_fsname_and_path_in_cap(self):
-        PERM, CEPHFS_MNTPT = 'r', 'dir1'
-        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        PERM, CEPHFS_MNTPT = 'r', '/dir1'
+        self.mount_a.run_shell(f'mkdir .{CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir .{CEPHFS_MNTPT}')
         self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
                            MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
@@ -126,9 +126,9 @@ class TestMDSCaps(TestMultiFS):
     # XXX: this tests the backward compatibility; "allow rw path=<dir1>" is
     # treated as "allow rw fsname=* path=<dir1>"
     def test_rw_with_no_fsname_and_path_in_cap(self):
-        PERM, CEPHFS_MNTPT = 'rw', 'dir1'
-        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        PERM, CEPHFS_MNTPT = 'rw', '/dir1'
+        self.mount_a.run_shell(f'mkdir .{CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir .{CEPHFS_MNTPT}')
         self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
                            MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
@@ -142,9 +142,9 @@ class TestMDSCaps(TestMultiFS):
     # XXX: this tests the backward compatibility; "allow r path=<dir1>" is
     # treated as "allow r fsname=* path=<dir1>"
     def test_r_with_no_fsname_and_path_in_cap(self):
-        PERM, CEPHFS_MNTPT = 'r', 'dir1'
-        self.mount_a.run_shell(f'mkdir {CEPHFS_MNTPT}')
-        self.mount_b.run_shell(f'mkdir {CEPHFS_MNTPT}')
+        PERM, CEPHFS_MNTPT = 'r', '/dir1'
+        self.mount_a.run_shell(f'mkdir .{CEPHFS_MNTPT}')
+        self.mount_b.run_shell(f'mkdir .{CEPHFS_MNTPT}')
         self.captesters = (MdsCapTester(self.mount_a, CEPHFS_MNTPT),
                            MdsCapTester(self.mount_b, CEPHFS_MNTPT))
 
@@ -202,7 +202,8 @@ class TestMDSCaps(TestMultiFS):
     def remount_with_new_client(self, keyring, cephfs_mntpt='/'):
         log.info(f'keyring generated for testing is -\n{keyring}')
 
-        if isinstance(cephfs_mntpt, str) and cephfs_mntpt != '/' :
+        if (isinstance(cephfs_mntpt, str) and cephfs_mntpt != '/'  and
+            cephfs_mntpt[0] != '/'):
             cephfs_mntpt = '/' + cephfs_mntpt
 
         keyring_path = self.mount_a.client_remote.mktemp(data=keyring)

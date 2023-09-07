@@ -31,7 +31,12 @@ class Monitor;
 #define MIN_GLOBAL_ID 0x1000
 
 class AuthMonitor : public PaxosService {
+
 public:
+  typedef enum {
+    CAPS_UPDATE_NOT_REQD, CAPS_UPDATE_REQD, CAPS_PARSING_ERR
+  } caps_update;
+
   enum IncType {
     GLOBAL_ID,
     AUTH_DATA,
@@ -194,6 +199,13 @@ private:
   int _update_caps(const EntityName& entity,
     const std::map<std::string, std::string>& caps, MonOpRequestRef op,
     std::stringstream& ds, bufferlist* rdata, Formatter* fmtr);
+
+  caps_update _gen_wanted_caps(EntityAuth& e_auth,
+    std::map<std::string, std::string>& newcaps, std::ostream& out);
+  template<typename CAP_ENTITY_CLASS>
+  caps_update _merge_caps(const std::string& cap_entity,
+    const std::string& new_cap_str, const std::string& cur_cap_str,
+    std::map<std::string, std::string>& newcaps, std::ostream& out);
 
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);

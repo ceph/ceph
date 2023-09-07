@@ -368,9 +368,16 @@ Usage::
 
     ceph fs add_data_pool <fs-name> <pool name/id>
 
-Subcommand ``authorize`` creates a new client that will be authorized for the
-given path in ``<fs_name>``. Pass ``/`` to authorize for the entire FS.
-``<perms>`` below can be ``r``, ``rw`` or ``rwp``.
+Subcommand ``authorize`` creates a new client (if the client doesn't exists
+on the cluster) that will be authorized for the given path in ``<fs_name>``.
+Pass ``/`` to authorize for the entire FS. ``<perms>`` below can be ``r``,
+``rw`` or ``rwp``.
+
+Running it for an existing client can grant the client a new capability
+(capability for a different CephFS on the same cluster or for a different
+path on the same CephFS). Or it can also change read/write permission in the
+capability that client already holds.
+
 
 Usage::
 
