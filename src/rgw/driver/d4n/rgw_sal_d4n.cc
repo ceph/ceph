@@ -824,7 +824,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       if (filter->get_cache_driver()->put_async(dpp, oid, bl, bl.length(), source->get_attrs()) == 0) {
         filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), null_yield);
         /* Store block in directory */
-        if (!blockDir->exist_key(oid, null_yield)) {
+        if (!blockDir->exist_key(&block, null_yield)) {
           #if 0
           int ret = blockDir->set_value(&block);
           if (ret < 0) {
@@ -848,7 +848,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       if (filter->get_cache_driver()->put_async(dpp, oid, bl, bl.length(), source->get_attrs()) == 0) {
         filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), null_yield);
         /* Store block in directory */
-        if (!blockDir->exist_key(oid, null_yield)) {
+        if (!blockDir->exist_key(&block, null_yield)) {
           #if 0
           int ret = blockDir->set_value(&block);
           if (ret < 0) {
@@ -880,7 +880,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         if (filter->get_cache_driver()->put_async(dpp, oid, bl_rem, bl_rem.length(), source->get_attrs()) == 0) {
           filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl_rem.length(), "", filter->get_cache_driver(), null_yield);
           /* Store block in directory */
-          if (!blockDir->exist_key(oid, null_yield)) {
+          if (!blockDir->exist_key(&block, null_yield)) {
             #if 0
             int ret = blockDir->set_value(&block);
             if (ret < 0) {

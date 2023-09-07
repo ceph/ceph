@@ -227,8 +227,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
         return -1;
     }
 
-    std::string key; // = dir->build_index(block);
-    int exists = dir->exist_key(key, y);
+    int exists = dir->exist_key(block, y);
     if (exists > 0) { /* Remote copy */
       if (dir->get(block, y) < 0) {
 	return -1;
@@ -302,7 +301,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 
   ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
 
-  if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0) {//} && dir->remove_host(&victim, ""/* local cache address */, y) < 0) {
+  if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0 && dir->remove_host(&victim, ""/* local cache address */, y) < 0) {
     return 0;
   } else {
     uint64_t num_entries = entries_map.size();
