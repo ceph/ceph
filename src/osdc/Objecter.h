@@ -2532,7 +2532,7 @@ public:
 
   std::map<uint64_t, LingerOp*> linger_ops;
   // we use this just to confirm a cookie is valid before dereferencing the ptr
-  std::set<LingerOp*> linger_ops_set;
+  std::unordered_set<LingerOp*> linger_ops_set;
 
   std::map<ceph_tid_t,PoolStatOp*> poolstat_ops;
   std::map<ceph_tid_t,StatfsOp*> statfs_ops;
@@ -2614,6 +2614,12 @@ public:
   friend class CB_Objecter_GetVersion;
   friend class CB_DoWatchError;
 public:
+
+  bool is_valid_watch(LingerOp* op) {
+    std::shared_lock l(rwlock);
+    return linger_ops_set.contains(op);
+  }
+
   template<typename CT>
   auto linger_callback_flush(CT&& ct) {
     auto consigned = boost::asio::consign(
