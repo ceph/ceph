@@ -2,10 +2,8 @@
 
 import logging as log
 import json
-import random
 import botocore
-from common import exec_cmd, create_user, boto_connect
-from time import sleep
+from common import exec_cmd, create_user, boto_connect, put_objects, create_unlinked_objects
 from botocore.config import Config
 
 """
@@ -24,48 +22,6 @@ DISPLAY_NAME = 'Check Testing'
 ACCESS_KEY = 'OJODXSLNX4LUNHQG99PA'
 SECRET_KEY = '3l6ffld34qaymfomuh832j94738aie2x4p2o8h6n'
 BUCKET_NAME = 'check-bucket'
-
-def put_objects(bucket, key_list):
-    objs = []
-    for key in key_list:
-        o = bucket.put_object(Key=key, Body=b"some_data")
-        objs.append((o.key, o.version_id))
-    return objs
-
-def create_unlinked_objects(conn, bucket, key_list):
-    # creates an unlinked/unlistable object for each key in key_list
-    
-    object_versions = []
-    try:
-        exec_cmd('ceph config set client rgw_debug_inject_set_olh_err 2')
-        exec_cmd('ceph config set client rgw_debug_inject_olh_cancel_modification_err true')
-        sleep(1)
-        for key in key_list:
-            tag = str(random.randint(0, 1_000_000))
-            try:
-                bucket.put_object(Key=key, Body=b"some_data", Metadata = {
-                    'tag': tag,
-                })
-            except Exception as e:
-                log.debug(e)
-            out = exec_cmd(f'radosgw-admin bi list --bucket {bucket.name} --object {key}')
-            instance_entries = filter(
-                lambda x: x['type'] == 'instance',
-                json.loads(out.replace(b'\x80', b'0x80')))
-            found = False
-            for ie in instance_entries:
-                instance_id = ie['entry']['instance']
-                ov = conn.ObjectVersion(bucket.name, key, instance_id).head()
-                if ov['Metadata'] and ov['Metadata']['tag'] == tag:
-                    object_versions.append((key, instance_id))
-                    found = True
-                    break
-            if not found:
-                raise Exception(f'failed to create unlinked object for key={key}')
-    finally:
-        exec_cmd('ceph config rm client rgw_debug_inject_set_olh_err')
-        exec_cmd('ceph config rm client rgw_debug_inject_olh_cancel_modification_err')
-    return object_versions
 
 def main():
     """
@@ -199,6 +155,27 @@ def main():
     all_versions = list(map(lambda x: (x.key, x.version_id), bucket.object_versions.all()))
     for key in null_version_keys:
         assert (key, 'null') in all_versions
+
+    # TESTCASE 'bucket check stats are correct in the presence of unlinked entries'
+    log.debug('TEST: bucket check stats are correct in the presence of unlinked entries\n')
+    bucket.object_versions.all().delete()
+    null_version_objs = put_objects(bucket, null_version_keys)
+    ok_objs = put_objects(bucket, ok_keys)
+    unlinked_objs = create_unlinked_objects(connection, bucket, unlinked_keys)
+    exec_cmd(f'radosgw-admin bucket check --fix --bucket {BUCKET_NAME}')
+    out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --fix --min-age-hours 0 --rgw-olh-pending-timeout-sec 0 --dump-keys')
+    json_out = json.loads(out)
+    assert len(json_out) == len(unlinked_keys)
+    bucket.object_versions.all().delete()
+    out = exec_cmd(f'radosgw-admin bucket stats --bucket {BUCKET_NAME}')
+    json_out = json.loads(out)
+    log.debug(json_out['usage'])
+    assert json_out['usage']['rgw.main']['size'] == 0
+    assert json_out['usage']['rgw.main']['num_objects'] == 0
+    assert json_out['usage']['rgw.main']['size_actual'] == 0
+    assert json_out['usage']['rgw.main']['size_kb'] == 0
+    assert json_out['usage']['rgw.main']['size_kb_actual'] == 0
+    assert json_out['usage']['rgw.main']['size_kb_utilized'] == 0
 
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
