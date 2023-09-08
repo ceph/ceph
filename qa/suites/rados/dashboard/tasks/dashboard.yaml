@@ -7,8 +7,6 @@ overrides:
     conf:
       osd:
         osd mclock override recovery settings: true
-      mgr:
-        mon warn on pool no app: false
 
 tasks:
   - install:

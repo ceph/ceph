@@ -17,8 +17,6 @@ overrides:
 tasks:
 - install:
 - ceph:
-    log-ignorelist:
-    - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

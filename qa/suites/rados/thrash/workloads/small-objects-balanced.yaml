@@ -1,8 +1,6 @@
 overrides:
   ceph:
     crush_tunables: jewel
-    log-ignorelist:
-      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - rados:
     clients: [client.0]

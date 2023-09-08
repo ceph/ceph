@@ -285,7 +285,6 @@ class PoolTest(DashboardTestCase):
                     'pool': 'dashboard_pool_quota1',
                     'pg_num': '32',
                     'pool_type': 'replicated',
-                    'application_metadata': ['rbd'],
                 },
                 'pool_quotas_to_check': {
                     'quota_max_objects': 0,
@@ -297,7 +296,6 @@ class PoolTest(DashboardTestCase):
                     'pool': 'dashboard_pool_quota2',
                     'pg_num': '32',
                     'pool_type': 'replicated',
-                    'application_metadata': ['rbd'],
                     'quota_max_objects': 1024,
                     'quota_max_bytes': 1000,
                 },

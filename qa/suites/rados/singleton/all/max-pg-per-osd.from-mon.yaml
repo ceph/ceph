@@ -21,7 +21,6 @@ overrides:
     log-ignorelist:
       - \(TOO_FEW_PGS\)
       - \(PENDING_CREATING_PGS\)
-      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - install:
 - ceph:

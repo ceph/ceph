@@ -5,8 +5,6 @@ overrides:
         debug ms: 1
         debug objecter: 20
         debug rados: 20
-    log-ignorelist:
-      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - full_sequential:
   - radosbench:

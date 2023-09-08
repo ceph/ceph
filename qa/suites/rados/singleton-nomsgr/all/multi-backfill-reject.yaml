@@ -22,7 +22,6 @@ tasks:
       - \(PG_
       - \(OSD_
       - \(OBJECT_
-      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         osd debug reject backfill probability: .3

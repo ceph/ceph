@@ -38,7 +38,6 @@ tasks:
     - \(TOO_FEW_PGS\)
     - \(POOL_BACKFILLFULL\)
     - slow request
-    - \(POOL_APP_NOT_ENABLED\)
 - thrashosds:
     op_delay: 30
     clean_interval: 120

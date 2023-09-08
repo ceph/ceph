@@ -24,7 +24,6 @@ overrides:
       - \(TOO_FEW_PGS\)
       - \(PG_
       - \(PENDING_CREATING_PGS\)
-      - \(POOL_APP_NOT_ENABLED\)
 tasks:
 - install:
 - ceph:

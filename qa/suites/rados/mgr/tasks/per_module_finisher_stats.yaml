@@ -2,8 +2,6 @@ tasks:
   - install:
   - ceph:
       wait-for-scrub: false
-      log-ignorelist:
-        - \(POOL_APP_NOT_ENABLED\)
   - check-counter:
       counters:
         mgr:

@@ -8,7 +8,6 @@ tasks:
     fs: xfs
     log-ignorelist:
       - \(PG_AVAILABILITY\)
-      - \(POOL_APP_NOT_ENABLED\)
 - cram:
     clients:
       client.0:
