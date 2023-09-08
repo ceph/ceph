@@ -21,6 +21,7 @@ if(NOT WIN32)
       neorados.cc)
   add_executable(neorados ${neorados_srcs})
   target_link_libraries(neorados libneorados fmt::fmt ${CMAKE_DL_LIBS})
+  add_dependencies(tests neorados)
   #install(TARGETS neorados DESTINATION bin)
 endif()
 
