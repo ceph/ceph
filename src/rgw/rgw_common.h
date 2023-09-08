@@ -1627,7 +1627,7 @@ int verify_user_permission(const DoutPrefixProvider* dpp,
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       int perm);
-bool verify_bucket_permission(
+int verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
   const rgw_bucket& bucket,
@@ -1637,7 +1637,7 @@ bool verify_bucket_permission(
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op);
+int verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
   const DoutPrefixProvider* dpp,
   req_state * const s,
@@ -1649,7 +1649,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
 					const int perm);
 int verify_bucket_owner_or_policy(req_state* const s,
 				  const uint64_t op);
-extern bool verify_object_permission(
+extern int verify_object_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
   const rgw_obj& obj,
@@ -1660,7 +1660,7 @@ extern bool verify_object_permission(
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
+extern int verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
   const DoutPrefixProvider* dpp,
   req_state * const s,

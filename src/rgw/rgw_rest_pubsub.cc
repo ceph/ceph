@@ -742,11 +742,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
 }
 
 int RGWPSCreateNotifOp::verify_permission(optional_yield y) {
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification);
 }
 
 // command (extension to S3): DELETE /bucket?notification[=<notification-id>]
@@ -822,11 +818,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
 }
 
 int RGWPSDeleteNotifOp::verify_permission(optional_yield y) {
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification)) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_bucket_permission(this, s, rgw::IAM::s3PutBucketNotification);
 }
 
 // command (S3 compliant): GET /bucket?notification[=<notification-id>]
@@ -921,11 +913,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
 }
 
 int RGWPSListNotifsOp::verify_permission(optional_yield y) {
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketNotification)) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_bucket_permission(this, s, rgw::IAM::s3GetBucketNotification);
 }
 
 RGWOp* RGWHandler_REST_PSNotifs_S3::op_get() {

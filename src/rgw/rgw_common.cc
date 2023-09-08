@@ -1234,22 +1234,22 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
   return false;
 }
 
-bool verify_bucket_permission(const DoutPrefixProvider* dpp,
-                              struct perm_state_base * const s,
-			      const rgw_bucket& bucket,
-                              RGWAccessControlPolicy * const user_acl,
-                              RGWAccessControlPolicy * const bucket_acl,
-			      const boost::optional<Policy>& bucket_policy,
-                              const vector<Policy>& identity_policies,
-                              const vector<Policy>& session_policies,
-                              const uint64_t op)
+int verify_bucket_permission(const DoutPrefixProvider* dpp,
+                             struct perm_state_base * const s,
+                             const rgw_bucket& bucket,
+                             RGWAccessControlPolicy * const user_acl,
+                             RGWAccessControlPolicy * const bucket_acl,
+                             const boost::optional<Policy>& bucket_policy,
+                             const vector<Policy>& identity_policies,
+                             const vector<Policy>& session_policies,
+                             const uint64_t op)
 {
   if (!verify_requester_payer_permission(s))
-    return false;
+    return -EACCES;
 
   auto identity_policy_res = eval_identity_or_session_policies(dpp, identity_policies, s->env, op, ARN(bucket));
   if (identity_policy_res == Effect::Deny)
-    return false;
+    return -EACCES;
 
   rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
   if (bucket_policy) {
@@ -1259,46 +1259,46 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   auto r = eval_or_pass(dpp, bucket_policy, s->env, *s->identity,
 			op, ARN(bucket), princ_type);
   if (r == Effect::Deny)
-    return false;
+    return -EACCES;
 
   //Take into account session policies, if the identity making a request is a role
   if (!session_policies.empty()) {
     auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, ARN(bucket));
     if (session_policy_res == Effect::Deny) {
-        return false;
+        return -EACCES;
     }
     if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
       //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
       if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
           (session_policy_res == Effect::Allow && r == Effect::Allow))
-        return true;
+        return 0;
     } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
       //Intersection of session policy and identity policy plus bucket policy
       if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || r == Effect::Allow)
-        return true;
+        return 0;
     } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
       if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow)
-        return true;
+        return 0;
     }
-    return false;
+    return -EACCES;
   }
 
   if (r == Effect::Allow || identity_policy_res == Effect::Allow)
     // It looks like S3 ACLs only GRANT permissions rather than
     // denying them, so this should be safe.
-    return true;
+    return 0;
 
   const auto perm = op_to_perm(op);
 
-  return verify_bucket_permission_no_policy(dpp, s, user_acl, bucket_acl, perm);
+  return verify_bucket_permission_no_policy(dpp, s, user_acl, bucket_acl, perm) ? 0 : -EACCES;
 }
 
-bool verify_bucket_permission(const DoutPrefixProvider* dpp,
+int verify_bucket_permission(const DoutPrefixProvider* dpp,
                               req_state * const s,
-			      const rgw_bucket& bucket,
+                              const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
-			      const boost::optional<Policy>& bucket_policy,
+                              const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& user_policies,
                               const vector<Policy>& session_policies,
                               const uint64_t op)
@@ -1360,11 +1360,11 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state
                                             perm);
 }
 
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op)
+int verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op)
 {
   if (rgw::sal::Bucket::empty(s->bucket)) {
     // request is missing a bucket name
-    return false;
+    return -EACCES;
   }
 
   perm_state_from_req_state ps(s);
@@ -1433,19 +1433,21 @@ int verify_bucket_owner_or_policy(req_state* const s,
 }
 
 
-static inline bool check_deferred_bucket_perms(const DoutPrefixProvider* dpp,
+static inline int check_deferred_bucket_perms(const DoutPrefixProvider* dpp,
                                                struct perm_state_base * const s,
-					       const rgw_bucket& bucket,
-					       RGWAccessControlPolicy * const user_acl,
-					       RGWAccessControlPolicy * const bucket_acl,
-					       const boost::optional<Policy>& bucket_policy,
-                 const vector<Policy>& identity_policies,
-                 const vector<Policy>& session_policies,
-					       const uint8_t deferred_check,
-					       const uint64_t op)
+                                               const rgw_bucket& bucket,
+                                               RGWAccessControlPolicy * const user_acl,
+                                               RGWAccessControlPolicy * const bucket_acl,
+                                               const boost::optional<Policy>& bucket_policy,
+                                               const vector<Policy>& identity_policies,
+                                               const vector<Policy>& session_policies,
+                                               const uint8_t deferred_check,
+                                               const uint64_t op)
 {
-  return (s->defer_to_bucket_acls == deferred_check \
-	  && verify_bucket_permission(dpp, s, bucket, user_acl, bucket_acl, bucket_policy, identity_policies, session_policies,op));
+  if (s->defer_to_bucket_acls != deferred_check) {
+    return -EACCES;
+  }
+  return verify_bucket_permission(dpp, s, bucket, user_acl, bucket_acl, bucket_policy, identity_policies, session_policies,op);
 }
 
 static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
@@ -1459,8 +1461,8 @@ static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
 	  && verify_bucket_permission_no_policy(dpp, s, user_acl, bucket_acl, perm));
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
-			      const rgw_obj& obj,
+int verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
+                              const rgw_obj& obj,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
                               RGWAccessControlPolicy * const object_acl,
@@ -1470,54 +1472,62 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
                               const uint64_t op)
 {
   if (!verify_requester_payer_permission(s))
-    return false;
+    return -EACCES;
 
   auto identity_policy_res = eval_identity_or_session_policies(dpp, identity_policies, s->env, op, ARN(obj));
   if (identity_policy_res == Effect::Deny)
-    return false;
+    return -EACCES;
 
   rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
   auto r = eval_or_pass(dpp, bucket_policy, s->env, *s->identity, op, ARN(obj), princ_type);
   if (r == Effect::Deny)
-    return false;
+    return -EACCES;
 
   if (!session_policies.empty()) {
     auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, ARN(obj));
     if (session_policy_res == Effect::Deny) {
-        return false;
+        return -EACCES;
     }
     if (princ_type == rgw::IAM::PolicyPrincipal::Role) {
       //Intersection of session policy and identity policy plus intersection of session policy and bucket policy
       if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) ||
           (session_policy_res == Effect::Allow && r == Effect::Allow))
-        return true;
+        return 0;
     } else if (princ_type == rgw::IAM::PolicyPrincipal::Session) {
       //Intersection of session policy and identity policy plus bucket policy
       if ((session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow) || r == Effect::Allow)
-        return true;
+        return 0;
     } else if (princ_type == rgw::IAM::PolicyPrincipal::Other) {// there was no match in the bucket policy
       if (session_policy_res == Effect::Allow && identity_policy_res == Effect::Allow)
-        return true;
+        return 0;
     }
-    return false;
+    return -EACCES;
   }
 
   if (r == Effect::Allow || identity_policy_res == Effect::Allow)
     // It looks like S3 ACLs only GRANT permissions rather than
     // denying them, so this should be safe.
-    return true;
+    return 0;
 
   const auto perm = op_to_perm(op);
 
-  if (check_deferred_bucket_perms(dpp, s, obj.bucket, user_acl, bucket_acl, bucket_policy,
-				  identity_policies, session_policies, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, op) ||
-      check_deferred_bucket_perms(dpp, s, obj.bucket, user_acl, bucket_acl, bucket_policy,
-				  identity_policies, session_policies, RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, rgw::IAM::s3All)) {
-    return true;
+  if (int ret = check_deferred_bucket_perms(dpp, s, obj.bucket, user_acl,
+                                            bucket_acl, bucket_policy,
+                                            identity_policies, session_policies,
+                                            RGW_DEFER_TO_BUCKET_ACLS_RECURSE, op
+                                           ); ret != -EACCES) {
+    return ret;
+  }
+  if (int ret = check_deferred_bucket_perms(dpp, s, obj.bucket, user_acl,
+                                            bucket_acl, bucket_policy,
+                                            identity_policies, session_policies,
+                                            RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL, rgw::IAM::s3All
+                                           ); ret != -EACCES) {
+    return ret;
   }
 
   if (!object_acl) {
-    return false;
+    return -EACCES;
   }
 
   bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm,
@@ -1525,14 +1535,14 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 					   s->bucket_access_conf &&
 					   s->bucket_access_conf->ignore_public_acls());
   if (ret) {
-    return true;
+    return 0;
   }
 
   if (!s->cct->_conf->rgw_enforce_swift_acls)
-    return ret;
+    return ret ? 0 : -EACCES;
 
   if ((perm & (int)s->perm_mask) != perm)
-    return false;
+    return -EACCES;
 
   int swift_perm = 0;
   if (perm & (RGW_PERM_READ | RGW_PERM_READ_ACP))
@@ -1541,29 +1551,29 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     swift_perm |= RGW_PERM_WRITE_OBJS;
 
   if (!swift_perm)
-    return false;
+    return -EACCES;
 
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
   if (bucket_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm,
                                     s->get_referer()))
-    return true;
+    return 0;
 
   if (!user_acl)
-    return false;
+    return -EACCES;
 
-  return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm);
+  return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm) ? 0 : -EACCES;
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s,
-			      const rgw_obj& obj,
-                              RGWAccessControlPolicy * const user_acl,
-                              RGWAccessControlPolicy * const bucket_acl,
-                              RGWAccessControlPolicy * const object_acl,
-                              const boost::optional<Policy>& bucket_policy,
-                              const vector<Policy>& identity_policies,
-                              const vector<Policy>& session_policies,
-                              const uint64_t op)
+int verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s,
+                             const rgw_obj& obj,
+                             RGWAccessControlPolicy * const user_acl,
+                             RGWAccessControlPolicy * const bucket_acl,
+                             RGWAccessControlPolicy * const object_acl,
+                             const boost::optional<Policy>& bucket_policy,
+                             const vector<Policy>& identity_policies,
+                             const vector<Policy>& session_policies,
+                             const uint64_t op)
 {
   perm_state_from_req_state ps(s);
   return verify_object_permission(dpp, &ps, obj,
@@ -1638,7 +1648,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state
                                             perm);
 }
 
-bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op)
+int verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op)
 {
   perm_state_from_req_state ps(s);
 
