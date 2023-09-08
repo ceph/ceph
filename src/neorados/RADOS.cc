@@ -944,6 +944,10 @@ void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 		     cb::list* bl,
 		     ReadOp::Completion c, version_t* objver,
 		     const blkin_trace_info *trace_info) {
+  if (_op.size() == 0) {
+    asio::dispatch(asio::append(std::move(c), bs::error_code{}));
+    return;
+  }
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
@@ -966,6 +970,10 @@ void RADOS::execute_(Object o, IOContext _ioc, ReadOp _op,
 void RADOS::execute_(Object o, IOContext _ioc, WriteOp _op,
 		     WriteOp::Completion c, version_t* objver,
 		     const blkin_trace_info *trace_info) {
+  if (_op.size() == 0) {
+    asio::dispatch(asio::append(std::move(c), bs::error_code{}));
+    return;
+  }
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
   auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
   auto op = reinterpret_cast<OpImpl*>(&_op.impl);
