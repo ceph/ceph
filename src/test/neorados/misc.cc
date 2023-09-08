@@ -193,15 +193,16 @@ CORO_TEST_F(NeoRadosMisc, Operate1, NeoRadosTest) {
     co_await execute(oid, ReadOp{}.get_xattr(key1, &bl));
     EXPECT_EQ(val1, bl);
   }
+  // Comparisons differing in NUL termination.
   const auto notval1 = to_buffer_list("val1"sv);
-  co_await expect_error_code(execute(oid, WriteOp{}
-				     .cmpxattr(key1, neorados::cmp_op::eq, val1)
-				     .rmxattr(key1)),
-			     sys::errc::operation_canceled);
   co_await expect_error_code(
-    execute(oid, WriteOp{} .cmpxattr(key1, neorados::cmp_op::eq, val1)),
+    execute(oid, WriteOp{}
+	    .cmpxattr(key1, neorados::cmp_op::eq, notval1)
+	    .rmxattr(key1)),
     sys::errc::operation_canceled);
-
+  co_await expect_error_code(
+    execute(oid, WriteOp{}.cmpxattr(key1, neorados::cmp_op::eq, notval1)),
+    sys::errc::operation_canceled);
 
   co_return;
 }
