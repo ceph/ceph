@@ -97,6 +97,10 @@ public:
     return get_decoratee().get_subuser();
   }
 
+  const rgw_user get_rgw_user() const override {
+    return get_decoratee().get_rgw_user();
+  }
+
   bool is_identity(
     const boost::container::flat_set<Principal>& ids) const override {
     return get_decoratee().is_identity(ids);

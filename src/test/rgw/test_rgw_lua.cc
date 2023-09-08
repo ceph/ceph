@@ -59,6 +59,10 @@ public:
     return "";
   }
 
+  const rgw_user get_rgw_user() const override {
+    return {};
+  }
+
   void to_str(std::ostream& out) const override {
     return;
   }
