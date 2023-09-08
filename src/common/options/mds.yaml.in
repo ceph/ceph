@@ -819,6 +819,16 @@ options:
   services:
   - mds
   with_legacy: true
+# must be overloaded for more than these epochs before we export anything
+- name: mds_bal_overload_epochs
+  type: int
+  level: dev
+  default: 2
+  services:
+  - mds
+  fmt_desc: The number of epochs the overload lasts before Ceph migrates,
+    setting it to a higher value can avoid frequent migrations caused by load fluctuations.
+  with_legacy: true
 # if we need less than this, we don't do anything
 - name: mds_bal_min_start
   type: float
