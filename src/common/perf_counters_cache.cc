@@ -5,17 +5,16 @@ namespace ceph::perf_counters {
 
 void PerfCountersCache::check_key(const std::string &key) {
   std::string_view key_name = ceph::perf_counters::key_name(key);
-  // return false for empty key name
+  // don't accept an empty key name
   assert(key_name != "");
 
-  // if there are no labels key name is not valid
+  // if there are no labels, key name is not valid
   auto key_labels = ceph::perf_counters::key_labels(key);
   assert(key_labels.begin() != key_labels.end());
 
-  // don't accept keys where any labels have an empty label name
+  // don't accept keys where any labels in the key have an empty key name
   for (auto key_label : key_labels) {
     assert(key_label.first != "");
-    assert(key_label.second != "");
   }
 }
 

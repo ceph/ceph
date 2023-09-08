@@ -3829,26 +3829,8 @@ options:
     other form of policies that Amazon does, so if you are mirroring
     policies between RGW and AWS, you may wish to set this to false.
   default: true
-- name: rgw_perf_counters_cache
-  type: bool
-  level: dev
-  default: false
-  desc: enable rgw labeled perf counters cache
-  long desc: If set to true, rgw creates labeled perf counters and stores them 
-    in an rgw specific labeled perf counters cache.
-  see_also:
-  - rgw_perf_counters_cache_size
   services:
   - rgw
-  with_legacy: true
-- name: rgw_perf_counters_cache_size
-  type: uint
-  level: advanced
-  desc: Number of labeled perf counters the rgw perf counters cache can store
-  default: 10000
-  services:
-  - rgw
-  with_legacy: true
 - name: rgw_d4n_host
   type: str
   level: advanced
@@ -3913,4 +3895,48 @@ options:
   default: 128000
   services:
   - rgw
+  with_legacy: true
+- name: rgw_user_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: enable a rgw perf counters cache for counters with user label
+  long desc: If set to true, rgw creates perf counters with a label for the user and stores them
+    in a perf counters cache. This perf counters cache contains only perf counters labeled by user.
+  see_also:
+  - rgw_user_counters_cache_size
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_user_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the user perf counters cache can store
+  default: 10000
+  services:
+  - rgw
+  see_also:
+  - rgw_user_counters_cache
+  with_legacy: true
+- name: rgw_bucket_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: enable a rgw perf counters cache for counters with bucket label
+  long desc: If set to true, rgw creates perf counters with a label for the bucket and stores them
+    in a perf counters cache. This perf counters cache contains only perf counters labeled by bucket.
+  see_also:
+  - rgw_bucket_counters_cache_size
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_bucket_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the bucket perf counters cache can store
+  default: 10000
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_counters_cache
   with_legacy: true
