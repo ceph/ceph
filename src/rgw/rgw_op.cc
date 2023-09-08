@@ -803,6 +803,10 @@ static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvide
                                                           boost::optional<vector<rgw::IAM::Policy>> identity_policies,
                                                           boost::optional<vector<rgw::IAM::Policy>> session_policies,
                                                           bool check_obj_exist_tag=true) {
+  if (dpp->get_cct()->_conf->rgw_extern_iam_enabled) {
+    return make_tuple(true, true);
+  }
+
   bool has_existing_obj_tag = false, has_resource_tag = false;
   bool iam_policy_s3_exist_tag = false, iam_policy_s3_resource_tag = false;
   if (iam_policy) {

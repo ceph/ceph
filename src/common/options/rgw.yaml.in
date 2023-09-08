@@ -3850,3 +3850,44 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_extern_iam_enabled
+  type: bool
+  level: advanced
+  desc: Enable External IAM Authorization
+  default: false
+  services:
+  - rgw
+  see_also:
+  - rgw_extern_iam_authorization_header
+  - rgw_extern_iam_addr
+  - rgw_extern_iam_verify_ssl
+  with_legacy: true
+- name: rgw_extern_iam_authorization_header
+  type: str
+  level: advanced
+  desc: External IAM Authorization header value
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_extern_iam_addr
+  type: str
+  level: advanced
+  desc: HTTP(S) External IAM address
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_extern_iam_unix_sock_path
+  type: str
+  level: advanced
+  desc: Path to the Unix Socket of External IAM
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_extern_iam_verify_ssl
+  type: bool
+  level: advanced
+  desc: Verify SSL for External IAM Access
+  default: true
+  services:
+  - rgw
+  with_legacy: true

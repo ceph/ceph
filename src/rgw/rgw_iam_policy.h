@@ -250,6 +250,274 @@ inline int op_to_perm(std::uint64_t op) {
   }
   return RGW_PERM_INVALID;
 }
+
+inline const char* action_bit_string(uint64_t action) {
+  switch (action) {
+  case s3GetObject:
+    return "s3:GetObject";
+
+  case s3GetObjectVersion:
+    return "s3:GetObjectVersion";
+
+  case s3PutObject:
+    return "s3:PutObject";
+
+  case s3GetObjectAcl:
+    return "s3:GetObjectAcl";
+
+  case s3GetObjectVersionAcl:
+    return "s3:GetObjectVersionAcl";
+
+  case s3PutObjectAcl:
+    return "s3:PutObjectAcl";
+
+  case s3PutObjectVersionAcl:
+    return "s3:PutObjectVersionAcl";
+
+  case s3DeleteObject:
+    return "s3:DeleteObject";
+
+  case s3DeleteObjectVersion:
+    return "s3:DeleteObjectVersion";
+
+  case s3ListMultipartUploadParts:
+    return "s3:ListMultipartUploadParts";
+
+  case s3AbortMultipartUpload:
+    return "s3:AbortMultipartUpload";
+
+  case s3GetObjectTorrent:
+    return "s3:GetObjectTorrent";
+
+  case s3GetObjectVersionTorrent:
+    return "s3:GetObjectVersionTorrent";
+
+  case s3RestoreObject:
+    return "s3:RestoreObject";
+
+  case s3CreateBucket:
+    return "s3:CreateBucket";
+
+  case s3DeleteBucket:
+    return "s3:DeleteBucket";
+
+  case s3ListBucket:
+    return "s3:ListBucket";
+
+  case s3ListBucketVersions:
+    return "s3:ListBucketVersions";
+  case s3ListAllMyBuckets:
+    return "s3:ListAllMyBuckets";
+
+  case s3ListBucketMultipartUploads:
+    return "s3:ListBucketMultipartUploads";
+
+  case s3GetAccelerateConfiguration:
+    return "s3:GetAccelerateConfiguration";
+
+  case s3PutAccelerateConfiguration:
+    return "s3:PutAccelerateConfiguration";
+
+  case s3GetBucketAcl:
+    return "s3:GetBucketAcl";
+
+  case s3PutBucketAcl:
+    return "s3:PutBucketAcl";
+
+  case s3GetBucketCORS:
+    return "s3:GetBucketCORS";
+
+  case s3PutBucketCORS:
+    return "s3:PutBucketCORS";
+
+  case s3GetBucketEncryption:
+    return "s3:GetBucketEncryption";
+
+  case s3PutBucketEncryption:
+    return "s3:PutBucketEncryption";
+
+  case s3GetBucketVersioning:
+    return "s3:GetBucketVersioning";
+
+  case s3PutBucketVersioning:
+    return "s3:PutBucketVersioning";
+
+  case s3GetBucketRequestPayment:
+    return "s3:GetBucketRequestPayment";
+
+  case s3PutBucketRequestPayment:
+    return "s3:PutBucketRequestPayment";
+
+  case s3GetBucketLocation:
+    return "s3:GetBucketLocation";
+
+  case s3GetBucketPolicy:
+    return "s3:GetBucketPolicy";
+
+  case s3DeleteBucketPolicy:
+    return "s3:DeleteBucketPolicy";
+
+  case s3PutBucketPolicy:
+    return "s3:PutBucketPolicy";
+
+  case s3GetBucketNotification:
+    return "s3:GetBucketNotification";
+
+  case s3PutBucketNotification:
+    return "s3:PutBucketNotification";
+
+  case s3GetBucketLogging:
+    return "s3:GetBucketLogging";
+
+  case s3PutBucketLogging:
+    return "s3:PutBucketLogging";
+
+  case s3GetBucketTagging:
+    return "s3:GetBucketTagging";
+
+  case s3PutBucketTagging:
+    return "s3:PutBucketTagging";
+
+  case s3GetBucketWebsite:
+    return "s3:GetBucketWebsite";
+
+  case s3PutBucketWebsite:
+    return "s3:PutBucketWebsite";
+
+  case s3DeleteBucketWebsite:
+    return "s3:DeleteBucketWebsite";
+
+  case s3GetLifecycleConfiguration:
+    return "s3:GetLifecycleConfiguration";
+
+  case s3PutLifecycleConfiguration:
+    return "s3:PutLifecycleConfiguration";
+
+  case s3PutReplicationConfiguration:
+    return "s3:PutReplicationConfiguration";
+
+  case s3GetReplicationConfiguration:
+    return "s3:GetReplicationConfiguration";
+
+  case s3DeleteReplicationConfiguration:
+    return "s3:DeleteReplicationConfiguration";
+
+  case s3PutObjectTagging:
+    return "s3:PutObjectTagging";
+
+  case s3PutObjectVersionTagging:
+    return "s3:PutObjectVersionTagging";
+
+  case s3GetObjectTagging:
+    return "s3:GetObjectTagging";
+
+  case s3GetObjectVersionTagging:
+    return "s3:GetObjectVersionTagging";
+
+  case s3DeleteObjectTagging:
+    return "s3:DeleteObjectTagging";
+
+  case s3DeleteObjectVersionTagging:
+    return "s3:DeleteObjectVersionTagging";
+
+  case s3PutBucketObjectLockConfiguration:
+    return "s3:PutBucketObjectLockConfiguration";
+
+  case s3GetBucketObjectLockConfiguration:
+    return "s3:GetBucketObjectLockConfiguration";
+
+  case s3PutObjectRetention:
+    return "s3:PutObjectRetention";
+
+  case s3GetObjectRetention:
+    return "s3:GetObjectRetention";
+
+  case s3PutObjectLegalHold:
+    return "s3:PutObjectLegalHold";
+
+  case s3GetObjectLegalHold:
+    return "s3:GetObjectLegalHold";
+
+  case s3BypassGovernanceRetention:
+    return "s3:BypassGovernanceRetention";
+
+  case iamPutUserPolicy:
+    return "iam:PutUserPolicy";
+
+  case iamGetUserPolicy:
+    return "iam:GetUserPolicy";
+
+  case iamListUserPolicies:
+    return "iam:ListUserPolicies";
+
+  case iamDeleteUserPolicy:
+    return "iam:DeleteUserPolicy";
+
+  case iamCreateRole:
+    return "iam:CreateRole";
+
+  case iamDeleteRole:
+    return "iam:DeleteRole";
+
+  case iamGetRole:
+    return "iam:GetRole";
+
+  case iamModifyRoleTrustPolicy:
+    return "iam:ModifyRoleTrustPolicy";
+
+  case iamListRoles:
+    return "iam:ListRoles";
+
+  case iamPutRolePolicy:
+    return "iam:PutRolePolicy";
+
+  case iamGetRolePolicy:
+    return "iam:GetRolePolicy";
+
+  case iamListRolePolicies:
+    return "iam:ListRolePolicies";
+
+  case iamDeleteRolePolicy:
+    return "iam:DeleteRolePolicy";
+
+  case iamCreateOIDCProvider:
+    return "iam:CreateOIDCProvider";
+
+  case iamDeleteOIDCProvider:
+    return "iam:DeleteOIDCProvider";
+
+  case iamGetOIDCProvider:
+    return "iam:GetOIDCProvider";
+
+  case iamListOIDCProviders:
+    return "iam:ListOIDCProviders";
+
+  case iamTagRole:
+    return "iam:TagRole";
+
+  case iamListRoleTags:
+    return "iam:ListRoleTags";
+
+  case iamUntagRole:
+    return "iam:UntagRole";
+
+  case iamUpdateRole:
+    return "iam:UpdateRole";
+
+  case stsAssumeRole:
+    return "sts:AssumeRole";
+
+  case stsAssumeRoleWithWebIdentity:
+    return "sts:AssumeRoleWithWebIdentity";
+
+  case stsGetSessionToken:
+    return "sts:GetSessionToken";
+
+  case stsTagSession:
+    return "sts:TagSession";
+  }
+  return "s3Invalid";
+}
 }
 
 enum class PolicyPrincipal {

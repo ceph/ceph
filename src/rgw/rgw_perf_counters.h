@@ -55,6 +55,8 @@ enum {
   l_rgw_lua_script_ok,
   l_rgw_lua_script_fail,
 
+  l_rgw_extern_iam_lat,
+
   l_rgw_last,
 };
 

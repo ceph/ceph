@@ -63,7 +63,9 @@ int rgw_perf_start(CephContext *cct)
   plb.add_u64_counter(l_rgw_lua_script_ok, "lua_script_ok", "Successfull executions of lua scripts");
   plb.add_u64_counter(l_rgw_lua_script_fail, "lua_script_fail", "Failed executions of lua scripts");
   plb.add_u64(l_rgw_lua_current_vms, "lua_current_vms", "Number of Lua VMs currently being executed");
-  
+
+  plb.add_time_avg(l_rgw_extern_iam_lat, "extern_iam_lat", "External IAM latency");
+
   perfcounter = plb.create_perf_counters();
   cct->get_perfcounters_collection()->add(perfcounter);
   return 0;

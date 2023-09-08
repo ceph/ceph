@@ -76,6 +76,7 @@ set(librgw_common_srcs
   rgw_cors_s3.cc
   rgw_env.cc
   rgw_es_query.cc
+  rgw_extern_iam.cc
   rgw_formats.cc
   rgw_http_client.cc
   rgw_keystone.cc
