@@ -30,6 +30,7 @@
 #include "rgw_crypt_sanitize.h"
 #include "rgw_bucket_sync.h"
 #include "rgw_sync_policy.h"
+#include "rgw_extern_iam.h"
 
 #include "services/svc_zone.h"
 
@@ -1121,10 +1122,10 @@ Effect eval_or_pass(const DoutPrefixProvider* dpp,
 }
 
 Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
-			  const vector<Policy>& policies,
-                          const rgw::IAM::Environment& env,
-                          const uint64_t op,
-                          const ARN& arn) {
+                                         const vector<Policy>& policies,
+                                         const rgw::IAM::Environment& env,
+                                         const uint64_t op,
+                                         const ARN& arn) {
   auto policy_res = Effect::Pass, prev_res = Effect::Pass;
   for (auto& policy : policies) {
     if (policy_res = eval_or_pass(dpp, policy, env, boost::none, op, arn); policy_res == Effect::Deny)
@@ -1151,6 +1152,18 @@ int verify_user_permission(const DoutPrefixProvider* dpp,
     return -EACCES;
   }
 
+  auto extern_iam_res = Effect::Pass;
+  if (s->cct->_conf->rgw_extern_iam_enabled) {
+    int ret = RGWExternIAMAuthorize::get_instance(s->cct).eval(
+      dpp, s->env, res, op, *s->identity,
+      extern_iam_res);
+    if (ret < 0) {
+      return -ERR_INTERNAL_ERROR;
+    } else if (extern_iam_res == Effect::Deny) {
+      return -EACCES;
+    }
+  }
+
   if (! session_policies.empty()) {
     auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, res);
     if (session_policy_res == Effect::Deny) {
@@ -1163,7 +1176,7 @@ int verify_user_permission(const DoutPrefixProvider* dpp,
     return -EACCES;
   }
 
-  if (identity_policy_res == Effect::Allow) {
+  if (identity_policy_res == Effect::Allow || extern_iam_res == Effect::Allow) {
     return 0;
   }
 
@@ -1247,23 +1260,37 @@ int verify_bucket_permission(const DoutPrefixProvider* dpp,
   if (!verify_requester_payer_permission(s))
     return -EACCES;
 
-  auto identity_policy_res = eval_identity_or_session_policies(dpp, identity_policies, s->env, op, ARN(bucket));
+  const ARN bucket_arn(bucket);
+
+  auto identity_policy_res = eval_identity_or_session_policies(dpp, identity_policies, s->env, op, bucket_arn);
   if (identity_policy_res == Effect::Deny)
     return -EACCES;
 
   rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
   if (bucket_policy) {
     ldpp_dout(dpp, 16) << __func__ << ": policy: " << bucket_policy.get()
-		       << "resource: " << ARN(bucket) << dendl;
+		       << "resource: " << bucket_arn << dendl;
   }
   auto r = eval_or_pass(dpp, bucket_policy, s->env, *s->identity,
-			op, ARN(bucket), princ_type);
+			op, bucket_arn, princ_type);
   if (r == Effect::Deny)
     return -EACCES;
 
+  auto extern_iam_res = Effect::Pass;
+  if (s->cct->_conf->rgw_extern_iam_enabled) {
+    int ret = RGWExternIAMAuthorize::get_instance(s->cct).eval(
+      dpp, s->env, bucket_arn, op, *s->identity,
+      extern_iam_res);
+    if (ret < 0) {
+      return -ERR_INTERNAL_ERROR;
+    } else if (extern_iam_res == Effect::Deny) {
+      return -EACCES;
+    }
+  }
+
   //Take into account session policies, if the identity making a request is a role
   if (!session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, ARN(bucket));
+    auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, bucket_arn);
     if (session_policy_res == Effect::Deny) {
         return -EACCES;
     }
@@ -1283,7 +1310,7 @@ int verify_bucket_permission(const DoutPrefixProvider* dpp,
     return -EACCES;
   }
 
-  if (r == Effect::Allow || identity_policy_res == Effect::Allow)
+  if (r == Effect::Allow || identity_policy_res == Effect::Allow || extern_iam_res == Effect::Allow)
     // It looks like S3 ACLs only GRANT permissions rather than
     // denying them, so this should be safe.
     return 0;
@@ -1383,25 +1410,35 @@ int verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s,
 // Authorize anyone permitted by the bucket policy, identity policies, session policies and the bucket owner
 // unless explicitly denied by the policy.
 
-int verify_bucket_owner_or_policy(req_state* const s,
-				  const uint64_t op)
+int verify_bucket_owner_or_policy(req_state* const s, const uint64_t op)
 {
-  auto identity_policy_res = eval_identity_or_session_policies(s, s->iam_user_policies, s->env, op, ARN(s->bucket->get_key()));
+  const ARN bucket_arn(s->bucket->get_key());
+
+  auto identity_policy_res = eval_identity_or_session_policies(s, s->iam_user_policies, s->env, op, bucket_arn);
   if (identity_policy_res == Effect::Deny) {
     return -EACCES;
   }
 
   rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
-  auto e = eval_or_pass(s, s->iam_policy,
-			s->env, *s->auth.identity,
-			op, ARN(s->bucket->get_key()), princ_type);
+  auto e = eval_or_pass(s, s->iam_policy, s->env, *s->auth.identity, op, bucket_arn, princ_type);
   if (e == Effect::Deny) {
     return -EACCES;
   }
 
+  auto extern_iam_res = Effect::Pass;
+  if (s->cct->_conf->rgw_extern_iam_enabled) {
+    int ret = RGWExternIAMAuthorize::get_instance(s->cct).eval(
+      s, s->env, bucket_arn, op, *s->auth.identity,
+      extern_iam_res);
+    if (ret < 0) {
+      return -ERR_INTERNAL_ERROR;
+    } else if (extern_iam_res == Effect::Deny) {
+      return -EACCES;
+    }
+  }
+
   if (!s->session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(s, s->session_policies, s->env, op,
-								ARN(s->bucket->get_key()));
+    auto session_policy_res = eval_identity_or_session_policies(s, s->session_policies, s->env, op, bucket_arn);
     if (session_policy_res == Effect::Deny) {
         return -EACCES;
     }
@@ -1421,15 +1458,12 @@ int verify_bucket_owner_or_policy(req_state* const s,
     return -EACCES;
   }
 
-  if (e == Effect::Allow ||
-      identity_policy_res == Effect::Allow ||
-      (e == Effect::Pass &&
-       identity_policy_res == Effect::Pass &&
-       s->auth.identity->is_owner_of(s->bucket_owner.get_id()))) {
+  if (e == Effect::Allow || identity_policy_res == Effect::Allow || extern_iam_res == Effect::Allow ||
+      s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
     return 0;
-  } else {
-    return -EACCES;
   }
+
+  return -EACCES;
 }
 
 
@@ -1474,17 +1508,31 @@ int verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_ba
   if (!verify_requester_payer_permission(s))
     return -EACCES;
 
-  auto identity_policy_res = eval_identity_or_session_policies(dpp, identity_policies, s->env, op, ARN(obj));
+  const ARN obj_arn(obj);
+
+  auto identity_policy_res = eval_identity_or_session_policies(dpp, identity_policies, s->env, op, obj_arn);
   if (identity_policy_res == Effect::Deny)
     return -EACCES;
 
   rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
-  auto r = eval_or_pass(dpp, bucket_policy, s->env, *s->identity, op, ARN(obj), princ_type);
+  auto r = eval_or_pass(dpp, bucket_policy, s->env, *s->identity, op, obj_arn, princ_type);
   if (r == Effect::Deny)
     return -EACCES;
 
+  auto extern_iam_res = Effect::Pass;
+  if (s->cct->_conf->rgw_extern_iam_enabled) {
+    int ret = RGWExternIAMAuthorize::get_instance(s->cct).eval(
+      dpp, s->env, obj_arn, op, *s->identity,
+      extern_iam_res);
+    if (ret < 0) {
+      return -ERR_INTERNAL_ERROR;
+    } else if (extern_iam_res == Effect::Deny) {
+      return -EACCES;
+    }
+  }
+
   if (!session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, ARN(obj));
+    auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, obj_arn);
     if (session_policy_res == Effect::Deny) {
         return -EACCES;
     }
@@ -1504,7 +1552,7 @@ int verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_ba
     return -EACCES;
   }
 
-  if (r == Effect::Allow || identity_policy_res == Effect::Allow)
+  if (r == Effect::Allow || identity_policy_res == Effect::Allow || extern_iam_res == Effect::Allow)
     // It looks like S3 ACLs only GRANT permissions rather than
     // denying them, so this should be safe.
     return 0;
