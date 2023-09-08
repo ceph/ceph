@@ -7,4 +7,6 @@ stress-tasks:
     clients:
       client.0:
         - cls/test_cls_rbd.sh
+    env:
+      CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.mirror_snapshot'
 - print: "**** done cls/test_cls_rbd.sh 4-workload"

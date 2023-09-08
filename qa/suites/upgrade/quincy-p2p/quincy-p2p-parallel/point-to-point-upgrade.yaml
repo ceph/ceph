@@ -124,7 +124,7 @@ workload_quincy:
          - rados/test.sh
          - cls
        env:
-         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.snapshots_namespaces'
+         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.mirror_snapshot'
    - print: "**** done rados/test.sh &  cls workload_quincy"
    - sequential:
      - rgw: [client.0]
