@@ -34,6 +34,7 @@
 .. confval:: mds_bal_max_until
 .. confval:: mds_bal_mode
 .. confval:: mds_bal_min_rebalance
+.. confval:: mds_bal_overload_epochs
 .. confval:: mds_bal_min_start
 .. confval:: mds_bal_need_min
 .. confval:: mds_bal_need_max

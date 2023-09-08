@@ -766,7 +766,7 @@ void MDBalancer::prep_rebalance(int beat)
       return;
     }
     // am i over long enough?
-    if (last_epoch_under && beat_epoch - last_epoch_under < 2) {
+    if (last_epoch_under && beat_epoch - last_epoch_under < g_conf()->mds_bal_overload_epochs) {
       dout(7) << "  i am overloaded, but only for " << (beat_epoch - last_epoch_under) << " epochs" << dendl;
       return;
     }
