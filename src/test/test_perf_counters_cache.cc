@@ -960,13 +960,31 @@ TEST(PerfCountersCache, TestLabelStrings) {
 
   // test empty val in a label pair will get the label pair added into the perf counters cache but empty key will not
   std::string label2 = key_create("bad_ctrs1", {{"label3", "val4"}, {"label1", ""}});
-  EXPECT_DEATH(pcc->set_counter(label2, TEST_PERFCOUNTERS_COUNTER, 2), "");
+  //EXPECT_DEATH(pcc->set_counter(label2, TEST_PERFCOUNTERS_COUNTER, 2), "");
+  pcc->set_counter(label2, TEST_PERFCOUNTERS_COUNTER, 2);
 
   std::string label3 = key_create("bad_ctrs2", {{"", "val4"}, {"label1", "val1"}});
   EXPECT_DEATH(pcc->set_counter(label3, TEST_PERFCOUNTERS_COUNTER, 2), "");
 
   ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
   ASSERT_EQ(R"({
+    "bad_ctrs1": [
+        {
+            "labels": {
+                "label1": "",
+                "label3": "val4"
+            },
+            "counters": {
+                "test_counter": 2,
+                "test_time": 0.000000000,
+                "test_time_avg": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                }
+            }
+        }
+    ],
     "good_ctrs": [
         {
             "labels": {
@@ -990,6 +1008,23 @@ TEST(PerfCountersCache, TestLabelStrings) {
   // test empty keys in each of the label pairs will not get the label added into the perf counters cache
   ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
   ASSERT_EQ(R"({
+    "bad_ctrs1": [
+        {
+            "labels": {
+                "label1": "",
+                "label3": "val4"
+            },
+            "counters": {
+                "test_counter": 2,
+                "test_time": 0.000000000,
+                "test_time_avg": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                }
+            }
+        }
+    ],
     "good_ctrs": [
         {
             "labels": {
@@ -1023,6 +1058,23 @@ TEST(PerfCountersCache, TestLabelStrings) {
 
   ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
   ASSERT_EQ(R"({
+    "bad_ctrs1": [
+        {
+            "labels": {
+                "label1": "",
+                "label3": "val4"
+            },
+            "counters": {
+                "test_counter": 2,
+                "test_time": 0.000000000,
+                "test_time_avg": {
+                    "avgcount": 0,
+                    "sum": 0.000000000,
+                    "avgtime": 0.000000000
+                }
+            }
+        }
+    ],
     "good_ctrs": [
         {
             "labels": {

@@ -36,6 +36,7 @@
 #include "rgw_putobj_processor.h"
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
+#include "rgw_perf_counters.h"
 
 
 /* XXX
@@ -2485,6 +2486,7 @@ public:
   off_t real_ofs;
   size_t bytes_written;
   bool eio;
+  rgw::op_counters::CountersContainer counters;
 
   RGWWriteRequest(rgw::sal::Driver* driver, const RGWProcessEnv& penv,
 		  std::unique_ptr<rgw::sal::User> _user,

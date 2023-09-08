@@ -135,12 +135,7 @@ void PerfCountersCollectionImpl::dump_formatted_generic(
     const std::string &counter) const
 {
   f->open_object_section("perfcounter_collection");
-  // close out all of counters collection immediately if collection is empty
-  if (m_loggers.empty()) {
-    f->close_section(); // all of counters collection
-    return;
-  }
-
+  
   if (dump_labeled) {
     std::string prev_key_name;
     for (auto l = m_loggers.begin(); l != m_loggers.end(); ++l) {
