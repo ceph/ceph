@@ -42,8 +42,8 @@ int RGWRestOIDCProvider::verify_permission(optional_yield y)
   uint64_t op = get_op();
   auto rgw_arn = rgw::ARN::parse(provider_arn, true);
   if (rgw_arn) {
-    if (!verify_user_permission(this, s, *rgw_arn, op)) {
-      return -EACCES;
+    if (int ret = verify_user_permission(this, s, *rgw_arn, op); ret) {
+      return ret;
     }
   } else {
       return -EACCES;
@@ -83,15 +83,9 @@ int RGWCreateOIDCProvider::verify_permission(optional_yield y)
   }
 
   string idp_url = url_remove_prefix(provider_url);
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(idp_url,
-                                        "oidc-provider",
-                                         s->user->get_tenant(), true),
-                                         get_op())) {
-    return -EACCES;
-  }
-  return 0;
+  return verify_user_permission(this, s,
+                                rgw::ARN(idp_url, "oidc-provider", s->user->get_tenant(), true),
+                                get_op());
 }
 
 int RGWCreateOIDCProvider::get_params()
@@ -196,14 +190,7 @@ int RGWListOIDCProviders::verify_permission(optional_yield y)
     return ret;
   }
 
-  if (!verify_user_permission(this, 
-                              s,
-                              rgw::ARN(),
-                              get_op())) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_user_permission(this, s, rgw::ARN(), get_op());
 }
 
 void RGWListOIDCProviders::execute(optional_yield y)

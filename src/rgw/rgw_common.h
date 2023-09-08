@@ -1603,27 +1603,27 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
 rgw::IAM::Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
-			  const std::vector<rgw::IAM::Policy>& user_policies,
-                          const rgw::IAM::Environment& env,
-                          const uint64_t op,
-                          const rgw::ARN& arn);
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            req_state * const s,
-                            RGWAccessControlPolicy * const user_acl,
-                            const std::vector<rgw::IAM::Policy>& user_policies,
-                            const std::vector<rgw::IAM::Policy>& session_policies,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy=true);
+                                                   const std::vector<rgw::IAM::Policy>& user_policies,
+                                                   const rgw::IAM::Environment& env,
+                                                   const uint64_t op,
+                                                   const rgw::ARN& arn);
+int verify_user_permission(const DoutPrefixProvider* dpp,
+                           req_state * const s,
+                           RGWAccessControlPolicy * const user_acl,
+                           const std::vector<rgw::IAM::Policy>& user_policies,
+                           const std::vector<rgw::IAM::Policy>& session_policies,
+                           const rgw::ARN& res,
+                           const uint64_t op,
+                           bool mandatory_policy=true);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       RGWAccessControlPolicy * const user_acl,
                                       const int perm);
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            req_state * const s,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy=true);
+int verify_user_permission(const DoutPrefixProvider* dpp,
+                           req_state * const s,
+                           const rgw::ARN& res,
+                           const uint64_t op,
+                           bool mandatory_policy=true);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       int perm);

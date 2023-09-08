@@ -573,12 +573,11 @@ int RGWSTSGetSessionToken::verify_permission(optional_yield y)
 {
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
-                              rgw::IAM::stsGetSessionToken)) {
+  if (int res = verify_user_permission(this, s,
+                                       rgw::ARN(partition, service, "", s->user->get_tenant(), ""),
+                                       rgw::IAM::stsGetSessionToken); res) {
     ldpp_dout(this, 0) << "User does not have permssion to perform GetSessionToken" << dendl;
-    return -EACCES;
+    return res;
   }
 
   return 0;

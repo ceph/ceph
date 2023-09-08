@@ -1137,45 +1137,45 @@ Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
   return policy_res;
 }
 
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            perm_state_base * const s,
-                            RGWAccessControlPolicy * const user_acl,
-                            const vector<rgw::IAM::Policy>& user_policies,
-                            const vector<rgw::IAM::Policy>& session_policies,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy)
+int verify_user_permission(const DoutPrefixProvider* dpp,
+                           perm_state_base * const s,
+                           RGWAccessControlPolicy * const user_acl,
+                           const vector<rgw::IAM::Policy>& user_policies,
+                           const vector<rgw::IAM::Policy>& session_policies,
+                           const rgw::ARN& res,
+                           const uint64_t op,
+                           bool mandatory_policy)
 {
   auto identity_policy_res = eval_identity_or_session_policies(dpp, user_policies, s->env, op, res);
   if (identity_policy_res == Effect::Deny) {
-    return false;
+    return -EACCES;
   }
 
   if (! session_policies.empty()) {
     auto session_policy_res = eval_identity_or_session_policies(dpp, session_policies, s->env, op, res);
     if (session_policy_res == Effect::Deny) {
-      return false;
+      return -EACCES;
     }
     //Intersection of identity policies and session policies
     if (identity_policy_res == Effect::Allow && session_policy_res == Effect::Allow) {
-      return true;
+      return 0;
     }
-    return false;
+    return -EACCES;
   }
 
   if (identity_policy_res == Effect::Allow) {
-    return true;
+    return 0;
   }
 
   if (mandatory_policy) {
     // no policies, and policy is mandatory
     ldpp_dout(dpp, 20) << "no policies for a policy mandatory op " << op << dendl;
-    return false;
+    return -EACCES;
   }
 
   auto perm = op_to_perm(op);
 
-  return verify_user_permission_no_policy(dpp, s, user_acl, perm);
+  return verify_user_permission_no_policy(dpp, s, user_acl, perm) ? 0 : -EACCES;
 }
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
@@ -1196,11 +1196,11 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
   return user_acl->verify_permission(dpp, *s->identity, perm, perm);
 }
 
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            req_state * const s,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy)
+int verify_user_permission(const DoutPrefixProvider* dpp,
+                           req_state * const s,
+                           const rgw::ARN& res,
+                           const uint64_t op,
+                           bool mandatory_policy)
 {
   perm_state_from_req_state ps(s);
   return verify_user_permission(dpp, &ps, s->user_acl.get(), s->iam_user_policies, s->session_policies, res, op, mandatory_policy);

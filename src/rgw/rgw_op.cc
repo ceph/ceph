@@ -2465,11 +2465,7 @@ int RGWListBuckets::verify_permission(optional_yield y)
     tenant = s->user->get_tenant();
   }
 
-  if (!verify_user_permission(this, s, ARN(partition, service, "", tenant, "*"), rgw::IAM::s3ListAllMyBuckets, false)) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_user_permission(this, s, ARN(partition, service, "", tenant, "*"), rgw::IAM::s3ListAllMyBuckets, false);
 }
 
 int RGWGetUsage::verify_permission(optional_yield y)
@@ -3084,8 +3080,8 @@ int RGWCreateBucket::verify_permission(optional_yield y)
   bucket.name = s->bucket_name;
   bucket.tenant = s->bucket_tenant;
   ARN arn = ARN(bucket);
-  if (!verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket, false)) {
-    return -EACCES;
+  if (int ret = verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket, false); ret) {
+    return ret;
   }
 
   if (s->user->get_tenant() != s->bucket_tenant) {
