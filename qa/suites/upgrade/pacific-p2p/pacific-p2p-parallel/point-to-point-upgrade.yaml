@@ -123,7 +123,7 @@ workload_pacific:
          - rados/test.sh
          - cls
        env:
-         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.snapshots_namespaces'
+         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.mirror_snapshot'
    - print: "**** done rados/test.sh &  cls workload_pacific"
    - sequential:
      - rgw: [client.0]
