@@ -1382,10 +1382,21 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
     string readdir_start = dirp->last_name;
     ceph_assert(!readdir_start.empty() || readdir_offset == 2);
 
+    string readdir_start_enc;
+
+    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
+    if (!readdir_start.empty() && fscrypt_denc) {
+      string alt;
+      int r = fscrypt_denc->get_encrypted_fname(readdir_start, &readdir_start_enc, &alt);
+      if (r < 0) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ": failed to decrypt filename (r=" << r << ")" << dendl;
+      }
+    }
+
     unsigned last_hash = 0;
     if (hash_order) {
       if (!readdir_start.empty()) {
-	last_hash = ceph_frag_value(diri->hash_dentry_name(readdir_start));
+	last_hash = ceph_frag_value(diri->hash_dentry_name((readdir_start_enc.empty() ? readdir_start : readdir_start_enc)));
       } else if (flags & CEPH_READDIR_OFFSET_HASH) {
 	/* mds understands offset_hash */
 	last_hash = offset_hash;
@@ -1421,8 +1432,6 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 
     _readdir_drop_dirp_buffer(dirp);
     dirp->buffer.reserve(numdn);
-
-    auto fscrypt_denc = fscrypt->get_fname_denc(diri->fscrypt_ctx, &diri->fscrypt_key_validator, true);
 
     string orig_dname;
     std::optional<string> enc_name;
@@ -1515,7 +1524,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
     }
 
     if (numdn > 0)
-      dirp->last_name = dname;
+      dirp->last_name = orig_dname;
     if (end)
       dirp->next_offset = 2;
     else
@@ -9599,6 +9608,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 						  dirp->offset, dentry_off_lt());
 
   string dn_name;
+  std::optional<string> enc_name;
   while (true) {
     int mask = caps;
     if (!dirp->inode->is_complete_and_ordered())
@@ -9653,12 +9663,13 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
     }
 
     dn_name = dn->name; // fill in name while we have lock
+    enc_name = dn->enc_name; // fill in name while we have lock
 
     client_lock.unlock();
     r = cb(p, &de, &stx, next_off, in);  // _next_ offset
     client_lock.lock();
     ldout(cct, 15) << " de " << de.d_name << " off " << hex << dn->offset << dec
-		   << " = " << r << dendl;
+		   << " idx " << idx << " cache.size=" << dir->readdir_cache.size() << " = " << r << dendl;
     if (r < 0) {
       return r;
     }
@@ -9668,7 +9679,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       dirp->next_offset = 2;
     else
       dirp->next_offset = dirp->offset_low();
-    dirp->last_name = dn_name; // we successfully returned this one; update!
+    dirp->last_name = (enc_name ? *enc_name : dn_name); // we successfully returned this one; update!
     dirp->release_count = 0; // last_name no longer match cache index
     if (r > 0)
       return r;
