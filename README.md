@@ -166,8 +166,8 @@ cluster:
 
 Most Ceph commands are available in the `bin/` directory. For example:
 
-	./bin/rados -p rbd bench 30 write
 	./bin/rbd create foo --size 1000
+	./bin/rados -p foo bench 30 write
 
 To shut down the test cluster, run the following command from the `build/`
 directory:
