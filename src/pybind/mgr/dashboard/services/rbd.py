@@ -370,6 +370,8 @@ class RbdService(object):
 
                 snap['is_protected'] = None
                 if mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+                    if not img.snap_exists(snap['name']):
+                        continue
                     snap['is_protected'] = img.is_protected_snap(snap['name'])
                 snap['used_bytes'] = None
                 snap['children'] = []
