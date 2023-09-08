@@ -1677,7 +1677,7 @@ public:
   using NotifyComp = boost::asio::any_completion_handler<NotifySig>;
   template<boost::asio::completion_token_for<NotifySig> CompletionToken>
   auto notify(Object o, IOContext ioc, ceph::buffer::list bl,
-	      std::optional<std::chrono::milliseconds> timeout,
+	      std::optional<std::chrono::seconds> timeout,
 	      CompletionToken&& token) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
@@ -1853,7 +1853,7 @@ private:
 		SimpleOpComp);
   void notify_(Object oid, IOContext ioctx,
 	       ceph::buffer::list bl,
-	       std::optional<std::chrono::milliseconds> timeout,
+	       std::optional<std::chrono::seconds> timeout,
 	       NotifyComp c);
   void flush_watch_(VoidOpComp);
 

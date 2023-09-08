@@ -1494,8 +1494,9 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
 		  bufferlist&& bl) {
     asio::post(
       strand,
-      [this, ec, p = shared_from_this()]() mutable {
+      [this, ec, bl = std::move(bl), p = shared_from_this()]() mutable {
 	finished = true;
+	rbl = std::move(bl);
 	maybe_cleanup(ec);
       });
   }
@@ -1513,7 +1514,7 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
 };
 
 void RADOS::notify_(Object o, IOContext _ioc, bufferlist bl,
-		    std::optional<std::chrono::milliseconds> timeout,
+		    std::optional<std::chrono::seconds> timeout,
 		    NotifyComp c)
 {
   auto oid = reinterpret_cast<const object_t*>(&o.impl);
@@ -1533,9 +1534,11 @@ void RADOS::notify_(Object o, IOContext _ioc, bufferlist bl,
       });
   ObjectOperation rd;
   bufferlist inbl;
+  // 30s is the default in librados. Use that rather than borrowing from CephFS.
+  // TODO add a config option later.
   rd.notify(
     linger_op->get_cookie(), 1,
-    timeout ? timeout->count() : impl->cct->_conf->client_notify_timeout,
+    timeout.value_or(30s).count(),
     bl, &inbl);
 
   impl->objecter->linger_notify(
