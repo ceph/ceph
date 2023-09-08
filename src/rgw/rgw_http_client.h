@@ -123,6 +123,10 @@ public:
     headers.push_back(std::pair<std::string, std::string>(name, val));
   }
 
+  void set_headers(const param_vec_t& h) {
+    headers = h;
+  }
+
   void set_send_length(size_t len) {
     send_len = len;
     has_send_len = true;
