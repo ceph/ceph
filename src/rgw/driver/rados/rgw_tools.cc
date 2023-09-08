@@ -30,7 +30,7 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
     if (r == -ERANGE) {
       ldpp_dout(dpp, 0)
         << __func__
-        << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
+        << " ERROR: librados::Rados::pool_create" << pool.name << " returned " << cpp_strerror(-r)
         << " (this can be due to a pool or placement group misconfiguration, e.g."
         << " pg_num < pgp_num or mon_max_pg_per_osd exceeded)"
         << dendl;
