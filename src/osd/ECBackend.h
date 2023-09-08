@@ -136,20 +136,29 @@ public:
    * ensures that we won't ever have to restart a client initiated read in
    * check_recovery_sources.
    */
+  typedef boost::tuple<uint64_t, uint64_t, uint32_t> ec_align_t;
+  typedef std::map<hobject_t,std::pair<int, extent_map>>  ec_extents_t;
+
   void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
-    > &reads,
-    bool fast_read,
-    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
+      const std::map<hobject_t,std::list<ec_align_t>> &reads,
+      bool fast_read,
+      GenContextURef<ec_extents_t &&> &&func);
+
+  bool should_partial_read(
+      const hobject_t &hoid,
+      std::list<ec_align_t> to_read,
+      const std::set<int> &want,
+      bool fast_read,
+      bool for_recovery);
 
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
     unsigned objects_to_read;
-    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> func;
-    std::map<hobject_t,std::pair<int, extent_map> > results;
+    GenContextURef<ec_extents_t &&> func;
+    ec_extents_t results;
     explicit ClientAsyncReadStatus(
       unsigned objects_to_read,
-      GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func)
+      GenContextURef<ec_extents_t &&> &&func)
       : objects_to_read(objects_to_read), func(std::move(func)) {}
     void complete_object(
       const hobject_t &hoid,
@@ -170,7 +179,7 @@ public:
   std::list<ClientAsyncReadStatus> in_progress_client_reads;
   void objects_read_async(
     const hobject_t &hoid,
-    const std::list<std::pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
+    const std::list<std::pair<ec_align_t,
 		    std::pair<ceph::buffer::list*, Context*> > > &to_read,
     Context *on_complete,
     bool fast_read = false) override;
@@ -179,7 +188,7 @@ public:
   void objects_read_async_no_cache(
     const std::map<hobject_t,extent_set> &to_read,
     Func &&on_complete) {
-    std::map<hobject_t,std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
+    std::map<hobject_t, std::list<ec_align_t>> _to_read;
     for (auto &&hpair: to_read) {
       auto &l = _to_read[hpair.first];
       for (auto extent: hpair.second) {
@@ -351,13 +360,15 @@ public:
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
     GenContext<std::pair<RecoveryMessages *, read_result_t& > &> *cb;
+    bool partial_read;
     read_request_t(
       const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
       bool want_attrs,
-      GenContext<std::pair<RecoveryMessages *, read_result_t& > &> *cb)
+      GenContext<std::pair<RecoveryMessages *, read_result_t& > &> *cb,
+      bool partial_read=false)
       : to_read(to_read), need(need), want_attrs(want_attrs),
-	cb(cb) {}
+	cb(cb), partial_read(partial_read) {}
   };
   friend ostream &operator<<(ostream &lhs, const read_request_t &rhs);
 
@@ -411,6 +422,21 @@ public:
     ReadOp() = delete;
     ReadOp(const ReadOp &) = default;
     ReadOp(ReadOp &&) = default;
+    void refresh_complete(const hobject_t &hoid) {
+      std::list<
+        boost::tuple<
+	  uint64_t, uint64_t, std::map<pg_shard_t, bufferlist> > > new_returned;
+      auto returned = complete[hoid].returned;
+      auto reads = to_read.find(hoid)->second.to_read;
+
+      auto r = returned.begin();
+      for (auto read : reads) {
+        new_returned.push_back(
+            boost::make_tuple(read.get<0>(), read.get<1>(), r->get<2>()));
+        ++r;
+      }
+      complete[hoid].returned = new_returned;
+    }
   };
   friend struct FinishReadOp;
   void filter_read_op(
@@ -650,6 +676,28 @@ public:
     bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
     ); ///< @return error code, 0 on success
+
+  /**
+   * The basic idea here is that we only call this function when there is a
+   * partial read.  The criteria for performing a partial read involves
+   * checking to make sure that we don't read across multiple stripes and that
+   * the read is within the stripe boundary (see should_partial_read).
+   *
+   * While get_want_to_read_shards creates a want_to_read based on the EC
+   * plugin's get_data_chunk_count(), this instead uses the number of chunks
+   * necessary to read the length of data and only inserts those chunks.  Just
+   * like in get_want_to_read_shards, we check the plugin's mapping but the
+   * difference is that we start at first_chunk and we end when we no longer
+   * have chunks based on the read's length.
+   *
+   * The resulting want_to_read has fewer chunks than a normal read, and thus
+   * gets intercepted in ErasureCode::decode_concat to be handled differently
+   * than when get_want_to_read_shards is used and we decode all data chunks.
+   */
+  void get_min_want_to_read_shards(
+    std::pair<uint64_t, uint64_t> off_len,    ///< [in]
+    std::set<int> *want_to_read               ///< [out]
+    );
 
   int get_remaining_shards(
     const hobject_t &hoid,
