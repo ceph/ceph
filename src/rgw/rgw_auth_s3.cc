@@ -574,7 +574,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 
   /* Handle case when query string exists. Step 3 described in: http://docs.
    * aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
-  std::map<std::string, std::string> canonical_qs_map;
+  std::multimap<std::string, std::string> canonical_qs_map;
   for (const auto& s : get_str_vec<5>(*params, "&")) {
     std::string_view key, val;
     const auto parsed_pair = parse_key_value(s);
@@ -595,7 +595,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
     // while awsv4 specs ask for all slashes to be encoded, s3 itself is relaxed
     // in its implementation allowing non-url-encoded slashes to be present in
     // presigned urls for instance
-    canonical_qs_map[aws4_uri_recode(key, true)] = aws4_uri_recode(val, true);
+    canonical_qs_map.insert({{aws4_uri_recode(key, true), aws4_uri_recode(val, true)}});
   }
 
   /* Thanks to the early exist we have the guarantee that canonical_qs_map has
