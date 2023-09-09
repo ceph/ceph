@@ -165,6 +165,8 @@ There are a few ways to create new OSDs:
 
     ceph orch apply -i spec.yml
 
+.. warning:: When deploying new OSDs with ``cephadm``, ensure that the ``ceph-osd`` package is not already installed on the target host. If it is installed, conflicts may arise in the management and control of the OSD that may lead to errors or unexpected behavior.
+
 Dry Run
 -------
 
