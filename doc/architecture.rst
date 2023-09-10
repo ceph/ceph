@@ -100,10 +100,9 @@ Scalability and High Availability
 In traditional architectures, clients talk to a centralized component. This
 centralized component might be a gateway, a broker, an API, or a facade. A
 centralized component of this kind acts as a single point of entry to a complex
-subsystem. Architectures that rely upon this kind of centralized component
-experience limits to performance and scalability and have a single point of
-failure. If the centralized component goes down, the whole system becomes
-unavailable.
+subsystem. Architectures that rely upon such a centralized component have a
+single point of failure and incur limits to performance and scalability. If
+the centralized component goes down, the whole system becomes unavailable.
 
 Ceph eliminates this centralized component. This enables clients to interact
 with Ceph OSDs directly. Ceph OSDs create object replicas on other Ceph Nodes
