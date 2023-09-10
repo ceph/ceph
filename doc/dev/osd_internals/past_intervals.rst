@@ -1,9 +1,10 @@
-=============
-PastIntervals
-=============
+=================================
+OSDMap Trimming and PastIntervals
+=================================
 
-Purpose
--------
+
+PastIntervals
+-------------
 
 There are two situations where we need to consider the set of all acting-set
 OSDs for a PG back to some epoch ``e``:
@@ -81,13 +82,31 @@ trimmed up to epoch ``e``, we know that the PG must have been clean at some epoc
 
 This dependency also pops up in PeeringState::check_past_interval_bounds().
 PeeringState::get_required_past_interval_bounds takes as a parameter
-oldest_epoch, which comes from OSDSuperblock::cluster_osdmap_trim_lower_bound.
-We use cluster_osdmap_trim_lower_bound rather than a specific osd's oldest_map
+oldest epoch, which comes from OSDSuperblock::cluster_osdmap_trim_lower_bound.
+We use cluster_osdmap_trim_lower_bound rather than a specific osd's oldest map
 because we don't necessarily trim all MOSDMap::cluster_osdmap_trim_lower_bound.
 In order to avoid doing too much work at once we limit the amount of osdmaps
 trimmed using ``osd_target_transaction_size`` in OSD::trim_maps().
-For this reason, a specific OSD's oldest_map can lag behind
+For this reason, a specific OSD's oldest map can lag behind
 OSDSuperblock::cluster_osdmap_trim_lower_bound
 for a while.
 
 See https://tracker.ceph.com/issues/49689 for an example.
+
+OSDSuperblock::maps
+-------------------
+
+The OSDSuperblock holds an epoch interval set that represents the OSDMaps
+that are stored by the OSD. Each OSDMap epoch range that was handled
+is added to the set.
+Once an osdmap is trimmed, it will be erased from the set.
+As a result, the set's lower bound represent the oldest map that is
+stored. While the upper bound represents the newest map.
+
+The ``interval_set`` data structure supports non-contiguous epoch intervals
+which may occur in "map gap" events. Before using this data structure,
+``oldest_map`` and ``newest_map`` epochs were stored in the OSDSuperblock.
+However, holding a single and contiguous epoch range imposed constraints which
+may have resulted in an OSDMap leak.
+
+See: https://tracker.ceph.com/issues/61962
