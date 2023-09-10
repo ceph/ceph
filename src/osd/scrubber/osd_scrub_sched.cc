@@ -321,7 +321,7 @@ std::string_view ScrubQueue::qu_state_text(qu_state_t st)
  *    - try that one. If not suitable, discard from 'to_scrub_copy'
  */
 Scrub::schedule_result_t ScrubQueue::select_pg_and_scrub(
-  Scrub::ScrubPreconds& preconds)
+  Scrub::OSDRestrictions& preconds)
 {
   dout(10) << " reg./pen. sizes: " << to_scrub.size() << " / "
 	   << penalized.size() << dendl;
@@ -437,7 +437,7 @@ ScrubQueue::ScrubQContainer ScrubQueue::collect_ripe_jobs(
 // not holding jobs_lock. 'group' is a copy of the actual list.
 Scrub::schedule_result_t ScrubQueue::select_from_group(
   ScrubQContainer& group,
-  const Scrub::ScrubPreconds& preconds,
+  const Scrub::OSDRestrictions& preconds,
   utime_t now_is)
 {
   dout(15) << "jobs #: " << group.size() << dendl;
