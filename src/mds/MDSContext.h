@@ -23,9 +23,12 @@
 #include "include/elist.h"
 #include "include/spinlock.h"
 #include "common/ceph_time.h"
+#include "include/auto_shared_ptr.h"
 
 class MDSRankBase;
 class MDSRank;
+class LogSegment;
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
 
 /**
  * Completion which has access to a reference to the global MDS instance.
@@ -98,6 +101,29 @@ public:
   MDSInternalContextWrapper(MDSRank *m, Context *c) : MDSInternalContext(m), fin(c) {}
 };
 
+class MDSLockingWrapper : public MDSContext 
+{
+  protected:
+  Context *wrapped = nullptr;
+  MDSRankBase* mds = nullptr;
+  void complete(int r) override;
+  void finish(int r) override
+  {
+    ceph_abort("this shouldn't be called");
+  }
+ public:
+  MDSRankBase* get_mds() override { return mds; }
+  bool takes_lock() const override { return true; }
+  MDSLockingWrapper(Context* wrapped, MDSRankBase* mds) : wrapped(wrapped), mds(mds) { }
+  MDSLockingWrapper(MDSContext *mds_wrapped) : wrapped(mds_wrapped), mds(mds_wrapped->get_mds()) { }
+  ~MDSLockingWrapper()
+  {
+    if (wrapped) {
+      delete wrapped;
+    }
+  }
+};
+
 class MDSIOContextBase : public MDSContext
 {
 public:
@@ -108,6 +134,7 @@ public:
   bool takes_lock() const override { return true; }
 
   void complete(int r) override;
+  void complete_no_lock(int r);
 
   virtual void print(std::ostream& out) const = 0;
 
@@ -129,16 +156,21 @@ private:
 class MDSLogContextBase : public MDSIOContextBase
 {
 protected:
-  uint64_t write_pos = 0;
+  AutoSharedLogSegment log_segment;
+  uint64_t event_start_pos = 0;
+  uint64_t event_end_pos = 0;
 public:
   MDSLogContextBase() = default;
   void complete(int r) final;
   bool takes_lock() const override { return true; }
-  void set_write_pos(uint64_t wp) { write_pos = wp; }
-  virtual void pre_finish(int r) {}
-  void print(std::ostream& out) const override {
-    out << "log_event(" << write_pos << ")";
+  void set_event_bounds(const AutoSharedLogSegment& ls, uint64_t event_start, uint64_t event_end)
+  {  
+    log_segment = ls;
+    event_start_pos = event_start;
+    event_end_pos = event_end;
   }
+  virtual void pre_finish(int r) {}
+  void print(std::ostream& out) const override;
 };
 
 /**
@@ -178,7 +210,7 @@ public:
   void finish(int r) override {}
   void complete(int r) override { delete this; }
 protected:
-  MDSRankBase* get_mds() override final {ceph_abort();}
+  MDSRankBase* get_mds() override final { return nullptr; }
 };
 
 

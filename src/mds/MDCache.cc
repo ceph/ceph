@@ -5737,9 +5737,9 @@ void MDCache::send_snaps(map<client_t,ref_t<MClientSnap>>& splits)
 void MDCache::clean_open_file_lists()
 {
   dout(10) << "clean_open_file_lists" << dendl;
-  
-  for (auto p = mds->mdlog->segments.begin();
-       p != mds->mdlog->segments.end();
+
+  for (auto p = mds->mdlog->unexpired_segments.begin();
+       p != mds->mdlog->unexpired_segments.end();
        ++p) {
     LogSegment *ls = p->second;
 
@@ -5763,8 +5763,8 @@ void MDCache::clean_open_file_lists()
 void MDCache::dump_openfiles(Formatter *f)
 {
   f->open_array_section("openfiles");
-  for (auto p = mds->mdlog->segments.begin();
-       p != mds->mdlog->segments.end();
+  for (auto p = mds->mdlog->unexpired_segments.begin();
+       p != mds->mdlog->unexpired_segments.end();
        ++p) {
     LogSegment *ls = p->second;
     
@@ -6708,7 +6708,7 @@ void MDCache::truncate_inode_logged(CInode *in, MutationRef& mut)
 void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 {
   dout(20) << "add_recovered_truncate " << *in << " in log segment "
-	   << ls->seq << "/" << ls->offset << dendl;
+	   << ls->seq << "/" << ls->get_offset() << dendl;
   ls->truncating_inodes.insert(in);
   in->get(CInode::PIN_TRUNCATING);
 }
@@ -6716,7 +6716,7 @@ void MDCache::add_recovered_truncate(CInode *in, LogSegment *ls)
 void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 {
   dout(20) << "remove_recovered_truncate " << *in << " in log segment "
-	   << ls->seq << "/" << ls->offset << dendl;
+	   << ls->seq << "/" << ls->get_offset() << dendl;
   // if we have the logseg the truncate started in, it must be in our list.
   set<CInode*>::iterator p = ls->truncating_inodes.find(in);
   ceph_assert(p != ls->truncating_inodes.end());
@@ -6727,8 +6727,8 @@ void MDCache::remove_recovered_truncate(CInode *in, LogSegment *ls)
 void MDCache::start_recovered_truncates()
 {
   dout(10) << "start_recovered_truncates" << dendl;
-  for (auto p = mds->mdlog->segments.begin();
-       p != mds->mdlog->segments.end();
+  for (auto p = mds->mdlog->unexpired_segments.begin();
+       p != mds->mdlog->unexpired_segments.end();
        ++p) {
     LogSegment *ls = p->second;
     for (set<CInode*>::iterator q = ls->truncating_inodes.begin();
@@ -6772,7 +6772,7 @@ public:
 
 void MDCache::start_purge_inodes(){
   dout(10) << "start_purge_inodes" << dendl;
-  for (auto& p : mds->mdlog->segments){
+  for (auto& p : mds->mdlog->unexpired_segments){
     LogSegment *ls = p.second;
     if (ls->purging_inodes.size()){
       purge_inodes(ls->purging_inodes, ls);

@@ -1067,6 +1067,13 @@ options:
   services:
   - mds
   fmt_desc: MDS will abort if dentry is detected newly corrupted.
+- name: mds_debug_zombie_log_segments
+  type: bool
+  level: advanced
+  default: false
+  services:
+  - mds
+  fmt_desc: MDS will abort if an expired log segment is still strongly referenced (for developers only).
 - name: mds_go_bad_corrupt_dentry
   type: bool
   level: advanced

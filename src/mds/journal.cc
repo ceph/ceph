@@ -118,7 +118,9 @@ void LogSegment::try_to_expire(MDSRankBase *mdsb, MDSGatherBuilder &gather_bld, 
   MDSRank* mds = MDSRank::from_base(mdsb);
   set<CDir*> commit;
 
-  dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire" << dendl;
+  // must be flushed!
+  ceph_assert(has_bounds());
+  dout(6) << "LogSegment(" << seq << "/" << get_offset() << ").try_to_expire" << dendl;
 
   ceph_assert(g_conf()->mds_kill_journal_expire_at != 1);
 
@@ -326,11 +328,11 @@ void LogSegment::try_to_expire(MDSRankBase *mdsb, MDSGatherBuilder &gather_bld, 
     set_purged_cb(gather_bld.new_sub());
   
   if (gather_bld.has_subs()) {
-    dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire waiting" << dendl;
+    dout(6) << "LogSegment(" << seq << "/" << get_offset() << ").try_to_expire waiting" << dendl;
     mds->get_log()->flush();
   } else {
     ceph_assert(g_conf()->mds_kill_journal_expire_at != 5);
-    dout(6) << "LogSegment(" << seq << "/" << offset << ").try_to_expire success" << dendl;
+    dout(6) << "LogSegment(" << seq << "/" << get_offset() << ").try_to_expire success" << dendl;
   }
 }
 
@@ -1174,7 +1176,7 @@ void EMetaBlob::replay(MDSRankBase *mdsb, LogSegment *logseg, int type, MDPeerUp
       mds->heartbeat_reset();
   }
   for (const auto& p : truncate_finish) {
-    LogSegment *ls = mds->get_log()->get_segment(p.second);
+    LogSegment *ls = mds->get_log()->get_unexpired_segment(p.second);
     if (ls) {
       CInode *in = mds->get_cache()->get_inode(p.first);
       ceph_assert(in);
@@ -1264,7 +1266,7 @@ void EPurged::replay(MDSRankBase *mdsb)
 {
   MDSRank* mds = MDSRank::from_base(mdsb);
   if (inos.size()) {
-    LogSegment *ls = mds->get_log()->get_segment(seq);
+    LogSegment *ls = mds->get_log()->get_unexpired_segment(seq);
     if (ls)
       ls->purging_inodes.subtract(inos);
 

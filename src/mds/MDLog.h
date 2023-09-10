@@ -56,6 +56,7 @@ enum {
 
 #include <list>
 #include <map>
+#include <optional>
 
 class Journaler;
 class JournalPointerStore;
@@ -70,29 +71,34 @@ public:
   MDLog(MDSRankBase *m);
   ~MDLog();
 
-  const std::set<AutoSharedLogSegment> &get_expiring_segments() const
-  {
-    return expiring_segments;
-  }
+  // Installs the callback for when all segments marked for expriy
+  // will have expired, unless there aren't any to await.
+  // Returns:
+  //  `true`  - some segments are expiring,
+  //            and the context will be finished when they expire
+  //  `false` - no segments are expiring,
+  //            the context WON'T finish
+  bool await_expiring_segments(Context* c);
 
   void create_logger();
   void set_write_iohint(unsigned iohint_flags);
 
-  const AutoSharedLogSegment& peek_current_segment()
+  const AutoSharedLogSegment& peek_current_segment() const
   {
-    return segments.empty() ? _null_segment : segments.rbegin()->second;
+    return unexpired_segments.empty() ? _null_segment : unexpired_segments.rbegin()->second;
   }
 
-  const AutoSharedLogSegment& get_current_segment()
+  const AutoSharedLogSegment& get_current_segment() const
   {
-    ceph_assert(!segments.empty());
-    return segments.rbegin()->second;
+    decltype(auto) current = peek_current_segment();
+    ceph_assert(_null_segment != current);
+    return current;
   }
 
-  const AutoSharedLogSegment& get_segment(LogSegment::seq_t seq)
+  const AutoSharedLogSegment& get_unexpired_segment(LogSegment::seq_t seq)
   {
-    auto it = segments.find(seq);
-    if (it != segments.end()) {
+    auto it = unexpired_segments.find(seq);
+    if (it != unexpired_segments.end()) {
       return it->second;
     } else {
       return _null_segment;
@@ -100,34 +106,34 @@ public:
   }
 
   bool have_any_segments() const {
-    return !segments.empty();
+    return !empty();
   }
 
   void flush_logger();
 
-  uint64_t get_num_events() const { return num_events; }
-  uint64_t get_num_segments() const { return segments.size(); }
+  uint64_t get_num_events() const { return count_total_events(); }
+  uint64_t get_num_segments() const { return count_total_segments(); }
+  uint64_t get_num_replayed_segments() const { return num_replayed_segments; }
 
   auto get_debug_subtrees() const {
-    return events_per_segment;
+    return debug_subtrees;
   }
   auto get_max_segments() const {
-    return max_segments;
+    return max_live_segments;
   }
 
   uint64_t get_read_pos() const;
   uint64_t get_write_pos() const;
   uint64_t get_safe_pos() const;
   Journaler *get_journaler() { return journaler; }
-  bool empty() const { return segments.empty(); }
+  bool empty() const { return count_total_segments() == 0; }
 
   uint64_t get_last_major_segment_seq() const {
-    ceph_assert(!major_segments.empty());
-    return *major_segments.rbegin();
+    ceph_assert(!major_segment_seqs.empty());
+    return *major_segment_seqs.rbegin();
   }
   uint64_t get_last_segment_seq() const {
-    ceph_assert(!segments.empty());
-    return segments.rbegin()->first;
+    return get_current_segment()->seq;
   }
 
   bool is_capped() const { return mds_is_shutting_down; }
@@ -136,18 +142,10 @@ public:
   void kick_submitter();
   void shutdown();
 
-  void submit_entry(LogEvent *e, MDSLogContextBase* c = 0) {
-    std::lock_guard l(submit_mutex);
-    _submit_entry(e, c);
-    _segment_upkeep();
-    submit_cond.notify_all();
-  }
+  void submit_entry(LogEvent *e, MDSLogContextBase* c = 0);
 
   void wait_for_safe(Context* c);
   void flush();
-  bool is_flushed() const {
-    return unflushed == 0;
-  }
 
   void trim_expired_segments();
   int trim_all();
@@ -158,7 +156,7 @@ public:
   void append();
   void replay(MDSContext *onfinish);
 
-  void standby_trim_segments();
+  void standby_cleanup_trimmed_segments();
 
   void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
@@ -168,7 +166,7 @@ public:
   // replay state
   std::map<inodeno_t, std::set<inodeno_t>> pending_exports;
 
-protected:
+private:
   struct PendingEvent {
     PendingEvent(LogEvent *e, Context* c, bool f=false) : le(e), fin(c), flush(f) {}
     LogEvent *le;
@@ -229,25 +227,14 @@ protected:
 
   void set_safe_pos(uint64_t pos)
   {
-    std::lock_guard l(submit_mutex);
     ceph_assert(pos >= safe_pos);
     safe_pos = pos;
   }
 
   void _submit_thread();
 
-  const AutoSharedLogSegment& get_oldest_segment()
-  {
-    ceph_assert(!segments.empty());
-    return segments.begin()->second;
-  }
-  void remove_oldest_segment() {
-    auto p = segments.begin();
-    segments.erase(p);
-  }
-
-  uint64_t num_events = 0; // in events
-  uint64_t unflushed = 0;
+  uint64_t num_live_events = 0; // in events
+  uint64_t queued_flushes = 0;
   bool mds_is_shutting_down = false;
 
   // Log position which is persistent *and* for which
@@ -263,33 +250,49 @@ protected:
   bool already_replayed = false;
 
   MDSContext::vec waitfor_replay;
+  std::map<LogSegment::seq_t, std::vector<Context*>> expiry_waiters;
 
-  // -- segments --
-  std::map<uint64_t, AutoSharedLogSegment> segments;
-  std::size_t pre_segments_size = 0;            // the num of segments when the mds finished replay-journal, to calc the num of segments growing
+  // -- live and expiring segments --
+  std::map<LogSegment::seq_t, AutoSharedLogSegment> unexpired_segments;
   LogSegment::seq_t event_seq = 0;
-  uint64_t expiring_events = 0;
-  uint64_t expired_events = 0;
+  std::optional<LogSegment::seq_t> last_expiring_segment_seq;
+  uint64_t num_expiring_segments = 0;
+  uint64_t num_expiring_events = 0;
+  uint64_t num_expired_events = 0;
 
   int64_t mdsmap_up_features = 0;
   std::map<uint64_t,std::list<PendingEvent> > pending_events; // log segment -> event list
   ceph::fair_mutex submit_mutex{"MDLog::submit_mutex"};
   std::condition_variable_any submit_cond;
 
-private:
+  inline uint64_t count_total_events() const
+  {
+    return num_live_events + num_expiring_events + num_expired_events;
+  }
+  inline uint64_t count_total_segments() const
+  {
+    return unexpired_segments.size() + expired_segments.size();
+  }
+  inline uint64_t count_live_segments() const
+  {
+    return unexpired_segments.size() - num_expiring_segments;
+  }
+
   friend class C_MaybeExpiredSegment;
   friend class C_MDL_Flushed;
   friend class C_OFT_Committed;
 
   void try_to_commit_open_file_table(uint64_t last_seq);
   const AutoSharedLogSegment& _start_new_segment(SegmentBoundary* sb);
-  void _segment_upkeep();
-  void _submit_entry(LogEvent* e, MDSLogContextBase* c);
+  void segment_upkeep();
 
-  void try_expire(const AutoSharedLogSegment &ls, int op_prio);
+  void _mark_for_expiry(const AutoSharedLogSegment& ls, int op_prio);
+  void try_expire(const AutoSharedLogSegment& ls, int op_prio);
   void _maybe_expired(const AutoSharedLogSegment& ls, int op_prio);
-  void _expired(const AutoSharedLogSegment& ls);
-  void _trim_expired_segments_and_unlock();
+
+  // we want this to take a strong reference to avoid races
+  // when removing the segment from unexpired
+  void _expired(AutoSharedLogSegment ls);
   void write_head(MDSContext *onfinish);
 
   void trim();
@@ -297,17 +300,33 @@ private:
 
   bool debug_subtrees;
   std::atomic_uint64_t event_large_threshold; // accessed by submit thread
-  uint64_t events_per_segment;
-  uint64_t major_segment_event_ratio;
-  int64_t max_events;
-  uint64_t max_segments;
+  uint64_t events_per_segment = 0;
+  uint64_t major_segment_event_ratio = 0;
+  int64_t max_live_events = 0;
+  uint64_t max_live_segments = 0;
+  uint64_t num_replayed_segments = 0;
   bool pause;
   bool skip_corrupt_events;
   bool skip_unbounded_events;
 
-  std::set<uint64_t> major_segments;
-  std::set<AutoSharedLogSegment> expired_segments;
-  std::set<AutoSharedLogSegment> expiring_segments;
+  std::set<LogSegment::seq_t> major_segment_seqs;
+
+  struct ExpiredSegmentInfo
+  {
+    WeakLogSegment segment;
+    uint64_t offset, end;
+    uint64_t num_events;
+    ExpiredSegmentInfo(const AutoSharedLogSegment &src)
+    {
+      segment = src;
+      ceph_assert(src->has_bounds());
+      offset = src->get_offset();
+      end = src->get_end();
+      num_events = src->num_events;
+    }
+    ExpiredSegmentInfo() = default;
+  };
+  std::map<LogSegment::seq_t, ExpiredSegmentInfo> expired_segments;
   uint64_t events_since_last_major_segment = 0;
 
   // log trimming decay counter

@@ -12,3 +12,4 @@ overrides:
         osd op complaint time: 180
         rados mon op timeout: 900
         rados osd op timeout: 900
+        mds debug zombie log segments: true

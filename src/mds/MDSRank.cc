@@ -166,26 +166,15 @@ private:
   void expire_segments() {
     dout(20) << __func__ << dendl;
 
-    // Attach contexts to wait for all expiring segments to expire
-    MDSGatherBuilder expiry_gather(g_ceph_context);
+    Context* ctx = new LambdaContext([this](int r) {
+      handle_expire_segments(r);
+    });
 
-    const auto &expiring_segments = mdlog->get_expiring_segments();
-    for (auto p : expiring_segments) {
-      p->wait_for_expiry(expiry_gather.new_sub());
+    if (!mdlog->await_expiring_segments(ctx)) {
+      ctx->complete(0);
+    } else {
+      dout(5) << __func__ << ": waiting for segments to expire" << dendl;
     }
-    dout(5) << __func__ << ": waiting for " << expiry_gather.num_subs_created()
-            << " segments to expire" << dendl;
-
-    if (!expiry_gather.has_subs()) {
-      trim_segments();
-      return;
-    }
-
-    Context *ctx = new LambdaContext([this](int r) {
-        handle_expire_segments(r);
-      });
-    expiry_gather.set_finisher(new MDSInternalContextWrapper(mds, ctx));
-    expiry_gather.activate();
   }
 
   void handle_expire_segments(int r) {
@@ -1858,7 +1847,7 @@ void MDSRank::_standby_replay_restart_finish(int r, uint64_t old_read_pos)
     respawn(); /* we're too far back, and this is easier than
 		  trying to reset everything in the cache, etc */
   } else {
-    mdlog->standby_trim_segments();
+    mdlog->standby_cleanup_trimmed_segments();
     boot_start(MDS_BOOT_PREPARE_LOG, r);
   }
 }

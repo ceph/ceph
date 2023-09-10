@@ -35,6 +35,24 @@ void MDSInternalContextWrapper::finish(int r)
   fin->complete(r);
 }
 
+void MDSLockingWrapper::complete(int r)
+{
+  if (wrapped) {
+    bool do_lock = mds != nullptr;
+    if (auto mds_wrapped = dynamic_cast<MDSContext*>(wrapped); mds_wrapped != nullptr) {
+      do_lock = !(mds == nullptr || mds_wrapped->takes_lock());
+    }
+    if (do_lock) {
+      std::lock_guard l(mds->get_lock());
+      wrapped->complete(r);
+    } else {
+      wrapped->complete(r);
+    }
+    wrapped = nullptr;
+  }
+  delete this;
+}
+
 struct MDSIOContextList {
   elist<MDSIOContextBase*> list;
   ceph::spinlock lock;
@@ -101,7 +119,11 @@ void MDSIOContextBase::complete(int r) {
   // lock here when MDSContext::complete would otherwise assume the lock is
   // already acquired.
   std::lock_guard l(mds->get_lock());
+  complete_no_lock(r);
+}
 
+void MDSIOContextBase::complete_no_lock(int r) {
+  MDSRankBase* mds = get_mds();
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
             << typeid(*this).name() << dendl;
@@ -120,13 +142,28 @@ void MDSIOContextBase::complete(int r) {
 }
 
 void MDSLogContextBase::complete(int r) {
+  MDSRankBase* mds = get_mds();
+  // we have to take the lock here to protect access
+  // to the mdlog variables.
+  // We account for this when we will call the _no_lock
+  // version of the io context base complete method
+  std::lock_guard l(mds->get_lock());
+
   MDLog *mdlog = get_mds()->get_log();
-  uint64_t safe_pos = write_pos;
   pre_finish(r);
-  // MDSIOContext::complete() free this
-  MDSIOContextBase::complete(r);
+  if (log_segment) {
+    log_segment->bounds_upkeep(event_start_pos, event_end_pos);
+  }
+  // MDSIOContext::complete() frees `this`
+  auto safe_pos = event_end_pos;
+  MDSIOContextBase::complete_no_lock(r);
   // safe_pos must be updated after MDSIOContext::complete() call
   mdlog->set_safe_pos(safe_pos);
+}
+
+void MDSLogContextBase::print(std::ostream& out) const
+{
+  out << "log_event(" << event_start_pos << ".." << event_end_pos << " @ " << *log_segment << ")";
 }
 
 void MDSIOContextWrapper::finish(int r)
