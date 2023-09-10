@@ -98,7 +98,7 @@ struct Tracer {
   jspan start_trace(std::string_view, bool enabled = true) { return {}; }
   jspan add_span(std::string_view, const jspan&) { return {}; }
   jspan add_span(std::string_view span_name, const jspan_context& parent_ctx) { return {}; }
-  void init(std::string_view service_name) {}
+  void init(CephContext* _cct, std::string_view service_name) {}
 };
   inline void encode(const jspan_context& span, bufferlist& bl, uint64_t f=0) {}
   inline void decode(jspan_context& span_ctx, ceph::buffer::list::const_iterator& bl) {}
