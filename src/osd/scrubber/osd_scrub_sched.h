@@ -214,7 +214,7 @@ class ScrubQueue {
    *
    * locking: locks jobs_lock
    */
-  Scrub::schedule_result_t select_pg_and_scrub(Scrub::ScrubPreconds& preconds);
+  Scrub::schedule_result_t select_pg_and_scrub(Scrub::OSDRestrictions& preconds);
 
   /**
    * Translate attempt_ values into readable text
@@ -419,7 +419,7 @@ class ScrubQueue {
 
   Scrub::schedule_result_t select_from_group(
     ScrubQContainer& group,
-    const Scrub::ScrubPreconds& preconds,
+    const Scrub::OSDRestrictions& preconds,
     utime_t now_is);
 
 protected: // used by the unit-tests

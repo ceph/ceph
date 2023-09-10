@@ -82,7 +82,7 @@ void OSD::sched_scrub()
     return;
   }
 
-  Scrub::ScrubPreconds env_conditions;
+  Scrub::OSDRestrictions env_conditions;
 
   if (service.is_recovery_active() && !cct->_conf->osd_scrub_during_recovery) {
     if (!cct->_conf->osd_repair_during_recovery) {
