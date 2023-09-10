@@ -1687,9 +1687,9 @@ void PgScrubber::on_replica_reservation_timeout()
   }
 }
 
-void PgScrubber::set_reserving_now()
+bool PgScrubber::set_reserving_now()
 {
-  m_osds->get_scrub_services().set_reserving_now();
+  return m_osds->get_scrub_services().set_reserving_now();
 }
 
 void PgScrubber::clear_reserving_now()

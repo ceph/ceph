@@ -547,7 +547,7 @@ class PgScrubber : public ScrubPgIF,
 
   void reserve_replicas() final;
 
-  void set_reserving_now() final;
+  bool set_reserving_now() final;
   void clear_reserving_now() final;
 
   [[nodiscard]] bool was_epoch_changed() const final;

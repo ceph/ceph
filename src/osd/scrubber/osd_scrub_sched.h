@@ -277,10 +277,22 @@ class ScrubQueue {
   /**
    * No new scrub session will start while a scrub was initiated on a PG,
    * and that PG is trying to acquire replica resources.
+   *
+   * \todo replace the atomic bool with a regular bool protected by a
+   * common OSD-service lock. Or better still - once PR#53263 is merged,
+   * remove this flag altogether.
    */
-  void set_reserving_now() { a_pg_is_reserving = true; }
-  void clear_reserving_now() { a_pg_is_reserving = false; }
-  bool is_reserving_now() const { return a_pg_is_reserving; }
+
+  /**
+   * set_reserving_now()
+   * \returns 'false' if the flag was already set
+   * (which is a possible result of a race between the check in OsdScrub and
+   * the initiation of a scrub by some other PG)
+   */
+  bool set_reserving_now();
+  void clear_reserving_now();
+  bool is_reserving_now() const;
+
 
   bool can_inc_scrubs() const;
   bool inc_scrubs_local();
