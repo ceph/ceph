@@ -96,27 +96,6 @@ ScrubQueue::ScrubQueue(CephContext* cct, Scrub::ScrubSchedListener& osds)
   }
 }
 
-std::optional<double> ScrubQueue::update_load_average()
-{
-  int hb_interval = conf()->osd_heartbeat_interval;
-  int n_samples = std::chrono::duration_cast<seconds>(24h).count();
-  if (hb_interval > 1) {
-    n_samples /= hb_interval;
-    if (n_samples < 1)
-      n_samples = 1;
-  }
-
-  // get CPU load avg
-  double loadavg;
-  if (getloadavg(&loadavg, 1) == 1) {
-    daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavg) / n_samples;
-    dout(17) << "heartbeat: daily_loadavg " << daily_loadavg << dendl;
-    return 100 * loadavg;
-  }
-
-  return std::nullopt;
-}
-
 /*
  * Modify the scrub job state:
  * - if 'registered' (as expected): mark as 'unregistering'. The job will be
@@ -560,57 +539,6 @@ ScrubQueue::scrub_schedule_t ScrubQueue::adjust_target_time(
   return sched_n_dead;
 }
 
-std::chrono::milliseconds ScrubQueue::scrub_sleep_time(bool must_scrub) const
-{
-  std::chrono::milliseconds regular_sleep_period{
-    uint64_t(std::max(0.0, conf()->osd_scrub_sleep) * 1000)};
-
-  if (must_scrub || scrub_time_permit(time_now())) {
-    return regular_sleep_period;
-  }
-
-  // relevant if scrubbing started during allowed time, but continued into
-  // forbidden hours
-  std::chrono::milliseconds extended_sleep{
-    uint64_t(std::max(0.0, conf()->osd_scrub_extended_sleep) * 1000)};
-  dout(20) << "w/ extended sleep (" << extended_sleep << ")" << dendl;
-
-  return std::max(extended_sleep, regular_sleep_period);
-}
-
-bool ScrubQueue::scrub_load_below_threshold() const
-{
-  double loadavgs[3];
-  if (getloadavg(loadavgs, 3) != 3) {
-    dout(10) << __func__ << " couldn't read loadavgs\n" << dendl;
-    return false;
-  }
-
-  // allow scrub if below configured threshold
-  long cpus = sysconf(_SC_NPROCESSORS_ONLN);
-  double loadavg_per_cpu = cpus > 0 ? loadavgs[0] / cpus : loadavgs[0];
-  if (loadavg_per_cpu < conf()->osd_scrub_load_threshold) {
-    dout(20) << "loadavg per cpu " << loadavg_per_cpu << " < max "
-	     << conf()->osd_scrub_load_threshold << " = yes" << dendl;
-    return true;
-  }
-
-  // allow scrub if below daily avg and currently decreasing
-  if (loadavgs[0] < daily_loadavg && loadavgs[0] < loadavgs[2]) {
-    dout(20) << "loadavg " << loadavgs[0] << " < daily_loadavg "
-	     << daily_loadavg << " and < 15m avg " << loadavgs[2] << " = yes"
-	     << dendl;
-    return true;
-  }
-
-  dout(20) << "loadavg " << loadavgs[0] << " >= max "
-	   << conf()->osd_scrub_load_threshold << " and ( >= daily_loadavg "
-	   << daily_loadavg << " or >= 15m avg " << loadavgs[2] << ") = no"
-	   << dendl;
-  return false;
-}
-
-
 // note: called with jobs_lock held
 void ScrubQueue::scan_penalized(bool forgive_all, utime_t time_now)
 {
@@ -641,40 +569,6 @@ void ScrubQueue::scan_penalized(bool forgive_all, utime_t time_now)
   }
 }
 
-// checks for half-closed ranges. Modify the (p<till)to '<=' to check for
-// closed.
-static inline bool isbetween_modulo(int64_t from, int64_t till, int p)
-{
-  // the 1st condition is because we have defined from==till as "always true"
-  return (till == from) || ((till >= from) ^ (p >= from) ^ (p < till));
-}
-
-bool ScrubQueue::scrub_time_permit(utime_t now) const
-{
-  tm bdt;
-  time_t tt = now.sec();
-  localtime_r(&tt, &bdt);
-
-  bool day_permit = isbetween_modulo(conf()->osd_scrub_begin_week_day,
-				     conf()->osd_scrub_end_week_day,
-				     bdt.tm_wday);
-  if (!day_permit) {
-    dout(20) << "should run between week day "
-	     << conf()->osd_scrub_begin_week_day << " - "
-	     << conf()->osd_scrub_end_week_day << " now " << bdt.tm_wday
-	     << " - no" << dendl;
-    return false;
-  }
-
-  bool time_permit = isbetween_modulo(conf()->osd_scrub_begin_hour,
-				      conf()->osd_scrub_end_hour,
-				      bdt.tm_hour);
-  dout(20) << "should run between " << conf()->osd_scrub_begin_hour << " - "
-	   << conf()->osd_scrub_end_hour << " now (" << bdt.tm_hour
-	   << ") = " << (time_permit ? "yes" : "no") << dendl;
-  return time_permit;
-}
-
 void ScrubQueue::ScrubJob::dump(ceph::Formatter* f) const
 {
   f->open_object_section("scrub");
@@ -683,24 +577,6 @@ void ScrubQueue::ScrubJob::dump(ceph::Formatter* f) const
   f->dump_stream("deadline") << schedule.deadline;
   f->dump_bool("forced",
 	       schedule.scheduled_at == PgScrubber::scrub_must_stamp());
-  f->close_section();
-}
-
-void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
-{
-  ceph_assert(f != nullptr);
-  std::lock_guard lck(jobs_lock);
-
-  f->open_array_section("scrubs");
-
-  std::for_each(to_scrub.cbegin(), to_scrub.cend(), [&f](const ScrubJobRef& j) {
-    j->dump(f);
-  });
-
-  std::for_each(penalized.cbegin(),
-		penalized.cend(),
-		[&f](const ScrubJobRef& j) { j->dump(f); });
-
   f->close_section();
 }
 
