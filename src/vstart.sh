@@ -1583,6 +1583,8 @@ debug_monc = 20
 debug_mgrc = 20
 mds_debug_scatterstat = true
 mds_verify_scatter = true
+mds_debug_zombie_log_segments = true
+
 EOF
     fi
     if [ "$cephadm" -gt 0 ]; then

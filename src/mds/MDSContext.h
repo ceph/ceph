@@ -23,9 +23,12 @@
 #include "include/elist.h"
 #include "include/spinlock.h"
 #include "common/ceph_time.h"
+#include "include/auto_shared_ptr.h"
 
 class MDSRankBase;
 class MDSRank;
+class LogSegment;
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
 
 /**
  * Completion which has access to a reference to the global MDS instance.
@@ -97,6 +100,19 @@ public:
   MDSInternalContextWrapper(MDSRank *m, Context *c) : MDSInternalContext(m), fin(c) {}
 };
 
+class MDSInternalLockingWrapper : public Context
+{
+ protected:
+  MDSInternalContext *internal_context = nullptr;
+  void complete(int r) override;
+  void finish(int r) override
+  {
+    ceph_abort("this shouldn't be called");
+  }
+ public:
+  MDSInternalLockingWrapper(MDSInternalContext *fin) : internal_context(fin) {}
+};
+
 class MDSIOContextBase : public MDSContext
 {
 public:
@@ -127,15 +143,20 @@ private:
 class MDSLogContextBase : public MDSIOContextBase
 {
 protected:
-  uint64_t write_pos = 0;
+  AutoSharedLogSegment log_segment;
+  uint64_t event_start_pos = 0;
+  uint64_t event_end_pos = 0;
 public:
   MDSLogContextBase() = default;
   void complete(int r) final;
-  void set_write_pos(uint64_t wp) { write_pos = wp; }
-  virtual void pre_finish(int r) {}
-  void print(std::ostream& out) const override {
-    out << "log_event(" << write_pos << ")";
+  void set_event_bounds(const AutoSharedLogSegment& ls, uint64_t event_start, uint64_t event_end)
+  {  
+    log_segment = ls;
+    event_start_pos = event_start;
+    event_end_pos = event_end;
   }
+  virtual void pre_finish(int r) {}
+  void print(std::ostream& out) const override;
 };
 
 /**

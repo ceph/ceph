@@ -35,6 +35,15 @@ void MDSInternalContextWrapper::finish(int r)
   fin->complete(r);
 }
 
+void MDSInternalLockingWrapper::complete(int r)
+{
+  if (internal_context) {
+    std::lock_guard l(internal_context->get_mds()->get_lock());
+    internal_context->complete(r);
+  }
+  delete this;
+}
+
 struct MDSIOContextList {
   elist<MDSIOContextBase*> list;
   ceph::spinlock lock;
@@ -121,12 +130,20 @@ void MDSIOContextBase::complete(int r) {
 
 void MDSLogContextBase::complete(int r) {
   MDLog *mdlog = get_mds()->get_log();
-  uint64_t safe_pos = write_pos;
   pre_finish(r);
-  // MDSIOContext::complete() free this
+  if (log_segment) {
+    log_segment->bounds_upkeep(event_start_pos, event_end_pos);
+  }
+  // MDSIOContext::complete() frees `this`
+  auto safe_pos = event_end_pos;
   MDSIOContextBase::complete(r);
   // safe_pos must be updated after MDSIOContext::complete() call
   mdlog->set_safe_pos(safe_pos);
+}
+
+void MDSLogContextBase::print(std::ostream& out) const
+{
+  out << "log_event(" << event_start_pos << ".." << event_end_pos << " @ " << *log_segment << ")";
 }
 
 void MDSIOContextWrapper::finish(int r)
