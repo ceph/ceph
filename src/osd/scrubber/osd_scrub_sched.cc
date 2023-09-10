@@ -490,3 +490,22 @@ int ScrubQueue::get_blocked_pgs_count() const
 {
   return blocked_scrubs_cnt;
 }
+
+// ////////////////////////////////////////////////////////////////////////// //
+// ScrubQueue - maintaining the 'some PG is reserving' flag
+
+bool ScrubQueue::set_reserving_now()
+{
+  auto was_set = a_pg_is_reserving.exchange(true);
+  return !was_set;
+}
+
+void ScrubQueue::clear_reserving_now()
+{
+  a_pg_is_reserving = false;
+}
+
+bool ScrubQueue::is_reserving_now() const
+{
+  return a_pg_is_reserving;
+}
