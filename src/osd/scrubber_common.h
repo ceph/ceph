@@ -32,6 +32,11 @@ private:
   ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
 };
 
+/// randomly returns true with probability equal to the passed parameter
+static inline bool random_bool_with_probability(double probability) {
+  return (ceph::util::generate_random_number<double>(0.0, 1.0) < probability);
+}
+
 namespace Scrub {
 
 /// high/low OP priority
