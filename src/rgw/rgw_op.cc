@@ -4297,7 +4297,7 @@ void RGWPutObj::execute(optional_yield y)
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = s->obj_size;
     cs_info.compressor_message = compressor->get_compressor_message();
-    cs_info.blocks = move(compressor->get_compression_blocks());
+    cs_info.blocks = std::move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
     ldpp_dout(this, 20) << "storing " << RGW_ATTR_COMPRESSION
@@ -4639,7 +4639,7 @@ void RGWPostObj::execute(optional_yield y)
       cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = s->obj_size;
       cs_info.compressor_message = compressor->get_compressor_message();
-      cs_info.blocks = move(compressor->get_compression_blocks());
+      cs_info.blocks = std::move(compressor->get_compression_blocks());
       encode(cs_info, tmp);
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }

@@ -1161,7 +1161,7 @@ int RGWRados::register_to_service_map(const DoutPrefixProvider *dpp, const strin
 
 int RGWRados::update_service_map(const DoutPrefixProvider *dpp, std::map<std::string, std::string>&& status)
 {
-  int ret = rados.service_daemon_update_status(move(status));
+  int ret = rados.service_daemon_update_status(std::move(status));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: service_daemon_update_status() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -4288,7 +4288,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = cb.get_data_len();
     cs_info.compressor_message = compressor->get_compressor_message();
-    cs_info.blocks = move(compressor->get_compression_blocks());
+    cs_info.blocks = std::move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;
   }
