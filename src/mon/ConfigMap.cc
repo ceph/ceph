@@ -477,7 +477,8 @@ int ConfigMap::add_profile(
     std::unique_ptr<Option>(
       new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
   auto it = profiles.emplace(name, Profile(stray_options.back().get()));
-  int r = it.first->second.parse(
+  Profile& new_profile = it.first->second;
+  int r = new_profile.parse(
     cct,
     def,
     [&](const std::string& name) {
@@ -490,7 +491,7 @@ int ConfigMap::add_profile(
   }
 
   // mark the profile option as a runtime option, even though it is a string
-  it.first->second.opt->set_flag(Option::FLAG_RUNTIME);
+  new_profile.opt->set_flag(Option::FLAG_RUNTIME);
 
   return 0;
 }
