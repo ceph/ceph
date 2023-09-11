@@ -110,6 +110,8 @@ To remove an erasure code profile::
 
 If the profile is referenced by a pool, the deletion will fail.
 
+.. warning:: Removing an erasure code profile using ``osd erasure-code-profile rm`` does not automatically delete the associated CRUSH rule associated with the erasure code profile. It is recommended to manually remove the associated CRUSH rule using ``ceph osd crush rule remove {rule-name}`` to avoid unexpected behavior.
+
 osd erasure-code-profile get
 ============================
 
