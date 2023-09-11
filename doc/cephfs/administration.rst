@@ -15,7 +15,7 @@ creation of multiple file systems use ``ceph fs flag set enable_multiple true``.
 
 ::
 
-    fs new <file system name> <metadata pool name> <data pool name>
+    ceph fs new <file system name> <metadata pool name> <data pool name>
 
 This command creates a new file system. The file system name and metadata pool
 name are self-explanatory. The specified data pool is the default data pool and
@@ -25,19 +25,19 @@ to accommodate the new file system.
 
 ::
 
-    fs ls
+    ceph fs ls
 
 List all file systems by name.
 
 ::
 
-    fs lsflags <file system name>
+    ceph fs lsflags <file system name>
 
 List all the flags set on a file system.
 
 ::
 
-    fs dump [epoch]
+    ceph fs dump [epoch]
 
 This dumps the FSMap at the given epoch (default: current) which includes all
 file system settings, MDS daemons and the ranks they hold, and the list of
@@ -46,7 +46,7 @@ standby MDS daemons.
 
 ::
 
-    fs rm <file system name> [--yes-i-really-mean-it]
+    ceph fs rm <file system name> [--yes-i-really-mean-it]
 
 Destroy a CephFS file system. This wipes information about the state of the
 file system from the FSMap. The metadata pool and data pools are untouched and
@@ -54,28 +54,28 @@ must be destroyed separately.
 
 ::
 
-    fs get <file system name>
+    ceph fs get <file system name>
 
 Get information about the named file system, including settings and ranks. This
-is a subset of the same information from the ``fs dump`` command.
+is a subset of the same information from the ``ceph fs dump`` command.
 
 ::
 
-    fs set <file system name> <var> <val>
+    ceph fs set <file system name> <var> <val>
 
 Change a setting on a file system. These settings are specific to the named
 file system and do not affect other file systems.
 
 ::
 
-    fs add_data_pool <file system name> <pool name/id>
+    ceph fs add_data_pool <file system name> <pool name/id>
 
 Add a data pool to the file system. This pool can be used for file layouts
 as an alternate location to store file data.
 
 ::
 
-    fs rm_data_pool <file system name> <pool name/id>
+    ceph fs rm_data_pool <file system name> <pool name/id>
 
 This command removes the specified pool from the list of data pools for the
 file system.  If any files have layouts for the removed data pool, the file
@@ -84,7 +84,7 @@ system) cannot be removed.
 
 ::
 
-    fs rename <file system name> <new file system name> [--yes-i-really-mean-it]
+    ceph fs rename <file system name> <new file system name> [--yes-i-really-mean-it]
 
 Rename a Ceph file system. This also changes the application tags on the data
 pools and metadata pool of the file system to the new file system name.
@@ -98,7 +98,7 @@ Settings
 
 ::
 
-    fs set <fs name> max_file_size <size in bytes>
+    ceph fs set <fs name> max_file_size <size in bytes>
 
 CephFS has a configurable maximum file size, and it's 1TB by default.
 You may wish to set this limit higher if you expect to store large files
@@ -132,13 +132,13 @@ Taking a CephFS cluster down is done by setting the down flag:
  
 :: 
  
-    fs set <fs_name> down true
+    ceph fs set <fs_name> down true
  
 To bring the cluster back online:
  
 :: 
 
-    fs set <fs_name> down false
+    ceph fs set <fs_name> down false
 
 This will also restore the previous value of max_mds. MDS daemons are brought
 down in a way such that journals are flushed to the metadata pool and all
@@ -149,11 +149,11 @@ Taking the cluster down rapidly for deletion or disaster recovery
 -----------------------------------------------------------------
 
 To allow rapidly deleting a file system (for testing) or to quickly bring the
-file system and MDS daemons down, use the ``fs fail`` command:
+file system and MDS daemons down, use the ``ceph fs fail`` command:
 
 ::
 
-    fs fail <fs_name>
+    ceph fs fail <fs_name>
 
 This command sets a file system flag to prevent standbys from
 activating on the file system (the ``joinable`` flag).
@@ -162,7 +162,7 @@ This process can also be done manually by doing the following:
 
 ::
 
-    fs set <fs_name> joinable false
+    ceph fs set <fs_name> joinable false
 
 Then the operator can fail all of the ranks which causes the MDS daemons to
 respawn as standbys. The file system will be left in a degraded state.
@@ -170,7 +170,7 @@ respawn as standbys. The file system will be left in a degraded state.
 ::
 
     # For all ranks, 0-N:
-    mds fail <fs_name>:<n>
+    ceph mds fail <fs_name>:<n>
 
 Once all ranks are inactive, the file system may also be deleted or left in
 this state for other purposes (perhaps disaster recovery).
@@ -179,7 +179,7 @@ To bring the cluster back up, simply set the joinable flag:
 
 ::
 
-    fs set <fs_name> joinable true
+    ceph fs set <fs_name> joinable true
 
 
 Daemons
@@ -198,34 +198,35 @@ Commands to manipulate MDS daemons:
 
 ::
 
-    mds fail <gid/name/role>
+    ceph mds fail <gid/name/role>
 
 Mark an MDS daemon as failed.  This is equivalent to what the cluster
 would do if an MDS daemon had failed to send a message to the mon
 for ``mds_beacon_grace`` second.  If the daemon was active and a suitable
-standby is available, using ``mds fail`` will force a failover to the standby.
+standby is available, using ``ceph mds fail`` will force a failover to the
+standby.
 
-If the MDS daemon was in reality still running, then using ``mds fail``
+If the MDS daemon was in reality still running, then using ``ceph mds fail``
 will cause the daemon to restart.  If it was active and a standby was
 available, then the "failed" daemon will return as a standby.
 
 
 ::
 
-    tell mds.<daemon name> command ...
+    ceph tell mds.<daemon name> command ...
 
 Send a command to the MDS daemon(s). Use ``mds.*`` to send a command to all
 daemons. Use ``ceph tell mds.* help`` to learn available commands.
 
 ::
 
-    mds metadata <gid/name/role>
+    ceph mds metadata <gid/name/role>
 
 Get metadata about the given MDS known to the Monitors.
 
 ::
 
-    mds repaired <role>
+    ceph mds repaired <role>
 
 Mark the file system rank as repaired. Unlike the name suggests, this command
 does not change a MDS; it manipulates the file system rank which has been
@@ -244,14 +245,14 @@ Commands to manipulate required client features of a file system:
 
 ::
 
-    fs required_client_features <fs name> add reply_encoding
-    fs required_client_features <fs name> rm reply_encoding
+    ceph fs required_client_features <fs name> add reply_encoding
+    ceph fs required_client_features <fs name> rm reply_encoding
 
 To list all CephFS features
 
 ::
 
-    fs feature ls
+    ceph fs feature ls
 
 Clients that are missing newly added features will be evicted automatically.
 
@@ -346,7 +347,7 @@ Global settings
 
 ::
 
-    fs flag set <flag name> <flag val> [<confirmation string>]
+    ceph fs flag set <flag name> <flag val> [<confirmation string>]
 
 Sets a global CephFS flag (i.e. not specific to a particular file system).
 Currently, the only flag setting is 'enable_multiple' which allows having
@@ -368,13 +369,13 @@ file system.
 
 ::
 
-    mds rmfailed
+    ceph mds rmfailed
 
 This removes a rank from the failed set.
 
 ::
 
-    fs reset <file system name>
+    ceph fs reset <file system name>
 
 This command resets the file system state to defaults, except for the name and
 pools. Non-zero ranks are saved in the stopped set.
@@ -382,7 +383,7 @@ pools. Non-zero ranks are saved in the stopped set.
 
 ::
 
-    fs new <file system name> <metadata pool name> <data pool name> --fscid <fscid> --force
+    ceph fs new <file system name> <metadata pool name> <data pool name> --fscid <fscid> --force
 
 This command creates a file system with a specific **fscid** (file system cluster ID).
 You may want to do this when an application expects the file system's ID to be
