@@ -10517,6 +10517,16 @@ next:
       cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
+    if (!rgw::sal::User::empty(user)) {
+      for (auto it = result.topics.cbegin(); it != result.topics.cend();) {
+        const auto& topic = it->second;
+        if (user->get_id() != topic.user) {
+          result.topics.erase(it++);
+        } else {
+          ++it;
+        }
+      }
+    }
     encode_json("result", result, formatter.get());
     formatter->flush(cout);
   }

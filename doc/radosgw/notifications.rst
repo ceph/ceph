@@ -78,7 +78,7 @@ following command:
 
 .. prompt:: bash #
 
-   radosgw-admin topic list [--tenant={tenant}]
+   radosgw-admin topic list [--tenant={tenant}]  [--uid={user}]
 
 
 Fetch the configuration of a specific topic by running the following command:
