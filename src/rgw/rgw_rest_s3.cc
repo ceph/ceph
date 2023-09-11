@@ -2156,11 +2156,12 @@ static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWBucket* bucke
   // only bucket's owner is allowed to get the quota settings of the account
   if (bucket->is_owner(s->user.get())) {
     auto user_info = s->user->get_info();
+    auto bucket_quota = s->bucket->get_info().quota; // bucket quota
     dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.user_quota.max_size));
     dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.user_quota.max_objects));
     dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
-    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(user_info.bucket_quota.max_size));
-    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(user_info.bucket_quota.max_objects));
+    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(bucket_quota.max_size));
+    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(bucket_quota.max_objects));
   }
 }
 
