@@ -1324,6 +1324,7 @@ PG::handle_rep_op_fut PG::handle_rep_op(Ref<MOSDRepOp> req)
     txn);
 
   log_operation(std::move(log_entries),
+                std::nullopt,
                 req->pg_trim_to,
                 req->version,
                 req->pg_committed_to,
@@ -1368,6 +1369,7 @@ PG::interruptible_future<> PG::update_snap_map(
 
 void PG::log_operation(
   std::vector<pg_log_entry_t>&& logv,
+  const std::optional<pg_hit_set_history_t> &hset_history,
   const eversion_t &trim_to,
   const eversion_t &roll_forward_to,
   const eversion_t &pg_committed_to,
@@ -1378,6 +1380,9 @@ void PG::log_operation(
   DEBUGDPP("", *this);
   if (is_primary()) {
     ceph_assert(trim_to <= peering_state.get_pg_committed_to());
+  }
+  if (hset_history) {
+    peering_state.update_hset(*hset_history);
   }
   auto last = logv.rbegin();
   if (is_primary() && last != logv.rend()) {
