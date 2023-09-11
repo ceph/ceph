@@ -1849,6 +1849,16 @@ class TestPermErrMsg(CephFSTestCase):
         for mdscap in self.MDSCAPS:
             self._negtestcmd('auth add', mdscap)
 
+    def test_auth_caps(self):
+        for mdscap in self.MDSCAPS:
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth add {self.CLIENT_NAME}')
+
+            self._negtestcmd('auth caps', mdscap)
+
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth rm {self.CLIENT_NAME}')
+
     def test_auth_get_or_create(self):
         for mdscap in self.MDSCAPS:
             self._negtestcmd('auth get-or-create', mdscap)

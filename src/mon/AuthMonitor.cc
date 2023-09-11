@@ -1801,7 +1801,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	dout(20) << it.first << " cap = \"" << it.second << "\"" << dendl;
       }
 
-      err = _update_caps(entity, newcaps, op, ds, &rdata, f.get());
+      err = _update_caps(entity, newcaps, op, ss, ds, &rdata, f.get());
       if (err == 0) {
 	return true;
       } else {
@@ -1809,14 +1809,14 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    err = _create_entity(entity, newcaps, op, ds, &rdata, f.get());
+    err = _create_entity(entity, newcaps, op, ss, ds, &rdata, f.get());
     if (err == 0) {
       return true;
     } else {
       goto done;
     }
   } else if (prefix == "auth caps" && !entity_name.empty()) {
-    err = _update_caps(entity, ceph_caps, op, ds, &rdata, f.get());
+    err = _update_caps(entity, ceph_caps, op, ss, ds, &rdata, f.get());
     if (err == 0) {
       return true;
     } else {
@@ -1976,10 +1976,9 @@ int AuthMonitor::_check_and_encode_caps(const map<string, string>& caps,
  * update and set create to True to allow authorizing a new entity instead
  * of updating its caps. */
 int AuthMonitor::_update_or_create_entity(const EntityName& entity,
-  const map<string, string>& caps, MonOpRequestRef op, stringstream& ds,
-  bufferlist* rdata, Formatter* fmtr, bool create_entity)
+  const map<string, string>& caps, MonOpRequestRef op, stringstream& ss,
+  stringstream& ds, bufferlist* rdata, Formatter* fmtr, bool create_entity)
 {
-  stringstream ss;
   KeyServerData::Incremental auth_inc;
   auth_inc.name = entity;
 
@@ -2019,18 +2018,18 @@ int AuthMonitor::_update_or_create_entity(const EntityName& entity,
 }
 
 int AuthMonitor::_update_caps(const EntityName& entity,
-  const map<string, string>& caps, MonOpRequestRef op, stringstream& ds,
-  bufferlist* rdata, Formatter* fmtr)
+  const map<string, string>& caps, MonOpRequestRef op, stringstream& ss,
+  stringstream& ds, bufferlist* rdata, Formatter* fmtr)
 {
-  return _update_or_create_entity(entity, caps, op, ds, rdata, fmtr,
+  return _update_or_create_entity(entity, caps, op, ss, ds, rdata, fmtr,
 				  false);
 }
 
 int AuthMonitor::_create_entity(const EntityName& entity,
-  const map<string, string>& caps, MonOpRequestRef op, stringstream& ds,
-  bufferlist* rdata, Formatter* fmtr)
+  const map<string, string>& caps, MonOpRequestRef op, stringstream& ss,
+  stringstream& ds, bufferlist* rdata, Formatter* fmtr)
 {
-  return _update_or_create_entity(entity, caps, op, ds, rdata, fmtr,
+  return _update_or_create_entity(entity, caps, op, ss, ds, rdata, fmtr,
 				  true);
 }
 
