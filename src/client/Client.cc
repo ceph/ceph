@@ -10901,7 +10901,9 @@ void Client::C_Read_Async_Finisher::finish(int r)
 {
   clnt->client_lock.lock();
 
-  clnt->do_readahead(f, in, off, len);
+  // Do read ahead as long as we aren't completing with 0 bytes
+  if (r != 0)
+    clnt->do_readahead(f, in, off, len);
 
   onfinish->complete(r);
 
@@ -10915,14 +10917,36 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
+  std::unique_ptr<Context> io_finish = nullptr;
+  C_SaferCond *io_finish_cond = nullptr;
 
   ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
+  if (onfinish != nullptr) {
+    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in,
+                                              f->pos, off, len));
+  }
+
   // trim read based on file size?
-  if (off >= in->size)
+  if ((off >= in->size) || (len == 0)) {
+    // If not async, immediate return of 0 bytes
+    if (onfinish == nullptr) 
+      return 0;
+
+    // Release C_Read_Async_Finisher from managed pointer, we need to complete
+    // immediately. The C_Read_Async_Finisher is safely handled and won't be
+    // abandoned.
+    Context *crf = io_finish.release();
+
+    // Complete the crf immediately with 0 bytes
+    client_lock.unlock();
+    crf->complete(0);
+    client_lock.lock();
+
+    // Signal async completion
     return 0;
-  if (len == 0)
-    return 0;
+  }
+
   if (off + len > in->size) {
     len = in->size - off;    
   }
@@ -10933,14 +10957,9 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 
   // read (and possibly block)
   int r = 0;
-  std::unique_ptr<Context> io_finish = nullptr;
-  C_SaferCond *io_finish_cond = nullptr;
   if (onfinish == nullptr) {
     io_finish_cond = new C_SaferCond("Client::_read_async flock");
     io_finish.reset(io_finish_cond);
-  } else {
-    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in,
-                                              f->pos, off, len));
   }
 
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
