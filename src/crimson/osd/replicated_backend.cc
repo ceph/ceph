@@ -96,6 +96,7 @@ ReplicatedBackend::submit_transaction(const std::set<pg_shard_t>& pg_shards,
 
   pg.log_operation(
     std::move(log_entries),
+    std::nullopt,
     osd_op_p.pg_trim_to,
     osd_op_p.at_version,
     osd_op_p.pg_committed_to,
