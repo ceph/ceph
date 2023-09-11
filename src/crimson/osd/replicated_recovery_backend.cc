@@ -601,7 +601,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     PushOp* push_op)
 {
   LOG_PREFIX(ReplicatedRecoveryBackend::read_metadata_for_push_op);
-  DEBUGDPP("{}", pg, oid);
+  DEBUGDPP("{} progress.first {}", pg, oid, progress.first);
   if (!progress.first) {
     return seastar::make_ready_future<eversion_t>(ver);
   }
