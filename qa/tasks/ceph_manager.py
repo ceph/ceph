@@ -567,6 +567,25 @@ class OSDThrasher(Thrasher):
             self.ceph_manager.set_config(self.rerrosd,
                                          bluestore_debug_random_read_err = self.random_eio)
 
+    def out_host(self, host=None):
+        """
+        Make all osds on a host out
+        :param host: Host to be marked.
+        """
+        # check that all osd remotes have a valid console
+        osds = self.ceph_manager.ctx.cluster.only(teuthology.is_type('osd', self.ceph_manager.cluster))
+        if host is None:
+            host = random.choice(list(osds.remotes.keys()))
+        self.log("Removing all osds in host %s" % (host,))
+
+        for role in osds.remotes[host]:
+            if not role.startswith("osd."):
+                continue
+            osdid = int(role.split('.')[1])
+            if self.in_osds.count(osdid) == 0:
+                continue
+            self.out_osd(osdid)
+
 
     def out_osd(self, osd=None):
         """
@@ -1227,13 +1246,19 @@ class OSDThrasher(Thrasher):
         minout = int(self.config.get("min_out", 0))
         minlive = int(self.config.get("min_live", 2))
         mindead = int(self.config.get("min_dead", 0))
+        thrash_hosts = self.config.get("thrash_hosts", False)
 
         self.log('choose_action: min_in %d min_out '
                  '%d min_live %d min_dead %d '
                  'chance_down %.2f' %
                  (minin, minout, minlive, mindead, chance_down))
         actions = []
-        if len(self.in_osds) > minin:
+        if thrash_hosts:
+            self.log("check thrash_hosts")
+            if len(self.in_osds) > minin:
+                self.log("check thrash_hosts: in_osds > minin")
+                actions.append((self.out_host, 1.0,))
+        elif len(self.in_osds) > minin:
             actions.append((self.out_osd, 1.0,))
         if len(self.live_osds) > minlive and chance_down > 0:
             actions.append((self.kill_osd, chance_down,))
