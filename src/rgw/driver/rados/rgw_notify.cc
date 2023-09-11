@@ -216,8 +216,15 @@ private:
     if ( (topic_persistency_ttl != 0 && event_entry.creation_time != ceph::coarse_real_clock::zero() &&
          time_now - event_entry.creation_time > std::chrono::seconds(topic_persistency_ttl))
          || ( topic_persistency_max_retries != 0 && entry_persistency_tracker.retires_num >  topic_persistency_max_retries) ) {
-      ldpp_dout(this, 20) << "Expiring entry retry_number=" << entry_persistency_tracker.retires_num << " creation_time="
-                          << event_entry.creation_time << " time_now:" << time_now << dendl;
+      ldpp_dout(this, 1) << "Expiring entry for topic= "
+                         << event_entry.arn_topic << " bucket_owner= "
+                         << event_entry.event.bucket_ownerIdentity
+                         << " bucket= " << event_entry.event.bucket_name
+                         << " object_name= " << event_entry.event.object_key
+                         << " entry retry_number="
+                         << entry_persistency_tracker.retires_num
+                         << " creation_time=" << event_entry.creation_time
+                         << " time_now=" << time_now << dendl;
       return EntryProcessingResult::Expired;
     }
     if (time_now - entry_persistency_tracker.last_retry_time < std::chrono::seconds(topic_persistency_sleep_duration) ) {
