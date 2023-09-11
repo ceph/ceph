@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, ReplaySubject, Subscription } from 'rxjs';
+import { Observable, ReplaySubject, Subscription, of } from 'rxjs';
 
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -18,8 +18,7 @@ import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum'
 import { HealthService } from '~/app/shared/api/health.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
-import { shareReplay, switchMap, tap } from 'rxjs/operators';
-import { RgwZonegroup } from '../models/rgw-multisite';
+import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -120,18 +119,22 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
             this.loading = false;
             this.replicaZonesInfo = data['dataSyncInfo'];
             this.metadataSyncInfo = data['metadataSyncInfo'];
+            if (this.replicaZonesInfo.length === 0) {
+              this.showMultisiteCard = false;
+              this.syncCardLoading = false;
+              this.loading = false;
+            }
             [this.realm, this.zonegroup, this.zone] = data['primaryZoneData'];
+          }),
+          catchError((err) => {
+            this.showMultisiteCard = false;
+            this.syncCardLoading = false;
+            this.loading = false;
+            err.preventDefault();
+            return of(true);
           })
         )
       ),
-      tap(() => {
-        const zonegroup = new RgwZonegroup();
-        zonegroup.name = this.zonegroup;
-        this.rgwZonegroupService.get(zonegroup).subscribe((data: any) => {
-          this.showMultisiteCard = data['zones'].length !== 1;
-          this.syncCardLoading = false;
-        });
-      }),
       shareReplay(1)
     );
   }
