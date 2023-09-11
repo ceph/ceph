@@ -134,9 +134,6 @@ Package: ceph-base
 Architecture: linux-any
 Depends: binutils,
          ceph-common (= ${binary:Version}),
-         debianutils,
-         findutils,
-         grep,
          logrotate,
          parted,
          psmisc,
@@ -430,7 +427,6 @@ Depends: ceph-osd (= ${binary:Version}),
          e2fsprogs,
          lvm2,
          parted,
-         util-linux,
          xfsprogs,
          ${misc:Depends},
          ${python3:Depends}
