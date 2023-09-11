@@ -14,14 +14,16 @@
 
 class CrushWrapper;
 
-// the precedence is thus:
+//  See doc/rados/configuration/ceph-conf.rst
+
+//  Configuration options stored by the monitor can be stored in:
 //
-//  global
-//   crush location (coarse to fine, ordered by type id)
-//  daemon type (e.g., osd)
-//   device class (osd only)
-//   crush location (coarse to fine, ordered by type id)
-//  daemon name (e.g., mds.foo)
+//  * global section
+//    - crush location (coarse to fine, ordered by type id)
+//  * daemon type section (e.g., osd)
+//    - device class (osd only)
+//  * crush location (coarse to fine, ordered by type id)
+//    - daemon name (e.g., mds.foo)
 //
 // Note that this means that if we have
 //
@@ -32,6 +34,15 @@ class CrushWrapper;
 // is less precise than host, because the crush limiters are only
 // resolved within a section (global, per-daemon, per-instance).
 
+
+
+// Options may have a mask associated with them to further restrict
+// which daemons or clients the option applies to.
+// Masks take two forms:
+// * type:location - where type is a CRUSH property
+//
+// * class:device-class where device-class is the name of a CRUSH device class
+//   - This mask has no effect on non-OSD daemons or clients.
 struct OptionMask {
   std::string location_type, location_value; ///< matches crush_location
   std::string device_class;                  ///< matches device class
@@ -88,6 +99,7 @@ struct MaskedOption {
   void dump(ceph::Formatter *f) const;
 };
 
+// Indicates which daemons or clients the options apply to
 struct Section {
   std::multimap<std::string,MaskedOption> options;
 
@@ -98,6 +110,7 @@ struct Section {
   std::string get_minimal_conf() const;
 };
 
+// TODO:
 struct Profile {
   Option *opt;
   std::map<std::string, Section> profile;

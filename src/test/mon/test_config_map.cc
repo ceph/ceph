@@ -147,6 +147,13 @@ TEST(ConfigMap, add_profile)
   auto cct = new CephContext(CEPH_ENTITY_TYPE_MON);
   int r;
 
+  // profile name is foo
+  // level: basic
+  // values:
+  // a:
+  //   opt:aaa
+  // b:
+  //   opt:bbb
   r = cm.add_profile(
     cct, "foo", "{\"level\": \"basic\", \"values\": {\"a\": {\"opt\": \"aaa\"}, \"b\": {\"opt\": \"bbb\"}}}",
     [&](const std::string& name) {
