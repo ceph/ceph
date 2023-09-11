@@ -1459,6 +1459,8 @@ files on a storage drive.
 
 .. index:: architecture; Ceph Clients
 
+.. _architecture_ceph_clients:
+
 Ceph Clients
 ============
 
