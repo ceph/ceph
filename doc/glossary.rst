@@ -58,7 +58,7 @@
                 as QEMU or Xen, and (3) a hypervisor abstraction layer such as
                 ``libvirt``.
 
-	Ceph Client
+	:ref:`Ceph Client <architecture_ceph_clients>`
                 Any of the Ceph components that can access a Ceph Storage
                 Cluster. This includes the Ceph Object Gateway, the Ceph Block
                 Device, the Ceph File System, and their corresponding
