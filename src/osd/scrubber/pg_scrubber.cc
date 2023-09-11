@@ -2085,7 +2085,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	false /* is periodic? unknown, actually */};
     }
   }
-  if (m_scrub_job->state != ScrubQueue::qu_state_t::registered) {
+  if (m_scrub_job->state != Scrub::qu_state_t::registered) {
     return pg_scrubbing_status_t{utime_t{},
 				 0,
 				 pg_scrub_sched_status_t::not_queued,
@@ -2168,9 +2168,8 @@ PgScrubber::PgScrubber(PG* pg)
   m_fsm = std::make_unique<ScrubMachine>(m_pg, this);
   m_fsm->initiate();
 
-  m_scrub_job = ceph::make_ref<ScrubQueue::ScrubJob>(m_osds->cct,
-						     m_pg->pg_id,
-						     m_osds->get_nodeid());
+  m_scrub_job = ceph::make_ref<Scrub::ScrubJob>(
+      m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
 }
 
 void PgScrubber::set_scrub_begin_time()
@@ -2469,7 +2468,7 @@ void ReplicaReservations::release_replica(pg_shard_t peer, epoch_t epoch)
 ReplicaReservations::ReplicaReservations(
   PG* pg,
   pg_shard_t whoami,
-  ScrubQueue::ScrubJobRef scrubjob,
+  Scrub::ScrubJobRef scrubjob,
   const ConfigProxy& conf)
     : m_pg{pg}
     , m_acting_set{pg->get_actingset()}
