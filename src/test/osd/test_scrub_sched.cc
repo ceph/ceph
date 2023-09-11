@@ -42,8 +42,10 @@ int main(int argc, char** argv)
 }
 
 using schedule_result_t = Scrub::schedule_result_t;
-using ScrubJobRef = ScrubQueue::ScrubJobRef;
-using qu_state_t = ScrubQueue::qu_state_t;
+using ScrubJobRef = Scrub::ScrubJobRef;
+using qu_state_t = Scrub::qu_state_t;
+using scrub_schedule_t = Scrub::scrub_schedule_t;
+using ScrubQContainer = Scrub::ScrubQContainer;
 
 /// enabling access into ScrubQueue internals
 class ScrubSchedTestWrapper : public ScrubQueue {
@@ -128,7 +130,7 @@ struct sjob_config_t {
   std::optional<double> pool_conf_max;
   bool is_must;
   bool is_need_auto;
-  ScrubQueue::scrub_schedule_t initial_schedule;
+  scrub_schedule_t initial_schedule;
 };
 
 
@@ -141,7 +143,7 @@ struct sjob_dynamic_data_t {
   pg_info_t mocked_pg_info;
   pool_opts_t mocked_pool_opts;
   requested_scrub_t request_flags;
-  ScrubQueue::ScrubJobRef job;
+  ScrubJobRef job;
 };
 
 class TestScrubSched : public ::testing::Test {
@@ -197,7 +199,7 @@ class TestScrubSched : public ::testing::Test {
     dyn_data.request_flags.need_auto = sjob_data.is_need_auto;
 
     // create the scrub job
-    dyn_data.job = ceph::make_ref<ScrubQueue::ScrubJob>(g_ceph_context,
+    dyn_data.job = ceph::make_ref<Scrub::ScrubJob>(g_ceph_context,
 							sjob_data.spg,
 							m_osd_num);
     m_scrub_jobs.push_back(dyn_data);
@@ -252,7 +254,7 @@ class TestScrubSched : public ::testing::Test {
   }
 
   void debug_print_jobs(std::string hdr,
-			const ScrubQueue::ScrubQContainer& jobs)
+			const ScrubQContainer& jobs)
   {
     std::cout << fmt::format("{}: time now {}", hdr, m_sched->time_now())
 	      << std::endl;
@@ -287,7 +289,7 @@ std::vector<sjob_config_t> sjob_configs = {
     std::nullopt,		    // max scrub delay in pool config
     false,			    // must-scrub
     false,			    // need-auto
-    ScrubQueue::scrub_schedule_t{}  // initial schedule
+    scrub_schedule_t{}  // initial schedule
   },
 
   {spg_t{pg_t{4, 1}},
@@ -297,7 +299,7 @@ std::vector<sjob_config_t> sjob_configs = {
    std::nullopt,
    true,
    false,
-   ScrubQueue::scrub_schedule_t{}},
+   scrub_schedule_t{}},
 
   {spg_t{pg_t{7, 1}},
    true,
@@ -306,7 +308,7 @@ std::vector<sjob_config_t> sjob_configs = {
    std::nullopt,
    false,
    false,
-   ScrubQueue::scrub_schedule_t{}},
+   scrub_schedule_t{}},
 
   {spg_t{pg_t{5, 1}},
    true,
@@ -315,7 +317,7 @@ std::vector<sjob_config_t> sjob_configs = {
    std::nullopt,
    false,
    false,
-   ScrubQueue::scrub_schedule_t{}}};
+   scrub_schedule_t{}}};
 
 }  // anonymous namespace
 

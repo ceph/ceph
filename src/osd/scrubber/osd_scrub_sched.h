@@ -107,20 +107,9 @@ ScrubQueue interfaces (main functions):
  */
 // clang-format on
 
-#include <atomic>
-#include <chrono>
-#include <memory>
 #include <optional>
-#include <vector>
-
-#include "common/RefCountedObj.h"
-#include "common/ceph_atomic.h"
-#include "osd/osd_types.h"
-#include "osd/scrubber_common.h"
-#include "include/utime_fmt.h"
-#include "osd/osd_types_fmt.h"
 #include "utime.h"
-
+#include "scrub_job.h"
 class PG;
 
 namespace Scrub {
@@ -163,6 +152,7 @@ class ScrubSchedListener {
 
 }  // namespace Scrub
 
+
 /**
  * the queue of PGs waiting to be scrubbed.
  * Main operations are scheduling/unscheduling a PG to be scrubbed at a certain
@@ -175,28 +165,12 @@ class ScrubSchedListener {
  */
 class ScrubQueue {
  public:
-  enum class must_scrub_t { not_mandatory, mandatory };
-
-  enum class qu_state_t {
-    not_registered,  // not a primary, thus not considered for scrubbing by this
-		     // OSD (also the temporary state when just created)
-    registered,	     // in either of the two queues ('to_scrub' or 'penalized')
-    unregistering    // in the process of being unregistered. Will be finalized
-		     // under lock
-  };
-
   ScrubQueue(CephContext* cct, Scrub::ScrubSchedListener& osds);
   virtual ~ScrubQueue() = default;
 
-#include "osd/scrubber/scrub_job.h"
-
   friend class TestOSDScrub;
   friend class ScrubSchedTestWrapper; ///< unit-tests structure
-
-  using ScrubJobRef = ceph::ref_t<ScrubJob>;
-  using ScrubQContainer = std::vector<ScrubJobRef>;
-
-  static std::string_view qu_state_text(qu_state_t st);
+  using sched_params_t = Scrub::sched_params_t;
 
   /**
    * called periodically by the OSD to select the first scrub-eligible PG
@@ -225,13 +199,13 @@ class ScrubQueue {
    * remove the pg from set of PGs to be scanned for scrubbing.
    * To be used if we are no longer the PG's primary, or if the PG is removed.
    */
-  void remove_from_osd_queue(ScrubJobRef sjob);
+  void remove_from_osd_queue(Scrub::ScrubJobRef sjob);
 
   /**
    * @return the list (not std::set!) of all scrub jobs registered
    *   (apart from PGs in the process of being removed)
    */
-  ScrubQContainer list_registered_jobs() const;
+  Scrub::ScrubQContainer list_registered_jobs() const;
 
   /**
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
@@ -243,7 +217,7 @@ class ScrubQueue {
    *
    * locking: might lock jobs_lock
    */
-  void register_with_osd(ScrubJobRef sjob, const sched_params_t& suggested);
+  void register_with_osd(Scrub::ScrubJobRef sjob, const sched_params_t& suggested);
 
   /**
    * modify a scrub-job's scheduled time and deadline
@@ -265,7 +239,7 @@ class ScrubQueue {
    *
    *  locking: not using the jobs_lock
    */
-  void update_job(ScrubJobRef sjob, const sched_params_t& suggested);
+  void update_job(Scrub::ScrubJobRef sjob, const sched_params_t& suggested);
 
   sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
 				      const pg_info_t& pg_info,
@@ -346,18 +320,18 @@ class ScrubQueue {
    */
   mutable ceph::mutex jobs_lock = ceph::make_mutex("ScrubQueue::jobs_lock");
 
-  ScrubQContainer to_scrub;   ///< scrub jobs (i.e. PGs) to scrub
-  ScrubQContainer penalized;  ///< those that failed to reserve remote resources
+  Scrub::ScrubQContainer to_scrub;   ///< scrub jobs (i.e. PGs) to scrub
+  Scrub::ScrubQContainer penalized;  ///< those that failed to reserve remote resources
   bool restore_penalized{false};
 
   double daily_loadavg{0.0};
 
   static inline constexpr auto registered_job = [](const auto& jobref) -> bool {
-    return jobref->state == qu_state_t::registered;
+    return jobref->state == Scrub::qu_state_t::registered;
   };
 
   static inline constexpr auto invalid_state = [](const auto& jobref) -> bool {
-    return jobref->state == qu_state_t::not_registered;
+    return jobref->state == Scrub::qu_state_t::not_registered;
   };
 
   /**
@@ -369,7 +343,7 @@ class ScrubQueue {
    * clear dead entries (unregistered, or belonging to removed PGs) from a
    * queue. Job state is changed to match new status.
    */
-  void rm_unregistered_jobs(ScrubQContainer& group);
+  void rm_unregistered_jobs(Scrub::ScrubQContainer& group);
 
   /**
    * the set of all scrub jobs in 'group' which are ready to be scrubbed
@@ -379,8 +353,9 @@ class ScrubQueue {
    *
    * Note that the returned container holds independent refs to the
    * scrub jobs.
+   * Note also that OSDRestrictions is 1L size, thus copied.
    */
-  ScrubQContainer collect_ripe_jobs(ScrubQContainer& group, utime_t time_now);
+  Scrub::ScrubQContainer collect_ripe_jobs(Scrub::ScrubQContainer& group, utime_t time_now);
 
 
   /// scrub resources management lock (guarding scrubs_local & scrubs_remote)
@@ -416,8 +391,8 @@ class ScrubQueue {
    *
    * @return a pair of values: the determined scrub time, and the deadline
    */
-  scrub_schedule_t adjust_target_time(
-    const sched_params_t& recomputed_params) const;
+  Scrub::scrub_schedule_t adjust_target_time(
+    const Scrub::sched_params_t& recomputed_params) const;
 
   /**
    * Look for scrub jobs that have their 'resources_failure' set. These jobs
@@ -430,7 +405,7 @@ class ScrubQueue {
   void move_failed_pgs(utime_t now_is);
 
   Scrub::schedule_result_t select_from_group(
-    ScrubQContainer& group,
+    Scrub::ScrubQContainer& group,
     const Scrub::OSDRestrictions& preconds,
     utime_t now_is);
 
@@ -440,34 +415,3 @@ protected: // used by the unit-tests
    */
   virtual utime_t time_now() const { return ceph_clock_now(); }
 };
-
-template <>
-struct fmt::formatter<ScrubQueue::qu_state_t>
-    : fmt::formatter<std::string_view> {
-  template <typename FormatContext>
-  auto format(const ScrubQueue::qu_state_t& s, FormatContext& ctx)
-  {
-    auto out = ctx.out();
-    out = fmt::formatter<string_view>::format(
-      std::string{ScrubQueue::qu_state_text(s)}, ctx);
-    return out;
-  }
-};
-
-template <>
-struct fmt::formatter<ScrubQueue::ScrubJob> {
-  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
-
-  template <typename FormatContext>
-  auto format(const ScrubQueue::ScrubJob& sjob, FormatContext& ctx)
-  {
-    return fmt::format_to(
-      ctx.out(),
-      "pg[{}] @ {:s} (dl:{:s}) - <{}> / failure: {} / pen. t.o.: {:s} / queue "
-      "state: {:.7}",
-      sjob.pgid, sjob.schedule.scheduled_at, sjob.schedule.deadline,
-      sjob.registration_state(), sjob.resources_failure, sjob.penalty_timeout,
-      sjob.state.load(std::memory_order_relaxed));
-  }
-};
-
