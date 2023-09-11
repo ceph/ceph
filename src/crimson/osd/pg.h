@@ -517,6 +517,7 @@ public:
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
   void log_operation(
     std::vector<pg_log_entry_t>&& logv,
+    const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     const eversion_t &min_last_complete_ondisk,

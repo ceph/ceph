@@ -1305,6 +1305,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   std::vector<pg_log_entry_t> log_entries;
   decode(log_entries, p);
   log_operation(std::move(log_entries),
+                std::nullopt,
                 req->pg_trim_to,
                 req->version,
                 req->min_last_complete_ondisk,
@@ -1327,6 +1328,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 
 void PG::log_operation(
   std::vector<pg_log_entry_t>&& logv,
+  const std::optional<pg_hit_set_history_t> &hset_history,
   const eversion_t &trim_to,
   const eversion_t &roll_forward_to,
   const eversion_t &min_last_complete_ondisk,
@@ -1336,6 +1338,9 @@ void PG::log_operation(
   logger().debug("{}", __func__);
   if (is_primary()) {
     ceph_assert(trim_to <= peering_state.get_last_update_ondisk());
+  }
+  if (hset_history) {
+    peering_state.update_hset(*hset_history);
   }
   /* TODO: when we add snap mapper and projected log support,
    * we'll likely want to update them here.
