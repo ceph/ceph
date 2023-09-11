@@ -272,6 +272,7 @@ private:
   friend struct RecoveryMessages;
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
   friend struct OnRecoveryReadComplete;
+  friend struct RecoveryReadCompleter;
   void handle_recovery_read_complete(
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > &to_read,
@@ -321,16 +322,24 @@ public:
     const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
-    GenContext<read_result_t&> *cb;
     read_request_t(
       const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
-      bool want_attrs,
-      GenContext<read_result_t&> *cb)
-      : to_read(to_read), need(need), want_attrs(want_attrs),
-	cb(cb) {}
+      bool want_attrs)
+      : to_read(to_read), need(need), want_attrs(want_attrs) {}
   };
   friend ostream &operator<<(ostream &lhs, const read_request_t &rhs);
+
+  struct ReadCompleter {
+    virtual void finish_single_request(
+      const hobject_t &hoid,
+      ECBackend::read_result_t &res,
+      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read) = 0;
+
+    virtual void finish(int priority) && = 0;
+
+    virtual ~ReadCompleter() = default;
+  };
 
   struct ReadOp {
     int priority;
@@ -343,7 +352,7 @@ public:
     // True if reading for recovery which could possibly reading only a subset
     // of the available shards.
     bool for_recovery;
-    GenContext<int> *on_complete;
+    std::unique_ptr<ReadCompleter> on_complete;
 
     ZTracer::Trace trace;
 
@@ -363,7 +372,7 @@ public:
       ceph_tid_t tid,
       bool do_redundant_reads,
       bool for_recovery,
-      GenContext<int> *on_complete,
+      std::unique_ptr<ReadCompleter> _on_complete,
       OpRequestRef op,
       std::map<hobject_t, std::set<int>> &&_want_to_read,
       std::map<hobject_t, read_request_t> &&_to_read)
@@ -372,7 +381,7 @@ public:
         op(op),
         do_redundant_reads(do_redundant_reads),
         for_recovery(for_recovery),
-        on_complete(on_complete),
+        on_complete(std::move(_on_complete)),
         want_to_read(std::move(_want_to_read)),
 	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
@@ -417,7 +426,7 @@ public:
       OpRequestRef op,
       bool do_redundant_reads,
       bool for_recovery,
-      GenContext<int> *on_complete);
+      std::unique_ptr<ReadCompleter> on_complete);
 
     void do_read_op(ReadOp &rop);
 
