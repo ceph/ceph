@@ -754,7 +754,7 @@ Architecture: any
 Section: debug
 Priority: extra
 Depends: libsqlite3-mod-ceph (= ${binary:Version}),
-         libsqlite3-0-dbgsym
+         libsqlite3-0-dbgsym,
          ${misc:Depends},
 Description: debugging symbols for libsqlite3-mod-ceph
  A SQLite3 VFS for storing and manipulating databases stored on Ceph's RADOS
@@ -1202,14 +1202,14 @@ Description: Java Native Interface library for CephFS Java bindings
 Package: rados-objclass-dev
 Architecture: linux-any
 Section: libdevel
-Depends: librados-dev (= ${binary:Version}) ${misc:Depends},
+Depends: librados-dev (= ${binary:Version}), ${misc:Depends},
 Description: RADOS object class development kit.
  .
  This package contains development files needed for building RADOS object class plugins.
 
 Package: cephfs-shell
 Architecture: all
-Depends: ${misc:Depends}
+Depends: ${misc:Depends},
          ${python3:Depends}
 Description: interactive shell for the Ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
@@ -1222,7 +1222,7 @@ Description: interactive shell for the Ceph distributed file system
 
 Package: cephfs-top
 Architecture: all
-Depends: ${misc:Depends}
+Depends: ${misc:Depends},
          ${python3:Depends}
 Description: This package provides a top(1) like utility to display various
  filesystem metrics in realtime.
