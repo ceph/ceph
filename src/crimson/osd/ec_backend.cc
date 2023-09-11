@@ -1,6 +1,7 @@
 #include <boost/iterator/counting_iterator.hpp>
 
 #include "crimson/common/log.h"
+#include "crimson/osd/pg.h"
 #include "crimson/osd/shard_services.h"
 #include "ec_backend.h"
 
@@ -67,9 +68,76 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
 }
 
 ECBackend::write_iertr::future<>
-ECBackend::handle_rep_write_op(Ref<MOSDECSubOpWrite>)
+ECBackend::handle_sub_write(
+  pg_shard_t from,
+  ECSubWrite &&op,
+  crimson::osd::PG& pg)
 {
-  return write_iertr::now();
+  LOG_PREFIX(ECBackend::handle_sub_write);
+  logger().info("{} from {}", __func__, from);
+  if (!op.temp_added.empty()) {
+    add_temp_obj(std::begin(op.temp_added), std::end(op.temp_added));
+  }
+  ceph::os::Transaction txn;
+  if (op.backfill_or_async_recovery) {
+    for (const auto& obj : op.temp_removed) {
+      logger().info("{}: removing object {} since we won't get the transaction",
+		    __func__, obj);
+      txn.remove(coll->get_cid(),
+		 ghobject_t{obj, ghobject_t::NO_GEN, get_shard()});
+    }
+  }
+  clear_temp_objs(op.temp_removed);
+  logger().debug("{}: missing before {}", __func__, "");
+
+  // flag set to true during async recovery
+  bool async = false;
+  if (pg.is_missing_object(op.soid)) {
+    async = true;
+    logger().debug("{}: {} is missing", __func__, op.soid);
+    for (const auto& e: op.log_entries) {
+      logger().debug("{}: add_next_event entry {}, is_delete {}",
+		      __func__, e, e.is_delete());
+      pg.add_local_next_event(e);
+    }
+  }
+  pg.log_operation(
+    std::move(op.log_entries),
+    op.updated_hit_set_history,
+    op.trim_to,
+    op.pg_committed_to,
+    op.pg_committed_to,
+    !op.backfill_or_async_recovery,
+    txn,
+    async);
+  txn.append(op.t); // hack warn
+  logger().debug("{}:{}", __func__, __LINE__);
+  if (op.at_version != eversion_t()) {
+    // dummy rollforward transaction doesn't get at_version
+    // (and doesn't advance it)
+    pg.op_applied(op.at_version);
+  }
+  logger().debug("{}:{}", __func__, __LINE__);
+  return store->do_transaction(coll, std::move(txn)).then([FNAME] {
+    DEBUG("transaction commited!");
+    return write_iertr::now();
+  });
+}
+
+ECBackend::write_iertr::future<>
+ECBackend::handle_rep_write_op(
+  Ref<MOSDECSubOpWrite> m,
+  crimson::osd::PG& pg)
+{
+  LOG_PREFIX(ECBackend::handle_rep_write_op);
+  const auto tid = m->op.tid;
+  DEBUG("tid {} from {}", tid, m->op.from);
+  return handle_sub_write(
+    m->op.from, std::move(m->op), pg
+  ).si_then([&pg] {
+    assert(!pg.pgb_is_primary());
+    return write_iertr::now();
+  }, crimson::ct_error::assert_all{});
 }
 
 ECBackend::write_iertr::future<>
