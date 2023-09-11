@@ -43,6 +43,7 @@
 class MQuery;
 class OSDMap;
 class PGBackend;
+class ECBackend;
 class PGPeeringEvent;
 class osd_op_params_t;
 
@@ -746,6 +747,7 @@ private:
   friend class WatchTimeoutRequest;
   friend class SnapTrimEvent;
   friend class SnapTrimObjSubEvent;
+  friend ECBackend;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
@@ -767,6 +769,10 @@ private:
   const std::set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();
   }
+  void add_local_next_event(const pg_log_entry_t& e) {
+    peering_state.add_local_next_event(e);
+  }
+  void op_applied(const eversion_t &applied_version);
 
 private:
   friend class IOInterruptCondition;

@@ -16,6 +16,10 @@
 #include "osd/osd_types.h"
 #include "pg_backend.h"
 
+namespace crimson::osd {
+  class PG;
+}
+
 class ECBackend : public PGBackend
 {
   static ceph::ErasureCodeInterfaceRef create_ec_impl(
@@ -35,7 +39,9 @@ public:
   }
   void on_actingset_changed(bool same_primary) final {}
 
-  write_iertr::future<> handle_rep_write_op(Ref<MOSDECSubOpWrite>);
+  write_iertr::future<> handle_rep_write_op(
+    Ref<MOSDECSubOpWrite>,
+    crimson::osd::PG& pg);
   write_iertr::future<> handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>);
   ll_read_ierrorator::future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
   ll_read_ierrorator::future<> handle_rep_read_reply(Ref<MOSDECSubOpReadReply>);
@@ -49,11 +55,15 @@ private:
 		      osd_op_params_t&& req,
 		      epoch_t min_epoch, epoch_t max_epoch,
 		      std::vector<pg_log_entry_t>&& log_entries) final;
-  CollectionRef coll;
   seastar::future<> request_committed(const osd_reqid_t& reqid,
 				       const eversion_t& version) final {
     return seastar::now();
   }
+
+  write_iertr::future<> handle_sub_write(
+    pg_shard_t from,
+    ECSubWrite&& op,
+    crimson::osd::PG& pg);
 
   bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
 
