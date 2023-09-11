@@ -335,16 +335,22 @@ Deploy the daemon::
 
   cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 
-Analyzing Core Dumps
+Capturing Core Dumps
 ---------------------
 
-When a Ceph daemon crashes, cephadm supports analyzing core dumps. To enable core dumps, run
+A Ceph cluster that uses cephadm can be configured to capture core dumps.
+Initial capture and processing of the coredump is performed by
+`systemd-coredump <https://www.man7.org/linux/man-pages/man8/systemd-coredump.8.html>`_.
+
+
+To enable coredump handling, run:
 
 .. prompt:: bash #
 
   ulimit -c unlimited
 
-Core dumps will now be written to ``/var/lib/systemd/coredump``.
+Core dumps will be written to ``/var/lib/systemd/coredump``.
+This will persist until the system is rebooted.
 
 .. note::
 
@@ -352,16 +358,35 @@ Core dumps will now be written to ``/var/lib/systemd/coredump``.
   they will be written to ``/var/lib/systemd/coredump`` on
   the container host. 
 
-Now, wait for the crash to happen again. To simulate the crash of a daemon, run e.g. ``killall -3 ceph-mon``.
+Now, wait for the crash to happen again. To simulate the crash of a daemon, run
+e.g. ``killall -3 ceph-mon``.
 
-Install debug packages including ``ceph-debuginfo`` by entering the cephadm shelll::
 
-  # cephadm shell --mount /var/lib/systemd/coredump
-  [ceph: root@host1 /]# dnf install ceph-debuginfo gdb zstd
-  [ceph: root@host1 /]# unzstd /mnt/coredump/core.ceph-*.zst
-  [ceph: root@host1 /]# gdb /usr/bin/ceph-mon /mnt/coredump/core.ceph-...
-  (gdb) bt
-  #0  0x00007fa9117383fc in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
-  #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
-  #2  0x00007fa913d3f48f in AsyncMessenger::wait() () from /usr/lib64/ceph/libceph-common.so.2
-  #3  0x0000563085ca3d7e in main ()
+Running the Debugger with cephadm
+----------------------------------
+
+Running a single debugging session
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+One can initiate a debugging session using the ``cephadm shell`` command.
+From within the shell container we need to install the debugger and debuginfo
+packages. To debug a core file captured by systemd, run the following:
+
+.. prompt:: bash #
+
+    # start the shell session
+    cephadm shell --mount /var/lib/system/coredump
+    # within the shell:
+    dnf install ceph-debuginfo gdb zstd
+    unzstd /var/lib/systemd/coredump/core.ceph-*.zst
+    gdb /usr/bin/ceph-mon /mnt/coredump/core.ceph-*.zst
+
+You can then run debugger commands at gdb's prompt.
+
+.. prompt::
+
+    (gdb) bt
+    #0  0x00007fa9117383fc in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+    #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
+    #2  0x00007fa913d3f48f in AsyncMessenger::wait() () from /usr/lib64/ceph/libceph-common.so.2
+    #3  0x0000563085ca3d7e in main ()
