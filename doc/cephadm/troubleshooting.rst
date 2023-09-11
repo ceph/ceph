@@ -390,3 +390,78 @@ You can then run debugger commands at gdb's prompt.
     #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
     #2  0x00007fa913d3f48f in AsyncMessenger::wait() () from /usr/lib64/ceph/libceph-common.so.2
     #3  0x0000563085ca3d7e in main ()
+
+
+Running repeated debugging sessions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When using ``cephadm shell``, like in the example above, the changes made to
+the container the shell command spawned are ephemeral. Once the shell session
+exits all of the files that were downloaded and installed are no longer
+available. One can simply re-run the same commands every time ``cephadm shell``
+is invoked, but in order to save time and resources one can create a new
+container image and use it for repeated debugging sessions.
+
+In the following example we create a simple file for constructing the
+container image. The command below uses podman but it should work correctly
+if ``podman`` is replaced with ``docker``.
+
+.. prompt:: bash
+
+  cat >Containerfile <<EOF
+  ARG BASE_IMG=quay.io/ceph/ceph:v18
+  FROM \${BASE_IMG}
+  # install ceph debuginfo packages, gdb and other potentially useful packages
+  RUN dnf install --enablerepo='*debug*' -y ceph-debuginfo gdb zstd strace python3-debuginfo
+  EOF
+  podman build -t ceph:debugging -f Containerfile .
+  # pass --build-arg=BASE_IMG=<your image> to customize the base image
+
+The result should be a new local image named ``ceph:debugging``. This image can
+be used on the same machine that built it. Later, the image could be pushed to
+a container repository, or saved and copied to a node runing other ceph
+containers. Please consult the documentation for ``podman`` or ``docker`` for
+more details on the general container workflow.
+
+Once the image has been built it can be used to initiate repeat debugging
+sessions without having to re-install the debug tools and debuginfo packages.
+To debug a core file using this image, in the same way as previously described,
+run:
+
+.. prompt:: bash #
+
+    cephadm --image ceph:debugging shell --mount /var/lib/system/coredump
+
+
+Debugging live processes
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The gdb debugger has the ability to attach to running processes to debug them.
+For a containerized process this can be accomplished by using the debug image
+and attaching it to the same PID namespace as the process to be debugged.
+
+This requires running a container command with some custom arguments. We can generate a script that can debug a process in a running container.
+
+.. prompt:: bash #
+
+   cephadm --image ceph:debugging shell --dry-run > /tmp/debug.sh
+
+This creates a script with the container command cephadm would use to create a
+shell. Now, modify the script by removing the ``--init`` argument and replace
+that with the argument to join to the namespace used for a running running
+container.  For example, let's assume we want to debug the MGR, and have
+determnined that the MGR is running in a container named
+``ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``. The new
+argument
+``--pid=container:ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``
+should be used.
+
+Now, we can run our debugging container with ``sh /tmp/debug.sh``. Within the shell
+we can run commands such as ``ps`` to get the PID of the MGR process. In the following
+example this will be ``2``. Running gdb, we can now attach to the running process:
+
+.. prompt:: bash (gdb)
+
+   attach 2
+   info threads
+   bt
