@@ -559,7 +559,7 @@ ReplicatedRecoveryBackend::read_metadata_for_push_op(
     eversion_t ver,
     PushOp* push_op)
 {
-  logger().debug("{}, {}", __func__, oid);
+  logger().debug("{}, {} progress.first {}", __func__, oid, progress.first);
   if (!progress.first) {
     return seastar::make_ready_future<eversion_t>(ver);
   }

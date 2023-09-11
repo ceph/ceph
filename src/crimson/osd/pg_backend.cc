@@ -16,6 +16,8 @@
 #include "os/Transaction.h"
 #include "common/Checksummer.h"
 #include "common/Clock.h"
+#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCodePlugin.h"
 
 #include "crimson/common/exception.h"
 #include "crimson/common/tmap_helpers.h"
@@ -77,7 +79,9 @@ PGBackend::PGBackend(pg_shard_t whoami,
     shard_services{shard_services},
     dpp{dpp},
     store{&shard_services.get_store()}
-{}
+{
+  logger().info("initialized PGBackend::store with {}", (void*)this->store);
+}
 
 PGBackend::load_metadata_iertr::future
   <PGBackend::loaded_object_md_t::ref>
