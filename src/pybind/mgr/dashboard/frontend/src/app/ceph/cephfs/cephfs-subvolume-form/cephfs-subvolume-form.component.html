@@ -43,6 +43,26 @@
           </div>
         </div>
 
+          <!--Subvolume Group name -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="subvolumeGroupName"
+                   i18n>Subvolume group
+            </label>
+            <div class="cd-col-form-input">
+              <select class="form-select"
+                      id="subvolumeGroupName"
+                      name="subvolumeGroupName"
+                      formControlName="subvolumeGroupName"
+                      *ngIf="subVolumeGroups$ | async as subvolumeGroups">
+                <option value=""
+                        i18n>Default</option>
+                <option *ngFor="let subvolumegroup of subvolumeGroups"
+                        [value]="subvolumegroup.name">{{ subvolumegroup.name }}</option>
+              </select>
+            </div>
+          </div>
+
         <!-- Size -->
         <div class="form-group row">
           <label class="cd-col-form-label"
