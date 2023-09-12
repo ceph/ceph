@@ -831,9 +831,6 @@ Message *decode_message(CephContext *cct,
     break;
 
 
-  case MSG_MDS_DENTRYUNLINK_ACK:
-    m = make_message<MDentryUnlinkAck>();
-    break;
   case MSG_MDS_DENTRYUNLINK:
     m = make_message<MDentryUnlink>();
     break;
