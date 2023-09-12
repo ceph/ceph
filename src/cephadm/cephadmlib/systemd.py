@@ -19,8 +19,11 @@ def check_unit(ctx, unit_name):
     enabled = False
     installed = False
     try:
-        out, err, code = call(ctx, ['systemctl', 'is-enabled', unit_name],
-                              verbosity=CallVerbosity.QUIET)
+        out, err, code = call(
+            ctx,
+            ['systemctl', 'is-enabled', unit_name],
+            verbosity=CallVerbosity.QUIET,
+        )
         if code == 0:
             enabled = True
             installed = True
@@ -33,8 +36,11 @@ def check_unit(ctx, unit_name):
 
     state = 'unknown'
     try:
-        out, err, code = call(ctx, ['systemctl', 'is-active', unit_name],
-                              verbosity=CallVerbosity.QUIET)
+        out, err, code = call(
+            ctx,
+            ['systemctl', 'is-active', unit_name],
+            verbosity=CallVerbosity.QUIET,
+        )
         out = out.strip()
         if out in ['active']:
             state = 'running'
