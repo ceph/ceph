@@ -105,6 +105,7 @@ class BlockDirectory: public Directory {
     int copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y);
     int del(CacheBlock* block, optional_yield y);
     int update_field(CacheBlock* block, std::string field, std::string value, optional_yield y);
+    int remove_host(CacheBlock* block, std::string value, optional_yield y);
 
   private:
     std::shared_ptr<connection> conn;

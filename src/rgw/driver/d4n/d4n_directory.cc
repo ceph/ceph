@@ -256,7 +256,7 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   std::string key = build_index(block);
     
   /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
-  std::string endpoint = cct->_conf->rgw_d4n_host + ":" + std::to_string(cct->_conf->rgw_d4n_port);
+  std::string endpoint;
   std::list<std::string> redisValues;
     
   /* Creating a redisValues of the entry's properties */
@@ -267,6 +267,15 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   redisValues.push_back("globalWeight");
   redisValues.push_back(std::to_string(block->globalWeight));
   redisValues.push_back("blockHosts");
+  
+  for (auto const& host : block->hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
+  }
+
+  endpoint.pop_back();
   redisValues.push_back(endpoint); // Set in filter -Sam
 
   redisValues.push_back("objName");
@@ -278,6 +287,16 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   redisValues.push_back("dirty");
   redisValues.push_back(std::to_string(block->cacheObj.dirty));
   redisValues.push_back("objHosts");
+  
+  endpoint.clear();
+  for (auto const& host : block->cacheObj.hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
+  }
+
+  endpoint.pop_back();
   redisValues.push_back(endpoint); // Set in filter -Sam
 
   try {
@@ -333,6 +352,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y) {
 
       {
         std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[3]));
+	block->hostsList.clear();
 
 	while (!ss.eof()) {
           std::string host;
@@ -348,6 +368,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y) {
 
       {
         std::stringstream ss(boost::lexical_cast<std::string>(std::get<0>(resp).value()[8]));
+	block->cacheObj.hostsList.clear();
 
 	while (!ss.eof()) {
           std::string host;
@@ -450,7 +471,7 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	  return -1;
       }
 
-      if (field == "blockHosts" || field == "objHosts") {
+      if (field == "blockHosts") { // Need one for object hosts? -Sam
 	/* Append rather than overwrite */
 	boost::system::error_code ec;
 	request req;
@@ -480,6 +501,73 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	}
 
 	return std::get<0>(resp).value(); /* Zero fields added since it is an update of an existing field */ 
+      }
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    return -2;
+  }
+}
+
+int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optional_yield y) {
+  std::string key = build_index(block);
+
+  if (exist_key(block, y)) {
+    try {
+      /* Ensure field exists */
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HEXISTS", key, "blockHosts");
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value() || (bool)ec)
+	  return -1;
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HGET", key, "blockHosts");
+	response<std::string> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value().size() || (bool)ec)
+	  return -1;
+
+	if (std::get<0>(resp).value().find("_") == std::string::npos) /* Last host, delete entirely */
+          return del(block, y);
+
+        std::string result = std::get<0>(resp).value();
+        auto it = result.find(delValue);
+        if (it != std::string::npos) 
+          result.erase(result.begin() + it, result.begin() + it + delValue.size());
+        else
+          return -1;
+
+        if (result[0] == '_')
+          result.erase(0, 1);
+
+	delValue = result;
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push_range("HSET", key, std::map<std::string, std::string>{{"blockHosts", delValue}});
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if ((bool)ec) {
+	  return -1;
+	}
+
+	return std::get<0>(resp).value();
       }
     } catch(std::exception &e) {
       return -1;
