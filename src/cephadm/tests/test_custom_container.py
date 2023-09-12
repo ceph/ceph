@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from .fixtures import (
     cephadm_fs,
@@ -96,8 +97,12 @@ class TestCustomContainer(unittest.TestCase):
 
 
 def test_deploy_custom_container(cephadm_fs):
+    m1 = mock.patch(
+        'cephadmlib.container_types.call', return_value=('', '', 0)
+    )
+    m2 = mock.patch('cephadmlib.container_types.call_throws', return_value=0)
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
-    with with_cephadm_ctx([]) as ctx:
+    with with_cephadm_ctx([]) as ctx, m1, m2:
         ctx.container_engine = mock_podman()
         ctx.fsid = fsid
         ctx.name = 'container.tdcc'
@@ -138,8 +143,12 @@ def test_deploy_custom_container(cephadm_fs):
 
 
 def test_deploy_custom_container_and_inits(cephadm_fs):
+    m1 = mock.patch(
+        'cephadmlib.container_types.call', return_value=('', '', 0)
+    )
+    m2 = mock.patch('cephadmlib.container_types.call_throws', return_value=0)
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
-    with with_cephadm_ctx([]) as ctx:
+    with with_cephadm_ctx([]) as ctx, m1, m2:
         ctx.container_engine = mock_podman()
         ctx.fsid = fsid
         ctx.name = 'container.tdccai'
