@@ -13,13 +13,18 @@ export class CephfsSubvolumeService {
 
   constructor(private http: HttpClient) {}
 
-  get(fsName: string): Observable<CephfsSubvolume[]> {
-    return this.http.get<CephfsSubvolume[]>(`${this.baseURL}/${fsName}`);
+  get(fsName: string, subVolumeGroupName: string = ''): Observable<CephfsSubvolume[]> {
+    return this.http.get<CephfsSubvolume[]>(`${this.baseURL}/${fsName}`, {
+      params: {
+        group_name: subVolumeGroupName
+      }
+    });
   }
 
   create(
     fsName: string,
     subVolumeName: string,
+    subVolumeGroupName: string,
     poolName: string,
     size: string,
     uid: number,
@@ -32,6 +37,7 @@ export class CephfsSubvolumeService {
       {
         vol_name: fsName,
         subvol_name: subVolumeName,
+        group_name: subVolumeGroupName,
         pool_layout: poolName,
         size: size,
         uid: uid,
@@ -43,18 +49,25 @@ export class CephfsSubvolumeService {
     );
   }
 
-  info(fsName: string, subVolumeName: string) {
+  info(fsName: string, subVolumeName: string, subVolumeGroupName: string = '') {
     return this.http.get(`${this.baseURL}/${fsName}/info`, {
       params: {
-        subvol_name: subVolumeName
+        subvol_name: subVolumeName,
+        group_name: subVolumeGroupName
       }
     });
   }
 
-  remove(fsName: string, subVolumeName: string, retainSnapshots: boolean = false) {
+  remove(
+    fsName: string,
+    subVolumeName: string,
+    subVolumeGroupName: string = '',
+    retainSnapshots: boolean = false
+  ) {
     return this.http.delete(`${this.baseURL}/${fsName}`, {
       params: {
         subvol_name: subVolumeName,
+        group_name: subVolumeGroupName,
         retain_snapshots: retainSnapshots
       },
       observe: 'response'
@@ -73,10 +86,11 @@ export class CephfsSubvolumeService {
     );
   }
 
-  update(fsName: string, subVolumeName: string, size: string) {
+  update(fsName: string, subVolumeName: string, size: string, subVolumeGroupName: string = '') {
     return this.http.put(`${this.baseURL}/${fsName}`, {
       subvol_name: subVolumeName,
-      size: size
+      size: size,
+      group_name: subVolumeGroupName
     });
   }
 }
