@@ -11247,19 +11247,15 @@ void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)
 
 void OSD::ShardedOpWQ::stop_for_fast_shutdown()
 {
-  uint32_t shard_index = 0;
   m_fast_shutdown = true;
 
-  for (; shard_index < osd->num_shards; shard_index++) {
+  for (int shard_index = 0; shard_index < osd->num_shards; shard_index++) {
     auto& sdata = osd->shards[shard_index];
     ceph_assert(sdata);
-    sdata->shard_lock.lock();
-    int work_count = 0;
-    while(! sdata->scheduler->empty() ) {
-      auto work_item = sdata->scheduler->dequeue();
-      work_count++;
+    std::lock_guard l(sdata->shard_lock);
+    while (!sdata->scheduler->empty()) {
+      sdata->scheduler->dequeue();
     }
-    sdata->shard_lock.unlock();
   }
 }
 
