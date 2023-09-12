@@ -44,6 +44,11 @@
   a large buildup of session metadata resulting in the MDS going read-only due to
   the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`
   config controls the maximum size that a (encoded) session metadata can grow.
+* CephFS: For clusters with multiple CephFS file systems, all the snap-schedule
+  commands now expect the '--fs' argument.
+* CephFS: The period specifier ``m`` now implies minutes and the period specifier
+  ``M`` now implies months. This has been made consistent with the rest
+  of the system.
 
 * RADOS: `get_pool_is_selfmanaged_snaps_mode` C++ API has been deprecated
   due to being prone to false negative results.  It's safer replacement is
