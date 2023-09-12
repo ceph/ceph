@@ -6812,7 +6812,6 @@ bool Server::is_unlink_pending(CDentry *dn)
 
 void Server::wait_for_pending_unlink(CDentry *dn, MDRequestRef& mdr)
 {
-  dout(20) << __func__ << " dn " << *dn << dendl;
   mds->locker->drop_locks(mdr.get());
   auto fin = new C_MDS_RetryRequest(mdcache, mdr);
   dn->get(CDentry::PIN_PURGING);
@@ -7907,13 +7906,11 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (rmdir) {
       // do empty directory checks
       if (_dir_is_nonempty_unlocked(mdr, in)) {
-        dn->state_clear(CDentry::STATE_UNLINKING);
-        respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+	respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
 	return;
       }
     } else {
       dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << dendl;
-      dn->state_clear(CDentry::STATE_UNLINKING);
       respond_to_request(mdr, -CEPHFS_EISDIR);
       return;
     }
@@ -7921,7 +7918,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (rmdir) {
       // unlink
       dout(7) << "handle_client_rmdir on non-dir " << *in << ", returning error" << dendl;
-      dn->state_clear(CDentry::STATE_UNLINKING);
       respond_to_request(mdr, -CEPHFS_ENOTDIR);
       return;
     }
@@ -7929,10 +7925,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   CInode *diri = dn->get_dir()->get_inode();
   if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
-    if (!check_access(mdr, diri, MAY_WRITE)) {
-      dn->state_clear(CDentry::STATE_UNLINKING);
+    if (!check_access(mdr, diri, MAY_WRITE))
       return;
-    }
   }
 
   // -- create stray dentry? --
@@ -7971,7 +7965,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (in->is_dir() &&
       _dir_is_nonempty(mdr, in)) {
     respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
-    dn->state_clear(CDentry::STATE_UNLINKING);
     return;
   }
 
