@@ -1,5 +1,7 @@
-#include "../../../common/async/yield_context.h"
 #include "d4n_policy.h"
+
+#include <boost/lexical_cast.hpp>
+#include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
 
 namespace rgw { namespace d4n {
@@ -75,7 +77,7 @@ int LFUDAPolicy::get_age(optional_yield y) {
   }
 
   if (!std::get<0>(resp).value()) {
-    if (!set_age(0, y)) /* Initialize age */
+    if (set_age(0, y)) /* Initialize age */
       return 0;
     else
       return -1;
@@ -117,7 +119,7 @@ int LFUDAPolicy::set_min_avg_weight(size_t weight, std::string cacheLocation, op
     boost::system::error_code ec;
     response<int> resp;
     request req;
-    req.push("HSET", "lfuda", "minAvgWeight:weight", cacheLocation);
+    req.push("HSET", "lfuda", "minAvgWeight:weight", boost::lexical_cast<int>(weight));
 
     redis_exec(conn, ec, req, resp, y);
 
@@ -147,7 +149,8 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
   }
 
   if (!std::get<0>(resp).value()) {
-    if (!set_min_avg_weight(INT_MAX, ""/* local cache location or keep empty? */, y)) { /* Initialize minimum average weight */
+    // Is int_max what we want here? -Sam
+    if (set_min_avg_weight(INT_MAX, ""/* local cache location or keep empty? */, y)) { /* Initialize minimum average weight */
       return INT_MAX;
     } else {
       return -1;
@@ -172,12 +175,17 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
+  if (entries_map.empty())
+    return {};
+
   auto it = std::min_element(std::begin(entries_map), std::end(entries_map),
 			      [](const auto& l, const auto& r) { return l.second->localWeight < r.second->localWeight; });
 
   /* Get victim cache block */
   CacheBlock victim;
   victim.cacheObj.objName = it->second->key;
+  victim.cacheObj.bucketName = cacheNode->get_attr(dpp, victim.cacheObj.objName, "bucket_name", y); // generalize for other cache backends -Sam
+  victim.version = 0; // TODO: figure out how to get version
 
   if (dir->get(&victim, y) < 0) {
     return {};
@@ -212,15 +220,18 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
   } else {
     uint64_t freeSpace = cacheNode->get_free_space(dpp);
 
-    while (freeSpace < block->size) /* Not enough space in local cache */
-      freeSpace += eviction(dpp, cacheNode, y);
+    while (freeSpace < block->size) { /* Not enough space in local cache */
+      if (int ret = eviction(dpp, cacheNode, y) > 0)
+        freeSpace += ret;
+      else 
+        return -1;
+    }
 
     int exists = dir->exist_key(block, y);
     if (exists > 0) { /* Remote copy */
       if (dir->get(block, y) < 0) {
 	return -1;
       } else {
-	// should not hold local cache IP if in this else statement -Sam
 	if (!block->hostsList.empty()) { 
 	  block->globalWeight += age;
 	  
@@ -251,66 +262,61 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 
   if (victim.cacheObj.objName.empty()) {
     ldpp_dout(dpp, 10) << "RGW D4N Policy: Could not find victim block" << dendl;
-    return -1; // return is unsigned so errors don't return -Sam
+    return 0; /* Return zero for failure */
   }
 
   auto it = entries_map.find(victim.cacheObj.objName); // change to block name eventually -Sam
   if (it == entries_map.end()) {
-    return -1;
+    return 0;
   }
 
-  int localWeight = it->second->localWeight; 
   int avgWeight = get_min_avg_weight(y);
   if (avgWeight < 0) {
-    return -1;
+    return 0;
   }
 
-  if (dir->get(&victim, y) < 0) {
-    return -1;
+  if (victim.hostsList.size() == 1 && victim.hostsList[0] == "127.0.0.1:6379" /* local cache address */) { /* Last copy */
+    if (victim.globalWeight) {
+      it->second->localWeight += victim.globalWeight;
+      if (cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y) < 0) {
+	return 0;
+      }
+
+      victim.globalWeight = 0;
+      if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) {
+	return 0;
+      }
+    }
+
+    if (it->second->localWeight > avgWeight) {
+      // Todo: push victim block to remote cache
+    }
+  }
+
+  victim.globalWeight += it->second->localWeight;
+  if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) { // just have one update? -Sam
+    return 0;
+  }
+
+  ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
+
+  if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0 && dir->remove_host(&victim, ""/* local cache address */, y) < 0) {
+    return 0;
   } else {
-    if (victim.hostsList.size() == 1 && victim.hostsList[0] == "" /* local cache address */) { /* Last copy */
-      if (victim.globalWeight) {
-	localWeight += victim.globalWeight;
-	if (cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(localWeight), y) < 0) {
-	  return -1;
-	}
+    uint64_t num_entries = entries_map.size();
 
-	victim.globalWeight = 0;
-	if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) {
-	  return -1;
-	}
-      }
-
-      if (localWeight > avgWeight) {
-	// push victim block to remote cache
-      }
-    }
-
-    victim.globalWeight += localWeight;
-    if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) { // just have one update? -Sam
-      return -1;
-    }
-
-    ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
-
-    if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0) {
-      return -1;
+    if (set_min_avg_weight(avgWeight - (it->second->localWeight/num_entries), ""/*local cache location*/, y) < 0) { // Where else must this be set? -Sam 
+      return 0;
     } else {
-      uint64_t num_entries = entries_map.size();
-
-      if (set_min_avg_weight(avgWeight - (localWeight/num_entries), ""/*local cache location*/, y) < 0) { // Where else must this be set? -Sam 
-	return -1;
-      } else {
-	int age = get_age(y);
-	age = std::max(localWeight, age);
-	if (set_age(age, y) < 0) {
-	  return -1;
-        }
+      int age = get_age(y);
+      age = std::max(it->second->localWeight, age);
+      if (set_age(age, y) < 0) {
+	return 0;
       }
     }
   }
 
-  return victim.size;
+  return victim.size; // this doesn't account for the additional attributes that were removed and need to be set with the new block -Sam
 }
 
 void LFUDAPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y)
@@ -318,10 +324,7 @@ void LFUDAPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64
   erase(dpp, key);
 
   int age = get_age(y);
-  if (age < 0) {
-    assert(set_age(0, y) > 0);
-    age = 0;
-  }
+  assert(age > -1);
   
   LFUDAEntry *e = new LFUDAEntry(key, offset, len, age);
   entries_lfuda_list.push_back(*e);
@@ -366,6 +369,7 @@ uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDri
   return cacheNode->get_free_space(dpp);
 }
 
+// why do we need cache node here? -Sam
 void LRUPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y)
 {
   erase(dpp, key);
