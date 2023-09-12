@@ -32,8 +32,6 @@ class RedisDriver : public CacheDriver {
       remove_partition_info(partition_info);
     }
 
-    //int update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight); // may need to exist for base class -Sam
-
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; } // how to get this from redis server? -Sam
@@ -84,6 +82,7 @@ class RedisDriver : public CacheDriver {
 
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
+    uint64_t calculate_free_space(const DoutPrefixProvider* dpp, optional_yield y); 
 };
 
 } } // namespace rgw::cache

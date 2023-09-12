@@ -62,6 +62,45 @@ void redis_exec(std::shared_ptr<connection> conn, boost::system::error_code& ec,
   }
 }
 
+uint64_t RedisDriver::calculate_free_space(const DoutPrefixProvider* dpp, optional_yield y) 
+{
+  try {
+    boost::system::error_code ec;
+    response< std::vector<std::string> > resp;
+    request req;
+    req.push("INFO"); // how to change to a specific petition of redis? -Sam
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return -1;
+
+    long int usedMem = -1;
+    long int maxMem = -1;
+
+    std::istringstream iss(std::get<0>(resp).value()[0]);
+    std::string line;    
+    while (std::getline(iss, line)) {
+      size_t pos = line.find_first_of(":");
+      if (pos != std::string::npos) {
+	if (line.substr(0, pos) == "used_memory") {
+	  usedMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
+	} else if (line.substr(0, line.find_first_of(":")) == "maxmemory") {
+	  maxMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
+	} 
+      }
+    }
+
+    maxMem = 8589934592; // TODO: Configure this somehow
+    if (usedMem > -1 && maxMem > -1)
+      return maxMem - usedMem;
+    else
+      return 0; /* Return 0 for failures so nothing is affected */
+  } catch(std::exception &e) {
+    return 0;
+  }
+}
+
 int RedisDriver::add_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
@@ -75,47 +114,6 @@ int RedisDriver::remove_partition_info(Partition& info)
   std::string key = info.name + info.type;
   return partitions.erase(key);
 }
-
-/*
-uint64_t RedisDriver::get_free_space(const DoutPrefixProvider* dpp) 
-{
-  int result = -1;
-
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  try {
-    client.info([&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        int usedMem = -1;
-	int maxMem = -1;
-
-        std::istringstream iss(reply.as_string());
-	std::string line;    
-        while (std::getline(iss, line)) {
-	  size_t pos = line.find_first_of(":");
-	  if (pos != std::string::npos) {
-	    if (line.substr(0, pos) == "used_memory") {
-	      usedMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
-	    } else if (line.substr(0, line.find_first_of(":")) == "maxmemory") {
-	      maxMem = std::stoi(line.substr(pos + 1, line.length() - pos - 2));
-	    } 
-	  }
-        }
-
-	if (usedMem > -1 && maxMem > -1)
-	  result = maxMem - usedMem;
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-  } catch(std::exception &e) {
-    return -1;
-  }
-
-  return result;
-}
-*/
 
 std::optional<Partition> RedisDriver::get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type)
 {
@@ -137,20 +135,6 @@ std::vector<Partition> RedisDriver::list_partitions(const DoutPrefixProvider* dp
 
   return partitions_v;
 }
-
-/* Currently an attribute but will also be part of the Entry metadata once consistency is guaranteed -Sam
-int RedisDriver::update_local_weight(const DoutPrefixProvider* dpp, std::string key, int localWeight) 
-{
-  auto iter = entries.find(key);
-
-  if (iter != entries.end()) {
-    iter->second.localWeight = localWeight;
-    return 0;
-  }
-
-  return -1;
-}
-*/
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
 {
@@ -201,7 +185,8 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
     return -1;
   }
 
-  return 0; // why is offset necessarily 0? -Sam
+  this->free_space = calculate_free_space(dpp, y); // what if this fails? -Sam
+  return 0;
 }
 
 int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) 
@@ -252,6 +237,7 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, opti
     if (ec)
       return -1;
 
+    this->free_space = calculate_free_space(dpp, y);
     return std::get<0>(resp).value() - 1; 
   } catch(std::exception &e) {
     return -1;
@@ -297,6 +283,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
     return -1;
   }
 
+  this->free_space = calculate_free_space(dpp, y);
   return 0;
 }
 
@@ -335,6 +322,7 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
     }
   }
 
+  this->free_space = calculate_free_space(dpp, y);
   return 0;
 }
 
@@ -394,6 +382,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
     return -1;
   }
 
+  this->free_space = calculate_free_space(dpp, y);
   return 0;
 }
 
@@ -418,6 +407,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
     return -1;
   }
 
+  this->free_space = calculate_free_space(dpp, y);
   return 0;
 }
 
@@ -438,6 +428,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
     if (ec)
       return -1;
 
+    this->free_space = calculate_free_space(dpp, y);
     return std::get<0>(resp).value(); 
   } catch(std::exception &e) {
     return -1;
@@ -505,6 +496,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
     return -1;
   }
 
+  this->free_space = calculate_free_space(dpp, y);
   return std::get<0>(resp).value();
 }
 
