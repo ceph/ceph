@@ -330,6 +330,13 @@
 	Pools
                 See :term:`pool`.
 
+	:ref:`Primary Affinity <rados_ops_primary_affinity>`
+                The characteristic of an OSD that governs the likelihood that
+                a given OSD will be selected as the primary OSD (or "lead
+                OSD") in an acting set. Primary affinity was introduced in
+                Firefly (v. 0.80). See :ref:`Primary Affinity
+                <rados_ops_primary_affinity>`.
+
 	RADOS
                 **R**\eliable **A**\utonomic **D**\istributed **O**\bject
                 **S**\tore. RADOS is the object store that provides a scalable
