@@ -167,7 +167,7 @@ public:
   void set_primary_device_ref(DeviceRef) final;
 };
 
-class EphemeralTestState {
+class EphemeralTestState : public ::testing::WithParamInterface<const char*> {
 protected:
   journal_type_t journal_type;
   size_t num_main_device_managers = 0;
@@ -209,16 +209,15 @@ protected:
     restart_fut().get0();
   }
 
-  seastar::future<> tm_setup(
-    journal_type_t type = journal_type_t::SEGMENTED) {
+  seastar::future<> tm_setup() {
     LOG_PREFIX(EphemeralTestState::tm_setup);
-    journal_type = type;
-    if (journal_type == journal_type_t::SEGMENTED) {
+    std::string j_type = GetParam();
+    if (j_type == "segmented") {
       devices.reset(new
         EphemeralSegmentedDevices(
           num_main_device_managers, num_cold_device_managers));
     } else {
-      assert(journal_type == journal_type_t::RANDOM_BLOCK);
+      assert(j_type == "circularbounded");
       //TODO: multiple devices
       ceph_assert(num_main_device_managers == 1);
       ceph_assert(num_cold_device_managers == 0);
