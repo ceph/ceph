@@ -36,8 +36,12 @@ class CBTperformance:
         for cbt_results in cbt_results_arry:
             cbt_results = json.loads(json.dumps(cbt_results))
             if cbt_results:
+                crimson_run = False
+                if ctx.config.get('flavor', 'default') == 'crimson':
+                    crimson_run = True
                 data = {
                     "job_id" : ctx.config.get('job_id', None),
+                    "crimson_run" : crimson_run,
                     "started_at" : ctx.config.get('timestamp', None),
                     "benchmark_mode" : cbt_results.get("Benchmark_mode", None),
                     "seq" : cbt_results.get("seq", None),
@@ -149,4 +153,4 @@ class CBTperformance:
         job_id = ctx.config.get('job_id', None)
         branch = ctx.config.get('branch', None)
 
-        return f'{server}:{grafana_port}/d/{Dash_id}?orgId=1&var-branch_name={branch}&var-job_id_selected={job_id}'
+        return f'{server}:{grafana_port}/d/{Dash_id}?orgId=1&var-branch_name={branch}&var-job_id_selected1={job_id}'
