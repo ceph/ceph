@@ -738,7 +738,67 @@ private:
   bool use_netlink;
   librados::IoCtx &io_ctx;
   librbd::Image &image;
-  unsigned long size;
+  uint64_t size;
+  std::thread handle_notify_thread;
+  ceph::condition_variable cond;
+  ceph::mutex lock = ceph::make_mutex("NBDWatchCtx::Locker");
+  bool notify = false;
+  bool terminated = false;
+
+  bool wait_notify() {
+    dout(10) << __func__ << dendl;
+
+    std::unique_lock locker{lock};
+    cond.wait(locker, [this] { return notify || terminated; });
+
+    if (terminated) {
+      return false;
+    }
+
+    dout(10) << __func__ << ": got notify request" << dendl;
+    notify = false;
+    return true;
+  }
+
+  void handle_notify_entry() {
+    dout(10) << __func__ << dendl;
+
+    while (wait_notify()) {
+      uint64_t new_size;
+      int ret = image.size(&new_size);
+      if (ret < 0) {
+        derr << "getting image size failed: " << cpp_strerror(ret) << dendl;
+        continue;
+      }
+      if (new_size == size) {
+        continue;
+      }
+      dout(5) << "resize detected" << dendl;
+      if (ioctl(fd, BLKFLSBUF, NULL) < 0) {
+        derr << "invalidate page cache failed: " << cpp_strerror(errno)
+             << dendl;
+      }
+      if (use_netlink) {
+        ret = netlink_resize(nbd_index, new_size);
+      } else {
+        ret = ioctl(fd, NBD_SET_SIZE, new_size);
+        if (ret < 0) {
+          derr << "resize failed: " << cpp_strerror(errno) << dendl;
+        }
+      }
+      if (!ret) {
+        size = new_size;
+      }
+      if (ioctl(fd, BLKRRPART, NULL) < 0) {
+        derr << "rescan of partition table failed: " << cpp_strerror(errno)
+             << dendl;
+      }
+      if (image.invalidate_cache() < 0) {
+        derr << "invalidate rbd cache failed" << dendl;
+      }
+    }
+  }
+
 public:
   NBDWatchCtx(int _fd,
               int _nbd_index,
@@ -752,41 +812,31 @@ public:
     , io_ctx(_io_ctx)
     , image(_image)
     , size(_size)
-  { }
+  {
+    handle_notify_thread = make_named_thread("rbd_handle_notify",
+                                             &NBDWatchCtx::handle_notify_entry,
+                                             this);
+  }
 
-  ~NBDWatchCtx() override {}
+  ~NBDWatchCtx() override
+  {
+    dout(10) << __func__ << ": terminating" << dendl;
+    std::unique_lock locker{lock};
+    terminated = true;
+    cond.notify_all();
+    locker.unlock();
+
+    handle_notify_thread.join();
+    dout(10) << __func__ << ": finish" << dendl;
+  }
 
   void handle_notify() override
   {
-    librbd::image_info_t info;
-    if (image.stat(info, sizeof(info)) == 0) {
-      unsigned long new_size = info.size;
-      int ret;
+    dout(10) << __func__ << dendl;
 
-      if (new_size != size) {
-        dout(5) << "resize detected" << dendl;
-        if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-          derr << "invalidate page cache failed: " << cpp_strerror(errno)
-               << dendl;
-	if (use_netlink) {
-	  ret = netlink_resize(nbd_index, new_size);
-	} else {
-          ret = ioctl(fd, NBD_SET_SIZE, new_size);
-          if (ret < 0)
-            derr << "resize failed: " << cpp_strerror(errno) << dendl;
-	}
-
-        if (!ret)
-          size = new_size;
-
-        if (ioctl(fd, BLKRRPART, NULL) < 0) {
-          derr << "rescan of partition table failed: " << cpp_strerror(errno)
-               << dendl;
-        }
-        if (image.invalidate_cache() < 0)
-          derr << "invalidate rbd cache failed" << dendl;
-      }
-    }
+    std::unique_lock locker{lock};
+    notify = true;
+    cond.notify_all();
   }
 };
 
