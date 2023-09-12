@@ -100,6 +100,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
       ],
       yAxes: [
         {
+          afterFit: (scaleInstance: any) => (scaleInstance.width = 100),
           gridLines: {
             display: false
           },
@@ -110,7 +111,7 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
               if (value === 0) {
                 return null;
               }
-              return this.fillString(this.convertUnits(value));
+              return this.convertUnits(value);
             }
           }
         }
@@ -240,18 +241,6 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
     return dataWithUnits;
   }
 
-  private fillString(str: string): string {
-    let maxNumberOfChar: number = 8;
-    let numberOfChars: number = str.length;
-    if (str.length < 4) {
-      maxNumberOfChar = 11;
-    }
-    for (; numberOfChars < maxNumberOfChar; numberOfChars++) {
-      str = '\u00A0' + str;
-    }
-    return str + '\u00A0\u00A0';
-  }
-
   private setChartTicks() {
     if (!this.chart) {
       return;
@@ -285,9 +274,9 @@ export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
         return null;
       }
       if (!maxValueDataUnits) {
-        return this.fillString(`${value}`);
+        return `${value}`;
       }
-      return this.fillString(`${value} ${maxValueDataUnits}`);
+      return `${value} ${maxValueDataUnits}`;
     };
     this.chartDataUnits = maxValueDataUnits || '';
     this.chart.chart.update();
