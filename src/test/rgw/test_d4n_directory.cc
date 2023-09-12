@@ -405,19 +405,60 @@ TEST_F(BlockDirectoryFixture, UpdateFieldYield)
     ASSERT_EQ(0, dir->update_field(block, "blockHosts", "127.0.0.1:5000", optional_yield{io, yield}));
     dir->shutdown();
 
+    boost::system::error_code ec;
+    request req;
+    req.push("HMGET", "testBucket_testName_0", "objName", "blockHosts");
+    req.push("FLUSHALL");
+    response< std::vector<std::string>, 
+	      boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value()[0], "newTestName");
+    EXPECT_EQ(std::get<0>(resp).value()[1], "127.0.0.1:6379_127.0.0.1:5000");
+
+    conn->cancel();
+  });
+
+  io.run();
+}
+
+TEST_F(BlockDirectoryFixture, RemoveHostYield)
+{
+  spawn::spawn(io, [this] (yield_context yield) {
+    block->hostsList.push_back("127.0.0.1:6000");
+    ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->remove_host(block, "127.0.0.1:6379", optional_yield{io, yield}));
+
     {
       boost::system::error_code ec;
       request req;
-      req.push("HMGET", "testBucket_testName_0", "objName", "blockHosts");
-      req.push("FLUSHALL");
-      response< std::vector<std::string>, 
-                boost::redis::ignore_t> resp;
+      req.push("HEXISTS", "testBucket_testName_0", "blockHosts");
+      req.push("HGET", "testBucket_testName_0", "blockHosts");
+      response<int, std::string> resp;
 
       conn->async_exec(req, resp, yield[ec]);
 
       ASSERT_EQ((bool)ec, false);
-      EXPECT_EQ(std::get<0>(resp).value()[0], "newTestName");
-      EXPECT_EQ(std::get<0>(resp).value()[1], "127.0.0.1:6379_127.0.0.1:5000");
+      EXPECT_EQ(std::get<0>(resp).value(), 1);
+      EXPECT_EQ(std::get<1>(resp).value(), "127.0.0.1:6000");
+    }
+
+    ASSERT_EQ(0, dir->remove_host(block, "127.0.0.1:6000", optional_yield{io, yield}));
+    dir->shutdown();
+
+    {
+      boost::system::error_code ec;
+      request req;
+      req.push("EXISTS", "testBucket_testName_0");
+      req.push("FLUSHALL");
+      response<int, boost::redis::ignore_t> resp;
+
+      conn->async_exec(req, resp, yield[ec]);
+
+      ASSERT_EQ((bool)ec, false);
+      EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
 
     conn->cancel();
